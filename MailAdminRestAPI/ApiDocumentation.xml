@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>MailAdminRestAPI</name>
+    </assembly>
+    <members>
+        <member name="M:weesky.MailAdminRestAPI.Authentication.Extensions.AuthorizationExtension.AddJwtBearerAuthentication(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Boolean)">
+            <summary>
+            Adds JwtBearer Middleware to the Pipeline
+            </summary>
+        </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.Add(weesky.MailAdminRestAPI.Models.Alias)">
+            <summary>
+            Add an aliases to the main mailbox.
+            </summary>
+            <param name="alias">the aliad to add</param>
+            <response code="200">successful action</response>
+            <response code="400">bad request</response>
+            <response code="401">unauthenticated user</response>
+        </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.List">
+            <summary>
+            Gets all aliases to the main mailbox
+            </summary>
+            <response code="200">successful action</response>
+            <response code="401">unauthenticated user</response>
+        </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.Delete(weesky.MailAdminRestAPI.Models.Alias)">
+            <summary>
+            Deletes an alias to the main mailbox
+            </summary>
+            <param name="alias">the alias to delete</param>
+            <response code="200">successful action</response>
+            <response code="400">Bad request</response>
+            <response code="401">unauthenticated user</response>
+        </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.BearerAuthenticatorController.Authenticate(weesky.MailAdminRestAPI.Models.Credentials)">
+            <summary>
+            Generates a Json Web Token (JWT) for bearer authentication.
+            </summary>
+            <param name="credentials">user credentials</param>
+            <returns></returns>
+            <response code="200">logout successful</response>
+            <response code="400">logout successful</response>
+        </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.LoginController.Login(weesky.MailAdminRestAPI.Models.Credentials)">
+            <summary>
+            Login with user credentials and cookie generation.
+            </summary>
+            <param name="credentials">user credentials</param>
+            <returns></returns>
+            <response code="200">login successful</response>
+            <response code="400">invalid credentials</response>
+        </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.LoginController.Logout">
+            <summary>
+            Logs out a cookie authenticated user 
+            </summary>
+            <returns></returns>
+            <response code="204">logout successful</response>
+            <response code="401">try to logout an unauthenticated user</response>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.Credentials.Email">
+            <summary>
+            The email of the user
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.Credentials.Password">
+            <summary>
+            The password of the user
+            </summary>
+        </member>
+    </members>
+</doc>
