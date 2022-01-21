@@ -6,7 +6,14 @@ namespace weesky.MailAdminRestAPI.Models
 	[DebuggerDisplay("{DebuggerDisplay}")]
 	public class Alias
 	{
+		/// <summary>
+		/// The alias name
+		/// </summary>
 		public string Name { get; set; }
+
+		/// <summary>
+		/// The domain
+		/// </summary>
 		public string Domain { get; set; }
 
 		[JsonIgnore]

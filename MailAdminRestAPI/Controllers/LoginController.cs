@@ -9,15 +9,15 @@ namespace weesky.MailAdminRestAPI.Controllers
 {
 	[Route("api/[controller]")]
 	[ApiController]
-	public class LoginController : ControllerBase
+	public class LoginController : ApiBaseController
 	{
-		private IUserAuthenticator Authenticator { get; }
-		private IOptions<TokenConstants> TokenConstants { get; }
+		private IUserAuthenticator _authenticator;
+		private IOptions<TokenConstants> _tokenConstants;
 
 		public LoginController(IUserAuthenticator authenticator, IOptions<TokenConstants> tokenConstants)
 		{
-			Authenticator = authenticator;
-			TokenConstants = tokenConstants;
+			_authenticator = authenticator;
+			_tokenConstants = tokenConstants;
 		}
 
 		/// <summary>
@@ -32,17 +32,14 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[ProducesResponseType(StatusCodes.Status400BadRequest)]
 		public async Task<ActionResult> Login(Credentials credentials)
 		{
-			AuthResult result = Authenticator.Authenticate(credentials.Email, credentials.Password);
+			AuthResult result = _authenticator.Authenticate(credentials.Email, credentials.Password);
 
 			if (result.IsSuccess)
 			{
-				HttpContext.Response.Cookies.Append(TokenConstants.Value.AuthCookieName, result.AccessToken.AccessToken);
-				return Ok();
+				HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.AccessToken.Token);
 			}
-			else
-			{
-				return BadRequest();
-			}
+
+			return StatusCode(result.IsSuccess ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
 		}
 
 		/// <summary>
@@ -57,7 +54,7 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		public async Task<ActionResult> Logout()
 		{
-			HttpContext.Response.Cookies.Delete(TokenConstants.Value.AuthCookieName);
+			HttpContext.Response.Cookies.Delete(_tokenConstants.Value.AuthCookieName);
 
 			return NoContent();
 		}

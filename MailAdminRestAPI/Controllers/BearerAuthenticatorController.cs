@@ -7,7 +7,7 @@ namespace weesky.MailAdminRestAPI.Controllers
 {
 	[Route("api/[controller]")]
 	[ApiController]
-	public class BearerAuthenticatorController : ControllerBase
+	public class BearerAuthenticatorController : ApiBaseController
 	{
 		private IUserAuthenticator Authenticator { get; }
 

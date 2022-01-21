@@ -6,7 +6,7 @@ namespace weesky.MailAdminRestAPI.Data
 {
 	[Table("domains_ownerships")]
 	[DebuggerDisplay("{DomainId} owned by user {UserId}")]
-	public class DomainOwnership
+	public class MailDomainOwnership
 	{
 		[Key]
 		[Required]

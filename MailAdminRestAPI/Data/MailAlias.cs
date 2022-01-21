@@ -16,12 +16,12 @@ namespace weesky.MailAdminRestAPI.Data
 		[Required]
 		[StringLength(30)]
 		[Column("source_addr")]
-		public string SourceName { get; set; }
+		public string Name { get; set; }
 
 		[Required]
 		[StringLength(3)]
 		[Column("source_domain")]
-		public string SourceDomainId { get; set; }
+		public string Domain { get; set; }
 
 		[Required]
 		[Column("destination_user")]

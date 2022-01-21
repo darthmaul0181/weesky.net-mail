@@ -10,12 +10,12 @@ namespace weesky.MailAdminRestAPI.Data
 	{
 		[Key]
 		[Column("id")]
-		[StringLength(3, ErrorMessage = "The string 'Id' value cannot exceed 3 characters. ")]
+		[StringLength(3)]
 		public string Id { get; set; }
 
 		[Required]
 		[Column("name")]
-		[StringLength(30, ErrorMessage = "The string 'Name' value cannot exceed 30 characters. ")]
+		[StringLength(30)]
 		public string Name { get; set; }
 	}
 }

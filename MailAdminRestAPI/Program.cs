@@ -6,6 +6,7 @@ using weesky.MailAdminRestAPI.Authentication.Extensions;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.PlatformAbstractions;
 using weesky.MailAdminRestAPI.Services;
+using weesky.MailAdminRestAPI.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,9 +22,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options => {
 });
 
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
-builder.Services.AddScoped<IRepository, Repository>();
+builder.Services.AddScoped<IUsersRepository, UsersRepository>();
+builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
 builder.Services.AddScoped<ITokenManager, TokenManager>();
+
 builder.Services.AddJwtBearerAuthentication(true);
 
 builder.Services.AddControllers().AddJsonOptions(o =>
