@@ -9,6 +9,31 @@
             Adds JwtBearer Middleware to the Pipeline
             </summary>
         </member>
+        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthResult.IsSuccess">
+            <summary>
+            Indicates if the authentication has succeeded.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthResult.AccessToken">
+            <summary>
+            The Authentication token.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthResult.FailedResult">
+            <summary>
+            Failed authentication.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthToken.ExpiresIn">
+            <summary>
+            Expiry in minutes
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthToken.Token">
+            <summary>
+            The Json Web Token used to authenticate the user.
+            </summary>
+        </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.Add(weesky.MailAdminRestAPI.Models.Alias)">
             <summary>
             Add an aliases to the main mailbox.
@@ -33,6 +58,11 @@
             <response code="200">successful action</response>
             <response code="400">Bad request</response>
             <response code="401">unauthenticated user</response>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Controllers.ApiBaseController.AuthenticatedUser">
+            <summary>
+            The authenticated user (JWT or Cookie authenticated).
+            </summary>
         </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.BearerAuthenticatorController.Authenticate(weesky.MailAdminRestAPI.Models.Credentials)">
             <summary>
@@ -60,6 +90,16 @@
             <response code="204">logout successful</response>
             <response code="401">try to logout an unauthenticated user</response>
         </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.Alias.Name">
+            <summary>
+            The alias name
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.Alias.Domain">
+            <summary>
+            The domain
+            </summary>
+        </member>
         <member name="P:weesky.MailAdminRestAPI.Models.Credentials.Email">
             <summary>
             The email of the user
@@ -68,6 +108,26 @@
         <member name="P:weesky.MailAdminRestAPI.Models.Credentials.Password">
             <summary>
             The password of the user
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.Domain.Id">
+            <summary>
+            Unique domain indentifier (3 chars).
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.Domain.Name">
+            <summary>
+            The name of the domain.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.User.Name">
+            <summary>
+            The name of the user (the mailbox name).
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.User.DomainId">
+            <summary>
+            The domain in which the user (mailbox) exists. 
             </summary>
         </member>
     </members>

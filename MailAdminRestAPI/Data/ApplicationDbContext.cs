@@ -33,6 +33,6 @@ namespace weesky.MailAdminRestAPI.Data
 		public DbSet<MailUser> Users {get; set;}
 		public DbSet<MailDomain> Domains { get; set; }
 		public DbSet<MailAlias> Aliases { get; set; }
-		public DbSet<DomainOwnership> DomainsOwnerships { get; set; }
+		public DbSet<MailDomainOwnership> DomainsOwnerships { get; set; }
 	}
 }

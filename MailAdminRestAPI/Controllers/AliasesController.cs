@@ -1,8 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using weesky.MailAdminRestAPI.Authentication.Extensions;
-using weesky.MailAdminRestAPI.Data;
 using weesky.MailAdminRestAPI.Models;
+using weesky.MailAdminRestAPI.Repositories;
 using weesky.MailAdminRestAPI.Services;
 
 namespace weesky.MailAdminRestAPI.Controllers
@@ -10,11 +9,11 @@ namespace weesky.MailAdminRestAPI.Controllers
 	[Route("api/[controller]")]
 	[ApiController]
 	[Authorize]
-	public class AliasesController : ControllerBase
+	public class AliasesController : ApiBaseController
 	{
-		private readonly IRepository _userRepository;
+		private readonly IAliasesRepository _userRepository;
 
-		public AliasesController(IRepository userRepository)
+		public AliasesController(IAliasesRepository userRepository)
 		{
 			_userRepository = userRepository;
 		}
@@ -31,11 +30,11 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status400BadRequest)]
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
-		public ActionResult<RepositoryResult> Add(Alias alias)
+		public ActionResult<ResultEnveloppe> Add(Alias alias)
 		{
-			RepositoryResult result = _userRepository.AddAlias(this.GetUser(), alias);
+			ResultEnveloppe result = _userRepository.AddAlias(AuthenticatedUser, alias);
 
-			return StatusCode(result.State == RespositoryResultState.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest, result);
+			return StatusCode(result.State == ResultState.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest, result);
 		}
 
 		/// <summary>
@@ -49,7 +48,7 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		public ActionResult<IEnumerable<Alias>> List()
 		{
-			return Ok(_userRepository.GetAliases(this.GetUser()));
+			return Ok(_userRepository.GetAliases(AuthenticatedUser));
 		}
 
 		/// <summary>
@@ -64,11 +63,11 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		[ProducesResponseType(StatusCodes.Status400BadRequest)]
-		public ActionResult<RepositoryResult> Delete(Alias alias)
+		public ActionResult<ResultEnveloppe> Delete(Alias alias)
 		{
-			RepositoryResult result = _userRepository.DeleteAlias(this.GetUser(), alias);
+			ResultEnveloppe result = _userRepository.DeleteAlias(AuthenticatedUser, alias);
 
-			return StatusCode(result.State == RespositoryResultState.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest, result);
+			return StatusCode(result.State == ResultState.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest, result);
 		}
 	}
 }

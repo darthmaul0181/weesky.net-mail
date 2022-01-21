@@ -1,30 +1,29 @@
-﻿using CryptSharp.Core;
-using weesky.MailAdminRestAPI.Authentication.Models;
+﻿using weesky.MailAdminRestAPI.Authentication.Models;
 using weesky.MailAdminRestAPI.Models;
-using weesky.MailAdminRestAPI.Services;
+using weesky.MailAdminRestAPI.Repositories;
 
 namespace weesky.MailAdminRestAPI.Authentication.Services
 {
 	public class UserAuthenticator : IUserAuthenticator
 	{
-		private IRepository UserRepository { get; }
-		private ITokenManager TokenManager { get; }
+		private IUsersRepository _usersRepository;
+		private ITokenManager _tokenManager { get; }
 
-		public UserAuthenticator(IRepository userRepository, ITokenManager tokenManager)
-		{
-			UserRepository = userRepository;
-			TokenManager = tokenManager;
+		public UserAuthenticator(IUsersRepository usersRepository, ITokenManager tokenManager)
+		{ 
+			_usersRepository = usersRepository;
+			_tokenManager = tokenManager;
 		}
 
 		public AuthResult Authenticate(string email, string password)
 		{
-			User user = UserRepository.FindByEmail(email);
+			User user = _usersRepository.FindByEmail(email);
 			if (user == null)
 			{
 				return AuthResult.FailedResult;
 			}
 
-			if(!UserRepository.IsValidPassword(user, password))
+			if(!_usersRepository.IsValidPassword(user, password))
 			{
 				return AuthResult.FailedResult;
 			}
@@ -32,7 +31,7 @@ namespace weesky.MailAdminRestAPI.Authentication.Services
 			return new AuthResult
 			{
 				IsSuccess = true,
-				AccessToken = TokenManager.Generate(user)
+				AccessToken = _tokenManager.Generate(user)
 			};
 		}
 	}
