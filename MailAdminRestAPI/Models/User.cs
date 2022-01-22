@@ -20,11 +20,11 @@ namespace weesky.MailAdminRestAPI.Models
 				throw new ArgumentException($"{email} is not a valid email address", nameof(email));
 
 			Name = mailParts[0];
-			DomainId = mailParts[1];
+			Domain = mailParts[1];
 		}
 
 		[JsonIgnore]
-		public string Email => $"{Name}@{DomainId}";
+		public string Email => $"{Name}@{Domain}";
 
 		/// <summary>
 		/// The name of the user (the mailbox name).
@@ -34,6 +34,6 @@ namespace weesky.MailAdminRestAPI.Models
 		/// <summary>
 		/// The domain in which the user (mailbox) exists. 
 		/// </summary>
-		public string DomainId { get; set; }
+		public string Domain { get; set; }
 	}
 }

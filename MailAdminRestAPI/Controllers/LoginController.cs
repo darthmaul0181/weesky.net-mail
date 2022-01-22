@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using CSharpFunctionalExtensions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using weesky.MailAdminRestAPI.Authentication.Models;
@@ -30,16 +31,16 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[HttpPost]
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status400BadRequest)]
-		public async Task<ActionResult> Login(Credentials credentials)
+		public async Task<ActionResult<AuthToken>> Login(Credentials credentials)
 		{
-			AuthResult result = _authenticator.Authenticate(credentials.Email, credentials.Password);
+			Result<AuthToken> result = _authenticator.Authenticate(credentials.Email, credentials.Password);
 
 			if (result.IsSuccess)
 			{
-				HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.AccessToken.Token);
+				HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.Value.Token);
 			}
 
-			return StatusCode(result.IsSuccess ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
+			return FromResult(result);
 		}
 
 		/// <summary>

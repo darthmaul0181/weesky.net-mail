@@ -1,4 +1,5 @@
-﻿using weesky.MailAdminRestAPI.Models;
+﻿using CSharpFunctionalExtensions;
+using weesky.MailAdminRestAPI.Models;
 
 namespace weesky.MailAdminRestAPI.Repositories
 {
@@ -6,5 +7,6 @@ namespace weesky.MailAdminRestAPI.Repositories
 	{
 		User FindByEmail(string email);
 		bool IsValidPassword(User user, string password);
+		Result ChangePassword(User user, string newPassword, string oldPassword);
 	}
 }

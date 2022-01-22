@@ -1,10 +1,10 @@
-﻿using weesky.MailAdminRestAPI.Authentication.Models;
-using weesky.MailAdminRestAPI.Data;
+﻿using CSharpFunctionalExtensions;
+using weesky.MailAdminRestAPI.Authentication.Models;
 
 namespace weesky.MailAdminRestAPI.Authentication.Services
 {
 	public interface IUserAuthenticator
 	{
-		AuthResult Authenticate(string email, string password);
+		Result<AuthToken> Authenticate(string email, string password);
 	}
 }

@@ -1,4 +1,5 @@
-﻿using weesky.MailAdminRestAPI.Authentication.Models;
+﻿using CSharpFunctionalExtensions;
+using weesky.MailAdminRestAPI.Authentication.Models;
 using weesky.MailAdminRestAPI.Models;
 using weesky.MailAdminRestAPI.Repositories;
 
@@ -15,24 +16,20 @@ namespace weesky.MailAdminRestAPI.Authentication.Services
 			_tokenManager = tokenManager;
 		}
 
-		public AuthResult Authenticate(string email, string password)
+		public Result<AuthToken> Authenticate(string email, string password)
 		{
 			User user = _usersRepository.FindByEmail(email);
 			if (user == null)
 			{
-				return AuthResult.FailedResult;
+				return Result.Failure<AuthToken>("Authentication failed");
 			}
 
 			if(!_usersRepository.IsValidPassword(user, password))
 			{
-				return AuthResult.FailedResult;
+				return Result.Failure<AuthToken>("Authentication failed");
 			}
 
-			return new AuthResult
-			{
-				IsSuccess = true,
-				AccessToken = _tokenManager.Generate(user)
-			};
+			return Result.Success(_tokenManager.Generate(user));
 		}
 	}
 }

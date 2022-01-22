@@ -9,21 +9,6 @@
             Adds JwtBearer Middleware to the Pipeline
             </summary>
         </member>
-        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthResult.IsSuccess">
-            <summary>
-            Indicates if the authentication has succeeded.
-            </summary>
-        </member>
-        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthResult.AccessToken">
-            <summary>
-            The Authentication token.
-            </summary>
-        </member>
-        <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthResult.FailedResult">
-            <summary>
-            Failed authentication.
-            </summary>
-        </member>
         <member name="P:weesky.MailAdminRestAPI.Authentication.Models.AuthToken.ExpiresIn">
             <summary>
             Expiry in minutes
@@ -34,12 +19,19 @@
             The Json Web Token used to authenticate the user.
             </summary>
         </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.AccountController.ChangePassword(weesky.MailAdminRestAPI.Models.SecretChange)">
+            <summary>
+            Change the mailbox password
+            </summary>
+            <param name="secretChange">the new secret</param>
+            <returns></returns>
+        </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.Add(weesky.MailAdminRestAPI.Models.Alias)">
             <summary>
             Add an aliases to the main mailbox.
             </summary>
             <param name="alias">the aliad to add</param>
-            <response code="200">successful action</response>
+            <response code="204">new alias has been added</response>
             <response code="400">bad request</response>
             <response code="401">unauthenticated user</response>
         </member>
@@ -125,7 +117,7 @@
             The name of the user (the mailbox name).
             </summary>
         </member>
-        <member name="P:weesky.MailAdminRestAPI.Models.User.DomainId">
+        <member name="P:weesky.MailAdminRestAPI.Models.User.Domain">
             <summary>
             The domain in which the user (mailbox) exists. 
             </summary>

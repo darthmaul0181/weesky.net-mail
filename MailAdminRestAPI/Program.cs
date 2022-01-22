@@ -1,11 +1,10 @@
-using weesky.MailAdminRestAPI.Authentication.Models;
-using weesky.MailAdminRestAPI.Data;
 using Microsoft.EntityFrameworkCore;
-using weesky.MailAdminRestAPI.Authentication.Services;
-using weesky.MailAdminRestAPI.Authentication.Extensions;
-using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.PlatformAbstractions;
-using weesky.MailAdminRestAPI.Services;
+using Microsoft.OpenApi.Models;
+using weesky.MailAdminRestAPI.Authentication.Extensions;
+using weesky.MailAdminRestAPI.Authentication.Models;
+using weesky.MailAdminRestAPI.Authentication.Services;
+using weesky.MailAdminRestAPI.Data;
 using weesky.MailAdminRestAPI.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
