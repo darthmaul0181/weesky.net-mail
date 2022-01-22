@@ -1,12 +1,12 @@
-﻿using weesky.MailAdminRestAPI.Models;
-using weesky.MailAdminRestAPI.Services;
+﻿using CSharpFunctionalExtensions;
+using weesky.MailAdminRestAPI.Models;
 
 namespace weesky.MailAdminRestAPI.Repositories
 {
 	public interface IAliasesRepository
 	{
 		IEnumerable<Alias> GetAliases(User user);
-		ResultEnveloppe AddAlias(User user, Alias alias);
-		ResultEnveloppe DeleteAlias(User user, Alias alias);
+		Result AddAlias(User user, Alias alias);
+		Result DeleteAlias(User user, Alias alias);
 	}
 }

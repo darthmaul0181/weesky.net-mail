@@ -1,4 +1,4 @@
-﻿namespace weesky.MailAdminRestAPI.Services
+﻿namespace weesky.MailAdminRestAPI.Models
 {
 	public class ResultEnveloppe
 	{
@@ -25,7 +25,7 @@
 
 	public class ResultEnveloppe<T> : ResultEnveloppe
 	{
-		public T Data { get; set; }
+		public T Result { get; set; }
 	}
 
 	public enum ResultState

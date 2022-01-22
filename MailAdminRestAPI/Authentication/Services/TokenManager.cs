@@ -22,7 +22,7 @@ namespace weesky.MailAdminRestAPI.Authentication.Services
 			var tokenBuilder = new TokenBuilder();
 
 			JwtSecurityToken token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
-				.AddClaim(ClaimTypes.Dns, user.DomainId)
+				.AddClaim(ClaimTypes.Dns, user.Domain)
 				.AddIssuer(TokenConstants.Value.Issuer)
 				.AddAudience(TokenConstants.Value.Audience)
 				.AddExpiry(TokenConstants.Value.ExpiryInMinutes)

@@ -1,5 +1,5 @@
-﻿using AutoMapper;
-using CryptSharp.Core;
+﻿using CryptSharp.Core;
+using CSharpFunctionalExtensions;
 using weesky.MailAdminRestAPI.Data;
 using weesky.MailAdminRestAPI.Models;
 
@@ -40,7 +40,7 @@ namespace weesky.MailAdminRestAPI.Repositories
 
 		public bool IsValidPassword(User user, string password)
 		{
-			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.DomainId);
+			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
 			if (domain == null)
 			{
 				return false;
@@ -53,6 +53,36 @@ namespace weesky.MailAdminRestAPI.Repositories
 			}
 
 			return Crypter.CheckPassword(password, mailUser.Password);
+		}
+
+		public Result ChangePassword(User user, string newPassword, string oldPassword)
+		{
+			if(string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
+			{
+				return Result.Failure($"Your password should contains 8 chars at least");
+			}
+
+			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
+			if (domain == null)
+			{
+				return Result.Failure($"User {user.Name}@{user.Domain} not found");
+			}
+
+			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
+			if (user == null)
+			{
+				return Result.Failure($"User {user.Name}@{user.Domain} not found");
+			}
+
+			if(!Crypter.CheckPassword(oldPassword, mailUser.Password))
+			{
+				return Result.Failure($"Invalid password");
+			}
+
+			mailUser.Password = newPassword;
+			_context.SaveChanges();
+
+			return Result.Success();
 		}
 	}
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using CSharpFunctionalExtensions;
+using Microsoft.AspNetCore.Mvc;
 using weesky.MailAdminRestAPI.Authentication.Models;
 using weesky.MailAdminRestAPI.Authentication.Services;
 using weesky.MailAdminRestAPI.Models;
@@ -25,12 +26,11 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// <response code="400">logout successful</response>
 		[HttpPost]
 		[ProducesResponseType(StatusCodes.Status200OK)]
-		[ProducesResponseType(StatusCodes.Status400BadRequest)]
-		public ActionResult<AuthResult> Authenticate(Credentials credentials)
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
+		public ActionResult<AuthToken> Authenticate(Credentials credentials)
 		{
-			AuthResult result = Authenticator.Authenticate(credentials.Email, credentials.Password);
-
-			return StatusCode(result.IsSuccess ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest, result);
+			Result<AuthToken> result = Authenticator.Authenticate(credentials.Email, credentials.Password);
+			return FromResult(result, StatusCodes.Status401Unauthorized);
 		}
 	}
 }
