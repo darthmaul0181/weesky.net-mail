@@ -26,8 +26,8 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// </summary>
 		/// <param name="credentials">user credentials</param>
 		/// <returns></returns>
-		/// <response code="200">login successful</response>
-		/// <response code="400">invalid credentials</response>
+		/// <response code="200">Login successful</response>
+		/// <response code="401">Invalid credentials</response>
 		[HttpPost]
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -40,15 +40,15 @@ namespace weesky.MailAdminRestAPI.Controllers
 				HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.Value.Token);
 			}
 
-			return FromResult(result);
+			return FromResult(result, errorStatusCode: StatusCodes.Status401Unauthorized);
 		}
 
 		/// <summary>
 		/// Logs out a cookie authenticated user 
 		/// </summary>
 		/// <returns></returns>
-		/// <response code="204">logout successful</response>
-		/// <response code="401">try to logout an unauthenticated user</response>
+		/// <response code="204">Logout successful</response>
+		/// <response code="401">Try to logout an unauthenticated user</response>
 		[Authorize]
 		[HttpDelete]
 		[ProducesResponseType(StatusCodes.Status204NoContent)]

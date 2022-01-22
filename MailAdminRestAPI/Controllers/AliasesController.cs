@@ -21,10 +21,10 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// <summary>
 		/// Add an aliases to the main mailbox.
 		/// </summary>
-		/// <param name="alias">the aliad to add</param>
-		/// <response code="204">new alias has been added</response>
-		/// <response code="400">bad request</response>
-		/// <response code="401">unauthenticated user</response>
+		/// <param name="alias">the aliad to create</param>
+		/// <response code="204">New alias has been successfully created</response>
+		/// <response code="400">Bad request</response>
+		/// <response code="401">Unauthenticated user</response>
 		[Authorize]
 		[HttpPost]
 		[ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -33,14 +33,14 @@ namespace weesky.MailAdminRestAPI.Controllers
 		public ActionResult<ResultEnveloppe> Add(Alias alias)
 		{
 			Result result = _userRepository.AddAlias(AuthenticatedUser, alias);
-			return FromResult(result, successStatusCode : StatusCodes.Status204NoContent);
+			return FromResultWithEnveloppe(result, successStatusCode : StatusCodes.Status204NoContent);
 		}
 
 		/// <summary>
 		/// Gets all aliases to the main mailbox
 		/// </summary>
-		/// <response code="200">successful action</response>
-		/// <response code="401">unauthenticated user</response>
+		/// <response code="200">Aliases list generated successfully</response>
+		/// <response code="401">Unauthenticated user</response>
 		[Authorize]
 		[HttpGet]
 		[ProducesResponseType(StatusCodes.Status200OK)]
@@ -53,19 +53,19 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// <summary>
 		/// Deletes an alias to the main mailbox
 		/// </summary>
-		/// <param name="alias">the alias to delete</param>
-		/// <response code="200">successful action</response>
+		/// <param name="alias">alias to delete</param>
+		/// <response code="200">Alias successfully deleted</response>
 		/// <response code="400">Bad request</response>
-		/// <response code="401">unauthenticated user</response>
+		/// <response code="401">Unauthenticated user</response>
 		[Authorize]
 		[HttpDelete]
 		[ProducesResponseType(StatusCodes.Status204NoContent)]
-		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		[ProducesResponseType(StatusCodes.Status400BadRequest)]
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		public ActionResult<ResultEnveloppe> Delete(Alias alias)
 		{
 			Result result = _userRepository.DeleteAlias(AuthenticatedUser, alias);
-			return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+			return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
 		}
 	}
 }

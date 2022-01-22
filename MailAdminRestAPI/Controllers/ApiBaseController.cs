@@ -12,7 +12,13 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// </summary>
 		public User AuthenticatedUser => this.GetUser();
 
-		protected ActionResult<ResultEnveloppe> FromResult(Result result, int errorStatusCode = StatusCodes.Status400BadRequest, int successStatusCode = StatusCodes.Status200OK)
+		protected ActionResult<ResultEnveloppe> FromResultWithEnveloppe(Result result, int errorStatusCode = StatusCodes.Status400BadRequest, int successStatusCode = StatusCodes.Status200OK)
+		{
+			if (result.IsSuccess) return StatusCode(successStatusCode);
+			return StatusCode(errorStatusCode, ResultEnveloppe.CrateErrorEnveloppe(result.Error));
+		}
+
+		protected ActionResult FromResult(Result result, int errorStatusCode = StatusCodes.Status400BadRequest, int successStatusCode = StatusCodes.Status200OK)
 		{
 			if (result.IsSuccess) return StatusCode(successStatusCode);
 			return StatusCode(errorStatusCode, ResultEnveloppe.CrateErrorEnveloppe(result.Error));

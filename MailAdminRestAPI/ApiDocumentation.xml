@@ -24,32 +24,34 @@
             Change the mailbox password
             </summary>
             <param name="secretChange">the new secret</param>
-            <returns></returns>
+            <response code="204">Secret changed successfully</response>
+            <response code="400">Wrong credentials</response>
+            <response code="401">Unauthenticated user</response>
         </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.Add(weesky.MailAdminRestAPI.Models.Alias)">
             <summary>
             Add an aliases to the main mailbox.
             </summary>
-            <param name="alias">the aliad to add</param>
-            <response code="204">new alias has been added</response>
-            <response code="400">bad request</response>
-            <response code="401">unauthenticated user</response>
+            <param name="alias">the aliad to create</param>
+            <response code="204">New alias has been successfully created</response>
+            <response code="400">Bad request</response>
+            <response code="401">Unauthenticated user</response>
         </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.List">
             <summary>
             Gets all aliases to the main mailbox
             </summary>
-            <response code="200">successful action</response>
-            <response code="401">unauthenticated user</response>
+            <response code="200">Aliases list generated successfully</response>
+            <response code="401">Unauthenticated user</response>
         </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.AliasesController.Delete(weesky.MailAdminRestAPI.Models.Alias)">
             <summary>
             Deletes an alias to the main mailbox
             </summary>
-            <param name="alias">the alias to delete</param>
-            <response code="200">successful action</response>
+            <param name="alias">alias to delete</param>
+            <response code="200">Alias successfully deleted</response>
             <response code="400">Bad request</response>
-            <response code="401">unauthenticated user</response>
+            <response code="401">Unauthenticated user</response>
         </member>
         <member name="P:weesky.MailAdminRestAPI.Controllers.ApiBaseController.AuthenticatedUser">
             <summary>
@@ -62,8 +64,8 @@
             </summary>
             <param name="credentials">user credentials</param>
             <returns></returns>
-            <response code="200">logout successful</response>
-            <response code="400">logout successful</response>
+            <response code="200">User authentication succeeded</response>
+            <response code="401">Wrong credentials</response>
         </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.LoginController.Login(weesky.MailAdminRestAPI.Models.Credentials)">
             <summary>
@@ -71,16 +73,16 @@
             </summary>
             <param name="credentials">user credentials</param>
             <returns></returns>
-            <response code="200">login successful</response>
-            <response code="400">invalid credentials</response>
+            <response code="200">Login successful</response>
+            <response code="401">Invalid credentials</response>
         </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.LoginController.Logout">
             <summary>
             Logs out a cookie authenticated user 
             </summary>
             <returns></returns>
-            <response code="204">logout successful</response>
-            <response code="401">try to logout an unauthenticated user</response>
+            <response code="204">Logout successful</response>
+            <response code="401">Try to logout an unauthenticated user</response>
         </member>
         <member name="P:weesky.MailAdminRestAPI.Models.Alias.Name">
             <summary>

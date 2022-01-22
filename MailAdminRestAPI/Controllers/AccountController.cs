@@ -22,12 +22,17 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// Change the mailbox password
 		/// </summary>
 		/// <param name="secretChange">the new secret</param>
-		/// <returns></returns>
+		/// <response code="204">Secret changed successfully</response>
+		/// <response code="400">Wrong credentials</response>
+		/// <response code="401">Unauthenticated user</response>
 		[HttpPatch("ChangeSecret")]
-		public ActionResult<ResultEnveloppe> ChangePassword(SecretChange secretChange)
+		[ProducesResponseType(StatusCodes.Status204NoContent)]
+		[ProducesResponseType(StatusCodes.Status400BadRequest)]
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
+		public ActionResult ChangePassword(SecretChange secretChange)
 		{
 			Result result = _usersRepository.ChangePassword(AuthenticatedUser, secretChange.NewPassword, secretChange.OldPassword);
-			return FromResult(result);
+			return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
 		}
 	}
 }
