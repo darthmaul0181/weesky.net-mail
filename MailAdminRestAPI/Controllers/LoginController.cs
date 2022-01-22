@@ -30,7 +30,7 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// <response code="401">Invalid credentials</response>
 		[HttpPost]
 		[ProducesResponseType(StatusCodes.Status200OK)]
-		[ProducesResponseType(StatusCodes.Status400BadRequest)]
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		public async Task<ActionResult<AuthToken>> Login(Credentials credentials)
 		{
 			Result<AuthToken> result = _authenticator.Authenticate(credentials.Email, credentials.Password);
