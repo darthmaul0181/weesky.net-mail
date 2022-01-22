@@ -22,8 +22,8 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// </summary>
 		/// <param name="credentials">user credentials</param>
 		/// <returns></returns>
-		/// <response code="200">logout successful</response>
-		/// <response code="400">logout successful</response>
+		/// <response code="200">User authentication succeeded</response>
+		/// <response code="401">Wrong credentials</response>
 		[HttpPost]
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
