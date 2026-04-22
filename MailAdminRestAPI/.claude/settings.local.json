@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:pom.weesky.be)",
+      "WebFetch(domain:weesky.net)"
+    ]
+  }
+}

@@ -28,6 +28,21 @@ builder.Services.AddScoped<ITokenManager, TokenManager>();
 
 builder.Services.AddJwtBearerAuthentication(true);
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                var host = new Uri(origin).Host;
+                return host == "localhost" || host.EndsWith(".mail.weesky.net");
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.IgnoreNullValues = true;
@@ -64,6 +79,7 @@ if (app.Environment.IsDevelopment())
 	app.UseSwaggerUI();
 }
 
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 

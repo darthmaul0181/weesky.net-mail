@@ -32,8 +32,13 @@ namespace weesky.MailAdminRestAPI.Models
 		public string Name { get; set; }
 
 		/// <summary>
-		/// The domain in which the user (mailbox) exists. 
+		/// The domain in which the user (mailbox) exists.
 		/// </summary>
 		public string Domain { get; set; }
+
+		/// <summary>
+		/// The full name of the user.
+		/// </summary>
+		public string FullName { get; set; }
 	}
 }

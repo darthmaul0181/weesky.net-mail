@@ -19,6 +19,22 @@ namespace weesky.MailAdminRestAPI.Controllers
 		}
 
 		/// <summary>
+		/// Returns information about the authenticated user account
+		/// </summary>
+		/// <response code="200">Account information</response>
+		/// <response code="401">Unauthenticated user</response>
+		/// <response code="404">User not found</response>
+		[HttpGet]
+		[ProducesResponseType(StatusCodes.Status200OK)]
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
+		[ProducesResponseType(StatusCodes.Status404NotFound)]
+		public ActionResult<AccountInfo> GetAccountInfo()
+		{
+			Result<AccountInfo> result = _usersRepository.GetAccountInfo(AuthenticatedUser);
+			return FromResult(result, errorStatusCode: StatusCodes.Status404NotFound);
+		}
+
+		/// <summary>
 		/// Change the mailbox password
 		/// </summary>
 		/// <param name="secretChange">the new secret</param>

@@ -55,6 +55,36 @@ namespace weesky.MailAdminRestAPI.Repositories
 			return Crypter.CheckPassword(password, mailUser.Password);
 		}
 
+		public Result<AccountInfo> GetAccountInfo(User user)
+		{
+			MailDomain domain = _context.Domains.FirstOrDefault(d => d.Name == user.Domain);
+			if (domain == null)
+				return Result.Failure<AccountInfo>($"Domain {user.Domain} not found");
+
+			MailUser mailUser = _context.Users.FirstOrDefault(u =>
+				string.Equals(u.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) &&
+				u.DomainId == domain.Id);
+			if (mailUser == null)
+				return Result.Failure<AccountInfo>($"User {user.Email} not found");
+
+			var ownedDomains = _context.DomainsOwnerships
+				.Where(o => o.UserId == mailUser.Id)
+				.Join(_context.Domains, o => o.DomainId, d => d.Id, (o, d) => new Domain { Id = d.Id, Name = d.Name })
+				.ToList();
+
+			if (ownedDomains.Count == 0)
+				ownedDomains.Add(new Domain { Id = domain.Id, Name = domain.Name });
+
+			return Result.Success(new AccountInfo
+			{
+				UserId = mailUser.Id,
+				UserName = mailUser.Name,
+				FullName = mailUser.FullName,
+				Mailbox = mailUser.DomainId,
+				Domains = ownedDomains
+			});
+		}
+
 		public Result ChangePassword(User user, string newPassword, string oldPassword)
 		{
 			if(string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)

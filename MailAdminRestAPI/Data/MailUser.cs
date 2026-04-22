@@ -29,6 +29,9 @@ namespace weesky.MailAdminRestAPI.Data
 		[Required]
 		[Column("active")]
 		public ActiveState Active { get; set ; }
+
+		[Column("fullname")]
+		public string FullName { get; set; }
 	}
 
 	public enum ActiveState

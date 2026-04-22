@@ -19,6 +19,14 @@
             The Json Web Token used to authenticate the user.
             </summary>
         </member>
+        <member name="M:weesky.MailAdminRestAPI.Controllers.AccountController.GetAccountInfo">
+            <summary>
+            Returns information about the authenticated user account
+            </summary>
+            <response code="200">Account information</response>
+            <response code="401">Unauthenticated user</response>
+            <response code="404">User not found</response>
+        </member>
         <member name="M:weesky.MailAdminRestAPI.Controllers.AccountController.ChangePassword(weesky.MailAdminRestAPI.Models.SecretChange)">
             <summary>
             Change the mailbox password
@@ -84,6 +92,36 @@
             <response code="204">Logout successful</response>
             <response code="401">Try to logout an unauthenticated user</response>
         </member>
+        <member name="T:weesky.MailAdminRestAPI.Models.AccountInfo">
+            <summary>
+            Information about the authenticated user account.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.AccountInfo.UserId">
+            <summary>
+            The internal user identifier.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.AccountInfo.UserName">
+            <summary>
+            The mailbox name (without domain).
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.AccountInfo.FullName">
+            <summary>
+            The full name of the user.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.AccountInfo.Mailbox">
+            <summary>
+            The domain id of the user's primary mailbox (matches one of the Domains ids).
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.AccountInfo.Domains">
+            <summary>
+            Domains owned by this user.
+            </summary>
+        </member>
         <member name="P:weesky.MailAdminRestAPI.Models.Alias.Name">
             <summary>
             The alias name
@@ -121,7 +159,12 @@
         </member>
         <member name="P:weesky.MailAdminRestAPI.Models.User.Domain">
             <summary>
-            The domain in which the user (mailbox) exists. 
+            The domain in which the user (mailbox) exists.
+            </summary>
+        </member>
+        <member name="P:weesky.MailAdminRestAPI.Models.User.FullName">
+            <summary>
+            The full name of the user.
             </summary>
         </member>
         <member name="T:Program">
