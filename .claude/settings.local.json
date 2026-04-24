@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(dotnet publish *)",
+      "Bash(tar -cf - -C D:\\\\\\\\development\\\\\\\\builds\\\\\\\\api .)",
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/snoopy.microservice && echo EXTRACTED && ls /var/www/admin/mail/snoopy.microservice | head -5\")",
+      "PowerShell(ssh root@curiosity.weesky.net \"chown root:www-data /var/www/admin/mail/account.frontend -R\")",
+      "PowerShell(ssh root@curiosity.weesky.net \"chmod 700 /var/www/admin/mail/account.frontend/assets\")",
+      "Bash(git mv *)"
+    ]
+  }
+}
