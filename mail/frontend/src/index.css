@@ -335,6 +335,11 @@ body {
   border-color: var(--primary);
 }
 
+.search-input.is-error,
+.search-input.is-error:focus {
+  border-color: var(--danger);
+}
+
 /* ── Alias grid ──────────────────────────────────────────── */
 
 .alias-grid {

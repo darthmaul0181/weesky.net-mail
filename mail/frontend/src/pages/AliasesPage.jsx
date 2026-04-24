@@ -303,10 +303,6 @@ export default function AliasesPage({ onLogout }) {
   }
 
   async function handleAdd() {
-    if (search.length > 30) {
-      addToast('An alias cannot exceed 30 characters', 'error')
-      return
-    }
     setAdding(true)
     try {
       await api.createAlias(search, selectedDomain)
@@ -370,16 +366,22 @@ export default function AliasesPage({ onLogout }) {
           </>
         )}
         <input
-          className="search-input"
+          className={`search-input${search.length > 30 ? ' is-error' : ''}`}
           type="search"
           placeholder="Search or create…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => {
+            const val = e.target.value
+            if (val.length > 30 && search.length <= 30) {
+              addToast('An alias cannot exceed 30 characters', 'error')
+            }
+            setSearch(val)
+          }}
         />
         <button
           className="btn btn-add"
           onClick={handleAdd}
-          disabled={adding || !selectedDomain || !search.trim()}
+          disabled={adding || !selectedDomain || !search.trim() || search.length > 30}
         >
           {adding ? <span className="spinner" /> : 'Create alias'}
         </button>
