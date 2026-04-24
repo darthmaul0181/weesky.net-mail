@@ -21,6 +21,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="snoopy.microservice.Tests\**" />
+    <None Remove="snoopy.microservice.Tests\**" />
+    <Content Remove="snoopy.microservice.Tests\**" />
+    <EmbeddedResource Remove="snoopy.microservice.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CryptSharp.Core" Version="2.0.0" />
     <PackageReference Include="CSharpFunctionalExtensions" Version="2.27.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />

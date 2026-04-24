@@ -120,7 +120,15 @@ namespace weesky.Snoopy.Microservice.Repositories
 				return false;
 			}
 
-			return _context.DomainsOwnerships.Any(ownedDomain => ownedDomain.UserId == mailUser.Id && _context.Domains.Any(domain => string.Equals(domain.Id, ownedDomain.DomainId, StringComparison.InvariantCultureIgnoreCase)));
+			MailDomain? requestedDomain = GetDomainBy(domainName);
+			if (requestedDomain == null)
+			{
+				return false;
+			}
+
+			return _context.DomainsOwnerships.Any(ownership =>
+				ownership.UserId == mailUser.Id &&
+				string.Equals(ownership.DomainId, requestedDomain.Id, StringComparison.InvariantCultureIgnoreCase));
 		}
 
 		private MailUser? GetMailUserBy(User user)

@@ -6,21 +6,32 @@ import weeskyLogo from '../assets/weesky_net.png'
 function useToasts() {
   const [toasts, setToasts] = useState([])
 
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now()
     setToasts(prev => [...prev, { id, message, type }])
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
+    if (type !== 'error') {
+      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
+    }
   }, [])
 
-  return { toasts, addToast }
+  return { toasts, addToast, removeToast }
 }
 
-function Toasts({ toasts }) {
+function Toasts({ toasts, onRemove }) {
   if (!toasts.length) return null
   return (
     <div className="toast-container">
       {toasts.map(t => (
-        <div key={t.id} className={`toast toast-${t.type}`}>{t.message}</div>
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          <span>{t.message}</span>
+          {t.type === 'error' && (
+            <button className="toast-close" onClick={() => onRemove(t.id)}>✕</button>
+          )}
+        </div>
       ))}
     </div>
   )
@@ -209,7 +220,7 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
 }
 
 export default function AliasesPage({ onLogout }) {
-  const { toasts, addToast } = useToasts()
+  const { toasts, addToast, removeToast } = useToasts()
 
   const [domains, setDomains] = useState([])
   const [selectedDomain, setSelectedDomain] = useState('')
@@ -225,8 +236,6 @@ export default function AliasesPage({ onLogout }) {
   const [listError, setListError] = useState(null)
   const [search, setSearch] = useState('')
 
-  const [newName, setNewName] = useState('')
-  const [addError, setAddError] = useState(null)
   const [adding, setAdding] = useState(false)
 
   const [deletingKey, setDeletingKey] = useState(null)
@@ -293,19 +302,21 @@ export default function AliasesPage({ onLogout }) {
     }
   }
 
-  async function handleAdd(e) {
-    e.preventDefault()
-    setAddError(null)
+  async function handleAdd() {
+    if (search.length > 30) {
+      addToast('An alias cannot exceed 30 characters', 'error')
+      return
+    }
     setAdding(true)
     try {
-      await api.createAlias(newName, selectedDomain)
-      const key = `${newName}@${selectedDomain}`
+      await api.createAlias(search, selectedDomain)
+      const key = `${search}@${selectedDomain}`
       addToast(`${key} added`)
-      setNewName('')
+      setSearch('')
       await fetchAliases()
       setHighlightedKey(key)
     } catch (err) {
-      setAddError(err.message || 'Failed to create alias.')
+      addToast(err.message || 'Failed to create alias.', 'error')
     } finally {
       setAdding(false)
     }
@@ -361,10 +372,17 @@ export default function AliasesPage({ onLogout }) {
         <input
           className="search-input"
           type="search"
-          placeholder="Search…"
+          placeholder="Search or create…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        <button
+          className="btn btn-add"
+          onClick={handleAdd}
+          disabled={adding || !selectedDomain || !search.trim()}
+        >
+          {adding ? <span className="spinner" /> : 'Create alias'}
+        </button>
       </div>
 
       {listError && <div className="alert alert-error">{listError}</div>}
@@ -402,36 +420,12 @@ export default function AliasesPage({ onLogout }) {
         </div>
       )}
 
-      <div className="add-form">
-        <div className="add-form-title">Add an alias</div>
-
-        {addError && <div className="alert alert-error">{addError}</div>}
-
-        <form onSubmit={handleAdd}>
-          <div className="add-form-row">
-            <div className="field">
-              <input
-                id="alias-name"
-                type="text"
-                placeholder="alias"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                required
-              />
-            </div>
-            <button className="btn btn-add" type="submit" disabled={adding || !selectedDomain}>
-              {adding ? <span className="spinner" /> : 'Add'}
-            </button>
-          </div>
-        </form>
-      </div>
-
       {changePasswordOpen && (
         <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       )}
     </div>
 
-      <Toasts toasts={toasts} />
+      <Toasts toasts={toasts} onRemove={removeToast} />
     </>
   )
 }
