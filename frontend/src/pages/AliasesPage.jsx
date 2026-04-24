@@ -26,6 +26,16 @@ function Toasts({ toasts }) {
   )
 }
 
+function LockIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+
 function TrashIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
@@ -69,7 +79,7 @@ function ChangePasswordModal({ onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Change password</span>
+          <span className="modal-title"><LockIcon />Change password</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -178,11 +188,7 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
 
             <div className="panel-actions">
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
+                <LockIcon />
                 Change password
               </button>
               <button className="panel-link panel-link-danger" onClick={onLogout}>
