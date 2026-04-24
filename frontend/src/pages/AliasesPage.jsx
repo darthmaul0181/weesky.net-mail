@@ -103,7 +103,38 @@ function ChangePasswordModal({ onClose }) {
   )
 }
 
-function AccountPanel({ initials, fullName, primaryEmail, subDomains, onLogout, onChangePassword }) {
+const MB = 1024 * 1024
+const GB = 1024 * MB
+
+function QuotaBlock({ quota }) {
+  if (!quota || !quota.storageBytesLimit) return null
+
+  const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB
+  const divisor = useGb ? GB : MB
+  const unit = useGb ? 'GB' : 'MB'
+  const used = quota.storageBytesUsed / divisor
+  const total = quota.storageBytesLimit / divisor
+  const percent = Math.min(100, Math.max(0, (quota.storageBytesUsed / quota.storageBytesLimit) * 100))
+  const format = v => (v >= 100 ? v.toFixed(0) : v.toFixed(1))
+  const levelClass = percent >= 90 ? 'is-danger' : percent >= 75 ? 'is-warn' : ''
+
+  return (
+    <div className="panel-quota">
+      <div className="panel-quota-label">Storage</div>
+      <div className="panel-quota-values">
+        <span className="panel-quota-used">{format(used)} {unit}</span>
+        <span className="panel-quota-sep"> / </span>
+        <span className="panel-quota-total">{format(total)} {unit}</span>
+        <span className="panel-quota-percent">{percent.toFixed(0)}%</span>
+      </div>
+      <div className={`panel-quota-bar ${levelClass}`}>
+        <div className="panel-quota-bar-fill" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword }) {
   const [open, setOpen] = useState(false)
   const panelRef = useRef(null)
 
@@ -143,6 +174,8 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, onLogout, 
               </div>
             )}
 
+            <QuotaBlock quota={quota} />
+
             <div className="panel-actions">
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
@@ -179,6 +212,7 @@ export default function AliasesPage({ onLogout }) {
   const [fullName, setFullName] = useState('')
   const [primaryEmail, setPrimaryEmail] = useState('')
   const [subDomains, setSubDomains] = useState([])
+  const [quota, setQuota] = useState(null)
 
   const [aliases, setAliases] = useState([])
   const [loadingList, setLoadingList] = useState(true)
@@ -190,6 +224,7 @@ export default function AliasesPage({ onLogout }) {
   const [adding, setAdding] = useState(false)
 
   const [deletingKey, setDeletingKey] = useState(null)
+  const [highlightedKey, setHighlightedKey] = useState(null)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
 
   useEffect(() => {
@@ -214,6 +249,8 @@ export default function AliasesPage({ onLogout }) {
 
       if (domainName) setSelectedDomain(domainName)
     }).catch(() => {})
+
+    api.getQuota().then(setQuota).catch(() => {})
   }, [])
 
   const fetchAliases = useCallback(async () => {
@@ -256,9 +293,11 @@ export default function AliasesPage({ onLogout }) {
     setAdding(true)
     try {
       await api.createAlias(newName, selectedDomain)
-      addToast(`${newName}@${selectedDomain} added`)
+      const key = `${newName}@${selectedDomain}`
+      addToast(`${key} added`)
       setNewName('')
-      fetchAliases()
+      await fetchAliases()
+      setHighlightedKey(key)
     } catch (err) {
       setAddError(err.message || 'Failed to create alias.')
     } finally {
@@ -277,13 +316,13 @@ export default function AliasesPage({ onLogout }) {
         <div className="site-header-brand">
           <img src={logoCircle} alt="" className="site-header-circle" />
           <img src={weeskyLogo} alt="weesky.net" className="site-header-logo" />
-          <span className="site-header-section">/mail</span>
         </div>
         <AccountPanel
           initials={initials}
           fullName={fullName}
           primaryEmail={primaryEmail}
           subDomains={subDomains}
+          quota={quota}
           onLogout={handleLogout}
           onChangePassword={() => setChangePasswordOpen(true)}
         />
@@ -334,8 +373,13 @@ export default function AliasesPage({ onLogout }) {
         <div className="alias-grid">
           {visibleAliases.map(a => {
             const key = `${a.name}@${a.domain}`
+            const isNew = highlightedKey === key
             return (
-              <div className="alias-tile" key={key}>
+              <div
+                className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
+                key={key}
+                onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
+              >
                 <span className="alias-tile-name">{a.name}</span>
                 <span className="alias-tile-domain">@{a.domain}</span>
                 <button

@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Text;
 using weesky.MailAdminRestAPI.Authentication.Models;
+using weesky.MailAdminRestAPI.Repositories;
 
 namespace weesky.MailAdminRestAPI.Authentication.Extensions
 {
@@ -35,9 +37,12 @@ namespace weesky.MailAdminRestAPI.Authentication.Extensions
 
                 options.Events = new JwtBearerEvents()
                 {
-                    OnAuthenticationFailed = (context) =>
+                    OnAuthenticationFailed = context =>
                     {
-                        Console.WriteLine(context.Exception);
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("JwtBearerAuth");
+                        logger.LogWarning("JWT authentication failed: {Reason}", context.Exception.Message);
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = (context) =>
@@ -49,8 +54,24 @@ namespace weesky.MailAdminRestAPI.Authentication.Extensions
 
                         return Task.CompletedTask;
                     },
-                    OnTokenValidated = (context) =>
+                    OnTokenValidated = context =>
                     {
+                        var claims = context.Principal?.Claims ?? Enumerable.Empty<Claim>();
+                        var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Upn)?.Value;
+                        var domain = claims.FirstOrDefault(c => c.Type == ClaimTypes.Dns)?.Value;
+
+                        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(domain))
+                        {
+                            context.Fail("Missing required claims");
+                            return Task.CompletedTask;
+                        }
+
+                        var repo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
+                        if (repo.FindByEmail($"{name}@{domain}") == null)
+                        {
+                            context.Fail("User no longer exists");
+                        }
+
                         return Task.CompletedTask;
                     }
                 };

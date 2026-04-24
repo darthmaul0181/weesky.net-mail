@@ -1,6 +1,7 @@
 ﻿using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using weesky.MailAdminRestAPI.Authentication.Models;
 using weesky.MailAdminRestAPI.Authentication.Services;
@@ -28,16 +29,25 @@ namespace weesky.MailAdminRestAPI.Controllers
 		/// <returns></returns>
 		/// <response code="200">Login successful</response>
 		/// <response code="401">Invalid credentials</response>
+		/// <response code="429">Too many authentication attempts</response>
 		[HttpPost]
+		[EnableRateLimiting("login")]
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
+		[ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 		public async Task<ActionResult<AuthToken>> Login(Credentials credentials)
 		{
 			Result<AuthToken> result = _authenticator.Authenticate(credentials.Email, credentials.Password);
 
 			if (result.IsSuccess)
 			{
-				HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.Value.Token);
+				HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.Value.Token, new CookieOptions
+				{
+					HttpOnly = true,
+					Secure = true,
+					SameSite = SameSiteMode.Strict,
+					Expires = DateTimeOffset.UtcNow.AddMinutes(_tokenConstants.Value.ExpiryInMinutes)
+				});
 			}
 
 			return FromResult(result, errorStatusCode: StatusCodes.Status401Unauthorized);
@@ -55,7 +65,12 @@ namespace weesky.MailAdminRestAPI.Controllers
 		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 		public async Task<ActionResult> Logout()
 		{
-			HttpContext.Response.Cookies.Delete(_tokenConstants.Value.AuthCookieName);
+			HttpContext.Response.Cookies.Delete(_tokenConstants.Value.AuthCookieName, new CookieOptions
+			{
+				HttpOnly = true,
+				Secure = true,
+				SameSite = SameSiteMode.Strict
+			});
 
 			return NoContent();
 		}

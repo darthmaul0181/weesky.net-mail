@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Text.Json.Serialization;
 
 namespace weesky.MailAdminRestAPI.Models
@@ -9,11 +10,16 @@ namespace weesky.MailAdminRestAPI.Models
 		/// <summary>
 		/// The alias name
 		/// </summary>
+		[Required]
+		[StringLength(30, MinimumLength = 1)]
+		[RegularExpression(@"^[A-Za-z0-9._%+-]+$")]
 		public string Name { get; set; }
 
 		/// <summary>
 		/// The domain
 		/// </summary>
+		[Required]
+		[StringLength(30, MinimumLength = 1)]
 		public string Domain { get; set; }
 
 		[JsonIgnore]

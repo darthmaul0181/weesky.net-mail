@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "tar --exclude=node_modules -cf - -C D:/development/repos/weesky.net/frontend . | ssh root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/account.frontend\"",
+    "ship": "npm run build && npm run deploy"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.MailAdminRestAPI.Models;
 using weesky.MailAdminRestAPI.Repositories;
+using weesky.MailAdminRestAPI.Services;
 
 namespace weesky.MailAdminRestAPI.Controllers
 {
@@ -12,10 +13,12 @@ namespace weesky.MailAdminRestAPI.Controllers
 	public class AccountController : ApiBaseController
 	{
 		private readonly IUsersRepository _usersRepository;
-		
-		public AccountController(IUsersRepository usersRepository)
+		private readonly IDovecotQuotaClient _dovecotQuotaClient;
+
+		public AccountController(IUsersRepository usersRepository, IDovecotQuotaClient dovecotQuotaClient)
 		{
 			_usersRepository = usersRepository;
+			_dovecotQuotaClient = dovecotQuotaClient;
 		}
 
 		/// <summary>
@@ -32,6 +35,22 @@ namespace weesky.MailAdminRestAPI.Controllers
 		{
 			Result<AccountInfo> result = _usersRepository.GetAccountInfo(AuthenticatedUser);
 			return FromResult(result, errorStatusCode: StatusCodes.Status404NotFound);
+		}
+
+		/// <summary>
+		/// Returns the mailbox quota usage reported by Dovecot
+		/// </summary>
+		/// <response code="200">Quota information</response>
+		/// <response code="401">Unauthenticated user</response>
+		/// <response code="502">Unable to reach Dovecot</response>
+		[HttpGet("Quota")]
+		[ProducesResponseType(StatusCodes.Status200OK)]
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
+		[ProducesResponseType(StatusCodes.Status502BadGateway)]
+		public async Task<ActionResult<Quota>> GetQuota(CancellationToken cancellationToken)
+		{
+			Result<Quota> result = await _dovecotQuotaClient.GetQuotaAsync(AuthenticatedUser, cancellationToken);
+			return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
 		}
 
 		/// <summary>

@@ -7,10 +7,12 @@ namespace weesky.MailAdminRestAPI.Repositories
 	public class AliasesRepository : IAliasesRepository
 	{
 		private readonly ApplicationDbContext _context;
+		private readonly ILogger<AliasesRepository> _logger;
 
-		public AliasesRepository(ApplicationDbContext dbContext)
+		public AliasesRepository(ApplicationDbContext dbContext, ILogger<AliasesRepository> logger)
 		{
 			_context = dbContext;
+			_logger = logger;
 		}
 
 		public IEnumerable<Alias> GetAliases(User user)
@@ -39,14 +41,22 @@ namespace weesky.MailAdminRestAPI.Repositories
 
 			if(!UserOwnsDomain(user, alias.Domain))
 			{
+				_logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=failure reason=domain_not_owned", user.Email, $"{alias.Name}@{alias.Domain}");
 				return Result.Failure($"User '{user.Name}@{user.Domain} doesn't own domain '{alias.Domain}'");
 			}
 
-			MailUser mailUser = GetMailUserBy(user);
+			MailUser? mailUser = GetMailUserBy(user);
 			MailDomain mailDomain = GetDomainBy(alias.Domain);
+
+			if (mailUser == null || mailDomain == null)
+			{
+				_logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=failure reason=user_or_domain_missing", user.Email, $"{alias.Name}@{alias.Domain}");
+				return Result.Failure("Account not found");
+			}
 
 			if(_context.Aliases.Any(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase) && a.DestinationUserId == mailUser.Id))
 			{
+				_logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=failure reason=already_exists", user.Email, $"{alias.Name}@{alias.Domain}");
 				return Result.Failure($"Alias '{alias.Name}@{alias.Domain}' already exists for this user");
 			}
 
@@ -59,6 +69,7 @@ namespace weesky.MailAdminRestAPI.Repositories
 
 			_context.SaveChanges();
 
+			_logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=success", user.Email, $"{alias.Name}@{alias.Domain}");
 			return Result.Success();
 		}
 
@@ -69,21 +80,30 @@ namespace weesky.MailAdminRestAPI.Repositories
 
 			if (!UserOwnsDomain(user, alias.Domain))
 			{
+				_logger.LogInformation("Audit: delete_alias user={User} alias={Alias} outcome=failure reason=domain_not_owned", user.Email, $"{alias.Name}@{alias.Domain}");
 				return Result.Failure($"User '{user.Name}@{user.Domain} doesn't own domain '{alias.Domain}'");
 			}
 
-			MailUser mailUser = GetMailUserBy(user);
+			MailUser? mailUser = GetMailUserBy(user);
 			MailDomain mailDomain = GetDomainBy(alias.Domain);
+
+			if (mailUser == null || mailDomain == null)
+			{
+				_logger.LogInformation("Audit: delete_alias user={User} alias={Alias} outcome=failure reason=user_or_domain_missing", user.Email, $"{alias.Name}@{alias.Domain}");
+				return Result.Failure("Account not found");
+			}
 
 			MailAlias mailAlias = _context.Aliases.FirstOrDefault(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase) && a.DestinationUserId == mailUser.Id);
 			if(mailAlias == null)
 			{
+				_logger.LogInformation("Audit: delete_alias user={User} alias={Alias} outcome=failure reason=not_found", user.Email, $"{alias.Name}@{alias.Domain}");
 				return Result.Failure($"Alias '{alias.Name}@{alias.Domain} not found");
 			}
 
 			_context.Aliases.Remove(mailAlias);
 			_context.SaveChanges();
 
+			_logger.LogInformation("Audit: delete_alias user={User} alias={Alias} outcome=success", user.Email, $"{alias.Name}@{alias.Domain}");
 			return Result.Success();
 		}
 
@@ -93,12 +113,17 @@ namespace weesky.MailAdminRestAPI.Repositories
 			{
 				return true;
 			}
-			
-			MailUser mailUser = GetMailUserBy(user);
+
+			MailUser? mailUser = GetMailUserBy(user);
+			if (mailUser == null)
+			{
+				return false;
+			}
+
 			return _context.DomainsOwnerships.Any(ownedDomain => ownedDomain.UserId == mailUser.Id && _context.Domains.Any(domain => string.Equals(domain.Id, ownedDomain.DomainId, StringComparison.InvariantCultureIgnoreCase)));
 		}
 
-		private MailUser GetMailUserBy(User user)
+		private MailUser? GetMailUserBy(User user)
 		{
 			var query = from usr in _context.Users
 						from domain in _context.Domains
@@ -107,7 +132,7 @@ namespace weesky.MailAdminRestAPI.Repositories
 							&& string.Equals(domain.Name, user.Domain, StringComparison.InvariantCultureIgnoreCase)
 						select usr;
 
-			return query.First();
+			return query.FirstOrDefault();
 		}
 
 		private MailDomain GetDomainBy(string name)

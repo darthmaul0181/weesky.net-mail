@@ -18,9 +18,7 @@ namespace weesky.MailAdminRestAPI.Data
 		{
 			var connectionString = Configuration.GetConnectionString("MailUserAccountsDatabase");
 			optionsBuilder.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString), options => options.EnableStringComparisonTranslations())
-			.LogTo(Console.WriteLine, LogLevel.Information)
-			.EnableSensitiveDataLogging()
-			.EnableDetailedErrors();
+			.LogTo(Console.WriteLine, LogLevel.Warning);
 		}
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)

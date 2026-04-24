@@ -8,10 +8,12 @@ namespace weesky.MailAdminRestAPI.Repositories
 	public class UsersRepository : IUsersRepository
 	{
 		private readonly ApplicationDbContext _context;
+		private readonly ILogger<UsersRepository> _logger;
 
-		public UsersRepository(ApplicationDbContext dbContext)
+		public UsersRepository(ApplicationDbContext dbContext, ILogger<UsersRepository> logger)
 		{
 			_context = dbContext;
+			_logger = logger;
 		}
 
 		public User FindByEmail(string email)
@@ -47,7 +49,7 @@ namespace weesky.MailAdminRestAPI.Repositories
 			}
 
 			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-			if (user == null)
+			if (mailUser == null)
 			{
 				return false;
 			}
@@ -59,13 +61,13 @@ namespace weesky.MailAdminRestAPI.Repositories
 		{
 			MailDomain domain = _context.Domains.FirstOrDefault(d => d.Name == user.Domain);
 			if (domain == null)
-				return Result.Failure<AccountInfo>($"Domain {user.Domain} not found");
+				return Result.Failure<AccountInfo>("Account not found");
 
 			MailUser mailUser = _context.Users.FirstOrDefault(u =>
 				string.Equals(u.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) &&
 				u.DomainId == domain.Id);
 			if (mailUser == null)
-				return Result.Failure<AccountInfo>($"User {user.Email} not found");
+				return Result.Failure<AccountInfo>("Account not found");
 
 			var ownedDomains = _context.DomainsOwnerships
 				.Where(o => o.UserId == mailUser.Id)
@@ -89,29 +91,34 @@ namespace weesky.MailAdminRestAPI.Repositories
 		{
 			if(string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
 			{
+				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=weak_password", user.Email);
 				return Result.Failure($"Your password should contains 8 chars at least");
 			}
 
 			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
 			if (domain == null)
 			{
+				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
 				return Result.Failure($"User {user.Name}@{user.Domain} not found");
 			}
 
 			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-			if (user == null)
+			if (mailUser == null)
 			{
+				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
 				return Result.Failure($"User {user.Name}@{user.Domain} not found");
 			}
 
 			if(!Crypter.CheckPassword(oldPassword, mailUser.Password))
 			{
+				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
 				return Result.Failure($"Invalid password");
 			}
 
 			mailUser.Password = newPassword;
 			_context.SaveChanges();
 
+			_logger.LogInformation("Audit: change_password user={User} outcome=success", user.Email);
 			return Result.Success();
 		}
 	}

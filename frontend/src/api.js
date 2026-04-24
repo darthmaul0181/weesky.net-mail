@@ -19,7 +19,7 @@ export function setToken(token, expiresIn, persist = false) {
   authToken = token
   if (persist) {
     localStorage.setItem(TOKEN_KEY, token)
-    localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 1000))
+    localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 60 * 1000))
   } else {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(EXPIRY_KEY)
@@ -71,6 +71,9 @@ export const api = {
 
   getAccount: () =>
     request('GET', '/api/Account'),
+
+  getQuota: () =>
+    request('GET', '/api/Account/Quota'),
 
   getAliases: () =>
     request('GET', '/api/Aliases'),

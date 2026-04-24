@@ -21,10 +21,12 @@ There are no tests in this project.
 
 **Controllers** (`Controllers/`) receive HTTP requests and return `ResultEnveloppe<T>` responses via helpers in `ApiBaseController`. The three main controllers are:
 - `LoginController` — `POST /api/login` (issue JWT), `DELETE /api/login` (revoke cookie)
-- `AccountController` — `PATCH /api/account/changesecret` (password change)
+- `AccountController` — `GET /api/account` (info), `GET /api/account/quota` (Dovecot quota), `PATCH /api/account/changesecret` (password change)
 - `AliasesController` — `GET/POST/DELETE /api/aliases` (alias CRUD, scoped to caller's owned domains)
 
 **Repositories** (`Repositories/`) handle all database access via EF Core. `UsersRepository` validates credentials and updates passwords; `AliasesRepository` lists/creates/deletes aliases and enforces domain ownership via the `MailDomainOwnership` join table.
+
+**Services** (`Services/`) wrap external integrations. `DovecotQuotaClient` (typed `HttpClient`) calls the remote doveadm HTTP API (`quotaGet`) to retrieve live mailbox quota.
 
 **Authentication** (`Authentication/`) configures JWT bearer + HTTP-only cookie auth. `UserAuthenticator` validates credentials; `TokenManager` + `TokenBuilder` issue signed JWTs. Token constants (issuer, audience, expiry, signing key, cookie name) come from `appsettings.json` under the `"Token"` key.
 
