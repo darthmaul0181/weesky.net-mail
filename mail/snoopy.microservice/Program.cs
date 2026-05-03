@@ -132,7 +132,11 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-app.UseSerilogRequestLogging();
+app.UseSerilogRequestLogging(options =>
+{
+    options.GetLevel = (ctx, _, _) =>
+        ctx.Request.Path == "/health" ? LogEventLevel.Verbose : LogEventLevel.Information;
+});
 
 app.UseExceptionHandler();
 
