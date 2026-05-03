@@ -69,5 +69,22 @@ namespace weesky.Snoopy.Microservice.Controllers
 			Result result = _usersRepository.ChangePassword(AuthenticatedUser, secretChange.NewPassword, secretChange.OldPassword);
 			return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
 		}
+
+		/// <summary>
+		/// Change the account full name
+		/// </summary>
+		/// <param name="fullNameChange">the new full name</param>
+		/// <response code="204">Full name changed successfully</response>
+		/// <response code="400">Invalid request</response>
+		/// <response code="401">Unauthenticated user</response>
+		[HttpPost("FullName")]
+		[ProducesResponseType(StatusCodes.Status204NoContent)]
+		[ProducesResponseType(StatusCodes.Status400BadRequest)]
+		[ProducesResponseType(StatusCodes.Status401Unauthorized)]
+		public ActionResult ChangeFullName(FullNameChange fullNameChange)
+		{
+			Result result = _usersRepository.ChangeFullName(AuthenticatedUser, fullNameChange.FullName);
+			return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+		}
 	}
 }

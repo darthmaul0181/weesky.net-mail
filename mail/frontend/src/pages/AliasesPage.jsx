@@ -60,6 +60,35 @@ function TrashIcon() {
   )
 }
 
+function PencilIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+
 function ChangePasswordModal({ onClose }) {
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -155,9 +184,13 @@ function QuotaBlock({ quota }) {
   )
 }
 
-function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword }) {
+function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, alphaMode, onAlphaModeChange, onFullNameChange }) {
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState('')
+  const [saving, setSaving] = useState(false)
   const panelRef = useRef(null)
+  const inputRef = useRef(null)
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -169,6 +202,29 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
+  function handleEdit() {
+    setEditValue(fullName)
+    setEditing(true)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  function handleCancel() {
+    setEditing(false)
+  }
+
+  async function handleConfirm() {
+    setSaving(true)
+    try {
+      await api.changeFullName(editValue.trim())
+      onFullNameChange(editValue.trim())
+      setEditing(false)
+    } catch {
+      // stay in edit mode on error
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <>
       <button className="avatar-btn" onClick={() => setOpen(o => !o)} title={primaryEmail}>
@@ -179,7 +235,32 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
         <>
           <div className="panel-overlay" onClick={() => setOpen(false)} />
           <div className="account-panel" ref={panelRef}>
-            <div className="panel-fullname">{fullName || primaryEmail}</div>
+            {editing ? (
+              <div className="panel-fullname-edit">
+                <input
+                  ref={inputRef}
+                  className="panel-fullname-input"
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
+                  maxLength={255}
+                  disabled={saving}
+                />
+                <button className="panel-fullname-btn panel-fullname-confirm" onClick={handleConfirm} disabled={saving} title="Confirm">
+                  {saving ? <span className="spinner spinner-sm" /> : <CheckIcon />}
+                </button>
+                <button className="panel-fullname-btn panel-fullname-cancel" onClick={handleCancel} disabled={saving} title="Cancel">
+                  <XIcon />
+                </button>
+              </div>
+            ) : (
+              <div className="panel-fullname-row">
+                <span className="panel-fullname">{fullName || primaryEmail}</span>
+                <button className="panel-fullname-pencil" onClick={handleEdit} title="Edit name">
+                  <PencilIcon />
+                </button>
+              </div>
+            )}
             <div className="panel-mailbox-row">
               <span className="panel-mailbox-label">Main mailbox</span>
               <span className="panel-mailbox-sep">&nbsp;:&nbsp;</span>
@@ -196,6 +277,21 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
             )}
 
             <QuotaBlock quota={quota} />
+
+            <div className="panel-settings">
+              <div className="panel-quota-label" style={{ marginBottom: '10px' }}>Options</div>
+              <div className="toggle-row">
+                <span className="toggle-label">Alphabetical mode</span>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={alphaMode}
+                    onChange={e => onAlphaModeChange(e.target.checked)}
+                  />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+            </div>
 
             <div className="panel-actions">
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
@@ -241,6 +337,16 @@ export default function AliasesPage({ onLogout }) {
   const [deletingKey, setDeletingKey] = useState(null)
   const [highlightedKey, setHighlightedKey] = useState(null)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [alphaMode, setAlphaMode] = useState(() => localStorage.getItem('alias_alpha_mode') === 'true')
+
+  function handleAlphaModeChange(value) {
+    setAlphaMode(value)
+    localStorage.setItem('alias_alpha_mode', String(value))
+  }
+
+  const scrollRef = useRef(null)
+  const groupRefs = useRef({})
+  const [activeLetter, setActiveLetter] = useState('')
 
   useEffect(() => {
     api.getAccount().then(data => {
@@ -288,6 +394,21 @@ export default function AliasesPage({ onLogout }) {
     .filter(a => !search || `${a.name}@${a.domain}`.includes(search.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  const grouped = []
+  const groupMap = {}
+  for (const a of visibleAliases) {
+    const letter = a.name[0]?.toUpperCase() ?? '#'
+    if (!groupMap[letter]) {
+      groupMap[letter] = []
+      grouped.push([letter, groupMap[letter]])
+    }
+    groupMap[letter].push(a)
+  }
+  const availableLetters = grouped.map(([l]) => l)
+  const effectiveActiveLetter = availableLetters.includes(activeLetter)
+    ? activeLetter
+    : (availableLetters[0] ?? '')
+
   async function handleDelete(name, domain) {
     const key = `${name}@${domain}`
     setDeletingKey(key)
@@ -318,6 +439,30 @@ export default function AliasesPage({ onLogout }) {
     }
   }
 
+  function handleScroll() {
+    const container = scrollRef.current
+    if (!container) return
+    const containerTop = container.getBoundingClientRect().top
+    let current = availableLetters[0] ?? ''
+    for (const letter of availableLetters) {
+      const el = groupRefs.current[letter]
+      if (el && el.getBoundingClientRect().top - containerTop <= 8) current = letter
+    }
+    if (current !== activeLetter) setActiveLetter(current)
+  }
+
+  function scrollToLetter(letter) {
+    const el = groupRefs.current[letter]
+    const container = scrollRef.current
+    if (!el || !container) return
+    container.scrollTop += el.getBoundingClientRect().top - container.getBoundingClientRect().top
+  }
+
+  function handleFullNameChange(newName) {
+    setFullName(newName)
+    setGreeting(newName || primaryEmail)
+  }
+
   function handleLogout() {
     clearToken()
     onLogout()
@@ -338,6 +483,9 @@ export default function AliasesPage({ onLogout }) {
           quota={quota}
           onLogout={handleLogout}
           onChangePassword={() => setChangePasswordOpen(true)}
+          onFullNameChange={handleFullNameChange}
+          alphaMode={alphaMode}
+          onAlphaModeChange={handleAlphaModeChange}
         />
       </header>
 
@@ -395,6 +543,57 @@ export default function AliasesPage({ onLogout }) {
         </div>
       ) : visibleAliases.length === 0 ? (
         <div className="alias-empty-grid">No aliases for this domain.</div>
+      ) : alphaMode ? (
+        <div className="alias-view-wrapper">
+          <div className="alias-scroll-area" ref={scrollRef} onScroll={handleScroll}>
+            {grouped.map(([letter, groupAliases]) => (
+              <div key={letter} className="alias-group">
+                <div
+                  className="alias-group-header"
+                  ref={el => { groupRefs.current[letter] = el }}
+                >
+                  <span className="alias-group-letter">{letter}</span>
+                  <div className="alias-group-divider" />
+                </div>
+                <div className="alias-grid">
+                  {groupAliases.map(a => {
+                    const key = `${a.name}@${a.domain}`
+                    const isNew = highlightedKey === key
+                    return (
+                      <div
+                        className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
+                        key={key}
+                        onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
+                      >
+                        <span className="alias-tile-name">{a.name}</span>
+                        <span className="alias-tile-domain">@{a.domain}</span>
+                        <button
+                          className="alias-tile-delete"
+                          onClick={() => handleDelete(a.name, a.domain)}
+                          disabled={deletingKey === key}
+                          title="Delete"
+                        >
+                          {deletingKey === key ? <span className="spinner" /> : <TrashIcon />}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="alpha-nav">
+            {availableLetters.map(letter => (
+              <button
+                key={letter}
+                className={`alpha-nav-letter${effectiveActiveLetter === letter ? ' is-active' : ''}`}
+                onClick={() => scrollToLetter(letter)}
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="alias-grid">
           {visibleAliases.map(a => {

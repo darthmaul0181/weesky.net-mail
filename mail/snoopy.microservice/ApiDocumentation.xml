@@ -44,6 +44,15 @@
             <response code="400">Wrong credentials</response>
             <response code="401">Unauthenticated user</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangeFullName(weesky.Snoopy.Microservice.Models.FullNameChange)">
+            <summary>
+            Change the account full name
+            </summary>
+            <param name="fullNameChange">the new full name</param>
+            <response code="204">Full name changed successfully</response>
+            <response code="400">Invalid request</response>
+            <response code="401">Unauthenticated user</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.Add(weesky.Snoopy.Microservice.Models.Alias)">
             <summary>
             Add an aliases to the main mailbox.

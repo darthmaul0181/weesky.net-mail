@@ -86,4 +86,7 @@ export const api = {
 
   changePassword: (oldPassword, newPassword) =>
     request('PATCH', '/api/Account/ChangeSecret', { oldPassword, newPassword }),
+
+  changeFullName: (fullName) =>
+    request('POST', '/api/Account/FullName', { fullName }),
 }

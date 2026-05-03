@@ -29,6 +29,35 @@ There are no tests and no linter configured.
 
 **Pages** — `AliasesPage.jsx` is the main view and contains several self-contained sub-components (`AccountPanel`, `ChangePasswordModal`, `Toasts`) defined in the same file. No shared component library is used.
 
+## Components
+
+### AccountPanel
+Slide-in panel (fixed, right side, full height) triggered by the avatar button in the header. Closes on outside click via `mousedown` listener. Internal structure top to bottom:
+- User name + primary email
+- Other domains list (hidden if none)
+- Storage quota bar (`QuotaBlock`)
+- **Options section** (`.panel-settings`) — bordered top, contains a toggle switch for alphabetical mode
+- **Actions section** (`.panel-actions`) — bordered top, contains Change password + Sign out
+
+Section labels (e.g. "Options", "Other domains", "Storage") use class `.panel-quota-label`: `11px`, `600`, `uppercase`, `letter-spacing 0.06em`, `var(--text-muted)`.
+
+### Alias display — flat vs alphabetical mode
+
+User preference is stored in `localStorage` key `alias_alpha_mode` (`"true"` / `"false"`), default `false`. It survives logout because it is never cleared by `clearToken()`. The state is initialized via `useState(() => localStorage.getItem('alias_alpha_mode') === 'true')`.
+
+**Flat mode** (`alphaMode === false`) — original layout: a single `.alias-grid` flex-wrap div, no scroll container.
+
+**Alphabetical mode** (`alphaMode === true`) — three-layer layout:
+- `.alias-view-wrapper` — `display: flex`, `max-height: calc(100vh - 260px)`, `overflow: hidden`, no border, transparent background
+- `.alias-scroll-area` — `flex: 1`, `overflow-y: auto`. Scrollbar: thumb `var(--primary)`, track `transparent` (keeps Dark Reader compat — avoids white background in dark mode)
+- `.alpha-nav` — 28px wide column of letter buttons, no border, right of the scrollbar
+
+**Group headers** — each letter group has an `.alias-group-header` with the letter (`13px`, bold, `var(--text-muted)`) and a flex-1 `<div>` acting as a horizontal rule.
+
+**Scroll ↔ letter sync** — active letter is detected in the `onScroll` handler via `getBoundingClientRect()` relative to the container top (threshold: 8px). Letter refs are stored in `groupRefs` (`useRef({})`). `scrollToLetter` uses the same `getBoundingClientRect` delta to set `container.scrollTop`. `effectiveActiveLetter` falls back to the first available letter when `activeLetter` is stale after a filter change.
+
+**Alpha-nav hover** — `background: var(--primary)`, `color: #fff` (mirrors the header banner). Active letter: `color: var(--primary)`, bold, no background.
+
 ## Deployment
 
 `npm run deploy` tarballs the project (excluding `node_modules`) and extracts it over SSH into `/var/www/admin/mail/account.frontend` on `root@curiosity.weesky.net`. Always run `npm run build` first (or just use `npm run ship`).

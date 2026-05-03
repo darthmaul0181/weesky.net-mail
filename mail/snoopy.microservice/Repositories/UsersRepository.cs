@@ -87,6 +87,29 @@ namespace weesky.Snoopy.Microservice.Repositories
 			});
 		}
 
+		public Result ChangeFullName(User user, string fullName)
+		{
+			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
+			if (domain == null)
+			{
+				_logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
+				return Result.Failure($"User {user.Name}@{user.Domain} not found");
+			}
+
+			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
+			if (mailUser == null)
+			{
+				_logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
+				return Result.Failure($"User {user.Name}@{user.Domain} not found");
+			}
+
+			mailUser.FullName = fullName;
+			_context.SaveChanges();
+
+			_logger.LogInformation("Audit: change_fullname user={User} outcome=success", user.Email);
+			return Result.Success();
+		}
+
 		public Result ChangePassword(User user, string newPassword, string oldPassword)
 		{
 			if(string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
