@@ -1,5 +1,5 @@
 ![Logo](./assets/weesky_net.png)
-# weesky.net
+# weesky.net-public
 
 Monorepo hosting the mail administration services for **weesky.net**: a .NET REST API on top of the Dovecot database and its React web interface.
 
