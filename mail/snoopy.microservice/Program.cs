@@ -11,6 +11,7 @@ using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.HealthChecks;
 using weesky.Snoopy.Microservice.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -84,6 +85,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddProblemDetails();
 
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database");
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -128,7 +132,11 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-app.UseSerilogRequestLogging();
+app.UseSerilogRequestLogging(options =>
+{
+    options.GetLevel = (ctx, _, _) =>
+        ctx.Request.Path == "/health" ? LogEventLevel.Verbose : LogEventLevel.Information;
+});
 
 app.UseExceptionHandler();
 
@@ -156,6 +164,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();
