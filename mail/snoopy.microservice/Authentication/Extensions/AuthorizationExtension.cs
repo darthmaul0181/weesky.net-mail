@@ -8,6 +8,7 @@ using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Authentication.Extensions
 {
+	[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 	public static class AuthorizationExtension
 	{
         /// <summary>

@@ -14,6 +14,7 @@ namespace weesky.Snoopy.Microservice.Data
 			Configuration = configuration;
 		}
 
+		[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 		protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 		{
 			var connectionString = Configuration.GetConnectionString("MailUserAccountsDatabase");

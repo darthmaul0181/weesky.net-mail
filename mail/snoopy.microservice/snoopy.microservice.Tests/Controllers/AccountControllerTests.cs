@@ -109,5 +109,31 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
             Assert.Equal("Invalid password", envelope.Message);
             Assert.Equal(ResultState.Error, envelope.State);
         }
+
+        [Fact]
+        public void ChangeFullName_WhenSuccess_Returns204()
+        {
+            _usersRepo.Setup(r => r.ChangeFullName(It.IsAny<User>(), It.IsAny<string>()))
+                .Returns(Result.Success());
+
+            var result = CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
+
+            var status = Assert.IsType<StatusCodeResult>(result);
+            Assert.Equal(204, status.StatusCode);
+        }
+
+        [Fact]
+        public void ChangeFullName_WhenFailed_Returns400WithEnvelope()
+        {
+            _usersRepo.Setup(r => r.ChangeFullName(It.IsAny<User>(), It.IsAny<string>()))
+                .Returns(Result.Failure("User not found"));
+
+            var result = CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
+
+            var obj = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(400, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("User not found", envelope.Message);
+        }
     }
 }

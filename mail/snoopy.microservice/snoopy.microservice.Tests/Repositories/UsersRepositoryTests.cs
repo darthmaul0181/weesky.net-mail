@@ -252,5 +252,57 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
 
             Assert.True(result.IsFailure);
         }
+
+        [Fact]
+        public void ChangePassword_WhenDomainNotFound_ReturnsFailure()
+        {
+            var (repo, _) = CreateSut();
+
+            var result = repo.ChangePassword(new User("john@nonexistent.com"), "NewPassword123!", TestPassword);
+
+            Assert.True(result.IsFailure);
+        }
+
+        // --- ChangeFullName ---
+
+        [Fact]
+        public void ChangeFullName_WithValidUser_ReturnsSuccess()
+        {
+            var (repo, _) = CreateSut();
+
+            var result = repo.ChangeFullName(new User(TestEmail), "New Name");
+
+            Assert.True(result.IsSuccess);
+        }
+
+        [Fact]
+        public void ChangeFullName_WithValidUser_PersistsNewName()
+        {
+            var (repo, context) = CreateSut();
+
+            repo.ChangeFullName(new User(TestEmail), "New Name");
+
+            Assert.Equal("New Name", context.Users.First(u => u.Name == "john").FullName);
+        }
+
+        [Fact]
+        public void ChangeFullName_WhenDomainNotFound_ReturnsFailure()
+        {
+            var (repo, _) = CreateSut();
+
+            var result = repo.ChangeFullName(new User("john@nonexistent.com"), "New Name");
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public void ChangeFullName_WhenUserNotFound_ReturnsFailure()
+        {
+            var (repo, _) = CreateSut();
+
+            var result = repo.ChangeFullName(new User("nobody@weesky.be"), "New Name");
+
+            Assert.True(result.IsFailure);
+        }
     }
 }
