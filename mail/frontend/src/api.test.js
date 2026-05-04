@@ -82,6 +82,77 @@ describe('token restoration on module load', () => {
   })
 })
 
+function mockFetch(status, { json, text, ok } = {}) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    status,
+    ok: ok ?? (status >= 200 && status < 300),
+    json: () => Promise.resolve(json ?? {}),
+    text: () => Promise.resolve(text ?? ''),
+    statusText: text ?? '',
+  }))
+}
+
+describe('request — response handling', () => {
+  it('returns null on 204', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+    await expect(api.getAliases()).resolves.toBeNull()
+  })
+
+  it('returns parsed JSON on 200', async () => {
+    const data = [{ name: 'alias', domain: 'example.com' }]
+    mockFetch(200, { json: data })
+    const { api } = await import('./api.js')
+    await expect(api.getAliases()).resolves.toEqual(data)
+  })
+
+  it('throws with body text on non-ok response', async () => {
+    mockFetch(400, { ok: false, text: 'Bad Request' })
+    const { api } = await import('./api.js')
+    await expect(api.getAliases()).rejects.toThrow('Bad Request')
+  })
+})
+
+describe('api methods', () => {
+  beforeEach(() => mockFetch(200))
+
+  it('login calls POST /api/BearerAuthenticator', async () => {
+    const { api } = await import('./api.js')
+    await api.login('user@example.com', 'pass')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/BearerAuthenticator'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('createAlias calls POST /api/Aliases', async () => {
+    const { api } = await import('./api.js')
+    await api.createAlias('test', 'example.com')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Aliases'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('deleteAlias calls DELETE /api/Aliases', async () => {
+    const { api } = await import('./api.js')
+    await api.deleteAlias('test', 'example.com')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Aliases'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('changePassword calls PATCH /api/Account/ChangeSecret', async () => {
+    const { api } = await import('./api.js')
+    await api.changePassword('old', 'new')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Account/ChangeSecret'),
+      expect.objectContaining({ method: 'PATCH' })
+    )
+  })
+})
+
 describe('401 handling', () => {
   it('clears token and calls the unauthorized handler', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 401 }))
