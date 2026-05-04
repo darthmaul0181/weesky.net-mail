@@ -79,6 +79,14 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.False(repo.UserOwnsDomain(new User("nobody@" + PrimaryDomain), OwnedDomain));
         }
 
+        [Fact]
+        public void UserOwnsDomain_WhenDomainDoesNotExist_ReturnsFalse()
+        {
+            var (repo, _, _) = CreateSut();
+
+            Assert.False(repo.UserOwnsDomain(AuthUser, "doesnotexist.com"));
+        }
+
         // --- AddAlias ---
 
         [Fact]
