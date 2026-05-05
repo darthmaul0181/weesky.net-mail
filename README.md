@@ -8,7 +8,7 @@ Monorepo hosting the mail administration services for **weesky.net**: a .NET RES
 ## Repository layout
 
 ```
-weesky.net/
+weesky.net-mail/
 └── src/
     ├── snoopy.microservice/   # Backend REST API (ASP.NET Core .NET 10)
     └── frontend/              # React + Vite SPA
