@@ -1,5 +1,4 @@
-![Logo](./assets/weesky_net.png)
-# weesky.net-public
+# weesky.net-mail
 
 [![Backend](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/dotnet.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/dotnet.yml)
 [![Frontend](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/account-frontend.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/account-frontend.yml)
