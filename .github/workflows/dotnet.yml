@@ -21,4 +21,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build
         with:
-          working-directory: mail/snoopy.microservice
+          working-directory: src/snoopy.microservice

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`mailadmin-frontend` — a React SPA for managing email aliases on the weesky.net mail service. It talks to a backend at `https://api.mail.weesky.net`.
+`frontend` — a React SPA for managing email aliases on the weesky.net mail service. It talks to a backend at `https://api.mail.weesky.net`.
 
 ## Commands
 

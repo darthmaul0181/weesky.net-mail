@@ -14,10 +14,10 @@ Run these commands **from PowerShell** (not Git Bash): the SSH key is held by th
 ## 1. Build locally
 
 ```powershell
-cd D:\development\repos\weesky.net\mail\frontend; npm run build
+cd D:\development\repos\weesky.net-mail\src\frontend; npm run build
 ```
 
-Produces `D:\development\repos\weesky.net\mail\frontend\dist\`.
+Produces `D:\development\repos\weesky.net-mail\src\frontend\dist\`.
 
 ## 2. Clean docroot, upload, chmod, chown
 
@@ -29,5 +29,5 @@ Single SSH session that:
 5. `chmod 750` on `assets/` (same lockdown as docroot — r-x for www-data so nginx can serve the hashed static assets, world excluded).
 
 ```powershell
-tar -cf - -C D:\development\repos\weesky.net\mail\frontend\dist . | ssh root@curiosity.weesky.net "find /var/www/admin/mail/account.frontend -mindepth 1 -delete && tar -xf - -C /var/www/admin/mail/account.frontend && chmod 750 /var/www/admin/mail/account.frontend && chown root:www-data /var/www/admin/mail/account.frontend -R && chmod 750 /var/www/admin/mail/account.frontend/assets"
+tar -cf - -C D:\development\repos\weesky.net-mail\src\frontend\dist . | ssh root@curiosity.weesky.net "find /var/www/admin/mail/account.frontend -mindepth 1 -delete && tar -xf - -C /var/www/admin/mail/account.frontend && chmod 750 /var/www/admin/mail/account.frontend && chown root:www-data /var/www/admin/mail/account.frontend -R && chmod 750 /var/www/admin/mail/account.frontend/assets"
 ```

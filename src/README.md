@@ -5,9 +5,9 @@ Mail administration services for weesky.net: a REST API backed by the Dovecot da
 ## Layout
 
 ```
-mail/
+src/
 ├── snoopy.microservice/   # Backend REST API (ASP.NET Core .NET 10)
-└── frontend/              # React + Vite SPA (mailadmin-frontend)
+└── frontend/              # React + Vite SPA
 ```
 
 ## snoopy.microservice — weesky.mail.snoopy
@@ -28,7 +28,7 @@ dotnet build -c Release
 
 See [`snoopy.microservice/DESIGN.md`](snoopy.microservice/DESIGN.md) for architecture details and [`snoopy.microservice/CLAUDE.md`](snoopy.microservice/CLAUDE.md) for commands.
 
-## frontend — mailadmin-frontend
+## frontend
 
 React SPA (Vite) for alias and account management. Talks to the API at `https://api.mail.weesky.net`.
 

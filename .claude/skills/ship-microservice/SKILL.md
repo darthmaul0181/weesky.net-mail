@@ -9,7 +9,7 @@ Run the steps in order. Each step depends on the previous one. If a step fails, 
 
 ## 1. Publish
 
-The publish profile `mail/snoopy.microservice/Properties/PublishProfiles/default.pubxml` targets `linux-x64`, self-contained, Release, and writes to `D:\development\builds\api`. The profile sets both `PublishUrl` (VS) and `PublishDir` (CLI) so `dotnet publish` honors the destination.
+The publish profile `src/snoopy.microservice/Properties/PublishProfiles/default.pubxml` targets `linux-x64`, self-contained, Release, and writes to `D:\development\builds\api`. The profile sets both `PublishUrl` (VS) and `PublishDir` (CLI) so `dotnet publish` honors the destination.
 
 Empty the target directory (the profile does not delete existing files), then publish:
 
@@ -18,7 +18,7 @@ Get-ChildItem D:\development\builds\api -Recurse -Force | Remove-Item -Recurse -
 ```
 
 ```bash
-cd mail/snoopy.microservice
+cd src/snoopy.microservice
 dotnet publish -p:PublishProfile=default
 ```
 

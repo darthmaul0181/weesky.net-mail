@@ -1,4 +1,4 @@
-# mailadmin-frontend
+# frontend
 
 A React SPA for managing email aliases on the weesky.net mail service. It talks to the backend at `https://api.mail.weesky.net`.
 
