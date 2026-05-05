@@ -1,5 +1,5 @@
 {
-  "name": "mailadmin-frontend",
+  "name": "frontend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "tar --exclude=node_modules -cf - -C D:/development/repos/weesky.net/mail/frontend . | ssh root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/account.frontend\"",
+    "deploy": "tar --exclude=node_modules -cf - -C D:/development/repos/weesky.net-mail/src/frontend . | ssh root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/account.frontend\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src",

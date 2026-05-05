@@ -19,7 +19,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: mail/frontend
+        working-directory: src/frontend
 
     steps:
     - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
       with:
         node-version: 20.x
         cache: npm
-        cache-dependency-path: mail/frontend/package-lock.json
+        cache-dependency-path: src/frontend/package-lock.json
     - name: Install dependencies
       run: npm install
     - name: Lint
@@ -38,7 +38,7 @@ jobs:
     - name: Coverage summary
       uses: irongut/CodeCoverageSummary@v1.3.0
       with:
-        filename: mail/frontend/coverage/cobertura-coverage.xml
+        filename: src/frontend/coverage/cobertura-coverage.xml
         badge: true
         format: markdown
         output: both

@@ -1,7 +1,7 @@
 # weesky.net-mail
 
-[![Backend](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/dotnet.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/dotnet.yml)
-[![Frontend](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/account-frontend.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-public/actions/workflows/account-frontend.yml)
+[![Backend](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/dotnet.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/dotnet.yml)
+[![Frontend](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/account-frontend.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/account-frontend.yml)
 
 Monorepo hosting the mail administration services for **weesky.net**: a .NET REST API on top of the Dovecot database and its React web interface.
 
@@ -9,23 +9,23 @@ Monorepo hosting the mail administration services for **weesky.net**: a .NET RES
 
 ```
 weesky.net/
-└── mail/
+└── src/
     ├── snoopy.microservice/   # Backend REST API (ASP.NET Core .NET 10)
-    └── frontend/              # React + Vite SPA (mailadmin-frontend)
+    └── frontend/              # React + Vite SPA
 ```
 
 ## Components
 
-### `mail/snoopy.microservice` — weesky.mail.snoopy
+### `src/snoopy.microservice` — weesky.mail.snoopy
 
 ASP.NET Core (.NET 10) REST API exposing admin operations on top of the `dovecot` database (MariaDB/MySQL).
 
 Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), `CryptSharp` (Dovecot-compatible crypt hashing), Serilog, Swashbuckle.
 
-See [`mail/snoopy.microservice/DESIGN.md`](mail/snoopy.microservice/DESIGN.md) for architecture details and [`mail/snoopy.microservice/CLAUDE.md`](mail/snoopy.microservice/CLAUDE.md) for commands.
+See [`src/snoopy.microservice/DESIGN.md`](src/snoopy.microservice/DESIGN.md) for architecture details and [`src/snoopy.microservice/CLAUDE.md`](src/snoopy.microservice/CLAUDE.md) for commands.
 
-### `mail/frontend` — mailadmin-frontend
+### `src/frontend`
 
 React SPA (Vite) for alias and account management. Talks to the API at `https://api.mail.weesky.net`.
 
-See [`mail/frontend/CLAUDE.md`](mail/frontend/CLAUDE.md) for details.
+See [`src/frontend/CLAUDE.md`](src/frontend/CLAUDE.md) for details.
