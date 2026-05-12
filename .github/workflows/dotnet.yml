@@ -58,6 +58,15 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Open SSH port
+        uses: ./.github/actions/firewall
+        with:
+          enabled: '1'
+          credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+
       - name: Download publish
         uses: actions/download-artifact@v4
         with:
@@ -91,3 +100,10 @@ jobs:
              sudo chmod 760 $DEPLOY_PATH/snoopy.microservice && \
              sudo chown -R root:github $DEPLOY_PATH && \
              sudo systemctl restart $SERVICE_NAME"
+
+      - name: Close SSH port
+        if: always()
+        uses: ./.github/actions/firewall
+        with:
+          enabled: '0'
+          credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}

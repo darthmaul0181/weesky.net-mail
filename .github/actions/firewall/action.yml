@@ -1,0 +1,32 @@
+name: Firewall rule
+description: Enable or disable the OPNsense SSH rule on curiosity.weesky.net
+
+inputs:
+  enabled:
+    description: '"1" to open, "0" to close'
+    required: true
+  credentials:
+    description: OPNsense API credentials (user:key)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set rule
+      shell: bash
+      run: |
+        result=$(curl -s -f -u "${{ inputs.credentials }}" \
+          -X POST -H "Content-Type: application/json" \
+          -d "{\"rule\": {\"enabled\": \"${{ inputs.enabled }}\"}}" \
+          "https://prism.weesky.net/api/firewall/filter/setRule/b78c7b9d-3aaa-466f-84c7-198b98919961")
+        echo "$result"
+        echo "$result" | jq -e '.result == "saved"' > /dev/null
+
+    - name: Apply
+      shell: bash
+      run: |
+        result=$(curl -s -f -u "${{ inputs.credentials }}" \
+          -X POST \
+          "https://prism.weesky.net/api/firewall/filter/apply")
+        echo "$result"
+        echo "$result" | jq -e '.status | startswith("OK")' > /dev/null
