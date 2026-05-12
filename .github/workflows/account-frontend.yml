@@ -94,7 +94,7 @@ jobs:
           tar -cf - -C dist . | ssh -i ~/.ssh/deploy_key github@curiosity.weesky.net \
             "mkdir -p $DEPLOY_PATH && \
              find $DEPLOY_PATH -mindepth 1 -delete && \
-             tar -xf - -C $DEPLOY_PATH --no-same-owner --no-same-permissions && \
+             sudo tar -xf - -C $DEPLOY_PATH && \
              sudo find $DEPLOY_PATH -type d -exec chmod 775 {} + && \
              sudo find $DEPLOY_PATH -type f -exec chmod 664 {} + && \
              sudo chown -R root:github $DEPLOY_PATH"
