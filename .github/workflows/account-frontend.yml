@@ -51,3 +51,50 @@ jobs:
         path: code-coverage-results.md
     - name: Build
       run: npm run build
+      env:
+        VITE_API_BASE: ${{ github.event_name == 'workflow_dispatch' && github.ref_name != 'master' && 'https://api-dev.mail.weesky.net' || '' }}
+    - name: Upload dist
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist
+        path: src/frontend/dist
+        retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
+
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Set deploy path
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            echo "DEPLOY_PATH=/var/www/admin/mail/account.frontend" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_PATH=/var/www/admin/mail-dev/account.frontend" >> $GITHUB_ENV
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        run: |
+          tar -cf - -C dist . | ssh -i ~/.ssh/deploy_key github@curiosity.weesky.net \
+            "mkdir -p $DEPLOY_PATH && \
+             find $DEPLOY_PATH -mindepth 1 -delete && \
+             tar -xf - -C $DEPLOY_PATH && \
+             sudo find $DEPLOY_PATH -type d -exec chmod 770 {} + && \
+             sudo find $DEPLOY_PATH -type f -exec chmod 660 {} + && \
+             sudo chown -R root:github $DEPLOY_PATH"

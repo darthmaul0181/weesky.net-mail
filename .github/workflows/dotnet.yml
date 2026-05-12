@@ -23,3 +23,54 @@ jobs:
       - uses: ./.github/actions/build
         with:
           working-directory: src/snoopy.microservice
+      - name: Publish
+        if: github.event_name == 'workflow_dispatch'
+        run: dotnet publish src/snoopy.microservice -c Release -r linux-x64 --self-contained -o ${{ github.workspace }}/publish
+      - name: Upload publish
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: microservice-publish
+          path: ${{ github.workspace }}/publish
+          retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
+
+    steps:
+      - name: Download publish
+        uses: actions/download-artifact@v4
+        with:
+          name: microservice-publish
+          path: publish
+
+      - name: Set deploy vars
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            echo "DEPLOY_PATH=/var/www/admin/mail/snoopy.microservice" >> $GITHUB_ENV
+            echo "SERVICE_NAME=snoopy.microservice" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_PATH=/var/www/admin/mail-dev/snoopy.microservice" >> $GITHUB_ENV
+            echo "SERVICE_NAME=snoopy.microservice-dev" >> $GITHUB_ENV
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        run: |
+          tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key github@curiosity.weesky.net \
+            "mkdir -p $DEPLOY_PATH && \
+             tar -xf - -C $DEPLOY_PATH && \
+             sudo find $DEPLOY_PATH -type d -exec chmod 770 {} + && \
+             sudo find $DEPLOY_PATH -type f -exec chmod 660 {} + && \
+             sudo chmod 760 $DEPLOY_PATH/snoopy.microservice && \
+             sudo chown -R root:github $DEPLOY_PATH && \
+             sudo systemctl restart $SERVICE_NAME"
