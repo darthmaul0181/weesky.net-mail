@@ -25,7 +25,12 @@ jobs:
           working-directory: src/snoopy.microservice
       - name: Publish
         if: github.event_name == 'workflow_dispatch'
-        run: dotnet publish src/snoopy.microservice -c Release -r linux-x64 --self-contained -o ${{ github.workspace }}/publish
+        run: >
+          dotnet publish src/snoopy.microservice
+          -c Release -r linux-x64 --self-contained
+          -p:SatelliteResourceLanguages=
+          -p:DebugType=None -p:DebugSymbols=false
+          -o ${{ github.workspace }}/publish
       - name: Upload publish
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
