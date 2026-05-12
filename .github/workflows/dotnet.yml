@@ -31,6 +31,18 @@ jobs:
           -p:SatelliteResourceLanguages=
           -p:DebugType=None -p:DebugSymbols=false
           -o ${{ github.workspace }}/publish
+      - name: Trim publish output
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          rm -rf \
+            ${{ github.workspace }}/publish/alpine \
+            ${{ github.workspace }}/publish/arm64 \
+            ${{ github.workspace }}/publish/CodeCoverage \
+            ${{ github.workspace }}/publish/macos \
+            ${{ github.workspace }}/publish/ubuntu \
+            ${{ github.workspace }}/publish/x64 \
+            ${{ github.workspace }}/publish/x86
+
       - name: Upload publish
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
