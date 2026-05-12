@@ -71,6 +71,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug connectivity
+        shell: bash
+        run: |
+          echo "Runner IP:"
+          curl -s https://ifconfig.me
+          echo ""
+          curl -v --max-time 10 https://prism.weesky.net 2>&1 | head -30
+
       - name: Open SSH port
         uses: ./.github/actions/firewall
         with:
