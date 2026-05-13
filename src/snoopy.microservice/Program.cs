@@ -21,6 +21,10 @@ var logDirectory = OperatingSystem.IsWindows()
     : "/var/log/snoopy.microservice";
 Directory.CreateDirectory(logDirectory);
 
+var logPrefix = builder.Environment.IsProduction()
+    ? ""
+    : $"{builder.Environment.EnvironmentName.ToLowerInvariant()}-";
+
 const string requestLoggerSource = "Serilog.AspNetCore.RequestLoggingMiddleware";
 
 Log.Logger = new LoggerConfiguration()
@@ -30,14 +34,14 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Logger(l => l
         .Filter.ByIncludingOnly(Matching.FromSource(requestLoggerSource))
         .WriteTo.File(
-            Path.Combine(logDirectory, "log-http-.log"),
+            Path.Combine(logDirectory, $"log-{logPrefix}http-.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 31,
             shared: true))
     .WriteTo.Logger(l => l
         .Filter.ByExcluding(Matching.FromSource(requestLoggerSource))
         .WriteTo.File(
-            Path.Combine(logDirectory, "log-.log"),
+            Path.Combine(logDirectory, $"log-{logPrefix}.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 31,
             shared: true))
