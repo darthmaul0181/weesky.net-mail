@@ -31,8 +31,12 @@ runs:
     - name: Apply
       shell: bash
       run: |
-        result=$(curl -s -f -u "${{ inputs.credentials }}" \
+        result=$(curl -s -u "${{ inputs.credentials }}" \
           -X POST \
+          -w "\n%{http_code}" \
           "${{ inputs.endpoint }}/api/firewall/filter/apply")
-        echo "$result"
-        echo "$result" | jq -e '.status | startswith("OK")' > /dev/null
+        http_code=$(echo "$result" | tail -1)
+        body=$(echo "$result" | head -n -1)
+        echo "$body"
+        echo "HTTP status: $http_code"
+        [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]
