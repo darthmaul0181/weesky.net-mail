@@ -94,7 +94,9 @@ jobs:
 
       - name: Deploy
         run: |
-          tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+          tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key \
+            -o ConnectTimeout=30 -o ServerAliveInterval=60 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "mkdir -p $DEPLOY_PATH && \
              sudo tar -xf - -C $DEPLOY_PATH && \
              sudo find $DEPLOY_PATH -type d -exec chmod 770 {} + && \

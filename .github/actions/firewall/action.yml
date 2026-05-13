@@ -1,5 +1,5 @@
 name: Firewall rule
-description: Enable or disable the OPNsense SSH rule on curiosity.weesky.net
+description: Enable or disable SSH firewall rule
 
 inputs:
   enabled:
