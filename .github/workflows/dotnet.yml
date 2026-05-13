@@ -66,6 +66,8 @@ jobs:
         with:
           enabled: '1'
           credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+          endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
+          rule_id: ${{ secrets.OPNSENSE_RULE_ID }}
 
       - name: Download publish
         uses: actions/download-artifact@v4
@@ -107,3 +109,5 @@ jobs:
         with:
           enabled: '0'
           credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+          endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
+          rule_id: ${{ secrets.OPNSENSE_RULE_ID }}

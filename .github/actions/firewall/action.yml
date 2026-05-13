@@ -8,6 +8,12 @@ inputs:
   credentials:
     description: OPNsense API credentials (user:key)
     required: true
+  endpoint:
+    description: OPNsense API base URL
+    required: true
+  rule_id:
+    description: UUID of the firewall rule to toggle
+    required: true
 
 runs:
   using: composite
@@ -18,7 +24,7 @@ runs:
         result=$(curl -s -f -u "${{ inputs.credentials }}" \
           -X POST -H "Content-Type: application/json" \
           -d "{\"rule\": {\"enabled\": \"${{ inputs.enabled }}\"}}" \
-          "https://prism.weesky.net/api/firewall/filter/setRule/b78c7b9d-3aaa-466f-84c7-198b98919961")
+          "${{ inputs.endpoint }}/api/firewall/filter/setRule/${{ inputs.rule_id }}")
         echo "$result"
         echo "$result" | jq -e '.result == "saved"' > /dev/null
 
@@ -27,6 +33,6 @@ runs:
       run: |
         result=$(curl -s -f -u "${{ inputs.credentials }}" \
           -X POST \
-          "https://prism.weesky.net/api/firewall/filter/apply")
+          "${{ inputs.endpoint }}/api/firewall/filter/apply")
         echo "$result"
         echo "$result" | jq -e '.status | startswith("OK")' > /dev/null
