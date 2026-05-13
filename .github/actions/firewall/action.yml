@@ -1,0 +1,42 @@
+name: Firewall rule
+description: Enable or disable SSH firewall rule
+
+inputs:
+  enabled:
+    description: '"1" to open, "0" to close'
+    required: true
+  credentials:
+    description: OPNsense API credentials (user:key)
+    required: true
+  endpoint:
+    description: OPNsense API base URL
+    required: true
+  rule_id:
+    description: UUID of the firewall rule to toggle
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set rule
+      shell: bash
+      run: |
+        result=$(curl -s -f -u "${{ inputs.credentials }}" \
+          -X POST -H "Content-Type: application/json" \
+          -d "{\"rule\": {\"enabled\": \"${{ inputs.enabled }}\"}}" \
+          "${{ inputs.endpoint }}/api/firewall/filter/setRule/${{ inputs.rule_id }}")
+        echo "$result"
+        echo "$result" | jq -e '.result == "saved"' > /dev/null
+
+    - name: Apply
+      shell: bash
+      run: |
+        result=$(curl -s -u "${{ inputs.credentials }}" \
+          -X POST --data "" \
+          -w "\n%{http_code}" \
+          "${{ inputs.endpoint }}/api/firewall/filter/apply")
+        http_code=$(echo "$result" | tail -1)
+        body=$(echo "$result" | head -n -1)
+        echo "$body"
+        echo "HTTP status: $http_code"
+        [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]

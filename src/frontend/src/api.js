@@ -1,4 +1,4 @@
-const BASE = 'https://api.mail.weesky.net'
+const BASE = import.meta.env.VITE_API_BASE || 'https://api.mail.weesky.net'
 const TOKEN_KEY = 'authToken'
 const EXPIRY_KEY = 'authExpiry'
 

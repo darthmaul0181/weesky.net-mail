@@ -51,3 +51,72 @@ jobs:
         path: code-coverage-results.md
     - name: Build
       run: npm run build
+      env:
+        VITE_API_BASE: ${{ github.event_name == 'workflow_dispatch' && github.ref_name != 'master' && 'https://api-dev.mail.weesky.net' || '' }}
+    - name: Upload dist
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist
+        path: src/frontend/dist
+        retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Open SSH port
+        uses: ./.github/actions/firewall
+        with:
+          enabled: '1'
+          credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+          endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
+          rule_id: ${{ secrets.OPNSENSE_RULE_ID }}
+
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Set deploy path
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_BASE_PATH }}/account.frontend" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_BASE_PATH }}-dev/account.frontend" >> $GITHUB_ENV
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        run: |
+          tar -cf - -C dist . | ssh -i ~/.ssh/deploy_key \
+            -o ConnectTimeout=30 -o ServerAliveInterval=60 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "mkdir -p $DEPLOY_PATH && \
+             find $DEPLOY_PATH -mindepth 1 -delete && \
+             sudo tar -xf - -C $DEPLOY_PATH && \
+             sudo find $DEPLOY_PATH -type d -exec chmod 775 {} + && \
+             sudo find $DEPLOY_PATH -type f -exec chmod 664 {} + && \
+             sudo chown -R root:${{ secrets.DEPLOY_USER }} $DEPLOY_PATH"
+
+      - name: Close SSH port
+        if: always()
+        uses: ./.github/actions/firewall
+        with:
+          enabled: '0'
+          credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+          endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
+          rule_id: ${{ secrets.OPNSENSE_RULE_ID }}
