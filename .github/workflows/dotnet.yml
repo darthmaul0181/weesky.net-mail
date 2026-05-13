@@ -78,10 +78,10 @@ jobs:
       - name: Set deploy vars
         run: |
           if [ "${{ github.ref_name }}" = "master" ]; then
-            echo "DEPLOY_PATH=/var/www/admin/mail/snoopy.microservice" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_PATH_SNOOPY }}/snoopy.microservice" >> $GITHUB_ENV
             echo "SERVICE_NAME=snoopy.microservice" >> $GITHUB_ENV
           else
-            echo "DEPLOY_PATH=/var/www/admin/mail-dev/snoopy.microservice" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_PATH_SNOOPY }}-dev/snoopy.microservice" >> $GITHUB_ENV
             echo "SERVICE_NAME=snoopy.microservice-dev" >> $GITHUB_ENV
           fi
 
@@ -94,13 +94,13 @@ jobs:
 
       - name: Deploy
         run: |
-          tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key github@curiosity.weesky.net \
+          tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "mkdir -p $DEPLOY_PATH && \
              sudo tar -xf - -C $DEPLOY_PATH && \
              sudo find $DEPLOY_PATH -type d -exec chmod 770 {} + && \
              sudo find $DEPLOY_PATH -type f -exec chmod 660 {} + && \
              sudo chmod 760 $DEPLOY_PATH/snoopy.microservice && \
-             sudo chown -R root:github $DEPLOY_PATH && \
+             sudo chown -R root:${{ secrets.DEPLOY_USER }} $DEPLOY_PATH && \
              sudo systemctl restart $SERVICE_NAME"
 
       - name: Close SSH port
