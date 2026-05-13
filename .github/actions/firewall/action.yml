@@ -32,7 +32,7 @@ runs:
       shell: bash
       run: |
         result=$(curl -s -u "${{ inputs.credentials }}" \
-          -X POST \
+          -X POST --data "" \
           -w "\n%{http_code}" \
           "${{ inputs.endpoint }}/api/firewall/filter/apply")
         http_code=$(echo "$result" | tail -1)
