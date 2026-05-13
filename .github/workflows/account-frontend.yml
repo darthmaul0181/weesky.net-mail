@@ -88,9 +88,9 @@ jobs:
       - name: Set deploy path
         run: |
           if [ "${{ github.ref_name }}" = "master" ]; then
-            echo "DEPLOY_PATH=${{ secrets.DEPLOY_PATH_SNOOPY }}/account.frontend" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_BASE_PATH }}/account.frontend" >> $GITHUB_ENV
           else
-            echo "DEPLOY_PATH=${{ secrets.DEPLOY_PATH_SNOOPY }}-dev/account.frontend" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_BASE_PATH }}-dev/account.frontend" >> $GITHUB_ENV
           fi
 
       - name: Setup SSH

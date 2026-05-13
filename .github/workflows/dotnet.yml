@@ -78,10 +78,10 @@ jobs:
       - name: Set deploy vars
         run: |
           if [ "${{ github.ref_name }}" = "master" ]; then
-            echo "DEPLOY_PATH=${{ secrets.DEPLOY_PATH_SNOOPY }}/snoopy.microservice" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_BASE_PATH }}/snoopy.microservice" >> $GITHUB_ENV
             echo "SERVICE_NAME=snoopy.microservice" >> $GITHUB_ENV
           else
-            echo "DEPLOY_PATH=${{ secrets.DEPLOY_PATH_SNOOPY }}-dev/snoopy.microservice" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=${{ secrets.DEPLOY_BASE_PATH }}-dev/snoopy.microservice" >> $GITHUB_ENV
             echo "SERVICE_NAME=snoopy.microservice-dev" >> $GITHUB_ENV
           fi
 
