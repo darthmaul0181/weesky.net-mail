@@ -21,33 +21,32 @@ var logDirectory = OperatingSystem.IsWindows()
     : "/var/log/snoopy.microservice";
 Directory.CreateDirectory(logDirectory);
 
-var logPrefix = builder.Environment.IsProduction()
-    ? ""
-    : $"{builder.Environment.EnvironmentName.ToLowerInvariant()}-";
-
 const string requestLoggerSource = "Serilog.AspNetCore.RequestLoggingMiddleware";
 
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .WriteTo.Logger(l => l
-        .Filter.ByIncludingOnly(Matching.FromSource(requestLoggerSource))
-        .WriteTo.File(
-            Path.Combine(logDirectory, $"log-{logPrefix}http-.log"),
-            rollingInterval: RollingInterval.Day,
-            retainedFileCountLimit: 31,
-            shared: true))
-    .WriteTo.Logger(l => l
-        .Filter.ByExcluding(Matching.FromSource(requestLoggerSource))
-        .WriteTo.File(
-            Path.Combine(logDirectory, $"log-{logPrefix}.log"),
-            rollingInterval: RollingInterval.Day,
-            retainedFileCountLimit: 31,
-            shared: true))
-    .CreateLogger();
-
-builder.Host.UseSerilog();
+builder.Host.UseSerilog((ctx, cfg) =>
+{
+    var logPrefix = ctx.HostingEnvironment.IsProduction()
+        ? ""
+        : $"{ctx.HostingEnvironment.EnvironmentName.ToLowerInvariant()}-";
+    cfg
+        .MinimumLevel.Information()
+        .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .WriteTo.Logger(l => l
+            .Filter.ByIncludingOnly(Matching.FromSource(requestLoggerSource))
+            .WriteTo.File(
+                Path.Combine(logDirectory, $"log-{logPrefix}http-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 31,
+                shared: true))
+        .WriteTo.Logger(l => l
+            .Filter.ByExcluding(Matching.FromSource(requestLoggerSource))
+            .WriteTo.File(
+                Path.Combine(logDirectory, $"log-{logPrefix}.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 31,
+                shared: true));
+});
 
 // Add services to the container.
 
