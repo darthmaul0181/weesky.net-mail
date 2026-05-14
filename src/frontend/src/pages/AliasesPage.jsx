@@ -509,12 +509,15 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
   )
 }
 
+const DOMAIN_RE = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/
+
 export function AddEditDomainModal({ domain, onSave, onClose }) {
   const [id, setId] = useState(domain?.id ?? '')
   const [name, setName] = useState(domain?.name ?? '')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const isEdit = !!domain
+  const nameValid = DOMAIN_RE.test(name)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -550,10 +553,11 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
           </div>
           <div className="field">
             <label>Domain name</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} required />
+            <input type="text" value={name} onChange={e => setName(e.target.value)} required
+              className={name && !nameValid ? 'is-error' : undefined} />
           </div>
           <button className="btn btn-primary" type="submit"
-            disabled={loading || !id.trim() || !name.trim()}>
+            disabled={loading || !id.trim() || !nameValid}>
             {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create domain')}
           </button>
         </form>

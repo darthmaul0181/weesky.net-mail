@@ -130,6 +130,11 @@ body {
   border-color: var(--primary);
 }
 
+.field input.is-error,
+.field input.is-error:focus {
+  border-color: var(--danger);
+}
+
 /* ── Buttons ─────────────────────────────────────────────── */
 
 .btn {

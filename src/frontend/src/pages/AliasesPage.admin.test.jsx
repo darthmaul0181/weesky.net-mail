@@ -282,11 +282,37 @@ describe('AddEditDomainModal — create mode', () => {
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
   })
 
-  it('submit button is enabled when both fields are filled', async () => {
+  it('submit button is enabled when both fields are filled with a valid domain', async () => {
     renderCreate()
     await userEvent.type(screen.getAllByRole('textbox')[0], 'TST')
     await userEvent.type(screen.getAllByRole('textbox')[1], 'test.com')
     expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
+  })
+
+  it('submit button is disabled when domain name is syntactically invalid', async () => {
+    renderCreate()
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'TST')
+    await userEvent.type(screen.getAllByRole('textbox')[1], 'notadomain')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+  })
+
+  it('name input gets is-error class when domain name is invalid', async () => {
+    renderCreate()
+    const nameInput = screen.getAllByRole('textbox')[1]
+    await userEvent.type(nameInput, 'notadomain')
+    expect(nameInput).toHaveClass('is-error')
+  })
+
+  it('name input has no is-error class when domain name is valid', async () => {
+    renderCreate()
+    const nameInput = screen.getAllByRole('textbox')[1]
+    await userEvent.type(nameInput, 'test.com')
+    expect(nameInput).not.toHaveClass('is-error')
+  })
+
+  it('name input has no is-error class when field is empty', () => {
+    renderCreate()
+    expect(screen.getAllByRole('textbox')[1]).not.toHaveClass('is-error')
   })
 
   it('calls adminCreateDomain with correct payload on submit', async () => {
