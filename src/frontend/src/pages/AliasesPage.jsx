@@ -240,7 +240,7 @@ export function QuotaMini({ quota }) {
   )
 }
 
-export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange }) {
+export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange, theme, onThemeChange }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -346,6 +346,20 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
                   />
                   <span className="toggle-track" />
                 </label>
+              </div>
+              <div className="toggle-row" style={{ marginTop: '10px' }}>
+                <span className="toggle-label">Appearance</span>
+                <div className="theme-selector">
+                  {[['light', 'Light'], ['dark', 'Dark'], ['system', 'System']].map(([val, label]) => (
+                    <button
+                      key={val}
+                      className={`theme-btn${theme === val ? ' is-active' : ''}`}
+                      onClick={() => onThemeChange(val)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -978,10 +992,29 @@ export default function AliasesPage({ onLogout }) {
   const [adminOpen, setAdminOpen] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [alphaMode, setAlphaMode] = useState(() => localStorage.getItem('alias_alpha_mode') === 'true')
+  const [theme, setTheme] = useState(() => localStorage.getItem('appearance_theme') || 'system')
+
+  useEffect(() => {
+    function apply() {
+      const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+    }
+    apply()
+    if (theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      mq.addEventListener('change', apply)
+      return () => mq.removeEventListener('change', apply)
+    }
+  }, [theme])
 
   function handleAlphaModeChange(value) {
     setAlphaMode(value)
     localStorage.setItem('alias_alpha_mode', String(value))
+  }
+
+  function handleThemeChange(value) {
+    setTheme(value)
+    localStorage.setItem('appearance_theme', value)
   }
 
   const scrollRef = useRef(null)
@@ -1130,6 +1163,8 @@ export default function AliasesPage({ onLogout }) {
           onFullNameChange={handleFullNameChange}
           alphaMode={alphaMode}
           onAlphaModeChange={handleAlphaModeChange}
+          theme={theme}
+          onThemeChange={handleThemeChange}
         />
       </header>
 
