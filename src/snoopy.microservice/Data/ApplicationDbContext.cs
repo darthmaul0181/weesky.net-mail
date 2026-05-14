@@ -17,7 +17,11 @@ namespace weesky.Snoopy.Microservice.Data
 		[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 		protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 		{
-			var connectionString = Configuration.GetConnectionString("MailUserAccountsDatabase");
+			var raw = Configuration.GetConnectionString("MailUserAccountsDatabase");
+			var connectionString = new MySqlConnector.MySqlConnectionStringBuilder(raw)
+			{
+				ConvertZeroDateTime = true
+			}.ToString();
 			optionsBuilder.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString), options => options.EnableStringComparisonTranslations())
 			.LogTo(Console.WriteLine, LogLevel.Warning);
 		}
