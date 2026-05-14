@@ -447,35 +447,34 @@ function AddEditUserModal({ user, domains, onSave, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isEdit ? 'Edit account' : 'Add account'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error">{error}</div>}
-          <div className="field">
+          <div className="field-h">
             <label>Username</label>
             <input type="text" value={userName} onChange={e => setUserName(e.target.value)}
               disabled={isEdit} required />
           </div>
-          <div className="field">
+          <div className="field-h">
             <label>Domain</label>
-            <select value={domainId} onChange={e => setDomainId(e.target.value)} disabled={isEdit}
-              style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontFamily: 'var(--font)', fontSize: '14px', background: 'var(--surface)', color: 'var(--text)' }}>
+            <select value={domainId} onChange={e => setDomainId(e.target.value)} disabled={isEdit}>
               {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
-          <div className="field">
-            <label>{isEdit ? 'Password (leave blank to keep)' : 'Password'}</label>
+          <div className="field-h">
+            <label>Password</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
               required={!isEdit} placeholder={isEdit ? 'Leave blank to keep unchanged' : ''} />
           </div>
-          <div className="field">
+          <div className="field-h">
             <label>Full name</label>
             <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} />
           </div>
-          <div className="field">
+          <div className="field-h">
             <label>Quota (MB)</label>
             <div className="quota-field">
               <input type="range" min={1} max={10240} value={quotaMb}
@@ -485,25 +484,21 @@ function AddEditUserModal({ user, domains, onSave, onClose }) {
               <span className="quota-field-unit">MB</span>
             </div>
           </div>
-          <div className="field">
-            <div className="toggle-row">
-              <span className="toggle-label">Active</span>
-              <label className="toggle-switch">
-                <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-                <span className="toggle-track" />
-              </label>
-            </div>
+          <div className="field-h">
+            <label>Active</label>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+              <span className="toggle-track" />
+            </label>
           </div>
-          <div className="field">
-            <div className="toggle-row">
-              <span className="toggle-label">Administrator</span>
-              <label className="toggle-switch">
-                <input type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} />
-                <span className="toggle-track" />
-              </label>
-            </div>
+          <div className="field-h">
+            <label>Administrator</label>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} />
+              <span className="toggle-track" />
+            </label>
           </div>
-          <button className="btn btn-primary" type="submit" disabled={loading}>
+          <button className="btn btn-primary" type="submit" disabled={loading} style={{ marginTop: '8px' }}>
             {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create account')}
           </button>
         </form>
@@ -617,7 +612,7 @@ function AccountsTab({ addToast }) {
     <div>
       <div className="admin-list-header">
         <span className="admin-list-title">Accounts ({users.length})</span>
-        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        <button className="btn btn-primary" style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           onClick={() => setShowAddModal(true)}>
           <PersonPlusIcon /> Add
         </button>
@@ -697,7 +692,7 @@ function DomainsTab({ addToast }) {
     <div>
       <div className="admin-list-header">
         <span className="admin-list-title">Domains ({domains.length})</span>
-        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        <button className="btn btn-primary" style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           onClick={() => setShowAddModal(true)}>
           <GlobeIcon /> Add
         </button>

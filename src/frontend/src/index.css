@@ -1159,6 +1159,56 @@ body {
   border-color: #dc2626;
 }
 
+/* ── Horizontal form fields ──────────────────────────────── */
+
+.field-h {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.field-h > label:first-child {
+  width: 110px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-h input[type="text"],
+.field-h input[type="password"],
+.field-h select {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--surface);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.field-h input[type="text"]:focus,
+.field-h input[type="password"]:focus,
+.field-h select:focus {
+  border-color: var(--primary);
+}
+
+.field-h input:disabled,
+.field-h select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.field-h .quota-field {
+  flex: 1;
+}
+
 /* ── Quota slider ────────────────────────────────────────── */
 
 .quota-field {
