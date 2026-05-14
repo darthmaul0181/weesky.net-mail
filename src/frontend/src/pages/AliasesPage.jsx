@@ -21,7 +21,7 @@ function useToasts() {
   return { toasts, addToast, removeToast }
 }
 
-function Toasts({ toasts, onRemove }) {
+export function Toasts({ toasts, onRemove }) {
   if (!toasts.length) return null
   return (
     <div className="toast-container">
@@ -121,7 +121,7 @@ function GlobeIcon() {
   )
 }
 
-function ChangePasswordModal({ onClose }) {
+export function ChangePasswordModal({ onClose }) {
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -188,7 +188,7 @@ function ChangePasswordModal({ onClose }) {
 const MB = 1024 * 1024
 const GB = 1024 * MB
 
-function QuotaBlock({ quota }) {
+export function QuotaBlock({ quota }) {
   if (!quota || !quota.storageBytesLimit) return null
 
   const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB

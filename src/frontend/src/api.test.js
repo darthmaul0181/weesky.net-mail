@@ -151,6 +151,33 @@ describe('api methods', () => {
       expect.objectContaining({ method: 'PATCH' })
     )
   })
+
+  it('getAccount calls GET /api/Account', async () => {
+    const { api } = await import('./api.js')
+    await api.getAccount()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Account'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('getQuota calls GET /api/Account/Quota', async () => {
+    const { api } = await import('./api.js')
+    await api.getQuota()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Account/Quota'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('changeFullName calls POST /api/Account/FullName', async () => {
+    const { api } = await import('./api.js')
+    await api.changeFullName('John Doe')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Account/FullName'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
 })
 
 describe('isAdmin state', () => {
