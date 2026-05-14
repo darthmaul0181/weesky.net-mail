@@ -20,7 +20,9 @@ Tests use Vitest + jsdom + `@testing-library/react`. Run with:
 npm run test          # run once
 npm run test -- --watch   # watch mode
 ```
-`src/api.test.js` covers token management, all api methods, and 401 handling. `src/pages/AliasesPage.admin.test.jsx` covers admin modal components (AccountsTab, DomainsTab, AddEditUserModal, AddEditDomainModal, DeleteConfirmModal). Components under test must carry a named `export` keyword in addition to the file's default export — the test file imports them individually from `AliasesPage.jsx`. No linter configured.
+`src/api.test.js` covers token management, all api methods, and 401 handling. `src/pages/AliasesPage.main.test.jsx` covers `Toasts`, `QuotaBlock`, `ChangePasswordModal`, `AccountPanel`, and the `AliasesPage` default export (alias CRUD, toasts, modal open/close). `src/pages/AliasesPage.admin.test.jsx` covers `AccountPanel` admin visibility, `DeleteConfirmModal`, `AddEditUserModal`, `AddEditDomainModal`, `AccountsTab`, `DomainsTab`, `OwnershipTab`, and `AdminModal`. Components under test must carry a named `export` keyword in addition to the file's default export — the test files import them individually from `AliasesPage.jsx`.
+
+ESLint is configured (`eslint.config.js`) with `eslint-plugin-react` and `eslint-plugin-react-hooks`. Run with `npm run lint`.
 
 ## Architecture
 
@@ -40,7 +42,7 @@ npm run test -- --watch   # watch mode
 - `AdminModal` — 800px admin panel with tab sidebar (Accounts / Domains / Ownerships). Only rendered when `adminOpen === true`.
 - `AccountsTab` — lists all users (email, fullname, quota), add/edit/delete via `AddEditUserModal` and `DeleteConfirmModal`
 - `DomainsTab` — lists all domains, add/edit/delete via `AddEditDomainModal` and `DeleteConfirmModal`
-- `OwnershipTab` — placeholder ("Coming soon")
+- `OwnershipTab` — lists all extra domains with their assigned owner (or "—" if unowned); inline pencil-click edit opens a live user-search input with dropdown; clicking a result sets the owner; a delete button appears when the domain already has an owner to unlink it
 
 ## Components
 

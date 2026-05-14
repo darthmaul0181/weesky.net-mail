@@ -17,6 +17,7 @@ ASP.NET Core (.NET 10) REST API on top of the `dovecot` database (MariaDB/MySQL)
 - **Login** (`/api/login`) — issues a signed JWT, also set as an `HttpOnly; Secure; SameSite=Strict` cookie. Rate limited (5 req/min/IP).
 - **Account** (`/api/account`) — mailbox info, quota (via the remote `doveadm` HTTP API) and password change.
 - **Aliases** (`/api/aliases`) — CRUD scoped to domains owned by the caller (via `MailDomainOwnership`).
+- **Admin** (`/api/Admin`) — admin-only CRUD for users, domains, and extra-domain ownerships.
 
 Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), `CryptSharp` (Dovecot-compatible crypt hashing), Serilog, Swashbuckle.
 
@@ -50,5 +51,5 @@ See [`frontend/CLAUDE.md`](frontend/CLAUDE.md) for details.
 
 Both components ship to weesky.net's webserver:
 
-- **Frontend** → via the Claude code `ship-frontend` skipll (`/ship-frontend`)
+- **Frontend** → via the Claude Code `ship-frontend` skill (`/ship-frontend`)
 - **Microservice** → via the Claude Code `ship-microservice` skill (`/ship-microservice`).

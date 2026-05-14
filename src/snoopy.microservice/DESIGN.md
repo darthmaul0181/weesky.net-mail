@@ -35,6 +35,7 @@ Exposed controllers:
 | `LoginController` | `/api/login` | POST, DELETE | POST anonymous / DELETE `[Authorize]` | POST goes through the `login` rate limiter (5 req/min per IP). |
 | `AccountController` | `/api/account` | GET, GET `Quota`, PATCH `ChangeSecret` | `[Authorize]` | `Quota` delegates to `IDovecotQuotaClient`; `ChangeSecret` requires the old password. |
 | `AliasesController` | `/api/aliases` | GET, POST, DELETE | `[Authorize]` | Every operation goes through `UserOwnsDomain`. |
+| `AdminController` | `/api/Admin/users`, `/api/Admin/domains`, `/api/Admin/ownerships` | GET, POST, PUT, DELETE | `[Authorize]` + `admin='Y'` check | User CRUD + quota proxy; domain CRUD; extra-domain ownership GET/PUT/DELETE. All endpoints check `IsAdmin()` and return 401 if false. |
 
 ### Repositories (`Repositories/`)
 
@@ -67,7 +68,7 @@ Wrap outbound integrations with external systems. Unlike repositories, these com
 | `MailUser` | `users` | `Id`, `Name`, `Password`, `DomainId`, `FullName`, `Active` (enum ⇄ string) |
 | `MailDomain` | `domains` | `Id`, `Name` |
 | `MailAlias` | `aliases` | `Id`, `Name`, `Domain`, `DestinationUserId` |
-| `MailDomainOwnership` | `domain_ownerships` | `UserId`, `DomainId` |
+| `MailDomainOwnership` | `domain_ownerships` | `UserId`, `DomainId` — only for extra domains (domains not used as primary by any user) |
 
 The context doesn't own the schema — Dovecot migrations are out of scope for this API.
 
@@ -116,4 +117,4 @@ Key `appsettings.json` entries:
 - `AddJwtBearerAuthentication` calls `BuildServiceProvider()` at setup time: anti-pattern (root scope) to be replaced with `IPostConfigureOptions<JwtBearerOptions>` if `TokenConstants` become dynamic.
 - `GetAliases` does not return a `Result<IEnumerable<Alias>>` — failures are invisible. Should be aligned with the other repositories if a real error condition appears.
 - `UserOwnsDomain`: the current join ignores the `domainName` parameter in the `DomainsOwnerships` branch (any owned domain matches). To fix: filter explicitly on `domain.Name == domainName`.
-- No automated tests. Repositories access `DbContext` directly, without a testable abstraction.
+- Repositories access `DbContext` directly, without a testable abstraction. Tests use EF Core InMemory; real DB behaviour (e.g. case-insensitive collation) is not covered.
