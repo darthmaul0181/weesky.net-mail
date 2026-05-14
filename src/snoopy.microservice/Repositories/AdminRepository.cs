@@ -1,4 +1,3 @@
-using CryptSharp.Core;
 using CSharpFunctionalExtensions;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
@@ -65,7 +64,7 @@ namespace weesky.Snoopy.Microservice.Repositories
             {
                 Name = request.UserName.ToLowerInvariant(),
                 DomainId = request.DomainId,
-                Password = Crypter.MD5.Crypt(request.Password),
+                Password = request.Password,
                 FullName = request.FullName ?? string.Empty,
                 QuotaMb = request.QuotaMb,
                 Active = request.Active ? ActiveState.Y : ActiveState.N,
@@ -104,7 +103,7 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             if (!string.IsNullOrEmpty(request.Password))
             {
-                user.Password = Crypter.MD5.Crypt(request.Password);
+                user.Password = request.Password;
                 user.LastUpdate = DateTime.UtcNow;
             }
 

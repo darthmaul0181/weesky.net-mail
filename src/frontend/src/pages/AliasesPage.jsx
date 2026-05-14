@@ -449,7 +449,7 @@ function AddEditUserModal({ user, domains, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isEdit ? 'Edit account' : 'Add account'}</span>
+          <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -566,6 +566,7 @@ function AccountsTab({ addToast }) {
   const [domains, setDomains] = useState([])
   const [loading, setLoading] = useState(true)
   const [quotas, setQuotas] = useState({})
+  const [search, setSearch] = useState('')
   const [userToEdit, setUserToEdit] = useState(null)
   const [userToDelete, setUserToDelete] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -608,19 +609,36 @@ function AccountsTab({ addToast }) {
     }
   }
 
+  const term = search.trim().toLowerCase()
+  const visibleUsers = term
+    ? users.filter(u =>
+        `${u.userName}@${u.domainName}`.toLowerCase().includes(term) ||
+        (u.fullName ?? '').toLowerCase().includes(term))
+    : users
+
   if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
 
   return (
     <div>
       <div className="admin-list-header">
-        <span className="admin-list-title">Accounts ({users.length})</span>
-        <button className="btn btn-primary" style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          onClick={() => setShowAddModal(true)}>
-          <PersonPlusIcon /> Add
-        </button>
+        <span className="admin-list-title">Accounts ({visibleUsers.length}{term ? ` / ${users.length}` : ''})</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            className="search-input"
+            type="search"
+            placeholder="Search…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '180px', padding: '6px 10px', fontSize: '13px' }}
+          />
+          <button className="btn btn-primary" style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => setShowAddModal(true)}>
+            <PersonPlusIcon /> Add
+          </button>
+        </div>
       </div>
       <div className="admin-list">
-        {users.map(u => (
+        {visibleUsers.map(u => (
           <div key={u.id} className="admin-list-item">
             <span className="admin-list-item-email">{u.userName}@{u.domainName}</span>
             <span className="admin-list-item-name">{u.fullName}</span>
