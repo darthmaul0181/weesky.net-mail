@@ -1378,6 +1378,10 @@ body {
   border-top-color: currentColor;
 }
 
+[data-theme="dark"] .site-header {
+  background: #3450a3;
+}
+
 /* ── Theme selector ──────────────────────────────────────── */
 
 .theme-selector {
