@@ -1335,19 +1335,19 @@ body {
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1117;
-  --surface: #1a1d23;
-  --border: #2d3038;
-  --text: #e8eaed;
-  --text-muted: #9ca3af;
+  --bg: #1e2229;
+  --surface: #272d38;
+  --border: #3b4253;
+  --text: #dce1e9;
+  --text-muted: #8b95a8;
 }
 
 [data-theme="dark"] .page-center::before {
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 [data-theme="dark"] .card {
-  background: rgba(26, 29, 35, 0.85);
+  background: rgba(39, 45, 56, 0.88);
 }
 
 [data-theme="dark"] .alert-error {
