@@ -513,5 +513,135 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             new AdminRepository(ctx).DeleteDomain("WSY");
             Assert.False(ctx.Domains.Any(d => d.Id == "WSY"));
         }
+
+        // ── GetAllOwnerships ──────────────────────────────────
+
+        private static void AddOwnership(TestDbContext ctx, string domainId, int userId)
+        {
+            ctx.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
+            ctx.SaveChanges();
+        }
+
+        [Fact]
+        public void GetAllOwnerships_WithNoDomains_ReturnsEmpty()
+        {
+            using var ctx = CreateContext();
+            Assert.Empty(new AdminRepository(ctx).GetAllOwnerships());
+        }
+
+        [Fact]
+        public void GetAllOwnerships_ExcludesPrimaryDomains()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            AddUser(ctx, "alice", "WSY");
+            Assert.Empty(new AdminRepository(ctx).GetAllOwnerships());
+        }
+
+        [Fact]
+        public void GetAllOwnerships_ReturnsExtraDomainWithNoOwner()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "EXT", "extra.com");
+            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            Assert.Single(result);
+            Assert.Equal("EXT", result[0].DomainId);
+            Assert.Equal("extra.com", result[0].DomainName);
+            Assert.Null(result[0].OwnerId);
+            Assert.Null(result[0].OwnerEmail);
+        }
+
+        [Fact]
+        public void GetAllOwnerships_ReturnsExtraDomainWithOwner()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            var user = AddUser(ctx, "alice", "WSY");
+            AddDomain(ctx, "EXT", "extra.com");
+            AddOwnership(ctx, "EXT", user.Id);
+            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            Assert.Single(result);
+            Assert.Equal("EXT", result[0].DomainId);
+            Assert.Equal(user.Id, result[0].OwnerId);
+            Assert.Equal("alice@weesky.be", result[0].OwnerEmail);
+        }
+
+        // ── SetOwnership ──────────────────────────────────────
+
+        [Fact]
+        public void SetOwnership_WhenDomainNotFound_ReturnsFailure()
+        {
+            using var ctx = CreateContext();
+            Assert.True(new AdminRepository(ctx).SetOwnership("ZZZ", 1).IsFailure);
+        }
+
+        [Fact]
+        public void SetOwnership_WhenDomainIsPrimary_ReturnsFailure()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx);
+            var user = AddUser(ctx, "alice", "WSY");
+            Assert.True(new AdminRepository(ctx).SetOwnership("WSY", user.Id).IsFailure);
+        }
+
+        [Fact]
+        public void SetOwnership_WhenUserNotFound_ReturnsFailure()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "EXT", "extra.com");
+            Assert.True(new AdminRepository(ctx).SetOwnership("EXT", 999).IsFailure);
+        }
+
+        [Fact]
+        public void SetOwnership_WhenValid_CreatesOwnership()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            var user = AddUser(ctx, "alice", "WSY");
+            AddDomain(ctx, "EXT", "extra.com");
+            var result = new AdminRepository(ctx).SetOwnership("EXT", user.Id);
+            Assert.True(result.IsSuccess);
+            Assert.Equal("EXT", result.Value.DomainId);
+            Assert.Equal(user.Id, result.Value.OwnerId);
+            Assert.Equal("alice@weesky.be", result.Value.OwnerEmail);
+            Assert.Single(ctx.DomainsOwnerships);
+        }
+
+        [Fact]
+        public void SetOwnership_WhenAlreadyExists_UpdatesOwnership()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            var alice = AddUser(ctx, "alice", "WSY");
+            var bob = AddUser(ctx, "bob", "WSY");
+            AddDomain(ctx, "EXT", "extra.com");
+            AddOwnership(ctx, "EXT", alice.Id);
+            var result = new AdminRepository(ctx).SetOwnership("EXT", bob.Id);
+            Assert.True(result.IsSuccess);
+            Assert.Equal(bob.Id, result.Value.OwnerId);
+            Assert.Single(ctx.DomainsOwnerships);
+        }
+
+        // ── DeleteOwnership ───────────────────────────────────
+
+        [Fact]
+        public void DeleteOwnership_WhenNotFound_ReturnsFailure()
+        {
+            using var ctx = CreateContext();
+            Assert.True(new AdminRepository(ctx).DeleteOwnership("EXT").IsFailure);
+        }
+
+        [Fact]
+        public void DeleteOwnership_WhenValid_RemovesOwnership()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            var user = AddUser(ctx, "alice", "WSY");
+            AddDomain(ctx, "EXT", "extra.com");
+            AddOwnership(ctx, "EXT", user.Id);
+            var result = new AdminRepository(ctx).DeleteOwnership("EXT");
+            Assert.True(result.IsSuccess);
+            Assert.Empty(ctx.DomainsOwnerships);
+        }
     }
 }

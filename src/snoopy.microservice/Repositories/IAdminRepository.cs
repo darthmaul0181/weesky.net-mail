@@ -14,5 +14,8 @@ namespace weesky.Snoopy.Microservice.Repositories
         Result<Domain> CreateDomain(AdminDomainRequest request);
         Result<Domain> UpdateDomain(string id, AdminDomainRequest request);
         Result DeleteDomain(string id);
+        IEnumerable<DomainOwnershipInfo> GetAllOwnerships();
+        Result<DomainOwnershipInfo> SetOwnership(string domainId, int userId);
+        Result DeleteOwnership(string domainId);
     }
 }

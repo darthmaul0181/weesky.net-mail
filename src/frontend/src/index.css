@@ -1168,6 +1168,42 @@ body {
   border-color: #dc2626;
 }
 
+/* ── Ownership dropdown ──────────────────────────────────── */
+
+.ownership-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 2px;
+}
+
+.ownership-dropdown-option {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ownership-dropdown-option:hover {
+  background: var(--bg);
+  color: var(--primary);
+}
+
 /* ── Horizontal form fields ──────────────────────────────── */
 
 .field-h {

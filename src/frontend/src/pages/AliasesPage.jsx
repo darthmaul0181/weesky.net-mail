@@ -753,10 +753,154 @@ export function DomainsTab({ addToast }) {
   )
 }
 
-function OwnershipTab() {
+export function OwnershipTab({ addToast }) {
+  const [ownerships, setOwnerships] = useState([])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editingDomainId, setEditingDomainId] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [saving, setSaving] = useState(false)
+  const editRef = useRef(null)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [o, u] = await Promise.all([api.adminGetOwnerships(), api.adminGetUsers()])
+      setOwnerships(o ?? [])
+      setUsers(u ?? [])
+    } catch {
+      addToast('Failed to load ownerships', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (!editingDomainId) return
+    function handleClick(e) {
+      if (!editRef.current?.contains(e.target)) {
+        setEditingDomainId(null)
+        setSearchQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [editingDomainId])
+
+  async function handleSelect(domainId, userId) {
+    setSaving(true)
+    try {
+      await api.adminSetOwnership(domainId, userId)
+      setEditingDomainId(null)
+      setSearchQuery('')
+      load()
+    } catch (err) {
+      addToast(err.message || 'Failed to set owner', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleUnlink(domainId) {
+    setSaving(true)
+    try {
+      await api.adminDeleteOwnership(domainId)
+      setEditingDomainId(null)
+      load()
+    } catch (err) {
+      addToast(err.message || 'Failed to remove owner', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const term = searchQuery.trim().toLowerCase()
+  const filteredUsers = term
+    ? users.filter(u => {
+        const email = `${u.userName}@${u.domainName}`.toLowerCase()
+        const name = (u.fullName ?? '').toLowerCase()
+        return email.includes(term) || name.includes(term)
+      })
+    : []
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+
   return (
-    <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-      Coming soon
+    <div>
+      <div className="admin-list-header">
+        <span className="admin-list-title">Extra domains ({ownerships.length})</span>
+      </div>
+      <div className="admin-list">
+        {ownerships.length === 0 && (
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+            No extra domains
+          </div>
+        )}
+        {ownerships.map(o => (
+          <div key={o.domainId} className="admin-list-item">
+            <span className="admin-list-item-email">{o.domainName}</span>
+            {editingDomainId === o.domainId ? (
+              <div ref={editRef} style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '30px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    className="search-input"
+                    type="text"
+                    placeholder="Search user…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    autoFocus
+                    style={{ width: '100%', padding: '5px 8px', fontSize: '13px' }}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') { setEditingDomainId(null); setSearchQuery('') }
+                    }}
+                  />
+                  {filteredUsers.length > 0 && (
+                    <div className="ownership-dropdown">
+                      {filteredUsers.slice(0, 10).map(u => (
+                        <button
+                          key={u.id}
+                          className="ownership-dropdown-option"
+                          disabled={saving}
+                          onMouseDown={e => { e.preventDefault(); handleSelect(o.domainId, u.id) }}
+                        >
+                          <span style={{ fontWeight: 600 }}>{u.userName}@{u.domainName}</span>
+                          {u.fullName && <span style={{ color: 'var(--text-muted)', fontSize: '12px', marginLeft: '8px' }}>{u.fullName}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {o.ownerId != null && (
+                  <button
+                    className="admin-icon-btn is-danger"
+                    title="Remove owner"
+                    disabled={saving}
+                    onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId) }}
+                  >
+                    <TrashIcon />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <span className="admin-list-item-name" style={{ flex: 1, paddingLeft: '30px' }}>
+                {o.ownerEmail ?? '—'}
+              </span>
+            )}
+            <div className="admin-list-item-actions">
+              {editingDomainId !== o.domainId && (
+                <button className="admin-icon-btn" title="Edit owner" onClick={() => {
+                  setEditingDomainId(o.domainId)
+                  setSearchQuery('')
+                }}>
+                  <PencilIcon />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -783,7 +927,7 @@ export function AdminModal({ onClose, addToast }) {
           <div className="admin-tab-content">
             {activeTab === 'accounts' && <AccountsTab addToast={addToast} />}
             {activeTab === 'domains' && <DomainsTab addToast={addToast} />}
-            {activeTab === 'ownerships' && <OwnershipTab />}
+            {activeTab === 'ownerships' && <OwnershipTab addToast={addToast} />}
           </div>
         </div>
       </div>

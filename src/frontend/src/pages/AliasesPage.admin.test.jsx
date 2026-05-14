@@ -10,6 +10,7 @@ import {
   AddEditDomainModal,
   AccountsTab,
   DomainsTab,
+  OwnershipTab,
   AdminModal,
 } from './AliasesPage.jsx'
 
@@ -25,6 +26,9 @@ vi.mock('../api.js', () => ({
     adminUpdateDomain: vi.fn(),
     adminDeleteDomain: vi.fn(),
     adminGetUserQuota: vi.fn(),
+    adminGetOwnerships: vi.fn(),
+    adminSetOwnership: vi.fn(),
+    adminDeleteOwnership: vi.fn(),
   },
   clearToken: vi.fn(),
   setIsAdmin: vi.fn(),
@@ -37,10 +41,15 @@ const MOCK_DOMAINS = [{ id: 'WSY', name: 'weesky.be' }]
 const MOCK_USERS = [
   { id: 1, userName: 'alice', domainName: 'weesky.be', domainId: 'WSY', fullName: 'Alice Smith', quotaMb: 1024, active: true, admin: false },
 ]
+const MOCK_OWNERSHIPS = [
+  { domainId: 'EXT', domainName: 'extra.com', ownerId: 1, ownerEmail: 'alice@weesky.be' },
+  { domainId: 'ORF', domainName: 'orphan.net', ownerId: null, ownerEmail: null },
+]
 
 beforeEach(() => {
   vi.clearAllMocks()
   api.adminGetUsers.mockResolvedValue(MOCK_USERS)
+  api.adminGetOwnerships.mockResolvedValue(MOCK_OWNERSHIPS)
   api.adminGetDomains.mockResolvedValue(MOCK_DOMAINS)
   api.adminGetUserQuota.mockRejectedValue(new Error('unavailable'))
 })
@@ -761,10 +770,11 @@ describe('AdminModal', () => {
     expect(await screen.findByText('WSY')).toBeInTheDocument()
   })
 
-  it('shows Coming soon on the Ownerships tab', async () => {
+  it('switches to Ownerships tab and loads extra domains', async () => {
     render(<AdminModal onClose={vi.fn()} addToast={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Ownerships' }))
-    expect(screen.getByText('Coming soon')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ownerships' })).toHaveClass('is-active')
+    expect(await screen.findByText('extra.com')).toBeInTheDocument()
   })
 
   it('switches back to Accounts tab after visiting Domains', async () => {
@@ -772,5 +782,123 @@ describe('AdminModal', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
     await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
     expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
+  })
+})
+
+// ── OwnershipTab ──────────────────────────────────────────────
+
+describe('OwnershipTab', () => {
+  it('fetches ownerships and users on mount', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await waitFor(() => expect(api.adminGetOwnerships).toHaveBeenCalledOnce())
+    expect(api.adminGetUsers).toHaveBeenCalledOnce()
+  })
+
+  it('renders domain names after loading', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    expect(await screen.findByText('extra.com')).toBeInTheDocument()
+    expect(screen.getByText('orphan.net')).toBeInTheDocument()
+  })
+
+  it('renders owner email for owned domains', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    expect(await screen.findByText('alice@weesky.be')).toBeInTheDocument()
+  })
+
+  it('renders — for unowned domains', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('shows "No extra domains" when list is empty', async () => {
+    api.adminGetOwnerships.mockResolvedValue([])
+    render(<OwnershipTab addToast={vi.fn()} />)
+    expect(await screen.findByText('No extra domains')).toBeInTheDocument()
+  })
+
+  it('shows search input when pencil is clicked', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    const pencilBtns = screen.getAllByTitle('Edit owner')
+    await userEvent.click(pencilBtns[0])
+    expect(screen.getByPlaceholderText('Search user…')).toBeInTheDocument()
+  })
+
+  it('shows filtered users in dropdown when typing', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[0])
+    await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
+    expect(await screen.findByText('alice@weesky.be')).toBeVisible()
+  })
+
+  it('calls adminSetOwnership when a user is selected from dropdown', async () => {
+    api.adminSetOwnership.mockResolvedValue({})
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[1])
+    await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
+    const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
+    fireEvent.mouseDown(option)
+    await waitFor(() => expect(api.adminSetOwnership).toHaveBeenCalledWith('ORF', 1))
+  })
+
+  it('shows remove button only for owned domains', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[0])
+    expect(screen.getByTitle('Remove owner')).toBeInTheDocument()
+  })
+
+  it('does not show remove button for unowned domains', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('orphan.net')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[1])
+    expect(screen.queryByTitle('Remove owner')).not.toBeInTheDocument()
+  })
+
+  it('calls adminDeleteOwnership when Remove owner is clicked', async () => {
+    api.adminDeleteOwnership.mockResolvedValue(null)
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[0])
+    fireEvent.mouseDown(screen.getByTitle('Remove owner'))
+    await waitFor(() => expect(api.adminDeleteOwnership).toHaveBeenCalledWith('EXT'))
+  })
+
+  it('cancels edit on Escape key', async () => {
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[0])
+    const input = screen.getByPlaceholderText('Search user…')
+    await userEvent.keyboard('{Escape}')
+    expect(input).not.toBeInTheDocument()
+  })
+
+  it('shows error toast when loading fails', async () => {
+    api.adminGetOwnerships.mockRejectedValue(new Error('Server error'))
+    const addToast = vi.fn()
+    render(<OwnershipTab addToast={addToast} />)
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load ownerships', 'error'))
+  })
+
+  it('shows error toast when set ownership fails', async () => {
+    api.adminSetOwnership.mockRejectedValue(new Error('Domain not found'))
+    const addToast = vi.fn()
+    render(<OwnershipTab addToast={addToast} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[1])
+    await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
+    const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
+    fireEvent.mouseDown(option)
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Domain not found', 'error'))
+  })
+
+  it('handles null response from adminGetOwnerships gracefully', async () => {
+    api.adminGetOwnerships.mockResolvedValue(null)
+    render(<OwnershipTab addToast={vi.fn()} />)
+    await waitFor(() => expect(api.adminGetOwnerships).toHaveBeenCalledOnce())
+    expect(screen.queryByText('extra.com')).not.toBeInTheDocument()
   })
 })
