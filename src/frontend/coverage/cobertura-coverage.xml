@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
-<coverage lines-valid="442" lines-covered="442" line-rate="1" branches-valid="293" branches-covered="280" branch-rate="0.9556" timestamp="1778760349882" complexity="0" version="0.1">
+<coverage lines-valid="442" lines-covered="442" line-rate="1" branches-valid="293" branches-covered="280" branch-rate="0.9556" timestamp="1778760626550" complexity="0" version="0.1">
   <sources>
     <source>D:/development/repos/weesky.net-mail/src/frontend</source>
   </sources>

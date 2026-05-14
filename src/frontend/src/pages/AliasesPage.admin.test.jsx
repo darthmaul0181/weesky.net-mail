@@ -666,7 +666,7 @@ describe('AddEditUserModal — toggles and quota', () => {
   })
 
   it('changing the quota number input updates the slider value', () => {
-    const { container } = renderCreate()
+    renderCreate()
     const numberInput = screen.getByRole('spinbutton')
     fireEvent.change(numberInput, { target: { value: '512' } })
     expect(screen.getByRole('slider')).toHaveValue('512')
