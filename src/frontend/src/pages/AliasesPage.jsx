@@ -468,7 +468,7 @@ function AddEditUserModal({ user, domains, onSave, onClose }) {
           <div className="field-h">
             <label>Password</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              required={!isEdit} placeholder={isEdit ? 'Leave blank to keep unchanged' : ''} />
+              placeholder={isEdit ? 'leave blank to keep' : ''} />
           </div>
           <div className="field-h">
             <label>Full name</label>
@@ -498,7 +498,9 @@ function AddEditUserModal({ user, domains, onSave, onClose }) {
               <span className="toggle-track" />
             </label>
           </div>
-          <button className="btn btn-primary" type="submit" disabled={loading} style={{ marginTop: '8px' }}>
+          <button className="btn btn-primary" type="submit"
+            disabled={loading || !userName.trim() || (!isEdit && !password.trim())}
+            style={{ marginTop: '8px' }}>
             {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create account')}
           </button>
         </form>

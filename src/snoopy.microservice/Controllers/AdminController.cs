@@ -44,7 +44,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult<AdminUserInfo> CreateUser(AdminUserRequest request)
+        public ActionResult<AdminUserInfo> CreateUser(AdminCreateUserRequest request)
         {
             if (!IsCurrentUserAdmin()) return Unauthorized();
             Result<AdminUserInfo> result = _adminRepository.CreateUser(request);
