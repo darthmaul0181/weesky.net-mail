@@ -836,12 +836,12 @@ export function VirtualDomainsTab({ addToast }) {
   return (
     <div>
       <div className="admin-list-header">
-        <span className="admin-list-title">Alias domains ({virtualDomains.length})</span>
+        <span className="admin-list-title">Virtual alias domains ({virtualDomains.length})</span>
       </div>
       <div className="admin-list">
         {virtualDomains.length === 0 && (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No alias domains
+            No virtual alias domains
           </div>
         )}
         {virtualDomains.map(o => (
