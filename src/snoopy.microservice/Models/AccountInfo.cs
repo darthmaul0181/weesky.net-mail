@@ -29,5 +29,10 @@ namespace weesky.Snoopy.Microservice.Models
         /// Domains owned by this user.
         /// </summary>
         public IEnumerable<Domain> Domains { get; set; }
+
+        /// <summary>
+        /// Whether this user has administrator privileges.
+        /// </summary>
+        public bool IsAdmin { get; set; }
     }
 }

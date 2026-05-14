@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api, clearToken } from '../api.js'
+import { api, clearToken, setIsAdmin } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
 
@@ -85,6 +85,38 @@ function XIcon() {
       fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+
+function ShieldIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  )
+}
+
+function PersonPlusIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  )
+}
+
+function GlobeIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
     </svg>
   )
 }
@@ -184,7 +216,7 @@ function QuotaBlock({ quota }) {
   )
 }
 
-function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, alphaMode, onAlphaModeChange, onFullNameChange }) {
+function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -294,6 +326,12 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
             </div>
 
             <div className="panel-actions">
+              {isAdmin && (
+                <button className="panel-link" onClick={() => { setOpen(false); onAdmin() }}>
+                  <ShieldIcon />
+                  Administration
+                </button>
+              )}
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
                 <LockIcon />
                 Change password
@@ -312,6 +350,393 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
         </>
       )}
     </>
+  )
+}
+
+function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Confirm deletion</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
+          Delete <strong>{entityLabel}</strong>? This action cannot be undone.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="btn btn-primary" style={{ background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
+            onClick={onConfirm} disabled={loading}>
+            {loading ? <span className="spinner" /> : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddEditUserModal({ user, domains, onSave, onClose }) {
+  const [userName, setUserName] = useState(user?.userName ?? '')
+  const [domainId, setDomainId] = useState(user?.domainId ?? domains[0]?.id ?? '')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState(user?.fullName ?? '')
+  const [quotaMb, setQuotaMb] = useState(user?.quotaMb ?? 1024)
+  const [active, setActive] = useState(user?.active ?? true)
+  const [admin, setAdmin] = useState(user?.admin ?? false)
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const isEdit = !!user
+
+  function handleQuotaSlider(v) {
+    const n = Math.max(1, Math.min(10240, Number(v)))
+    setQuotaMb(n)
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!isEdit && !password) { setError('Password is required'); return }
+    setError(null)
+    setLoading(true)
+    try {
+      const payload = {
+        userName,
+        domainId,
+        password: password || null,
+        fullName,
+        quotaMb,
+        active,
+        admin,
+      }
+      if (isEdit) {
+        await api.adminUpdateUser(user.id, payload)
+      } else {
+        await api.adminCreateUser(payload)
+      }
+      onSave()
+    } catch (err) {
+      setError(err.message || 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">{isEdit ? 'Edit account' : 'Add account'}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="field">
+            <label>Username</label>
+            <input type="text" value={userName} onChange={e => setUserName(e.target.value)}
+              disabled={isEdit} required />
+          </div>
+          <div className="field">
+            <label>Domain</label>
+            <select value={domainId} onChange={e => setDomainId(e.target.value)} disabled={isEdit}
+              style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontFamily: 'var(--font)', fontSize: '14px', background: 'var(--surface)', color: 'var(--text)' }}>
+              {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>{isEdit ? 'Password (leave blank to keep)' : 'Password'}</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              required={!isEdit} placeholder={isEdit ? 'Leave blank to keep unchanged' : ''} />
+          </div>
+          <div className="field">
+            <label>Full name</label>
+            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Quota (MB)</label>
+            <div className="quota-field">
+              <input type="range" min={1} max={10240} value={quotaMb}
+                onChange={e => handleQuotaSlider(e.target.value)} />
+              <input type="number" min={1} max={10240} value={quotaMb}
+                onChange={e => handleQuotaSlider(e.target.value)} />
+              <span className="quota-field-unit">MB</span>
+            </div>
+          </div>
+          <div className="field">
+            <div className="toggle-row">
+              <span className="toggle-label">Active</span>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+                <span className="toggle-track" />
+              </label>
+            </div>
+          </div>
+          <div className="field">
+            <div className="toggle-row">
+              <span className="toggle-label">Administrator</span>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} />
+                <span className="toggle-track" />
+              </label>
+            </div>
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={loading}>
+            {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create account')}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function AddEditDomainModal({ domain, onSave, onClose }) {
+  const [id, setId] = useState(domain?.id ?? '')
+  const [name, setName] = useState(domain?.name ?? '')
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const isEdit = !!domain
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      if (isEdit) {
+        await api.adminUpdateDomain(domain.id, { id, name })
+      } else {
+        await api.adminCreateDomain({ id, name })
+      }
+      onSave()
+    } catch (err) {
+      setError(err.message || 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: '380px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">{isEdit ? 'Edit domain' : 'Add domain'}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="field">
+            <label>ID (3 chars max)</label>
+            <input type="text" value={id} onChange={e => setId(e.target.value.toUpperCase())}
+              maxLength={3} disabled={isEdit} required />
+          </div>
+          <div className="field">
+            <label>Domain name</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} required />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={loading}>
+            {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create domain')}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function AccountsTab({ addToast }) {
+  const [users, setUsers] = useState([])
+  const [domains, setDomains] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [userToEdit, setUserToEdit] = useState(null)
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [u, d] = await Promise.all([api.adminGetUsers(), api.adminGetDomains()])
+      setUsers(u ?? [])
+      setDomains(d ?? [])
+    } catch {
+      addToast('Failed to load accounts', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await api.adminDeleteUser(userToDelete.id)
+      addToast(`${userToDelete.userName}@${userToDelete.domainName} deleted`)
+      setUserToDelete(null)
+      load()
+    } catch (err) {
+      addToast(err.message || 'Failed to delete user', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+
+  return (
+    <div>
+      <div className="admin-list-header">
+        <span className="admin-list-title">Accounts ({users.length})</span>
+        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          onClick={() => setShowAddModal(true)}>
+          <PersonPlusIcon /> Add
+        </button>
+      </div>
+      <div className="admin-list">
+        {users.map(u => (
+          <div key={u.id} className="admin-list-item">
+            <span className="admin-list-item-email">{u.userName}@{u.domainName}</span>
+            <span className="admin-list-item-name">{u.fullName}</span>
+            <span className="admin-list-item-quota">{u.quotaMb} MB</span>
+            <div className="admin-list-item-actions">
+              <button className="admin-icon-btn" title="Edit" onClick={() => setUserToEdit(u)}>
+                <PencilIcon />
+              </button>
+              <button className="admin-icon-btn is-danger" title="Delete" onClick={() => setUserToDelete(u)}>
+                <TrashIcon />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {showAddModal && (
+        <AddEditUserModal domains={domains} onSave={() => { setShowAddModal(false); load(); addToast('Account created') }}
+          onClose={() => setShowAddModal(false)} />
+      )}
+      {userToEdit && (
+        <AddEditUserModal user={userToEdit} domains={domains}
+          onSave={() => { setUserToEdit(null); load(); addToast('Account updated') }}
+          onClose={() => setUserToEdit(null)} />
+      )}
+      {userToDelete && (
+        <DeleteConfirmModal entityLabel={`${userToDelete.userName}@${userToDelete.domainName}`}
+          onConfirm={handleDelete} onClose={() => setUserToDelete(null)} loading={deleting} />
+      )}
+    </div>
+  )
+}
+
+function DomainsTab({ addToast }) {
+  const [domains, setDomains] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [domainToEdit, setDomainToEdit] = useState(null)
+  const [domainToDelete, setDomainToDelete] = useState(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      setDomains(await api.adminGetDomains() ?? [])
+    } catch {
+      addToast('Failed to load domains', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await api.adminDeleteDomain(domainToDelete.id)
+      addToast(`Domain ${domainToDelete.name} deleted`)
+      setDomainToDelete(null)
+      load()
+    } catch (err) {
+      addToast(err.message || 'Failed to delete domain', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+
+  return (
+    <div>
+      <div className="admin-list-header">
+        <span className="admin-list-title">Domains ({domains.length})</span>
+        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          onClick={() => setShowAddModal(true)}>
+          <GlobeIcon /> Add
+        </button>
+      </div>
+      <div className="admin-list">
+        {domains.map(d => (
+          <div key={d.id} className="admin-list-item">
+            <span className="admin-list-item-email" style={{ minWidth: '60px' }}>{d.id}</span>
+            <span className="admin-list-item-name">{d.name}</span>
+            <div className="admin-list-item-actions">
+              <button className="admin-icon-btn" title="Edit" onClick={() => setDomainToEdit(d)}>
+                <PencilIcon />
+              </button>
+              <button className="admin-icon-btn is-danger" title="Delete" onClick={() => setDomainToDelete(d)}>
+                <TrashIcon />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {showAddModal && (
+        <AddEditDomainModal onSave={() => { setShowAddModal(false); load(); addToast('Domain created') }}
+          onClose={() => setShowAddModal(false)} />
+      )}
+      {domainToEdit && (
+        <AddEditDomainModal domain={domainToEdit}
+          onSave={() => { setDomainToEdit(null); load(); addToast('Domain updated') }}
+          onClose={() => setDomainToEdit(null)} />
+      )}
+      {domainToDelete && (
+        <DeleteConfirmModal entityLabel={domainToDelete.name}
+          onConfirm={handleDelete} onClose={() => setDomainToDelete(null)} loading={deleting} />
+      )}
+    </div>
+  )
+}
+
+function OwnershipTab() {
+  return (
+    <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+      Coming soon
+    </div>
+  )
+}
+
+function AdminModal({ onClose, addToast }) {
+  const [activeTab, setActiveTab] = useState('accounts')
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-admin" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title"><ShieldIcon /> Administration</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="admin-modal-body">
+          <nav className="admin-tab-bar">
+            <button className={`admin-tab${activeTab === 'accounts' ? ' is-active' : ''}`}
+              onClick={() => setActiveTab('accounts')}>Accounts</button>
+            <button className={`admin-tab${activeTab === 'domains' ? ' is-active' : ''}`}
+              onClick={() => setActiveTab('domains')}>Domains</button>
+            <button className={`admin-tab${activeTab === 'ownerships' ? ' is-active' : ''}`}
+              onClick={() => setActiveTab('ownerships')}>Ownerships</button>
+          </nav>
+          <div className="admin-tab-content">
+            {activeTab === 'accounts' && <AccountsTab addToast={addToast} />}
+            {activeTab === 'domains' && <DomainsTab addToast={addToast} />}
+            {activeTab === 'ownerships' && <OwnershipTab />}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -337,6 +762,8 @@ export default function AliasesPage({ onLogout }) {
   const [deletingKey, setDeletingKey] = useState(null)
   const [highlightedKey, setHighlightedKey] = useState(null)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [isAdminUser, setIsAdminUser] = useState(false)
   const [alphaMode, setAlphaMode] = useState(() => localStorage.getItem('alias_alpha_mode') === 'true')
 
   function handleAlphaModeChange(value) {
@@ -367,6 +794,8 @@ export default function AliasesPage({ onLogout }) {
         (domainName?.[0] ?? data.mailbox?.[0] ?? '').toUpperCase()
       )
       setSubDomains(primaryDomain ? list.filter(d => d.id !== data.mailbox) : list)
+      setIsAdminUser(data?.isAdmin === true)
+      setIsAdmin(data?.isAdmin === true)
 
       if (domainName) setSelectedDomain(domainName)
     }).catch(() => {})
@@ -483,6 +912,8 @@ export default function AliasesPage({ onLogout }) {
           quota={quota}
           onLogout={handleLogout}
           onChangePassword={() => setChangePasswordOpen(true)}
+          onAdmin={() => setAdminOpen(true)}
+          isAdmin={isAdminUser}
           onFullNameChange={handleFullNameChange}
           alphaMode={alphaMode}
           onAlphaModeChange={handleAlphaModeChange}
@@ -623,6 +1054,9 @@ export default function AliasesPage({ onLogout }) {
 
       {changePasswordOpen && (
         <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
+      )}
+      {adminOpen && (
+        <AdminModal onClose={() => setAdminOpen(false)} addToast={addToast} />
       )}
     </div>
 

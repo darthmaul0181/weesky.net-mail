@@ -53,6 +53,52 @@
             <response code="400">Invalid request</response>
             <response code="401">Unauthenticated user</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetUsers">
+            <summary>Returns all users</summary>
+            <response code="200">User list</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateUser(weesky.Snoopy.Microservice.Models.AdminUserRequest)">
+            <summary>Creates a new user</summary>
+            <response code="201">User created</response>
+            <response code="400">Validation error</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateUser(System.Int32,weesky.Snoopy.Microservice.Models.AdminUserRequest)">
+            <summary>Updates an existing user</summary>
+            <response code="200">User updated</response>
+            <response code="400">Validation error</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteUser(System.Int32)">
+            <summary>Deletes a user</summary>
+            <response code="204">User deleted</response>
+            <response code="400">User not found</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetDomains">
+            <summary>Returns all domains</summary>
+            <response code="200">Domain list</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateDomain(weesky.Snoopy.Microservice.Models.AdminDomainRequest)">
+            <summary>Creates a new domain</summary>
+            <response code="201">Domain created</response>
+            <response code="400">Validation error</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateDomain(System.String,weesky.Snoopy.Microservice.Models.AdminDomainRequest)">
+            <summary>Updates an existing domain</summary>
+            <response code="200">Domain updated</response>
+            <response code="400">Validation error</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteDomain(System.String)">
+            <summary>Deletes a domain</summary>
+            <response code="204">Domain deleted</response>
+            <response code="400">Domain not found or still has users</response>
+            <response code="401">Unauthenticated or not an admin</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.Add(weesky.Snoopy.Microservice.Models.Alias)">
             <summary>
             Add an aliases to the main mailbox.
@@ -139,6 +185,11 @@
         <member name="P:weesky.Snoopy.Microservice.Models.AccountInfo.Domains">
             <summary>
             Domains owned by this user.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.AccountInfo.IsAdmin">
+            <summary>
+            Whether this user has administrator privileges.
             </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Alias.Name">
