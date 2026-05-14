@@ -131,6 +131,10 @@ export function ChangePasswordModal({ onClose }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (newPassword.length < 10) {
+      setError('Password is too short (minimum 10 characters).')
+      return
+    }
     if (newPassword !== confirm) {
       setError('Passwords do not match.')
       return

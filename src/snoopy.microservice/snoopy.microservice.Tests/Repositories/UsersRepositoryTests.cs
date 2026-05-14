@@ -23,7 +23,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             var user = new MailUser
             {
                 Name = "john",
-                Password = Crypter.MD5.Crypt(TestPassword),
+                Password = Crypter.Sha512.Crypt(TestPassword, Crypter.Sha512.GenerateSalt()),
                 DomainId = "WKY",
                 Active = ActiveState.Y,
                 FullName = "John Doe"
