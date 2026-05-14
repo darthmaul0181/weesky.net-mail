@@ -840,7 +840,7 @@ export function OwnershipTab({ addToast }) {
         )}
         {ownerships.map(o => (
           <div key={o.domainId} className="admin-list-item">
-            <span className="admin-list-item-email">{o.domainName}</span>
+            <span className="admin-list-item-email">{o.domainName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({o.domainId})</span></span>
             {editingDomainId === o.domainId ? (
               <div ref={editRef} style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '30px' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
