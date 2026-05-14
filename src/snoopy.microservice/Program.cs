@@ -61,6 +61,7 @@ builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Confi
 builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
 builder.Services.AddScoped<IUsersRepository, UsersRepository>();
 builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
+builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
 builder.Services.AddScoped<ITokenManager, TokenManager>();
 builder.Services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>
@@ -79,7 +80,7 @@ builder.Services.AddCors(options =>
     {
         policy
             .WithOrigins(allowedOrigins)
-            .WithMethods("GET", "POST", "PATCH", "DELETE")
+            .WithMethods("GET", "POST", "PATCH", "DELETE", "PUT")
             .WithHeaders("Authorization", "Content-Type")
             .AllowCredentials()
             .SetPreflightMaxAge(TimeSpan.FromMinutes(10));

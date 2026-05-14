@@ -9,9 +9,11 @@ dotnet build                    # Build the project
 dotnet build -c Release         # Release build
 dotnet run                      # Run on localhost:5104 (opens Swagger UI)
 dotnet clean                    # Clean build artifacts
+dotnet test                     # Run all tests (always use this, NOT --no-build, when new test files have been added)
+dotnet test --no-build          # Run tests without recompiling (safe only when no new test files were added since last build)
 ```
 
-There are no tests in this project.
+Tests live in the `snoopy.microservice.Tests` sub-project (xUnit 2.9.3, Moq 4.20.72, EF Core InMemory). Repository tests use a per-test in-memory database via `TestDbContext`. Controller tests use `Moq` and `ControllerTestHelpers.CreateAuthenticatedContext`.
 
 Release procedure lives in the `ship-microservice` skill (`.claude/skills/ship-microservice/SKILL.md` at the repo root) — invoked by the user saying "ship the microservice", "déploie le backend", or `/ship-microservice`. A separate `ship-frontend` skill will handle the frontend release.
 
@@ -21,10 +23,11 @@ Release procedure lives in the `ship-microservice` skill (`.claude/skills/ship-m
 
 ### Layers
 
-**Controllers** (`Controllers/`) receive HTTP requests and return `ResultEnveloppe<T>` responses via helpers in `ApiBaseController`. The three main controllers are:
+**Controllers** (`Controllers/`) receive HTTP requests and return `ResultEnveloppe<T>` responses via helpers in `ApiBaseController`. The main controllers are:
 - `LoginController` — `POST /api/login` (issue JWT), `DELETE /api/login` (revoke cookie)
 - `AccountController` — `GET /api/account` (info), `GET /api/account/quota` (Dovecot quota), `PATCH /api/account/changesecret` (password change)
 - `AliasesController` — `GET/POST/DELETE /api/aliases` (alias CRUD, scoped to caller's owned domains)
+- `AdminController` — `GET/POST/PUT/DELETE /api/Admin/users` and `/api/Admin/domains` (admin-only CRUD); requires `admin='Y'` on the authenticated user
 
 **Repositories** (`Repositories/`) handle all database access via EF Core. `UsersRepository` validates credentials and updates passwords; `AliasesRepository` lists/creates/deletes aliases and enforces domain ownership via the `MailDomainOwnership` join table.
 
@@ -37,6 +40,7 @@ Release procedure lives in the `ship-microservice` skill (`.claude/skills/ship-m
 ### Key Patterns
 
 - **Functional error handling:** Repository and service methods return `Result<T>` / `Result` from `CSharpFunctionalExtensions`. Controllers unwrap these and call `Ok(result)` / `Problem(result)` helpers from `ApiBaseController`.
-- **JWT claims:** `ClaimTypes.Upn` = username, `ClaimTypes.Dns` = domain. Controllers extract these to scope queries to the authenticated user's domain.
-- **Password hashing:** Uses `CryptSharp.Core` (crypt-style hashing matching Dovecot's format).
+- **JWT claims:** `ClaimTypes.Upn` = username, `ClaimTypes.Dns` = domain **name** (e.g. `"weesky.be"`, NOT the 3-char domain ID). `AdminRepository.IsAdmin` resolves name → ID via the `Domains` table before querying users.
+- **Password storage — CRITICAL:** The microservice **must store passwords as plaintext**. MariaDB triggers `INSERT_PASSWORD` and `UPDATE_PASSWORD` on the `users` table automatically encrypt the value using SHA-512 crypt (`$6$...`) before it is persisted. Any server-side hashing (e.g. CryptSharp) would double-encrypt and break login. Always assign `Password = request.Password` directly — never hash.
 - **Database:** MySQL via Pomelo EF Core provider, targeting the `dovecot` database. Development overrides in `appsettings.Development.json` point to `10.0.0.2`.
+- **Assert.IsType&lt;T&gt; in tests:** Checks the **exact** runtime type. `BadRequest(body)` returns `BadRequestObjectResult` (a subtype of `ObjectResult`); always use `Assert.IsType<BadRequestObjectResult>` for those. Only `StatusCode(400)` / the `FromResult()` helper returns a plain `ObjectResult`.

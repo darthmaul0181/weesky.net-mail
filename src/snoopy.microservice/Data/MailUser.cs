@@ -32,6 +32,16 @@ namespace weesky.Snoopy.Microservice.Data
 
 		[Column("fullname")]
 		public string FullName { get; set; }
+
+		[Required]
+		[Column("admin")]
+		public ActiveState Admin { get; set; }
+
+		[Column("quota_mb")]
+		public int QuotaMb { get; set; } = 1024;
+
+		[Column("lastupdate")]
+		public DateTime LastUpdate { get; set; }
 	}
 
 	public enum ActiveState

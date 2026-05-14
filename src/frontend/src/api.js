@@ -4,6 +4,7 @@ const EXPIRY_KEY = 'authExpiry'
 
 let authToken = null
 let unauthorizedHandler = null
+let isAdmin = false
 
 // Restore persisted token only if not expired
 const savedToken = localStorage.getItem(TOKEN_KEY)
@@ -28,9 +29,13 @@ export function setToken(token, expiresIn, persist = false) {
 
 export function clearToken() {
   authToken = null
+  isAdmin = false
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(EXPIRY_KEY)
 }
+
+export function setIsAdmin(value) { isAdmin = value }
+export function getIsAdmin() { return isAdmin }
 
 export function hasToken() {
   return !!authToken
@@ -89,4 +94,31 @@ export const api = {
 
   changeFullName: (fullName) =>
     request('POST', '/api/Account/FullName', { fullName }),
+
+  adminGetUsers: () =>
+    request('GET', '/api/Admin/users'),
+
+  adminCreateUser: (payload) =>
+    request('POST', '/api/Admin/users', payload),
+
+  adminUpdateUser: (id, payload) =>
+    request('PUT', `/api/Admin/users/${id}`, payload),
+
+  adminDeleteUser: (id) =>
+    request('DELETE', `/api/Admin/users/${id}`),
+
+  adminGetDomains: () =>
+    request('GET', '/api/Admin/domains'),
+
+  adminCreateDomain: (payload) =>
+    request('POST', '/api/Admin/domains', payload),
+
+  adminUpdateDomain: (id, payload) =>
+    request('PUT', `/api/Admin/domains/${id}`, payload),
+
+  adminDeleteDomain: (id) =>
+    request('DELETE', `/api/Admin/domains/${id}`),
+
+  adminGetUserQuota: (id) =>
+    request('GET', `/api/Admin/users/${id}/quota`),
 }

@@ -27,6 +27,10 @@ namespace weesky.Snoopy.Microservice.Data
 			modelBuilder.Entity<MailUser>()
 				.Property(u => u.Active)
 				.HasConversion(new EnumToStringConverter<ActiveState>());
+
+			modelBuilder.Entity<MailUser>()
+				.Property(u => u.Admin)
+				.HasConversion(new EnumToStringConverter<ActiveState>());
 		}
 
 		public DbSet<MailUser> Users {get; set;}

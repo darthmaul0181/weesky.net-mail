@@ -83,7 +83,8 @@ namespace weesky.Snoopy.Microservice.Repositories
 				UserName = mailUser.Name,
 				FullName = mailUser.FullName,
 				Mailbox = mailUser.DomainId,
-				Domains = ownedDomains
+				Domains = ownedDomains,
+				IsAdmin = mailUser.Admin == ActiveState.Y
 			});
 		}
 
