@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Controllers
 {
@@ -12,10 +13,12 @@ namespace weesky.Snoopy.Microservice.Controllers
     public class AdminController : ApiBaseController
     {
         private readonly IAdminRepository _adminRepository;
+        private readonly IDovecotQuotaClient _dovecotQuotaClient;
 
-        public AdminController(IAdminRepository adminRepository)
+        public AdminController(IAdminRepository adminRepository, IDovecotQuotaClient dovecotQuotaClient)
         {
             _adminRepository = adminRepository;
+            _dovecotQuotaClient = dovecotQuotaClient;
         }
 
         private bool IsCurrentUserAdmin() =>
@@ -122,6 +125,29 @@ namespace weesky.Snoopy.Microservice.Controllers
             Result<Domain> result = _adminRepository.UpdateDomain(id, request);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
             return Ok(result.Value);
+        }
+
+        /// <summary>Returns the Dovecot mailbox quota for a specific user</summary>
+        /// <response code="200">Quota information</response>
+        /// <response code="400">User not found</response>
+        /// <response code="401">Unauthenticated or not an admin</response>
+        /// <response code="502">Unable to reach Dovecot</response>
+        [HttpGet("users/{id}/quota")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult<Quota>> GetUserQuota(int id, CancellationToken cancellationToken)
+        {
+            if (!IsCurrentUserAdmin()) return Unauthorized();
+
+            var users = _adminRepository.GetAllUsers();
+            var userInfo = users.FirstOrDefault(u => u.Id == id);
+            if (userInfo == null) return BadRequest(ResultEnveloppe.CrateErrorEnveloppe($"User {id} not found"));
+
+            var user = new User($"{userInfo.UserName}@{userInfo.DomainName}");
+            Result<Quota> result = await _dovecotQuotaClient.GetQuotaAsync(user, cancellationToken);
+            return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
         }
 
         /// <summary>Deletes a domain</summary>

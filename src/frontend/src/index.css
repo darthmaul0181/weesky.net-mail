@@ -1019,18 +1019,20 @@ body {
 /* ── Admin modal ─────────────────────────────────────────── */
 
 .modal-admin {
-  max-width: 800px;
-  width: 100%;
+  width: 75vw;
+  max-width: 75vw;
+  height: 75vh;
+  max-height: 75vh;
   padding: 0;
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
 }
 
-.modal-admin .modal-header {
+.modal.modal-admin > .modal-header {
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0;
+  flex-shrink: 0;
 }
 
 .admin-modal-body {

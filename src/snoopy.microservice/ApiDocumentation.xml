@@ -93,6 +93,13 @@
             <response code="400">Validation error</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetUserQuota(System.Int32,System.Threading.CancellationToken)">
+            <summary>Returns the Dovecot mailbox quota for a specific user</summary>
+            <response code="200">Quota information</response>
+            <response code="400">User not found</response>
+            <response code="401">Unauthenticated or not an admin</response>
+            <response code="502">Unable to reach Dovecot</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteDomain(System.String)">
             <summary>Deletes a domain</summary>
             <response code="204">Domain deleted</response>

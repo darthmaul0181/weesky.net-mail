@@ -118,4 +118,7 @@ export const api = {
 
   adminDeleteDomain: (id) =>
     request('DELETE', `/api/Admin/domains/${id}`),
+
+  adminGetUserQuota: (id) =>
+    request('GET', `/api/Admin/users/${id}/quota`),
 }

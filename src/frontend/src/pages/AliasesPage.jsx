@@ -216,6 +216,30 @@ function QuotaBlock({ quota }) {
   )
 }
 
+function QuotaMini({ quota }) {
+  if (!quota || !quota.storageBytesLimit) return <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
+
+  const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB
+  const divisor = useGb ? GB : MB
+  const unit = useGb ? 'GB' : 'MB'
+  const used = quota.storageBytesUsed / divisor
+  const total = quota.storageBytesLimit / divisor
+  const percent = Math.min(100, Math.max(0, (quota.storageBytesUsed / quota.storageBytesLimit) * 100))
+  const format = v => (v >= 100 ? v.toFixed(0) : v.toFixed(1))
+  const levelClass = percent >= 90 ? 'is-danger' : percent >= 75 ? 'is-warn' : ''
+
+  return (
+    <div style={{ width: '130px' }}>
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+        {format(used)} / {format(total)} {unit}
+      </div>
+      <div className={`panel-quota-bar ${levelClass}`}>
+        <div className="panel-quota-bar-fill" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
 function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -544,6 +568,7 @@ function AccountsTab({ addToast }) {
   const [users, setUsers] = useState([])
   const [domains, setDomains] = useState([])
   const [loading, setLoading] = useState(true)
+  const [quotas, setQuotas] = useState({})
   const [userToEdit, setUserToEdit] = useState(null)
   const [userToDelete, setUserToDelete] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -551,13 +576,21 @@ function AccountsTab({ addToast }) {
 
   async function load() {
     setLoading(true)
+    setQuotas({})
     try {
       const [u, d] = await Promise.all([api.adminGetUsers(), api.adminGetDomains()])
-      setUsers(u ?? [])
+      const allUsers = u ?? []
+      setUsers(allUsers)
       setDomains(d ?? [])
+      setLoading(false)
+      allUsers.forEach(async (user) => {
+        try {
+          const q = await api.adminGetUserQuota(user.id)
+          setQuotas(prev => ({ ...prev, [user.id]: q }))
+        } catch { /* quota unavailable for this user */ }
+      })
     } catch {
       addToast('Failed to load accounts', 'error')
-    } finally {
       setLoading(false)
     }
   }
@@ -594,7 +627,7 @@ function AccountsTab({ addToast }) {
           <div key={u.id} className="admin-list-item">
             <span className="admin-list-item-email">{u.userName}@{u.domainName}</span>
             <span className="admin-list-item-name">{u.fullName}</span>
-            <span className="admin-list-item-quota">{u.quotaMb} MB</span>
+            <div className="admin-list-item-quota"><QuotaMini quota={quotas[u.id]} /></div>
             <div className="admin-list-item-actions">
               <button className="admin-icon-btn" title="Edit" onClick={() => setUserToEdit(u)}>
                 <PencilIcon />
