@@ -120,8 +120,20 @@ jobs:
           path: ${{ github.workspace }}/publish
           retention-days: 1
 
+  ci-result:
+    needs: [ci-frontend, ci-backend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check CI results
+        run: |
+          if [[ "${{ needs.ci-frontend.result }}" == "failure" || \
+                "${{ needs.ci-backend.result }}" == "failure" ]]; then
+            exit 1
+          fi
+
   deploy:
-    needs: [detect-changes, ci-frontend, ci-backend]
+    needs: [detect-changes, ci-result]
     if: |
       always() &&
       !failure() &&
