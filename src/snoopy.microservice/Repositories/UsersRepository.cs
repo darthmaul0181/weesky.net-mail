@@ -74,7 +74,7 @@ namespace weesky.Snoopy.Microservice.Repositories
 				.Join(_context.Domains, o => o.DomainId, d => d.Id, (o, d) => new Domain { Id = d.Id, Name = d.Name })
 				.ToList();
 
-			if (ownedDomains.Count == 0)
+			if (ownedDomains.All(d => d.Id != domain.Id))
 				ownedDomains.Add(new Domain { Id = domain.Id, Name = domain.Name });
 
 			return Result.Success(new AccountInfo

@@ -180,6 +180,34 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
+        public void GetAccountInfo_WithOwnedDomains_AlsoIncludesPrimaryDomain()
+        {
+            var (repo, context) = CreateSut();
+            var userId = context.Users.First(u => u.Name == "john").Id;
+            context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
+            context.SaveChanges();
+
+            var result = repo.GetAccountInfo(new User(TestEmail));
+
+            Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
+            Assert.Contains(result.Value.Domains, d => d.Name == "other.com");
+        }
+
+        [Fact]
+        public void GetAccountInfo_WhenPrimaryDomainIsInOwnerships_NoDuplicates()
+        {
+            var (repo, context) = CreateSut();
+            var userId = context.Users.First(u => u.Name == "john").Id;
+            context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "WKY", UserId = userId });
+            context.SaveChanges();
+
+            var result = repo.GetAccountInfo(new User(TestEmail));
+
+            Assert.Single(result.Value.Domains);
+            Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
+        }
+
+        [Fact]
         public void GetAccountInfo_WhenDomainNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
