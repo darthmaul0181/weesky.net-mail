@@ -552,7 +552,8 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
             <label>Domain name</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)} required />
           </div>
-          <button className="btn btn-primary" type="submit" disabled={loading}>
+          <button className="btn btn-primary" type="submit"
+            disabled={loading || !id.trim() || !name.trim()}>
             {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create domain')}
           </button>
         </form>

@@ -265,6 +265,30 @@ describe('AddEditDomainModal — create mode', () => {
     expect(screen.getAllByRole('textbox')).toHaveLength(2)
   })
 
+  it('submit button is disabled when both fields are empty', () => {
+    renderCreate()
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+  })
+
+  it('submit button is disabled when only id is filled', async () => {
+    renderCreate()
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'TST')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+  })
+
+  it('submit button is disabled when only name is filled', async () => {
+    renderCreate()
+    await userEvent.type(screen.getAllByRole('textbox')[1], 'test.com')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+  })
+
+  it('submit button is enabled when both fields are filled', async () => {
+    renderCreate()
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'TST')
+    await userEvent.type(screen.getAllByRole('textbox')[1], 'test.com')
+    expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
+  })
+
   it('calls adminCreateDomain with correct payload on submit', async () => {
     api.adminCreateDomain.mockResolvedValue({})
     const onSave = vi.fn()
