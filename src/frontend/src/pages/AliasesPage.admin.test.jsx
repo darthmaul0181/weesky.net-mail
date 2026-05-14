@@ -834,7 +834,7 @@ describe('OwnershipTab', () => {
   })
 
   it('calls adminSetOwnership when a user is selected from dropdown', async () => {
-    api.adminSetOwnership.mockResolvedValue({})
+    api.adminSetOwnership.mockResolvedValue({ domainId: 'ORF', domainName: 'orphan.net', owners: [{ ownerId: 1, ownerEmail: 'alice@weesky.be' }] })
     render(<OwnershipTab addToast={vi.fn()} />)
     await screen.findByText('extra.com')
     await userEvent.click(screen.getAllByTitle('Edit owner')[1])

@@ -792,9 +792,9 @@ export function OwnershipTab({ addToast }) {
   async function handleSelect(domainId, userId) {
     setSaving(true)
     try {
-      await api.adminSetOwnership(domainId, userId)
+      const updated = await api.adminSetOwnership(domainId, userId)
       setSearchQuery('')
-      load()
+      setOwnerships(prev => prev.map(o => o.domainId === domainId ? updated : o))
     } catch (err) {
       addToast(err.message || 'Failed to set owner', 'error')
     } finally {
@@ -806,7 +806,11 @@ export function OwnershipTab({ addToast }) {
     setSaving(true)
     try {
       await api.adminDeleteOwnership(domainId, userId)
-      load()
+      setOwnerships(prev => prev.map(o =>
+        o.domainId === domainId
+          ? { ...o, owners: o.owners.filter(own => own.ownerId !== userId) }
+          : o
+      ))
     } catch (err) {
       addToast(err.message || 'Failed to remove owner', 'error')
     } finally {
