@@ -3,6 +3,8 @@ name: deploy
 on:
   push:
     branches-ignore: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
   workflow_dispatch:
 
 jobs:
@@ -22,10 +24,13 @@ jobs:
             backend:
               - 'src/snoopy.microservice/**'
 
-  build-frontend:
+  ci-frontend:
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     defaults:
       run:
@@ -40,37 +45,56 @@ jobs:
           cache-dependency-path: src/frontend/package-lock.json
       - name: Install dependencies
         run: npm install
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test:coverage
+      - name: Coverage summary
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: src/frontend/coverage/cobertura-coverage.xml
+          badge: true
+          format: markdown
+          output: both
+      - name: PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          recreate: true
+          path: code-coverage-results.md
       - name: Create env files
+        if: github.event_name != 'pull_request'
         run: |
           echo "VITE_API_BASE=${{ secrets.API_ENDPOINT_PROD }}" > .env.production
           echo "VITE_API_BASE=${{ secrets.API_ENDPOINT_DEV }}" > .env.dev
       - name: Build
+        if: github.event_name != 'pull_request'
         run: npm run build ${{ github.ref_name != 'master' && '-- --mode dev' || '' }}
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: frontend-dist
           path: src/frontend/dist
           retention-days: 1
 
-  build-microservice:
+  ci-backend:
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: ./.github/actions/build
         with:
-          dotnet-version: 10.0.x
-      - uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-      - name: Restore dependencies
+          working-directory: src/snoopy.microservice
+      - name: Restore for publish
+        if: github.event_name != 'pull_request'
         run: dotnet restore src/snoopy.microservice/snoopy.microservice.csproj -r linux-x64
       - name: Publish
+        if: github.event_name != 'pull_request'
         run: >
           dotnet publish src/snoopy.microservice/snoopy.microservice.csproj
           -c Release -r linux-x64 --self-contained
@@ -79,6 +103,7 @@ jobs:
           -p:DebugType=None -p:DebugSymbols=false
           -o ${{ github.workspace }}/publish
       - name: Trim publish output
+        if: github.event_name != 'pull_request'
         run: |
           rm -rf \
             ${{ github.workspace }}/publish/alpine \
@@ -89,19 +114,21 @@ jobs:
             ${{ github.workspace }}/publish/x64 \
             ${{ github.workspace }}/publish/x86
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: microservice-publish
           path: ${{ github.workspace }}/publish
           retention-days: 1
 
   deploy:
-    needs: [detect-changes, build-frontend, build-microservice]
+    needs: [detect-changes, ci-frontend, ci-backend]
     if: |
       always() &&
       !failure() &&
       !cancelled() &&
-      (needs.detect-changes.outputs.frontend == 'true' ||
-       needs.detect-changes.outputs.backend == 'true')
+      github.event_name != 'pull_request' &&
+      (github.ref_name != 'master' || github.event_name == 'workflow_dispatch') &&
+      (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true')
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
     permissions:
