@@ -17,7 +17,7 @@ ASP.NET Core (.NET 10) REST API on top of the `dovecot` database (MariaDB/MySQL)
 - **Login** (`/api/login`) — issues a signed JWT, also set as an `HttpOnly; Secure; SameSite=Strict` cookie. Rate limited (5 req/min/IP).
 - **Account** (`/api/account`) — mailbox info, quota (via the remote `doveadm` HTTP API) and password change.
 - **Aliases** (`/api/aliases`) — CRUD scoped to domains owned by the caller (via `MailDomainOwnership`).
-- **Admin** (`/api/Admin`) — admin-only CRUD for users, domains, and extra-domain ownerships.
+- **Admin** (`/api/Admin`) — admin-only CRUD for users, domains, and alias domain ownerships.
 
 Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), `CryptSharp` (Dovecot-compatible crypt hashing), Serilog, Swashbuckle.
 

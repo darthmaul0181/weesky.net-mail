@@ -122,12 +122,12 @@ export const api = {
   adminGetUserQuota: (id) =>
     request('GET', `/api/Admin/users/${id}/quota`),
 
-  adminGetOwnerships: () =>
-    request('GET', '/api/Admin/ownerships'),
+  adminGetVirtualDomains: () =>
+    request('GET', '/api/Admin/domains/virtuals'),
 
-  adminSetOwnership: (domainId, userId) =>
-    request('PUT', `/api/Admin/ownerships/${domainId}`, { userId }),
+  adminAddVirtualDomainOwner: (domainId, userId) =>
+    request('PUT', `/api/Admin/domains/virtuals/${domainId}`, { userId }),
 
-  adminDeleteOwnership: (domainId) =>
-    request('DELETE', `/api/Admin/ownerships/${domainId}`),
+  adminRemoveVirtualDomainOwner: (domainId, userId) =>
+    request('DELETE', `/api/Admin/domains/virtuals/${domainId}/${userId}`),
 }

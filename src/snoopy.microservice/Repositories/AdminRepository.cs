@@ -187,12 +187,12 @@ namespace weesky.Snoopy.Microservice.Repositories
             return Result.Success();
         }
 
-        public IEnumerable<DomainOwnershipInfo> GetAllOwnerships()
+        public IEnumerable<VirtualDomainInfo> GetAllVirtualDomains()
         {
             var primaryDomainIds = _context.Users.Select(u => u.DomainId).Distinct().ToHashSet();
             var ownedDomainIds = _context.DomainsOwnerships.Select(o => o.DomainId).ToHashSet();
 
-            var extraDomains = _context.Domains
+            var aliasDomains = _context.Domains
                 .Select(d => new { d.Id, d.Name })
                 .ToList()
                 .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
@@ -208,65 +208,75 @@ namespace weesky.Snoopy.Microservice.Repositories
                 .Select(d => new { d.Id, d.Name })
                 .ToDictionary(d => d.Id, d => d.Name);
 
-            return extraDomains.Select(domain =>
+            return aliasDomains.Select(domain =>
             {
-                var ownership = ownerships.FirstOrDefault(o => o.DomainId == domain.Id);
-                string? ownerEmail = null;
-                if (ownership != null)
-                {
-                    var owner = userProjections.FirstOrDefault(u => u.Id == ownership.UserId);
-                    if (owner != null && domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
-                        ownerEmail = $"{owner.Name}@{ownerDomainName}";
-                }
-                return new DomainOwnershipInfo
+                var owners = ownerships
+                    .Where(o => o.DomainId == domain.Id)
+                    .Select(o =>
+                    {
+                        var owner = userProjections.FirstOrDefault(u => u.Id == o.UserId);
+                        if (owner == null || !domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
+                            return null;
+                        return new OwnerInfo { OwnerId = o.UserId, OwnerEmail = $"{owner.Name}@{ownerDomainName}" };
+                    })
+                    .OfType<OwnerInfo>()
+                    .ToList();
+                return new VirtualDomainInfo
                 {
                     DomainId = domain.Id,
                     DomainName = domain.Name,
-                    OwnerId = ownership?.UserId,
-                    OwnerEmail = ownerEmail
+                    Owners = owners
                 };
             }).ToList();
         }
 
-        public Result<DomainOwnershipInfo> SetOwnership(string domainId, int userId)
+        public Result<VirtualDomainInfo> AddVirtualDomainOwner(string domainId, int userId)
         {
             var domain = _context.Domains.FirstOrDefault(d => d.Id == domainId);
             if (domain == null)
-                return Result.Failure<DomainOwnershipInfo>($"Domain '{domainId}' not found");
+                return Result.Failure<VirtualDomainInfo>($"Domain '{domainId}' not found");
 
             var user = _context.Users
                 .Where(u => u.Id == userId)
                 .Select(u => new { u.Id, u.Name, u.DomainId })
                 .FirstOrDefault();
             if (user == null)
-                return Result.Failure<DomainOwnershipInfo>($"User with id {userId} not found");
+                return Result.Failure<VirtualDomainInfo>($"User with id {userId} not found");
 
-            var existing = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId);
-            if (existing != null)
-                existing.UserId = userId;
-            else
+            var existing = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
+            if (existing == null)
                 _context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
 
             _context.SaveChanges();
 
-            var userDomainName = _context.Domains
-                .Where(d => d.Id == user.DomainId)
-                .Select(d => d.Name)
-                .FirstOrDefault();
-            return Result.Success(new DomainOwnershipInfo
+            var userProjections = _context.Users.Select(u => new { u.Id, u.Name, u.DomainId }).ToList();
+            var domainNames = _context.Domains.Select(d => new { d.Id, d.Name }).ToDictionary(d => d.Id, d => d.Name);
+            var owners = _context.DomainsOwnerships
+                .Where(o => o.DomainId == domainId)
+                .ToList()
+                .Select(o =>
+                {
+                    var owner = userProjections.FirstOrDefault(u => u.Id == o.UserId);
+                    if (owner == null || !domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
+                        return null;
+                    return new OwnerInfo { OwnerId = o.UserId, OwnerEmail = $"{owner.Name}@{ownerDomainName}" };
+                })
+                .OfType<OwnerInfo>()
+                .ToList();
+
+            return Result.Success(new VirtualDomainInfo
             {
                 DomainId = domain.Id,
                 DomainName = domain.Name,
-                OwnerId = userId,
-                OwnerEmail = userDomainName != null ? $"{user.Name}@{userDomainName}" : null
+                Owners = owners
             });
         }
 
-        public Result DeleteOwnership(string domainId)
+        public Result RemoveVirtualDomainOwner(string domainId, int userId)
         {
-            var ownership = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId);
+            var ownership = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
             if (ownership == null)
-                return Result.Failure($"No ownership found for domain '{domainId}'");
+                return Result.Failure($"No ownership found for domain '{domainId}' and user {userId}");
 
             _context.DomainsOwnerships.Remove(ownership);
             _context.SaveChanges();

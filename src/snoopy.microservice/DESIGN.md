@@ -35,7 +35,7 @@ Exposed controllers:
 | `LoginController` | `/api/login` | POST, DELETE | POST anonymous / DELETE `[Authorize]` | POST goes through the `login` rate limiter (5 req/min per IP). |
 | `AccountController` | `/api/account` | GET, GET `Quota`, PATCH `ChangeSecret` | `[Authorize]` | `Quota` delegates to `IDovecotQuotaClient`; `ChangeSecret` requires the old password. |
 | `AliasesController` | `/api/aliases` | GET, POST, DELETE | `[Authorize]` | Every operation goes through `UserOwnsDomain`. |
-| `AdminController` | `/api/Admin/users`, `/api/Admin/domains`, `/api/Admin/ownerships` | GET, POST, PUT, DELETE | `[Authorize]` + `admin='Y'` check | User CRUD + quota proxy; domain CRUD; extra-domain ownership GET/PUT/DELETE. All endpoints check `IsAdmin()` and return 401 if false. |
+| `AdminController` | `/api/Admin/users`, `/api/Admin/domains`, `/api/Admin/ownerships` | GET, POST, PUT, DELETE | `[Authorize]` + `admin='Y'` check | User CRUD + quota proxy; domain CRUD; alias domain ownership GET/PUT/DELETE. All endpoints check `IsAdmin()` and return 401 if false. |
 
 ### Repositories (`Repositories/`)
 
@@ -68,7 +68,7 @@ Wrap outbound integrations with external systems. Unlike repositories, these com
 | `MailUser` | `users` | `Id`, `Name`, `Password`, `DomainId`, `FullName`, `Active` (enum ⇄ string) |
 | `MailDomain` | `domains` | `Id`, `Name` |
 | `MailAlias` | `aliases` | `Id`, `Name`, `Domain`, `DestinationUserId` |
-| `MailDomainOwnership` | `domain_ownerships` | `UserId`, `DomainId` — only for extra domains (domains not used as primary by any user) |
+| `MailDomainOwnership` | `domain_ownerships` | `UserId`, `DomainId` — only for alias domains (domains not used as a primary mailbox by any user) |
 
 The context doesn't own the schema — Dovecot migrations are out of scope for this API.
 

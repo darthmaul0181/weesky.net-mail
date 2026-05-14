@@ -534,9 +534,9 @@ describe('AliasesPage', () => {
     await userEvent.click(screen.getByTitle('john@weesky.be'))
     await waitFor(() => screen.getByRole('button', { name: 'Administration' }))
     await userEvent.click(screen.getByRole('button', { name: 'Administration' }))
-    expect(await screen.findByRole('button', { name: 'Ownerships' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Virtual domains' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '✕' }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ownerships' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Virtual domains' })).not.toBeInTheDocument())
   })
 
   it('fires alpha nav letter click (scrollToLetter)', async () => {

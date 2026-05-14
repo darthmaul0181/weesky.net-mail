@@ -312,76 +312,76 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
                 It.IsAny<CancellationToken>()), Times.Once);
         }
 
-        // ── GetOwnerships ─────────────────────────────────────
+        // ── GetVirtualDomains ─────────────────────────────────
 
         [Fact]
-        public void GetOwnerships_WhenNotAdmin_Returns401()
+        public void GetVirtualDomains_WhenNotAdmin_Returns401()
         {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).GetOwnerships().Result);
+            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).GetVirtualDomains().Result);
         }
 
         [Fact]
-        public void GetOwnerships_WhenAdmin_Returns200WithList()
+        public void GetVirtualDomains_WhenAdmin_Returns200WithList()
         {
-            var ownerships = new[] { new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com" } };
-            _repo.Setup(r => r.GetAllOwnerships()).Returns(ownerships);
-            var ok = Assert.IsType<OkObjectResult>(CreateController().GetOwnerships().Result);
-            Assert.Same(ownerships, ok.Value);
+            var virtualDomains = new[] { new VirtualDomainInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() } };
+            _repo.Setup(r => r.GetAllVirtualDomains()).Returns(virtualDomains);
+            var ok = Assert.IsType<OkObjectResult>(CreateController().GetVirtualDomains().Result);
+            Assert.Same(virtualDomains, ok.Value);
         }
 
-        // ── SetOwnership ──────────────────────────────────────
+        // ── AddVirtualDomainOwner ─────────────────────────────
 
         [Fact]
-        public void SetOwnership_WhenNotAdmin_Returns401()
+        public void AddVirtualDomainOwner_WhenNotAdmin_Returns401()
         {
             Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false)
-                .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
+                .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 }).Result);
         }
 
         [Fact]
-        public void SetOwnership_WhenRepositoryFails_Returns400WithEnvelope()
+        public void AddVirtualDomainOwner_WhenRepositoryFails_Returns400WithEnvelope()
         {
-            _repo.Setup(r => r.SetOwnership(It.IsAny<string>(), It.IsAny<int>()))
-                .Returns(Result.Failure<DomainOwnershipInfo>("User not found"));
+            _repo.Setup(r => r.AddVirtualDomainOwner(It.IsAny<string>(), It.IsAny<int>()))
+                .Returns(Result.Failure<VirtualDomainInfo>("User not found"));
             var obj = Assert.IsType<BadRequestObjectResult>(CreateController()
-                .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
+                .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 }).Result);
             Assert.Equal(400, obj.StatusCode);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
             Assert.Equal("User not found", envelope.Message);
         }
 
         [Fact]
-        public void SetOwnership_WhenSuccess_Returns200WithOwnership()
+        public void AddVirtualDomainOwner_WhenSuccess_Returns200WithVirtualDomain()
         {
-            var info = new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com", OwnerId = 1 };
-            _repo.Setup(r => r.SetOwnership("EXT", 1)).Returns(Result.Success(info));
+            var info = new VirtualDomainInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() { new OwnerInfo { OwnerId = 1, OwnerEmail = "alice@weesky.be" } } };
+            _repo.Setup(r => r.AddVirtualDomainOwner("EXT", 1)).Returns(Result.Success(info));
             var ok = Assert.IsType<OkObjectResult>(CreateController()
-                .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
+                .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 }).Result);
             Assert.Same(info, ok.Value);
         }
 
-        // ── DeleteOwnership ───────────────────────────────────
+        // ── RemoveVirtualDomainOwner ──────────────────────────
 
         [Fact]
-        public void DeleteOwnership_WhenNotAdmin_Returns401()
+        public void RemoveVirtualDomainOwner_WhenNotAdmin_Returns401()
         {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).DeleteOwnership("EXT"));
+            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).RemoveVirtualDomainOwner("EXT", 1));
         }
 
         [Fact]
-        public void DeleteOwnership_WhenRepositoryFails_Returns400WithEnvelope()
+        public void RemoveVirtualDomainOwner_WhenRepositoryFails_Returns400WithEnvelope()
         {
-            _repo.Setup(r => r.DeleteOwnership(It.IsAny<string>()))
-                .Returns(Result.Failure("Ownership not found"));
-            var obj = Assert.IsType<ObjectResult>(CreateController().DeleteOwnership("EXT"));
+            _repo.Setup(r => r.RemoveVirtualDomainOwner(It.IsAny<string>(), It.IsAny<int>()))
+                .Returns(Result.Failure("Owner not found"));
+            var obj = Assert.IsType<ObjectResult>(CreateController().RemoveVirtualDomainOwner("EXT", 1));
             Assert.Equal(400, obj.StatusCode);
         }
 
         [Fact]
-        public void DeleteOwnership_WhenSuccess_Returns204()
+        public void RemoveVirtualDomainOwner_WhenSuccess_Returns204()
         {
-            _repo.Setup(r => r.DeleteOwnership("EXT")).Returns(Result.Success());
-            var status = Assert.IsType<StatusCodeResult>(CreateController().DeleteOwnership("EXT"));
+            _repo.Setup(r => r.RemoveVirtualDomainOwner("EXT", 1)).Returns(Result.Success());
+            var status = Assert.IsType<StatusCodeResult>(CreateController().RemoveVirtualDomainOwner("EXT", 1));
             Assert.Equal(204, status.StatusCode);
         }
     }

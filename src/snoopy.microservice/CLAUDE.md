@@ -27,7 +27,7 @@ Release procedure lives in the `ship-microservice` skill (`.claude/skills/ship-m
 - `LoginController` — `POST /api/login` (issue JWT), `DELETE /api/login` (revoke cookie)
 - `AccountController` — `GET /api/account` (info), `GET /api/account/quota` (Dovecot quota), `PATCH /api/account/changesecret` (password change)
 - `AliasesController` — `GET/POST/DELETE /api/aliases` (alias CRUD, scoped to caller's owned domains)
-- `AdminController` — admin-only CRUD (requires `admin='Y'` on the authenticated user): users (`GET/POST/PUT/DELETE /api/Admin/users`, `GET /api/Admin/users/{id}/quota`), domains (`GET/POST/PUT/DELETE /api/Admin/domains`), extra-domain ownerships (`GET /api/Admin/ownerships`, `PUT /api/Admin/ownerships/{domainId}`, `DELETE /api/Admin/ownerships/{domainId}`)
+- `AdminController` — admin-only CRUD (requires `admin='Y'` on the authenticated user): users (`GET/POST/PUT/DELETE /api/Admin/users`, `GET /api/Admin/users/{id}/quota`), domains (`GET/POST/PUT/DELETE /api/Admin/domains`), alias domain ownerships (`GET /api/Admin/ownerships`, `PUT /api/Admin/ownerships/{domainId}`, `DELETE /api/Admin/ownerships/{domainId}/{userId}`)
 
 **Repositories** (`Repositories/`) handle all database access via EF Core. `UsersRepository` validates credentials and updates passwords; `AliasesRepository` lists/creates/deletes aliases and enforces domain ownership via the `MailDomainOwnership` join table.
 

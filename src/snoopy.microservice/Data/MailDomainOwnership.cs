@@ -8,7 +8,6 @@ namespace weesky.Snoopy.Microservice.Data
 	[DebuggerDisplay("{DomainId} owned by user {UserId}")]
 	public class MailDomainOwnership
 	{
-		[Key]
 		[Required]
 		[StringLength(3)]
 		[Column("domainId")]

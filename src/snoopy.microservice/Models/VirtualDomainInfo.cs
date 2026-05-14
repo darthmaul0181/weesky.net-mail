@@ -1,6 +1,6 @@
 namespace weesky.Snoopy.Microservice.Models
 {
-    public class DomainOwnershipInfo
+    public class VirtualDomainInfo
     {
         public string DomainId { get; set; }
         public string DomainName { get; set; }
