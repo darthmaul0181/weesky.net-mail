@@ -69,13 +69,19 @@ CREATE TABLE `users` (
 -- Triggers `users`
 --
 DELIMITER $$
-CREATE TRIGGER `INSERT_PASSWORD` BEFORE INSERT ON `users` FOR EACH ROW SET NEW.password = ENCRYPT(NEW.password, CONCAT('$6$', SUBSTRING(SHA(RAND()), -16)))
+CREATE TRIGGER `INSERT_PASSWORD` BEFORE INSERT ON `users` FOR EACH ROW SET NEW.password = ENCRYPT(
+  NEW.password,
+  CONCAT('$6$', SUBSTRING(SHA2(CONCAT(UUID(), RAND(), NOW(6)), 256), 1, 16), '$')
+)
 $$
 DELIMITER ;
 DELIMITER $$
 CREATE TRIGGER `UPDATE_PASSWORD` BEFORE UPDATE ON `users` FOR EACH ROW IF NEW.password <> OLD.password THEN
-	SET NEW.password = ENCRYPT(NEW.password, CONCAT('$6$', SUBSTRING(SHA(RAND()), -16)));
-    SET NEW.lastupdate = now();
+    SET NEW.password = ENCRYPT(
+        NEW.password,
+        CONCAT('$6$', SUBSTRING(SHA2(CONCAT(UUID(), RAND(), NOW(6)), 256), 1, 16), '$')
+    );
+    SET NEW.lastupdate = NOW();
 END IF
 $$
 DELIMITER ;
