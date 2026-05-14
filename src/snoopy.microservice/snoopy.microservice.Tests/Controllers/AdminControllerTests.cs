@@ -342,12 +342,12 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         public void SetOwnership_WhenRepositoryFails_Returns400WithEnvelope()
         {
             _repo.Setup(r => r.SetOwnership(It.IsAny<string>(), It.IsAny<int>()))
-                .Returns(Result.Failure<DomainOwnershipInfo>("Domain not found"));
+                .Returns(Result.Failure<DomainOwnershipInfo>("User not found"));
             var obj = Assert.IsType<BadRequestObjectResult>(CreateController()
                 .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
             Assert.Equal(400, obj.StatusCode);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
-            Assert.Equal("Domain not found", envelope.Message);
+            Assert.Equal("User not found", envelope.Message);
         }
 
         [Fact]

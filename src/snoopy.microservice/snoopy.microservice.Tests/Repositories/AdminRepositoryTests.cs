@@ -530,12 +530,25 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllOwnerships_ExcludesPrimaryDomains()
+        public void GetAllOwnerships_ExcludesPrimaryDomainWithNoOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             AddUser(ctx, "alice", "WSY");
             Assert.Empty(new AdminRepository(ctx).GetAllOwnerships());
+        }
+
+        [Fact]
+        public void GetAllOwnerships_IncludesPrimaryDomainWhenInOwnershipsTable()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            var alice = AddUser(ctx, "alice", "WSY");
+            AddOwnership(ctx, "WSY", alice.Id);
+            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            Assert.Single(result);
+            Assert.Equal("WSY", result[0].DomainId);
+            Assert.Equal(alice.Id, result[0].OwnerId);
         }
 
         [Fact]
@@ -573,15 +586,6 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         {
             using var ctx = CreateContext();
             Assert.True(new AdminRepository(ctx).SetOwnership("ZZZ", 1).IsFailure);
-        }
-
-        [Fact]
-        public void SetOwnership_WhenDomainIsPrimary_ReturnsFailure()
-        {
-            using var ctx = CreateContext();
-            AddDomain(ctx);
-            var user = AddUser(ctx, "alice", "WSY");
-            Assert.True(new AdminRepository(ctx).SetOwnership("WSY", user.Id).IsFailure);
         }
 
         [Fact]

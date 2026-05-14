@@ -190,10 +190,12 @@ namespace weesky.Snoopy.Microservice.Repositories
         public IEnumerable<DomainOwnershipInfo> GetAllOwnerships()
         {
             var primaryDomainIds = _context.Users.Select(u => u.DomainId).Distinct().ToHashSet();
+            var ownedDomainIds = _context.DomainsOwnerships.Select(o => o.DomainId).ToHashSet();
 
             var extraDomains = _context.Domains
-                .Where(d => !primaryDomainIds.Contains(d.Id))
                 .Select(d => new { d.Id, d.Name })
+                .ToList()
+                .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
                 .ToList();
 
             var ownerships = _context.DomainsOwnerships.ToList();
@@ -228,14 +230,9 @@ namespace weesky.Snoopy.Microservice.Repositories
 
         public Result<DomainOwnershipInfo> SetOwnership(string domainId, int userId)
         {
-            var primaryDomainIds = _context.Users.Select(u => u.DomainId).Distinct().ToHashSet();
-
             var domain = _context.Domains.FirstOrDefault(d => d.Id == domainId);
             if (domain == null)
                 return Result.Failure<DomainOwnershipInfo>($"Domain '{domainId}' not found");
-
-            if (primaryDomainIds.Contains(domainId))
-                return Result.Failure<DomainOwnershipInfo>($"Domain '{domainId}' is not an extra domain");
 
             var user = _context.Users
                 .Where(u => u.Id == userId)
