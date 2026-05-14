@@ -186,5 +186,91 @@ namespace weesky.Snoopy.Microservice.Repositories
             _context.SaveChanges();
             return Result.Success();
         }
+
+        public IEnumerable<DomainOwnershipInfo> GetAllOwnerships()
+        {
+            var primaryDomainIds = _context.Users.Select(u => u.DomainId).Distinct().ToHashSet();
+            var ownedDomainIds = _context.DomainsOwnerships.Select(o => o.DomainId).ToHashSet();
+
+            var extraDomains = _context.Domains
+                .Select(d => new { d.Id, d.Name })
+                .ToList()
+                .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
+                .ToList();
+
+            var ownerships = _context.DomainsOwnerships.ToList();
+
+            var userProjections = _context.Users
+                .Select(u => new { u.Id, u.Name, u.DomainId })
+                .ToList();
+
+            var domainNames = _context.Domains
+                .Select(d => new { d.Id, d.Name })
+                .ToDictionary(d => d.Id, d => d.Name);
+
+            return extraDomains.Select(domain =>
+            {
+                var ownership = ownerships.FirstOrDefault(o => o.DomainId == domain.Id);
+                string? ownerEmail = null;
+                if (ownership != null)
+                {
+                    var owner = userProjections.FirstOrDefault(u => u.Id == ownership.UserId);
+                    if (owner != null && domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
+                        ownerEmail = $"{owner.Name}@{ownerDomainName}";
+                }
+                return new DomainOwnershipInfo
+                {
+                    DomainId = domain.Id,
+                    DomainName = domain.Name,
+                    OwnerId = ownership?.UserId,
+                    OwnerEmail = ownerEmail
+                };
+            }).ToList();
+        }
+
+        public Result<DomainOwnershipInfo> SetOwnership(string domainId, int userId)
+        {
+            var domain = _context.Domains.FirstOrDefault(d => d.Id == domainId);
+            if (domain == null)
+                return Result.Failure<DomainOwnershipInfo>($"Domain '{domainId}' not found");
+
+            var user = _context.Users
+                .Where(u => u.Id == userId)
+                .Select(u => new { u.Id, u.Name, u.DomainId })
+                .FirstOrDefault();
+            if (user == null)
+                return Result.Failure<DomainOwnershipInfo>($"User with id {userId} not found");
+
+            var existing = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId);
+            if (existing != null)
+                existing.UserId = userId;
+            else
+                _context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
+
+            _context.SaveChanges();
+
+            var userDomainName = _context.Domains
+                .Where(d => d.Id == user.DomainId)
+                .Select(d => d.Name)
+                .FirstOrDefault();
+            return Result.Success(new DomainOwnershipInfo
+            {
+                DomainId = domain.Id,
+                DomainName = domain.Name,
+                OwnerId = userId,
+                OwnerEmail = userDomainName != null ? $"{user.Name}@{userDomainName}" : null
+            });
+        }
+
+        public Result DeleteOwnership(string domainId)
+        {
+            var ownership = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId);
+            if (ownership == null)
+                return Result.Failure($"No ownership found for domain '{domainId}'");
+
+            _context.DomainsOwnerships.Remove(ownership);
+            _context.SaveChanges();
+            return Result.Success();
+        }
     }
 }

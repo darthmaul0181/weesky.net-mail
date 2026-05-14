@@ -311,5 +311,78 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
                 It.Is<User>(u => u.Email == "alice@weesky.be"),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
+
+        // ── GetOwnerships ─────────────────────────────────────
+
+        [Fact]
+        public void GetOwnerships_WhenNotAdmin_Returns401()
+        {
+            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).GetOwnerships().Result);
+        }
+
+        [Fact]
+        public void GetOwnerships_WhenAdmin_Returns200WithList()
+        {
+            var ownerships = new[] { new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com" } };
+            _repo.Setup(r => r.GetAllOwnerships()).Returns(ownerships);
+            var ok = Assert.IsType<OkObjectResult>(CreateController().GetOwnerships().Result);
+            Assert.Same(ownerships, ok.Value);
+        }
+
+        // ── SetOwnership ──────────────────────────────────────
+
+        [Fact]
+        public void SetOwnership_WhenNotAdmin_Returns401()
+        {
+            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false)
+                .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
+        }
+
+        [Fact]
+        public void SetOwnership_WhenRepositoryFails_Returns400WithEnvelope()
+        {
+            _repo.Setup(r => r.SetOwnership(It.IsAny<string>(), It.IsAny<int>()))
+                .Returns(Result.Failure<DomainOwnershipInfo>("User not found"));
+            var obj = Assert.IsType<BadRequestObjectResult>(CreateController()
+                .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
+            Assert.Equal(400, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("User not found", envelope.Message);
+        }
+
+        [Fact]
+        public void SetOwnership_WhenSuccess_Returns200WithOwnership()
+        {
+            var info = new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com", OwnerId = 1 };
+            _repo.Setup(r => r.SetOwnership("EXT", 1)).Returns(Result.Success(info));
+            var ok = Assert.IsType<OkObjectResult>(CreateController()
+                .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
+            Assert.Same(info, ok.Value);
+        }
+
+        // ── DeleteOwnership ───────────────────────────────────
+
+        [Fact]
+        public void DeleteOwnership_WhenNotAdmin_Returns401()
+        {
+            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).DeleteOwnership("EXT"));
+        }
+
+        [Fact]
+        public void DeleteOwnership_WhenRepositoryFails_Returns400WithEnvelope()
+        {
+            _repo.Setup(r => r.DeleteOwnership(It.IsAny<string>()))
+                .Returns(Result.Failure("Ownership not found"));
+            var obj = Assert.IsType<ObjectResult>(CreateController().DeleteOwnership("EXT"));
+            Assert.Equal(400, obj.StatusCode);
+        }
+
+        [Fact]
+        public void DeleteOwnership_WhenSuccess_Returns204()
+        {
+            _repo.Setup(r => r.DeleteOwnership("EXT")).Returns(Result.Success());
+            var status = Assert.IsType<StatusCodeResult>(CreateController().DeleteOwnership("EXT"));
+            Assert.Equal(204, status.StatusCode);
+        }
     }
 }

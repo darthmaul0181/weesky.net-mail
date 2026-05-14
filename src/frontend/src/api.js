@@ -121,4 +121,13 @@ export const api = {
 
   adminGetUserQuota: (id) =>
     request('GET', `/api/Admin/users/${id}/quota`),
+
+  adminGetOwnerships: () =>
+    request('GET', '/api/Admin/ownerships'),
+
+  adminSetOwnership: (domainId, userId) =>
+    request('PUT', `/api/Admin/ownerships/${domainId}`, { userId }),
+
+  adminDeleteOwnership: (domainId) =>
+    request('DELETE', `/api/Admin/ownerships/${domainId}`),
 }
