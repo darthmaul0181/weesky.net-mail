@@ -54,7 +54,7 @@ namespace weesky.Snoopy.Microservice.Repositories
 				return false;
 			}
 
-			return Crypter.CheckPassword(password, mailUser.Password);
+			return Crypter.Sha512.Crypt(password, mailUser.Password) == mailUser.Password;
 		}
 
 		public Result<AccountInfo> GetAccountInfo(User user)
@@ -133,7 +133,7 @@ namespace weesky.Snoopy.Microservice.Repositories
 				return Result.Failure($"User {user.Name}@{user.Domain} not found");
 			}
 
-			if(!Crypter.CheckPassword(oldPassword, mailUser.Password))
+			if(Crypter.Sha512.Crypt(oldPassword, mailUser.Password) != mailUser.Password)
 			{
 				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
 				return Result.Failure($"Invalid password");
