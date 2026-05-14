@@ -54,7 +54,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public void CreateUser_WhenPasswordNull_Returns400()
         {
-            var obj = Assert.IsType<ObjectResult>(
+            var obj = Assert.IsType<BadRequestObjectResult>(
                 CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = null }).Result);
             Assert.Equal(400, obj.StatusCode);
         }
@@ -62,7 +62,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public void CreateUser_WhenPasswordEmpty_Returns400()
         {
-            var obj = Assert.IsType<ObjectResult>(
+            var obj = Assert.IsType<BadRequestObjectResult>(
                 CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "" }).Result);
             Assert.Equal(400, obj.StatusCode);
         }
@@ -72,7 +72,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         {
             _repo.Setup(r => r.CreateUser(It.IsAny<AdminUserRequest>()))
                 .Returns(Result.Failure<AdminUserInfo>("Duplicate user"));
-            var obj = Assert.IsType<ObjectResult>(
+            var obj = Assert.IsType<BadRequestObjectResult>(
                 CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "pw" }).Result);
             Assert.Equal(400, obj.StatusCode);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -106,7 +106,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         {
             _repo.Setup(r => r.UpdateUser(It.IsAny<int>(), It.IsAny<AdminUserRequest>()))
                 .Returns(Result.Failure<AdminUserInfo>("User not found"));
-            var obj = Assert.IsType<ObjectResult>(
+            var obj = Assert.IsType<BadRequestObjectResult>(
                 CreateController().UpdateUser(1, new AdminUserRequest { UserName = "alice" }).Result);
             Assert.Equal(400, obj.StatusCode);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -180,7 +180,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         {
             _repo.Setup(r => r.CreateDomain(It.IsAny<AdminDomainRequest>()))
                 .Returns(Result.Failure<Domain>("Invalid id"));
-            var obj = Assert.IsType<ObjectResult>(CreateController()
+            var obj = Assert.IsType<BadRequestObjectResult>(CreateController()
                 .CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" }).Result);
             Assert.Equal(400, obj.StatusCode);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -213,7 +213,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         {
             _repo.Setup(r => r.UpdateDomain(It.IsAny<string>(), It.IsAny<AdminDomainRequest>()))
                 .Returns(Result.Failure<Domain>("Domain not found"));
-            var obj = Assert.IsType<ObjectResult>(CreateController()
+            var obj = Assert.IsType<BadRequestObjectResult>(CreateController()
                 .UpdateDomain("WSY", new AdminDomainRequest { Name = "new.com" }).Result);
             Assert.Equal(400, obj.StatusCode);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -270,7 +270,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         {
             _repo.Setup(r => r.GetAllUsers()).Returns(Array.Empty<AdminUserInfo>());
             var result = await CreateController().GetUserQuota(1, CancellationToken.None);
-            var obj = Assert.IsType<ObjectResult>(result.Result);
+            var obj = Assert.IsType<BadRequestObjectResult>(result.Result);
             Assert.Equal(400, obj.StatusCode);
         }
 

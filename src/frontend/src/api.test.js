@@ -153,6 +153,119 @@ describe('api methods', () => {
   })
 })
 
+describe('isAdmin state', () => {
+  it('getIsAdmin is false by default', async () => {
+    const { getIsAdmin } = await import('./api.js')
+    expect(getIsAdmin()).toBe(false)
+  })
+
+  it('setIsAdmin(true) makes getIsAdmin return true', async () => {
+    const { setIsAdmin, getIsAdmin } = await import('./api.js')
+    setIsAdmin(true)
+    expect(getIsAdmin()).toBe(true)
+  })
+
+  it('setIsAdmin(false) makes getIsAdmin return false', async () => {
+    const { setIsAdmin, getIsAdmin } = await import('./api.js')
+    setIsAdmin(true)
+    setIsAdmin(false)
+    expect(getIsAdmin()).toBe(false)
+  })
+
+  it('clearToken resets isAdmin to false', async () => {
+    const { setToken, setIsAdmin, clearToken, getIsAdmin } = await import('./api.js')
+    setToken('tok', 60)
+    setIsAdmin(true)
+    clearToken()
+    expect(getIsAdmin()).toBe(false)
+  })
+})
+
+describe('admin api methods', () => {
+  beforeEach(() => mockFetch(200))
+
+  it('adminGetUsers calls GET /api/Admin/users', async () => {
+    const { api } = await import('./api.js')
+    await api.adminGetUsers()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/users'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('adminCreateUser calls POST /api/Admin/users', async () => {
+    const { api } = await import('./api.js')
+    await api.adminCreateUser({ userName: 'alice', domainId: 'WSY', password: 'pw' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/users'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('adminUpdateUser calls PUT /api/Admin/users/:id', async () => {
+    const { api } = await import('./api.js')
+    await api.adminUpdateUser(5, { userName: 'alice' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/users/5'),
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
+
+  it('adminDeleteUser calls DELETE /api/Admin/users/:id', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteUser(5)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/users/5'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('adminGetDomains calls GET /api/Admin/domains', async () => {
+    const { api } = await import('./api.js')
+    await api.adminGetDomains()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('adminCreateDomain calls POST /api/Admin/domains', async () => {
+    const { api } = await import('./api.js')
+    await api.adminCreateDomain({ id: 'TST', name: 'test.com' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('adminUpdateDomain calls PUT /api/Admin/domains/:id', async () => {
+    const { api } = await import('./api.js')
+    await api.adminUpdateDomain('WSY', { name: 'new.com' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/WSY'),
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
+
+  it('adminDeleteDomain calls DELETE /api/Admin/domains/:id', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteDomain('WSY')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/WSY'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('adminGetUserQuota calls GET /api/Admin/users/:id/quota', async () => {
+    const { api } = await import('./api.js')
+    await api.adminGetUserQuota(5)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/users/5/quota'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+})
+
 describe('401 handling', () => {
   it('clears token and calls the unauthorized handler', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 401 }))

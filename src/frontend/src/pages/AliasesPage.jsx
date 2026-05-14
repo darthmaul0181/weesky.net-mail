@@ -216,7 +216,7 @@ function QuotaBlock({ quota }) {
   )
 }
 
-function QuotaMini({ quota }) {
+export function QuotaMini({ quota }) {
   if (!quota || !quota.storageBytesLimit) return <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
 
   const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB
@@ -240,7 +240,7 @@ function QuotaMini({ quota }) {
   )
 }
 
-function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange }) {
+export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -377,7 +377,7 @@ function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onL
   )
 }
 
-function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
+export function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
@@ -400,7 +400,7 @@ function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
   )
 }
 
-function AddEditUserModal({ user, domains, onSave, onClose }) {
+export function AddEditUserModal({ user, domains, onSave, onClose }) {
   const [userName, setUserName] = useState(user?.userName ?? '')
   const [domainId, setDomainId] = useState(user?.domainId ?? domains[0]?.id ?? '')
   const [password, setPassword] = useState('')
@@ -509,7 +509,7 @@ function AddEditUserModal({ user, domains, onSave, onClose }) {
   )
 }
 
-function AddEditDomainModal({ domain, onSave, onClose }) {
+export function AddEditDomainModal({ domain, onSave, onClose }) {
   const [id, setId] = useState(domain?.id ?? '')
   const [name, setName] = useState(domain?.name ?? '')
   const [error, setError] = useState(null)
@@ -561,7 +561,7 @@ function AddEditDomainModal({ domain, onSave, onClose }) {
   )
 }
 
-function AccountsTab({ addToast }) {
+export function AccountsTab({ addToast }) {
   const [users, setUsers] = useState([])
   const [domains, setDomains] = useState([])
   const [loading, setLoading] = useState(true)
@@ -669,7 +669,7 @@ function AccountsTab({ addToast }) {
   )
 }
 
-function DomainsTab({ addToast }) {
+export function DomainsTab({ addToast }) {
   const [domains, setDomains] = useState([])
   const [loading, setLoading] = useState(true)
   const [domainToEdit, setDomainToEdit] = useState(null)
@@ -756,7 +756,7 @@ function OwnershipTab() {
   )
 }
 
-function AdminModal({ onClose, addToast }) {
+export function AdminModal({ onClose, addToast }) {
   const [activeTab, setActiveTab] = useState('accounts')
 
   return (
