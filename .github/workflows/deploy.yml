@@ -67,10 +67,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
       - name: Restore dependencies
-        run: dotnet restore src/snoopy.microservice
+        run: dotnet restore src/snoopy.microservice/snoopy.microservice.csproj -r linux-x64
       - name: Publish
         run: >
-          dotnet publish src/snoopy.microservice
+          dotnet publish src/snoopy.microservice/snoopy.microservice.csproj
           -c Release -r linux-x64 --self-contained
           --no-restore
           -p:SatelliteResourceLanguages=
