@@ -58,7 +58,7 @@
             <response code="200">User list</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateUser(weesky.Snoopy.Microservice.Models.AdminCreateUserRequest)">
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateUser(weesky.Snoopy.Microservice.Models.AdminUserRequest)">
             <summary>Creates a new user</summary>
             <response code="201">User created</response>
             <response code="400">Validation error</response>
@@ -200,10 +200,10 @@
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AdminUserRequest">
-            <summary>Request body for PUT /api/Admin/users/{id} — password is optional (null = keep unchanged).</summary>
-        </member>
-        <member name="T:weesky.Snoopy.Microservice.Models.AdminCreateUserRequest">
-            <summary>Request body for POST /api/Admin/users — password is required for account creation.</summary>
+            <summary>
+            Request body for POST and PUT /api/Admin/users.
+            Password is optional on PUT (null = keep unchanged); the controller enforces it on POST.
+            </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Alias.Name">
             <summary>

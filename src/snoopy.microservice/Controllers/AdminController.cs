@@ -44,9 +44,11 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult<AdminUserInfo> CreateUser(AdminCreateUserRequest request)
+        public ActionResult<AdminUserInfo> CreateUser(AdminUserRequest request)
         {
             if (!IsCurrentUserAdmin()) return Unauthorized();
+            if (string.IsNullOrEmpty(request.Password))
+                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Password is required"));
             Result<AdminUserInfo> result = _adminRepository.CreateUser(request);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
             return StatusCode(StatusCodes.Status201Created, result.Value);

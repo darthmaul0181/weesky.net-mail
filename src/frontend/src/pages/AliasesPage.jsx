@@ -622,20 +622,18 @@ function AccountsTab({ addToast }) {
     <div>
       <div className="admin-list-header">
         <span className="admin-list-title">Accounts ({visibleUsers.length}{term ? ` / ${users.length}` : ''})</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Search…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ width: '180px', padding: '6px 10px', fontSize: '13px' }}
-          />
-          <button className="btn btn-primary" style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            onClick={() => setShowAddModal(true)}>
-            <PersonPlusIcon /> Add
-          </button>
-        </div>
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Search…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ marginLeft: '30px', width: '180px', padding: '6px 10px', fontSize: '13px' }}
+        />
+        <button className="btn btn-primary" style={{ marginLeft: 'auto', width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          onClick={() => setShowAddModal(true)}>
+          <PersonPlusIcon /> Add
+        </button>
       </div>
       <div className="admin-list">
         {visibleUsers.map(u => (
