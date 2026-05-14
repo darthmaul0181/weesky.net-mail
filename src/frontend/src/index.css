@@ -1340,8 +1340,8 @@ body {
   --border: #3b4253;
   --text: #dce1e9;
   --text-muted: #8b95a8;
-  --primary: #6288e0;
-  --primary-hover: #7299e8;
+  --primary: #84aad8;
+  --primary-hover: #99bbdf;
 }
 
 [data-theme="dark"] .page-center::before {
