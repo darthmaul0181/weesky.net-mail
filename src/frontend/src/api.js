@@ -128,6 +128,6 @@ export const api = {
   adminSetOwnership: (domainId, userId) =>
     request('PUT', `/api/Admin/ownerships/${domainId}`, { userId }),
 
-  adminDeleteOwnership: (domainId) =>
-    request('DELETE', `/api/Admin/ownerships/${domainId}`),
+  adminDeleteOwnership: (domainId, userId) =>
+    request('DELETE', `/api/Admin/ownerships/${domainId}/${userId}`),
 }

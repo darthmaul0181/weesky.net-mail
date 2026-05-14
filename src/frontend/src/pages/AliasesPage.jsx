@@ -793,7 +793,6 @@ export function OwnershipTab({ addToast }) {
     setSaving(true)
     try {
       await api.adminSetOwnership(domainId, userId)
-      setEditingDomainId(null)
       setSearchQuery('')
       load()
     } catch (err) {
@@ -803,11 +802,10 @@ export function OwnershipTab({ addToast }) {
     }
   }
 
-  async function handleUnlink(domainId) {
+  async function handleUnlink(domainId, userId) {
     setSaving(true)
     try {
-      await api.adminDeleteOwnership(domainId)
-      setEditingDomainId(null)
+      await api.adminDeleteOwnership(domainId, userId)
       load()
     } catch (err) {
       addToast(err.message || 'Failed to remove owner', 'error')
@@ -816,9 +814,13 @@ export function OwnershipTab({ addToast }) {
     }
   }
 
+  const editingOwnership = ownerships.find(o => o.domainId === editingDomainId)
+  const editingOwnerIds = new Set((editingOwnership?.owners ?? []).map(own => own.ownerId))
+
   const term = searchQuery.trim().toLowerCase()
   const filteredUsers = term
     ? users.filter(u => {
+        if (editingOwnerIds.has(u.id)) return false
         const email = `${u.userName}@${u.domainName}`.toLowerCase()
         const name = (u.fullName ?? '').toLowerCase()
         return email.includes(term) || name.includes(term)
@@ -839,11 +841,28 @@ export function OwnershipTab({ addToast }) {
           </div>
         )}
         {ownerships.map(o => (
-          <div key={o.domainId} className="admin-list-item">
-            <span className="admin-list-item-email">{o.domainName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({o.domainId})</span></span>
+          <div key={o.domainId} className="admin-list-item" style={{ alignItems: 'flex-start', paddingTop: '10px', paddingBottom: '10px' }}>
+            <span className="admin-list-item-email" style={{ paddingTop: '2px' }}>{o.domainName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({o.domainId})</span></span>
             {editingDomainId === o.domainId ? (
-              <div ref={editRef} style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '30px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
+              <div ref={editRef} style={{ flex: 1, paddingLeft: '30px' }}>
+                {o.owners.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                    {o.owners.map(own => (
+                      <span key={own.ownerId} className="ownership-chip">
+                        {own.ownerEmail}
+                        <button
+                          className="ownership-chip-remove"
+                          title="Remove owner"
+                          disabled={saving}
+                          onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId, own.ownerId) }}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ position: 'relative' }}>
                   <input
                     className="search-input"
                     type="text"
@@ -872,20 +891,12 @@ export function OwnershipTab({ addToast }) {
                     </div>
                   )}
                 </div>
-                {o.ownerId != null && (
-                  <button
-                    className="admin-icon-btn is-danger"
-                    title="Remove owner"
-                    disabled={saving}
-                    onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId) }}
-                  >
-                    <TrashIcon />
-                  </button>
-                )}
               </div>
             ) : (
               <span className="admin-list-item-name" style={{ flex: 1, paddingLeft: '30px' }}>
-                {o.ownerEmail ?? '—'}
+                {o.owners.length === 0
+                  ? '—'
+                  : o.owners.map(own => own.ownerEmail).join(', ')}
               </span>
             )}
             <div className="admin-list-item-actions">

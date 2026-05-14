@@ -42,8 +42,8 @@ const MOCK_USERS = [
   { id: 1, userName: 'alice', domainName: 'weesky.be', domainId: 'WSY', fullName: 'Alice Smith', quotaMb: 1024, active: true, admin: false },
 ]
 const MOCK_OWNERSHIPS = [
-  { domainId: 'EXT', domainName: 'extra.com', ownerId: 1, ownerEmail: 'alice@weesky.be' },
-  { domainId: 'ORF', domainName: 'orphan.net', ownerId: null, ownerEmail: null },
+  { domainId: 'EXT', domainName: 'extra.com', owners: [{ ownerId: 1, ownerEmail: 'alice@weesky.be' }] },
+  { domainId: 'ORF', domainName: 'orphan.net', owners: [] },
 ]
 
 beforeEach(() => {
@@ -864,7 +864,7 @@ describe('OwnershipTab', () => {
     await screen.findByText('extra.com')
     await userEvent.click(screen.getAllByTitle('Edit owner')[0])
     fireEvent.mouseDown(screen.getByTitle('Remove owner'))
-    await waitFor(() => expect(api.adminDeleteOwnership).toHaveBeenCalledWith('EXT'))
+    await waitFor(() => expect(api.adminDeleteOwnership).toHaveBeenCalledWith('EXT', 1))
   })
 
   it('cancels edit on Escape key', async () => {

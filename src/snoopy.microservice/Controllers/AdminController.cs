@@ -195,18 +195,18 @@ namespace weesky.Snoopy.Microservice.Controllers
             return Ok(result.Value);
         }
 
-        /// <summary>Removes the owner of an extra domain</summary>
+        /// <summary>Removes a specific owner from an extra domain</summary>
         /// <response code="204">Ownership removed</response>
         /// <response code="400">Ownership not found</response>
         /// <response code="401">Unauthenticated or not an admin</response>
-        [HttpDelete("ownerships/{domainId}")]
+        [HttpDelete("ownerships/{domainId}/{userId}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult DeleteOwnership(string domainId)
+        public ActionResult DeleteOwnership(string domainId, int userId)
         {
             if (!IsCurrentUserAdmin()) return Unauthorized();
-            Result result = _adminRepository.DeleteOwnership(domainId);
+            Result result = _adminRepository.DeleteOwnership(domainId, userId);
             return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
     }

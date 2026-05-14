@@ -117,8 +117,8 @@
             <response code="400">Validation error</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteOwnership(System.String)">
-            <summary>Removes the owner of an extra domain</summary>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteOwnership(System.String,System.Int32)">
+            <summary>Removes a specific owner from an extra domain</summary>
             <response code="204">Ownership removed</response>
             <response code="400">Ownership not found</response>
             <response code="401">Unauthenticated or not an admin</response>

@@ -323,7 +323,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public void GetOwnerships_WhenAdmin_Returns200WithList()
         {
-            var ownerships = new[] { new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com" } };
+            var ownerships = new[] { new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() } };
             _repo.Setup(r => r.GetAllOwnerships()).Returns(ownerships);
             var ok = Assert.IsType<OkObjectResult>(CreateController().GetOwnerships().Result);
             Assert.Same(ownerships, ok.Value);
@@ -353,7 +353,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public void SetOwnership_WhenSuccess_Returns200WithOwnership()
         {
-            var info = new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com", OwnerId = 1 };
+            var info = new DomainOwnershipInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() { new OwnerInfo { OwnerId = 1, OwnerEmail = "alice@weesky.be" } } };
             _repo.Setup(r => r.SetOwnership("EXT", 1)).Returns(Result.Success(info));
             var ok = Assert.IsType<OkObjectResult>(CreateController()
                 .SetOwnership("EXT", new AdminOwnershipRequest { UserId = 1 }).Result);
@@ -365,23 +365,23 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public void DeleteOwnership_WhenNotAdmin_Returns401()
         {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).DeleteOwnership("EXT"));
+            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).DeleteOwnership("EXT", 1));
         }
 
         [Fact]
         public void DeleteOwnership_WhenRepositoryFails_Returns400WithEnvelope()
         {
-            _repo.Setup(r => r.DeleteOwnership(It.IsAny<string>()))
+            _repo.Setup(r => r.DeleteOwnership(It.IsAny<string>(), It.IsAny<int>()))
                 .Returns(Result.Failure("Ownership not found"));
-            var obj = Assert.IsType<ObjectResult>(CreateController().DeleteOwnership("EXT"));
+            var obj = Assert.IsType<ObjectResult>(CreateController().DeleteOwnership("EXT", 1));
             Assert.Equal(400, obj.StatusCode);
         }
 
         [Fact]
         public void DeleteOwnership_WhenSuccess_Returns204()
         {
-            _repo.Setup(r => r.DeleteOwnership("EXT")).Returns(Result.Success());
-            var status = Assert.IsType<StatusCodeResult>(CreateController().DeleteOwnership("EXT"));
+            _repo.Setup(r => r.DeleteOwnership("EXT", 1)).Returns(Result.Success());
+            var status = Assert.IsType<StatusCodeResult>(CreateController().DeleteOwnership("EXT", 1));
             Assert.Equal(204, status.StatusCode);
         }
     }

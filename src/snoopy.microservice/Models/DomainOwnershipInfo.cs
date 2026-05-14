@@ -4,7 +4,6 @@ namespace weesky.Snoopy.Microservice.Models
     {
         public string DomainId { get; set; }
         public string DomainName { get; set; }
-        public int? OwnerId { get; set; }
-        public string? OwnerEmail { get; set; }
+        public List<OwnerInfo> Owners { get; set; } = new();
     }
 }
