@@ -42,7 +42,7 @@ ESLint is configured (`eslint.config.js`) with `eslint-plugin-react` and `eslint
 - `AdminModal` — 800px admin panel with tab sidebar (Accounts / Domains / Ownerships). Only rendered when `adminOpen === true`.
 - `AccountsTab` — lists all users (email, fullname, quota), add/edit/delete via `AddEditUserModal` and `DeleteConfirmModal`
 - `DomainsTab` — lists all domains, add/edit/delete via `AddEditDomainModal` and `DeleteConfirmModal`
-- `OwnershipTab` — lists all extra domains with their assigned owner (or "—" if unowned); inline pencil-click edit opens a live user-search input with dropdown; clicking a result sets the owner; a delete button appears when the domain already has an owner to unlink it
+- `OwnershipTab` — lists all alias domains with their assigned owners (or "—" if none); inline pencil-click edit shows existing owners as chips with individual remove buttons, plus a live user-search input to add new owners; already-assigned users are excluded from the dropdown
 
 ## Components
 

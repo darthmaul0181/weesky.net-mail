@@ -1,11 +1,3 @@
--- phpMyAdmin SQL Dump
--- version 5.2.2
--- https://www.phpmyadmin.net/
---
--- Generation Time: May 05, 2026 at 07:15 PM
--- Server version: 12.3.1-MariaDB-deb13
--- PHP Version: 8.3.30
-
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
@@ -68,9 +60,9 @@ CREATE TABLE `users` (
   `password` varchar(128) NOT NULL COMMENT 'the user password',
   `quota_mb` int(11) NOT NULL DEFAULT 1024 COMMENT 'mailbox quota in mb (0=unlimited)',
   `fullname` varchar(100) NOT NULL COMMENT 'user''s fullname',
-  `encrypt` enum('Y','N') NOT NULL DEFAULT 'N' COMMENT 'indicates whether the mailbox is encrypted or not',
   `lastupdate` datetime NOT NULL COMMENT 'last password update',
-  `active` enum('Y','N') DEFAULT 'Y' COMMENT 'indicates whether the user is active or not'
+  `active` enum('Y','N') DEFAULT 'Y' COMMENT 'indicates whether the user is active or not',
+  `admin` enum('Y','N') NOT NULL DEFAULT 'N' COMMENT 'Indicate whether the user is an administrator or no'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -98,9 +90,9 @@ DELIMITER ;
 ALTER TABLE `aliases`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `source_addr_2` (`source_addr`,`source_domain`),
-  ADD KEY `source_domain_foreign_key` (`source_domain`),
   ADD KEY `source_addr` (`source_addr`),
-  ADD KEY `destination_user` (`destination_user`);
+  ADD KEY `destination_user` (`destination_user`),
+  ADD KEY `source_domain_foreign_key` (`source_domain`);
 
 --
 -- Indexes for table `domains`
@@ -112,8 +104,8 @@ ALTER TABLE `domains`
 -- Indexes for table `domains_ownerships`
 --
 ALTER TABLE `domains_ownerships`
-  ADD UNIQUE KEY `domainId` (`domainId`),
-  ADD KEY `user_id` (`userId`);
+  ADD PRIMARY KEY (`domainId`,`userId`),
+  ADD KEY `fk_ownership_user` (`userId`);
 
 --
 -- Indexes for table `users`
@@ -131,13 +123,13 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `aliases`
 --
 ALTER TABLE `aliases`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=331;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=29;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- Constraints for dumped tables
@@ -147,15 +139,16 @@ ALTER TABLE `users`
 -- Constraints for table `aliases`
 --
 ALTER TABLE `aliases`
-  ADD CONSTRAINT `desination_user_foreign_key` FOREIGN KEY (`destination_user`) REFERENCES `users` (`id`),
-  ADD CONSTRAINT `source_domain_foreign_key` FOREIGN KEY (`source_domain`) REFERENCES `domains` (`id`);
+  ADD CONSTRAINT `desination_user_foreign_key` FOREIGN KEY (`destination_user`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `source_domain_foreign_key` FOREIGN KEY (`source_domain`) REFERENCES `domains` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `domains_ownerships`
 --
 ALTER TABLE `domains_ownerships`
-  ADD CONSTRAINT `domain_id` FOREIGN KEY (`domainId`) REFERENCES `domains` (`id`),
-  ADD CONSTRAINT `user_id` FOREIGN KEY (`userId`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `fk_ownership_domain` FOREIGN KEY (`domainId`) REFERENCES `domains` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_ownership_user` FOREIGN KEY (`userId`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `user_id` FOREIGN KEY (`userId`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `users`

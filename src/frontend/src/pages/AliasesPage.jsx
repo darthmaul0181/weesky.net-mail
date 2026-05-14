@@ -541,7 +541,7 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: '380px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isEdit ? 'Edit domain' : 'Add domain'}</span>
+          <span className="modal-title">{isEdit ? <><PencilIcon /> Edit domain</> : <><GlobeIcon /> Add domain</>}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -753,8 +753,8 @@ export function DomainsTab({ addToast }) {
   )
 }
 
-export function OwnershipTab({ addToast }) {
-  const [ownerships, setOwnerships] = useState([])
+export function VirtualDomainsTab({ addToast }) {
+  const [virtualDomains, setVirtualDomains] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingDomainId, setEditingDomainId] = useState(null)
@@ -765,11 +765,11 @@ export function OwnershipTab({ addToast }) {
   async function load() {
     setLoading(true)
     try {
-      const [o, u] = await Promise.all([api.adminGetOwnerships(), api.adminGetUsers()])
-      setOwnerships(o ?? [])
+      const [o, u] = await Promise.all([api.adminGetVirtualDomains(), api.adminGetUsers()])
+      setVirtualDomains(o ?? [])
       setUsers(u ?? [])
     } catch {
-      addToast('Failed to load ownerships', 'error')
+      addToast('Failed to load virtual domains', 'error')
     } finally {
       setLoading(false)
     }
@@ -792,9 +792,9 @@ export function OwnershipTab({ addToast }) {
   async function handleSelect(domainId, userId) {
     setSaving(true)
     try {
-      const updated = await api.adminSetOwnership(domainId, userId)
+      const updated = await api.adminAddVirtualDomainOwner(domainId, userId)
       setSearchQuery('')
-      setOwnerships(prev => prev.map(o => o.domainId === domainId ? updated : o))
+      setVirtualDomains(prev => prev.map(o => o.domainId === domainId ? updated : o))
     } catch (err) {
       addToast(err.message || 'Failed to set owner', 'error')
     } finally {
@@ -805,8 +805,8 @@ export function OwnershipTab({ addToast }) {
   async function handleUnlink(domainId, userId) {
     setSaving(true)
     try {
-      await api.adminDeleteOwnership(domainId, userId)
-      setOwnerships(prev => prev.map(o =>
+      await api.adminRemoveVirtualDomainOwner(domainId, userId)
+      setVirtualDomains(prev => prev.map(o =>
         o.domainId === domainId
           ? { ...o, owners: o.owners.filter(own => own.ownerId !== userId) }
           : o
@@ -818,8 +818,8 @@ export function OwnershipTab({ addToast }) {
     }
   }
 
-  const editingOwnership = ownerships.find(o => o.domainId === editingDomainId)
-  const editingOwnerIds = new Set((editingOwnership?.owners ?? []).map(own => own.ownerId))
+  const editingVirtualDomain = virtualDomains.find(o => o.domainId === editingDomainId)
+  const editingOwnerIds = new Set((editingVirtualDomain?.owners ?? []).map(own => own.ownerId))
 
   const term = searchQuery.trim().toLowerCase()
   const filteredUsers = term
@@ -836,15 +836,15 @@ export function OwnershipTab({ addToast }) {
   return (
     <div>
       <div className="admin-list-header">
-        <span className="admin-list-title">Extra domains ({ownerships.length})</span>
+        <span className="admin-list-title">Alias domains ({virtualDomains.length})</span>
       </div>
       <div className="admin-list">
-        {ownerships.length === 0 && (
+        {virtualDomains.length === 0 && (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No extra domains
+            No alias domains
           </div>
         )}
-        {ownerships.map(o => (
+        {virtualDomains.map(o => (
           <div key={o.domainId} className="admin-list-item" style={{ alignItems: 'flex-start', paddingTop: '10px', paddingBottom: '10px' }}>
             <span className="admin-list-item-email" style={{ paddingTop: '4px' }}>{o.domainName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({o.domainId})</span></span>
             {editingDomainId === o.domainId ? (
@@ -939,13 +939,13 @@ export function AdminModal({ onClose, addToast }) {
               onClick={() => setActiveTab('accounts')}>Accounts</button>
             <button className={`admin-tab${activeTab === 'domains' ? ' is-active' : ''}`}
               onClick={() => setActiveTab('domains')}>Domains</button>
-            <button className={`admin-tab${activeTab === 'ownerships' ? ' is-active' : ''}`}
-              onClick={() => setActiveTab('ownerships')}>Ownerships</button>
+            <button className={`admin-tab${activeTab === 'virtualdomains' ? ' is-active' : ''}`}
+              onClick={() => setActiveTab('virtualdomains')}>Virtual domains</button>
           </nav>
           <div className="admin-tab-content">
             {activeTab === 'accounts' && <AccountsTab addToast={addToast} />}
             {activeTab === 'domains' && <DomainsTab addToast={addToast} />}
-            {activeTab === 'ownerships' && <OwnershipTab addToast={addToast} />}
+            {activeTab === 'virtualdomains' && <VirtualDomainsTab addToast={addToast} />}
           </div>
         </div>
       </div>

@@ -106,21 +106,21 @@
             <response code="400">Domain not found or still has users</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetOwnerships">
-            <summary>Returns all extra domain ownerships</summary>
-            <response code="200">Ownership list</response>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetVirtualDomains">
+            <summary>Returns all virtual (alias) domains with their owners</summary>
+            <response code="200">Virtual domain list</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.SetOwnership(System.String,weesky.Snoopy.Microservice.Models.AdminOwnershipRequest)">
-            <summary>Sets or updates the owner of an extra domain</summary>
-            <response code="200">Ownership updated</response>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.AddVirtualDomainOwner(System.String,weesky.Snoopy.Microservice.Models.AdminVirtualDomainOwnerRequest)">
+            <summary>Adds an owner to a virtual domain</summary>
+            <response code="200">Owner added</response>
             <response code="400">Validation error</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteOwnership(System.String,System.Int32)">
-            <summary>Removes a specific owner from an extra domain</summary>
-            <response code="204">Ownership removed</response>
-            <response code="400">Ownership not found</response>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.RemoveVirtualDomainOwner(System.String,System.Int32)">
+            <summary>Removes a specific owner from a virtual domain</summary>
+            <response code="204">Owner removed</response>
+            <response code="400">Owner not found</response>
             <response code="401">Unauthenticated or not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.Add(weesky.Snoopy.Microservice.Models.Alias)">

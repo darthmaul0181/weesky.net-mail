@@ -187,12 +187,12 @@ namespace weesky.Snoopy.Microservice.Repositories
             return Result.Success();
         }
 
-        public IEnumerable<DomainOwnershipInfo> GetAllOwnerships()
+        public IEnumerable<VirtualDomainInfo> GetAllVirtualDomains()
         {
             var primaryDomainIds = _context.Users.Select(u => u.DomainId).Distinct().ToHashSet();
             var ownedDomainIds = _context.DomainsOwnerships.Select(o => o.DomainId).ToHashSet();
 
-            var extraDomains = _context.Domains
+            var aliasDomains = _context.Domains
                 .Select(d => new { d.Id, d.Name })
                 .ToList()
                 .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
@@ -208,7 +208,7 @@ namespace weesky.Snoopy.Microservice.Repositories
                 .Select(d => new { d.Id, d.Name })
                 .ToDictionary(d => d.Id, d => d.Name);
 
-            return extraDomains.Select(domain =>
+            return aliasDomains.Select(domain =>
             {
                 var owners = ownerships
                     .Where(o => o.DomainId == domain.Id)
@@ -221,7 +221,7 @@ namespace weesky.Snoopy.Microservice.Repositories
                     })
                     .OfType<OwnerInfo>()
                     .ToList();
-                return new DomainOwnershipInfo
+                return new VirtualDomainInfo
                 {
                     DomainId = domain.Id,
                     DomainName = domain.Name,
@@ -230,18 +230,18 @@ namespace weesky.Snoopy.Microservice.Repositories
             }).ToList();
         }
 
-        public Result<DomainOwnershipInfo> SetOwnership(string domainId, int userId)
+        public Result<VirtualDomainInfo> AddVirtualDomainOwner(string domainId, int userId)
         {
             var domain = _context.Domains.FirstOrDefault(d => d.Id == domainId);
             if (domain == null)
-                return Result.Failure<DomainOwnershipInfo>($"Domain '{domainId}' not found");
+                return Result.Failure<VirtualDomainInfo>($"Domain '{domainId}' not found");
 
             var user = _context.Users
                 .Where(u => u.Id == userId)
                 .Select(u => new { u.Id, u.Name, u.DomainId })
                 .FirstOrDefault();
             if (user == null)
-                return Result.Failure<DomainOwnershipInfo>($"User with id {userId} not found");
+                return Result.Failure<VirtualDomainInfo>($"User with id {userId} not found");
 
             var existing = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
             if (existing == null)
@@ -264,7 +264,7 @@ namespace weesky.Snoopy.Microservice.Repositories
                 .OfType<OwnerInfo>()
                 .ToList();
 
-            return Result.Success(new DomainOwnershipInfo
+            return Result.Success(new VirtualDomainInfo
             {
                 DomainId = domain.Id,
                 DomainName = domain.Name,
@@ -272,7 +272,7 @@ namespace weesky.Snoopy.Microservice.Repositories
             });
         }
 
-        public Result DeleteOwnership(string domainId, int userId)
+        public Result RemoveVirtualDomainOwner(string domainId, int userId)
         {
             var ownership = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
             if (ownership == null)

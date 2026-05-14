@@ -514,7 +514,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.False(ctx.Domains.Any(d => d.Id == "WSY"));
         }
 
-        // ── GetAllOwnerships ──────────────────────────────────
+        // ── GetAllVirtualDomains ──────────────────────────────────
 
         private static void AddOwnership(TestDbContext ctx, string domainId, int userId)
         {
@@ -523,40 +523,40 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllOwnerships_WithNoDomains_ReturnsEmpty()
+        public void GetAllVirtualDomains_WithNoDomains_ReturnsEmpty()
         {
             using var ctx = CreateContext();
-            Assert.Empty(new AdminRepository(ctx).GetAllOwnerships());
+            Assert.Empty(new AdminRepository(ctx).GetAllVirtualDomains());
         }
 
         [Fact]
-        public void GetAllOwnerships_ExcludesPrimaryDomainWithNoOwnership()
+        public void GetAllVirtualDomains_ExcludesPrimaryDomainWithNoOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             AddUser(ctx, "alice", "WSY");
-            Assert.Empty(new AdminRepository(ctx).GetAllOwnerships());
+            Assert.Empty(new AdminRepository(ctx).GetAllVirtualDomains());
         }
 
         [Fact]
-        public void GetAllOwnerships_IncludesPrimaryDomainWhenInOwnershipsTable()
+        public void GetAllVirtualDomains_IncludesPrimaryDomainWhenInOwnershipsTable()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var alice = AddUser(ctx, "alice", "WSY");
             AddOwnership(ctx, "WSY", alice.Id);
-            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
             Assert.Single(result);
             Assert.Equal("WSY", result[0].DomainId);
             Assert.Contains(result[0].Owners, o => o.OwnerId == alice.Id);
         }
 
         [Fact]
-        public void GetAllOwnerships_ReturnsExtraDomainWithNoOwner()
+        public void GetAllVirtualDomains_ReturnsAliasDomainWithNoOwner()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "EXT", "extra.com");
-            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
             Assert.Single(result);
             Assert.Equal("EXT", result[0].DomainId);
             Assert.Equal("extra.com", result[0].DomainName);
@@ -564,14 +564,14 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllOwnerships_ReturnsExtraDomainWithOwner()
+        public void GetAllVirtualDomains_ReturnsAliasDomainWithOwner()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", user.Id);
-            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
             Assert.Single(result);
             Assert.Equal("EXT", result[0].DomainId);
             Assert.Single(result[0].Owners);
@@ -580,7 +580,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllOwnerships_ReturnsExtraDomainWithMultipleOwners()
+        public void GetAllVirtualDomains_ReturnsAliasDomainWithMultipleOwners()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -589,38 +589,38 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
             AddOwnership(ctx, "EXT", bob.Id);
-            var result = new AdminRepository(ctx).GetAllOwnerships().ToList();
+            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
             Assert.Single(result);
             Assert.Equal(2, result[0].Owners.Count);
             Assert.Contains(result[0].Owners, o => o.OwnerEmail == "alice@weesky.be");
             Assert.Contains(result[0].Owners, o => o.OwnerEmail == "bob@weesky.be");
         }
 
-        // ── SetOwnership ──────────────────────────────────────
+        // ── AddVirtualDomainOwner ──────────────────────────────────────
 
         [Fact]
-        public void SetOwnership_WhenDomainNotFound_ReturnsFailure()
+        public void AddVirtualDomainOwner_WhenDomainNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).SetOwnership("ZZZ", 1).IsFailure);
+            Assert.True(new AdminRepository(ctx).AddVirtualDomainOwner("ZZZ", 1).IsFailure);
         }
 
         [Fact]
-        public void SetOwnership_WhenUserNotFound_ReturnsFailure()
+        public void AddVirtualDomainOwner_WhenUserNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "EXT", "extra.com");
-            Assert.True(new AdminRepository(ctx).SetOwnership("EXT", 999).IsFailure);
+            Assert.True(new AdminRepository(ctx).AddVirtualDomainOwner("EXT", 999).IsFailure);
         }
 
         [Fact]
-        public void SetOwnership_WhenValid_CreatesOwnership()
+        public void AddVirtualDomainOwner_WhenValid_CreatesOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
-            var result = new AdminRepository(ctx).SetOwnership("EXT", user.Id);
+            var result = new AdminRepository(ctx).AddVirtualDomainOwner("EXT", user.Id);
             Assert.True(result.IsSuccess);
             Assert.Equal("EXT", result.Value.DomainId);
             Assert.Single(result.Value.Owners);
@@ -630,7 +630,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void SetOwnership_WithSecondUser_AddsSecondOwner()
+        public void AddVirtualDomainOwner_WithSecondUser_AddsSecondOwner()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -638,49 +638,49 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             var bob = AddUser(ctx, "bob", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
-            var result = new AdminRepository(ctx).SetOwnership("EXT", bob.Id);
+            var result = new AdminRepository(ctx).AddVirtualDomainOwner("EXT", bob.Id);
             Assert.True(result.IsSuccess);
             Assert.Equal(2, result.Value.Owners.Count);
             Assert.Equal(2, ctx.DomainsOwnerships.Count());
         }
 
         [Fact]
-        public void SetOwnership_WhenSameUserAlreadyOwns_IsIdempotent()
+        public void AddVirtualDomainOwner_WhenSameUserAlreadyOwns_IsIdempotent()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var alice = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
-            var result = new AdminRepository(ctx).SetOwnership("EXT", alice.Id);
+            var result = new AdminRepository(ctx).AddVirtualDomainOwner("EXT", alice.Id);
             Assert.True(result.IsSuccess);
             Assert.Single(ctx.DomainsOwnerships);
         }
 
-        // ── DeleteOwnership ───────────────────────────────────
+        // ── RemoveVirtualDomainOwner ───────────────────────────────────
 
         [Fact]
-        public void DeleteOwnership_WhenNotFound_ReturnsFailure()
+        public void RemoveVirtualDomainOwner_WhenNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).DeleteOwnership("EXT", 1).IsFailure);
+            Assert.True(new AdminRepository(ctx).RemoveVirtualDomainOwner("EXT", 1).IsFailure);
         }
 
         [Fact]
-        public void DeleteOwnership_WhenValid_RemovesOwnership()
+        public void RemoveVirtualDomainOwner_WhenValid_RemovesOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", user.Id);
-            var result = new AdminRepository(ctx).DeleteOwnership("EXT", user.Id);
+            var result = new AdminRepository(ctx).RemoveVirtualDomainOwner("EXT", user.Id);
             Assert.True(result.IsSuccess);
             Assert.Empty(ctx.DomainsOwnerships);
         }
 
         [Fact]
-        public void DeleteOwnership_WhenMultipleOwners_OnlyRemovesSpecified()
+        public void RemoveVirtualDomainOwner_WhenMultipleOwners_OnlyRemovesSpecified()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -689,7 +689,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
             AddOwnership(ctx, "EXT", bob.Id);
-            var result = new AdminRepository(ctx).DeleteOwnership("EXT", alice.Id);
+            var result = new AdminRepository(ctx).RemoveVirtualDomainOwner("EXT", alice.Id);
             Assert.True(result.IsSuccess);
             Assert.Single(ctx.DomainsOwnerships);
             Assert.Equal(bob.Id, ctx.DomainsOwnerships.Single().UserId);

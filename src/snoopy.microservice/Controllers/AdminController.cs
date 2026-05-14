@@ -167,46 +167,46 @@ namespace weesky.Snoopy.Microservice.Controllers
             return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
-        /// <summary>Returns all extra domain ownerships</summary>
-        /// <response code="200">Ownership list</response>
+        /// <summary>Returns all virtual (alias) domains with their owners</summary>
+        /// <response code="200">Virtual domain list</response>
         /// <response code="401">Unauthenticated or not an admin</response>
-        [HttpGet("ownerships")]
+        [HttpGet("domains/virtuals")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult<IEnumerable<DomainOwnershipInfo>> GetOwnerships()
+        public ActionResult<IEnumerable<VirtualDomainInfo>> GetVirtualDomains()
         {
             if (!IsCurrentUserAdmin()) return Unauthorized();
-            return Ok(_adminRepository.GetAllOwnerships());
+            return Ok(_adminRepository.GetAllVirtualDomains());
         }
 
-        /// <summary>Sets or updates the owner of an extra domain</summary>
-        /// <response code="200">Ownership updated</response>
+        /// <summary>Adds an owner to a virtual domain</summary>
+        /// <response code="200">Owner added</response>
         /// <response code="400">Validation error</response>
         /// <response code="401">Unauthenticated or not an admin</response>
-        [HttpPut("ownerships/{domainId}")]
+        [HttpPut("domains/virtuals/{domainId}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult<DomainOwnershipInfo> SetOwnership(string domainId, AdminOwnershipRequest request)
+        public ActionResult<VirtualDomainInfo> AddVirtualDomainOwner(string domainId, AdminVirtualDomainOwnerRequest request)
         {
             if (!IsCurrentUserAdmin()) return Unauthorized();
-            Result<DomainOwnershipInfo> result = _adminRepository.SetOwnership(domainId, request.UserId);
+            Result<VirtualDomainInfo> result = _adminRepository.AddVirtualDomainOwner(domainId, request.UserId);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
             return Ok(result.Value);
         }
 
-        /// <summary>Removes a specific owner from an extra domain</summary>
-        /// <response code="204">Ownership removed</response>
-        /// <response code="400">Ownership not found</response>
+        /// <summary>Removes a specific owner from a virtual domain</summary>
+        /// <response code="204">Owner removed</response>
+        /// <response code="400">Owner not found</response>
         /// <response code="401">Unauthenticated or not an admin</response>
-        [HttpDelete("ownerships/{domainId}/{userId}")]
+        [HttpDelete("domains/virtuals/{domainId}/{userId}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult DeleteOwnership(string domainId, int userId)
+        public ActionResult RemoveVirtualDomainOwner(string domainId, int userId)
         {
             if (!IsCurrentUserAdmin()) return Unauthorized();
-            Result result = _adminRepository.DeleteOwnership(domainId, userId);
+            Result result = _adminRepository.RemoveVirtualDomainOwner(domainId, userId);
             return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
     }
