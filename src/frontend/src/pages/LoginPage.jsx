@@ -1,20 +1,18 @@
 import { useState } from 'react'
+import { Form, Input, Button, Checkbox, Alert } from 'antd'
+import { MailOutlined, LockOutlined } from '@ant-design/icons'
 import { api, setToken } from '../api.js'
 
 export default function LoginPage({ onLogin }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(false)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e) {
-    e.preventDefault()
+  async function handleSubmit(values) {
     setError(null)
     setLoading(true)
     try {
-      const data = await api.login(email, password)
-      setToken(data.token, data.expiresIn, remember)
+      const data = await api.login(values.email, values.password)
+      setToken(data.token, data.expiresIn, values.remember)
       onLogin()
     } catch {
       setError('Invalid credentials.')
@@ -26,48 +24,32 @@ export default function LoginPage({ onLogin }) {
   return (
     <div className="page-center">
       <div className="card">
-        {error && <div className="alert alert-error">{error}</div>}
-
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <input
-              id="email"
+        {error && <Alert message={error} type="error" showIcon style={{ marginBottom: 16 }} />}
+        <Form layout="vertical" onFinish={handleSubmit} initialValues={{ remember: false }}>
+          <Form.Item name="email" style={{ marginBottom: 12 }}>
+            <Input
+              prefix={<MailOutlined />}
               type="email"
               autoComplete="email"
               placeholder="Email address"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
+              size="large"
             />
-          </div>
-
-          <div className="field">
-            <input
-              id="password"
-              type="password"
+          </Form.Item>
+          <Form.Item name="password" style={{ marginBottom: 12 }}>
+            <Input.Password
+              prefix={<LockOutlined />}
               autoComplete="current-password"
               placeholder="Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
+              size="large"
             />
-          </div>
-
-          <div className="remember-row">
-            <label className="remember-label">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={e => setRemember(e.target.checked)}
-              />
-              Remember me
-            </label>
-          </div>
-
-          <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Sign in'}
-          </button>
-        </form>
+          </Form.Item>
+          <Form.Item name="remember" valuePropName="checked" style={{ marginBottom: 16 }}>
+            <Checkbox>Remember me</Checkbox>
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={loading} block size="large">
+            Sign in
+          </Button>
+        </Form>
       </div>
     </div>
   )

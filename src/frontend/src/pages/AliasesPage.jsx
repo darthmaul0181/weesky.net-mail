@@ -1,4 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Button, Alert, Spin, Form, Input } from 'antd'
+import {
+  LockOutlined, DeleteOutlined, EditOutlined, CheckOutlined, CloseOutlined,
+  SafetyCertificateOutlined, UserAddOutlined, GlobalOutlined, LogoutOutlined,
+} from '@ant-design/icons'
 import { api, clearToken, setIsAdmin } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
@@ -33,154 +38,6 @@ export function Toasts({ toasts, onRemove }) {
           )}
         </div>
       ))}
-    </div>
-  )
-}
-
-function LockIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14H6L5 6" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M9 6V4h6v2" />
-    </svg>
-  )
-}
-
-function PencilIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
-}
-
-function XIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
-function ShieldIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  )
-}
-
-function PersonPlusIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <line x1="19" y1="8" x2="19" y2="14" />
-      <line x1="22" y1="11" x2="16" y2="11" />
-    </svg>
-  )
-}
-
-function GlobeIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  )
-}
-
-export function ChangePasswordModal({ onClose }) {
-  const [oldPassword, setOldPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (newPassword !== confirm) {
-      setError('Passwords do not match.')
-      return
-    }
-    setError(null)
-    setLoading(true)
-    try {
-      await api.changePassword(oldPassword, newPassword)
-      setSuccess(true)
-    } catch {
-      setError('Current password is incorrect.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title"><LockIcon />Change password</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-
-        {success ? (
-          <div className="modal-success">Password changed successfully.</div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            {error && <div className="alert alert-error">{error}</div>}
-            <div className="field">
-              <label htmlFor="old-password">Current password</label>
-              <input id="old-password" type="password" value={oldPassword}
-                onChange={e => setOldPassword(e.target.value)} required autoFocus />
-            </div>
-            <div className="field">
-              <label htmlFor="new-password">New password</label>
-              <input id="new-password" type="password" value={newPassword}
-                onChange={e => setNewPassword(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="confirm-password">Confirm new password</label>
-              <input id="confirm-password" type="password" value={confirm}
-                onChange={e => setConfirm(e.target.value)} required />
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? <span className="spinner" /> : 'Update password'}
-            </button>
-          </form>
-        )}
-      </div>
     </div>
   )
 }
@@ -303,17 +160,17 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
                   disabled={saving}
                 />
                 <button className="panel-fullname-btn panel-fullname-confirm" onClick={handleConfirm} disabled={saving} title="Confirm">
-                  {saving ? <span className="spinner spinner-sm" /> : <CheckIcon />}
+                  {saving ? <Spin size="small" /> : <CheckOutlined />}
                 </button>
                 <button className="panel-fullname-btn panel-fullname-cancel" onClick={handleCancel} disabled={saving} title="Cancel">
-                  <XIcon />
+                  <CloseOutlined />
                 </button>
               </div>
             ) : (
               <div className="panel-fullname-row">
                 <span className="panel-fullname">{fullName || primaryEmail}</span>
                 <button className="panel-fullname-pencil" onClick={handleEdit} title="Edit name">
-                  <PencilIcon />
+                  <EditOutlined />
                 </button>
               </div>
             )}
@@ -352,21 +209,16 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
             <div className="panel-actions">
               {isAdmin && (
                 <button className="panel-link" onClick={() => { setOpen(false); onAdmin() }}>
-                  <ShieldIcon />
+                  <span aria-hidden="true"><SafetyCertificateOutlined /></span>
                   Administration
                 </button>
               )}
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
-                <LockIcon />
+                <span aria-hidden="true"><LockOutlined /></span>
                 Change password
               </button>
               <button className="panel-link panel-link-danger" onClick={onLogout}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
+                <span aria-hidden="true"><LogoutOutlined /></span>
                 Sign out
               </button>
             </div>
@@ -374,6 +226,61 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
         </>
       )}
     </>
+  )
+}
+
+export function ChangePasswordModal({ onClose }) {
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [form] = Form.useForm()
+
+  async function handleSubmit(values) {
+    if (values.newPassword !== values.confirm) {
+      setError('Passwords do not match.')
+      return
+    }
+    setError(null)
+    setLoading(true)
+    try {
+      await api.changePassword(values.oldPassword, values.newPassword)
+      setSuccess(true)
+    } catch {
+      setError('Current password is incorrect.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title"><LockOutlined /> Change password</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        {success ? (
+          <div className="modal-success">Password changed successfully.</div>
+        ) : (
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
+            {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
+            <Form.Item label="Current password" name="oldPassword" style={{ marginBottom: 12 }}>
+              <Input.Password autoFocus />
+            </Form.Item>
+            <Form.Item label="New password" name="newPassword" style={{ marginBottom: 12 }}>
+              <Input.Password />
+            </Form.Item>
+            <Form.Item label="Confirm new password" name="confirm" style={{ marginBottom: 16 }}>
+              <Input.Password />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" loading={loading} block>
+              Update password
+            </Button>
+          </Form>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -389,11 +296,10 @@ export function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading })
           Delete <strong>{entityLabel}</strong>? This action cannot be undone.
         </p>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
-            onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Delete'}
-          </button>
+          <Button onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="primary" danger onClick={onConfirm} loading={loading}>
+            Delete
+          </Button>
         </div>
       </div>
     </div>
@@ -449,11 +355,13 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
+          <span className="modal-title">
+            {isEdit ? <><EditOutlined /> Edit account</> : <><UserAddOutlined /> Add account</>}
+          </span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
           <div className="field-h">
             <label>Username</label>
             <input type="text" value={userName} onChange={e => setUserName(e.target.value)}
@@ -498,11 +406,13 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
               <span className="toggle-track" />
             </label>
           </div>
-          <button className="btn btn-primary" type="submit"
-            disabled={loading || !userName.trim() || (!isEdit && !password.trim())}
+          <Button type="primary" htmlType="submit"
+            loading={loading}
+            disabled={!userName.trim() || (!isEdit && !password.trim())}
+            block
             style={{ marginTop: '8px' }}>
-            {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create account')}
-          </button>
+            {isEdit ? 'Save changes' : 'Create account'}
+          </Button>
         </form>
       </div>
     </div>
@@ -545,7 +455,7 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
           <div className="field">
             <label>ID (3 chars max)</label>
             <input type="text" value={id} onChange={e => setId(e.target.value.toUpperCase())}
@@ -556,10 +466,12 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
             <input type="text" value={name} onChange={e => setName(e.target.value)} required
               className={name && !nameValid ? 'is-error' : undefined} />
           </div>
-          <button className="btn btn-primary" type="submit"
-            disabled={loading || !id.trim() || !nameValid}>
-            {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create domain')}
-          </button>
+          <Button type="primary" htmlType="submit"
+            loading={loading}
+            disabled={!id.trim() || !nameValid}
+            block>
+            {isEdit ? 'Save changes' : 'Create domain'}
+          </Button>
         </form>
       </div>
     </div>
@@ -590,7 +502,7 @@ export function AccountsTab({ addToast }) {
         try {
           const q = await api.adminGetUserQuota(user.id)
           setQuotas(prev => ({ ...prev, [user.id]: q }))
-        } catch { /* quota unavailable for this user */ }
+        } catch { /* quota unavailable */ }
       })
     } catch {
       addToast('Failed to load accounts', 'error')
@@ -621,7 +533,7 @@ export function AccountsTab({ addToast }) {
         (u.fullName ?? '').toLowerCase().includes(term))
     : users
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><Spin /></div>
 
   return (
     <div>
@@ -635,10 +547,10 @@ export function AccountsTab({ addToast }) {
           onChange={e => setSearch(e.target.value)}
           style={{ marginLeft: '30px', width: '180px', padding: '6px 10px', fontSize: '13px' }}
         />
-        <button className="btn btn-primary" style={{ marginLeft: 'auto', width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        <Button type="primary" icon={<UserAddOutlined />} style={{ marginLeft: 'auto' }}
           onClick={() => setShowAddModal(true)}>
-          <PersonPlusIcon /> Add
-        </button>
+          Add
+        </Button>
       </div>
       <div className="admin-list">
         {visibleUsers.map(u => (
@@ -647,12 +559,8 @@ export function AccountsTab({ addToast }) {
             <span className="admin-list-item-name" style={{ paddingLeft: '30px' }}>{u.fullName}</span>
             <div className="admin-list-item-quota"><QuotaMini quota={quotas[u.id]} /></div>
             <div className="admin-list-item-actions">
-              <button className="admin-icon-btn" title="Edit" onClick={() => setUserToEdit(u)}>
-                <PencilIcon />
-              </button>
-              <button className="admin-icon-btn is-danger" title="Delete" onClick={() => setUserToDelete(u)}>
-                <TrashIcon />
-              </button>
+              <Button size="small" title="Edit" icon={<EditOutlined />} onClick={() => setUserToEdit(u)} />
+              <Button size="small" title="Delete" danger icon={<DeleteOutlined />} onClick={() => setUserToDelete(u)} />
             </div>
           </div>
         ))}
@@ -709,16 +617,15 @@ export function DomainsTab({ addToast }) {
     }
   }
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><Spin /></div>
 
   return (
     <div>
       <div className="admin-list-header">
         <span className="admin-list-title">Domains ({domains.length})</span>
-        <button className="btn btn-primary" style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          onClick={() => setShowAddModal(true)}>
-          <GlobeIcon /> Add
-        </button>
+        <Button type="primary" icon={<GlobalOutlined />} onClick={() => setShowAddModal(true)}>
+          Add
+        </Button>
       </div>
       <div className="admin-list">
         {domains.map(d => (
@@ -726,12 +633,8 @@ export function DomainsTab({ addToast }) {
             <span className="admin-list-item-email" style={{ minWidth: '60px' }}>{d.id}</span>
             <span className="admin-list-item-name">{d.name}</span>
             <div className="admin-list-item-actions">
-              <button className="admin-icon-btn" title="Edit" onClick={() => setDomainToEdit(d)}>
-                <PencilIcon />
-              </button>
-              <button className="admin-icon-btn is-danger" title="Delete" onClick={() => setDomainToDelete(d)}>
-                <TrashIcon />
-              </button>
+              <Button size="small" title="Edit" icon={<EditOutlined />} onClick={() => setDomainToEdit(d)} />
+              <Button size="small" title="Delete" danger icon={<DeleteOutlined />} onClick={() => setDomainToDelete(d)} />
             </div>
           </div>
         ))}
@@ -825,7 +728,7 @@ export function OwnershipTab({ addToast }) {
       })
     : []
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+  if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><Spin /></div>
 
   return (
     <div>
@@ -873,14 +776,14 @@ export function OwnershipTab({ addToast }) {
                   )}
                 </div>
                 {o.ownerId != null && (
-                  <button
-                    className="admin-icon-btn is-danger"
+                  <Button
+                    size="small"
                     title="Remove owner"
+                    danger
+                    icon={<DeleteOutlined />}
                     disabled={saving}
                     onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId) }}
-                  >
-                    <TrashIcon />
-                  </button>
+                  />
                 )}
               </div>
             ) : (
@@ -890,12 +793,10 @@ export function OwnershipTab({ addToast }) {
             )}
             <div className="admin-list-item-actions">
               {editingDomainId !== o.domainId && (
-                <button className="admin-icon-btn" title="Edit owner" onClick={() => {
+                <Button size="small" title="Edit owner" icon={<EditOutlined />} onClick={() => {
                   setEditingDomainId(o.domainId)
                   setSearchQuery('')
-                }}>
-                  <PencilIcon />
-                </button>
+                }} />
               )}
             </div>
           </div>
@@ -912,7 +813,7 @@ export function AdminModal({ onClose, addToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-admin" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title"><ShieldIcon /> Administration</span>
+          <span className="modal-title"><SafetyCertificateOutlined /> Administration</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="admin-modal-body">
@@ -1115,151 +1016,151 @@ export default function AliasesPage({ onLogout }) {
         />
       </header>
 
-    <div className="page-main">
-      <div className="header">
-        <div>
-          <div className="header-title">{greeting ? `Hello ${greeting} !` : 'Aliases'}</div>
-          <div className="header-sub">Mail alias management</div>
+      <div className="page-main">
+        <div className="header">
+          <div>
+            <div className="header-title">{greeting ? `Hello ${greeting} !` : 'Aliases'}</div>
+            <div className="header-sub">Mail alias management</div>
+          </div>
         </div>
-      </div>
 
-      <div className="domain-toolbar">
-        {domains.length > 1 && (
-          <>
-            <label htmlFor="domain-select" className="domain-label">Domain</label>
-            <select
-              id="domain-select"
-              className="domain-select"
-              value={selectedDomain}
-              onChange={e => setSelectedDomain(e.target.value)}
-            >
-              {domains.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
-              ))}
-            </select>
-          </>
-        )}
-        <input
-          className={`search-input${search.length > 30 ? ' is-error' : ''}`}
-          type="search"
-          placeholder="Search or create…"
-          value={search}
-          onChange={e => {
-            const val = e.target.value
-            if (val.length > 30 && search.length <= 30) {
-              addToast('An alias cannot exceed 30 characters', 'error')
-            }
-            setSearch(val)
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !adding && selectedDomain && search.trim() && search.length <= 30) {
-              handleAdd()
-            }
-          }}
-        />
-        <button
-          className="btn btn-add"
-          onClick={handleAdd}
-          disabled={adding || !selectedDomain || !search.trim() || search.length > 30}
-        >
-          {adding ? <span className="spinner" /> : 'Create alias'}
-        </button>
-      </div>
-
-      {listError && <div className="alert alert-error">{listError}</div>}
-
-      {loadingList ? (
-        <div className="loading-center">
-          <span className="spinner" />
+        <div className="domain-toolbar">
+          {domains.length > 1 && (
+            <>
+              <label htmlFor="domain-select" className="domain-label">Domain</label>
+              <select
+                id="domain-select"
+                className="domain-select"
+                value={selectedDomain}
+                onChange={e => setSelectedDomain(e.target.value)}
+              >
+                {domains.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+            </>
+          )}
+          <input
+            className={`search-input${search.length > 30 ? ' is-error' : ''}`}
+            type="search"
+            placeholder="Search or create…"
+            value={search}
+            onChange={e => {
+              const val = e.target.value
+              if (val.length > 30 && search.length <= 30) {
+                addToast('An alias cannot exceed 30 characters', 'error')
+              }
+              setSearch(val)
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !adding && selectedDomain && search.trim() && search.length <= 30) {
+                handleAdd()
+              }
+            }}
+          />
+          <Button
+            type="primary"
+            onClick={handleAdd}
+            loading={adding}
+            disabled={!selectedDomain || !search.trim() || search.length > 30}
+          >
+            Create alias
+          </Button>
         </div>
-      ) : visibleAliases.length === 0 ? (
-        <div className="alias-empty-grid">No aliases for this domain.</div>
-      ) : alphaMode ? (
-        <div className="alias-view-wrapper">
-          <div className="alias-scroll-area" ref={scrollRef} onScroll={handleScroll}>
-            {grouped.map(([letter, groupAliases]) => (
-              <div key={letter} className="alias-group">
-                <div
-                  className="alias-group-header"
-                  ref={el => { groupRefs.current[letter] = el }}
-                >
-                  <span className="alias-group-letter">{letter}</span>
-                  <div className="alias-group-divider" />
-                </div>
-                <div className="alias-grid">
-                  {groupAliases.map(a => {
-                    const key = `${a.name}@${a.domain}`
-                    const isNew = highlightedKey === key
-                    return (
-                      <div
-                        className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
-                        key={key}
-                        onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
-                      >
-                        <span className="alias-tile-name">{a.name}</span>
-                        <span className="alias-tile-domain">@{a.domain}</span>
-                        <button
-                          className="alias-tile-delete"
-                          onClick={() => handleDelete(a.name, a.domain)}
-                          disabled={deletingKey === key}
-                          title="Delete"
+
+        {listError && <Alert type="error" message={listError} showIcon style={{ marginBottom: 16 }} />}
+
+        {loadingList ? (
+          <div className="loading-center">
+            <Spin />
+          </div>
+        ) : visibleAliases.length === 0 ? (
+          <div className="alias-empty-grid">No aliases for this domain.</div>
+        ) : alphaMode ? (
+          <div className="alias-view-wrapper">
+            <div className="alias-scroll-area" ref={scrollRef} onScroll={handleScroll}>
+              {grouped.map(([letter, groupAliases]) => (
+                <div key={letter} className="alias-group">
+                  <div
+                    className="alias-group-header"
+                    ref={el => { groupRefs.current[letter] = el }}
+                  >
+                    <span className="alias-group-letter">{letter}</span>
+                    <div className="alias-group-divider" />
+                  </div>
+                  <div className="alias-grid">
+                    {groupAliases.map(a => {
+                      const key = `${a.name}@${a.domain}`
+                      const isNew = highlightedKey === key
+                      return (
+                        <div
+                          className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
+                          key={key}
+                          onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
                         >
-                          {deletingKey === key ? <span className="spinner" /> : <TrashIcon />}
-                        </button>
-                      </div>
-                    )
-                  })}
+                          <span className="alias-tile-name">{a.name}</span>
+                          <span className="alias-tile-domain">@{a.domain}</span>
+                          <button
+                            className="alias-tile-delete"
+                            onClick={() => handleDelete(a.name, a.domain)}
+                            disabled={deletingKey === key}
+                            title="Delete"
+                          >
+                            {deletingKey === key ? <Spin size="small" /> : <DeleteOutlined />}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-          <div className="alpha-nav">
-            {availableLetters.map(letter => (
-              <button
-                key={letter}
-                className={`alpha-nav-letter${effectiveActiveLetter === letter ? ' is-active' : ''}`}
-                onClick={() => scrollToLetter(letter)}
-              >
-                {letter}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="alias-grid">
-          {visibleAliases.map(a => {
-            const key = `${a.name}@${a.domain}`
-            const isNew = highlightedKey === key
-            return (
-              <div
-                className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
-                key={key}
-                onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
-              >
-                <span className="alias-tile-name">{a.name}</span>
-                <span className="alias-tile-domain">@{a.domain}</span>
+              ))}
+            </div>
+            <div className="alpha-nav">
+              {availableLetters.map(letter => (
                 <button
-                  className="alias-tile-delete"
-                  onClick={() => handleDelete(a.name, a.domain)}
-                  disabled={deletingKey === key}
-                  title="Delete"
+                  key={letter}
+                  className={`alpha-nav-letter${effectiveActiveLetter === letter ? ' is-active' : ''}`}
+                  onClick={() => scrollToLetter(letter)}
                 >
-                  {deletingKey === key ? <span className="spinner" /> : <TrashIcon />}
+                  {letter}
                 </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="alias-grid">
+            {visibleAliases.map(a => {
+              const key = `${a.name}@${a.domain}`
+              const isNew = highlightedKey === key
+              return (
+                <div
+                  className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
+                  key={key}
+                  onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
+                >
+                  <span className="alias-tile-name">{a.name}</span>
+                  <span className="alias-tile-domain">@{a.domain}</span>
+                  <button
+                    className="alias-tile-delete"
+                    onClick={() => handleDelete(a.name, a.domain)}
+                    disabled={deletingKey === key}
+                    title="Delete"
+                  >
+                    {deletingKey === key ? <Spin size="small" /> : <DeleteOutlined />}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
-      {changePasswordOpen && (
-        <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
-      )}
-      {adminOpen && (
-        <AdminModal onClose={() => setAdminOpen(false)} addToast={addToast} />
-      )}
-    </div>
-
+        {changePasswordOpen && (
+          <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
+        )}
+        {adminOpen && (
+          <AdminModal onClose={() => setAdminOpen(false)} addToast={addToast} />
+        )}
+      </div>
       <Toasts toasts={toasts} onRemove={removeToast} />
     </>
   )
