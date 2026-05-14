@@ -229,7 +229,7 @@ function QuotaMini({ quota }) {
   const levelClass = percent >= 90 ? 'is-danger' : percent >= 75 ? 'is-warn' : ''
 
   return (
-    <div style={{ width: '130px' }}>
+    <div style={{ width: '145px' }}>
       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
         {format(used)} / {format(total)} {unit}
       </div>
@@ -390,7 +390,7 @@ function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
         </p>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <button className="btn" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="btn btn-primary" style={{ background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
+          <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
             onClick={onConfirm} disabled={loading}>
             {loading ? <span className="spinner" /> : 'Delete'}
           </button>
@@ -639,7 +639,7 @@ function AccountsTab({ addToast }) {
         {visibleUsers.map(u => (
           <div key={u.id} className="admin-list-item">
             <span className="admin-list-item-email">{u.userName}@{u.domainName}</span>
-            <span className="admin-list-item-name">{u.fullName}</span>
+            <span className="admin-list-item-name" style={{ paddingLeft: '30px' }}>{u.fullName}</span>
             <div className="admin-list-item-quota"><QuotaMini quota={quotas[u.id]} /></div>
             <div className="admin-list-item-actions">
               <button className="admin-icon-btn" title="Edit" onClick={() => setUserToEdit(u)}>
