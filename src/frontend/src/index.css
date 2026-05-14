@@ -1115,7 +1115,11 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  min-width: 180px;
+  width: 40ch;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-list-item-name {
