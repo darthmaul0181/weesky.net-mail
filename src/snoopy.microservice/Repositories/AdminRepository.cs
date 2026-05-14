@@ -193,29 +193,35 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             var extraDomains = _context.Domains
                 .Where(d => !primaryDomainIds.Contains(d.Id))
+                .Select(d => new { d.Id, d.Name })
                 .ToList();
 
             var ownerships = _context.DomainsOwnerships.ToList();
-            var users = _context.Users.ToList();
-            var allDomains = _context.Domains.ToList();
+
+            var userProjections = _context.Users
+                .Select(u => new { u.Id, u.Name, u.DomainId })
+                .ToList();
+
+            var domainNames = _context.Domains
+                .Select(d => new { d.Id, d.Name })
+                .ToDictionary(d => d.Id, d => d.Name);
 
             return extraDomains.Select(domain =>
             {
                 var ownership = ownerships.FirstOrDefault(o => o.DomainId == domain.Id);
-                MailUser? owner = null;
-                MailDomain? ownerDomain = null;
+                string? ownerEmail = null;
                 if (ownership != null)
                 {
-                    owner = users.FirstOrDefault(u => u.Id == ownership.UserId);
-                    if (owner != null)
-                        ownerDomain = allDomains.FirstOrDefault(d => d.Id == owner.DomainId);
+                    var owner = userProjections.FirstOrDefault(u => u.Id == ownership.UserId);
+                    if (owner != null && domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
+                        ownerEmail = $"{owner.Name}@{ownerDomainName}";
                 }
                 return new DomainOwnershipInfo
                 {
                     DomainId = domain.Id,
                     DomainName = domain.Name,
                     OwnerId = ownership?.UserId,
-                    OwnerEmail = owner != null && ownerDomain != null ? $"{owner.Name}@{ownerDomain.Name}" : null
+                    OwnerEmail = ownerEmail
                 };
             }).ToList();
         }
@@ -231,7 +237,10 @@ namespace weesky.Snoopy.Microservice.Repositories
             if (primaryDomainIds.Contains(domainId))
                 return Result.Failure<DomainOwnershipInfo>($"Domain '{domainId}' is not an extra domain");
 
-            var user = _context.Users.FirstOrDefault(u => u.Id == userId);
+            var user = _context.Users
+                .Where(u => u.Id == userId)
+                .Select(u => new { u.Id, u.Name, u.DomainId })
+                .FirstOrDefault();
             if (user == null)
                 return Result.Failure<DomainOwnershipInfo>($"User with id {userId} not found");
 
@@ -243,13 +252,16 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             _context.SaveChanges();
 
-            var userDomain = _context.Domains.FirstOrDefault(d => d.Id == user.DomainId);
+            var userDomainName = _context.Domains
+                .Where(d => d.Id == user.DomainId)
+                .Select(d => d.Name)
+                .FirstOrDefault();
             return Result.Success(new DomainOwnershipInfo
             {
                 DomainId = domain.Id,
                 DomainName = domain.Name,
                 OwnerId = userId,
-                OwnerEmail = userDomain != null ? $"{user.Name}@{userDomain.Name}" : null
+                OwnerEmail = userDomainName != null ? $"{user.Name}@{userDomainName}" : null
             });
         }
 
