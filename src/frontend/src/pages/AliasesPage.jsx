@@ -1007,6 +1007,11 @@ export default function AliasesPage({ onLogout }) {
             }
             setSearch(val)
           }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !adding && selectedDomain && search.trim() && search.length <= 30) {
+              handleAdd()
+            }
+          }}
         />
         <button
           className="btn btn-add"
