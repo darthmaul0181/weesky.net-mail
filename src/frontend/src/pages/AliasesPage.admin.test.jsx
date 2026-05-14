@@ -814,7 +814,7 @@ describe('VirtualDomainsTab', () => {
   it('shows "No alias domains" when list is empty', async () => {
     api.adminGetVirtualDomains.mockResolvedValue([])
     render(<VirtualDomainsTab addToast={vi.fn()} />)
-    expect(await screen.findByText('No alias domains')).toBeInTheDocument()
+    expect(await screen.findByText('No virtual alias domains')).toBeInTheDocument()
   })
 
   it('shows search input when pencil is clicked', async () => {
