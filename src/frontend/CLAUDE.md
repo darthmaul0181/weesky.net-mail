@@ -15,11 +15,18 @@ npm run preview    # preview the production build locally
 npm run ship       # build + deploy to production server via SSH
 ```
 
-There are no tests and no linter configured.
+Tests use Vitest + jsdom + `@testing-library/react`. Run with:
+```bash
+npm run test          # run once
+npm run test -- --watch   # watch mode
+```
+`src/api.test.js` covers token management, all api methods, and 401 handling. `src/pages/AliasesPage.admin.test.jsx` covers admin modal components (AccountsTab, DomainsTab, AddEditUserModal, AddEditDomainModal, DeleteConfirmModal). Components under test must carry a named `export` keyword in addition to the file's default export — the test file imports them individually from `AliasesPage.jsx`. No linter configured.
 
 ## Architecture
 
 **Auth flow** — authentication state lives as module-level state in `src/api.js`, not React context. `App.jsx` conditionally renders `LoginPage` or `AliasesPage` based on a `loggedIn` boolean. There is no React Router; navigation is purely state-driven.
+
+**Admin state** — `src/api.js` exports `setIsAdmin(bool)` and `getIsAdmin()`. `AliasesPage` calls `setIsAdmin(data.isAdmin)` after fetching account info. `clearToken()` resets `isAdmin` to `false`. `AccountPanel` receives `isAdmin` and `onAdmin` props; when `isAdmin === true` it renders an "Administration" link that opens `AdminModal`.
 
 **Token persistence** — `src/api.js` stores the bearer token in `localStorage` alongside an expiry timestamp. On module load it checks expiry and restores or discards the saved token. `setToken(token, expiresIn, persist)` controls persistence; `clearToken()` wipes both memory and storage.
 
@@ -27,7 +34,13 @@ There are no tests and no linter configured.
 
 **API client** — all backend calls go through the `request()` helper in `src/api.js` and are exported as named methods on `api`. The backend base URL is the hardcoded constant `BASE` at the top of that file.
 
-**Pages** — `AliasesPage.jsx` is the main view and contains several self-contained sub-components (`AccountPanel`, `ChangePasswordModal`, `Toasts`) defined in the same file. No shared component library is used.
+**Pages** — `AliasesPage.jsx` is the main view and contains all self-contained sub-components defined in the same file. No shared component library is used. Key components:
+- `AccountPanel` — slide-in settings panel (see below)
+- `ChangePasswordModal` — password change dialog
+- `AdminModal` — 800px admin panel with tab sidebar (Accounts / Domains / Ownerships). Only rendered when `adminOpen === true`.
+- `AccountsTab` — lists all users (email, fullname, quota), add/edit/delete via `AddEditUserModal` and `DeleteConfirmModal`
+- `DomainsTab` — lists all domains, add/edit/delete via `AddEditDomainModal` and `DeleteConfirmModal`
+- `OwnershipTab` — placeholder ("Coming soon")
 
 ## Components
 
