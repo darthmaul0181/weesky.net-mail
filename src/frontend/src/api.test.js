@@ -111,6 +111,17 @@ describe('request — response handling', () => {
     const { api } = await import('./api.js')
     await expect(api.getAliases()).rejects.toThrow('Bad Request')
   })
+
+  it('throws with statusText when body text is empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 400,
+      ok: false,
+      text: () => Promise.resolve(''),
+      statusText: 'Bad Request',
+    }))
+    const { api } = await import('./api.js')
+    await expect(api.getAliases()).rejects.toThrow('Bad Request')
+  })
 })
 
 describe('api methods', () => {

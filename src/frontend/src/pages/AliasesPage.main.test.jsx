@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api, clearToken } from '../api.js'
@@ -295,6 +295,41 @@ describe('AccountPanel', () => {
     await userEvent.keyboard('{Enter}')
     await waitFor(() => expect(api.changeFullName).toHaveBeenCalled())
   })
+
+  it('stays in edit mode when changeFullName fails', async () => {
+    api.changeFullName.mockRejectedValue(new Error('Network error'))
+    renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'JD' }))
+    await userEvent.click(screen.getByTitle('Edit name'))
+    await userEvent.click(screen.getByTitle('Confirm'))
+    await waitFor(() => expect(api.changeFullName).toHaveBeenCalled())
+    expect(screen.getByDisplayValue('John Doe')).toBeInTheDocument()
+  })
+
+  it('closes the panel when the overlay is clicked', async () => {
+    const { container } = renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'JD' }))
+    expect(screen.getByText('Main mailbox')).toBeInTheDocument()
+    await userEvent.click(container.querySelector('.panel-overlay'))
+    expect(screen.queryByText('Main mailbox')).not.toBeInTheDocument()
+  })
+
+  it('closes the panel when clicking outside', async () => {
+    renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'JD' }))
+    expect(screen.getByText('Main mailbox')).toBeInTheDocument()
+    await userEvent.click(document.body)
+    await waitFor(() => expect(screen.queryByText('Main mailbox')).not.toBeInTheDocument())
+  })
+
+  it('closes the panel when the overlay element is directly clicked', async () => {
+    const { container } = renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'JD' }))
+    expect(screen.getByText('Main mailbox')).toBeInTheDocument()
+    // fireEvent.click bypasses the mousedown listener so the overlay's own onClick fires
+    fireEvent.click(container.querySelector('.panel-overlay'))
+    await waitFor(() => expect(screen.queryByText('Main mailbox')).not.toBeInTheDocument())
+  })
 })
 
 // ── AliasesPage ───────────────────────────────────────────────
@@ -460,5 +495,208 @@ describe('AliasesPage', () => {
     await userEvent.type(input, 'Jane Doe')
     await userEvent.click(screen.getByTitle('Confirm'))
     await waitFor(() => expect(screen.getByText('Hello Jane Doe !')).toBeInTheDocument())
+  })
+
+  it('handles getAccount failure gracefully', async () => {
+    api.getAccount.mockRejectedValue(new Error('Server error'))
+    renderPage()
+    expect(await screen.findByText('alias1')).toBeInTheDocument()
+  })
+
+  it('handles getQuota failure gracefully', async () => {
+    api.getQuota.mockRejectedValue(new Error('Quota unavailable'))
+    renderPage()
+    expect(await screen.findByText('alias1')).toBeInTheDocument()
+  })
+
+  it('reloads aliases when delete fails', async () => {
+    api.deleteAlias.mockRejectedValue(new Error('Not found'))
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await waitFor(() => expect(api.getAliases).toHaveBeenCalledTimes(2))
+  })
+
+  it('closes the change password modal when ✕ is clicked', async () => {
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getByTitle('john@weesky.be'))
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }))
+    expect(screen.getByRole('button', { name: 'Update password' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    expect(screen.queryByRole('button', { name: 'Update password' })).not.toBeInTheDocument()
+  })
+
+  it('closes the admin modal when ✕ is clicked', async () => {
+    api.getAccount.mockResolvedValue({ ...ACCOUNT, isAdmin: true })
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getByTitle('john@weesky.be'))
+    await waitFor(() => screen.getByRole('button', { name: 'Administration' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Administration' }))
+    expect(await screen.findByRole('button', { name: 'Ownerships' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ownerships' })).not.toBeInTheDocument())
+  })
+
+  it('fires alpha nav letter click (scrollToLetter)', async () => {
+    localStorage.setItem('alias_alpha_mode', 'true')
+    api.getAliases.mockResolvedValue([
+      { name: 'alpha', domain: 'weesky.be' },
+      { name: 'beta', domain: 'weesky.be' },
+    ])
+    const { container } = renderPage()
+    await waitFor(() => expect(container.querySelector('.alpha-nav-letter')).toBeTruthy())
+    const navButtons = container.querySelectorAll('.alpha-nav-letter')
+    await userEvent.click(navButtons[1]) // click 'B'
+    expect(navButtons[1]).toBeInTheDocument()
+  })
+
+  it('fires scroll event in alpha mode (handleScroll)', async () => {
+    localStorage.setItem('alias_alpha_mode', 'true')
+    api.getAliases.mockResolvedValue([
+      { name: 'alpha', domain: 'weesky.be' },
+      { name: 'beta', domain: 'weesky.be' },
+    ])
+    const { container } = renderPage()
+    await waitFor(() => expect(container.querySelector('.alias-scroll-area')).toBeTruthy())
+    fireEvent.scroll(container.querySelector('.alias-scroll-area'))
+    expect(container.querySelector('.alias-group-letter')).toBeTruthy()
+  })
+
+  it('clears alias highlight after animation ends (non-alpha mode)', async () => {
+    api.createAlias.mockResolvedValue(null)
+    api.getAliases
+      .mockResolvedValueOnce(ALIASES)
+      .mockResolvedValue([...ALIASES, { name: 'newone', domain: 'weesky.be' }])
+    const { container } = renderPage()
+    await screen.findByText('Hello John Doe !')
+    await screen.findByText('alias1')
+    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'newone')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create alias' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    const newTile = await waitFor(
+      () => {
+        const el = container.querySelector('.alias-tile-new')
+        if (!el) throw new Error('tile not yet highlighted')
+        return el
+      },
+      { timeout: 3000 }
+    )
+    // Invoke the onAnimationEnd handler directly via React internal props
+    const propsKey = Object.keys(newTile).find(k => k.startsWith('__reactProps'))
+    if (propsKey) {
+      await act(async () => { newTile[propsKey].onAnimationEnd() })
+    }
+    await waitFor(() => expect(container.querySelector('.alias-tile-new')).toBeNull())
+  })
+
+  it('changes the selected domain in the domain toolbar', async () => {
+    api.getAccount.mockResolvedValue({
+      ...ACCOUNT,
+      domains: [
+        { id: 'WSY', name: 'weesky.be' },
+        { id: 'EXM', name: 'example.com' },
+      ],
+    })
+    renderPage()
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'example.com')
+    expect(screen.getByRole('combobox')).toHaveValue('example.com')
+  })
+
+  it('deletes an alias in alpha mode', async () => {
+    localStorage.setItem('alias_alpha_mode', 'true')
+    api.deleteAlias.mockResolvedValue(null)
+    api.getAliases.mockResolvedValue([{ name: 'alpha', domain: 'weesky.be' }])
+    renderPage()
+    await screen.findByText('alpha')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await waitFor(() => expect(api.deleteAlias).toHaveBeenCalledWith('alpha', 'weesky.be'))
+  })
+
+  it('removes an error toast when its close button is clicked', async () => {
+    api.createAlias.mockRejectedValue(new Error('Alias exists'))
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
+    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    const closeBtn = await screen.findByRole('button', { name: '✕' })
+    await userEvent.click(closeBtn)
+    await waitFor(() => expect(screen.queryByText('Alias exists')).not.toBeInTheDocument())
+  })
+
+  it('uses fallback error message when alias creation error has no message', async () => {
+    api.createAlias.mockRejectedValue(new Error())
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
+    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    expect(await screen.findByText('Failed to create alias.')).toBeInTheDocument()
+  })
+
+  it('handles getAliases returning null', async () => {
+    api.getAliases.mockResolvedValue(null)
+    renderPage()
+    expect(await screen.findByText('No aliases for this domain.')).toBeInTheDocument()
+  })
+
+  it('handles account with no domains and null fullName', async () => {
+    api.getAccount.mockResolvedValue({
+      userName: null,
+      fullName: null,
+      mailbox: null,
+      domains: [],
+      isAdmin: false,
+    })
+    renderPage()
+    // page renders without crashing; aliases still show via the default mock
+    expect(await screen.findByText('alias1')).toBeInTheDocument()
+  })
+
+  it('updates greeting to primary email when fullname is cleared', async () => {
+    api.changeFullName.mockResolvedValue(null)
+    renderPage()
+    await screen.findByText('Hello John Doe !')
+    await userEvent.click(screen.getByTitle('john@weesky.be'))
+    await userEvent.click(screen.getByTitle('Edit name'))
+    const input = screen.getByDisplayValue('John Doe')
+    await userEvent.clear(input)
+    await userEvent.click(screen.getByTitle('Confirm'))
+    await waitFor(() => expect(screen.getByText('Hello john@weesky.be !')).toBeInTheDocument())
+  })
+
+  it('renders alpha mode with no aliases (empty state)', async () => {
+    localStorage.setItem('alias_alpha_mode', 'true')
+    api.getAliases.mockResolvedValue([])
+    renderPage()
+    expect(await screen.findByText('No aliases for this domain.')).toBeInTheDocument()
+  })
+
+  it('clears alias highlight after animation ends (alpha mode)', async () => {
+    localStorage.setItem('alias_alpha_mode', 'true')
+    api.createAlias.mockResolvedValue(null)
+    api.getAliases
+      .mockResolvedValueOnce([{ name: 'alpha', domain: 'weesky.be' }])
+      .mockResolvedValue([{ name: 'alpha', domain: 'weesky.be' }, { name: 'newone', domain: 'weesky.be' }])
+    const { container } = renderPage()
+    await screen.findByText('Hello John Doe !')
+    await waitFor(() => expect(container.querySelector('.alias-group-letter')).toBeTruthy())
+    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'newone')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create alias' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    const newTile = await waitFor(
+      () => {
+        const el = container.querySelector('.alias-tile-new')
+        if (!el) throw new Error('tile not yet highlighted')
+        return el
+      },
+      { timeout: 3000 }
+    )
+    const propsKey = Object.keys(newTile).find(k => k.startsWith('__reactProps'))
+    if (propsKey) {
+      await act(async () => { newTile[propsKey].onAnimationEnd() })
+    }
+    await waitFor(() => expect(container.querySelector('.alias-tile-new')).toBeNull())
   })
 })

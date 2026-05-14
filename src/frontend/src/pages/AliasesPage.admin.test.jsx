@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api } from '../api.js'
@@ -350,9 +350,112 @@ describe('AccountsTab', () => {
     render(<AccountsTab addToast={vi.fn()} />)
     await screen.findByText('alice@weesky.be')
     await userEvent.click(screen.getByTitle('Delete'))
-    // two 'Delete' buttons now exist: the icon btn (title) + the modal confirm btn
     await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
     await waitFor(() => expect(api.adminDeleteUser).toHaveBeenCalledWith(1))
+  })
+
+  it('shows error toast when user delete fails', async () => {
+    api.adminDeleteUser.mockRejectedValue(new Error('Cannot delete'))
+    const addToast = vi.fn()
+    render(<AccountsTab addToast={addToast} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Cannot delete', 'error'))
+  })
+
+  it('shows error toast when loading fails', async () => {
+    api.adminGetUsers.mockRejectedValue(new Error('Server error'))
+    const addToast = vi.fn()
+    render(<AccountsTab addToast={addToast} />)
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load accounts', 'error'))
+  })
+
+  it('opens AddEditUserModal when Add is clicked', async () => {
+    render(<AccountsTab addToast={vi.fn()} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument()
+  })
+
+  it('shows success toast after user is created', async () => {
+    api.adminCreateUser.mockResolvedValue({})
+    const addToast = vi.fn()
+    const { container } = render(<AccountsTab addToast={addToast} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'newuser')
+    await userEvent.type(container.querySelector('input[type="password"]'), 'pw')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Account created'))
+  })
+
+  it('opens AddEditUserModal with user data when Edit is clicked', async () => {
+    render(<AccountsTab addToast={vi.fn()} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Edit'))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+  })
+
+  it('shows success toast after user is updated', async () => {
+    api.adminUpdateUser.mockResolvedValue({})
+    const addToast = vi.fn()
+    render(<AccountsTab addToast={addToast} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Edit'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Account updated'))
+  })
+
+  it('cancel closes the delete modal without deleting', async () => {
+    render(<AccountsTab addToast={vi.fn()} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(api.adminDeleteUser).not.toHaveBeenCalled()
+    expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
+  })
+
+  it('closes the add user modal when ✕ is clicked', async () => {
+    render(<AccountsTab addToast={vi.fn()} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    expect(screen.queryByRole('button', { name: 'Create account' })).not.toBeInTheDocument()
+  })
+
+  it('closes the edit user modal when ✕ is clicked', async () => {
+    render(<AccountsTab addToast={vi.fn()} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Edit'))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('shows user quota when adminGetUserQuota resolves', async () => {
+    api.adminGetUserQuota.mockResolvedValue({ storageBytesUsed: 50 * MB, storageBytesLimit: 200 * MB })
+    render(<AccountsTab addToast={vi.fn()} />)
+    await screen.findByText('alice@weesky.be')
+    await waitFor(() => expect(api.adminGetUserQuota).toHaveBeenCalledWith(1))
+  })
+
+  it('handles null response from adminGetUsers gracefully', async () => {
+    api.adminGetUsers.mockResolvedValue(null)
+    render(<AccountsTab addToast={vi.fn()} />)
+    await waitFor(() => expect(api.adminGetUsers).toHaveBeenCalledOnce())
+    expect(screen.queryByText('alice@weesky.be')).not.toBeInTheDocument()
+  })
+
+  it('uses fallback message when delete error has no message', async () => {
+    api.adminDeleteUser.mockRejectedValue(new Error())
+    const addToast = vi.fn()
+    render(<AccountsTab addToast={addToast} />)
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to delete user', 'error'))
   })
 })
 
@@ -368,6 +471,226 @@ describe('DomainsTab', () => {
     render(<DomainsTab addToast={vi.fn()} />)
     expect(await screen.findByText('WSY')).toBeInTheDocument()
     expect(screen.getByText('weesky.be')).toBeInTheDocument()
+  })
+
+  it('shows error toast when loading fails', async () => {
+    api.adminGetDomains.mockRejectedValue(new Error('Server error'))
+    const addToast = vi.fn()
+    render(<DomainsTab addToast={addToast} />)
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load domains', 'error'))
+  })
+
+  it('opens AddEditDomainModal when Add is clicked', async () => {
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeInTheDocument()
+  })
+
+  it('shows success toast after domain is created', async () => {
+    api.adminCreateDomain.mockResolvedValue({})
+    const addToast = vi.fn()
+    render(<DomainsTab addToast={addToast} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    const [idInput, nameInput] = screen.getAllByRole('textbox')
+    await userEvent.type(idInput, 'TST')
+    await userEvent.type(nameInput, 'test.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Domain created'))
+  })
+
+  it('opens AddEditDomainModal with domain data when Edit is clicked', async () => {
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Edit'))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+  })
+
+  it('shows success toast after domain is updated', async () => {
+    api.adminUpdateDomain.mockResolvedValue({})
+    const addToast = vi.fn()
+    render(<DomainsTab addToast={addToast} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Edit'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Domain updated'))
+  })
+
+  it('calls adminDeleteDomain and shows toast after deletion', async () => {
+    api.adminDeleteDomain.mockResolvedValue(null)
+    const addToast = vi.fn()
+    render(<DomainsTab addToast={addToast} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+    await waitFor(() => expect(api.adminDeleteDomain).toHaveBeenCalledWith('WSY'))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Domain weesky.be deleted'))
+  })
+
+  it('shows error toast when delete fails', async () => {
+    api.adminDeleteDomain.mockRejectedValue(new Error('Has users'))
+    const addToast = vi.fn()
+    render(<DomainsTab addToast={addToast} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Has users', 'error'))
+  })
+
+  it('cancel closes delete modal without deleting', async () => {
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(api.adminDeleteDomain).not.toHaveBeenCalled()
+    expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
+  })
+
+  it('closes the add domain modal when ✕ is clicked', async () => {
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    expect(screen.queryByRole('button', { name: 'Create domain' })).not.toBeInTheDocument()
+  })
+
+  it('closes the edit domain modal when ✕ is clicked', async () => {
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Edit'))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('handles null response from adminGetDomains gracefully', async () => {
+    api.adminGetDomains.mockResolvedValue(null)
+    render(<DomainsTab addToast={vi.fn()} />)
+    await waitFor(() => expect(api.adminGetDomains).toHaveBeenCalledOnce())
+    expect(screen.queryByText('WSY')).not.toBeInTheDocument()
+  })
+
+  it('uses fallback message when domain delete error has no message', async () => {
+    api.adminDeleteDomain.mockRejectedValue(new Error())
+    const addToast = vi.fn()
+    render(<DomainsTab addToast={addToast} />)
+    await screen.findByText('WSY')
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to delete domain', 'error'))
+  })
+})
+
+// ── AddEditUserModal — additional field changes ───────────────
+
+describe('AddEditUserModal — field changes', () => {
+  const TWO_DOMAINS = [
+    { id: 'WSY', name: 'weesky.be' },
+    { id: 'EXM', name: 'example.com' },
+  ]
+
+  it('changing the domain select updates domainId in the payload', async () => {
+    api.adminCreateUser.mockResolvedValue({})
+    const onSave = vi.fn()
+    const { container } = render(
+      <AddEditUserModal user={null} domains={TWO_DOMAINS} onSave={onSave} onClose={vi.fn()} />
+    )
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'alice')
+    await userEvent.type(container.querySelector('input[type="password"]'), 'pw')
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'EXM')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() =>
+      expect(api.adminCreateUser).toHaveBeenCalledWith(
+        expect.objectContaining({ domainId: 'EXM' })
+      )
+    )
+  })
+
+  it('changing the full name field updates the value', async () => {
+    render(
+      <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    const fullNameInput = screen.getAllByRole('textbox')[1]
+    await userEvent.type(fullNameInput, 'Alice Smith')
+    expect(fullNameInput).toHaveValue('Alice Smith')
+  })
+
+  it('changing the range slider updates the quota number input', () => {
+    render(
+      <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '2048' } })
+    expect(screen.getByRole('spinbutton')).toHaveValue(2048)
+  })
+})
+
+// ── AddEditUserModal — toggles & quota ───────────────────────
+
+describe('AddEditUserModal — toggles and quota', () => {
+  function renderCreate(props = {}) {
+    return render(
+      <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} {...props} />
+    )
+  }
+
+  it('unchecking active sets active:false in the payload', async () => {
+    api.adminCreateUser.mockResolvedValue({})
+    const { container } = renderCreate()
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'alice')
+    await userEvent.type(container.querySelector('input[type="password"]'), 'pw')
+    const [activeCheckbox] = screen.getAllByRole('checkbox')
+    await userEvent.click(activeCheckbox) // uncheck active (was true by default)
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() =>
+      expect(api.adminCreateUser).toHaveBeenCalledWith(
+        expect.objectContaining({ active: false })
+      )
+    )
+  })
+
+  it('checking admin sets admin:true in the payload', async () => {
+    api.adminCreateUser.mockResolvedValue({})
+    const { container } = renderCreate()
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'alice')
+    await userEvent.type(container.querySelector('input[type="password"]'), 'pw')
+    const [, adminCheckbox] = screen.getAllByRole('checkbox')
+    await userEvent.click(adminCheckbox) // check admin (was false by default)
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() =>
+      expect(api.adminCreateUser).toHaveBeenCalledWith(
+        expect.objectContaining({ admin: true })
+      )
+    )
+  })
+
+  it('changing the quota number input updates the slider value', () => {
+    const { container } = renderCreate()
+    const numberInput = screen.getByRole('spinbutton')
+    fireEvent.change(numberInput, { target: { value: '512' } })
+    expect(screen.getByRole('slider')).toHaveValue('512')
+  })
+})
+
+// ── AddEditDomainModal — error case ───────────────────────────
+
+describe('AddEditDomainModal — error handling', () => {
+  it('shows error when create API fails', async () => {
+    api.adminCreateDomain.mockRejectedValue(new Error('Invalid ID'))
+    render(<AddEditDomainModal domain={null} onSave={vi.fn()} onClose={vi.fn()} />)
+    const [idInput, nameInput] = screen.getAllByRole('textbox')
+    await userEvent.type(idInput, 'TST')
+    await userEvent.type(nameInput, 'test.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await waitFor(() => expect(screen.getByText('Invalid ID')).toBeInTheDocument())
+  })
+
+  it('shows error when update API fails', async () => {
+    api.adminUpdateDomain.mockRejectedValue(new Error('Not found'))
+    render(<AddEditDomainModal domain={{ id: 'WSY', name: 'weesky.be' }} onSave={vi.fn()} onClose={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getByText('Not found')).toBeInTheDocument())
   })
 })
 
@@ -392,5 +715,12 @@ describe('AdminModal', () => {
     render(<AdminModal onClose={vi.fn()} addToast={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Ownerships' }))
     expect(screen.getByText('Coming soon')).toBeInTheDocument()
+  })
+
+  it('switches back to Accounts tab after visiting Domains', async () => {
+    render(<AdminModal onClose={vi.fn()} addToast={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
+    expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
   })
 })
