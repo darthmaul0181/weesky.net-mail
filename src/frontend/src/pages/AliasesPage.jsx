@@ -842,16 +842,16 @@ export function OwnershipTab({ addToast }) {
         )}
         {ownerships.map(o => (
           <div key={o.domainId} className="admin-list-item" style={{ alignItems: 'flex-start', paddingTop: '10px', paddingBottom: '10px' }}>
-            <span className="admin-list-item-email" style={{ paddingTop: '2px' }}>{o.domainName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({o.domainId})</span></span>
+            <span className="admin-list-item-email" style={{ paddingTop: '4px' }}>{o.domainName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({o.domainId})</span></span>
             {editingDomainId === o.domainId ? (
               <div ref={editRef} style={{ flex: 1, paddingLeft: '30px' }}>
                 {o.owners.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
                     {o.owners.map(own => (
-                      <span key={own.ownerId} className="ownership-chip">
+                      <span key={own.ownerId} className="ownership-tile">
                         {own.ownerEmail}
                         <button
-                          className="ownership-chip-remove"
+                          className="ownership-tile-remove"
                           title="Remove owner"
                           disabled={saving}
                           onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId, own.ownerId) }}
@@ -893,11 +893,14 @@ export function OwnershipTab({ addToast }) {
                 </div>
               </div>
             ) : (
-              <span className="admin-list-item-name" style={{ flex: 1, paddingLeft: '30px' }}>
+              <div style={{ flex: 1, paddingLeft: '30px', display: 'flex', flexWrap: 'wrap', gap: '4px', paddingTop: '2px' }}>
                 {o.owners.length === 0
-                  ? '—'
-                  : o.owners.map(own => own.ownerEmail).join(', ')}
-              </span>
+                  ? <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>—</span>
+                  : o.owners.map(own => (
+                      <span key={own.ownerId} className="ownership-tile">{own.ownerEmail}</span>
+                    ))
+                }
+              </div>
             )}
             <div className="admin-list-item-actions">
               {editingDomainId !== o.domainId && (

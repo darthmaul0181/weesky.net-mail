@@ -8,7 +8,10 @@
       "PowerShell(ssh root@curiosity.weesky.net \"chown root:www-data /var/www/admin/mail/account.frontend -R\")",
       "PowerShell(ssh root@curiosity.weesky.net \"chmod 700 /var/www/admin/mail/account.frontend/assets\")",
       "Bash(git mv *)",
-      "Bash(dotnet test *)"
+      "Bash(dotnet test *)",
+      "Bash(Get-ChildItem \"D:\\\\development\\\\repos\\\\weesky.net-mail\\\\src\\\\frontend\" -Recurse -Include \"*.css\",\"*.scss\")",
+      "Bash(Select-Object FullName)",
+      "Bash(npm run *)"
     ]
   }
 }

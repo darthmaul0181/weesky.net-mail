@@ -1174,6 +1174,42 @@ body {
   border-color: #dc2626;
 }
 
+/* ── Ownership tiles ─────────────────────────────────────── */
+
+.ownership-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(52, 80, 163, 0.08);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary);
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.ownership-tile-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(52, 80, 163, 0.45);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.ownership-tile-remove:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.ownership-tile-remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── Ownership dropdown ──────────────────────────────────── */
 
 .ownership-dropdown {
