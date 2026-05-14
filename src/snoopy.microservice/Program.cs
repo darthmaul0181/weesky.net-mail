@@ -52,6 +52,12 @@ builder.Host.UseSerilog((ctx, cfg) =>
 
 var connectionString = builder.Configuration.GetConnectionString("MailUserAccountsDatabase");
 
+// Convert 0000-00-00 00:00:00 (zero datetime) to DateTime.MinValue instead of throwing
+connectionString = new MySqlConnector.MySqlConnectionStringBuilder(connectionString)
+{
+    ConvertZeroDateTime = true
+}.ToString();
+
 builder.Services.AddDbContext<ApplicationDbContext>(options => {
 	options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
 	.LogTo(Console.WriteLine, LogLevel.Warning);
