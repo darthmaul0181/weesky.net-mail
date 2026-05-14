@@ -1,7 +1,6 @@
 # weesky.net-mail
 
-[![Backend](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/dotnet.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/dotnet.yml)
-[![Frontend](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/account-frontend.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/account-frontend.yml)
+[![CI/CD](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/deploy.yml/badge.svg)](https://github.com/darthmaul0181/weesky.net-mail/actions/workflows/deploy.yml)
 
 Monorepo hosting the mail administration services for **weesky.net**: a .NET REST API on top of the Dovecot database and its React web interface.
 
