@@ -133,7 +133,7 @@ namespace weesky.Snoopy.Microservice.Repositories
 				return Result.Failure($"User {user.Name}@{user.Domain} not found");
 			}
 
-			if(Crypter.Sha512.Crypt(oldPassword, mailUser.Password) != mailUser.Password)
+			if(!IsValidPassword(user, oldPassword))
 			{
 				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
 				return Result.Failure($"Invalid password");
