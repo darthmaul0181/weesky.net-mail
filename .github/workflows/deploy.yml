@@ -1,0 +1,188 @@
+name: deploy
+
+on:
+  push:
+    branches-ignore: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.frontend == 'true' }}
+      backend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.backend == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'src/frontend/**'
+            backend:
+              - 'src/snoopy.microservice/**'
+
+  build-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE: ${{ github.ref_name != 'master' && 'https://api-dev.mail.weesky.net' || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: src/frontend/dist
+          retention-days: 1
+
+  build-microservice:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - name: Restore dependencies
+        run: dotnet restore src/snoopy.microservice
+      - name: Publish
+        run: >
+          dotnet publish src/snoopy.microservice
+          -c Release -r linux-x64 --self-contained
+          --no-restore
+          -p:SatelliteResourceLanguages=
+          -p:DebugType=None -p:DebugSymbols=false
+          -o ${{ github.workspace }}/publish
+      - name: Trim publish output
+        run: |
+          rm -rf \
+            ${{ github.workspace }}/publish/alpine \
+            ${{ github.workspace }}/publish/arm64 \
+            ${{ github.workspace }}/publish/CodeCoverage \
+            ${{ github.workspace }}/publish/macos \
+            ${{ github.workspace }}/publish/ubuntu \
+            ${{ github.workspace }}/publish/x64 \
+            ${{ github.workspace }}/publish/x86
+      - uses: actions/upload-artifact@v4
+        with:
+          name: microservice-publish
+          path: ${{ github.workspace }}/publish
+          retention-days: 1
+
+  deploy:
+    needs: [detect-changes, build-frontend, build-microservice]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      (needs.detect-changes.outputs.frontend == 'true' ||
+       needs.detect-changes.outputs.backend == 'true')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open SSH port
+        uses: ./.github/actions/firewall
+        with:
+          enabled: '1'
+          credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+          endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
+          rule_id: ${{ secrets.OPNSENSE_RULE_ID }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      # === Frontend ===
+
+      - name: Download frontend dist
+        if: needs.detect-changes.outputs.frontend == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Deploy frontend
+        if: needs.detect-changes.outputs.frontend == 'true'
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}/account.frontend"
+          else
+            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}-dev/account.frontend"
+          fi
+          tar -cf - -C dist . | ssh -i ~/.ssh/deploy_key \
+            -o ConnectTimeout=30 -o ServerAliveInterval=60 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "mkdir -p $DEPLOY_PATH && \
+             find $DEPLOY_PATH -mindepth 1 -delete && \
+             sudo tar -xf - -C $DEPLOY_PATH && \
+             sudo find $DEPLOY_PATH -type d -exec chmod 775 {} + && \
+             sudo find $DEPLOY_PATH -type f -exec chmod 664 {} + && \
+             sudo chown -R root:${{ secrets.DEPLOY_USER }} $DEPLOY_PATH"
+
+      # === Microservice ===
+
+      - name: Download microservice publish
+        if: needs.detect-changes.outputs.backend == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: microservice-publish
+          path: publish
+
+      - name: Deploy microservice
+        if: needs.detect-changes.outputs.backend == 'true'
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}/snoopy.microservice"
+            SERVICE_NAME="snoopy.microservice"
+          else
+            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}-dev/snoopy.microservice"
+            SERVICE_NAME="snoopy.microservice-dev"
+          fi
+          tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key \
+            -o ConnectTimeout=30 -o ServerAliveInterval=60 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "mkdir -p $DEPLOY_PATH && \
+             sudo tar -xf - -C $DEPLOY_PATH && \
+             sudo find $DEPLOY_PATH -type d -exec chmod 770 {} + && \
+             sudo find $DEPLOY_PATH -type f -exec chmod 660 {} + && \
+             sudo chmod 760 $DEPLOY_PATH/snoopy.microservice && \
+             sudo chown -R root:${{ secrets.DEPLOY_USER }} $DEPLOY_PATH && \
+             sudo systemctl restart $SERVICE_NAME"
+
+      - name: Close SSH port
+        if: always()
+        uses: ./.github/actions/firewall
+        with:
+          enabled: '0'
+          credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
+          endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
+          rule_id: ${{ secrets.OPNSENSE_RULE_ID }}
