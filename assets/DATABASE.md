@@ -11,7 +11,7 @@ Stores every domain the system knows about — both primary and virtual (alias) 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `char(3)` | Short uppercase identifier, e.g. `WSY`, `EXT`. Primary key. |
-| `name` | `varchar(30)` | Fully qualified domain name, e.g. `weesky.be`. |
+| `name` | `varchar(30)` | Fully qualified domain name, e.g. `weesky.be`. Indexed (`idx_name`) — queried by name on every Postfix/Dovecot lookup. |
 
 A domain is **primary** when at least one user has their mailbox hosted on it (`users.domain = domains.id`). It is a **virtual (alias) domain** when no user has their primary mailbox on it — it exists purely to receive mail that gets forwarded to owners' primary mailboxes via the `aliases` table.
 
@@ -81,4 +81,4 @@ Example flow: `info@extra.com` is an alias (`source_domain = 'EXT'`, `source_add
 
 ### Password encryption
 
-The application writes the password in cleartext. The `INSERT_PASSWORD` / `UPDATE_PASSWORD` triggers on `users` convert it to `$6$<salt>$<hash>` (SHA-512 crypt) transparently. Dovecot then validates login using that stored hash. Any server-side pre-hashing would cause double-encryption and break authentication.
+The application writes the password in cleartext. The `INSERT_PASSWORD` / `UPDATE_PASSWORD` triggers on `users` convert it to `$6$<salt>$<hash>` (SHA-512 crypt) transparently before the row is persisted. The salt is derived from `SHA2(CONCAT(UUID(), RAND(), NOW(6)), 256)` — combining a UUID, a random value, and a microsecond timestamp — giving sufficient entropy to prevent rainbow-table attacks. Dovecot validates login against that stored hash. Any server-side pre-hashing would cause double-encryption and break authentication.

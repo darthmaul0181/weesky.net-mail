@@ -1,3 +1,5 @@
+-- Generation Time: May 15, 2026 at 12:58 PM
+
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
@@ -104,7 +106,8 @@ ALTER TABLE `aliases`
 -- Indexes for table `domains`
 --
 ALTER TABLE `domains`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_name` (`name`);
 
 --
 -- Indexes for table `domains_ownerships`
