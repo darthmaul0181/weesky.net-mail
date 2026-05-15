@@ -353,17 +353,15 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
               </div>
               <div className="toggle-row" style={{ marginTop: '10px' }}>
                 <span className="toggle-label">Appearance</span>
-                <div className="theme-selector">
-                  {[['light', 'Light'], ['dark', 'Dark'], ['system', 'System']].map(([val, label]) => (
-                    <button
-                      key={val}
-                      className={`theme-btn${theme === val ? ' is-active' : ''}`}
-                      onClick={() => onThemeChange(val)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  className="theme-select"
+                  value={theme}
+                  onChange={e => onThemeChange(e.target.value)}
+                >
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                  <option value="system">System</option>
+                </select>
               </div>
             </div>
 
