@@ -121,6 +121,15 @@ function GlobeIcon() {
   )
 }
 
+function HelpTooltip({ text }) {
+  return (
+    <div className="help-tooltip-wrap">
+      <div className="help-tooltip-icon">?</div>
+      <div className="help-tooltip-bubble">{text}</div>
+    </div>
+  )
+}
+
 export function ChangePasswordModal({ onClose }) {
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -752,6 +761,9 @@ export function DomainsTab({ addToast }) {
           </div>
         ))}
       </div>
+      <div className="tab-help-footer">
+        <HelpTooltip text="A domain is a mail domain hosted directly on this server (e.g. example.com). Every user account belongs to exactly one domain. Adding a domain here enables creating mailboxes of the form user@example.com. The numeric ID is the internal identifier used by Postfix's virtual mailbox configuration." />
+      </div>
       {showAddModal && (
         <AddEditDomainModal onSave={() => { setShowAddModal(false); load(); addToast('Domain created') }}
           onClose={() => setShowAddModal(false)} />
@@ -934,6 +946,9 @@ export function VirtualDomainsTab({ addToast }) {
             </div>
           </div>
         ))}
+      </div>
+      <div className="tab-help-footer">
+        <HelpTooltip text="A virtual alias domain is a domain with no mailboxes of its own. Emails sent to any address under this domain are redirected to real mailboxes via alias rules. Each virtual alias domain can have one or more owners — accounts authorised to create and manage aliases under it." />
       </div>
     </div>
   )

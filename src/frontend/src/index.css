@@ -1396,3 +1396,59 @@ body {
   flex-shrink: 0;
   appearance: auto;
 }
+
+/* ── Tab help tooltip ────────────────────────────────────── */
+
+.tab-help-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.help-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.help-tooltip-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  user-select: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.help-tooltip-wrap:hover .help-tooltip-icon {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.help-tooltip-bubble {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.help-tooltip-wrap:hover .help-tooltip-bubble {
+  display: block;
+}
