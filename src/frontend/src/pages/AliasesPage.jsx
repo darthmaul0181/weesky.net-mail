@@ -121,6 +121,15 @@ function GlobeIcon() {
   )
 }
 
+function HelpTooltip({ text }) {
+  return (
+    <div className="help-tooltip-wrap">
+      <div className="help-tooltip-icon">?</div>
+      <div className="help-tooltip-bubble">{text}</div>
+    </div>
+  )
+}
+
 export function ChangePasswordModal({ onClose }) {
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -353,17 +362,15 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
               </div>
               <div className="toggle-row" style={{ marginTop: '10px' }}>
                 <span className="toggle-label">Appearance</span>
-                <div className="theme-selector">
-                  {[['light', 'Light'], ['dark', 'Dark'], ['system', 'System']].map(([val, label]) => (
-                    <button
-                      key={val}
-                      className={`theme-btn${theme === val ? ' is-active' : ''}`}
-                      onClick={() => onThemeChange(val)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  className="theme-select"
+                  value={theme}
+                  onChange={e => onThemeChange(e.target.value)}
+                >
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                  <option value="system">System</option>
+                </select>
               </div>
             </div>
 
@@ -941,6 +948,11 @@ export function VirtualDomainsTab({ addToast }) {
   )
 }
 
+const ADMIN_HELP = {
+  domains: 'A domain is a mail domain hosted directly on this server (e.g. example.com). Every user account belongs to exactly one domain. Adding a domain enables creating mailboxes of the form user@example.com.',
+  virtualdomains: 'A virtual alias domain is a domain with no mailboxes of its own. Emails sent to any address under this domain are redirected to real mailboxes via alias rules. Each virtual alias domain can have one or more owners — accounts authorised to create and manage aliases under it.',
+}
+
 export function AdminModal({ onClose, addToast }) {
   const [activeTab, setActiveTab] = useState('accounts')
 
@@ -966,6 +978,11 @@ export function AdminModal({ onClose, addToast }) {
             {activeTab === 'virtualdomains' && <VirtualDomainsTab addToast={addToast} />}
           </div>
         </div>
+        {ADMIN_HELP[activeTab] && (
+          <div className="admin-modal-help">
+            <HelpTooltip text={ADMIN_HELP[activeTab]} />
+          </div>
+        )}
       </div>
     </div>
   )
