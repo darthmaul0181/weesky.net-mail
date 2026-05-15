@@ -761,9 +761,6 @@ export function DomainsTab({ addToast }) {
           </div>
         ))}
       </div>
-      <div className="tab-help-footer">
-        <HelpTooltip text="A domain is a mail domain hosted directly on this server (e.g. example.com). Every user account belongs to exactly one domain. Adding a domain here enables creating mailboxes of the form user@example.com. The numeric ID is the internal identifier used by Postfix's virtual mailbox configuration." />
-      </div>
       {showAddModal && (
         <AddEditDomainModal onSave={() => { setShowAddModal(false); load(); addToast('Domain created') }}
           onClose={() => setShowAddModal(false)} />
@@ -947,11 +944,13 @@ export function VirtualDomainsTab({ addToast }) {
           </div>
         ))}
       </div>
-      <div className="tab-help-footer">
-        <HelpTooltip text="A virtual alias domain is a domain with no mailboxes of its own. Emails sent to any address under this domain are redirected to real mailboxes via alias rules. Each virtual alias domain can have one or more owners — accounts authorised to create and manage aliases under it." />
-      </div>
     </div>
   )
+}
+
+const ADMIN_HELP = {
+  domains: 'A domain is a mail domain hosted directly on this server (e.g. example.com). Every user account belongs to exactly one domain. Adding a domain enables creating mailboxes of the form user@example.com.',
+  virtualdomains: 'A virtual alias domain is a domain with no mailboxes of its own. Emails sent to any address under this domain are redirected to real mailboxes via alias rules. Each virtual alias domain can have one or more owners — accounts authorised to create and manage aliases under it.',
 }
 
 export function AdminModal({ onClose, addToast }) {
@@ -979,6 +978,11 @@ export function AdminModal({ onClose, addToast }) {
             {activeTab === 'virtualdomains' && <VirtualDomainsTab addToast={addToast} />}
           </div>
         </div>
+        {ADMIN_HELP[activeTab] && (
+          <div className="admin-modal-help">
+            <HelpTooltip text={ADMIN_HELP[activeTab]} />
+          </div>
+        )}
       </div>
     </div>
   )

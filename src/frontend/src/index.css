@@ -1031,6 +1031,7 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .modal.modal-admin > .modal-header {
@@ -1397,12 +1398,12 @@ body {
   appearance: auto;
 }
 
-/* ── Tab help tooltip ────────────────────────────────────── */
+/* ── Admin modal help tooltip ────────────────────────────── */
 
-.tab-help-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+.admin-modal-help {
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
 }
 
 .help-tooltip-wrap {
@@ -1437,7 +1438,7 @@ body {
   bottom: calc(100% + 8px);
   right: 0;
   width: 280px;
-  background: var(--card-bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px;
