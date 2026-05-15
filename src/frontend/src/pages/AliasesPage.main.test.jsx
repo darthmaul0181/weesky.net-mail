@@ -410,6 +410,7 @@ describe('AliasesPage', () => {
     renderPage()
     await screen.findByText('alias1')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
     await waitFor(() => expect(api.deleteAlias).toHaveBeenCalledWith('alias1', 'weesky.be'))
     await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
   })
@@ -491,6 +492,7 @@ describe('AliasesPage', () => {
     renderPage()
     await screen.findByText('alias1')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
     expect(await screen.findByText('alias1@weesky.be deleted')).toBeInTheDocument()
   })
 
@@ -524,6 +526,7 @@ describe('AliasesPage', () => {
     renderPage()
     await screen.findByText('alias1')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
     await waitFor(() => expect(api.getAliases).toHaveBeenCalledTimes(2))
   })
 
@@ -622,6 +625,7 @@ describe('AliasesPage', () => {
     renderPage()
     await screen.findByText('alpha')
     await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
     await waitFor(() => expect(api.deleteAlias).toHaveBeenCalledWith('alpha', 'weesky.be'))
   })
 
