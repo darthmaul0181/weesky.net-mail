@@ -1008,6 +1008,7 @@ export default function AliasesPage({ onLogout }) {
   const [adding, setAdding] = useState(false)
 
   const [deletingKey, setDeletingKey] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(null)
   const [highlightedKey, setHighlightedKey] = useState(null)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
@@ -1274,11 +1275,10 @@ export default function AliasesPage({ onLogout }) {
                         <span className="alias-tile-domain">@{a.domain}</span>
                         <button
                           className="alias-tile-delete"
-                          onClick={() => handleDelete(a.name, a.domain)}
-                          disabled={deletingKey === key}
+                          onClick={() => setPendingDelete({ name: a.name, domain: a.domain })}
                           title="Delete"
                         >
-                          {deletingKey === key ? <span className="spinner" /> : <TrashIcon />}
+                          <TrashIcon />
                         </button>
                       </div>
                     )
@@ -1314,11 +1314,10 @@ export default function AliasesPage({ onLogout }) {
                 <span className="alias-tile-domain">@{a.domain}</span>
                 <button
                   className="alias-tile-delete"
-                  onClick={() => handleDelete(a.name, a.domain)}
-                  disabled={deletingKey === key}
+                  onClick={() => setPendingDelete({ name: a.name, domain: a.domain })}
                   title="Delete"
                 >
-                  {deletingKey === key ? <span className="spinner" /> : <TrashIcon />}
+                  <TrashIcon />
                 </button>
               </div>
             )
@@ -1326,6 +1325,17 @@ export default function AliasesPage({ onLogout }) {
         </div>
       )}
 
+      {pendingDelete && (
+        <DeleteConfirmModal
+          entityLabel={`${pendingDelete.name}@${pendingDelete.domain}`}
+          onConfirm={async () => {
+            await handleDelete(pendingDelete.name, pendingDelete.domain)
+            setPendingDelete(null)
+          }}
+          onClose={() => setPendingDelete(null)}
+          loading={deletingKey === `${pendingDelete.name}@${pendingDelete.domain}`}
+        />
+      )}
       {changePasswordOpen && (
         <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       )}
