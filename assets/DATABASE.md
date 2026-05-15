@@ -2,6 +2,70 @@
 
 MariaDB database used by Dovecot for mail authentication and by the `snoopy.microservice` API for account/domain management.
 
+## Ecosystem role
+
+The `dovecot` database is the **single source of truth** for the entire weesky.net mail stack. Every component — from mail routing to authentication to administration — derives its decisions from this database. No component maintains its own copy of this data.
+
+```
+                        ┌──────────────────────────────────────┐
+                        │           dovecot (MariaDB)          │
+                        │   domains · users · aliases          │
+                        │   domains_ownerships                 │
+                        └────────────┬─────────────────────────┘
+                                     │
+               ┌─────────────────────┼──────────────────────┐
+               │                     │                      │
+               ▼                     ▼                      ▼
+         ┌──────────┐          ┌──────────┐         ┌─────────────────┐
+         │ Postfix  │          │ Dovecot  │         │    snoopy       │
+         │ (MTA)    │          │ (IMAP /  │         │ microservice    │
+         │          │          │  LDA)    │         │ (ASP.NET REST)  │
+         └──────────┘          └──────────┘         └─────────────────┘
+```
+
+### Postfix
+
+Postfix queries the database via MySQL maps at every stage of message processing. See [`POSTFIX.md`](POSTFIX.md) for the exact SQL.
+
+| What Postfix asks | Table(s) queried | Purpose |
+|---|---|---|
+| Is this domain mine? | `domains` | Accept or reject the RCPT TO domain (`virtual_mailbox_domains`) |
+| Does this mailbox exist? | `users`, `domains` | Confirm delivery routing is possible (`virtual_mailbox_maps`) |
+| Where does this alias point? | `aliases`, `users`, `domains` | Rewrite the recipient before delivery (`virtual_alias_maps`) |
+| Who is allowed to send as this address? | `users`, `aliases`, `domains` | Authorize SMTP submission (`smtpd_sender_login_maps`) |
+
+> [!NOTE]
+> Postfix never touches the filesystem to resolve a mailbox path — it delegates actual delivery to Dovecot via LMTP. The database is therefore the > only thing standing between an incoming message and its destination.
+
+
+### Dovecot
+
+Dovecot queries the database for every authentication attempt and every mailbox operation. See [`DOVECOT.md`](DOVECOT.md) for the exact SQL.
+
+| What Dovecot asks | Table(s) queried | Purpose |
+|---|---|---|
+| What is the stored password? | `users`, `domains` | IMAP login authentication (`passdb`) |
+| What are this user's mailbox details and quota? | `users`, `domains`, `aliases` | Resolve identity and enforce storage limits (`userdb`) |
+| List all active mailboxes | `users`, `domains` | Batch operations via `doveadm` (e.g. quota recalculation) |
+
+Dovecot's `passdb` is also called by Postfix during SMTP SUBMISSION: when a client sends a mail through port 587, Postfix delegates credential validation to Dovecot (SASL), which in turn reads the hashed password from the `users` table. The same password hash therefore gates both IMAP access and authenticated outbound sending.
+
+The `userdb` alias branch is queried by the Postfix quota-status plugin **before** alias resolution — at that point Postfix only knows the alias address, so the `UNION ALL` branch resolves it to the real mailbox and its quota on the fly.
+
+### snoopy microservice
+
+The `snoopy.microservice` (ASP.NET Core REST API) is the **only component that writes** to the database. Postfix and Dovecot are read-only consumers; `snoopy` is the sole administration path.
+
+Through its React web frontend, `snoopy` exposes:
+
+- Domain management (create / delete primary and virtual domains, assign ownerships)
+- Account management (create / update / delete mailboxes, change password, set quota, toggle active state)
+- Alias management (create / delete aliases across owned domains)
+
+Because the database is shared with live Postfix and Dovecot processes, every write performed by `snoopy` takes effect immediately — there is no configuration reload step.
+
+---
+
 ## Tables
 
 ### `domains`
