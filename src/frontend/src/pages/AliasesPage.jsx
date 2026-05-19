@@ -488,20 +488,6 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
           <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        {isEdit && user.lastLogins?.length > 0 && (
-          <div className="last-login-info">
-            <span className="last-login-label">Last connections</span>
-            <div className="last-login-row">
-              {user.lastLogins.map((l, i) => (
-                <span key={l.service} className="last-login-entry">
-                  {i > 0 && <span className="last-login-sep">·</span>}
-                  <span className="last-login-service">{l.service.toUpperCase()}</span>
-                  <span className="last-login-time">{formatRelative(l.at)}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="field-h">
@@ -548,6 +534,20 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
               <span className="toggle-track" />
             </label>
           </div>
+          {isEdit && user.lastLogins?.length > 0 && (
+            <div className="last-login-info">
+              <span className="last-login-label">Last connections</span>
+              <div className="last-login-row">
+                {user.lastLogins.map((l, i) => (
+                  <span key={l.service} className="last-login-entry">
+                    {i > 0 && <span className="last-login-sep">·</span>}
+                    <span className="last-login-service">{l.service.toUpperCase()}</span>
+                    <span className="last-login-time">{formatRelative(l.at)}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <button className="btn btn-primary" type="submit"
             disabled={loading || !userName.trim() || (!isEdit && !password.trim())}
             style={{ marginTop: '8px' }}>
