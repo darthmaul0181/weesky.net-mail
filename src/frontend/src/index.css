@@ -1383,6 +1383,65 @@ body {
   background: #3450a3;
 }
 
+/* ── Last connections (AddEditUserModal) ─────────────────── */
+
+.last-login-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.last-login-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.last-login-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.last-login-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.last-login-sep {
+  color: var(--border);
+}
+
+.last-login-service {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.last-login-time {
+  color: var(--text);
+  position: relative;
+  top: -2px;
+}
+
+.last-login-never {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* ── Theme selector ──────────────────────────────────────── */
 
 .theme-select {

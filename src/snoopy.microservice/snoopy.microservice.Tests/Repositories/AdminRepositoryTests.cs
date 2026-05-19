@@ -128,6 +128,50 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.False(users.First(u => u.UserName == "regular").Admin);
         }
 
+        [Fact]
+        public void GetAllUsers_MapsLastLoginsWhenPresent()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            AddUser(ctx, "alice", "WSY");
+            var ts = new DateTimeOffset(2025, 1, 15, 10, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = ts });
+            ctx.SaveChanges();
+
+            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            var alice = users.Single(u => u.UserName == "alice");
+            Assert.Single(alice.LastLogins);
+            Assert.Equal("imap", alice.LastLogins[0].Service);
+            Assert.Equal(new DateTime(2025, 1, 15, 10, 0, 0, DateTimeKind.Utc), alice.LastLogins[0].At);
+        }
+
+        [Fact]
+        public void GetAllUsers_ReturnsEmptyLastLoginsWhenNone()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx);
+            AddUser(ctx, "alice", "WSY");
+            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            Assert.Empty(users.Single().LastLogins);
+        }
+
+        [Fact]
+        public void GetAllUsers_OrdersLastLoginsMostRecentFirst()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            AddUser(ctx, "alice", "WSY");
+            var older = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+            var newer = new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "lmtp", LastAccess = older });
+            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = newer });
+            ctx.SaveChanges();
+
+            var logins = new AdminRepository(ctx).GetAllUsers().Single().LastLogins;
+            Assert.Equal("imap", logins[0].Service);
+            Assert.Equal("lmtp", logins[1].Service);
+        }
+
         // ── CreateUser ────────────────────────────────────────
 
         [Fact]

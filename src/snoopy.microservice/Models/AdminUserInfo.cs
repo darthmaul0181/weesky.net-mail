@@ -10,5 +10,6 @@ namespace weesky.Snoopy.Microservice.Models
         public int QuotaMb { get; set; }
         public bool Active { get; set; }
         public bool Admin { get; set; }
+        public List<LastLoginEntry> LastLogins { get; set; } = new();
     }
 }

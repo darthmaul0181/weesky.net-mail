@@ -425,6 +425,17 @@ export function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading })
   )
 }
 
+function formatRelative(isoString) {
+  const diff = Date.now() - new Date(isoString).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
 export function AddEditUserModal({ user, domains, onSave, onClose }) {
   const [userName, setUserName] = useState(user?.userName ?? '')
   const [domainId, setDomainId] = useState(user?.domainId ?? domains[0]?.id ?? '')
@@ -477,6 +488,20 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
           <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
+        {isEdit && user.lastLogins?.length > 0 && (
+          <div className="last-login-info">
+            <span className="last-login-label">Last connections</span>
+            <div className="last-login-row">
+              {user.lastLogins.map((l, i) => (
+                <span key={l.service} className="last-login-entry">
+                  {i > 0 && <span className="last-login-sep">·</span>}
+                  <span className="last-login-service">{l.service.toUpperCase()}</span>
+                  <span className="last-login-time">{formatRelative(l.at)}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="field-h">
