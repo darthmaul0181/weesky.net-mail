@@ -38,11 +38,15 @@ namespace weesky.Snoopy.Microservice.Data
 
 			modelBuilder.Entity<MailDomainOwnership>()
 				.HasKey(o => new { o.DomainId, o.UserId });
+
+			modelBuilder.Entity<LastLogin>()
+				.HasKey(l => new { l.UserId, l.Service });
 		}
 
 		public DbSet<MailUser> Users {get; set;}
 		public DbSet<MailDomain> Domains { get; set; }
 		public DbSet<MailAlias> Aliases { get; set; }
 		public DbSet<MailDomainOwnership> DomainsOwnerships { get; set; }
+		public DbSet<LastLogin> LastLogins { get; set; }
 	}
 }

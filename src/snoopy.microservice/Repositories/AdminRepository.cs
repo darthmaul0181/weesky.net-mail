@@ -27,19 +27,43 @@ namespace weesky.Snoopy.Microservice.Repositories
 
         public IEnumerable<AdminUserInfo> GetAllUsers()
         {
+            var loginsByUser = _context.LastLogins
+                .ToList()
+                .GroupBy(l => l.UserId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             return (from user in _context.Users
                     join domain in _context.Domains on user.DomainId equals domain.Id
-                    select new AdminUserInfo
+                    select new { user, domain })
+                .ToList()
+                .Select(x =>
+                {
+                    var email = $"{x.user.Name}@{x.domain.Name}";
+                    var logins = loginsByUser.TryGetValue(email, out var entries)
+                        ? entries
+                            .Select(e => new LastLoginEntry
+                            {
+                                Service = e.Service,
+                                At = DateTimeOffset.FromUnixTimeSeconds(e.LastAccess).UtcDateTime,
+                                Ip = e.LastIp
+                            })
+                            .OrderByDescending(e => e.At)
+                            .ToList()
+                        : new List<LastLoginEntry>();
+
+                    return new AdminUserInfo
                     {
-                        Id = user.Id,
-                        UserName = user.Name,
-                        DomainId = user.DomainId,
-                        DomainName = domain.Name,
-                        FullName = user.FullName,
-                        QuotaMb = user.QuotaMb,
-                        Active = user.Active == ActiveState.Y,
-                        Admin = user.Admin == ActiveState.Y
-                    }).ToList();
+                        Id = x.user.Id,
+                        UserName = x.user.Name,
+                        DomainId = x.user.DomainId,
+                        DomainName = x.domain.Name,
+                        FullName = x.user.FullName,
+                        QuotaMb = x.user.QuotaMb,
+                        Active = x.user.Active == ActiveState.Y,
+                        Admin = x.user.Admin == ActiveState.Y,
+                        LastLogins = logins
+                    };
+                }).ToList();
         }
 
         public Result<AdminUserInfo> CreateUser(AdminUserRequest request)
