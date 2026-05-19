@@ -14,7 +14,5 @@ namespace weesky.Snoopy.Microservice.Data
         [Column("last_access")]
         public long LastAccess { get; set; }    // Unix timestamp (seconds)
 
-        [Column("last_ip")]
-        public string LastIp { get; set; } = string.Empty;
     }
 }

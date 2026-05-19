@@ -45,7 +45,6 @@ namespace weesky.Snoopy.Microservice.Repositories
                             {
                                 Service = e.Service,
                                 At = DateTimeOffset.FromUnixTimeSeconds(e.LastAccess).UtcDateTime,
-                                Ip = e.LastIp
                             })
                             .OrderByDescending(e => e.At)
                             .ToList()

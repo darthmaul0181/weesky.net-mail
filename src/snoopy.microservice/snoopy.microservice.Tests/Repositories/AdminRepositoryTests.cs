@@ -135,14 +135,13 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             AddDomain(ctx, "WSY", "weesky.be");
             AddUser(ctx, "alice", "WSY");
             var ts = new DateTimeOffset(2025, 1, 15, 10, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = ts, LastIp = "1.2.3.4" });
+            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = ts });
             ctx.SaveChanges();
 
             var users = new AdminRepository(ctx).GetAllUsers().ToList();
             var alice = users.Single(u => u.UserName == "alice");
             Assert.Single(alice.LastLogins);
             Assert.Equal("imap", alice.LastLogins[0].Service);
-            Assert.Equal("1.2.3.4", alice.LastLogins[0].Ip);
             Assert.Equal(new DateTime(2025, 1, 15, 10, 0, 0, DateTimeKind.Utc), alice.LastLogins[0].At);
         }
 
@@ -164,8 +163,8 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             AddUser(ctx, "alice", "WSY");
             var older = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
             var newer = new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "lmtp", LastAccess = older, LastIp = "10.0.0.1" });
-            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = newer, LastIp = "1.2.3.4" });
+            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "lmtp", LastAccess = older });
+            ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = newer });
             ctx.SaveChanges();
 
             var logins = new AdminRepository(ctx).GetAllUsers().Single().LastLogins;

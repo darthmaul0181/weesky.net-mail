@@ -488,18 +488,18 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
           <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        {isEdit && (
+        {isEdit && user.lastLogins?.length > 0 && (
           <div className="last-login-info">
             <span className="last-login-label">Last connections</span>
-            {user.lastLogins?.length > 0 ? user.lastLogins.map(l => (
-              <div key={l.service} className="last-login-row">
-                <span className="last-login-service">{l.service.toUpperCase()}</span>
-                <span className="last-login-time">{formatRelative(l.at)}</span>
-                {l.ip && <span className="last-login-ip">{l.ip}</span>}
-              </div>
-            )) : (
-              <span className="last-login-never">Never</span>
-            )}
+            <div className="last-login-row">
+              {user.lastLogins.map((l, i) => (
+                <span key={l.service} className="last-login-entry">
+                  {i > 0 && <span className="last-login-sep">·</span>}
+                  <span className="last-login-service">{l.service.toUpperCase()}</span>
+                  <span className="last-login-time">{formatRelative(l.at)}</span>
+                </span>
+              ))}
+            </div>
           </div>
         )}
         <form onSubmit={handleSubmit}>

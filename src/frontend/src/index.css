@@ -1408,8 +1408,19 @@ body {
 .last-login-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.last-login-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.last-login-sep {
+  color: var(--border);
 }
 
 .last-login-service {
@@ -1417,19 +1428,10 @@ body {
   font-size: 11px;
   font-weight: 700;
   color: var(--primary);
-  width: 36px;
-  flex-shrink: 0;
 }
 
 .last-login-time {
   color: var(--text);
-}
-
-.last-login-ip {
-  color: var(--text-muted);
-  margin-left: auto;
-  font-family: monospace;
-  font-size: 12px;
 }
 
 .last-login-never {
