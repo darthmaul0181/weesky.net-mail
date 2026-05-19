@@ -1432,6 +1432,8 @@ body {
 
 .last-login-time {
   color: var(--text);
+  position: relative;
+  top: -2px;
 }
 
 .last-login-never {
