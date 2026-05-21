@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api, clearToken, setIsAdmin } from '../api.js'
+import { api, clearSession, setIsAdmin } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
 
@@ -1185,8 +1185,13 @@ export default function AliasesPage({ onLogout }) {
     setGreeting(newName || primaryEmail)
   }
 
-  function handleLogout() {
-    clearToken()
+  async function handleLogout() {
+    try {
+      await api.logout()
+    } catch {
+      // ignore — cookie may already be expired
+    }
+    clearSession()
     onLogout()
   }
 

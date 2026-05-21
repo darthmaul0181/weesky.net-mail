@@ -1,12 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api, setToken } from '../api.js'
+import { api, markLoggedIn } from '../api.js'
 import LoginPage from './LoginPage.jsx'
 
 vi.mock('../api.js', () => ({
   api: { login: vi.fn() },
-  setToken: vi.fn(),
+  markLoggedIn: vi.fn(),
 }))
 
 beforeEach(() => vi.clearAllMocks())
@@ -28,27 +28,18 @@ describe('LoginPage', () => {
   })
 
   it('calls onLogin after successful login', async () => {
-    api.login.mockResolvedValue({ token: 'tok', expiresIn: 60 })
+    api.login.mockResolvedValue({})
     const onLogin = vi.fn()
     render(<LoginPage onLogin={onLogin} />)
     await fillAndSubmit()
     await waitFor(() => expect(onLogin).toHaveBeenCalledOnce())
   })
 
-  it('calls setToken with the received token', async () => {
-    api.login.mockResolvedValue({ token: 'tok', expiresIn: 60 })
+  it('calls markLoggedIn after successful login', async () => {
+    api.login.mockResolvedValue({})
     render(<LoginPage onLogin={vi.fn()} />)
     await fillAndSubmit()
-    await waitFor(() => expect(setToken).toHaveBeenCalledWith('tok', 60, false))
-  })
-
-  it('passes persist=true when remember me is checked', async () => {
-    api.login.mockResolvedValue({ token: 'tok', expiresIn: 60 })
-    render(<LoginPage onLogin={vi.fn()} />)
-    const user = userEvent.setup()
-    await user.click(screen.getByLabelText(/remember me/i))
-    await fillAndSubmit()
-    await waitFor(() => expect(setToken).toHaveBeenCalledWith('tok', 60, true))
+    await waitFor(() => expect(markLoggedIn).toHaveBeenCalledOnce())
   })
 
   it('shows an error message on failed login', async () => {

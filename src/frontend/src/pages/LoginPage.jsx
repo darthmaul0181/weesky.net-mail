@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { api, setToken } from '../api.js'
+import { api, markLoggedIn } from '../api.js'
 
 export default function LoginPage({ onLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(false)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -13,8 +12,8 @@ export default function LoginPage({ onLogin }) {
     setError(null)
     setLoading(true)
     try {
-      const data = await api.login(email, password)
-      setToken(data.token, data.expiresIn, remember)
+      await api.login(email, password)
+      markLoggedIn()
       onLogin()
     } catch {
       setError('Invalid credentials.')
@@ -51,17 +50,6 @@ export default function LoginPage({ onLogin }) {
               onChange={e => setPassword(e.target.value)}
               required
             />
-          </div>
-
-          <div className="remember-row">
-            <label className="remember-label">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={e => setRemember(e.target.checked)}
-              />
-              Remember me
-            </label>
           </div>
 
           <button className="btn btn-primary" type="submit" disabled={loading}>

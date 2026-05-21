@@ -1,44 +1,23 @@
 const BASE = import.meta.env.VITE_API_BASE || 'https://api.mail.weesky.net'
-const TOKEN_KEY = 'authToken'
-const EXPIRY_KEY = 'authExpiry'
+const SESSION_KEY = 'sessionActive'
 
-let authToken = null
 let unauthorizedHandler = null
 let isAdmin = false
 
-// Restore persisted token only if not expired
-const savedToken = localStorage.getItem(TOKEN_KEY)
-const savedExpiry = localStorage.getItem(EXPIRY_KEY)
-if (savedToken && savedExpiry && Date.now() < Number(savedExpiry)) {
-  authToken = savedToken
-} else {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(EXPIRY_KEY)
+export function markLoggedIn() {
+  localStorage.setItem(SESSION_KEY, '1')
 }
 
-export function setToken(token, expiresIn, persist = false) {
-  authToken = token
-  if (persist) {
-    localStorage.setItem(TOKEN_KEY, token)
-    localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 60 * 1000))
-  } else {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(EXPIRY_KEY)
-  }
-}
-
-export function clearToken() {
-  authToken = null
+export function clearSession() {
   isAdmin = false
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(EXPIRY_KEY)
+  localStorage.removeItem(SESSION_KEY)
 }
 
 export function setIsAdmin(value) { isAdmin = value }
 export function getIsAdmin() { return isAdmin }
 
-export function hasToken() {
-  return !!authToken
+export function hasSession() {
+  return localStorage.getItem(SESSION_KEY) === '1'
 }
 
 export function setUnauthorizedHandler(fn) {
@@ -48,16 +27,16 @@ export function setUnauthorizedHandler(fn) {
 async function request(method, path, body) {
   const headers = {}
   if (body) headers['Content-Type'] = 'application/json'
-  if (authToken) headers['Authorization'] = `Bearer ${authToken}`
 
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
+    credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   })
 
   if (res.status === 401) {
-    clearToken()
+    clearSession()
     unauthorizedHandler?.()
     throw new Error('Unauthorized')
   }
@@ -72,7 +51,10 @@ async function request(method, path, body) {
 
 export const api = {
   login: (email, password) =>
-    request('POST', '/api/BearerAuthenticator', { email, password }),
+    request('POST', '/api/Login', { email, password }),
+
+  logout: () =>
+    request('DELETE', '/api/Login'),
 
   getAccount: () =>
     request('GET', '/api/Account'),
