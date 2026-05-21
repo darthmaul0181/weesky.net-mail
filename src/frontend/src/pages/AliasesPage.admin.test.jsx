@@ -30,7 +30,7 @@ vi.mock('../api.js', () => ({
     adminAddVirtualDomainOwner: vi.fn(),
     adminRemoveVirtualDomainOwner: vi.fn(),
   },
-  clearToken: vi.fn(),
+  clearSession: vi.fn(),
   setIsAdmin: vi.fn(),
 }))
 

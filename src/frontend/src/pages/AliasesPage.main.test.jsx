@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api, clearToken } from '../api.js'
+import { api, clearSession } from '../api.js'
 import AliasesPage, {
   ChangePasswordModal,
   QuotaBlock,
@@ -18,11 +18,12 @@ vi.mock('../api.js', () => ({
     deleteAlias: vi.fn(),
     changePassword: vi.fn(),
     changeFullName: vi.fn(),
+    logout: vi.fn(),
     adminGetUsers: vi.fn(),
     adminGetDomains: vi.fn(),
     adminGetUserQuota: vi.fn(),
   },
-  clearToken: vi.fn(),
+  clearSession: vi.fn(),
   setIsAdmin: vi.fn(),
 }))
 
@@ -445,13 +446,13 @@ describe('AliasesPage', () => {
     expect(screen.getByRole('button', { name: 'Update password' })).toBeInTheDocument()
   })
 
-  it('calls clearToken and onLogout when Sign out is clicked', async () => {
+  it('calls clearSession and onLogout when Sign out is clicked', async () => {
     const onLogout = vi.fn()
     renderPage({ onLogout })
     await screen.findByText('alias1')
     await userEvent.click(screen.getByTitle('john@weesky.be'))
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
-    expect(clearToken).toHaveBeenCalledOnce()
+    await waitFor(() => expect(clearSession).toHaveBeenCalledOnce())
     expect(onLogout).toHaveBeenCalledOnce()
   })
 

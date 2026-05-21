@@ -9,76 +9,32 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('hasToken', () => {
-  it('is false with no token', async () => {
-    const { hasToken } = await import('./api.js')
-    expect(hasToken()).toBe(false)
+describe('hasSession', () => {
+  it('is false with no session', async () => {
+    const { hasSession } = await import('./api.js')
+    expect(hasSession()).toBe(false)
   })
 
-  it('is true after setToken', async () => {
-    const { setToken, hasToken } = await import('./api.js')
-    setToken('tok', 60)
-    expect(hasToken()).toBe(true)
+  it('is true after markLoggedIn', async () => {
+    const { markLoggedIn, hasSession } = await import('./api.js')
+    markLoggedIn()
+    expect(hasSession()).toBe(true)
   })
 
-  it('is false after clearToken', async () => {
-    const { setToken, clearToken, hasToken } = await import('./api.js')
-    setToken('tok', 60)
-    clearToken()
-    expect(hasToken()).toBe(false)
-  })
-})
-
-describe('setToken', () => {
-  it('with persist writes token and expiry to localStorage', async () => {
-    const { setToken } = await import('./api.js')
-    const before = Date.now()
-    setToken('tok', 60, true)
-    expect(localStorage.getItem('authToken')).toBe('tok')
-    expect(Number(localStorage.getItem('authExpiry'))).toBeGreaterThan(before)
-  })
-
-  it('without persist clears localStorage', async () => {
-    localStorage.setItem('authToken', 'old')
-    localStorage.setItem('authExpiry', '9999')
-    const { setToken } = await import('./api.js')
-    setToken('tok', 60, false)
-    expect(localStorage.getItem('authToken')).toBeNull()
-    expect(localStorage.getItem('authExpiry')).toBeNull()
+  it('is false after clearSession', async () => {
+    const { markLoggedIn, clearSession, hasSession } = await import('./api.js')
+    markLoggedIn()
+    clearSession()
+    expect(hasSession()).toBe(false)
   })
 })
 
-describe('clearToken', () => {
-  it('removes token and expiry from localStorage', async () => {
-    const { setToken, clearToken } = await import('./api.js')
-    setToken('tok', 60, true)
-    clearToken()
-    expect(localStorage.getItem('authToken')).toBeNull()
-    expect(localStorage.getItem('authExpiry')).toBeNull()
-  })
-})
-
-describe('token restoration on module load', () => {
-  it('restores a valid persisted token', async () => {
-    localStorage.setItem('authToken', 'saved')
-    localStorage.setItem('authExpiry', String(Date.now() + 60_000))
-    const { hasToken } = await import('./api.js')
-    expect(hasToken()).toBe(true)
-  })
-
-  it('discards an expired token', async () => {
-    localStorage.setItem('authToken', 'saved')
-    localStorage.setItem('authExpiry', String(Date.now() - 1_000))
-    const { hasToken } = await import('./api.js')
-    expect(hasToken()).toBe(false)
-  })
-
-  it('clears localStorage when token is expired', async () => {
-    localStorage.setItem('authToken', 'saved')
-    localStorage.setItem('authExpiry', String(Date.now() - 1_000))
-    await import('./api.js')
-    expect(localStorage.getItem('authToken')).toBeNull()
-    expect(localStorage.getItem('authExpiry')).toBeNull()
+describe('clearSession', () => {
+  it('removes the session flag from localStorage', async () => {
+    const { markLoggedIn, clearSession } = await import('./api.js')
+    markLoggedIn()
+    clearSession()
+    expect(localStorage.getItem('sessionActive')).toBeNull()
   })
 })
 
@@ -122,17 +78,37 @@ describe('request — response handling', () => {
     const { api } = await import('./api.js')
     await expect(api.getAliases()).rejects.toThrow('Bad Request')
   })
+
+  it('sends credentials: include on every request', async () => {
+    mockFetch(200)
+    const { api } = await import('./api.js')
+    await api.getAliases()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
 })
 
 describe('api methods', () => {
   beforeEach(() => mockFetch(200))
 
-  it('login calls POST /api/BearerAuthenticator', async () => {
+  it('login calls POST /api/Login', async () => {
     const { api } = await import('./api.js')
     await api.login('user@example.com', 'pass')
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/BearerAuthenticator'),
+      expect.stringContaining('/api/Login'),
       expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('logout calls DELETE /api/Login', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+    await api.logout()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Login'),
+      expect.objectContaining({ method: 'DELETE' })
     )
   })
 
@@ -210,11 +186,11 @@ describe('isAdmin state', () => {
     expect(getIsAdmin()).toBe(false)
   })
 
-  it('clearToken resets isAdmin to false', async () => {
-    const { setToken, setIsAdmin, clearToken, getIsAdmin } = await import('./api.js')
-    setToken('tok', 60)
+  it('clearSession resets isAdmin to false', async () => {
+    const { markLoggedIn, setIsAdmin, clearSession, getIsAdmin } = await import('./api.js')
+    markLoggedIn()
     setIsAdmin(true)
-    clearToken()
+    clearSession()
     expect(getIsAdmin()).toBe(false)
   })
 })
@@ -305,16 +281,14 @@ describe('admin api methods', () => {
 })
 
 describe('401 handling', () => {
-  it('clears token and calls the unauthorized handler', async () => {
+  it('clears session and calls the unauthorized handler', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 401 }))
-    const { setToken, setUnauthorizedHandler, hasToken, api } = await import('./api.js')
-
-    setToken('tok', 60)
+    const { markLoggedIn, setUnauthorizedHandler, hasSession, api } = await import('./api.js')
+    markLoggedIn()
     const handler = vi.fn()
     setUnauthorizedHandler(handler)
-
     await expect(api.getAliases()).rejects.toThrow('Unauthorized')
     expect(handler).toHaveBeenCalledOnce()
-    expect(hasToken()).toBe(false)
+    expect(hasSession()).toBe(false)
   })
 })
