@@ -370,7 +370,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
                 onRemove={() => removeCondition(i)} />
             ))}
             {rule.conditions.length === 0 && (
-              <p className="rule-editor-empty">Aucune condition — la règle s'applique à tous les messages.</p>
+              <p className="rule-editor-empty">Aucune condition — la règle s&apos;applique à tous les messages.</p>
             )}
           </div>
 
@@ -619,7 +619,7 @@ export default function RulesPage({ onBack }) {
               ruleSet?.kind === 'Advanced' ? (
                 <div className="rules-notice">
                   <p>Le script actuel ne peut pas être interprété comme des règles structurées.</p>
-                  <p>Utilisez l'onglet <strong>Script brut</strong> pour l'éditer manuellement, ou supprimez-le pour repartir de zéro.</p>
+                  <p>Utilisez l&apos;onglet <strong>Script brut</strong> pour l&apos;éditer manuellement, ou supprimez-le pour repartir de zéro.</p>
                   <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
                     <button className="btn btn-ghost" onClick={handleSwitchToRaw}>Voir le script brut</button>
                     <button className="btn"
@@ -681,7 +681,7 @@ export default function RulesPage({ onBack }) {
               <div className="raw-editor-wrap">
                 {ruleSet?.kind === 'Structured' && (
                   <div className="alert alert-warn">
-                    Attention : modifier le script manuellement peut rendre les règles structurées inaccessibles depuis l'éditeur.
+                    Attention : modifier le script manuellement peut rendre les règles structurées inaccessibles depuis l&apos;éditeur.
                   </div>
                 )}
                 <textarea
