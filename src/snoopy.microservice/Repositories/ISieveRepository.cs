@@ -13,11 +13,18 @@ namespace weesky.Snoopy.Microservice.Repositories
 
         Task<Result<string>> GetRawScriptAsync(User user, CancellationToken cancellationToken = default);
 
-        /// <summary>Compile the supplied rules and replace the user's managed script (and activate it).</summary>
-        Task<Result> SaveRulesAsync(User user, IReadOnlyList<SieveRule> rules, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Compile the supplied rules with the chosen provider (defaults to the registry's
+        /// default when <paramref name="providerId"/> is null) and write the result back to
+        /// <paramref name="scriptName"/> (or the provider's default name when null), then
+        /// activate that script.
+        /// </summary>
+        Task<Result> SaveRulesAsync(User user, IReadOnlyList<SieveRule> rules, string? providerId, string? scriptName, CancellationToken cancellationToken = default);
 
-        /// <summary>Replace the user's managed script with raw Sieve text (and activate it). Used by the advanced editor.</summary>
-        Task<Result> SaveRawScriptAsync(User user, string content, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Replace the user's script with raw Sieve text. Used by the advanced editor.
+        /// </summary>
+        Task<Result> SaveRawScriptAsync(User user, string content, string? scriptName, CancellationToken cancellationToken = default);
 
         /// <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
         Task<Result> DeleteAllRulesAsync(User user, CancellationToken cancellationToken = default);

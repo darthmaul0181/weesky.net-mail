@@ -4,9 +4,14 @@ using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using weesky.Snoopy.Microservice.Models;
 
-namespace weesky.Snoopy.Microservice.Services
+namespace weesky.Snoopy.Microservice.RuleProviders
 {
-    public class SieveScriptCompiler : ISieveScriptCompiler
+    /// <summary>
+    /// Native rule format for this microservice. The script begins with a marker comment
+    /// <c># WEESKY-RULES-V1:&lt;base64 JSON&gt;</c> that round-trips the structured model,
+    /// followed by a minimal <c>require[]</c> and a Sieve <c>if</c> block per enabled rule.
+    /// </summary>
+    public class WeeskyRuleProvider : IRuleProvider
     {
         public const string MarkerPrefix = "# WEESKY-RULES-V1:";
 
@@ -17,6 +22,40 @@ namespace weesky.Snoopy.Microservice.Services
             WriteIndented = false,
             Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
         };
+
+        public string Id => "weesky";
+        public string DisplayName => "weesky.net";
+        public string DefaultScriptName => "weesky-rules";
+
+        public bool CanHandle(string scriptContent)
+        {
+            if (string.IsNullOrEmpty(scriptContent)) return false;
+            var firstLine = ExtractFirstLine(scriptContent);
+            return firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal);
+        }
+
+        public Result<IReadOnlyList<SieveRule>> Parse(string scriptContent)
+        {
+            if (string.IsNullOrEmpty(scriptContent))
+                return Result.Success<IReadOnlyList<SieveRule>>(Array.Empty<SieveRule>());
+
+            var firstLine = ExtractFirstLine(scriptContent);
+            if (!firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal))
+                return Result.Failure<IReadOnlyList<SieveRule>>("Script does not contain the WEESKY-RULES marker");
+
+            var encoded = firstLine.Substring(MarkerPrefix.Length).Trim();
+            try
+            {
+                var bytes = Convert.FromBase64String(encoded);
+                var json = Encoding.UTF8.GetString(bytes);
+                var payload = JsonSerializer.Deserialize<Payload>(json, JsonOptions);
+                return Result.Success<IReadOnlyList<SieveRule>>(payload?.Rules ?? Array.Empty<SieveRule>());
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<SieveRule>>($"Unable to decode WEESKY-RULES marker: {ex.Message}");
+            }
+        }
 
         public Result<string> Compile(IReadOnlyList<SieveRule> rules)
         {
@@ -53,37 +92,6 @@ namespace weesky.Snoopy.Microservice.Services
             }
 
             return Result.Success(sb.ToString());
-        }
-
-        public SieveScriptParseResult Parse(string scriptContent)
-        {
-            if (string.IsNullOrEmpty(scriptContent))
-                return new SieveScriptParseResult { Kind = SieveScriptKind.Structured };
-
-            var newlineIndex = scriptContent.IndexOf('\n');
-            var firstLine = newlineIndex < 0 ? scriptContent : scriptContent.Substring(0, newlineIndex);
-            firstLine = firstLine.TrimEnd('\r');
-
-            if (!firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal))
-                return new SieveScriptParseResult { Kind = SieveScriptKind.Advanced };
-
-            var encoded = firstLine.Substring(MarkerPrefix.Length).Trim();
-            try
-            {
-                var bytes = Convert.FromBase64String(encoded);
-                var json = Encoding.UTF8.GetString(bytes);
-                var payload = JsonSerializer.Deserialize<Payload>(json, JsonOptions);
-                return new SieveScriptParseResult
-                {
-                    Kind = SieveScriptKind.Structured,
-                    Rules = payload?.Rules ?? Array.Empty<SieveRule>()
-                };
-            }
-            catch
-            {
-                // Marker was present but corrupted — fall back to raw editing rather than throwing.
-                return new SieveScriptParseResult { Kind = SieveScriptKind.Advanced };
-            }
         }
 
         // ---------- Validation ----------
@@ -217,6 +225,11 @@ namespace weesky.Snoopy.Microservice.Services
                 _ => throw new InvalidOperationException($"Operator {c.Operator} is not valid for a text field")
             };
 
+            if (c.Field == SieveConditionField.Recipient)
+            {
+                return $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+            }
+
             var headerName = c.Field switch
             {
                 SieveConditionField.From => "From",
@@ -256,6 +269,13 @@ namespace weesky.Snoopy.Microservice.Services
 
         private static string EscapeForComment(string s) =>
             s.Replace("\r", " ").Replace("\n", " ");
+
+        private static string ExtractFirstLine(string s)
+        {
+            var newlineIndex = s.IndexOf('\n');
+            var firstLine = newlineIndex < 0 ? s : s.Substring(0, newlineIndex);
+            return firstLine.TrimEnd('\r');
+        }
 
         private sealed record Payload(IReadOnlyList<SieveRule> Rules);
     }

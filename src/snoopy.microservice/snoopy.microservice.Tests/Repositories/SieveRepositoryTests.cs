@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using Moq;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.RuleProviders;
+using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -11,7 +13,8 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
 {
     public class SieveRepositoryTests
     {
-        private const string ScriptName = "weesky-rules";
+        private const string WeeskyScriptName = "weesky-rules";
+        private const string RainloopScriptName = "rainloop.user";
 
         private static User Alice => new("alice@weesky.be");
 
@@ -22,10 +25,19 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(Result.Success<IManageSieveSession>(session.Object));
 
-            var options = Options.Create(new SieveOptions { ScriptName = ScriptName });
-            var repo = new SieveRepository(client.Object, new SieveScriptCompiler(), options, Mock.Of<ILogger<SieveRepository>>());
+            var registry = new RuleProviderRegistry(new IRuleProvider[]
+            {
+                new WeeskyRuleProvider(),
+                new RainloopRuleProvider()
+            });
+            var options = Options.Create(new SieveOptions());
+            var repo = new SieveRepository(client.Object, registry, options, Mock.Of<ILogger<SieveRepository>>());
             return (repo, client, session);
         }
+
+        private static void SetupList(Mock<IManageSieveSession> session, params SieveScriptListEntry[] entries) =>
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(entries));
 
         // ----- GetRuleSetAsync -----
 
@@ -35,8 +47,8 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             var client = new Mock<IManageSieveClient>();
             client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(Result.Failure<IManageSieveSession>("Connection refused"));
-            var repo = new SieveRepository(client.Object, new SieveScriptCompiler(),
-                Options.Create(new SieveOptions { ScriptName = ScriptName }), Mock.Of<ILogger<SieveRepository>>());
+            var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider() });
+            var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
 
             var result = await repo.GetRuleSetAsync(Alice);
 
@@ -45,241 +57,134 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public async Task GetRuleSetAsync_WhenScriptDoesNotExist_ReturnsEmptyStructured()
+        public async Task GetRuleSetAsync_WhenNoScripts_ReturnsEmptyStructuredWithDefaultProvider()
         {
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry("something-else", false) }));
+            SetupList(session);
 
             var result = await repo.GetRuleSetAsync(Alice);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(SieveScriptKind.Structured, result.Value.Kind);
             Assert.Empty(result.Value.Rules);
-            Assert.Equal(string.Empty, result.Value.RawScript);
-            session.Verify(s => s.GetScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            Assert.Equal("weesky", result.Value.ProviderId);
+            Assert.Equal(WeeskyScriptName, result.Value.ScriptName);
         }
 
         [Fact]
-        public async Task GetRuleSetAsync_WhenManagedScriptMissingButAnotherActive_AdoptsActiveScript()
+        public async Task GetRuleSetAsync_WhenWeeskyScriptExists_LoadsItViaWeeskyProvider()
         {
-            const string rainloopScript = "require [\"fileinto\"];\nif header :contains \"Subject\" \"x\" { fileinto \"X\"; }";
-
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[]
-                   {
-                       new SieveScriptListEntry("rainloop.user.sieve", true),
-                       new SieveScriptListEntry("backup", false)
-                   }));
-            session.Setup(s => s.GetScriptAsync("rainloop.user.sieve", It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success(rainloopScript));
-
-            var result = await repo.GetRuleSetAsync(Alice);
-
-            Assert.True(result.IsSuccess);
-            Assert.Equal(SieveScriptKind.Advanced, result.Value.Kind);
-            Assert.Equal(rainloopScript, result.Value.RawScript);
-            Assert.Equal("rainloop.user.sieve", result.Value.AdoptedFromScriptName);
-            session.Verify(s => s.GetScriptAsync("rainloop.user.sieve", It.IsAny<CancellationToken>()), Times.Once);
-            session.Verify(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task GetRuleSetAsync_WhenOnlyInactiveScriptsExist_ReturnsEmpty()
-        {
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[]
-                   {
-                       new SieveScriptListEntry("old", false)
-                   }));
-
-            var result = await repo.GetRuleSetAsync(Alice);
-
-            Assert.True(result.IsSuccess);
-            Assert.Equal(SieveScriptKind.Structured, result.Value.Kind);
-            Assert.Empty(result.Value.Rules);
-            Assert.Null(result.Value.AdoptedFromScriptName);
-            session.Verify(s => s.GetScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task GetRuleSetAsync_WhenManagedScriptExists_PrefersItOverActiveOther()
-        {
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[]
-                   {
-                       new SieveScriptListEntry(ScriptName, false),
-                       new SieveScriptListEntry("rainloop", true)
-                   }));
-            session.Setup(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success("require [\"fileinto\"];"));
-
-            var result = await repo.GetRuleSetAsync(Alice);
-
-            Assert.True(result.IsSuccess);
-            Assert.Null(result.Value.AdoptedFromScriptName);
-            session.Verify(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()), Times.Once);
-            session.Verify(s => s.GetScriptAsync("rainloop", It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task GetRuleSetAsync_WhenScriptHasMarker_ReturnsStructuredRules()
-        {
-            var compiler = new SieveScriptCompiler();
+            var weesky = new WeeskyRuleProvider();
             var rules = new[]
             {
                 new SieveRule
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Move alerts",
+                    Name = "Alerts",
                     Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "[ALERT]" } },
                     Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "Alerts" } }
                 }
             };
-            var script = compiler.Compile(rules).Value;
+            var script = weesky.Compile(rules).Value;
 
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, true) }));
-            session.Setup(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
+            SetupList(session, new SieveScriptListEntry(WeeskyScriptName, true));
+            session.Setup(s => s.GetScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success(script));
 
             var result = await repo.GetRuleSetAsync(Alice);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(SieveScriptKind.Structured, result.Value.Kind);
+            Assert.Equal("weesky", result.Value.ProviderId);
+            Assert.Equal(WeeskyScriptName, result.Value.ScriptName);
             Assert.Single(result.Value.Rules);
-            Assert.Equal("Move alerts", result.Value.Rules[0].Name);
-            Assert.Equal(script, result.Value.RawScript);
         }
 
         [Fact]
-        public async Task GetRuleSetAsync_WhenScriptHasNoMarker_ReturnsAdvancedWithRaw()
+        public async Task GetRuleSetAsync_WhenRainloopScriptExists_LoadsItViaRainloopProvider()
         {
-            const string raw = "require [\"fileinto\"];\nfileinto \"Inbox\";";
+            var rainloop = new RainloopRuleProvider();
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Zik",
+                    StopAfter = true,
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "[ZIK]" } },
+                    Actions =
+                    {
+                        new SieveAction { Type = SieveActionType.SetFlag, Argument = @"\Seen" },
+                        new SieveAction { Type = SieveActionType.FileInto, Argument = "Zik" }
+                    }
+                }
+            };
+            var script = rainloop.Compile(rules).Value;
 
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, true) }));
-            session.Setup(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
+            SetupList(session, new SieveScriptListEntry(RainloopScriptName, true));
+            session.Setup(s => s.GetScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success(script));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(SieveScriptKind.Structured, result.Value.Kind);
+            Assert.Equal("rainloop", result.Value.ProviderId);
+            Assert.Equal(RainloopScriptName, result.Value.ScriptName);
+            Assert.Single(result.Value.Rules);
+            Assert.Equal("Zik", result.Value.Rules[0].Name);
+        }
+
+        [Fact]
+        public async Task GetRuleSetAsync_WhenUnknownActiveScript_ReturnsAdvancedWithRaw()
+        {
+            const string raw = "require [\"fileinto\"];\nfileinto \"Inbox\";";
+            var (repo, _, session) = CreateSut();
+            SetupList(session, new SieveScriptListEntry("custom", true));
+            session.Setup(s => s.GetScriptAsync("custom", It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success(raw));
 
             var result = await repo.GetRuleSetAsync(Alice);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(SieveScriptKind.Advanced, result.Value.Kind);
-            Assert.Empty(result.Value.Rules);
+            Assert.Null(result.Value.ProviderId);
+            Assert.Equal("custom", result.Value.ScriptName);
             Assert.Equal(raw, result.Value.RawScript);
         }
 
         [Fact]
-        public async Task GetRuleSetAsync_WhenListFails_ReturnsFailure()
+        public async Task GetRuleSetAsync_PrefersWeeskyOverActiveRainloopWhenBothExist()
         {
+            var weesky = new WeeskyRuleProvider();
+            var script = weesky.Compile(Array.Empty<SieveRule>()).Value;
+
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Failure<IReadOnlyList<SieveScriptListEntry>>("server down"));
+            SetupList(session,
+                new SieveScriptListEntry(WeeskyScriptName, false),
+                new SieveScriptListEntry(RainloopScriptName, true));
+            session.Setup(s => s.GetScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success(script));
 
             var result = await repo.GetRuleSetAsync(Alice);
 
-            Assert.True(result.IsFailure);
-            Assert.Equal("server down", result.Error);
-        }
-
-        [Fact]
-        public async Task GetRuleSetAsync_WhenGetScriptFails_ReturnsFailure()
-        {
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, true) }));
-            session.Setup(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Failure<string>("denied"));
-
-            var result = await repo.GetRuleSetAsync(Alice);
-
-            Assert.True(result.IsFailure);
-            Assert.Equal("denied", result.Error);
-        }
-
-        // ----- GetRawScriptAsync -----
-
-        [Fact]
-        public async Task GetRawScriptAsync_ReturnsRawContent()
-        {
-            const string raw = "# WEESKY-RULES-V1:eyJydWxlcyI6W119\n";
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, true) }));
-            session.Setup(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success(raw));
-
-            var result = await repo.GetRawScriptAsync(Alice);
-
             Assert.True(result.IsSuccess);
-            Assert.Equal(raw, result.Value);
-        }
-
-        [Fact]
-        public async Task GetRawScriptAsync_WhenScriptMissing_ReturnsEmptyString()
-        {
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(Array.Empty<SieveScriptListEntry>()));
-
-            var result = await repo.GetRawScriptAsync(Alice);
-
-            Assert.True(result.IsSuccess);
-            Assert.Equal(string.Empty, result.Value);
+            Assert.Equal(WeeskyScriptName, result.Value.ScriptName);
+            session.Verify(s => s.GetScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()), Times.Never);
         }
 
         // ----- SaveRulesAsync -----
 
         [Fact]
-        public async Task SaveRulesAsync_WithValidRules_PutsThenActivates()
+        public async Task SaveRulesAsync_WithDefaultProvider_WritesToWeeskyScript()
         {
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.PutScriptAsync(ScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
-            session.Setup(s => s.SetActiveAsync(ScriptName, It.IsAny<CancellationToken>()))
+            session.Setup(s => s.SetActiveAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
-
-            var rules = new[]
-            {
-                new SieveRule
-                {
-                    Name = "Trash newsletters",
-                    Conditions = { new SieveCondition { Field = SieveConditionField.From, Operator = SieveConditionOperator.Contains, Value = "noreply" } },
-                    Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "Junk" } }
-                }
-            };
-
-            var result = await repo.SaveRulesAsync(Alice, rules);
-
-            Assert.True(result.IsSuccess);
-            session.Verify(s => s.PutScriptAsync(ScriptName, It.Is<string>(c => c.Contains("# WEESKY-RULES-V1:")), It.IsAny<CancellationToken>()), Times.Once);
-            session.Verify(s => s.SetActiveAsync(ScriptName, It.IsAny<CancellationToken>()), Times.Once);
-        }
-
-        [Fact]
-        public async Task SaveRulesAsync_WhenCompilerValidationFails_DoesNotCallServer()
-        {
-            var (repo, _, session) = CreateSut();
-            var invalid = new[] { new SieveRule { Name = "" } };
-
-            var result = await repo.SaveRulesAsync(Alice, invalid);
-
-            Assert.True(result.IsFailure);
-            session.Verify(s => s.PutScriptAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task SaveRulesAsync_WhenPutFails_ReturnsFailureWithoutActivating()
-        {
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.PutScriptAsync(ScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Failure("line 1: error: unknown command"));
 
             var rules = new[]
             {
@@ -291,42 +196,130 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
                 }
             };
 
-            var result = await repo.SaveRulesAsync(Alice, rules);
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: null, scriptName: null);
+
+            Assert.True(result.IsSuccess);
+            session.Verify(s => s.PutScriptAsync(WeeskyScriptName,
+                It.Is<string>(c => c.Contains("# WEESKY-RULES-V1:")), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_WithRainloopProvider_WritesToRainloopScript()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(RainloopScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync(RainloopScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "X" } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: "rainloop", scriptName: null);
+
+            Assert.True(result.IsSuccess);
+            session.Verify(s => s.PutScriptAsync(RainloopScriptName,
+                It.Is<string>(c => c.Contains("# RAINLOOP:SIEVE")), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_WithExplicitScriptName_WritesToThatScript()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync("custom-name", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync("custom-name", It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.Keep } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: null, scriptName: "custom-name");
+
+            Assert.True(result.IsSuccess);
+            session.Verify(s => s.PutScriptAsync("custom-name", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_UnknownProvider_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+
+            var result = await repo.SaveRulesAsync(Alice, Array.Empty<SieveRule>(), providerId: "nope", scriptName: null);
 
             Assert.True(result.IsFailure);
-            Assert.Equal("line 1: error: unknown command", result.Error);
-            session.Verify(s => s.SetActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            session.Verify(s => s.PutScriptAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_WhenProviderRejectsCompile_DoesNotCallServer()
+        {
+            var (repo, _, session) = CreateSut();
+            var invalid = new[]
+            {
+                new SieveRule
+                {
+                    Name = "Multi",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions =
+                    {
+                        new SieveAction { Type = SieveActionType.FileInto, Argument = "A" },
+                        new SieveAction { Type = SieveActionType.Redirect, Argument = "y@z.com" }
+                    }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, invalid, providerId: "rainloop", scriptName: null);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Rainloop", result.Error);
+            session.Verify(s => s.PutScriptAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         // ----- SaveRawScriptAsync -----
 
         [Fact]
-        public async Task SaveRawScriptAsync_PutsExactContentAndActivates()
+        public async Task SaveRawScriptAsync_WithScriptName_WritesToThatScript()
         {
-            const string raw = "require [\"fileinto\"];\nfileinto \"Inbox\";\n";
+            const string raw = "require [\"fileinto\"];\nfileinto \"Inbox\";";
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.PutScriptAsync(ScriptName, raw, It.IsAny<CancellationToken>()))
+            session.Setup(s => s.PutScriptAsync(RainloopScriptName, raw, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
-            session.Setup(s => s.SetActiveAsync(ScriptName, It.IsAny<CancellationToken>()))
+            session.Setup(s => s.SetActiveAsync(RainloopScriptName, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
 
-            var result = await repo.SaveRawScriptAsync(Alice, raw);
+            var result = await repo.SaveRawScriptAsync(Alice, raw, RainloopScriptName);
 
             Assert.True(result.IsSuccess);
-            session.Verify(s => s.PutScriptAsync(ScriptName, raw, It.IsAny<CancellationToken>()), Times.Once);
+            session.Verify(s => s.PutScriptAsync(RainloopScriptName, raw, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
-        public async Task SaveRawScriptAsync_WhenPutFails_PropagatesServerError()
+        public async Task SaveRawScriptAsync_WithoutScriptName_UsesDefault()
         {
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.PutScriptAsync(ScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Failure("syntax error at line 2"));
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
 
-            var result = await repo.SaveRawScriptAsync(Alice, "garbage");
+            await repo.SaveRawScriptAsync(Alice, "stop;", scriptName: null);
 
-            Assert.True(result.IsFailure);
-            Assert.Equal("syntax error at line 2", result.Error);
+            session.Verify(s => s.PutScriptAsync(WeeskyScriptName, "stop;", It.IsAny<CancellationToken>()), Times.Once);
         }
 
         // ----- DeleteAllRulesAsync -----
@@ -335,76 +328,45 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         public async Task DeleteAllRulesAsync_WhenScriptMissing_IsNoOp()
         {
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(Array.Empty<SieveScriptListEntry>()));
+            SetupList(session);
 
             var result = await repo.DeleteAllRulesAsync(Alice);
 
             Assert.True(result.IsSuccess);
-            session.Verify(s => s.SetActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
             session.Verify(s => s.DeleteScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
-        public async Task DeleteAllRulesAsync_WhenScriptActive_DeactivatesThenDeletes()
+        public async Task DeleteAllRulesAsync_WhenActiveWeeskyScript_DeactivatesThenDeletes()
         {
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, true) }));
+            SetupList(session, new SieveScriptListEntry(WeeskyScriptName, true));
             session.Setup(s => s.SetActiveAsync(string.Empty, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
-            session.Setup(s => s.DeleteScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
+            session.Setup(s => s.DeleteScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
 
             var result = await repo.DeleteAllRulesAsync(Alice);
 
             Assert.True(result.IsSuccess);
             session.Verify(s => s.SetActiveAsync(string.Empty, It.IsAny<CancellationToken>()), Times.Once);
-            session.Verify(s => s.DeleteScriptAsync(ScriptName, It.IsAny<CancellationToken>()), Times.Once);
+            session.Verify(s => s.DeleteScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
-        public async Task DeleteAllRulesAsync_WhenScriptInactive_OnlyDeletes()
+        public async Task DeleteAllRulesAsync_WhenActiveRainloopScript_DeletesIt()
         {
             var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, false) }));
-            session.Setup(s => s.DeleteScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
+            SetupList(session, new SieveScriptListEntry(RainloopScriptName, true));
+            session.Setup(s => s.SetActiveAsync(string.Empty, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.DeleteScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success());
 
             var result = await repo.DeleteAllRulesAsync(Alice);
 
             Assert.True(result.IsSuccess);
-            session.Verify(s => s.SetActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task DeleteAllRulesAsync_WhenDeactivateFails_DoesNotDelete()
-        {
-            var (repo, _, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[] { new SieveScriptListEntry(ScriptName, true) }));
-            session.Setup(s => s.SetActiveAsync(string.Empty, It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Failure("denied"));
-
-            var result = await repo.DeleteAllRulesAsync(Alice);
-
-            Assert.True(result.IsFailure);
-            session.Verify(s => s.DeleteScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        // ----- Session is opened for the right target user -----
-
-        [Fact]
-        public async Task GetRuleSetAsync_OpensSessionForTargetUser()
-        {
-            var (repo, client, session) = CreateSut();
-            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
-                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(Array.Empty<SieveScriptListEntry>()));
-
-            await repo.GetRuleSetAsync(Alice);
-
-            client.Verify(c => c.OpenSessionAsync("alice@weesky.be", It.IsAny<CancellationToken>()), Times.Once);
+            session.Verify(s => s.DeleteScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }

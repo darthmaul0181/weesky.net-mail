@@ -18,11 +18,16 @@ namespace weesky.Snoopy.Microservice.Models
         public string RawScript { get; init; } = string.Empty;
 
         /// <summary>
-        /// When non-null, indicates the content was fetched from another active script
-        /// (e.g. one created by Rainloop) because no managed script exists yet. On the
-        /// next save, a new managed script will be created and activated, deactivating
-        /// this one. The original script is not deleted.
+        /// Identifier of the rule provider that decoded the script
+        /// (<c>"weesky"</c>, <c>"rainloop"</c>, ...). Null when the script could not be
+        /// recognised and the user must edit the raw Sieve.
         /// </summary>
-        public string? AdoptedFromScriptName { get; init; }
+        public string? ProviderId { get; init; }
+
+        /// <summary>
+        /// Name of the ManageSieve script the content was loaded from (so subsequent
+        /// saves write back to the same script). Null when no script exists yet.
+        /// </summary>
+        public string? ScriptName { get; init; }
     }
 }

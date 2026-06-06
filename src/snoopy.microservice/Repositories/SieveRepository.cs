@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories
@@ -8,18 +9,18 @@ namespace weesky.Snoopy.Microservice.Repositories
     public class SieveRepository : ISieveRepository
     {
         private readonly IManageSieveClient _client;
-        private readonly ISieveScriptCompiler _compiler;
+        private readonly IRuleProviderRegistry _registry;
         private readonly SieveOptions _options;
         private readonly ILogger<SieveRepository> _logger;
 
         public SieveRepository(
             IManageSieveClient client,
-            ISieveScriptCompiler compiler,
+            IRuleProviderRegistry registry,
             IOptions<SieveOptions> options,
             ILogger<SieveRepository> logger)
         {
             _client = client;
-            _compiler = compiler;
+            _registry = registry;
             _options = options.Value;
             _logger = logger;
         }
@@ -35,40 +36,22 @@ namespace weesky.Snoopy.Microservice.Repositories
             var list = await session.ListScriptsAsync(cancellationToken);
             if (list.IsFailure) return Result.Failure<SieveRuleSet>(list.Error);
 
-            var managed = list.Value.FirstOrDefault(e => string.Equals(e.Name, _options.ScriptName, StringComparison.Ordinal));
-            if (managed != null)
+            var scriptName = ResolveScriptName(list.Value);
+            if (scriptName == null)
             {
-                var script = await session.GetScriptAsync(_options.ScriptName, cancellationToken);
-                if (script.IsFailure) return Result.Failure<SieveRuleSet>(script.Error);
-
-                var parsed = _compiler.Parse(script.Value);
+                // No script exists at all → return an empty structured set using the default provider.
                 return Result.Success(new SieveRuleSet
                 {
-                    Kind = parsed.Kind,
-                    Rules = parsed.Rules,
-                    RawScript = script.Value
+                    Kind = SieveScriptKind.Structured,
+                    ProviderId = _registry.Default.Id,
+                    ScriptName = _registry.Default.DefaultScriptName
                 });
             }
 
-            // No managed script yet — adopt the currently active script (if any) so existing
-            // rules created by another client (e.g. Rainloop) show up in the advanced editor.
-            var adopted = list.Value.FirstOrDefault(e => e.IsActive);
-            if (adopted == null)
-            {
-                return Result.Success(new SieveRuleSet { Kind = SieveScriptKind.Structured });
-            }
+            var script = await session.GetScriptAsync(scriptName, cancellationToken);
+            if (script.IsFailure) return Result.Failure<SieveRuleSet>(script.Error);
 
-            var adoptedScript = await session.GetScriptAsync(adopted.Name, cancellationToken);
-            if (adoptedScript.IsFailure) return Result.Failure<SieveRuleSet>(adoptedScript.Error);
-
-            var adoptedParsed = _compiler.Parse(adoptedScript.Value);
-            return Result.Success(new SieveRuleSet
-            {
-                Kind = adoptedParsed.Kind,
-                Rules = adoptedParsed.Rules,
-                RawScript = adoptedScript.Value,
-                AdoptedFromScriptName = adopted.Name
-            });
+            return DecodeScript(script.Value, scriptName);
         }
 
         public async Task<Result<string>> GetRawScriptAsync(User user, CancellationToken cancellationToken = default)
@@ -79,21 +62,28 @@ namespace weesky.Snoopy.Microservice.Repositories
                 : Result.Success(ruleSet.Value.RawScript);
         }
 
-        public async Task<Result> SaveRulesAsync(User user, IReadOnlyList<SieveRule> rules, CancellationToken cancellationToken = default)
+        public async Task<Result> SaveRulesAsync(User user, IReadOnlyList<SieveRule> rules, string? providerId, string? scriptName, CancellationToken cancellationToken = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
             if (rules == null) return Result.Failure("Rules collection is required");
 
-            var compiled = _compiler.Compile(rules);
+            var provider = providerId != null
+                ? _registry.GetById(providerId)
+                : _registry.Default;
+            if (provider == null) return Result.Failure($"Unknown rule provider: {providerId}");
+
+            var compiled = provider.Compile(rules);
             if (compiled.IsFailure) return Result.Failure(compiled.Error);
 
-            return await PutAndActivateAsync(user, compiled.Value, cancellationToken);
+            var targetName = string.IsNullOrEmpty(scriptName) ? provider.DefaultScriptName : scriptName;
+            return await PutAndActivateAsync(user, targetName, compiled.Value, cancellationToken);
         }
 
-        public Task<Result> SaveRawScriptAsync(User user, string content, CancellationToken cancellationToken = default)
+        public Task<Result> SaveRawScriptAsync(User user, string content, string? scriptName, CancellationToken cancellationToken = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
-            return PutAndActivateAsync(user, content ?? string.Empty, cancellationToken);
+            var targetName = string.IsNullOrEmpty(scriptName) ? _registry.Default.DefaultScriptName : scriptName;
+            return PutAndActivateAsync(user, targetName, content ?? string.Empty, cancellationToken);
         }
 
         public async Task<Result> DeleteAllRulesAsync(User user, CancellationToken cancellationToken = default)
@@ -107,35 +97,92 @@ namespace weesky.Snoopy.Microservice.Repositories
             var list = await session.ListScriptsAsync(cancellationToken);
             if (list.IsFailure) return list;
 
-            var entry = list.Value.FirstOrDefault(e => string.Equals(e.Name, _options.ScriptName, StringComparison.Ordinal));
-            if (entry == null) return Result.Success();
+            var scriptName = ResolveScriptName(list.Value);
+            if (scriptName == null) return Result.Success();
 
+            var entry = list.Value.First(e => string.Equals(e.Name, scriptName, StringComparison.Ordinal));
             if (entry.IsActive)
             {
                 var deactivate = await session.SetActiveAsync(string.Empty, cancellationToken);
                 if (deactivate.IsFailure) return deactivate;
             }
 
-            return await session.DeleteScriptAsync(_options.ScriptName, cancellationToken);
+            return await session.DeleteScriptAsync(scriptName, cancellationToken);
         }
 
-        private async Task<Result> PutAndActivateAsync(User user, string scriptContent, CancellationToken cancellationToken)
+        /// <summary>
+        /// Pick the ManageSieve script we should operate on:
+        /// 1. A script whose name matches any provider's default name (prefer the active one).
+        /// 2. Otherwise the currently active script (will be treated as Advanced if no provider matches).
+        /// 3. Otherwise null (no script at all).
+        /// </summary>
+        private string? ResolveScriptName(IReadOnlyList<SieveScriptListEntry> scripts)
+        {
+            if (scripts.Count == 0) return null;
+
+            foreach (var provider in _registry.All)
+            {
+                var match = scripts.FirstOrDefault(e => string.Equals(e.Name, provider.DefaultScriptName, StringComparison.Ordinal));
+                if (match != null) return match.Name;
+            }
+
+            var active = scripts.FirstOrDefault(e => e.IsActive);
+            return active?.Name;
+        }
+
+        private SieveRuleSet DecodeScript(string scriptContent, string scriptName)
+        {
+            var provider = _registry.Detect(scriptContent);
+            if (provider == null)
+            {
+                return new SieveRuleSet
+                {
+                    Kind = SieveScriptKind.Advanced,
+                    RawScript = scriptContent,
+                    ScriptName = scriptName
+                };
+            }
+
+            var parsed = provider.Parse(scriptContent);
+            if (parsed.IsFailure)
+            {
+                _logger.LogWarning("Provider {Provider} failed to parse script {Script}: {Error}", provider.Id, scriptName, parsed.Error);
+                return new SieveRuleSet
+                {
+                    Kind = SieveScriptKind.Advanced,
+                    RawScript = scriptContent,
+                    ProviderId = provider.Id,
+                    ScriptName = scriptName
+                };
+            }
+
+            return new SieveRuleSet
+            {
+                Kind = SieveScriptKind.Structured,
+                Rules = parsed.Value,
+                RawScript = scriptContent,
+                ProviderId = provider.Id,
+                ScriptName = scriptName
+            };
+        }
+
+        private async Task<Result> PutAndActivateAsync(User user, string scriptName, string scriptContent, CancellationToken cancellationToken)
         {
             var sessionResult = await _client.OpenSessionAsync(user.Email, cancellationToken);
             if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
             await using var session = sessionResult.Value;
 
-            var put = await session.PutScriptAsync(_options.ScriptName, scriptContent, cancellationToken);
+            var put = await session.PutScriptAsync(scriptName, scriptContent, cancellationToken);
             if (put.IsFailure)
             {
-                _logger.LogWarning("PUTSCRIPT rejected for user={User}: {Error}", user.Email, put.Error);
+                _logger.LogWarning("PUTSCRIPT rejected for user={User} script={Script}: {Error}", user.Email, scriptName, put.Error);
                 return put;
             }
 
-            var activate = await session.SetActiveAsync(_options.ScriptName, cancellationToken);
+            var activate = await session.SetActiveAsync(scriptName, cancellationToken);
             if (activate.IsFailure)
             {
-                _logger.LogWarning("SETACTIVE failed for user={User}: {Error}", user.Email, activate.Error);
+                _logger.LogWarning("SETACTIVE failed for user={User} script={Script}: {Error}", user.Email, scriptName, activate.Error);
             }
             return activate;
         }

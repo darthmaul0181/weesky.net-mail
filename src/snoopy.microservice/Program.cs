@@ -12,6 +12,8 @@ using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.HealthChecks;
+using weesky.Snoopy.Microservice.RuleProviders;
+using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -61,7 +63,9 @@ builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Confi
 builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
 builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSection("Sieve"));
 builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
-builder.Services.AddSingleton<ISieveScriptCompiler, SieveScriptCompiler>();
+builder.Services.AddSingleton<IRuleProvider, WeeskyRuleProvider>();
+builder.Services.AddSingleton<IRuleProvider, RainloopRuleProvider>();
+builder.Services.AddSingleton<IRuleProviderRegistry, RuleProviderRegistry>();
 builder.Services.AddScoped<ISieveRepository, SieveRepository>();
 builder.Services.AddScoped<IUsersRepository, UsersRepository>();
 builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();

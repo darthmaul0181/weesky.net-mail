@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.RuleProviders;
 
 namespace weesky.Snoopy.Microservice.Controllers
 {
@@ -12,19 +13,19 @@ namespace weesky.Snoopy.Microservice.Controllers
     public class RulesController : ApiBaseController
     {
         private readonly ISieveRepository _sieveRepository;
+        private readonly IRuleProviderRegistry _providers;
 
-        public RulesController(ISieveRepository sieveRepository)
+        public RulesController(ISieveRepository sieveRepository, IRuleProviderRegistry providers)
         {
             _sieveRepository = sieveRepository;
+            _providers = providers;
         }
 
         /// <summary>
-        /// Returns the authenticated user's Sieve configuration: structured rules when the
-        /// script was produced by this UI, or the raw script when it was hand-edited.
+        /// Returns the authenticated user's Sieve configuration: structured rules when a
+        /// registered provider can decode the script, or the raw script when none matches.
         /// </summary>
-        /// <response code="200">Rule set retrieved</response>
-        /// <response code="400">Rules service is unavailable or rejected the request</response>
-        /// <response code="401">Unauthenticated user</response>
+        /// <param name="cancellationToken">Cancellation token.</param>
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -37,34 +38,30 @@ namespace weesky.Snoopy.Microservice.Controllers
         }
 
         /// <summary>
-        /// Replaces all of the authenticated user's structured rules.
-        /// Switches the script back to structured mode if it had been edited as raw Sieve.
+        /// Replaces all of the authenticated user's structured rules. The body may specify
+        /// which provider to compile with and which script to write to; otherwise the
+        /// default provider and its default script name are used.
         /// </summary>
-        /// <param name="rules">The complete, ordered list of rules.</param>
+        /// <param name="request">Rules + optional provider/script hints.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <response code="204">Rules saved and activated</response>
-        /// <response code="400">A rule is invalid or the server rejected the resulting Sieve script</response>
-        /// <response code="401">Unauthenticated user</response>
         [HttpPut]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<ActionResult<ResultEnveloppe>> Replace([FromBody] List<SieveRule> rules, CancellationToken cancellationToken)
+        public async Task<ActionResult<ResultEnveloppe>> Replace([FromBody] SaveRulesRequest request, CancellationToken cancellationToken)
         {
-            if (rules == null)
+            if (request == null)
                 return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Request body is required"));
 
-            Result result = await _sieveRepository.SaveRulesAsync(AuthenticatedUser, rules, cancellationToken);
+            Result result = await _sieveRepository.SaveRulesAsync(
+                AuthenticatedUser, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
             return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
         /// <summary>
-        /// Deletes the managed Sieve script (deactivating it first). The user retains
-        /// any other scripts they uploaded out-of-band.
+        /// Deletes the active managed Sieve script (deactivating it first).
         /// </summary>
-        /// <response code="204">Managed script removed (or absent to begin with)</response>
-        /// <response code="400">Rules service unavailable</response>
-        /// <response code="401">Unauthenticated user</response>
+        /// <param name="cancellationToken">Cancellation token.</param>
         [HttpDelete]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -76,32 +73,32 @@ namespace weesky.Snoopy.Microservice.Controllers
         }
 
         /// <summary>
-        /// Returns the raw Sieve text currently stored on the server. Used by the advanced editor.
+        /// Returns the raw Sieve text currently stored on the server.
         /// </summary>
-        /// <response code="200">Raw script retrieved (empty if no script exists yet)</response>
-        /// <response code="400">Rules service unavailable</response>
-        /// <response code="401">Unauthenticated user</response>
+        /// <param name="cancellationToken">Cancellation token.</param>
         [HttpGet("Raw")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<SieveRawScript>> GetRaw(CancellationToken cancellationToken)
         {
-            Result<string> result = await _sieveRepository.GetRawScriptAsync(AuthenticatedUser, cancellationToken);
-            if (result.IsSuccess) return Ok(new SieveRawScript { Content = result.Value });
-            return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
+            Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
+            if (result.IsFailure)
+                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
+
+            return Ok(new SieveRawScript
+            {
+                Content = result.Value.RawScript,
+                ScriptName = result.Value.ScriptName
+            });
         }
 
         /// <summary>
-        /// Replaces the managed Sieve script with raw Sieve text typed by the user in
-        /// the advanced editor. The structured representation is lost (the marker is
-        /// not added back) until the user reverts via <c>PUT /api/Rules</c>.
+        /// Replaces the script with raw Sieve text. The structured representation is lost
+        /// until the user issues a fresh structured PUT.
         /// </summary>
-        /// <param name="script">The raw script content.</param>
+        /// <param name="script">The raw script content and optional script name.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <response code="204">Script saved and activated</response>
-        /// <response code="400">Server rejected the script (Sieve compilation error)</response>
-        /// <response code="401">Unauthenticated user</response>
         [HttpPut("Raw")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -111,8 +108,31 @@ namespace weesky.Snoopy.Microservice.Controllers
             if (script == null)
                 return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Request body is required"));
 
-            Result result = await _sieveRepository.SaveRawScriptAsync(AuthenticatedUser, script.Content ?? string.Empty, cancellationToken);
+            Result result = await _sieveRepository.SaveRawScriptAsync(
+                AuthenticatedUser, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
             return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
+        }
+
+        /// <summary>
+        /// Lists the rule providers supported by the server (e.g. weesky, rainloop) so the
+        /// frontend can offer format selection.
+        /// </summary>
+        [HttpGet("Providers")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public ActionResult<IEnumerable<RuleProviderInfo>> ListProviders()
+        {
+            var defaultId = _providers.Default.Id;
+            var infos = _providers.All
+                .Select(p => new RuleProviderInfo
+                {
+                    Id = p.Id,
+                    DisplayName = p.DisplayName,
+                    DefaultScriptName = p.DefaultScriptName,
+                    IsDefault = p.Id == defaultId
+                })
+                .ToList();
+            return Ok(infos);
         }
     }
 }
