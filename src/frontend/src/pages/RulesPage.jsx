@@ -343,45 +343,13 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '660px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: '680px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isNew ? 'New rule' : 'Edit rule'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error">{error}</div>}
-
-          <div className="field-h">
-            <label>Name</label>
-            <input type="text" value={rule.name}
-              onChange={e => setField('name', e.target.value)} autoFocus required />
-          </div>
-
-          <div className="field-h">
-            <label>Match</label>
-            <select value={rule.matchAll ? 'all' : 'any'}
-              onChange={e => setField('matchAll', e.target.value === 'all')}>
-              <option value="any">Any condition (anyof)</option>
-              <option value="all">All conditions (allof)</option>
-            </select>
-          </div>
-
-          <div className="rule-editor-section">
-            <div className="rule-editor-section-header">
-              <span className="rule-editor-section-title">Conditions</span>
-              <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
-                <PlusIcon /> Add
-              </button>
-            </div>
-            {rule.conditions.map((c, i) => (
-              <ConditionRow key={i} condition={c}
-                onChange={cond => updateCondition(i, cond)}
-                onRemove={() => removeCondition(i)} />
-            ))}
-            {rule.conditions.length === 0 && (
-              <p className="rule-editor-empty">No conditions — the rule applies to all messages.</p>
-            )}
-          </div>
+          {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
 
           {folders.length > 0 && (
             <datalist id="rule-editor-folders">
@@ -389,43 +357,111 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
             </datalist>
           )}
 
-          <div className="rule-editor-section">
-            <div className="rule-editor-section-header">
-              <span className="rule-editor-section-title">Actions</span>
-              <button type="button" className="rule-editor-add-btn" onClick={addAction}>
-                <PlusIcon /> Add
-              </button>
+          <div className="rule-wizard">
+
+            <div className="rule-wizard-step">
+              <div className="rule-wizard-indicator">
+                <div className="rule-wizard-circle">1</div>
+                <div className="rule-wizard-line" />
+              </div>
+              <div className="rule-wizard-body">
+                <div className="rule-wizard-title">Name</div>
+                <input
+                  type="text"
+                  className="rule-wizard-input"
+                  value={rule.name}
+                  onChange={e => setField('name', e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
             </div>
-            {rule.actions.map((a, i) => (
-              <ActionRow key={i} action={a}
-                onChange={action => updateAction(i, action)}
-                onRemove={() => removeAction(i)}
-                foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
-            ))}
-            {rule.actions.length === 0 && (
-              <p className="rule-editor-empty">No actions defined.</p>
-            )}
+
+            <div className="rule-wizard-step">
+              <div className="rule-wizard-indicator">
+                <div className="rule-wizard-circle">2</div>
+                <div className="rule-wizard-line" />
+              </div>
+              <div className="rule-wizard-body">
+                <div className="rule-wizard-step-header">
+                  <span className="rule-wizard-title">Conditions</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <select
+                      className="rule-wizard-select"
+                      value={rule.matchAll ? 'all' : 'any'}
+                      onChange={e => setField('matchAll', e.target.value === 'all')}
+                    >
+                      <option value="any">Any (anyof)</option>
+                      <option value="all">All (allof)</option>
+                    </select>
+                    <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
+                      <PlusIcon /> Add
+                    </button>
+                  </div>
+                </div>
+                {rule.conditions.map((c, i) => (
+                  <ConditionRow key={i} condition={c}
+                    onChange={cond => updateCondition(i, cond)}
+                    onRemove={() => removeCondition(i)} />
+                ))}
+                {rule.conditions.length === 0 && (
+                  <p className="rule-editor-empty">No conditions — applies to all messages.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rule-wizard-step">
+              <div className="rule-wizard-indicator">
+                <div className="rule-wizard-circle">3</div>
+                <div className="rule-wizard-line" />
+              </div>
+              <div className="rule-wizard-body">
+                <div className="rule-wizard-step-header">
+                  <span className="rule-wizard-title">Actions</span>
+                  <button type="button" className="rule-editor-add-btn" onClick={addAction}>
+                    <PlusIcon /> Add
+                  </button>
+                </div>
+                {rule.actions.map((a, i) => (
+                  <ActionRow key={i} action={a}
+                    onChange={action => updateAction(i, action)}
+                    onRemove={() => removeAction(i)}
+                    foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
+                ))}
+                {rule.actions.length === 0 && (
+                  <p className="rule-editor-empty">No actions defined.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rule-wizard-step">
+              <div className="rule-wizard-indicator">
+                <div className="rule-wizard-circle">4</div>
+              </div>
+              <div className="rule-wizard-body">
+                <div className="rule-wizard-title">Options</div>
+                <div className="rule-wizard-toggle-row">
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={markAsRead}
+                      onChange={e => setMarkAsRead(e.target.checked)} />
+                    <span className="toggle-track" />
+                  </label>
+                  <span className="rule-wizard-toggle-label">Mark as read</span>
+                </div>
+                <div className="rule-wizard-toggle-row">
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={rule.stopAfter}
+                      onChange={e => setField('stopAfter', e.target.checked)} />
+                    <span className="toggle-track" />
+                  </label>
+                  <span className="rule-wizard-toggle-label">Stop processing after this rule</span>
+                </div>
+              </div>
+            </div>
+
           </div>
 
-          <div className="field-h" style={{ marginTop: '4px' }}>
-            <label>Mark as read</label>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={markAsRead}
-                onChange={e => setMarkAsRead(e.target.checked)} />
-              <span className="toggle-track" />
-            </label>
-          </div>
-
-          <div className="field-h">
-            <label>Stop after</label>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={rule.stopAfter}
-                onChange={e => setField('stopAfter', e.target.checked)} />
-              <span className="toggle-track" />
-            </label>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}>
               {isNew ? 'Create rule' : 'Save changes'}
