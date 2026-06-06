@@ -180,7 +180,7 @@ function makeEmptyRule() {
 // ── RuleCard ──────────────────────────────────────────────────
 
 export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const hasActions = rule.actions.length > 0
 
   return (
@@ -199,6 +199,13 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isDragOver, 
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>
+        {collapsed && hasActions && (
+          <div className="rule-card-inline-actions">
+            {rule.actions.map((a, i) => (
+              <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a)}</span>
+            ))}
+          </div>
+        )}
         <div className="rule-card-btns">
           <button className="admin-icon-btn" title="Edit" onClick={e => { e.stopPropagation(); onEdit() }}><PencilIcon /></button>
           <button className="admin-icon-btn is-danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}><TrashIcon /></button>
@@ -208,16 +215,7 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isDragOver, 
         </div>
       </div>
 
-      {collapsed ? (
-        hasActions && (
-          <div className="rule-card-compact">
-            {rule.actions.map((a, i) => (
-              <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a)}</span>
-            ))}
-            {rule.stopAfter && <span className="rule-card-stop">stop</span>}
-          </div>
-        )
-      ) : (
+      {!collapsed && (
         <div className="rule-card-body">
           <div className="rule-card-side">
             <span className="rule-card-badge">{rule.matchAll ? 'ALL' : 'ANY'}</span>

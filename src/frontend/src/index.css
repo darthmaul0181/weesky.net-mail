@@ -2020,11 +2020,10 @@ body {
   box-shadow: 0 -3px 0 0 var(--primary), 0 0 0 1px rgba(52, 80, 163, 0.25);
 }
 
-.rule-card-compact {
+.rule-card-inline-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 1px solid var(--border);
+  flex: 1;
+  min-width: 0;
 }
