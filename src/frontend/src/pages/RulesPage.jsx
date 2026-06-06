@@ -252,7 +252,7 @@ export function ConditionRow({ condition, onChange, onRemove }) {
 
 // ── ActionRow ─────────────────────────────────────────────────
 
-export function ActionRow({ action, onChange, onRemove }) {
+export function ActionRow({ action, onChange, onRemove, foldersDatalistId }) {
   const def = ACTION_TYPES.find(t => t.value === action.type) ?? ACTION_TYPES[0]
   return (
     <div className="rule-row">
@@ -273,6 +273,7 @@ export function ActionRow({ action, onChange, onRemove }) {
           placeholder={def.argPlaceholder}
           value={action.argument ?? ''}
           onChange={e => onChange({ ...action, argument: e.target.value })}
+          list={action.type === 'FileInto' && foldersDatalistId ? foldersDatalistId : undefined}
           style={{ flex: 1 }}
         />
       )}
@@ -295,6 +296,11 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
     initialRule?.actions?.some(a => a.type === 'SetFlag') ?? false
   )
   const [error, setError] = useState(null)
+  const [folders, setFolders] = useState([])
+
+  useEffect(() => {
+    api.getFolders().then(data => { if (Array.isArray(data)) setFolders(data) }).catch(() => {})
+  }, [])
 
   function setField(key, value) {
     setRule(r => ({ ...r, [key]: value }))
@@ -377,6 +383,12 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
             )}
           </div>
 
+          {folders.length > 0 && (
+            <datalist id="rule-editor-folders">
+              {folders.map(f => <option key={f} value={f} />)}
+            </datalist>
+          )}
+
           <div className="rule-editor-section">
             <div className="rule-editor-section-header">
               <span className="rule-editor-section-title">Actions</span>
@@ -387,7 +399,8 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
             {rule.actions.map((a, i) => (
               <ActionRow key={i} action={a}
                 onChange={action => updateAction(i, action)}
-                onRemove={() => removeAction(i)} />
+                onRemove={() => removeAction(i)}
+                foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
             ))}
             {rule.actions.length === 0 && (
               <p className="rule-editor-empty">No actions defined.</p>

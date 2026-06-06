@@ -73,6 +73,31 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
+        public async Task GetFolders_WhenSuccess_Returns200WithFolderList()
+        {
+            IReadOnlyList<string> folders = ["INBOX", "Sent", "Trash"];
+            _dovecotClient.Setup(c => c.GetMailboxesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Success(folders));
+
+            var result = await CreateController().GetFolders(CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Same(folders, ok.Value);
+        }
+
+        [Fact]
+        public async Task GetFolders_WhenFailed_Returns502()
+        {
+            _dovecotClient.Setup(c => c.GetMailboxesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Failure<IReadOnlyList<string>>("Unreachable"));
+
+            var result = await CreateController().GetFolders(CancellationToken.None);
+
+            var status = Assert.IsType<StatusCodeResult>(result.Result);
+            Assert.Equal(502, status.StatusCode);
+        }
+
+        [Fact]
         public void ChangePassword_WhenSuccess_Returns204()
         {
             _usersRepo.Setup(r => r.ChangePassword(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))

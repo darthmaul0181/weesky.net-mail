@@ -113,6 +113,9 @@ export const api = {
   adminRemoveVirtualDomainOwner: (domainId, userId) =>
     request('DELETE', `/api/Admin/domains/virtuals/${domainId}/${userId}`),
 
+  getFolders: () =>
+    request('GET', '/api/Account/Folders'),
+
   getRuleProviders: () =>
     request('GET', '/api/Rules/Providers'),
 

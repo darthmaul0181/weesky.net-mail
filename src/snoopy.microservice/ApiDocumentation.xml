@@ -35,6 +35,14 @@
             <response code="401">Unauthenticated user</response>
             <response code="502">Unable to reach Dovecot</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetFolders(System.Threading.CancellationToken)">
+            <summary>
+            Returns the list of IMAP folders (mailboxes) for the authenticated user
+            </summary>
+            <response code="200">List of folder names</response>
+            <response code="401">Unauthenticated user</response>
+            <response code="502">Unable to reach Dovecot</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangePassword(weesky.Snoopy.Microservice.Models.SecretChange)">
             <summary>
             Change the mailbox password
