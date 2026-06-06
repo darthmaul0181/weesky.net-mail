@@ -1877,7 +1877,7 @@ body {
 
 .modal-rules {
   width: 75vw;
-  max-width: 900px;
+  max-width: 75vw;
   height: 75vh;
   max-height: 75vh;
   padding: 0;
