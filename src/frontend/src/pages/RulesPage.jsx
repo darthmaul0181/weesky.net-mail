@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
@@ -99,6 +99,16 @@ function ChevronDownIcon() {
   )
 }
 
+function GripIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="8"  cy="6"  r="1.8" /><circle cx="16" cy="6"  r="1.8" />
+      <circle cx="8"  cy="12" r="1.8" /><circle cx="16" cy="12" r="1.8" />
+      <circle cx="8"  cy="18" r="1.8" /><circle cx="16" cy="18" r="1.8" />
+    </svg>
+  )
+}
+
 // ── Constants ─────────────────────────────────────────────────
 
 const CONDITION_FIELDS = [
@@ -169,41 +179,69 @@ function makeEmptyRule() {
 
 // ── RuleCard ──────────────────────────────────────────────────
 
-export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, onMoveUp, onMoveDown, isFirst, isLast }) {
+export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const hasActions = rule.actions.length > 0
+
   return (
-    <div className={`rule-card${rule.enabled ? '' : ' rule-card-disabled'}`}>
+    <div
+      className={`rule-card${rule.enabled ? '' : ' rule-card-disabled'}${isDragOver ? ' rule-card-drop-over' : ''}`}
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
+      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onDragOver() }}
+      onDrop={e => { e.preventDefault(); onDrop() }}
+      onDragEnd={onDragEnd}
+    >
       <div className="rule-card-header">
+        <span className="rule-card-drag" title="Drag to reorder"><GripIcon /></span>
         <label className="toggle-switch" title={rule.enabled ? 'Disable' : 'Enable'}>
           <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)} />
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>
         <div className="rule-card-btns">
-          <button className="admin-icon-btn" title="Move up" disabled={isFirst} onClick={onMoveUp}><ChevronUpIcon /></button>
-          <button className="admin-icon-btn" title="Move down" disabled={isLast} onClick={onMoveDown}><ChevronDownIcon /></button>
-          <button className="admin-icon-btn" title="Edit" onClick={onEdit}><PencilIcon /></button>
-          <button className="admin-icon-btn is-danger" title="Delete" onClick={onDelete}><TrashIcon /></button>
+          <button className="admin-icon-btn" title="Edit" onClick={e => { e.stopPropagation(); onEdit() }}><PencilIcon /></button>
+          <button className="admin-icon-btn is-danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}><TrashIcon /></button>
+          <button className="admin-icon-btn" title={collapsed ? 'Expand' : 'Collapse'} onClick={e => { e.stopPropagation(); setCollapsed(c => !c) }}>
+            {collapsed ? <ChevronDownIcon /> : <ChevronUpIcon />}
+          </button>
         </div>
       </div>
-      <div className="rule-card-body">
-        <div className="rule-card-side">
-          <span className="rule-card-badge">{rule.matchAll ? 'ALL' : 'ANY'}</span>
-          <div className="rule-card-conditions">
-            {rule.conditions.map((c, i) => (
-              <span key={i} className="rule-card-pill">{summarizeCondition(c)}</span>
-            ))}
-          </div>
-        </div>
-        <span className="rule-card-arrow">→</span>
-        <div className="rule-card-side">
-          <div className="rule-card-actions">
+
+      {collapsed ? (
+        hasActions && (
+          <div className="rule-card-compact">
             {rule.actions.map((a, i) => (
               <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a)}</span>
             ))}
+            {rule.stopAfter && <span className="rule-card-stop">stop</span>}
           </div>
+        )
+      ) : (
+        <div className="rule-card-body">
+          <div className="rule-card-side">
+            <span className="rule-card-badge">{rule.matchAll ? 'ALL' : 'ANY'}</span>
+            <div className="rule-card-conditions">
+              {rule.conditions.map((c, i) => (
+                <span key={i} className="rule-card-pill">{summarizeCondition(c)}</span>
+              ))}
+            </div>
+          </div>
+          {hasActions && (
+            <>
+              <span className="rule-card-arrow">→</span>
+              <div className="rule-card-side">
+                <div className="rule-card-actions">
+                  {rule.actions.map((a, i) => (
+                    <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a)}</span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          {rule.stopAfter && <span className="rule-card-stop">stop</span>}
         </div>
-        {rule.stopAfter && <span className="rule-card-stop">stop</span>}
-      </div>
+      )}
     </div>
   )
 }
@@ -616,18 +654,23 @@ export default function RulesPage({ onBack }) {
     persistRules(updated)
   }
 
-  function handleMoveUp(index) {
-    if (index === 0) return
-    const u = [...rules];
-    [u[index - 1], u[index]] = [u[index], u[index - 1]]
+  const dragIndexRef = useRef(null)
+  const [dropIndex, setDropIndex] = useState(null)
+
+  function handleDrop(index) {
+    const from = dragIndexRef.current
+    dragIndexRef.current = null
+    setDropIndex(null)
+    if (from === null || from === index) return
+    const u = [...rules]
+    const [moved] = u.splice(from, 1)
+    u.splice(index, 0, moved)
     persistRules(u)
   }
 
-  function handleMoveDown(index) {
-    if (index === rules.length - 1) return
-    const u = [...rules];
-    [u[index], u[index + 1]] = [u[index + 1], u[index]]
-    persistRules(u)
+  function handleDragEnd() {
+    dragIndexRef.current = null
+    setDropIndex(null)
   }
 
   const providerLabel = ruleSet?.providerId === 'rainloop' ? 'Rainloop'
@@ -725,13 +768,14 @@ export default function RulesPage({ onBack }) {
                         <RuleCard
                           key={rule.id ?? i}
                           rule={rule}
-                          isFirst={i === 0}
-                          isLast={i === rules.length - 1}
                           onEdit={() => setRuleToEdit(rule)}
                           onDelete={() => setRuleToDelete(rule)}
                           onToggleEnabled={enabled => handleToggleEnabled(i, enabled)}
-                          onMoveUp={() => handleMoveUp(i)}
-                          onMoveDown={() => handleMoveDown(i)}
+                          isDragOver={dropIndex === i}
+                          onDragStart={() => { dragIndexRef.current = i }}
+                          onDragOver={() => { if (dragIndexRef.current !== null && dragIndexRef.current !== i) setDropIndex(i) }}
+                          onDrop={() => handleDrop(i)}
+                          onDragEnd={handleDragEnd}
                         />
                       ))}
                     </div>
