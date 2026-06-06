@@ -392,7 +392,7 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
               )}
               <button className="panel-link" onClick={() => { setOpen(false); onRules() }}>
                 <FilterIcon />
-                Règles de filtrage
+                Mail filters
               </button>
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
                 <LockIcon />

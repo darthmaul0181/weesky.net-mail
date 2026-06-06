@@ -102,30 +102,30 @@ function ChevronDownIcon() {
 // ── Constants ─────────────────────────────────────────────────
 
 const CONDITION_FIELDS = [
-  { value: 'From',      label: 'Expéditeur (From)' },
-  { value: 'To',        label: 'Destinataire (To)' },
+  { value: 'From',      label: 'From' },
+  { value: 'To',        label: 'To' },
   { value: 'Cc',        label: 'Cc' },
-  { value: 'Recipient', label: 'Destinataire To/Cc' },
-  { value: 'Subject',   label: 'Sujet' },
-  { value: 'Header',    label: 'En-tête personnalisé' },
-  { value: 'Size',      label: 'Taille (octets)' },
+  { value: 'Recipient', label: 'Recipient (To/Cc)' },
+  { value: 'Subject',   label: 'Subject' },
+  { value: 'Header',    label: 'Custom header' },
+  { value: 'Size',      label: 'Size (bytes)' },
 ]
 
 const CONDITION_OPERATORS = [
-  { value: 'Contains', label: 'contient' },
-  { value: 'Equals',   label: 'est égal à' },
-  { value: 'Matches',  label: 'correspond à (wildcard)' },
-  { value: 'Larger',   label: 'est plus grand que' },
-  { value: 'Smaller',  label: 'est plus petit que' },
+  { value: 'Contains', label: 'contains' },
+  { value: 'Equals',   label: 'equals' },
+  { value: 'Matches',  label: 'matches (wildcard)' },
+  { value: 'Larger',   label: 'is larger than' },
+  { value: 'Smaller',  label: 'is smaller than' },
 ]
 
 const ACTION_TYPES = [
-  { value: 'FileInto', label: 'Déplacer vers',           hasArg: true,  argPlaceholder: 'Nom du dossier' },
-  { value: 'Redirect', label: 'Rediriger vers',          hasArg: true,  argPlaceholder: 'adresse@email.com' },
-  { value: 'SetFlag',  label: 'Marquer comme lu',        hasArg: true,  argPlaceholder: '\\Seen' },
-  { value: 'Keep',     label: 'Conserver (keep)',        hasArg: false, argPlaceholder: '' },
-  { value: 'Discard',  label: 'Supprimer (discard)',     hasArg: false, argPlaceholder: '' },
-  { value: 'Reject',   label: 'Rejeter avec message',   hasArg: true,  argPlaceholder: 'Message (optionnel)' },
+  { value: 'FileInto', label: 'Move to',            hasArg: true,  argPlaceholder: 'Folder name' },
+  { value: 'Redirect', label: 'Redirect to',        hasArg: true,  argPlaceholder: 'email@address.com' },
+  { value: 'SetFlag',  label: 'Mark as read',       hasArg: true,  argPlaceholder: '\\Seen' },
+  { value: 'Keep',     label: 'Keep',               hasArg: false, argPlaceholder: '' },
+  { value: 'Discard',  label: 'Discard',            hasArg: false, argPlaceholder: '' },
+  { value: 'Reject',   label: 'Reject with message', hasArg: true, argPlaceholder: 'Message (optional)' },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -143,7 +143,7 @@ function extractError(err) {
 function summarizeCondition(c) {
   const fieldLabel = CONDITION_FIELDS.find(f => f.value === c.field)?.label ?? c.field
   const opLabel = CONDITION_OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator
-  const name = c.field === 'Header' ? (c.headerName ?? 'En-tête') : fieldLabel
+  const name = c.field === 'Header' ? (c.headerName ?? 'Header') : fieldLabel
   return `${name} ${opLabel} "${c.value}"`
 }
 
@@ -151,10 +151,10 @@ function summarizeAction(a) {
   switch (a.type) {
     case 'FileInto': return `→ ${a.argument ?? '?'}`
     case 'Redirect': return `⇥ ${a.argument ?? '?'}`
-    case 'SetFlag':  return 'Lu'
-    case 'Keep':     return 'Conserver'
-    case 'Discard':  return 'Supprimer'
-    case 'Reject':   return 'Rejeter'
+    case 'SetFlag':  return 'Mark as read'
+    case 'Keep':     return 'Keep'
+    case 'Discard':  return 'Discard'
+    case 'Reject':   return 'Reject'
     default:         return a.type
   }
 }
@@ -177,21 +177,21 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, onMoveUp, on
   return (
     <div className={`rule-card${rule.enabled ? '' : ' rule-card-disabled'}`}>
       <div className="rule-card-header">
-        <label className="toggle-switch" title={rule.enabled ? 'Désactiver' : 'Activer'}>
+        <label className="toggle-switch" title={rule.enabled ? 'Disable' : 'Enable'}>
           <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)} />
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>
         <div className="rule-card-btns">
-          <button className="admin-icon-btn" title="Monter" disabled={isFirst} onClick={onMoveUp}><ChevronUpIcon /></button>
-          <button className="admin-icon-btn" title="Descendre" disabled={isLast} onClick={onMoveDown}><ChevronDownIcon /></button>
-          <button className="admin-icon-btn" title="Modifier" onClick={onEdit}><PencilIcon /></button>
-          <button className="admin-icon-btn is-danger" title="Supprimer" onClick={onDelete}><TrashIcon /></button>
+          <button className="admin-icon-btn" title="Move up" disabled={isFirst} onClick={onMoveUp}><ChevronUpIcon /></button>
+          <button className="admin-icon-btn" title="Move down" disabled={isLast} onClick={onMoveDown}><ChevronDownIcon /></button>
+          <button className="admin-icon-btn" title="Edit" onClick={onEdit}><PencilIcon /></button>
+          <button className="admin-icon-btn is-danger" title="Delete" onClick={onDelete}><TrashIcon /></button>
         </div>
       </div>
       <div className="rule-card-body">
         <div className="rule-card-side">
-          <span className="rule-card-badge">{rule.matchAll ? 'TOUTES' : "L'UNE"}</span>
+          <span className="rule-card-badge">{rule.matchAll ? 'ALL' : 'ANY'}</span>
           <div className="rule-card-conditions">
             {rule.conditions.map((c, i) => (
               <span key={i} className="rule-card-pill">{summarizeCondition(c)}</span>
@@ -233,7 +233,7 @@ export function ConditionRow({ condition, onChange, onRemove }) {
         <input
           type="text"
           className="rule-row-input"
-          placeholder="Nom de l'en-tête"
+          placeholder="Header name"
           value={condition.headerName ?? ''}
           onChange={e => onChange({ ...condition, headerName: e.target.value })}
           style={{ width: '130px', flexShrink: 0 }}
@@ -242,12 +242,12 @@ export function ConditionRow({ condition, onChange, onRemove }) {
       <input
         type="text"
         className="rule-row-input"
-        placeholder="Valeur"
+        placeholder="Value"
         value={condition.value}
         onChange={e => onChange({ ...condition, value: e.target.value })}
         style={{ flex: 1 }}
       />
-      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Supprimer">
+      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Remove">
         <TrashIcon />
       </button>
     </div>
@@ -280,7 +280,7 @@ export function ActionRow({ action, onChange, onRemove }) {
           style={{ flex: 1 }}
         />
       )}
-      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Supprimer">
+      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Remove">
         <TrashIcon />
       </button>
     </div>
@@ -325,9 +325,9 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!rule.name.trim()) { setError('Le nom est obligatoire'); return }
-    if (rule.conditions.length === 0) { setError('Au moins une condition est requise'); return }
-    if (rule.actions.length === 0) { setError('Au moins une action est requise'); return }
+    if (!rule.name.trim()) { setError('Name is required'); return }
+    if (rule.conditions.length === 0) { setError('At least one condition is required'); return }
+    if (rule.actions.length === 0) { setError('At least one action is required'); return }
     setError(null)
     onSave(rule)
   }
@@ -336,24 +336,24 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: '660px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isNew ? 'Nouvelle règle' : 'Modifier la règle'}</span>
+          <span className="modal-title">{isNew ? 'New rule' : 'Edit rule'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error">{error}</div>}
 
           <div className="field-h">
-            <label>Nom</label>
+            <label>Name</label>
             <input type="text" value={rule.name}
               onChange={e => setField('name', e.target.value)} autoFocus required />
           </div>
 
           <div className="field-h">
-            <label>Correspondance</label>
+            <label>Match</label>
             <select value={rule.matchAll ? 'all' : 'any'}
               onChange={e => setField('matchAll', e.target.value === 'all')}>
-              <option value="any">Au moins une condition (anyof)</option>
-              <option value="all">Toutes les conditions (allof)</option>
+              <option value="any">Any condition (anyof)</option>
+              <option value="all">All conditions (allof)</option>
             </select>
           </div>
 
@@ -361,7 +361,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
             <div className="rule-editor-section-header">
               <span className="rule-editor-section-title">Conditions</span>
               <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
-                <PlusIcon /> Ajouter
+                <PlusIcon /> Add
               </button>
             </div>
             {rule.conditions.map((c, i) => (
@@ -370,7 +370,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
                 onRemove={() => removeCondition(i)} />
             ))}
             {rule.conditions.length === 0 && (
-              <p className="rule-editor-empty">Aucune condition — la règle s&apos;applique à tous les messages.</p>
+              <p className="rule-editor-empty">No conditions — the rule applies to all messages.</p>
             )}
           </div>
 
@@ -378,7 +378,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
             <div className="rule-editor-section-header">
               <span className="rule-editor-section-title">Actions</span>
               <button type="button" className="rule-editor-add-btn" onClick={addAction}>
-                <PlusIcon /> Ajouter
+                <PlusIcon /> Add
               </button>
             </div>
             {rule.actions.map((a, i) => (
@@ -387,12 +387,12 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
                 onRemove={() => removeAction(i)} />
             ))}
             {rule.actions.length === 0 && (
-              <p className="rule-editor-empty">Aucune action définie.</p>
+              <p className="rule-editor-empty">No actions defined.</p>
             )}
           </div>
 
           <div className="field-h" style={{ marginTop: '4px' }}>
-            <label>Arrêter après</label>
+            <label>Stop after</label>
             <label className="toggle-switch">
               <input type="checkbox" checked={rule.stopAfter}
                 onChange={e => setField('stopAfter', e.target.checked)} />
@@ -401,9 +401,9 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
           </div>
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}>
-              {isNew ? 'Créer la règle' : 'Enregistrer'}
+              {isNew ? 'Create rule' : 'Save changes'}
             </button>
           </div>
         </form>
@@ -419,18 +419,18 @@ function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Confirmer la suppression</span>
+          <span className="modal-title">Confirm deletion</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
-          Supprimer <strong>{entityLabel}</strong> ? Cette action est irréversible.
+          Delete <strong>{entityLabel}</strong>? This action cannot be undone.
         </p>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Annuler</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="btn btn-primary"
             style={{ width: 'auto', background: 'var(--danger)', borderColor: 'var(--danger)' }}
             onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Supprimer'}
+            {loading ? <span className="spinner" /> : 'Delete'}
           </button>
         </div>
       </div>
@@ -471,7 +471,7 @@ export default function RulesPage({ onBack }) {
         setView('rules')
       }
     } catch (err) {
-      addToast(extractError(err) || 'Impossible de charger les règles', 'error')
+      addToast(extractError(err) || 'Failed to load rules', 'error')
     } finally {
       setLoading(false)
     }
@@ -498,9 +498,9 @@ export default function RulesPage({ onBack }) {
     try {
       await api.saveRules(updatedRules, ruleSet?.providerId, ruleSet?.scriptName)
       setRules(updatedRules)
-      addToast('Règles enregistrées')
+      addToast('Rules saved')
     } catch (err) {
-      addToast(extractError(err) || 'Erreur lors de la sauvegarde', 'error')
+      addToast(extractError(err) || 'Failed to save rules', 'error')
     } finally {
       setSaving(false)
     }
@@ -512,9 +512,9 @@ export default function RulesPage({ onBack }) {
       await api.saveRawScript(rawContent, ruleSet?.scriptName)
       setRawLoaded(false)
       await load()
-      addToast('Script sauvegardé')
+      addToast('Script saved')
     } catch (err) {
-      addToast(extractError(err) || 'Erreur lors de la sauvegarde', 'error')
+      addToast(extractError(err) || 'Failed to save script', 'error')
     } finally {
       setSaving(false)
     }
@@ -529,9 +529,9 @@ export default function RulesPage({ onBack }) {
       setRuleSet(prev => prev ? { ...prev, kind: 'Structured', rules: [] } : prev)
       setConfirmDeleteAll(false)
       setView('rules')
-      addToast('Toutes les règles supprimées')
+      addToast('All rules deleted')
     } catch (err) {
-      addToast(extractError(err) || 'Erreur lors de la suppression', 'error')
+      addToast(extractError(err) || 'Failed to delete rules', 'error')
     } finally {
       setDeleting(false)
     }
@@ -577,7 +577,7 @@ export default function RulesPage({ onBack }) {
     <>
       <header className="site-header">
         <div className="site-header-brand">
-          <button className="back-btn" onClick={onBack} title="Retour aux aliases">
+          <button className="back-btn" onClick={onBack} title="Back to aliases">
             <ArrowLeftIcon />
           </button>
           <img src={logoCircle} alt="" className="site-header-circle" />
@@ -588,8 +588,8 @@ export default function RulesPage({ onBack }) {
       <div className="page-main">
         <div className="header">
           <div>
-            <div className="header-title">Règles de filtrage</div>
-            <div className="header-sub">Filtres Sieve / Pigeonhole</div>
+            <div className="header-title">Mail filters</div>
+            <div className="header-sub">Sieve / Pigeonhole rules</div>
           </div>
           {providerLabel && (
             <span className="provider-badge">{providerLabel}</span>
@@ -605,27 +605,27 @@ export default function RulesPage({ onBack }) {
                 className={`rules-tab${view === 'rules' ? ' is-active' : ''}`}
                 onClick={() => setView('rules')}
               >
-                Règles
+                Rules
               </button>
               <button
                 className={`rules-tab${view === 'raw' ? ' is-active' : ''}`}
                 onClick={handleSwitchToRaw}
               >
-                Script brut
+                Raw script
               </button>
             </div>
 
             {view === 'rules' ? (
               ruleSet?.kind === 'Advanced' ? (
                 <div className="rules-notice">
-                  <p>Le script actuel ne peut pas être interprété comme des règles structurées.</p>
-                  <p>Utilisez l&apos;onglet <strong>Script brut</strong> pour l&apos;éditer manuellement, ou supprimez-le pour repartir de zéro.</p>
+                  <p>The current script cannot be parsed as structured rules.</p>
+                  <p>Use the <strong>Raw script</strong> tab to edit it manually, or delete it to start fresh.</p>
                   <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-ghost" onClick={handleSwitchToRaw}>Voir le script brut</button>
+                    <button className="btn btn-ghost" onClick={handleSwitchToRaw}>View raw script</button>
                     <button className="btn"
                       style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
                       onClick={() => setConfirmDeleteAll(true)}>
-                      Supprimer le script
+                      Delete script
                     </button>
                   </div>
                 </div>
@@ -633,7 +633,7 @@ export default function RulesPage({ onBack }) {
                 <div>
                   <div className="rules-toolbar">
                     <span className="rules-count">
-                      {rules.length} règle{rules.length !== 1 ? 's' : ''}
+                      {rules.length} rule{rules.length !== 1 ? 's' : ''}
                       {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
                     </span>
                     <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
@@ -641,7 +641,7 @@ export default function RulesPage({ onBack }) {
                         <button className="btn"
                           style={{ width: 'auto', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                           onClick={() => setConfirmDeleteAll(true)}>
-                          Tout supprimer
+                          Delete all
                         </button>
                       )}
                       <button
@@ -649,14 +649,14 @@ export default function RulesPage({ onBack }) {
                         style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                         onClick={() => setRuleToEdit(null)}
                       >
-                        <PlusIcon /> Nouvelle règle
+                        <PlusIcon /> New rule
                       </button>
                     </div>
                   </div>
 
                   {rules.length === 0 ? (
                     <div className="rules-empty">
-                      Aucune règle. Cliquez sur <strong>Nouvelle règle</strong> pour commencer.
+                      No rules yet. Click <strong>New rule</strong> to get started.
                     </div>
                   ) : (
                     <div className="rules-list">
@@ -681,7 +681,7 @@ export default function RulesPage({ onBack }) {
               <div className="raw-editor-wrap">
                 {ruleSet?.kind === 'Structured' && (
                   <div className="alert alert-warn">
-                    Attention : modifier le script manuellement peut rendre les règles structurées inaccessibles depuis l&apos;éditeur.
+                    Warning: editing the script manually may make structured rules unavailable in the rule editor.
                   </div>
                 )}
                 <textarea
@@ -695,7 +695,7 @@ export default function RulesPage({ onBack }) {
                 <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
                   <button className="btn btn-primary" style={{ width: 'auto' }}
                     onClick={saveRawScript} disabled={saving}>
-                    {saving ? <span className="spinner" /> : 'Enregistrer le script'}
+                    {saving ? <span className="spinner" /> : 'Save script'}
                   </button>
                 </div>
               </div>
@@ -714,7 +714,7 @@ export default function RulesPage({ onBack }) {
 
       {ruleToDelete && (
         <DeleteConfirmModal
-          entityLabel={`la règle "${ruleToDelete.name}"`}
+          entityLabel={`rule "${ruleToDelete.name}"`}
           onConfirm={handleDeleteRule}
           onClose={() => setRuleToDelete(null)}
           loading={deleting}
@@ -723,7 +723,7 @@ export default function RulesPage({ onBack }) {
 
       {confirmDeleteAll && (
         <DeleteConfirmModal
-          entityLabel="toutes les règles"
+          entityLabel="all rules"
           onConfirm={handleDeleteAll}
           onClose={() => setConfirmDeleteAll(false)}
           loading={deleting}
