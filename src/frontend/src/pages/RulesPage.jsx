@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api.js'
-import logoCircle from '../assets/logo_circle.jpg'
-import weeskyLogo from '../assets/weesky_net.png'
 
 // ── Toasts (local copy, same pattern as AliasesPage) ─────────
 
@@ -37,16 +35,6 @@ export function Toasts({ toasts, onRemove }) {
 }
 
 // ── Icons ─────────────────────────────────────────────────────
-
-function ArrowLeftIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="19" y1="12" x2="5" y2="12" />
-      <polyline points="12 19 5 12 12 5" />
-    </svg>
-  )
-}
 
 function PlusIcon() {
   return (
@@ -539,7 +527,7 @@ function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
 
 // ── RulesPage ─────────────────────────────────────────────────
 
-export default function RulesPage({ onBack }) {
+export default function RulesPage({ onClose }) {
   const { toasts, addToast, removeToast } = useToasts()
 
   const [ruleSet, setRuleSet] = useState(null)
@@ -652,85 +640,80 @@ export default function RulesPage({ onBack }) {
 
   return (
     <>
-      <header className="site-header">
-        <div className="site-header-brand">
-          <button className="back-btn" onClick={onBack} title="Back to aliases">
-            <ArrowLeftIcon />
-          </button>
-          <img src={logoCircle} alt="" className="site-header-circle" />
-          <img src={weeskyLogo} alt="weesky.net" className="site-header-logo" />
-        </div>
-      </header>
-
-      <div className="page-main">
-        <div className="header">
-          <div>
-            <div className="header-title">Rules</div>
-            <div className="header-sub">Create and manage rules that define how your incoming messages are handled. Rules are processed from top to bottom.</div>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal modal-rules" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <span className="modal-title">
+              Rules
+              {providerLabel && <span className="provider-badge" style={{ marginLeft: '8px' }}>{providerLabel}</span>}
+            </span>
+            <button className="modal-close" onClick={onClose}>✕</button>
           </div>
-          {providerLabel && (
-            <span className="provider-badge">{providerLabel}</span>
-          )}
-        </div>
+          <div className="rules-modal-body">
+            <p className="rules-modal-desc">
+              Create and manage rules that define how your incoming messages are handled. Rules are processed from top to bottom.
+            </p>
 
-        {loading ? (
-          <div className="loading-center"><span className="spinner" /></div>
-        ) : ruleSet?.kind === 'Advanced' ? (
-          <div className="rules-notice">
-            <p>The current script cannot be parsed as structured rules.</p>
-            <p>Delete it to start fresh with the rule editor.</p>
-            <div style={{ marginTop: '16px' }}>
-              <button className="btn"
-                style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
-                onClick={() => setConfirmDeleteAll(true)}>
-                Delete script
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="rules-toolbar">
-              <span className="rules-count">
-                {rules.length} rule{rules.length !== 1 ? 's' : ''}
-                {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
-              </span>
-              <button
-                className="btn btn-primary"
-                style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}
-                onClick={() => setRuleToEdit(null)}
-              >
-                <PlusIcon /> New rule
-              </button>
-            </div>
-
-            {rules.length === 0 ? (
-              <div className="rules-empty">
-                No rules yet. Click <strong>New rule</strong> to get started.
+            {loading ? (
+              <div className="loading-center"><span className="spinner" /></div>
+            ) : ruleSet?.kind === 'Advanced' ? (
+              <div className="rules-notice">
+                <p>The current script cannot be parsed as structured rules.</p>
+                <p>Delete it to start fresh with the rule editor.</p>
+                <div style={{ marginTop: '16px' }}>
+                  <button className="btn"
+                    style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
+                    onClick={() => setConfirmDeleteAll(true)}>
+                    Delete script
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="rules-list">
-                {rules.map((rule, i) => (
-                  <RuleCard
-                    key={rule.id ?? i}
-                    rule={rule}
-                    isFirst={i === 0}
-                    isLast={i === rules.length - 1}
-                    onEdit={() => setRuleToEdit(rule)}
-                    onDelete={() => setRuleToDelete(rule)}
-                    onToggleEnabled={enabled => handleToggleEnabled(i, enabled)}
-                    onMoveUp={() => handleMoveUp(i)}
-                    onMoveDown={() => handleMoveDown(i)}
-                    isDragOver={dropIndex === i}
-                    onDragStart={() => { dragIndexRef.current = i }}
-                    onDragOver={() => { if (dragIndexRef.current !== null && dragIndexRef.current !== i) setDropIndex(i) }}
-                    onDrop={() => handleDrop(i)}
-                    onDragEnd={handleDragEnd}
-                  />
-                ))}
+              <div>
+                <div className="rules-toolbar">
+                  <span className="rules-count">
+                    {rules.length} rule{rules.length !== 1 ? 's' : ''}
+                    {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
+                  </span>
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}
+                    onClick={() => setRuleToEdit(null)}
+                  >
+                    <PlusIcon /> New rule
+                  </button>
+                </div>
+
+                {rules.length === 0 ? (
+                  <div className="rules-empty">
+                    No rules yet. Click <strong>New rule</strong> to get started.
+                  </div>
+                ) : (
+                  <div className="rules-list">
+                    {rules.map((rule, i) => (
+                      <RuleCard
+                        key={rule.id ?? i}
+                        rule={rule}
+                        isFirst={i === 0}
+                        isLast={i === rules.length - 1}
+                        onEdit={() => setRuleToEdit(rule)}
+                        onDelete={() => setRuleToDelete(rule)}
+                        onToggleEnabled={enabled => handleToggleEnabled(i, enabled)}
+                        onMoveUp={() => handleMoveUp(i)}
+                        onMoveDown={() => handleMoveDown(i)}
+                        isDragOver={dropIndex === i}
+                        onDragStart={() => { dragIndexRef.current = i }}
+                        onDragOver={() => { if (dragIndexRef.current !== null && dragIndexRef.current !== i) setDropIndex(i) }}
+                        onDrop={() => handleDrop(i)}
+                        onDragEnd={handleDragEnd}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       {ruleToEdit !== undefined && (
@@ -752,7 +735,7 @@ export default function RulesPage({ onBack }) {
 
       {confirmDeleteAll && (
         <DeleteConfirmModal
-          entityLabel="all rules"
+          entityLabel="script"
           onConfirm={handleDeleteAll}
           onClose={() => setConfirmDeleteAll(false)}
           loading={deleting}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, clearSession, setIsAdmin } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
+import RulesPage from './RulesPage.jsx'
 
 function useToasts() {
   const [toasts, setToasts] = useState([])
@@ -1026,7 +1027,7 @@ export function AdminModal({ onClose, addToast }) {
   )
 }
 
-export default function AliasesPage({ onLogout, onOpenRules }) {
+export default function AliasesPage({ onLogout }) {
   const { toasts, addToast, removeToast } = useToasts()
 
   const [domains, setDomains] = useState([])
@@ -1050,6 +1051,7 @@ export default function AliasesPage({ onLogout, onOpenRules }) {
   const [highlightedKey, setHighlightedKey] = useState(null)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
+  const [rulesOpen, setRulesOpen] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [alphaMode, setAlphaMode] = useState(() => localStorage.getItem('alias_alpha_mode') === 'true')
   const [theme, setTheme] = useState(() => localStorage.getItem('appearance_theme') || 'system')
@@ -1224,7 +1226,7 @@ export default function AliasesPage({ onLogout, onOpenRules }) {
           onLogout={handleLogout}
           onChangePassword={() => setChangePasswordOpen(true)}
           onAdmin={() => setAdminOpen(true)}
-          onRules={onOpenRules}
+          onRules={() => setRulesOpen(true)}
           isAdmin={isAdminUser}
           onFullNameChange={handleFullNameChange}
           alphaMode={alphaMode}
@@ -1385,6 +1387,9 @@ export default function AliasesPage({ onLogout, onOpenRules }) {
       )}
       {adminOpen && (
         <AdminModal onClose={() => setAdminOpen(false)} addToast={addToast} />
+      )}
+      {rulesOpen && (
+        <RulesPage onClose={() => setRulesOpen(false)} />
       )}
     </div>
 

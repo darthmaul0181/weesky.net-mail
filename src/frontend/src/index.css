@@ -1873,6 +1873,38 @@ body {
   background: #1a1f2e;
 }
 
+/* ── Rules modal ─────────────────────────────────────────────  */
+
+.modal-rules {
+  width: 75vw;
+  max-width: 900px;
+  height: 75vh;
+  max-height: 75vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal.modal-rules > .modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.rules-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.rules-modal-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+
 /* ── Rule editor wizard ──────────────────────────────────────  */
 
 .rule-wizard {
