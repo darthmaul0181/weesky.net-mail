@@ -16,5 +16,13 @@ namespace weesky.Snoopy.Microservice.Models
         /// script has been uploaded yet.
         /// </summary>
         public string RawScript { get; init; } = string.Empty;
+
+        /// <summary>
+        /// When non-null, indicates the content was fetched from another active script
+        /// (e.g. one created by Rainloop) because no managed script exists yet. On the
+        /// next save, a new managed script will be created and activated, deactivating
+        /// this one. The original script is not deleted.
+        /// </summary>
+        public string? AdoptedFromScriptName { get; init; }
     }
 }

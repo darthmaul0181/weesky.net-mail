@@ -31,17 +31,23 @@ namespace weesky.Snoopy.Microservice.Services
         {
             ThrowIfDisposed();
             await SendLineAsync("LISTSCRIPTS", cancellationToken);
-            var response = await ReadResponseAsync(cancellationToken);
-            if (!response.IsOk)
-                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>(response.Message ?? "Unable to list Sieve scripts");
 
             var entries = new List<SieveScriptListEntry>();
-            foreach (var line in response.DataLines)
+            while (true)
             {
-                var entry = ParseListEntry(line);
+                var line = await ReadLineAsync(cancellationToken);
+                if (line == null)
+                    return Result.Failure<IReadOnlyList<SieveScriptListEntry>>("Connection closed");
+                if (IsTerminator(line, out var status))
+                {
+                    return status.IsOk
+                        ? Result.Success<IReadOnlyList<SieveScriptListEntry>>(entries)
+                        : Result.Failure<IReadOnlyList<SieveScriptListEntry>>(status.Message ?? "Unable to list Sieve scripts");
+                }
+
+                var entry = await ParseListEntryAsync(line, cancellationToken);
                 if (entry != null) entries.Add(entry);
             }
-            return Result.Success<IReadOnlyList<SieveScriptListEntry>>(entries);
         }
 
         public async Task<Result<string>> GetScriptAsync(string name, CancellationToken cancellationToken = default)
@@ -263,24 +269,39 @@ namespace weesky.Snoopy.Microservice.Services
             return sb.ToString();
         }
 
-        private static SieveScriptListEntry? ParseListEntry(string line)
+        private async Task<SieveScriptListEntry?> ParseListEntryAsync(string line, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(line)) return null;
-            if (line[0] != '"') return null;
-            // Find the closing unescaped quote.
-            int end = -1;
-            for (int i = 1; i < line.Length; i++)
+
+            // Quoted form: "name" [ACTIVE]
+            if (line[0] == '"')
             {
-                if (line[i] == '\\' && i + 1 < line.Length) { i++; continue; }
-                if (line[i] == '"') { end = i; break; }
+                int end = -1;
+                for (int i = 1; i < line.Length; i++)
+                {
+                    if (line[i] == '\\' && i + 1 < line.Length) { i++; continue; }
+                    if (line[i] == '"') { end = i; break; }
+                }
+                if (end < 0) return null;
+                var name = TryUnquote(line.Substring(0, end + 1)) ?? string.Empty;
+                var rest = line.Substring(end + 1).Trim();
+                return new SieveScriptListEntry(name, IsActiveKeyword(rest));
             }
-            if (end < 0) return null;
-            var quoted = line.Substring(0, end + 1);
-            var name = TryUnquote(quoted) ?? string.Empty;
-            var rest = line.Substring(end + 1).Trim();
-            bool active = rest.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
-            return new SieveScriptListEntry(name, active);
+
+            // Literal form: {N} or {N+} on its own line, then N bytes of name, then maybe " ACTIVE\r\n"
+            if (line[0] == '{' && TryParseLiteralPrefix(line, out var size))
+            {
+                var nameBytes = await ReadExactlyAsync(size, cancellationToken);
+                var name = Utf8.GetString(nameBytes);
+                var trailing = await ReadLineAsync(cancellationToken);
+                return new SieveScriptListEntry(name, trailing != null && IsActiveKeyword(trailing.Trim()));
+            }
+
+            return null;
         }
+
+        private static bool IsActiveKeyword(string s) =>
+            s.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
 
         private static bool TryParseLiteralPrefix(string line, out int size)
         {

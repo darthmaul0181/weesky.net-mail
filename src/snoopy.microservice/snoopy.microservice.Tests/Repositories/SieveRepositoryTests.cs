@@ -61,6 +61,71 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
+        public async Task GetRuleSetAsync_WhenManagedScriptMissingButAnotherActive_AdoptsActiveScript()
+        {
+            const string rainloopScript = "require [\"fileinto\"];\nif header :contains \"Subject\" \"x\" { fileinto \"X\"; }";
+
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[]
+                   {
+                       new SieveScriptListEntry("rainloop.user.sieve", true),
+                       new SieveScriptListEntry("backup", false)
+                   }));
+            session.Setup(s => s.GetScriptAsync("rainloop.user.sieve", It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success(rainloopScript));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(SieveScriptKind.Advanced, result.Value.Kind);
+            Assert.Equal(rainloopScript, result.Value.RawScript);
+            Assert.Equal("rainloop.user.sieve", result.Value.AdoptedFromScriptName);
+            session.Verify(s => s.GetScriptAsync("rainloop.user.sieve", It.IsAny<CancellationToken>()), Times.Once);
+            session.Verify(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetRuleSetAsync_WhenOnlyInactiveScriptsExist_ReturnsEmpty()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[]
+                   {
+                       new SieveScriptListEntry("old", false)
+                   }));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(SieveScriptKind.Structured, result.Value.Kind);
+            Assert.Empty(result.Value.Rules);
+            Assert.Null(result.Value.AdoptedFromScriptName);
+            session.Verify(s => s.GetScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetRuleSetAsync_WhenManagedScriptExists_PrefersItOverActiveOther()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(new[]
+                   {
+                       new SieveScriptListEntry(ScriptName, false),
+                       new SieveScriptListEntry("rainloop", true)
+                   }));
+            session.Setup(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success("require [\"fileinto\"];"));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsSuccess);
+            Assert.Null(result.Value.AdoptedFromScriptName);
+            session.Verify(s => s.GetScriptAsync(ScriptName, It.IsAny<CancellationToken>()), Times.Once);
+            session.Verify(s => s.GetScriptAsync("rainloop", It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
         public async Task GetRuleSetAsync_WhenScriptHasMarker_ReturnsStructuredRules()
         {
             var compiler = new SieveScriptCompiler();

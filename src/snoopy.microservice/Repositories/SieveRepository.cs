@@ -35,20 +35,39 @@ namespace weesky.Snoopy.Microservice.Repositories
             var list = await session.ListScriptsAsync(cancellationToken);
             if (list.IsFailure) return Result.Failure<SieveRuleSet>(list.Error);
 
-            if (!list.Value.Any(e => string.Equals(e.Name, _options.ScriptName, StringComparison.Ordinal)))
+            var managed = list.Value.FirstOrDefault(e => string.Equals(e.Name, _options.ScriptName, StringComparison.Ordinal));
+            if (managed != null)
+            {
+                var script = await session.GetScriptAsync(_options.ScriptName, cancellationToken);
+                if (script.IsFailure) return Result.Failure<SieveRuleSet>(script.Error);
+
+                var parsed = _compiler.Parse(script.Value);
+                return Result.Success(new SieveRuleSet
+                {
+                    Kind = parsed.Kind,
+                    Rules = parsed.Rules,
+                    RawScript = script.Value
+                });
+            }
+
+            // No managed script yet — adopt the currently active script (if any) so existing
+            // rules created by another client (e.g. Rainloop) show up in the advanced editor.
+            var adopted = list.Value.FirstOrDefault(e => e.IsActive);
+            if (adopted == null)
             {
                 return Result.Success(new SieveRuleSet { Kind = SieveScriptKind.Structured });
             }
 
-            var script = await session.GetScriptAsync(_options.ScriptName, cancellationToken);
-            if (script.IsFailure) return Result.Failure<SieveRuleSet>(script.Error);
+            var adoptedScript = await session.GetScriptAsync(adopted.Name, cancellationToken);
+            if (adoptedScript.IsFailure) return Result.Failure<SieveRuleSet>(adoptedScript.Error);
 
-            var parsed = _compiler.Parse(script.Value);
+            var adoptedParsed = _compiler.Parse(adoptedScript.Value);
             return Result.Success(new SieveRuleSet
             {
-                Kind = parsed.Kind,
-                Rules = parsed.Rules,
-                RawScript = script.Value
+                Kind = adoptedParsed.Kind,
+                Rules = adoptedParsed.Rules,
+                RawScript = adoptedScript.Value,
+                AdoptedFromScriptName = adopted.Name
             });
         }
 

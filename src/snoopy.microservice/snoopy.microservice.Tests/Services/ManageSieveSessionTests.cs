@@ -41,6 +41,35 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         }
 
         [Fact]
+        public async Task ListScriptsAsync_WithLiteralName_ParsesAndDetectsActive()
+        {
+            // "{16+}\r\nrainloop.sieve.0 ACTIVE\r\n{4+}\r\nbak1\r\nOK\r\n"
+            var server = "{16+}\r\nrainloop.sieve.0 ACTIVE\r\n{4+}\r\nbak1\r\nOK\r\n";
+            var sut = CreateSut(server, out _);
+
+            var result = await sut.ListScriptsAsync();
+
+            Assert.True(result.IsSuccess);
+            Assert.Collection(result.Value,
+                e => { Assert.Equal("rainloop.sieve.0", e.Name); Assert.True(e.IsActive); },
+                e => { Assert.Equal("bak1", e.Name); Assert.False(e.IsActive); });
+        }
+
+        [Fact]
+        public async Task ListScriptsAsync_WithMixedQuotedAndLiteralNames_ParsesBoth()
+        {
+            var server = "\"weesky-rules\" ACTIVE\r\n{4+}\r\nbak1\r\nOK\r\n";
+            var sut = CreateSut(server, out _);
+
+            var result = await sut.ListScriptsAsync();
+
+            Assert.True(result.IsSuccess);
+            Assert.Collection(result.Value,
+                e => { Assert.Equal("weesky-rules", e.Name); Assert.True(e.IsActive); },
+                e => { Assert.Equal("bak1", e.Name); Assert.False(e.IsActive); });
+        }
+
+        [Fact]
         public async Task ListScriptsAsync_WithNoResponse_ReturnsFailure()
         {
             var sut = CreateSut("NO \"Something went wrong\"\r\n", out _);

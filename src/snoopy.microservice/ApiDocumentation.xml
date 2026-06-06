@@ -196,6 +196,7 @@
             Switches the script back to structured mode if it had been edited as raw Sieve.
             </summary>
             <param name="rules">The complete, ordered list of rules.</param>
+            <param name="cancellationToken">Cancellation token.</param>
             <response code="204">Rules saved and activated</response>
             <response code="400">A rule is invalid or the server rejected the resulting Sieve script</response>
             <response code="401">Unauthenticated user</response>
@@ -224,6 +225,7 @@
             not added back) until the user reverts via <c>PUT /api/Rules</c>.
             </summary>
             <param name="script">The raw script content.</param>
+            <param name="cancellationToken">Cancellation token.</param>
             <response code="204">Script saved and activated</response>
             <response code="400">Server rejected the script (Sieve compilation error)</response>
             <response code="401">Unauthenticated user</response>
@@ -414,6 +416,14 @@
             <summary>
             The exact text returned by the ManageSieve server, or an empty string if no
             script has been uploaded yet.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveRuleSet.AdoptedFromScriptName">
+            <summary>
+            When non-null, indicates the content was fetched from another active script
+            (e.g. one created by Rainloop) because no managed script exists yet. On the
+            next save, a new managed script will be created and activated, deactivating
+            this one. The original script is not deleted.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.SieveScriptKind">
