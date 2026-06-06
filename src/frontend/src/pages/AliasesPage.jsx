@@ -98,6 +98,15 @@ function ShieldIcon() {
   )
 }
 
+function FilterIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  )
+}
+
 function PersonPlusIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
@@ -253,7 +262,7 @@ export function QuotaMini({ quota }) {
   )
 }
 
-export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange, theme, onThemeChange }) {
+export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, onRules, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange, theme, onThemeChange }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -381,6 +390,10 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
                   Administration
                 </button>
               )}
+              <button className="panel-link" onClick={() => { setOpen(false); onRules() }}>
+                <FilterIcon />
+                Règles de filtrage
+              </button>
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
                 <LockIcon />
                 Change password
@@ -1013,7 +1026,7 @@ export function AdminModal({ onClose, addToast }) {
   )
 }
 
-export default function AliasesPage({ onLogout }) {
+export default function AliasesPage({ onLogout, onOpenRules }) {
   const { toasts, addToast, removeToast } = useToasts()
 
   const [domains, setDomains] = useState([])
@@ -1211,6 +1224,7 @@ export default function AliasesPage({ onLogout }) {
           onLogout={handleLogout}
           onChangePassword={() => setChangePasswordOpen(true)}
           onAdmin={() => setAdminOpen(true)}
+          onRules={onOpenRules}
           isAdmin={isAdminUser}
           onFullNameChange={handleFullNameChange}
           alphaMode={alphaMode}
