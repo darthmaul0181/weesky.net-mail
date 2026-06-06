@@ -120,12 +120,10 @@ const CONDITION_OPERATORS = [
 ]
 
 const ACTION_TYPES = [
-  { value: 'FileInto', label: 'Move to',            hasArg: true,  argPlaceholder: 'Folder name' },
-  { value: 'Redirect', label: 'Redirect to',        hasArg: true,  argPlaceholder: 'email@address.com' },
-  { value: 'SetFlag',  label: 'Mark as read',       hasArg: true,  argPlaceholder: '\\Seen' },
-  { value: 'Keep',     label: 'Keep',               hasArg: false, argPlaceholder: '' },
-  { value: 'Discard',  label: 'Discard',            hasArg: false, argPlaceholder: '' },
-  { value: 'Reject',   label: 'Reject with message', hasArg: true, argPlaceholder: 'Message (optional)' },
+  { value: 'FileInto', label: 'Move to',             hasArg: true,  argPlaceholder: 'Folder name' },
+  { value: 'Redirect', label: 'Redirect to',         hasArg: true,  argPlaceholder: 'email@address.com' },
+  { value: 'Discard',  label: 'Discard',             hasArg: false, argPlaceholder: '' },
+  { value: 'Reject',   label: 'Reject with message', hasArg: true,  argPlaceholder: 'Message (optional)' },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -291,8 +289,12 @@ export function ActionRow({ action, onChange, onRemove }) {
 
 export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
   const isNew = !initialRule
-  const [rule, setRule] = useState(() =>
-    initialRule ? JSON.parse(JSON.stringify(initialRule)) : makeEmptyRule()
+  const [rule, setRule] = useState(() => {
+    const base = initialRule ? JSON.parse(JSON.stringify(initialRule)) : makeEmptyRule()
+    return { ...base, actions: base.actions.filter(a => a.type !== 'SetFlag') }
+  })
+  const [markAsRead, setMarkAsRead] = useState(() =>
+    initialRule?.actions?.some(a => a.type === 'SetFlag') ?? false
   )
   const [error, setError] = useState(null)
 
@@ -329,7 +331,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
     if (rule.conditions.length === 0) { setError('At least one condition is required'); return }
     if (rule.actions.length === 0) { setError('At least one action is required'); return }
     setError(null)
-    onSave(rule)
+    const fullActions = markAsRead
+      ? [{ type: 'SetFlag', argument: '\\Seen' }, ...rule.actions]
+      : rule.actions
+    onSave({ ...rule, actions: fullActions })
   }
 
   return (
@@ -392,6 +397,15 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
           </div>
 
           <div className="field-h" style={{ marginTop: '4px' }}>
+            <label>Mark as read</label>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={markAsRead}
+                onChange={e => setMarkAsRead(e.target.checked)} />
+              <span className="toggle-track" />
+            </label>
+          </div>
+
+          <div className="field-h">
             <label>Stop after</label>
             <label className="toggle-switch">
               <input type="checkbox" checked={rule.stopAfter}
