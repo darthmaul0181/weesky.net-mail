@@ -103,9 +103,7 @@ function ChevronDownIcon() {
 
 const CONDITION_FIELDS = [
   { value: 'From',      label: 'From' },
-  { value: 'To',        label: 'To' },
-  { value: 'Cc',        label: 'Cc' },
-  { value: 'Recipient', label: 'Recipient (To/Cc)' },
+  { value: 'Recipient', label: 'To / Cc' },
   { value: 'Subject',   label: 'Subject' },
   { value: 'Header',    label: 'Custom header' },
   { value: 'Size',      label: 'Size (bytes)' },
