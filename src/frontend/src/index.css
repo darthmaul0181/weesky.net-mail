@@ -2001,18 +2001,18 @@ body {
 
 .rule-card-drag {
   color: var(--text-muted);
-  opacity: 0.35;
+  opacity: 0.55;
   cursor: grab;
   display: flex;
   align-items: center;
-  padding: 0 3px;
+  padding: 0 4px;
   flex-shrink: 0;
   transition: opacity 0.15s;
   user-select: none;
 }
 
 .rule-card-drag:hover {
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .rule-card-drop-over {

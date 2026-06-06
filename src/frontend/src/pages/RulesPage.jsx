@@ -101,10 +101,10 @@ function ChevronDownIcon() {
 
 function GripIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="8"  cy="6"  r="1.8" /><circle cx="16" cy="6"  r="1.8" />
-      <circle cx="8"  cy="12" r="1.8" /><circle cx="16" cy="12" r="1.8" />
-      <circle cx="8"  cy="18" r="1.8" /><circle cx="16" cy="18" r="1.8" />
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="8"  cy="6"  r="2" /><circle cx="16" cy="6"  r="2" />
+      <circle cx="8"  cy="12" r="2" /><circle cx="16" cy="12" r="2" />
+      <circle cx="8"  cy="18" r="2" /><circle cx="16" cy="18" r="2" />
     </svg>
   )
 }
@@ -179,7 +179,7 @@ function makeEmptyRule() {
 
 // ── RuleCard ──────────────────────────────────────────────────
 
-export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) {
+export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isLast, onMoveUp, onMoveDown, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) {
   const [collapsed, setCollapsed] = useState(true)
   const hasActions = rule.actions.length > 0
 
@@ -207,6 +207,8 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isDragOver, 
           </div>
         )}
         <div className="rule-card-btns">
+          <button className="admin-icon-btn" title="Move up" disabled={isFirst} onClick={e => { e.stopPropagation(); onMoveUp() }}><ChevronUpIcon /></button>
+          <button className="admin-icon-btn" title="Move down" disabled={isLast} onClick={e => { e.stopPropagation(); onMoveDown() }}><ChevronDownIcon /></button>
           <button className="admin-icon-btn" title="Edit" onClick={e => { e.stopPropagation(); onEdit() }}><PencilIcon /></button>
           <button className="admin-icon-btn is-danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}><TrashIcon /></button>
           <button className="admin-icon-btn" title={collapsed ? 'Expand' : 'Collapse'} onClick={e => { e.stopPropagation(); setCollapsed(c => !c) }}>
@@ -546,10 +548,6 @@ export default function RulesPage({ onBack }) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const [view, setView] = useState('rules')
-  const [rawContent, setRawContent] = useState('')
-  const [rawLoaded, setRawLoaded] = useState(false)
-
   const [ruleToEdit, setRuleToEdit] = useState(undefined)
   const [ruleToDelete, setRuleToDelete] = useState(null)
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
@@ -560,13 +558,6 @@ export default function RulesPage({ onBack }) {
       const data = await api.getRules()
       setRuleSet(data)
       setRules(data.rules ?? [])
-      if (data.kind === 'Advanced') {
-        setView('raw')
-        setRawContent(data.rawScript ?? '')
-        setRawLoaded(true)
-      } else {
-        setView('rules')
-      }
     } catch (err) {
       addToast(extractError(err) || 'Failed to load rules', 'error')
     } finally {
@@ -575,20 +566,6 @@ export default function RulesPage({ onBack }) {
   }, [addToast])
 
   useEffect(() => { load() }, [load])
-
-  async function handleSwitchToRaw() {
-    setView('raw')
-    if (!rawLoaded) {
-      try {
-        const data = await api.getRawScript()
-        setRawContent(data?.content ?? '')
-        setRawLoaded(true)
-      } catch {
-        setRawContent('')
-        setRawLoaded(true)
-      }
-    }
-  }
 
   async function persistRules(updatedRules) {
     setSaving(true)
@@ -603,32 +580,16 @@ export default function RulesPage({ onBack }) {
     }
   }
 
-  async function saveRawScript() {
-    setSaving(true)
-    try {
-      await api.saveRawScript(rawContent, ruleSet?.scriptName)
-      setRawLoaded(false)
-      await load()
-      addToast('Script saved')
-    } catch (err) {
-      addToast(extractError(err) || 'Failed to save script', 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   async function handleDeleteAll() {
     setDeleting(true)
     try {
       await api.deleteRules()
       setRules([])
-      setRawContent('')
       setRuleSet(prev => prev ? { ...prev, kind: 'Structured', rules: [] } : prev)
       setConfirmDeleteAll(false)
-      setView('rules')
-      addToast('All rules deleted')
+      addToast('Script deleted')
     } catch (err) {
-      addToast(extractError(err) || 'Failed to delete rules', 'error')
+      addToast(extractError(err) || 'Failed to delete script', 'error')
     } finally {
       setDeleting(false)
     }
@@ -650,6 +611,20 @@ export default function RulesPage({ onBack }) {
     const updated = rules.filter(r => r.id !== ruleToDelete.id)
     setRuleToDelete(null)
     persistRules(updated)
+  }
+
+  function handleMoveUp(index) {
+    if (index === 0) return
+    const u = [...rules];
+    [u[index - 1], u[index]] = [u[index], u[index - 1]]
+    persistRules(u)
+  }
+
+  function handleMoveDown(index) {
+    if (index === rules.length - 1) return
+    const u = [...rules];
+    [u[index], u[index + 1]] = [u[index + 1], u[index]]
+    persistRules(u)
   }
 
   const dragIndexRef = useRef(null)
@@ -690,8 +665,8 @@ export default function RulesPage({ onBack }) {
       <div className="page-main">
         <div className="header">
           <div>
-            <div className="header-title">Mail filters</div>
-            <div className="header-sub">Sieve / Pigeonhole rules</div>
+            <div className="header-title">Rules</div>
+            <div className="header-sub">Create and manage rules that define how your incoming messages are handled. Rules are processed from top to bottom.</div>
           </div>
           {providerLabel && (
             <span className="provider-badge">{providerLabel}</span>
@@ -700,110 +675,61 @@ export default function RulesPage({ onBack }) {
 
         {loading ? (
           <div className="loading-center"><span className="spinner" /></div>
-        ) : (
-          <>
-            <div className="rules-tabs">
-              <button
-                className={`rules-tab${view === 'rules' ? ' is-active' : ''}`}
-                onClick={() => setView('rules')}
-              >
-                Rules
+        ) : ruleSet?.kind === 'Advanced' ? (
+          <div className="rules-notice">
+            <p>The current script cannot be parsed as structured rules.</p>
+            <p>Delete it to start fresh with the rule editor.</p>
+            <div style={{ marginTop: '16px' }}>
+              <button className="btn"
+                style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
+                onClick={() => setConfirmDeleteAll(true)}>
+                Delete script
               </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="rules-toolbar">
+              <span className="rules-count">
+                {rules.length} rule{rules.length !== 1 ? 's' : ''}
+                {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
+              </span>
               <button
-                className={`rules-tab${view === 'raw' ? ' is-active' : ''}`}
-                onClick={handleSwitchToRaw}
+                className="btn btn-primary"
+                style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}
+                onClick={() => setRuleToEdit(null)}
               >
-                Raw script
+                <PlusIcon /> New rule
               </button>
             </div>
 
-            {view === 'rules' ? (
-              ruleSet?.kind === 'Advanced' ? (
-                <div className="rules-notice">
-                  <p>The current script cannot be parsed as structured rules.</p>
-                  <p>Use the <strong>Raw script</strong> tab to edit it manually, or delete it to start fresh.</p>
-                  <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-ghost" onClick={handleSwitchToRaw}>View raw script</button>
-                    <button className="btn"
-                      style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
-                      onClick={() => setConfirmDeleteAll(true)}>
-                      Delete script
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="rules-toolbar">
-                    <span className="rules-count">
-                      {rules.length} rule{rules.length !== 1 ? 's' : ''}
-                      {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
-                    </span>
-                    <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
-                      {rules.length > 0 && (
-                        <button className="btn"
-                          style={{ width: 'auto', color: 'var(--danger)', border: '1px solid var(--danger)' }}
-                          onClick={() => setConfirmDeleteAll(true)}>
-                          Delete all
-                        </button>
-                      )}
-                      <button
-                        className="btn btn-primary"
-                        style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        onClick={() => setRuleToEdit(null)}
-                      >
-                        <PlusIcon /> New rule
-                      </button>
-                    </div>
-                  </div>
-
-                  {rules.length === 0 ? (
-                    <div className="rules-empty">
-                      No rules yet. Click <strong>New rule</strong> to get started.
-                    </div>
-                  ) : (
-                    <div className="rules-list">
-                      {rules.map((rule, i) => (
-                        <RuleCard
-                          key={rule.id ?? i}
-                          rule={rule}
-                          onEdit={() => setRuleToEdit(rule)}
-                          onDelete={() => setRuleToDelete(rule)}
-                          onToggleEnabled={enabled => handleToggleEnabled(i, enabled)}
-                          isDragOver={dropIndex === i}
-                          onDragStart={() => { dragIndexRef.current = i }}
-                          onDragOver={() => { if (dragIndexRef.current !== null && dragIndexRef.current !== i) setDropIndex(i) }}
-                          onDrop={() => handleDrop(i)}
-                          onDragEnd={handleDragEnd}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
+            {rules.length === 0 ? (
+              <div className="rules-empty">
+                No rules yet. Click <strong>New rule</strong> to get started.
+              </div>
             ) : (
-              <div className="raw-editor-wrap">
-                {ruleSet?.kind === 'Structured' && (
-                  <div className="alert alert-warn">
-                    Warning: editing the script manually may make structured rules unavailable in the rule editor.
-                  </div>
-                )}
-                <textarea
-                  className="raw-textarea"
-                  value={rawContent}
-                  onChange={e => setRawContent(e.target.value)}
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                />
-                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                  <button className="btn btn-primary" style={{ width: 'auto' }}
-                    onClick={saveRawScript} disabled={saving}>
-                    {saving ? <span className="spinner" /> : 'Save script'}
-                  </button>
-                </div>
+              <div className="rules-list">
+                {rules.map((rule, i) => (
+                  <RuleCard
+                    key={rule.id ?? i}
+                    rule={rule}
+                    isFirst={i === 0}
+                    isLast={i === rules.length - 1}
+                    onEdit={() => setRuleToEdit(rule)}
+                    onDelete={() => setRuleToDelete(rule)}
+                    onToggleEnabled={enabled => handleToggleEnabled(i, enabled)}
+                    onMoveUp={() => handleMoveUp(i)}
+                    onMoveDown={() => handleMoveDown(i)}
+                    isDragOver={dropIndex === i}
+                    onDragStart={() => { dragIndexRef.current = i }}
+                    onDragOver={() => { if (dragIndexRef.current !== null && dragIndexRef.current !== i) setDropIndex(i) }}
+                    onDrop={() => handleDrop(i)}
+                    onDragEnd={handleDragEnd}
+                  />
+                ))}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
