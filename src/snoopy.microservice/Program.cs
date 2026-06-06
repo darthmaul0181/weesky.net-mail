@@ -59,6 +59,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options => {
 
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
 builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
+builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSection("Sieve"));
+builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
+builder.Services.AddSingleton<ISieveScriptCompiler, SieveScriptCompiler>();
+builder.Services.AddScoped<ISieveRepository, SieveRepository>();
 builder.Services.AddScoped<IUsersRepository, UsersRepository>();
 builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();

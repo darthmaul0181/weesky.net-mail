@@ -181,6 +181,53 @@
             <response code="204">Logout successful</response>
             <response code="401">Try to logout an unauthenticated user</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
+            <summary>
+            Returns the authenticated user's Sieve configuration: structured rules when the
+            script was produced by this UI, or the raw script when it was hand-edited.
+            </summary>
+            <response code="200">Rule set retrieved</response>
+            <response code="400">Rules service is unavailable or rejected the request</response>
+            <response code="401">Unauthenticated user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Replace(System.Collections.Generic.List{weesky.Snoopy.Microservice.Models.SieveRule},System.Threading.CancellationToken)">
+            <summary>
+            Replaces all of the authenticated user's structured rules.
+            Switches the script back to structured mode if it had been edited as raw Sieve.
+            </summary>
+            <param name="rules">The complete, ordered list of rules.</param>
+            <response code="204">Rules saved and activated</response>
+            <response code="400">A rule is invalid or the server rejected the resulting Sieve script</response>
+            <response code="401">Unauthenticated user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.DeleteAll(System.Threading.CancellationToken)">
+            <summary>
+            Deletes the managed Sieve script (deactivating it first). The user retains
+            any other scripts they uploaded out-of-band.
+            </summary>
+            <response code="204">Managed script removed (or absent to begin with)</response>
+            <response code="400">Rules service unavailable</response>
+            <response code="401">Unauthenticated user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.GetRaw(System.Threading.CancellationToken)">
+            <summary>
+            Returns the raw Sieve text currently stored on the server. Used by the advanced editor.
+            </summary>
+            <response code="200">Raw script retrieved (empty if no script exists yet)</response>
+            <response code="400">Rules service unavailable</response>
+            <response code="401">Unauthenticated user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.PutRaw(weesky.Snoopy.Microservice.Models.SieveRawScript,System.Threading.CancellationToken)">
+            <summary>
+            Replaces the managed Sieve script with raw Sieve text typed by the user in
+            the advanced editor. The structured representation is lost (the marker is
+            not added back) until the user reverts via <c>PUT /api/Rules</c>.
+            </summary>
+            <param name="script">The raw script content.</param>
+            <response code="204">Script saved and activated</response>
+            <response code="400">Server rejected the script (Sieve compilation error)</response>
+            <response code="401">Unauthenticated user</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AccountInfo">
             <summary>
             Information about the authenticated user account.
@@ -287,6 +334,105 @@
             Message count limit. 0 means no limit.
             </summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveAction.Argument">
+            <summary>
+            FileInto → folder name. Redirect → email address. Reject → reason text. SetFlag → flag name (e.g. <c>\Seen</c>).
+            Unused for Discard / Keep.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveCondition.HeaderName">
+            <summary>Required when <see cref="P:weesky.Snoopy.Microservice.Models.SieveCondition.Field"/> is <see cref="F:weesky.Snoopy.Microservice.Models.SieveConditionField.Header"/>.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveCondition.Value">
+            <summary>For text fields, the substring/value/pattern. For Size, an octet count optionally suffixed with K/M/G.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SieveOptions">
+            <summary>
+            Configuration for the ManageSieve client used to manage user Sieve scripts (Pigeonhole).
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.Host">
+            <summary>
+            Hostname of the ManageSieve server (typically the Dovecot host).
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.Port">
+            <summary>
+            TCP port of the ManageSieve service. Default 4190.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.MasterUser">
+            <summary>
+            Master username configured in Dovecot (see <c>auth_master_users</c>).
+            Used as the SASL PLAIN authentication identity while impersonating the target user.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.MasterPassword">
+            <summary>
+            Master password matching <see cref="P:weesky.Snoopy.Microservice.Models.SieveOptions.MasterUser"/>.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.ScriptName">
+            <summary>
+            Name of the Sieve script managed by this service. A single named script holds all the rules
+            produced by the structured editor; users can keep other scripts they uploaded separately.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.TimeoutSeconds">
+            <summary>
+            Connect/read/write timeout in seconds for a ManageSieve session.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.AllowInvalidCertificate">
+            <summary>
+            When true, accept any TLS certificate (development only).
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SieveRawScript">
+            <summary>
+            Wrapper used by the raw Sieve script endpoints (<c>GET/PUT /api/Rules/raw</c>) so the
+            payload remains a JSON object rather than a bare string.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveRule.MatchAll">
+            <summary>
+            When true, all conditions must match (Sieve <c>allof</c>); when false, any condition matches (<c>anyof</c>).
+            Ignored when there is exactly one condition.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveRule.StopAfter">
+            <summary>When true, no further rules are evaluated after this one fires (Sieve <c>stop;</c>).</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SieveRuleSet">
+            <summary>
+            The user-facing view of their Sieve configuration: both the decoded structured rules
+            (when present) and the underlying raw script. Returned by the repository so the
+            frontend can switch between structured and advanced editing without a second fetch.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveRuleSet.RawScript">
+            <summary>
+            The exact text returned by the ManageSieve server, or an empty string if no
+            script has been uploaded yet.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SieveScriptKind">
+            <summary>
+            Indicates whether a Sieve script could be decoded into structured rules
+            (the WEESKY-RULES marker was present and valid) or must be edited as raw text.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SieveScriptParseResult">
+            <summary>
+            Result of decoding a Sieve script returned by the ManageSieve server.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveScriptParseResult.Rules">
+            <summary>
+            The structured rules decoded from the WEESKY-RULES marker. Empty when
+            <see cref="P:weesky.Snoopy.Microservice.Models.SieveScriptParseResult.Kind"/> is <see cref="F:weesky.Snoopy.Microservice.Models.SieveScriptKind.Advanced"/>.
+            </summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.User.Name">
             <summary>
             The name of the user (the mailbox name).
@@ -302,10 +448,108 @@
             The full name of the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
+            <summary>
+            High-level Sieve management API used by controllers. Each method opens its own
+            ManageSieve session on behalf of the supplied user.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.SaveRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.SieveRule},System.Threading.CancellationToken)">
+            <summary>Compile the supplied rules and replace the user's managed script (and activate it).</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.SaveRawScriptAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Threading.CancellationToken)">
+            <summary>Replace the user's managed script with raw Sieve text (and activate it). Used by the advanced editor.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.DeleteAllRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
+            <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.DovecotQuotaClient">
             <summary>
             Queries a remote Dovecot server via its doveadm HTTP API.
             See https://doc.dovecot.org/admin_manual/doveadm_http_api/
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
+            <summary>
+            Opens authenticated ManageSieve sessions on behalf of any mailbox user, using the
+            master credentials configured in <c>SieveOptions</c>.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IManageSieveClient.OpenSessionAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Opens a TLS-protected ManageSieve session authenticated as <paramref name="targetUser"/>
+            via SASL PLAIN master impersonation. The returned session must be disposed.
+            </summary>
+            <param name="targetUser">Full mailbox address (e.g. <c>alice@weesky.be</c>).</param>
+            <param name="cancellationToken">Cancellation token.</param>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveSession">
+            <summary>
+            An authenticated ManageSieve session (RFC 5804) for a single target user.
+            Disposing closes the underlying TCP connection.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IManageSieveSession.SetActiveAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Activate a script by name. Pass an empty string to deactivate all scripts.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ISieveScriptCompiler">
+            <summary>
+            Bidirectional bridge between the structured rule model and Sieve script text,
+            with the JSON model embedded as a comment marker at the top of the script so
+            the structured representation survives a round-trip through ManageSieve.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ISieveScriptCompiler.Compile(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.SieveRule})">
+            <summary>
+            Produce a Sieve script for <paramref name="rules"/>, prefixed by the
+            WEESKY-RULES marker that encodes the structured model. Disabled rules are
+            preserved in the marker but not emitted as executable Sieve.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ISieveScriptCompiler.Parse(System.String)">
+            <summary>
+            Inspect a Sieve script and return the structured rules if the marker is
+            present and decodable. Otherwise the result is flagged as Advanced.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ManageSieveClient">
+            <summary>
+            Opens ManageSieve (RFC 5804) sessions over TCP+STARTTLS, authenticating with
+            the configured master credentials (SASL PLAIN with the target user as
+            authorization identity).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ManageSieveClient.ReadLineAsync(System.IO.Stream,System.Threading.CancellationToken)">
+            <summary>
+            Unbuffered line read used only during the handshake. Once the session is
+            authenticated and handed to <see cref="T:weesky.Snoopy.Microservice.Services.ManageSieveSession"/>, that class
+            uses its own buffered reader.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ManageSieveSession">
+            <summary>
+            ManageSieve (RFC 5804) protocol session built on top of an already-connected and
+            authenticated <see cref="T:System.IO.Stream"/>. The transport (TCP/TLS) and the SASL handshake
+            are handled by <see cref="T:weesky.Snoopy.Microservice.Services.ManageSieveClient"/>; this class only speaks the
+            post-authentication command set.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ManageSieveSession.ExtractResponseMessage(System.String,System.Int32)">
+            <summary>
+            Extracts the human-readable message from an OK/NO/BYE line, skipping the optional
+            "(code)" prefix and unquoting the trailing quoted string if present.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SieveScriptListEntry">
+            <summary>
+            One entry in the LISTSCRIPTS response from a ManageSieve server.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SieveScriptListEntry.#ctor(System.String,System.Boolean)">
+            <summary>
+            One entry in the LISTSCRIPTS response from a ManageSieve server.
             </summary>
         </member>
     </members>
