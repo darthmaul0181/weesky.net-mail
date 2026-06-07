@@ -81,5 +81,26 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
         {
             Assert.Throws<InvalidOperationException>(() => new RuleProviderRegistry(Array.Empty<IRuleProvider>()));
         }
+
+        [Fact]
+        public void Constructor_WithoutWeeskyProvider_DefaultFallsToFirst()
+        {
+            var sut = new RuleProviderRegistry(new IRuleProvider[] { new RainloopRuleProvider() });
+            Assert.Equal("rainloop", sut.Default.Id);
+        }
+
+        [Fact]
+        public void Constructor_WithoutRainloopProvider_NewAccountDefaultFallsToDefault()
+        {
+            var sut = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider() });
+            Assert.Equal("weesky", sut.NewAccountDefault.Id);
+        }
+
+        [Fact]
+        public void Detect_EmptyString_ReturnsNull()
+        {
+            var sut = CreateSut();
+            Assert.Null(sut.Detect(string.Empty));
+        }
     }
 }

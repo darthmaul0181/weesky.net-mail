@@ -646,6 +646,277 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("CurrentHour", result.Error);
         }
 
+        // ----- Parse edge cases -----
+
+        [Fact]
+        public void Parse_EmptyString_ReturnsEmptyList()
+        {
+            var result = _sut.Parse(string.Empty);
+
+            Assert.True(result.IsSuccess);
+            Assert.Empty(result.Value);
+        }
+
+        [Fact]
+        public void Parse_CorruptBase64InBlock_ReturnsFailure()
+        {
+            var script = "# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n!!notbase64!!\nEND:HEADER\n*/\n";
+
+            var result = _sut.Parse(script);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Unable to decode", result.Error);
+        }
+
+        [Fact]
+        public void Parse_NullJsonInBlock_ReturnsFailure()
+        {
+            var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("null"));
+            var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
+
+            var result = _sut.Parse(script);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("null", result.Error);
+        }
+
+        [Fact]
+        public void Parse_UnknownActionType_ReturnsFailure()
+        {
+            var json = "{\"ID\":\"abc\",\"Enabled\":true,\"Name\":\"x\",\"Conditions\":[{\"Field\":\"From\",\"Type\":\"Contains\",\"Value\":\"v\"}],\"ConditionsType\":\"Any\",\"ActionType\":\"FlyAway\",\"ActionValue\":\"\",\"Stop\":false,\"Keep\":false,\"MarkAsRead\":false}";
+            var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+            var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
+
+            var result = _sut.Parse(script);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("FlyAway", result.Error);
+        }
+
+        // ----- Compile emission -----
+
+        [Fact]
+        public void Compile_NullRules_Fails()
+        {
+            var result = _sut.Compile(null!);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("required", result.Error);
+        }
+
+        [Fact]
+        public void RoundTrip_RejectAction_PreservesStructure()
+        {
+            var original = new SieveRule
+            {
+                Id = Guid.NewGuid(),
+                Name = "SpamReject",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
+                Actions = { Act(SieveActionType.Reject, "Spam is not accepted.") }
+            };
+
+            var script = _sut.Compile(new[] { original }).Value;
+
+            Assert.Contains("require [\"reject\"];", script);
+            Assert.Contains("reject \"Spam is not accepted.\";", script);
+
+            var rules = _sut.Parse(script).Value;
+            var rt = Assert.Single(rules);
+
+            Assert.Equal("SpamReject", rt.Name);
+            Assert.Equal(SieveActionType.Reject, rt.Actions[0].Type);
+            Assert.Equal("Spam is not accepted.", rt.Actions[0].Argument);
+        }
+
+        [Fact]
+        public void RoundTrip_DiscardAction_PreservesStructure()
+        {
+            var original = new SieveRule
+            {
+                Id = Guid.NewGuid(),
+                Name = "TrashIt",
+                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@") },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var script = _sut.Compile(new[] { original }).Value;
+
+            Assert.Contains("discard;", script);
+
+            var rules = _sut.Parse(script).Value;
+            var rt = Assert.Single(rules);
+
+            Assert.Equal("TrashIt", rt.Name);
+            Assert.Equal(SieveActionType.Discard, rt.Actions[0].Type);
+        }
+
+        [Fact]
+        public void Compile_AllOfMultipleConditions_EmitsSieveAllofBody()
+        {
+            var rule = new SieveRule
+            {
+                Name = "AllOfTest",
+                MatchAll = true,
+                Conditions =
+                {
+                    Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[TEST]"),
+                    Cond(SieveConditionField.From, SieveConditionOperator.Contains, "admin@")
+                },
+                Actions = { Act(SieveActionType.FileInto, "Admin") }
+            };
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("if allof(", script);
+        }
+
+        [Fact]
+        public void Compile_SizeCondition_EmitsSizeOverInSieve()
+        {
+            var rule = new SieveRule
+            {
+                Name = "Large",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Larger, Value = "5M" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("size :over 5M", script);
+        }
+
+        [Fact]
+        public void Compile_ToCondition_EmitsToHeaderInSieve()
+        {
+            var rule = new SieveRule
+            {
+                Name = "ToTest",
+                Conditions = { Cond(SieveConditionField.To, SieveConditionOperator.Contains, "admin@") },
+                Actions = { Act(SieveActionType.FileInto, "Admin") }
+            };
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("[\"To\"]", script);
+        }
+
+        [Fact]
+        public void Compile_CcCondition_EmitsCcHeaderInSieve()
+        {
+            var rule = new SieveRule
+            {
+                Name = "CcTest",
+                Conditions = { Cond(SieveConditionField.Cc, SieveConditionOperator.Contains, "list@") },
+                Actions = { Act(SieveActionType.FileInto, "Lists") }
+            };
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("[\"Cc\"]", script);
+        }
+
+        [Fact]
+        public void Compile_HeaderCondition_EmitsCustomHeaderInSieve()
+        {
+            var rule = new SieveRule
+            {
+                Name = "HeaderTest",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.Header, Operator = SieveConditionOperator.Contains, Value = "magic", HeaderName = "X-Custom" }
+                },
+                Actions = { Act(SieveActionType.FileInto, "Custom") }
+            };
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("[\"X-Custom\"]", script);
+        }
+
+        // ----- CanRepresent guard cases -----
+
+        [Fact]
+        public void CanRepresent_NullRule_Fails()
+        {
+            var result = _sut.CanRepresent(null!);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("null", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_NoConditions_Fails()
+        {
+            var rule = new SieveRule { Name = "empty", Actions = { Act(SieveActionType.Discard) } };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("condition", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_NoActions_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "noaction",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("action", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_RejectAction_Succeeds()
+        {
+            var rule = new SieveRule
+            {
+                Name = "spam-reject",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
+                Actions = { Act(SieveActionType.Reject, "Not accepted.") }
+            };
+
+            Assert.True(_sut.CanRepresent(rule).IsSuccess);
+        }
+
+        [Fact]
+        public void CanRepresent_DiscardAction_Succeeds()
+        {
+            var rule = new SieveRule
+            {
+                Name = "trash",
+                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@") },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            Assert.True(_sut.CanRepresent(rule).IsSuccess);
+        }
+
+        [Fact]
+        public void Compile_SizeCondition_EmitsSizeUnderInSieve()
+        {
+            var rule = new SieveRule
+            {
+                Name = "Tiny",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Smaller, Value = "10K" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("size :under 10K", script);
+        }
+
         // ----- Helpers -----
 
         private static SieveCondition Cond(SieveConditionField f, SieveConditionOperator o, string v) =>

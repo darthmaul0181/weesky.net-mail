@@ -299,5 +299,52 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
             Assert.Contains(list, p => p.Id == "weesky" && p.IsDefault);
             Assert.Contains(list, p => p.Id == "rainloop" && !p.IsDefault);
         }
+
+        // ----- DELETE /api/Rules (failure) -----
+
+        [Fact]
+        public async Task DeleteAll_WhenRepoFails_Returns400()
+        {
+            _repo.Setup(r => r.DeleteAllRulesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure("deletion error"));
+
+            var result = await CreateController().DeleteAll(CancellationToken.None);
+
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(400, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("deletion error", envelope.Message);
+        }
+
+        // ----- GET /api/Rules/Raw (failure) -----
+
+        [Fact]
+        public async Task GetRaw_WhenRepoFails_Returns400()
+        {
+            _repo.Setup(r => r.GetRuleSetAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<SieveRuleSet>("no connection"));
+
+            var result = await CreateController().GetRaw(CancellationToken.None);
+
+            var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+            var envelope = Assert.IsType<ResultEnveloppe>(bad.Value);
+            Assert.Equal("no connection", envelope.Message);
+        }
+
+        // ----- PUT /api/Rules/Raw (failure) -----
+
+        [Fact]
+        public async Task PutRaw_WhenRepoFails_Returns400()
+        {
+            _repo.Setup(r => r.SaveRawScriptAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure("write error"));
+
+            var result = await CreateController().PutRaw(new SieveRawScript { Content = "keep;", ScriptName = "test" }, CancellationToken.None);
+
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(400, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("write error", envelope.Message);
+        }
     }
 }

@@ -434,5 +434,234 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.True(result.IsSuccess);
             session.Verify(s => s.DeleteScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()), Times.Once);
         }
+
+        // ----- GetRuleSetAsync additional failure paths -----
+
+        [Fact]
+        public async Task GetRuleSetAsync_WhenListScriptsFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure<IReadOnlyList<SieveScriptListEntry>>("list error"));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("list error", result.Error);
+        }
+
+        [Fact]
+        public async Task GetRuleSetAsync_WhenGetScriptFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            SetupList(session, new SieveScriptListEntry(WeeskyScriptName, true));
+            session.Setup(s => s.GetScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure<string>("not found"));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("not found", result.Error);
+        }
+
+        [Fact]
+        public async Task GetRuleSetAsync_WhenProviderParseFails_ReturnsAdvancedWithRaw()
+        {
+            // Script whose first line looks like weesky (CanHandle = true) but has corrupt base64.
+            const string corrupt = "# WEESKY-RULES-V1:!!!not-valid-base64!!!\n";
+            var (repo, _, session) = CreateSut();
+            SetupList(session, new SieveScriptListEntry(WeeskyScriptName, true));
+            session.Setup(s => s.GetScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success(corrupt));
+
+            var result = await repo.GetRuleSetAsync(Alice);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(SieveScriptKind.Advanced, result.Value.Kind);
+            Assert.Equal("weesky", result.Value.ProviderId);
+            Assert.Equal(corrupt, result.Value.RawScript);
+        }
+
+        // ----- GetRawScriptAsync -----
+
+        [Fact]
+        public async Task GetRawScriptAsync_WhenSuccess_ReturnsRawContent()
+        {
+            const string raw = "require [\"fileinto\"];\nfileinto \"Inbox\";";
+            var (repo, _, session) = CreateSut();
+            SetupList(session, new SieveScriptListEntry("custom", true));
+            session.Setup(s => s.GetScriptAsync("custom", It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success(raw));
+
+            var result = await repo.GetRawScriptAsync(Alice);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(raw, result.Value);
+        }
+
+        [Fact]
+        public async Task GetRawScriptAsync_WhenFails_PropagatesError()
+        {
+            var client = new Mock<IManageSieveClient>();
+            client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(Result.Failure<IManageSieveSession>("Connection refused"));
+            var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider() });
+            var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+
+            var result = await repo.GetRawScriptAsync(Alice);
+
+            Assert.True(result.IsFailure);
+        }
+
+        // ----- SaveRulesAsync additional failure paths -----
+
+        [Fact]
+        public async Task SaveRulesAsync_WhenSessionFails_ReturnsFailure()
+        {
+            var client = new Mock<IManageSieveClient>();
+            client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(Result.Failure<IManageSieveSession>("refused"));
+            var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider(), new RainloopRuleProvider() });
+            var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.Keep } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: null, scriptName: null);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("refused", result.Error);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_WhenPutScriptFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure("script syntax error"));
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.Keep } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: null, scriptName: null);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("script syntax error", result.Error);
+            session.Verify(s => s.SetActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_WhenSetActiveFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure("cannot activate"));
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.Keep } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: null, scriptName: null);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("cannot activate", result.Error);
+        }
+
+        // ----- SaveRawScriptAsync additional failure paths -----
+
+        [Fact]
+        public async Task SaveRawScriptAsync_WhenSessionFails_ReturnsFailure()
+        {
+            var client = new Mock<IManageSieveClient>();
+            client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(Result.Failure<IManageSieveSession>("refused"));
+            var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider(), new RainloopRuleProvider() });
+            var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+
+            var result = await repo.SaveRawScriptAsync(Alice, "stop;", null);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("refused", result.Error);
+        }
+
+        [Fact]
+        public async Task SaveRawScriptAsync_WhenPutScriptFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure("bad script"));
+
+            var result = await repo.SaveRawScriptAsync(Alice, "stop;", null);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("bad script", result.Error);
+            session.Verify(s => s.SetActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveRawScriptAsync_WhenSetActiveFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure("cannot activate"));
+
+            var result = await repo.SaveRawScriptAsync(Alice, "stop;", null);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("cannot activate", result.Error);
+        }
+
+        // ----- DeleteAllRulesAsync additional failure paths -----
+
+        [Fact]
+        public async Task DeleteAllRulesAsync_WhenListScriptsFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure<IReadOnlyList<SieveScriptListEntry>>("list error"));
+
+            var result = await repo.DeleteAllRulesAsync(Alice);
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task DeleteAllRulesAsync_WhenDeactivateFails_ReturnsFailure()
+        {
+            var (repo, _, session) = CreateSut();
+            SetupList(session, new SieveScriptListEntry(WeeskyScriptName, true));
+            session.Setup(s => s.SetActiveAsync(string.Empty, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Failure("cannot deactivate"));
+
+            var result = await repo.DeleteAllRulesAsync(Alice);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("cannot deactivate", result.Error);
+            session.Verify(s => s.DeleteScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
     }
 }

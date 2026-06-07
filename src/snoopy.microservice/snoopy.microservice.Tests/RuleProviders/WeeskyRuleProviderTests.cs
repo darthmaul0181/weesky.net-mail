@@ -636,6 +636,195 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("Before", result.Error);
         }
 
+        // ----- AnyOf emission -----
+
+        [Fact]
+        public void Compile_AnyOf_EmitsAnyofKeyword()
+        {
+            var rule = MakeRule("Spam",
+                new[] { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@"),
+                        Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
+                new[] { Act(SieveActionType.Discard) },
+                matchAll: false);
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("if anyof (", script);
+        }
+
+        // ----- Size condition -----
+
+        [Fact]
+        public void Compile_SizeCondition_LargerThan_EmitsSizeOver()
+        {
+            var rule = MakeRule("Large",
+                new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Larger, Value = "1M" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("size :over 1M", script);
+        }
+
+        [Fact]
+        public void Compile_SizeCondition_SmallerThan_EmitsSizeUnder()
+        {
+            var rule = MakeRule("Tiny",
+                new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Smaller, Value = "10K" },
+                Act(SieveActionType.Keep));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("size :under 10K", script);
+        }
+
+        [Fact]
+        public void Compile_SizeWithTextOperator_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Contains, Value = "5M" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Larger or Smaller", result.Error);
+        }
+
+        [Fact]
+        public void Compile_SizeWithInvalidValue_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Larger, Value = "not-a-number" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Invalid size", result.Error);
+        }
+
+        [Fact]
+        public void Compile_DuplicateConditionWithSizeOperator_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Larger, Value = "" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Larger/Smaller", result.Error);
+        }
+
+        // ----- To / Cc fields -----
+
+        [Fact]
+        public void Compile_ToField_EmitsToHeader()
+        {
+            var rule = MakeRule("ToFilter",
+                new SieveCondition { Field = SieveConditionField.To, Operator = SieveConditionOperator.Contains, Value = "admin@" },
+                Act(SieveActionType.FileInto, "Admin"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("header :contains \"To\" \"admin@\"", script);
+        }
+
+        [Fact]
+        public void Compile_CcField_EmitsCcHeader()
+        {
+            var rule = MakeRule("CcFilter",
+                new SieveCondition { Field = SieveConditionField.Cc, Operator = SieveConditionOperator.Equals, Value = "list@example.com" },
+                Act(SieveActionType.FileInto, "List"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("header :is \"Cc\" \"list@example.com\"", script);
+        }
+
+        // ----- Redirect / Reject actions -----
+
+        [Fact]
+        public void Compile_RedirectAction_EmitsRedirect()
+        {
+            var rule = MakeRule("Fwd",
+                Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[FWD]"),
+                Act(SieveActionType.Redirect, "copy@example.com"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("redirect \"copy@example.com\";", script);
+        }
+
+        [Fact]
+        public void Compile_RejectAction_EmitsRejectAndRequire()
+        {
+            var rule = MakeRule("Spam",
+                Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]"),
+                Act(SieveActionType.Reject, "Spam rejected."));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"reject\"", script);
+            Assert.Contains("reject \"Spam rejected.\";", script);
+        }
+
+        // ----- Null / guard cases -----
+
+        [Fact]
+        public void Compile_NullRules_Fails()
+        {
+            var result = _sut.Compile(null!);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("required", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_NullRule_Fails()
+        {
+            var result = _sut.CanRepresent(null!);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("null", result.Error);
+        }
+
+        [Fact]
+        public void Parse_EmptyString_ReturnsEmptyList()
+        {
+            var result = _sut.Parse(string.Empty);
+
+            Assert.True(result.IsSuccess);
+            Assert.Empty(result.Value);
+        }
+
+        [Fact]
+        public void Compile_DuplicateConditionWithZeroSeconds_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "0" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("positive integer", result.Error);
+        }
+
+        [Fact]
+        public void Compile_CurrentWeekday_AllCommasValue_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = ",,," },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("weekday", result.Error.ToLower());
+        }
+
         // ----- CanRepresent (superset) -----
 
         [Fact]
