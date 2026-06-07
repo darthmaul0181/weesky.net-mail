@@ -23,6 +23,10 @@ namespace weesky.Snoopy.Microservice.Models
         /// The condition <c>Value</c> is optional; if non-empty it must be a positive integer (seconds window).
         /// <c>Operator</c> is irrelevant and ignored.
         /// </summary>
-        Duplicate
+        Duplicate,
+        /// <summary>Current date at delivery — emits <c>currentdate :value "lt"/"ge" "date" "YYYY-MM-DD"</c> or <c>currentdate :is "date" "YYYY-MM-DD"</c> (requires "date"; also "relational" for Before/OnOrAfter). Weesky-only.</summary>
+        CurrentDate,
+        /// <summary>Message Date header — emits <c>date :value "lt"/"ge" "date" "Date" "YYYY-MM-DD"</c> or <c>date :is "date" "Date" "YYYY-MM-DD"</c> (requires "date"; also "relational" for Before/OnOrAfter). Weesky-only.</summary>
+        MessageDate
     }
 }

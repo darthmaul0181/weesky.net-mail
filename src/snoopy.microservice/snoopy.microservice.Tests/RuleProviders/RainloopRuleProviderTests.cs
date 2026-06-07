@@ -570,6 +570,44 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("Body", result.Error);
         }
 
+        [Fact]
+        public void CanRepresent_CurrentDateCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "date-test",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Before, Value = "2026-12-31" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("CurrentDate", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_MessageDateCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "msgdate-test",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.MessageDate, Operator = SieveConditionOperator.OnOrAfter, Value = "2026-01-01" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("MessageDate", result.Error);
+        }
+
         // ----- Helpers -----
 
         private static SieveCondition Cond(SieveConditionField f, SieveConditionOperator o, string v) =>

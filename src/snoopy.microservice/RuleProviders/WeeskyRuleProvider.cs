@@ -128,9 +128,25 @@ namespace weesky.Snoopy.Microservice.RuleProviders
         {
             bool isSize = c.Field == SieveConditionField.Size;
             bool isSizeOp = c.Operator == SieveConditionOperator.Larger || c.Operator == SieveConditionOperator.Smaller;
+            bool isDateField = c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate;
+            bool isDateOp = c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter;
 
             if (isSize && !isSizeOp) return Result.Failure("Size condition requires the Larger or Smaller operator");
             if (!isSize && isSizeOp) return Result.Failure("Larger/Smaller operator is only valid for the Size field");
+            if (!isDateField && isDateOp) return Result.Failure("Before/OnOrAfter operator is only valid for date fields");
+
+            if (isDateField)
+            {
+                if (!isDateOp && c.Operator != SieveConditionOperator.Equals)
+                    return Result.Failure("Date condition requires Before, OnOrAfter or Equals operator");
+                if (string.IsNullOrWhiteSpace(c.Value))
+                    return Result.Failure("Date condition requires a value");
+                if (!DateOnly.TryParseExact(c.Value.Trim(), "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out _))
+                    return Result.Failure("Date value must be in YYYY-MM-DD format (e.g. 2026-06-07)");
+                return Result.Success();
+            }
 
             if (c.Field == SieveConditionField.Duplicate)
             {
@@ -211,6 +227,12 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                     if (c.Field == SieveConditionField.RecipientDetail) set.Add("subaddress");
                     if (c.Field == SieveConditionField.Duplicate) set.Add("duplicate");
                     if (c.Operator == SieveConditionOperator.Regex) set.Add("regex");
+                    if (c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate)
+                    {
+                        set.Add("date");
+                        if (c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter)
+                            set.Add("relational");
+                    }
                 }
             }
             return set.ToList();
@@ -256,6 +278,24 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 return string.IsNullOrWhiteSpace(c.Value)
                     ? "duplicate"
                     : $"duplicate :seconds {c.Value.Trim()}";
+            }
+
+            if (c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate)
+            {
+                var dateValue = Quote(c.Value!.Trim());
+                bool isCurrent = c.Field == SieveConditionField.CurrentDate;
+                return c.Operator switch
+                {
+                    SieveConditionOperator.Before    => isCurrent
+                        ? $"currentdate :value \"lt\" \"date\" {dateValue}"
+                        : $"date :value \"lt\" \"date\" \"Date\" {dateValue}",
+                    SieveConditionOperator.OnOrAfter => isCurrent
+                        ? $"currentdate :value \"ge\" \"date\" {dateValue}"
+                        : $"date :value \"ge\" \"date\" \"Date\" {dateValue}",
+                    _                                => isCurrent
+                        ? $"currentdate :is \"date\" {dateValue}"
+                        : $"date :is \"date\" \"Date\" {dateValue}"
+                };
             }
 
             if (c.Field == SieveConditionField.Body)

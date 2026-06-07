@@ -349,17 +349,7 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
 
         private static Result<RainloopCondition> MapConditionToRainloop(SieveCondition c)
         {
-            var type = c.Operator switch
-            {
-                SieveConditionOperator.Contains => "Contains",
-                SieveConditionOperator.Equals => "EqualTo",
-                SieveConditionOperator.Matches => "Regex",
-                SieveConditionOperator.Larger => "Over",
-                SieveConditionOperator.Smaller => "Under",
-                _ => null
-            };
-            if (type == null) return Result.Failure<RainloopCondition>($"Unsupported operator for Rainloop: {c.Operator}");
-
+            // Check field first so extended fields produce a field-specific error message.
             var field = c.Field switch
             {
                 SieveConditionField.From => "From",
@@ -372,6 +362,17 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
                 _ => null
             };
             if (field == null) return Result.Failure<RainloopCondition>($"Unsupported field for Rainloop: {c.Field}");
+
+            var type = c.Operator switch
+            {
+                SieveConditionOperator.Contains => "Contains",
+                SieveConditionOperator.Equals => "EqualTo",
+                SieveConditionOperator.Matches => "Regex",
+                SieveConditionOperator.Larger => "Over",
+                SieveConditionOperator.Smaller => "Under",
+                _ => null
+            };
+            if (type == null) return Result.Failure<RainloopCondition>($"Unsupported operator for Rainloop: {c.Operator}");
 
             return Result.Success(new RainloopCondition
             {

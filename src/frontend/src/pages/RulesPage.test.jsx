@@ -474,6 +474,64 @@ describe('FileInto :create checkbox', () => {
   })
 })
 
+// ── Date conditions ───────────────────────────────────────────
+
+describe('Date condition fields', () => {
+  function getCondFieldSelect() {
+    return Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Subject'))
+  }
+  it('CurrentDate and MessageDate appear in extended mode', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
+    const opts = Array.from(getCondFieldSelect().options).map(o => o.value)
+    expect(opts).toContain('CurrentDate')
+    expect(opts).toContain('MessageDate')
+  })
+
+  it('CurrentDate and MessageDate are hidden in non-extended mode', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
+    const opts = Array.from(getCondFieldSelect().options).map(o => o.value)
+    expect(opts).not.toContain('CurrentDate')
+    expect(opts).not.toContain('MessageDate')
+  })
+
+  it('shows Before and OnOrAfter operators when CurrentDate is selected', () => {
+    const rule = {
+      ...fileIntoRule('a', 'r1'),
+      conditions: [{ field: 'CurrentDate', operator: 'Before', value: '2026-12-31', headerName: null }],
+    }
+    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
+    // When CurrentDate is selected the op select shows date operators (no 'Contains')
+    const dateOpSelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Before'))
+    const ops = Array.from(dateOpSelect.options).map(o => o.value)
+    expect(ops).toContain('Before')
+    expect(ops).toContain('OnOrAfter')
+    expect(ops).toContain('Equals')
+    expect(ops).not.toContain('Contains')
+    expect(ops).not.toContain('Matches')
+  })
+
+  it('shows a date input instead of text when CurrentDate is selected', () => {
+    const rule = {
+      ...fileIntoRule('a', 'r1'),
+      conditions: [{ field: 'CurrentDate', operator: 'Before', value: '2026-12-31', headerName: null }],
+    }
+    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
+    expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
+  })
+
+  it('Before and OnOrAfter operators are absent in non-extended mode', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
+    const opSelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Contains') &&
+      !Array.from(s.options).some(o => o.value === 'FileInto'))
+    const ops = Array.from(opSelect.options).map(o => o.value)
+    expect(ops).not.toContain('Before')
+    expect(ops).not.toContain('OnOrAfter')
+  })
+})
+
 // ── ConvertConfirmModal ───────────────────────────────────────
 
 describe('ConvertConfirmModal', () => {

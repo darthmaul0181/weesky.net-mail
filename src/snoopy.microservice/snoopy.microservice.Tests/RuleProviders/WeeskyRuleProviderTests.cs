@@ -409,6 +409,113 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("address :detail :is [\"To\", \"Cc\"] \"support\"", script);
         }
 
+        // ----- Date / currentdate conditions -----
+
+        [Fact]
+        public void Compile_CurrentDateBefore_EmitsCurrentdateValueLtAndRequires()
+        {
+            var rule = MakeRule("Expire",
+                new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Before, Value = "2026-12-31" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"date\"", script);
+            Assert.Contains("\"relational\"", script);
+            Assert.Contains("currentdate :value \"lt\" \"date\" \"2026-12-31\"", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentDateOnOrAfter_EmitsValueGe()
+        {
+            var rule = MakeRule("Active",
+                new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.OnOrAfter, Value = "2026-01-01" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("currentdate :value \"ge\" \"date\" \"2026-01-01\"", script);
+            Assert.Contains("\"relational\"", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentDateEquals_EmitsIsWithoutRelational()
+        {
+            var rule = MakeRule("Today",
+                new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Equals, Value = "2026-06-07" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("currentdate :is \"date\" \"2026-06-07\"", script);
+            Assert.DoesNotContain("\"relational\"", script);
+        }
+
+        [Fact]
+        public void Compile_MessageDateBefore_EmitsDateTestWithHeaderName()
+        {
+            var rule = MakeRule("OldMail",
+                new SieveCondition { Field = SieveConditionField.MessageDate, Operator = SieveConditionOperator.Before, Value = "2026-01-01" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"date\"", script);
+            Assert.Contains("\"relational\"", script);
+            Assert.Contains("date :value \"lt\" \"date\" \"Date\" \"2026-01-01\"", script);
+        }
+
+        [Fact]
+        public void Compile_MessageDateOnOrAfter_EmitsValueGe()
+        {
+            var rule = MakeRule("NewMail",
+                new SieveCondition { Field = SieveConditionField.MessageDate, Operator = SieveConditionOperator.OnOrAfter, Value = "2026-06-01" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("date :value \"ge\" \"date\" \"Date\" \"2026-06-01\"", script);
+        }
+
+        [Fact]
+        public void Compile_DateWithInvalidFormat_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Before, Value = "31/12/2026" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("YYYY-MM-DD", result.Error);
+        }
+
+        [Fact]
+        public void Compile_DateWithWrongOperator_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Contains, Value = "2026-06-07" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Before", result.Error);
+        }
+
+        [Fact]
+        public void Compile_BeforeOperatorOnNonDateField_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Before, Value = "test" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Before", result.Error);
+        }
+
         // ----- CanRepresent (superset) -----
 
         [Fact]

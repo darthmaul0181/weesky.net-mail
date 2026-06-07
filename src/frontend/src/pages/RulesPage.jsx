@@ -124,15 +124,19 @@ const CONDITION_FIELDS = [
   { value: 'EnvelopeTo',     label: 'Envelope to',       extendedOnly: true },
   { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true },
   { value: 'Duplicate',      label: 'Duplicate message', extendedOnly: true, noOperator: true },
+  { value: 'CurrentDate',    label: 'Current date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
+  { value: 'MessageDate',    label: 'Message date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
 ]
 
 const CONDITION_OPERATORS = [
-  { value: 'Contains', label: 'contains' },
-  { value: 'Equals',   label: 'equals' },
-  { value: 'Matches',  label: 'matches (wildcard)' },
-  { value: 'Regex',    label: 'matches (regex)',    extendedOnly: true },
-  { value: 'Larger',   label: 'is larger than' },
-  { value: 'Smaller',  label: 'is smaller than' },
+  { value: 'Contains',   label: 'contains' },
+  { value: 'Equals',     label: 'equals' },
+  { value: 'Matches',    label: 'matches (wildcard)' },
+  { value: 'Regex',      label: 'matches (regex)',    extendedOnly: true },
+  { value: 'Larger',     label: 'is larger than' },
+  { value: 'Smaller',    label: 'is smaller than' },
+  { value: 'Before',     label: 'is before',         extendedOnly: true },
+  { value: 'OnOrAfter',  label: 'is on or after',    extendedOnly: true },
 ]
 
 const ACTION_TYPES = [
@@ -161,6 +165,8 @@ function summarizeCondition(c) {
   const fieldLabel = CONDITION_FIELDS.find(f => f.value === c.field)?.label ?? c.field
   const opLabel = CONDITION_OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator
   const name = c.field === 'Header' ? (c.headerName ?? 'Header') : fieldLabel
+  if (c.field === 'CurrentDate' || c.field === 'MessageDate')
+    return `${name} ${opLabel} ${c.value}`
   return `${name} ${opLabel} "${c.value}"`
 }
 
@@ -273,6 +279,7 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
     ? baseOps.filter(o => fieldDef.operators.includes(o.value))
     : baseOps
   const isDuplicate = condition.field === 'Duplicate'
+  const isDateField = fieldDef?.inputType === 'date'
 
   return (
     <div className="rule-row">
@@ -319,6 +326,14 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
           className="rule-row-input"
           placeholder="Seconds window (optional)"
           value={condition.value}
+          onChange={e => onChange({ ...condition, value: e.target.value })}
+          style={{ flex: 1 }}
+        />
+      ) : isDateField ? (
+        <input
+          type="date"
+          className="rule-row-input"
+          value={condition.value ?? ''}
           onChange={e => onChange({ ...condition, value: e.target.value })}
           style={{ flex: 1 }}
         />
