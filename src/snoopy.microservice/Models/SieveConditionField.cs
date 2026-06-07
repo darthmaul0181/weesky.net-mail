@@ -27,6 +27,10 @@ namespace weesky.Snoopy.Microservice.Models
         /// <summary>Current date at delivery — emits <c>currentdate :value "lt"/"ge" "date" "YYYY-MM-DD"</c> or <c>currentdate :is "date" "YYYY-MM-DD"</c> (requires "date"; also "relational" for Before/OnOrAfter). Weesky-only.</summary>
         CurrentDate,
         /// <summary>Message Date header — emits <c>date :value "lt"/"ge" "date" "Date" "YYYY-MM-DD"</c> or <c>date :is "date" "Date" "YYYY-MM-DD"</c> (requires "date"; also "relational" for Before/OnOrAfter). Weesky-only.</summary>
-        MessageDate
+        MessageDate,
+        /// <summary>Day of week at delivery time — emits <c>currentdate :is "weekday" "N"</c> or <c>["N1","N2"...]</c> (requires "date"). Value is comma-separated weekday numbers 0-6 (0=Sun). Operator ignored. Weesky-only.</summary>
+        CurrentWeekday,
+        /// <summary>Hour of day at delivery time (0-23) — emits <c>currentdate :value OP "hour" "N"</c> or <c>:is</c> (requires "date"; also "relational" for Before/OnOrAfter). Weesky-only.</summary>
+        CurrentHour
     }
 }

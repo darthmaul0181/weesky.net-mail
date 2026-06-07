@@ -516,6 +516,126 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("Before", result.Error);
         }
 
+        // ----- Weekday condition -----
+
+        [Fact]
+        public void Compile_CurrentWeekday_SingleDay_EmitsIs()
+        {
+            var rule = MakeRule("Monday",
+                new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "1" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"date\"", script);
+            Assert.DoesNotContain("\"relational\"", script);
+            Assert.Contains("currentdate :is \"weekday\" \"1\"", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentWeekday_Weekdays_EmitsList()
+        {
+            var rule = MakeRule("Workweek",
+                new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "1,2,3,4,5" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("currentdate :is \"weekday\" [\"1\", \"2\", \"3\", \"4\", \"5\"]", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentWeekday_Weekend_EmitsList()
+        {
+            var rule = MakeRule("Weekend",
+                new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "0,6" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("currentdate :is \"weekday\" [\"0\", \"6\"]", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentWeekday_InvalidValue_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "8" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("weekday", result.Error.ToLower());
+        }
+
+        // ----- Hour condition -----
+
+        [Fact]
+        public void Compile_CurrentHourBefore_EmitsCurrentdateHourValueLt()
+        {
+            var rule = MakeRule("BeforeNoon",
+                new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Before, Value = "12" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"date\"", script);
+            Assert.Contains("\"relational\"", script);
+            Assert.Contains("currentdate :value \"lt\" \"hour\" \"12\"", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentHourOnOrAfter_EmitsValueGe()
+        {
+            var rule = MakeRule("AfterWork",
+                new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.OnOrAfter, Value = "18" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("currentdate :value \"ge\" \"hour\" \"18\"", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentHourEquals_EmitsIsWithoutRelational()
+        {
+            var rule = MakeRule("Noon",
+                new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Equals, Value = "12" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("currentdate :is \"hour\" \"12\"", script);
+            Assert.DoesNotContain("\"relational\"", script);
+        }
+
+        [Fact]
+        public void Compile_CurrentHour_InvalidValue_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Before, Value = "25" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("0 and 23", result.Error);
+        }
+
+        [Fact]
+        public void Compile_CurrentHour_WrongOperator_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Contains, Value = "9" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Before", result.Error);
+        }
+
         // ----- CanRepresent (superset) -----
 
         [Fact]

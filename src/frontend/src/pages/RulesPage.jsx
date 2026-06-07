@@ -126,6 +126,20 @@ const CONDITION_FIELDS = [
   { value: 'Duplicate',      label: 'Duplicate message', extendedOnly: true, noOperator: true },
   { value: 'CurrentDate',    label: 'Current date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
   { value: 'MessageDate',    label: 'Message date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
+  { value: 'CurrentWeekday', label: 'Current weekday',   extendedOnly: true, noOperator: true, inputType: 'weekday' },
+  { value: 'CurrentHour',    label: 'Current hour',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'hour' },
+]
+
+const WEEKDAY_OPTIONS = [
+  { value: '1,2,3,4,5', label: 'Weekday (Mon–Fri)' },
+  { value: '0,6',       label: 'Weekend (Sat–Sun)' },
+  { value: '1', label: 'Monday' },
+  { value: '2', label: 'Tuesday' },
+  { value: '3', label: 'Wednesday' },
+  { value: '4', label: 'Thursday' },
+  { value: '5', label: 'Friday' },
+  { value: '6', label: 'Saturday' },
+  { value: '0', label: 'Sunday' },
 ]
 
 const CONDITION_OPERATORS = [
@@ -167,6 +181,12 @@ function summarizeCondition(c) {
   const name = c.field === 'Header' ? (c.headerName ?? 'Header') : fieldLabel
   if (c.field === 'CurrentDate' || c.field === 'MessageDate')
     return `${name} ${opLabel} ${c.value}`
+  if (c.field === 'CurrentWeekday') {
+    const wLabel = WEEKDAY_OPTIONS.find(o => o.value === c.value)?.label ?? c.value
+    return `Weekday is ${wLabel}`
+  }
+  if (c.field === 'CurrentHour')
+    return `Hour ${opLabel} ${c.value}:00`
   return `${name} ${opLabel} "${c.value}"`
 }
 
@@ -280,6 +300,8 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
     : baseOps
   const isDuplicate = condition.field === 'Duplicate'
   const isDateField = fieldDef?.inputType === 'date'
+  const isWeekday = fieldDef?.inputType === 'weekday'
+  const isHour = fieldDef?.inputType === 'hour'
 
   return (
     <div className="rule-row">
@@ -296,12 +318,13 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
             field: newField,
             headerName: null,
             operator: opValid ? condition.operator : (newAvailOps[0]?.value ?? 'Contains'),
+            ...(newDef?.inputType === 'weekday' && { value: '1,2,3,4,5' }),
           })
         }}
       >
         {availableFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
       </select>
-      {!isDuplicate && (
+      {!isDuplicate && !isWeekday && (
         <select
           value={condition.operator}
           onChange={e => onChange({ ...condition, operator: e.target.value })}
@@ -329,10 +352,29 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
           onChange={e => onChange({ ...condition, value: e.target.value })}
           style={{ flex: 1 }}
         />
+      ) : isWeekday ? (
+        <select
+          value={WEEKDAY_OPTIONS.some(o => o.value === condition.value) ? condition.value : WEEKDAY_OPTIONS[0].value}
+          onChange={e => onChange({ ...condition, value: e.target.value })}
+          style={{ flex: 1 }}
+        >
+          {WEEKDAY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       ) : isDateField ? (
         <input
           type="date"
           className="rule-row-input"
+          value={condition.value ?? ''}
+          onChange={e => onChange({ ...condition, value: e.target.value })}
+          style={{ flex: 1 }}
+        />
+      ) : isHour ? (
+        <input
+          type="number"
+          min="0"
+          max="23"
+          className="rule-row-input"
+          placeholder="0–23"
           value={condition.value ?? ''}
           onChange={e => onChange({ ...condition, value: e.target.value })}
           style={{ flex: 1 }}

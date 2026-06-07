@@ -608,6 +608,44 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("MessageDate", result.Error);
         }
 
+        [Fact]
+        public void CanRepresent_CurrentWeekdayCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "weekday-test",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "1,2,3,4,5" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("CurrentWeekday", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_CurrentHourCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "hour-test",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Before, Value = "9" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("CurrentHour", result.Error);
+        }
+
         // ----- Helpers -----
 
         private static SieveCondition Cond(SieveConditionField f, SieveConditionOperator o, string v) =>

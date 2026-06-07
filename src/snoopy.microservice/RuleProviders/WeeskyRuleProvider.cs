@@ -129,11 +129,13 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             bool isSize = c.Field == SieveConditionField.Size;
             bool isSizeOp = c.Operator == SieveConditionOperator.Larger || c.Operator == SieveConditionOperator.Smaller;
             bool isDateField = c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate;
+            bool isHourField = c.Field == SieveConditionField.CurrentHour;
             bool isDateOp = c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter;
 
             if (isSize && !isSizeOp) return Result.Failure("Size condition requires the Larger or Smaller operator");
             if (!isSize && isSizeOp) return Result.Failure("Larger/Smaller operator is only valid for the Size field");
-            if (!isDateField && isDateOp) return Result.Failure("Before/OnOrAfter operator is only valid for date fields");
+            if (!isDateField && !isHourField && isDateOp)
+                return Result.Failure("Before/OnOrAfter operator is only valid for date/hour fields");
 
             if (isDateField)
             {
@@ -145,6 +147,31 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out _))
                     return Result.Failure("Date value must be in YYYY-MM-DD format (e.g. 2026-06-07)");
+                return Result.Success();
+            }
+
+            if (isHourField)
+            {
+                if (!isDateOp && c.Operator != SieveConditionOperator.Equals)
+                    return Result.Failure("Hour condition requires Before, OnOrAfter or Equals operator");
+                if (string.IsNullOrWhiteSpace(c.Value))
+                    return Result.Failure("Hour condition requires a value");
+                if (!int.TryParse(c.Value.Trim(), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var h) || h < 0 || h > 23)
+                    return Result.Failure("Hour value must be an integer between 0 and 23");
+                return Result.Success();
+            }
+
+            if (c.Field == SieveConditionField.CurrentWeekday)
+            {
+                if (string.IsNullOrWhiteSpace(c.Value))
+                    return Result.Failure("Weekday condition requires a value");
+                var wparts = c.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (wparts.Length == 0)
+                    return Result.Failure("Weekday condition requires at least one day");
+                foreach (var p in wparts)
+                    if (!int.TryParse(p, out var d) || d < 0 || d > 6)
+                        return Result.Failure($"Invalid weekday value: {p} (must be 0-6, where 0=Sunday)");
                 return Result.Success();
             }
 
@@ -227,10 +254,12 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                     if (c.Field == SieveConditionField.RecipientDetail) set.Add("subaddress");
                     if (c.Field == SieveConditionField.Duplicate) set.Add("duplicate");
                     if (c.Operator == SieveConditionOperator.Regex) set.Add("regex");
-                    if (c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate)
+                    if (c.Field is SieveConditionField.CurrentDate or SieveConditionField.MessageDate
+                        or SieveConditionField.CurrentHour or SieveConditionField.CurrentWeekday)
                     {
                         set.Add("date");
-                        if (c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter)
+                        if (c.Field != SieveConditionField.CurrentWeekday &&
+                            (c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter))
                             set.Add("relational");
                     }
                 }
@@ -295,6 +324,25 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                     _                                => isCurrent
                         ? $"currentdate :is \"date\" {dateValue}"
                         : $"date :is \"date\" \"Date\" {dateValue}"
+                };
+            }
+
+            if (c.Field == SieveConditionField.CurrentWeekday)
+            {
+                var parts = c.Value!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 1)
+                    return $"currentdate :is \"weekday\" {Quote(parts[0])}";
+                return "currentdate :is \"weekday\" [" + string.Join(", ", parts.Select(Quote)) + "]";
+            }
+
+            if (c.Field == SieveConditionField.CurrentHour)
+            {
+                var hourVal = Quote(c.Value!.Trim());
+                return c.Operator switch
+                {
+                    SieveConditionOperator.Before    => $"currentdate :value \"lt\" \"hour\" {hourVal}",
+                    SieveConditionOperator.OnOrAfter => $"currentdate :value \"ge\" \"hour\" {hourVal}",
+                    _                                => $"currentdate :is \"hour\" {hourVal}"
                 };
             }
 

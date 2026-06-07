@@ -532,6 +532,77 @@ describe('Date condition fields', () => {
   })
 })
 
+// ── Weekday / hour conditions ─────────────────────────────────
+
+describe('CurrentWeekday condition', () => {
+  it('appears in extended mode', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
+    const fieldSelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Subject'))
+    expect(Array.from(fieldSelect.options).some(o => o.value === 'CurrentWeekday')).toBe(true)
+  })
+
+  it('is absent in non-extended mode', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
+    const fieldSelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Subject'))
+    expect(Array.from(fieldSelect.options).some(o => o.value === 'CurrentWeekday')).toBe(false)
+  })
+
+  it('shows weekday dropdown with preset options when selected', () => {
+    const rule = {
+      ...fileIntoRule('a', 'r1'),
+      conditions: [{ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5', headerName: null }],
+    }
+    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
+    const weekdaySelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === '1,2,3,4,5'))
+    expect(weekdaySelect).toBeTruthy()
+    const opts = Array.from(weekdaySelect.options).map(o => o.value)
+    expect(opts).toContain('0,6')
+    expect(opts).toContain('1')
+    expect(opts).toContain('0')
+  })
+
+  it('hides the operator select when CurrentWeekday is active', () => {
+    const rule = {
+      ...fileIntoRule('a', 'r1'),
+      conditions: [{ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5', headerName: null }],
+    }
+    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
+    const hasOpSelect = Array.from(document.querySelectorAll('select')).some(s =>
+      Array.from(s.options).some(o => o.value === 'Contains') &&
+      !Array.from(s.options).some(o => o.value === 'FileInto') &&
+      !Array.from(s.options).some(o => o.value === '1,2,3,4,5'))
+    expect(hasOpSelect).toBe(false)
+  })
+})
+
+describe('CurrentHour condition', () => {
+  it('appears in extended mode', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
+    const fieldSelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Subject'))
+    expect(Array.from(fieldSelect.options).some(o => o.value === 'CurrentHour')).toBe(true)
+  })
+
+  it('shows number input 0-23 and Before/OnOrAfter operators when selected', () => {
+    const rule = {
+      ...fileIntoRule('a', 'r1'),
+      conditions: [{ field: 'CurrentHour', operator: 'Before', value: '9', headerName: null }],
+    }
+    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
+    const hourInput = document.querySelector('input[type="number"][min="0"][max="23"]')
+    expect(hourInput).toBeInTheDocument()
+    const opSelect = Array.from(document.querySelectorAll('select')).find(s =>
+      Array.from(s.options).some(o => o.value === 'Before'))
+    const ops = Array.from(opSelect.options).map(o => o.value)
+    expect(ops).toContain('Before')
+    expect(ops).toContain('OnOrAfter')
+    expect(ops).not.toContain('Contains')
+  })
+})
+
 // ── ConvertConfirmModal ───────────────────────────────────────
 
 describe('ConvertConfirmModal', () => {
