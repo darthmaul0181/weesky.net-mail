@@ -87,6 +87,26 @@ function ChevronDownIcon() {
   )
 }
 
+function ArrowUpIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </svg>
+  )
+}
+
+function ArrowDownIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <polyline points="19 12 12 19 5 12" />
+    </svg>
+  )
+}
+
 function GripIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -277,10 +297,11 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
           </div>
         )}
         <div className="rule-card-btns">
-          <button className="admin-icon-btn" title="Move up" disabled={isFirst} onClick={e => { e.stopPropagation(); onMoveUp() }}><ChevronUpIcon /></button>
-          <button className="admin-icon-btn" title="Move down" disabled={isLast} onClick={e => { e.stopPropagation(); onMoveDown() }}><ChevronDownIcon /></button>
+          <button className="admin-icon-btn" title="Move up" disabled={isFirst} onClick={e => { e.stopPropagation(); onMoveUp() }}><ArrowUpIcon /></button>
+          <button className="admin-icon-btn" title="Move down" disabled={isLast} onClick={e => { e.stopPropagation(); onMoveDown() }}><ArrowDownIcon /></button>
           <button className="admin-icon-btn" title="Edit" onClick={e => { e.stopPropagation(); onEdit() }}><PencilIcon /></button>
           <button className="admin-icon-btn is-danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}><TrashIcon /></button>
+          <span className="rule-card-btns-sep" aria-hidden="true" />
           <button className="admin-icon-btn" title={collapsed ? 'Expand' : 'Collapse'} onClick={e => { e.stopPropagation(); setCollapsed(c => !c) }}>
             {collapsed ? <ChevronDownIcon /> : <ChevronUpIcon />}
           </button>

@@ -1713,11 +1713,40 @@ body {
   flex-shrink: 0;
 }
 
-/* Essai : pas d'encadré autour des icônes d'action dans la popup Rules.
-   (On pourra les remettre en retirant ce bloc.) */
+/* Icônes d'action de la popup Rules : pas d'encadré, surbrillance au survol.
+   (Essai — on pourra revenir en retirant ce bloc.) */
 .rule-card-btns .admin-icon-btn {
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius);
+  padding: 6px;
+}
+
+.rule-card-btns .admin-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rule-card-btns .admin-icon-btn:hover:not(:disabled) {
+  color: var(--primary);
+  background: rgba(52, 80, 163, 0.1);
+}
+
+.rule-card-btns .admin-icon-btn.is-danger:hover:not(:disabled) {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.rule-card-btns .admin-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Trait vertical séparant les actions du bouton déplier/replier */
+.rule-card-btns-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 0;
+  background: var(--border);
 }
 
 .rule-card-body {
