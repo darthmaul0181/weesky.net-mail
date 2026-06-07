@@ -5,6 +5,7 @@ import { api } from '../api.js'
 import RulesPage, {
   RuleEditorModal,
   ConvertConfirmModal,
+  RuleCard,
   isConditionValid,
   isActionValid,
 } from './RulesPage.jsx'
@@ -709,6 +710,427 @@ describe('Wizard step gating', () => {
     expect(circle(2).className).toContain('rule-wizard-circle--active')
     expect(circle(3).className).toContain('rule-wizard-circle--locked')
     expect(screen.getByText('Save changes')).toBeDisabled()
+  })
+})
+
+// ── RuleCard ──────────────────────────────────────────────────
+
+describe('RuleCard', () => {
+  function makeCardProps(overrides = {}) {
+    return {
+      rule: fileIntoRule('r1', 'My Rule'),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+      onToggleEnabled: vi.fn(),
+      isFirst: false,
+      isLast: false,
+      onMoveUp: vi.fn(),
+      onMoveDown: vi.fn(),
+      isDragOver: false,
+      onDragStart: vi.fn(),
+      onDragOver: vi.fn(),
+      onDrop: vi.fn(),
+      onDragEnd: vi.fn(),
+      ...overrides,
+    }
+  }
+
+  it('renders rule name', () => {
+    render(<RuleCard {...makeCardProps()} />)
+    expect(screen.getByText('My Rule')).toBeInTheDocument()
+  })
+
+  it('starts collapsed with inline action pill and no body', () => {
+    render(<RuleCard {...makeCardProps()} />)
+    expect(document.querySelector('.rule-card-inline-actions')).toBeInTheDocument()
+    expect(document.querySelector('.rule-card-body')).not.toBeInTheDocument()
+  })
+
+  it('expand toggle shows body and hides inline pills', () => {
+    render(<RuleCard {...makeCardProps()} />)
+    fireEvent.click(screen.getByTitle('Expand'))
+    expect(document.querySelector('.rule-card-body')).toBeInTheDocument()
+    expect(document.querySelector('.rule-card-inline-actions')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTitle('Collapse'))
+    expect(document.querySelector('.rule-card-body')).not.toBeInTheDocument()
+  })
+
+  it('isDragOver adds drop-over class', () => {
+    const { container } = render(<RuleCard {...makeCardProps({ isDragOver: true })} />)
+    expect(container.querySelector('.rule-card-drop-over')).toBeInTheDocument()
+  })
+
+  it('disabled rule adds disabled class', () => {
+    const rule = { ...fileIntoRule('r1', 'My Rule'), enabled: false }
+    const { container } = render(<RuleCard {...makeCardProps({ rule })} />)
+    expect(container.querySelector('.rule-card-disabled')).toBeInTheDocument()
+  })
+
+  it('Move up is disabled when isFirst', () => {
+    render(<RuleCard {...makeCardProps({ isFirst: true })} />)
+    expect(screen.getByTitle('Move up')).toBeDisabled()
+  })
+
+  it('Move down is disabled when isLast', () => {
+    render(<RuleCard {...makeCardProps({ isLast: true })} />)
+    expect(screen.getByTitle('Move down')).toBeDisabled()
+  })
+
+  it('calls onEdit when Edit is clicked', () => {
+    const onEdit = vi.fn()
+    render(<RuleCard {...makeCardProps({ onEdit })} />)
+    fireEvent.click(screen.getByTitle('Edit'))
+    expect(onEdit).toHaveBeenCalled()
+  })
+
+  it('calls onDelete when Delete is clicked', () => {
+    const onDelete = vi.fn()
+    render(<RuleCard {...makeCardProps({ onDelete })} />)
+    fireEvent.click(screen.getByTitle('Delete'))
+    expect(onDelete).toHaveBeenCalled()
+  })
+
+  it('calls onToggleEnabled with false when enabled rule checkbox is clicked', () => {
+    const onToggleEnabled = vi.fn()
+    render(<RuleCard {...makeCardProps({ onToggleEnabled })} />)
+    fireEvent.click(screen.getByTitle('Disable').querySelector('input[type="checkbox"]'))
+    expect(onToggleEnabled).toHaveBeenCalledWith(false)
+  })
+
+  it('calls onMoveUp when Move up is clicked', () => {
+    const onMoveUp = vi.fn()
+    render(<RuleCard {...makeCardProps({ onMoveUp })} />)
+    fireEvent.click(screen.getByTitle('Move up'))
+    expect(onMoveUp).toHaveBeenCalled()
+  })
+
+  it('calls onMoveDown when Move down is clicked', () => {
+    const onMoveDown = vi.fn()
+    render(<RuleCard {...makeCardProps({ onMoveDown })} />)
+    fireEvent.click(screen.getByTitle('Move down'))
+    expect(onMoveDown).toHaveBeenCalled()
+  })
+})
+
+// ── summarize helpers (via RuleCard expand) ────────────────────
+
+describe('summarize helpers', () => {
+  function baseProps() {
+    return {
+      onEdit: vi.fn(), onDelete: vi.fn(), onToggleEnabled: vi.fn(),
+      isFirst: false, isLast: false,
+      onMoveUp: vi.fn(), onMoveDown: vi.fn(), isDragOver: false,
+      onDragStart: vi.fn(), onDragOver: vi.fn(), onDrop: vi.fn(), onDragEnd: vi.fn(),
+    }
+  }
+  function cardWithCondition(cond) {
+    return { id: 'r1', name: 'R', enabled: true, matchAll: false, stopAfter: false,
+      conditions: [cond], actions: [{ type: 'Keep', argument: '' }] }
+  }
+  function cardWithAction(action) {
+    return { id: 'r1', name: 'R', enabled: true, matchAll: false, stopAfter: false,
+      conditions: [{ field: 'Subject', operator: 'Contains', value: 'x', headerName: null }],
+      actions: [action] }
+  }
+  function renderExpanded(rule) {
+    render(<RuleCard rule={rule} {...baseProps()} />)
+    fireEvent.click(screen.getByTitle('Expand'))
+  }
+
+  it('Subject Contains', () => {
+    renderExpanded(cardWithCondition({ field: 'Subject', operator: 'Contains', value: 'urgent', headerName: null }))
+    expect(screen.getByText('Subject contains "urgent"')).toBeInTheDocument()
+  })
+
+  it('Duplicate without value', () => {
+    renderExpanded(cardWithCondition({ field: 'Duplicate', operator: null, value: '', headerName: null }))
+    expect(screen.getByText('Duplicate message')).toBeInTheDocument()
+  })
+
+  it('Duplicate with seconds window', () => {
+    renderExpanded(cardWithCondition({ field: 'Duplicate', operator: null, value: '60', headerName: null }))
+    expect(screen.getByText('Duplicate (within 60s)')).toBeInTheDocument()
+  })
+
+  it('CurrentDate', () => {
+    renderExpanded(cardWithCondition({ field: 'CurrentDate', operator: 'Before', value: '2024-01-01', headerName: null }))
+    expect(screen.getByText('Current date is before 2024-01-01')).toBeInTheDocument()
+  })
+
+  it('MessageDate', () => {
+    renderExpanded(cardWithCondition({ field: 'MessageDate', operator: 'OnOrAfter', value: '2024-06-01', headerName: null }))
+    expect(screen.getByText('Message date is on or after 2024-06-01')).toBeInTheDocument()
+  })
+
+  it('CurrentWeekday', () => {
+    renderExpanded(cardWithCondition({ field: 'CurrentWeekday', operator: null, value: '1,2,3,4,5', headerName: null }))
+    expect(screen.getByText('Weekday is Weekday (Mon–Fri)')).toBeInTheDocument()
+  })
+
+  it('CurrentHour', () => {
+    renderExpanded(cardWithCondition({ field: 'CurrentHour', operator: 'Before', value: '9', headerName: null }))
+    expect(screen.getByText('Hour is before 9:00')).toBeInTheDocument()
+  })
+
+  it('Custom header uses headerName', () => {
+    renderExpanded(cardWithCondition({ field: 'Header', operator: 'Contains', value: 'spam', headerName: 'X-Spam' }))
+    expect(screen.getByText('X-Spam contains "spam"')).toBeInTheDocument()
+  })
+
+  it('Redirect action', () => {
+    renderExpanded(cardWithAction({ type: 'Redirect', argument: 'a@b.com' }))
+    expect(screen.getByText('⇥ a@b.com')).toBeInTheDocument()
+  })
+
+  it('SetFlag Seen', () => {
+    renderExpanded(cardWithAction({ type: 'SetFlag', argument: '\\Seen' }))
+    expect(screen.getByText('Mark as read')).toBeInTheDocument()
+  })
+
+  it('SetFlag Flagged', () => {
+    renderExpanded(cardWithAction({ type: 'SetFlag', argument: '\\Flagged' }))
+    expect(screen.getByText('⭐ Flagged')).toBeInTheDocument()
+  })
+
+  it('Keep action', () => {
+    renderExpanded(cardWithAction({ type: 'Keep', argument: '' }))
+    expect(screen.getByText('Keep in inbox')).toBeInTheDocument()
+  })
+
+  it('Discard action', () => {
+    renderExpanded(cardWithAction({ type: 'Discard', argument: '' }))
+    expect(screen.getByText('Discard')).toBeInTheDocument()
+  })
+
+  it('FileInto with autoCreate shows ✚ in expanded view', () => {
+    renderExpanded(cardWithAction({ type: 'FileInto', argument: 'Archive', autoCreate: true }))
+    expect(screen.getByText('Archive ✚')).toBeInTheDocument()
+  })
+
+  it('FileInto collapsed pill shows → prefix', () => {
+    render(<RuleCard rule={cardWithAction({ type: 'FileInto', argument: 'Inbox' })} {...baseProps()} />)
+    expect(screen.getByText('→ Inbox')).toBeInTheDocument()
+  })
+})
+
+// ── RulesPage — initial load ──────────────────────────────────
+
+describe('RulesPage — initial load', () => {
+  it('shows spinner while loading', () => {
+    api.getRules.mockReturnValue(new Promise(() => {}))
+    render(<RulesPage onClose={() => {}} />)
+    expect(document.querySelector('.loading-center')).toBeInTheDocument()
+  })
+
+  it('shows error toast when getRules rejects', async () => {
+    api.getRules.mockRejectedValue(new Error('network failure'))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('network failure')
+  })
+
+  it('shows empty state when rules list is empty', async () => {
+    api.getRules.mockResolvedValue(ruleSet('weesky', []))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/No rules yet/)
+  })
+
+  it('renders rule cards when rules exist', async () => {
+    api.getRules.mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'My Test Rule')]))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('My Test Rule')
+  })
+
+  it('shows Advanced notice for Advanced kind', async () => {
+    api.getRules.mockResolvedValue({ kind: 'Advanced', providerId: 'weesky', scriptName: 'custom', rules: [] })
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/cannot be parsed/)
+  })
+
+  it('shows provider badge for weesky', async () => {
+    api.getRules.mockResolvedValue(ruleSet('weesky', []))
+    render(<RulesPage onClose={() => {}} />)
+    await waitFor(() => expect(document.querySelector('.provider-badge')).toBeInTheDocument())
+    expect(document.querySelector('.provider-badge').textContent).toBe('Weesky')
+  })
+})
+
+// ── RulesPage — CRUD ──────────────────────────────────────────
+
+describe('RulesPage — CRUD', () => {
+  beforeEach(() => {
+    api.getRules.mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'Existing Rule')]))
+  })
+
+  it('click New rule opens editor with empty name', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+    await userEvent.click(screen.getByRole('button', { name: /New rule/i }))
+    const nameInput = document.querySelector('.rule-wizard-input')
+    expect(nameInput).toBeInTheDocument()
+    expect(nameInput.value).toBe('')
+  })
+
+  it('create new rule calls saveRules with the new rule appended', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    await userEvent.click(screen.getByRole('button', { name: /New rule/i }))
+    await userEvent.type(document.querySelector('.rule-wizard-input'), 'New Test Rule')
+    await userEvent.type(screen.getByPlaceholderText('Value'), 'spam')
+    await userEvent.type(screen.getByPlaceholderText('Folder name'), 'Spam')
+    await userEvent.click(screen.getByText('Create rule'))
+
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Existing Rule' }),
+        expect.objectContaining({ name: 'New Test Rule' }),
+      ]),
+      'weesky', null
+    ))
+  })
+
+  it('click Edit opens editor pre-filled with rule name', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    await userEvent.click(screen.getByTitle('Edit'))
+    expect(document.querySelector('.rule-wizard-input').value).toBe('Existing Rule')
+  })
+
+  it('edit and save calls saveRules with updated rule', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    await userEvent.click(screen.getByTitle('Edit'))
+    const nameInput = document.querySelector('.rule-wizard-input')
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, 'Renamed Rule')
+    await userEvent.click(screen.getByText('Save changes'))
+
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'Renamed Rule' })],
+      'weesky', null
+    ))
+  })
+
+  it('click Delete opens confirm modal', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    await userEvent.click(screen.getByTitle('Delete'))
+    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
+  })
+
+  it('confirm delete calls saveRules without the deleted rule', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith([], 'weesky', null))
+  })
+
+  it('toggle enabled calls saveRules with updated enabled flag', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    fireEvent.click(screen.getByTitle('Disable').querySelector('input[type="checkbox"]'))
+
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'Existing Rule', enabled: false })],
+      'weesky', null
+    ))
+  })
+
+  it('save error shows error toast', async () => {
+    api.saveRules.mockRejectedValue(new Error('connection refused'))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    await userEvent.click(screen.getByTitle('Edit'))
+    await userEvent.click(screen.getByText('Save changes'))
+
+    await screen.findByText('connection refused')
+  })
+})
+
+// ── RulesPage — reordering ────────────────────────────────────
+
+describe('RulesPage — reordering', () => {
+  beforeEach(() => {
+    api.getRules.mockResolvedValue(ruleSet('weesky', [
+      fileIntoRule('a', 'First'),
+      fileIntoRule('b', 'Second'),
+    ]))
+  })
+
+  it('Move up swaps the rule with the one above it', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Second')
+
+    const moveUpBtns = screen.getAllByTitle('Move up')
+    await userEvent.click(moveUpBtns[1])
+
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'Second' }), expect.objectContaining({ name: 'First' })],
+      'weesky', null
+    ))
+  })
+
+  it('Move down swaps the rule with the one below it', async () => {
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('First')
+
+    const moveDownBtns = screen.getAllByTitle('Move down')
+    await userEvent.click(moveDownBtns[0])
+
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'Second' }), expect.objectContaining({ name: 'First' })],
+      'weesky', null
+    ))
+  })
+})
+
+// ── RulesPage — delete all script ────────────────────────────
+
+describe('RulesPage — delete all script', () => {
+  function advancedRuleSet() {
+    return { kind: 'Advanced', providerId: 'weesky', scriptName: 'custom', rules: [] }
+  }
+
+  it('Delete script button opens confirm modal', async () => {
+    api.getRules.mockResolvedValue(advancedRuleSet())
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/cannot be parsed/)
+
+    await userEvent.click(screen.getByText('Delete script'))
+    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
+  })
+
+  it('confirm calls deleteRules and switches to structured view', async () => {
+    api.getRules.mockResolvedValue(advancedRuleSet())
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/cannot be parsed/)
+
+    await userEvent.click(screen.getByText('Delete script'))
+    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(api.deleteRules).toHaveBeenCalled())
+    await screen.findByText('Script deleted')
+    expect(document.querySelector('.rules-toolbar')).toBeInTheDocument()
+  })
+
+  it('delete error shows error toast', async () => {
+    api.getRules.mockResolvedValue(advancedRuleSet())
+    api.deleteRules.mockRejectedValue(new Error('IMAP connection lost'))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/cannot be parsed/)
+
+    await userEvent.click(screen.getByText('Delete script'))
+    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+
+    await screen.findByText('IMAP connection lost')
   })
 })
 
