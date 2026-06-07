@@ -141,9 +141,9 @@ function summarizeCondition(c) {
   return `${name} ${opLabel} "${c.value}"`
 }
 
-function summarizeAction(a) {
+function summarizeAction(a, compact = false) {
   switch (a.type) {
-    case 'FileInto': return `→ ${a.argument ?? '?'}`
+    case 'FileInto': return compact ? `→ ${a.argument ?? '?'}` : (a.argument ?? '?')
     case 'Redirect': return `⇥ ${a.argument ?? '?'}`
     case 'SetFlag':  return 'Mark as read'
     case 'Keep':     return 'Keep'
@@ -190,7 +190,7 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
         {collapsed && hasActions && (
           <div className="rule-card-inline-actions">
             {rule.actions.map((a, i) => (
-              <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a)}</span>
+              <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a, true)}</span>
             ))}
           </div>
         )}
