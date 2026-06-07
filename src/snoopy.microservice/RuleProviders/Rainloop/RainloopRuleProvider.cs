@@ -259,6 +259,9 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
                 switch (a.Type)
                 {
                     case SieveActionType.FileInto:
+                        if (a.AutoCreate)
+                            return Result.Failure("The Rainloop format does not support auto-creating folders (:create)");
+                        break;
                     case SieveActionType.Redirect:
                     case SieveActionType.Reject:
                     case SieveActionType.Discard:

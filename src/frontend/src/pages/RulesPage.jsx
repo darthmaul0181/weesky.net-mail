@@ -114,21 +114,23 @@ const EXTENDED_RULES_HELP =
 // ── Constants ─────────────────────────────────────────────────
 
 const CONDITION_FIELDS = [
-  { value: 'From',      label: 'From' },
-  { value: 'Recipient', label: 'To / Cc' },
-  { value: 'Subject',   label: 'Subject' },
-  { value: 'Header',    label: 'Custom header' },
-  { value: 'Size',      label: 'Size (bytes)' },
-  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'Matches'] },
+  { value: 'From',           label: 'From' },
+  { value: 'Recipient',      label: 'To / Cc' },
+  { value: 'Subject',        label: 'Subject' },
+  { value: 'Header',         label: 'Custom header' },
+  { value: 'Size',           label: 'Size (bytes)',      operators: ['Larger', 'Smaller'] },
+  { value: 'Body',           label: 'Body',              extendedOnly: true, operators: ['Contains', 'Matches', 'Regex'] },
   { value: 'EnvelopeFrom',   label: 'Envelope from',     extendedOnly: true },
   { value: 'EnvelopeTo',     label: 'Envelope to',       extendedOnly: true },
   { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true },
+  { value: 'Duplicate',      label: 'Duplicate message', extendedOnly: true, noOperator: true },
 ]
 
 const CONDITION_OPERATORS = [
   { value: 'Contains', label: 'contains' },
   { value: 'Equals',   label: 'equals' },
   { value: 'Matches',  label: 'matches (wildcard)' },
+  { value: 'Regex',    label: 'matches (regex)',    extendedOnly: true },
   { value: 'Larger',   label: 'is larger than' },
   { value: 'Smaller',  label: 'is smaller than' },
 ]
@@ -154,6 +156,8 @@ function extractError(err) {
 }
 
 function summarizeCondition(c) {
+  if (c.field === 'Duplicate')
+    return c.value ? `Duplicate (within ${c.value}s)` : 'Duplicate message'
   const fieldLabel = CONDITION_FIELDS.find(f => f.value === c.field)?.label ?? c.field
   const opLabel = CONDITION_OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator
   const name = c.field === 'Header' ? (c.headerName ?? 'Header') : fieldLabel
@@ -162,7 +166,10 @@ function summarizeCondition(c) {
 
 function summarizeAction(a, compact = false) {
   switch (a.type) {
-    case 'FileInto': return compact ? `→ ${a.argument ?? '?'}` : (a.argument ?? '?')
+    case 'FileInto': {
+      const label = `${a.argument ?? '?'}${a.autoCreate ? ' ✚' : ''}`
+      return compact ? `→ ${label}` : label
+    }
     case 'Redirect': return `⇥ ${a.argument ?? '?'}`
     case 'SetFlag':
       if (a.argument === '\\Seen'    || a.argument === '\\\\Seen')    return 'Mark as read'
@@ -261,9 +268,11 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
 export function ConditionRow({ condition, onChange, onRemove, extended = false }) {
   const availableFields = extended ? CONDITION_FIELDS : CONDITION_FIELDS.filter(f => !f.extendedOnly)
   const fieldDef = CONDITION_FIELDS.find(f => f.value === condition.field)
+  const baseOps = extended ? CONDITION_OPERATORS : CONDITION_OPERATORS.filter(o => !o.extendedOnly)
   const availableOperators = fieldDef?.operators
-    ? CONDITION_OPERATORS.filter(o => fieldDef.operators.includes(o.value))
-    : CONDITION_OPERATORS
+    ? baseOps.filter(o => fieldDef.operators.includes(o.value))
+    : baseOps
+  const isDuplicate = condition.field === 'Duplicate'
 
   return (
     <div className="rule-row">
@@ -272,23 +281,27 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
         onChange={e => {
           const newField = e.target.value
           const newDef = CONDITION_FIELDS.find(f => f.value === newField)
-          const opValid = !newDef?.operators || newDef.operators.includes(condition.operator)
+          const newBaseOps = extended ? CONDITION_OPERATORS : CONDITION_OPERATORS.filter(o => !o.extendedOnly)
+          const newAvailOps = newDef?.operators ? newBaseOps.filter(o => newDef.operators.includes(o.value)) : newBaseOps
+          const opValid = newAvailOps.some(o => o.value === condition.operator)
           onChange({
             ...condition,
             field: newField,
             headerName: null,
-            operator: opValid ? condition.operator : (newDef?.operators?.[0] ?? 'Contains'),
+            operator: opValid ? condition.operator : (newAvailOps[0]?.value ?? 'Contains'),
           })
         }}
       >
         {availableFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
       </select>
-      <select
-        value={condition.operator}
-        onChange={e => onChange({ ...condition, operator: e.target.value })}
-      >
-        {availableOperators.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      {!isDuplicate && (
+        <select
+          value={condition.operator}
+          onChange={e => onChange({ ...condition, operator: e.target.value })}
+        >
+          {availableOperators.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      )}
       {condition.field === 'Header' && (
         <input
           type="text"
@@ -299,14 +312,26 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
           style={{ width: '130px', flexShrink: 0 }}
         />
       )}
-      <input
-        type="text"
-        className="rule-row-input"
-        placeholder="Value"
-        value={condition.value}
-        onChange={e => onChange({ ...condition, value: e.target.value })}
-        style={{ flex: 1 }}
-      />
+      {isDuplicate ? (
+        <input
+          type="number"
+          min="1"
+          className="rule-row-input"
+          placeholder="Seconds window (optional)"
+          value={condition.value}
+          onChange={e => onChange({ ...condition, value: e.target.value })}
+          style={{ flex: 1 }}
+        />
+      ) : (
+        <input
+          type="text"
+          className="rule-row-input"
+          placeholder="Value"
+          value={condition.value}
+          onChange={e => onChange({ ...condition, value: e.target.value })}
+          style={{ flex: 1 }}
+        />
+      )}
       <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Remove">
         <TrashIcon />
       </button>
@@ -341,6 +366,16 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId, exten
           list={action.type === 'FileInto' && foldersDatalistId ? foldersDatalistId : undefined}
           style={{ flex: 1 }}
         />
+      )}
+      {action.type === 'FileInto' && extended && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <input
+            type="checkbox"
+            checked={action.autoCreate ?? false}
+            onChange={e => onChange({ ...action, autoCreate: e.target.checked })}
+          />
+          Create
+        </label>
       )}
       <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Remove">
         <TrashIcon />

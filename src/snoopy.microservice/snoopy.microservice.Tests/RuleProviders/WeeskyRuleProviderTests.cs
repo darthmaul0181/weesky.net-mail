@@ -198,6 +198,103 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
 
         // ----- Helpers -----
 
+        // ----- Regex operator -----
+
+        [Fact]
+        public void Compile_RegexOperator_EmitsRegexMatchTypeAndRequire()
+        {
+            var rule = MakeRule("Regex",
+                new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Regex, Value = "^ALERT" },
+                Act(SieveActionType.FileInto, "Alerts"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"regex\"", script);
+            Assert.Contains("header :regex \"Subject\" \"^ALERT\"", script);
+        }
+
+        [Fact]
+        public void Compile_RegexOnBody_EmitsBodyRegex()
+        {
+            var rule = MakeRule("BodyRegex",
+                new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Regex, Value = "casino|lottery" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("body :text :regex \"casino|lottery\"", script);
+            Assert.Contains("\"body\"", script);
+            Assert.Contains("\"regex\"", script);
+        }
+
+        // ----- :create (mailbox) -----
+
+        [Fact]
+        public void Compile_FileIntoCreate_EmitsCreateFlagAndMailboxRequire()
+        {
+            var rule = MakeRule("Create",
+                Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x"),
+                new SieveAction { Type = SieveActionType.FileInto, Argument = "NewFolder", AutoCreate = true });
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"mailbox\"", script);
+            Assert.Contains("fileinto :create \"NewFolder\";", script);
+        }
+
+        [Fact]
+        public void Compile_FileIntoWithoutCreate_DoesNotEmitCreateFlag()
+        {
+            var rule = MakeRule("NoCreate",
+                Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x"),
+                Act(SieveActionType.FileInto, "Folder"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.DoesNotContain(":create", script);
+            Assert.DoesNotContain("\"mailbox\"", script);
+        }
+
+        // ----- duplicate -----
+
+        [Fact]
+        public void Compile_DuplicateCondition_EmitsDuplicateTestAndRequire()
+        {
+            var rule = MakeRule("Dedup",
+                new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"duplicate\"", script);
+            Assert.Contains("if duplicate {", script);
+        }
+
+        [Fact]
+        public void Compile_DuplicateConditionWithSeconds_EmitsSecondsParameter()
+        {
+            var rule = MakeRule("DedupHour",
+                new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "3600" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("if duplicate :seconds 3600 {", script);
+        }
+
+        [Fact]
+        public void Compile_DuplicateConditionWithInvalidSeconds_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "not-a-number" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("positive integer", result.Error);
+        }
+
         // ----- SetFlag emission -----
 
         [Fact]

@@ -132,10 +132,21 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             if (isSize && !isSizeOp) return Result.Failure("Size condition requires the Larger or Smaller operator");
             if (!isSize && isSizeOp) return Result.Failure("Larger/Smaller operator is only valid for the Size field");
 
+            if (c.Field == SieveConditionField.Duplicate)
+            {
+                if (isSizeOp) return Result.Failure("Larger/Smaller operator is not valid for the Duplicate condition");
+                if (!string.IsNullOrWhiteSpace(c.Value) &&
+                    (!long.TryParse(c.Value.Trim(), System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var secs) || secs <= 0))
+                    return Result.Failure("Duplicate :seconds value must be a positive integer");
+                return Result.Success();
+            }
+
             if (c.Field == SieveConditionField.Body &&
                 c.Operator != SieveConditionOperator.Contains &&
-                c.Operator != SieveConditionOperator.Matches)
-                return Result.Failure("Body condition only supports the Contains or Matches operator");
+                c.Operator != SieveConditionOperator.Matches &&
+                c.Operator != SieveConditionOperator.Regex)
+                return Result.Failure("Body condition only supports the Contains, Matches or Regex operator");
 
             if (c.Field == SieveConditionField.Header && string.IsNullOrWhiteSpace(c.HeaderName))
                 return Result.Failure("Header name is required when matching a custom header");
@@ -186,7 +197,10 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 {
                     switch (a.Type)
                     {
-                        case SieveActionType.FileInto: set.Add("fileinto"); break;
+                        case SieveActionType.FileInto:
+                            set.Add("fileinto");
+                            if (a.AutoCreate) set.Add("mailbox");
+                            break;
                         case SieveActionType.Reject: set.Add("reject"); break;
                         case SieveActionType.SetFlag: set.Add("imap4flags"); break;
                     }
@@ -195,6 +209,8 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 {
                     if (c.Field == SieveConditionField.Body) set.Add("body");
                     if (c.Field == SieveConditionField.RecipientDetail) set.Add("subaddress");
+                    if (c.Field == SieveConditionField.Duplicate) set.Add("duplicate");
+                    if (c.Operator == SieveConditionOperator.Regex) set.Add("regex");
                 }
             }
             return set.ToList();
@@ -235,17 +251,30 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 return $"size {op} {c.Value.Trim()}";
             }
 
+            if (c.Field == SieveConditionField.Duplicate)
+            {
+                return string.IsNullOrWhiteSpace(c.Value)
+                    ? "duplicate"
+                    : $"duplicate :seconds {c.Value.Trim()}";
+            }
+
             if (c.Field == SieveConditionField.Body)
             {
-                var bodyOp = c.Operator == SieveConditionOperator.Matches ? ":matches" : ":contains";
+                var bodyOp = c.Operator switch
+                {
+                    SieveConditionOperator.Matches => ":matches",
+                    SieveConditionOperator.Regex   => ":regex",
+                    _                              => ":contains"
+                };
                 return $"body :text {bodyOp} {Quote(c.Value)}";
             }
 
             var matchOp = c.Operator switch
             {
                 SieveConditionOperator.Contains => ":contains",
-                SieveConditionOperator.Equals => ":is",
-                SieveConditionOperator.Matches => ":matches",
+                SieveConditionOperator.Equals   => ":is",
+                SieveConditionOperator.Matches  => ":matches",
+                SieveConditionOperator.Regex    => ":regex",
                 _ => throw new InvalidOperationException($"Operator {c.Operator} is not valid for a text field")
             };
 
@@ -280,7 +309,9 @@ namespace weesky.Snoopy.Microservice.RuleProviders
 
         private static string BuildAction(SieveAction a) => a.Type switch
         {
-            SieveActionType.FileInto => $"fileinto {Quote(a.Argument!)};",
+            SieveActionType.FileInto => a.AutoCreate
+                ? $"fileinto :create {Quote(a.Argument!)};"
+                : $"fileinto {Quote(a.Argument!)};",
             SieveActionType.Redirect => $"redirect {Quote(a.Argument!)};",
             SieveActionType.Discard => "discard;",
             SieveActionType.Reject => $"reject {Quote(a.Argument!)};",

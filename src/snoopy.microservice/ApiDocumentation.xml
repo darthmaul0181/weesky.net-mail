@@ -393,6 +393,12 @@
             Unused for Discard / Keep.
             </summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveAction.AutoCreate">
+            <summary>
+            FileInto only — when <c>true</c>, emits <c>fileinto :create "folder"</c> and adds <c>"mailbox"</c> to
+            <c>require[]</c>. Creates the target folder if it does not already exist (RFC 5490).
+            </summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.SieveCondition.HeaderName">
             <summary>Required when <see cref="P:weesky.Snoopy.Microservice.Models.SieveCondition.Field"/> is <see cref="F:weesky.Snoopy.Microservice.Models.SieveConditionField.Header"/>.</summary>
         </member>
@@ -413,6 +419,16 @@
         </member>
         <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionField.RecipientDetail">
             <summary>Subaddress detail part (e.g. +tag) — emits <c>address :detail :op ["To","Cc"] "value"</c> (requires "subaddress"). Weesky-only.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionField.Duplicate">
+            <summary>
+            Duplicate detection — emits <c>duplicate</c> or <c>duplicate :seconds N</c> (requires "duplicate"). Weesky-only.
+            The condition <c>Value</c> is optional; if non-empty it must be a positive integer (seconds window).
+            <c>Operator</c> is irrelevant and ignored.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionOperator.Regex">
+            <summary>POSIX extended regex — emits <c>:regex</c> (requires "regex" extension). Weesky-only.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.SieveOptions">
             <summary>

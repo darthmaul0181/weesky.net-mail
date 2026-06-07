@@ -460,6 +460,60 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
         }
 
         [Fact]
+        public void CanRepresent_RegexOperator_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "regex-rule",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Regex, Value = "^spam" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Regex", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_FileIntoWithAutoCreate_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "create-rule",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+                Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "NewFolder", AutoCreate = true } }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains(":create", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_DuplicateCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "dedup",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Duplicate", result.Error);
+        }
+
+        [Fact]
         public void CanRepresent_EnvelopeFromCondition_Fails()
         {
             var rule = new SieveRule

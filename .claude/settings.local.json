@@ -17,7 +17,9 @@
       "WebFetch(domain:doc.dovecot.org)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "PowerShell(dotnet test *)",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "Bash(powershell *)",
+      "Bash(dotnet clean *)"
     ]
   }
 }

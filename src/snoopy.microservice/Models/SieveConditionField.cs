@@ -17,6 +17,12 @@ namespace weesky.Snoopy.Microservice.Models
         /// <summary>SMTP envelope recipient — emits <c>envelope :op "to" "value"</c>. Weesky-only.</summary>
         EnvelopeTo,
         /// <summary>Subaddress detail part (e.g. +tag) — emits <c>address :detail :op ["To","Cc"] "value"</c> (requires "subaddress"). Weesky-only.</summary>
-        RecipientDetail
+        RecipientDetail,
+        /// <summary>
+        /// Duplicate detection — emits <c>duplicate</c> or <c>duplicate :seconds N</c> (requires "duplicate"). Weesky-only.
+        /// The condition <c>Value</c> is optional; if non-empty it must be a positive integer (seconds window).
+        /// <c>Operator</c> is irrelevant and ignored.
+        /// </summary>
+        Duplicate
     }
 }

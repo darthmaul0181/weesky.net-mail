@@ -308,7 +308,7 @@ describe('ConditionRow body field', () => {
     const opSelect = Array.from(selects).find(s =>
       Array.from(s.options).some(o => o.value === 'Contains') &&
       !Array.from(s.options).some(o => o.value === 'FileInto'))
-    expect(Array.from(opSelect.options).map(o => o.value)).toEqual(['Contains', 'Matches'])
+    expect(Array.from(opSelect.options).map(o => o.value)).toEqual(['Contains', 'Matches', 'Regex'])
   })
 })
 
@@ -349,6 +349,128 @@ describe('ConditionRow envelope and subaddress fields', () => {
     expect(values).not.toContain('EnvelopeFrom')
     expect(values).not.toContain('EnvelopeTo')
     expect(values).not.toContain('RecipientDetail')
+  })
+})
+
+// ── Regex operator (extended only) ────────────────────────────
+
+describe('Regex operator', () => {
+  it('shows regex option in extended mode', () => {
+    render(
+      <RuleEditorModal
+        rule={fileIntoRule('a', 'r1')}
+        extended={true}
+        onSave={() => {}}
+        onClose={() => {}}
+      />)
+
+    const selects = document.querySelectorAll('select')
+    const opSelect = Array.from(selects).find(s =>
+      Array.from(s.options).some(o => o.value === 'Contains') &&
+      !Array.from(s.options).some(o => o.value === 'FileInto'))
+    expect(Array.from(opSelect.options).some(o => o.value === 'Regex')).toBe(true)
+  })
+
+  it('hides regex option in non-extended mode', () => {
+    render(
+      <RuleEditorModal
+        rule={fileIntoRule('a', 'r1')}
+        extended={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />)
+
+    const selects = document.querySelectorAll('select')
+    const opSelect = Array.from(selects).find(s =>
+      Array.from(s.options).some(o => o.value === 'Contains') &&
+      !Array.from(s.options).some(o => o.value === 'FileInto'))
+    expect(Array.from(opSelect.options).some(o => o.value === 'Regex')).toBe(false)
+  })
+})
+
+// ── Duplicate condition (extended only) ───────────────────────
+
+describe('Duplicate condition', () => {
+  it('shows Duplicate field in extended mode', () => {
+    render(
+      <RuleEditorModal
+        rule={fileIntoRule('a', 'r1')}
+        extended={true}
+        onSave={() => {}}
+        onClose={() => {}}
+      />)
+
+    const selects = document.querySelectorAll('select')
+    const condFieldSelect = Array.from(selects).find(s =>
+      Array.from(s.options).some(o => o.value === 'Subject'))
+    expect(Array.from(condFieldSelect.options).some(o => o.value === 'Duplicate')).toBe(true)
+  })
+
+  it('hides operator select when Duplicate field is active', () => {
+    const rule = {
+      ...fileIntoRule('a', 'r1'),
+      conditions: [{ field: 'Duplicate', operator: 'Contains', value: '', headerName: null }],
+    }
+    render(
+      <RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
+
+    const selects = document.querySelectorAll('select')
+    const hasOpSelect = Array.from(selects).some(s =>
+      Array.from(s.options).some(o => o.value === 'Contains') &&
+      !Array.from(s.options).some(o => o.value === 'FileInto') &&
+      !Array.from(s.options).some(o => o.value === 'Subject'))
+    expect(hasOpSelect).toBe(false)
+  })
+})
+
+// ── :create (mailbox) ─────────────────────────────────────────
+
+describe('FileInto :create checkbox', () => {
+  it('shows Create checkbox for FileInto in extended mode', () => {
+    render(
+      <RuleEditorModal
+        rule={fileIntoRule('a', 'r1')}
+        extended={true}
+        onSave={() => {}}
+        onClose={() => {}}
+      />)
+
+    expect(screen.getByText('Create')).toBeInTheDocument()
+  })
+
+  it('hides Create checkbox in non-extended mode', () => {
+    render(
+      <RuleEditorModal
+        rule={fileIntoRule('a', 'r1')}
+        extended={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />)
+
+    expect(screen.queryByText('Create')).not.toBeInTheDocument()
+  })
+
+  it('includes autoCreate on save when checkbox is checked', async () => {
+    const onSave = vi.fn()
+    render(
+      <RuleEditorModal
+        rule={fileIntoRule('a', 'r1')}
+        extended={true}
+        onSave={onSave}
+        onClose={() => {}}
+      />)
+
+    // clicking the label toggles the checkbox inside it
+    await userEvent.click(screen.getByText('Create').firstElementChild)
+    await userEvent.click(screen.getByText('Save changes'))
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: expect.arrayContaining([
+          expect.objectContaining({ type: 'FileInto', autoCreate: true }),
+        ])
+      })
+    )
   })
 })
 
