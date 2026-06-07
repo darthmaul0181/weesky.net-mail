@@ -1154,25 +1154,35 @@ body {
 
 .admin-icon-btn {
   background: none;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
-  padding: 5px;
+  padding: 6px;
   cursor: pointer;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
 
-.admin-icon-btn:hover {
+.admin-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-icon-btn:hover:not(:disabled) {
   color: var(--primary);
-  border-color: var(--primary);
+  background: rgba(52, 80, 163, 0.1);
 }
 
-.admin-icon-btn.is-danger:hover {
+.admin-icon-btn.is-danger:hover:not(:disabled) {
   color: #dc2626;
-  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.admin-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 /* ── Ownership tiles ─────────────────────────────────────── */
@@ -1711,34 +1721,6 @@ body {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-}
-
-/* Icônes d'action de la popup Rules : pas d'encadré, surbrillance au survol.
-   (Essai — on pourra revenir en retirant ce bloc.) */
-.rule-card-btns .admin-icon-btn {
-  border: none;
-  border-radius: var(--radius);
-  padding: 6px;
-}
-
-.rule-card-btns .admin-icon-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.rule-card-btns .admin-icon-btn:hover:not(:disabled) {
-  color: var(--primary);
-  background: rgba(52, 80, 163, 0.1);
-}
-
-.rule-card-btns .admin-icon-btn.is-danger:hover:not(:disabled) {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.1);
-}
-
-.rule-card-btns .admin-icon-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
 }
 
 /* Trait vertical séparant les actions du bouton déplier/replier */
