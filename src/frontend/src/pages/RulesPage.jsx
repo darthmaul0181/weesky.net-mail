@@ -508,6 +508,94 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId, exten
   )
 }
 
+// ── RuleHelpModal ─────────────────────────────────────────────
+
+function RuleHelpModal({ onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal rule-help-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Rule editor — help</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="rule-help-body">
+
+          <section className="rule-help-section">
+            <h3 className="rule-help-heading">Conditions</h3>
+            <dl className="rule-help-dl">
+              <dt>From / To·Cc / Subject</dt>
+              <dd>Match against the corresponding email header.</dd>
+              <dt>Custom header</dt>
+              <dd>Match any header by name (e.g. <code>X-Spam-Score</code>).</dd>
+              <dt>Size</dt>
+              <dd>Message size in bytes — use <em>is larger than</em> / <em>is smaller than</em>.</dd>
+              <dt>Body <span className="rule-help-badge">Extended</span></dt>
+              <dd>Search inside the message body text.</dd>
+              <dt>Envelope from / Envelope to <span className="rule-help-badge">Extended</span></dt>
+              <dd>Match the real SMTP sender/recipient, ignoring display headers.</dd>
+              <dt>Recipient +detail <span className="rule-help-badge">Extended</span></dt>
+              <dd>Match the <code>+tag</code> part of an address like <code>you+shopping@…</code>.</dd>
+              <dt>Duplicate <span className="rule-help-badge">Extended</span></dt>
+              <dd>Fires when a similar message was already received within the given time window (seconds).</dd>
+              <dt>Current date / Message date <span className="rule-help-badge">Extended</span></dt>
+              <dd>Compare the current date or the date in the message header against a fixed date.</dd>
+              <dt>Current weekday / Current hour <span className="rule-help-badge">Extended</span></dt>
+              <dd>Filter by the day of the week or the hour of the day when the message arrives.</dd>
+            </dl>
+          </section>
+
+          <section className="rule-help-section">
+            <h3 className="rule-help-heading">Operators</h3>
+            <dl className="rule-help-dl">
+              <dt>contains</dt>
+              <dd>The field includes the text anywhere (case-insensitive).</dd>
+              <dt>equals</dt>
+              <dd>Exact match of the entire field value.</dd>
+              <dt>matches (wildcard)</dt>
+              <dd>Glob pattern — <code>*</code> matches any sequence of characters, <code>?</code> matches exactly one.</dd>
+              <dt>matches (regex) <span className="rule-help-badge">Extended</span></dt>
+              <dd>Full POSIX regular expression.</dd>
+              <dt>is larger than / is smaller than</dt>
+              <dd>Numeric comparison, for the <em>Size</em> field only.</dd>
+              <dt>is before / is on or after</dt>
+              <dd>Date comparison, for date and time fields only.</dd>
+            </dl>
+          </section>
+
+          <section className="rule-help-section">
+            <h3 className="rule-help-heading">Actions</h3>
+            <dl className="rule-help-dl">
+              <dt>Move to</dt>
+              <dd>Move the message into the specified folder. Enable <em>Create</em> to auto-create the folder if it doesn&apos;t exist <span className="rule-help-badge">Extended</span>.</dd>
+              <dt>Redirect to</dt>
+              <dd>Forward a copy of the message to another address.</dd>
+              <dt>Reject with message</dt>
+              <dd>Refuse the message at delivery with an optional error text sent back to the sender.</dd>
+              <dt>Discard</dt>
+              <dd>Silently drop the message — no bounce, no copy kept.</dd>
+              <dt>Keep in inbox <span className="rule-help-badge">Extended</span></dt>
+              <dd>Explicitly keep a copy in the inbox, useful when combined with another action.</dd>
+            </dl>
+          </section>
+
+          <section className="rule-help-section">
+            <h3 className="rule-help-heading">Options</h3>
+            <dl className="rule-help-dl">
+              <dt>Mark as read</dt>
+              <dd>Automatically mark the message as read upon delivery.</dd>
+              <dt>Mark as flagged ⭐ <span className="rule-help-badge">Extended</span></dt>
+              <dd>Add the starred/flagged flag to the message.</dd>
+              <dt>Stop processing after this rule</dt>
+              <dd>If this rule matches, no further rules in the list are evaluated. Without this, all matching rules apply in order.</dd>
+            </dl>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── RuleEditorModal ───────────────────────────────────────────
 
 export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended = false }) {
@@ -524,6 +612,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
   )
   const [error, setError] = useState(null)
   const [folders, setFolders] = useState([])
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const step1Done = rule.name.trim() !== ''
   const step2Done = rule.conditions.length > 0 && rule.conditions.every(isConditionValid)
@@ -588,8 +677,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
       <div className="modal" style={{ maxWidth: '680px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isNew ? 'New rule' : 'Edit rule'}</span>
+          <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)} title="Help">?</button>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
+        {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
 
@@ -650,6 +741,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                 {rule.conditions.length === 0 && (
                   <p className="rule-editor-empty">No conditions — applies to all messages.</p>
                 )}
+                <p className="rule-wizard-hint">
+                  <strong>Any</strong> — fires if at least one condition matches.&ensp;
+                  <strong>All</strong> — every condition must match.
+                </p>
               </div>
             </div>
 
@@ -710,7 +805,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                       onChange={e => setField('stopAfter', e.target.checked)} />
                     <span className="toggle-track" />
                   </label>
-                  <span className="rule-wizard-toggle-label">Stop processing after this rule</span>
+                  <span className="rule-wizard-toggle-label">
+                    Stop processing after this rule
+                    <span className="rule-wizard-hint rule-wizard-hint--inline">If this rule matches, the remaining rules are skipped.</span>
+                  </span>
                 </div>
               </div>
             </div>
