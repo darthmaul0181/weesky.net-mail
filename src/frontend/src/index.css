@@ -1618,6 +1618,38 @@ body {
   gap: 8px;
 }
 
+.convert-lost-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.convert-lost-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.convert-lost-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.convert-lost-reason {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .rules-empty {
   padding: 40px;
   text-align: center;

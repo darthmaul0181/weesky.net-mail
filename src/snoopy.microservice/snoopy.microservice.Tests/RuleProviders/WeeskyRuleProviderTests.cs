@@ -198,6 +198,112 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
 
         // ----- Helpers -----
 
+        // ----- Body condition -----
+
+        [Fact]
+        public void Compile_BodyContains_EmitsBodyExtensionAndRequire()
+        {
+            var rule = MakeRule("Spam",
+                new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Contains, Value = "casino" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("require [\"body\"];", script);
+            Assert.Contains("body :text :contains \"casino\"", script);
+        }
+
+        [Fact]
+        public void Compile_BodyMatches_EmitsMatchesKeyword()
+        {
+            var rule = MakeRule("Wildcard",
+                new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Matches, Value = "*win*" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("body :text :matches \"*win*\"", script);
+        }
+
+        [Fact]
+        public void Compile_BodyWithEqualsOperator_Fails()
+        {
+            var rule = MakeRule("Bad",
+                new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Equals, Value = "x" },
+                Act(SieveActionType.Discard));
+
+            var result = _sut.Compile(new[] { rule });
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Body", result.Error);
+        }
+
+        // ----- Envelope / subaddress conditions -----
+
+        [Fact]
+        public void Compile_EnvelopeFrom_EmitsEnvelopeFromTest()
+        {
+            var rule = MakeRule("NoReply",
+                new SieveCondition { Field = SieveConditionField.EnvelopeFrom, Operator = SieveConditionOperator.Contains, Value = "noreply@" },
+                Act(SieveActionType.Discard));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("envelope :contains \"from\" \"noreply@\"", script);
+            Assert.DoesNotContain("require", script); // envelope is core, no require
+        }
+
+        [Fact]
+        public void Compile_EnvelopeTo_EmitsEnvelopeToTest()
+        {
+            var rule = MakeRule("ToMe",
+                new SieveCondition { Field = SieveConditionField.EnvelopeTo, Operator = SieveConditionOperator.Equals, Value = "me@example.com" },
+                Act(SieveActionType.FileInto, "Me"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("envelope :is \"to\" \"me@example.com\"", script);
+        }
+
+        [Fact]
+        public void Compile_RecipientDetail_EmitsSubaddressRequireAndAddressDetail()
+        {
+            var rule = MakeRule("Tagged",
+                new SieveCondition { Field = SieveConditionField.RecipientDetail, Operator = SieveConditionOperator.Equals, Value = "support" },
+                Act(SieveActionType.FileInto, "Support"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("\"subaddress\"", script);
+            Assert.Contains("address :detail :is [\"To\", \"Cc\"] \"support\"", script);
+        }
+
+        // ----- CanRepresent (superset) -----
+
+        [Fact]
+        public void CanRepresent_ExtendedFlagAndMultipleActions_Succeeds()
+        {
+            var rule = MakeRule(
+                "extended",
+                new[] { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+                new[]
+                {
+                    Act(SieveActionType.SetFlag, @"\Flagged"),
+                    Act(SieveActionType.FileInto, "A"),
+                    Act(SieveActionType.Redirect, "y@z.com")
+                });
+
+            Assert.True(_sut.CanRepresent(rule).IsSuccess);
+        }
+
+        [Fact]
+        public void CanRepresent_StructurallyInvalidRule_Fails()
+        {
+            var rule = new SieveRule { Name = "", Conditions = { }, Actions = { } };
+
+            Assert.True(_sut.CanRepresent(rule).IsFailure);
+        }
+
         private static SieveRule MakeRule(string name, SieveCondition cond, SieveAction act, bool matchAll = true) =>
             new() { Name = name, MatchAll = matchAll, Conditions = { cond }, Actions = { act } };
 

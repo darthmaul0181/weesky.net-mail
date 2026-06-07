@@ -114,6 +114,42 @@ namespace weesky.Snoopy.Microservice.Controllers
         }
 
         /// <summary>
+        /// Checks whether the supplied rules can be represented by a target provider's format,
+        /// without writing anything. The frontend calls this before switching providers (e.g.
+        /// turning off "Extended rules") to preview which rules would be lost in the conversion.
+        /// </summary>
+        /// <param name="request">Target provider id + the rules to test.</param>
+        [HttpPost("CompatibilityCheck")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public ActionResult<CompatibilityCheckResult> CompatibilityCheck([FromBody] CompatibilityCheckRequest request)
+        {
+            if (request == null)
+                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Request body is required"));
+
+            var provider = request.ProviderId != null
+                ? _providers.GetById(request.ProviderId)
+                : _providers.Default;
+            if (provider == null)
+                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe($"Unknown rule provider: {request.ProviderId}"));
+
+            var incompatible = new List<IncompatibleRule>();
+            foreach (var rule in request.Rules ?? new List<SieveRule>())
+            {
+                var check = provider.CanRepresent(rule);
+                if (check.IsFailure)
+                    incompatible.Add(new IncompatibleRule { Id = rule.Id, Name = rule.Name, Reason = check.Error });
+            }
+
+            return Ok(new CompatibilityCheckResult
+            {
+                Compatible = incompatible.Count == 0,
+                Incompatible = incompatible
+            });
+        }
+
+        /// <summary>
         /// Lists the rule providers supported by the server (e.g. weesky, rainloop) so the
         /// frontend can offer format selection.
         /// </summary>

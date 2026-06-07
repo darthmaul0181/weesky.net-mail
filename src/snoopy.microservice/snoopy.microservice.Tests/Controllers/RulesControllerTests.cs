@@ -180,6 +180,111 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
             _repo.Verify(r => r.SaveRawScriptAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
+        // ----- POST /api/Rules/CompatibilityCheck -----
+
+        [Fact]
+        public void CompatibilityCheck_AllRepresentable_ReturnsCompatible()
+        {
+            var body = new CompatibilityCheckRequest
+            {
+                ProviderId = "rainloop",
+                Rules =
+                {
+                    new SieveRule
+                    {
+                        Name = "ok",
+                        Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                        Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "X" } }
+                    }
+                }
+            };
+
+            var result = CreateController().CompatibilityCheck(body);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var payload = Assert.IsType<CompatibilityCheckResult>(ok.Value);
+            Assert.True(payload.Compatible);
+            Assert.Empty(payload.Incompatible);
+        }
+
+        [Fact]
+        public void CompatibilityCheck_IncompatibleRule_ListsItWithReason()
+        {
+            var id = Guid.NewGuid();
+            var body = new CompatibilityCheckRequest
+            {
+                ProviderId = "rainloop",
+                Rules =
+                {
+                    new SieveRule
+                    {
+                        Id = id,
+                        Name = "extended",
+                        Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                        Actions =
+                        {
+                            new SieveAction { Type = SieveActionType.FileInto, Argument = "A" },
+                            new SieveAction { Type = SieveActionType.Redirect, Argument = "y@z.com" }
+                        }
+                    }
+                }
+            };
+
+            var result = CreateController().CompatibilityCheck(body);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var payload = Assert.IsType<CompatibilityCheckResult>(ok.Value);
+            Assert.False(payload.Compatible);
+            var entry = Assert.Single(payload.Incompatible);
+            Assert.Equal(id, entry.Id);
+            Assert.Equal("extended", entry.Name);
+            Assert.False(string.IsNullOrWhiteSpace(entry.Reason));
+        }
+
+        [Fact]
+        public void CompatibilityCheck_WeeskyTarget_AlwaysCompatible()
+        {
+            var body = new CompatibilityCheckRequest
+            {
+                ProviderId = "weesky",
+                Rules =
+                {
+                    new SieveRule
+                    {
+                        Name = "extended",
+                        Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                        Actions =
+                        {
+                            new SieveAction { Type = SieveActionType.SetFlag, Argument = @"\Flagged" },
+                            new SieveAction { Type = SieveActionType.FileInto, Argument = "A" }
+                        }
+                    }
+                }
+            };
+
+            var result = CreateController().CompatibilityCheck(body);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var payload = Assert.IsType<CompatibilityCheckResult>(ok.Value);
+            Assert.True(payload.Compatible);
+        }
+
+        [Fact]
+        public void CompatibilityCheck_UnknownProvider_Returns400()
+        {
+            var result = CreateController().CompatibilityCheck(new CompatibilityCheckRequest { ProviderId = "nope" });
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+        }
+
+        [Fact]
+        public void CompatibilityCheck_NullBody_Returns400()
+        {
+            var result = CreateController().CompatibilityCheck(null!);
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+        }
+
         // ----- GET /api/Rules/Providers -----
 
         [Fact]

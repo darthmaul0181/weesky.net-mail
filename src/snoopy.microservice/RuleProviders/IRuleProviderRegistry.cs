@@ -8,6 +8,12 @@ namespace weesky.Snoopy.Microservice.RuleProviders
         /// <summary>Provider used when no existing script is found and no explicit choice is made.</summary>
         IRuleProvider Default { get; }
 
+        /// <summary>
+        /// Provider a brand-new account starts on (no script yet). Rainloop, so the Snappymail
+        /// webmail sees the rules from day one; users opt into the extended Weesky format later.
+        /// </summary>
+        IRuleProvider NewAccountDefault { get; }
+
         IReadOnlyList<IRuleProvider> All { get; }
 
         /// <summary>Resolve a provider by its identifier; returns null if unknown.</summary>

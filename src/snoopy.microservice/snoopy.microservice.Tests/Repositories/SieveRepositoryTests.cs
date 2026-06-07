@@ -25,6 +25,11 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(Result.Success<IManageSieveSession>(session.Object));
 
+            // Default so SaveRulesAsync's post-activation cleanup finds nothing to remove.
+            // Tests that care about listing override this via SetupList.
+            session.Setup(s => s.ListScriptsAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success<IReadOnlyList<SieveScriptListEntry>>(Array.Empty<SieveScriptListEntry>()));
+
             var registry = new RuleProviderRegistry(new IRuleProvider[]
             {
                 new WeeskyRuleProvider(),
@@ -57,7 +62,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public async Task GetRuleSetAsync_WhenNoScripts_ReturnsEmptyStructuredWithDefaultProvider()
+        public async Task GetRuleSetAsync_WhenNoScripts_ReturnsEmptyStructuredOnNewAccountDefault()
         {
             var (repo, _, session) = CreateSut();
             SetupList(session);
@@ -67,8 +72,9 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.True(result.IsSuccess);
             Assert.Equal(SieveScriptKind.Structured, result.Value.Kind);
             Assert.Empty(result.Value.Rules);
-            Assert.Equal("weesky", result.Value.ProviderId);
-            Assert.Equal(WeeskyScriptName, result.Value.ScriptName);
+            // New accounts start on Rainloop so the Snappymail webmail stays in sync by default.
+            Assert.Equal("rainloop", result.Value.ProviderId);
+            Assert.Equal(RainloopScriptName, result.Value.ScriptName);
         }
 
         [Fact]
@@ -227,6 +233,66 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.True(result.IsSuccess);
             session.Verify(s => s.PutScriptAsync(RainloopScriptName,
                 It.Is<string>(c => c.Contains("# RAINLOOP:SIEVE")), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_DeletesOtherProvidersManagedScript()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            // After activating weesky-rules, an inactive rainloop.user still lingers.
+            SetupList(session,
+                new SieveScriptListEntry(WeeskyScriptName, true),
+                new SieveScriptListEntry(RainloopScriptName, false));
+            session.Setup(s => s.DeleteScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.Keep } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: "weesky", scriptName: null);
+
+            Assert.True(result.IsSuccess);
+            session.Verify(s => s.DeleteScriptAsync(RainloopScriptName, It.IsAny<CancellationToken>()), Times.Once);
+            session.Verify(s => s.DeleteScriptAsync(WeeskyScriptName, It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveRulesAsync_DoesNotDeleteUnknownOrActiveScripts()
+        {
+            var (repo, _, session) = CreateSut();
+            session.Setup(s => s.PutScriptAsync(WeeskyScriptName, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            session.Setup(s => s.SetActiveAsync(WeeskyScriptName, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(Result.Success());
+            SetupList(session,
+                new SieveScriptListEntry(WeeskyScriptName, true),
+                new SieveScriptListEntry("custom-advanced", false));
+
+            var rules = new[]
+            {
+                new SieveRule
+                {
+                    Name = "x",
+                    Conditions = { new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Contains, Value = "x" } },
+                    Actions = { new SieveAction { Type = SieveActionType.Keep } }
+                }
+            };
+
+            var result = await repo.SaveRulesAsync(Alice, rules, providerId: "weesky", scriptName: null);
+
+            Assert.True(result.IsSuccess);
+            session.Verify(s => s.DeleteScriptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]

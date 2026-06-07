@@ -3,6 +3,7 @@ namespace weesky.Snoopy.Microservice.RuleProviders
     public class RuleProviderRegistry : IRuleProviderRegistry
     {
         public const string DefaultProviderId = "weesky";
+        public const string NewAccountProviderId = "rainloop";
 
         private readonly Dictionary<string, IRuleProvider> _byId;
 
@@ -17,9 +18,15 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             Default = _byId.TryGetValue(DefaultProviderId, out var weesky)
                 ? weesky
                 : All[0];
+
+            NewAccountDefault = _byId.TryGetValue(NewAccountProviderId, out var rainloop)
+                ? rainloop
+                : Default;
         }
 
         public IRuleProvider Default { get; }
+
+        public IRuleProvider NewAccountDefault { get; }
 
         public IReadOnlyList<IRuleProvider> All { get; }
 

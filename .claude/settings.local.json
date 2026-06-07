@@ -15,7 +15,9 @@
       "Bash(npm test *)",
       "Bash(Get-ChildItem *)",
       "WebFetch(domain:doc.dovecot.org)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "PowerShell(dotnet test *)",
+      "PowerShell(npm run *)"
     ]
   }
 }

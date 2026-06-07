@@ -17,6 +17,13 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
         }
 
         [Fact]
+        public void NewAccountDefault_IsRainloop()
+        {
+            var sut = CreateSut();
+            Assert.Equal("rainloop", sut.NewAccountDefault.Id);
+        }
+
+        [Fact]
         public void All_ListsAllProviders()
         {
             var sut = CreateSut();

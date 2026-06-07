@@ -39,12 +39,13 @@ namespace weesky.Snoopy.Microservice.Repositories
             var scriptName = ResolveScriptName(list.Value);
             if (scriptName == null)
             {
-                // No script exists at all → return an empty structured set using the default provider.
+                // No script exists at all → return an empty structured set on the provider a
+                // brand-new account starts on (Rainloop), so the webmail stays in sync by default.
                 return Result.Success(new SieveRuleSet
                 {
                     Kind = SieveScriptKind.Structured,
-                    ProviderId = _registry.Default.Id,
-                    ScriptName = _registry.Default.DefaultScriptName
+                    ProviderId = _registry.NewAccountDefault.Id,
+                    ScriptName = _registry.NewAccountDefault.DefaultScriptName
                 });
             }
 
@@ -76,7 +77,56 @@ namespace weesky.Snoopy.Microservice.Repositories
             if (compiled.IsFailure) return Result.Failure(compiled.Error);
 
             var targetName = string.IsNullOrEmpty(scriptName) ? provider.DefaultScriptName : scriptName;
-            return await PutAndActivateAsync(user, targetName, compiled.Value, cancellationToken);
+
+            var sessionResult = await _client.OpenSessionAsync(user.Email, cancellationToken);
+            if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+            await using var session = sessionResult.Value;
+
+            var put = await session.PutScriptAsync(targetName, compiled.Value, cancellationToken);
+            if (put.IsFailure)
+            {
+                _logger.LogWarning("PUTSCRIPT rejected for user={User} script={Script}: {Error}", user.Email, targetName, put.Error);
+                return put;
+            }
+
+            var activate = await session.SetActiveAsync(targetName, cancellationToken);
+            if (activate.IsFailure)
+            {
+                _logger.LogWarning("SETACTIVE failed for user={User} script={Script}: {Error}", user.Email, targetName, activate.Error);
+                return activate;
+            }
+
+            // Drop any other provider's managed script so only one stays on the server and the
+            // next load is unambiguous. Best-effort: a failure here doesn't undo the save.
+            await CleanupOtherManagedScriptsAsync(session, targetName, cancellationToken);
+
+            return Result.Success();
+        }
+
+        /// <summary>
+        /// Delete the default-named scripts of providers other than the one we just wrote,
+        /// leaving the active managed script as the single source of truth. Never touches the
+        /// active script or any unrecognised (Advanced) script.
+        /// </summary>
+        private async Task CleanupOtherManagedScriptsAsync(IManageSieveSession session, string keepName, CancellationToken cancellationToken)
+        {
+            var list = await session.ListScriptsAsync(cancellationToken);
+            if (list.IsFailure) return;
+
+            var managedNames = _registry.All
+                .Select(p => p.DefaultScriptName)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (var entry in list.Value)
+            {
+                if (string.Equals(entry.Name, keepName, StringComparison.Ordinal)) continue;
+                if (entry.IsActive) continue;                 // never remove the active script
+                if (!managedNames.Contains(entry.Name)) continue; // never remove Advanced/unknown scripts
+
+                var del = await session.DeleteScriptAsync(entry.Name, cancellationToken);
+                if (del.IsFailure)
+                    _logger.LogWarning("Failed to delete superseded script {Script}: {Error}", entry.Name, del.Error);
+            }
         }
 
         public Task<Result> SaveRawScriptAsync(User user, string content, string? scriptName, CancellationToken cancellationToken = default)

@@ -34,5 +34,14 @@ namespace weesky.Snoopy.Microservice.RuleProviders
 
         /// <summary>Emit a script in this provider's dialect.</summary>
         Result<string> Compile(IReadOnlyList<SieveRule> rules);
+
+        /// <summary>
+        /// Checks whether this provider's on-disk format can losslessly represent the rule.
+        /// Returns success when it can, or a failure whose error explains why it cannot.
+        /// Pure, network-free check used to preview a provider switch before committing it.
+        /// Implementations must use a strict whitelist (reject anything not explicitly
+        /// supported) so that future rule features fail safe rather than being silently dropped.
+        /// </summary>
+        Result CanRepresent(SieveRule rule);
     }
 }

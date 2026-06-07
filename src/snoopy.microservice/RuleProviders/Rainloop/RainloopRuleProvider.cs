@@ -216,6 +216,69 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
             return Result.Success(sb.ToString());
         }
 
+        /// <summary>
+        /// Strict whitelist: a rule is representable only if every condition and action maps
+        /// to the frozen Snappymail schema. Anything not explicitly supported (extended flags,
+        /// multiple primary actions, new condition fields like body/envelope/subaddress) is
+        /// rejected so it can never be silently dropped on a weesky→rainloop conversion.
+        /// </summary>
+        public Result CanRepresent(SieveRule rule)
+        {
+            if (rule == null) return Result.Failure("Rule is null");
+            if (string.IsNullOrWhiteSpace(rule.Name)) return Result.Failure("Name is required");
+            if (rule.Conditions == null || rule.Conditions.Count == 0)
+                return Result.Failure("At least one condition is required");
+            if (rule.Actions == null || rule.Actions.Count == 0)
+                return Result.Failure("At least one action is required");
+
+            // Conditions: only the whitelisted field/operator combinations Rainloop understands.
+            foreach (var c in rule.Conditions)
+            {
+                var mapped = MapConditionToRainloop(c);
+                if (mapped.IsFailure) return Result.Failure(mapped.Error);
+            }
+
+            // Actions: exactly one primary (Move/Forward/Reject/Discard). The "fileinto INBOX"
+            // companion to a Forward+Keep is not a primary action and is ignored when counting.
+            var primaries = rule.Actions
+                .Where(a => a.Type is SieveActionType.FileInto or SieveActionType.Redirect or SieveActionType.Reject or SieveActionType.Discard)
+                .ToList();
+
+            if (primaries.Any(a => a.Type == SieveActionType.Redirect))
+                primaries.RemoveAll(a => a.Type == SieveActionType.FileInto && a.Argument == "INBOX");
+
+            if (primaries.Count == 0)
+                return Result.Failure("The Rainloop format requires exactly one Move/Forward/Reject/Discard action");
+            if (primaries.Count > 1)
+                return Result.Failure("The Rainloop format only supports one primary action per rule (Move/Forward/Reject/Discard)");
+
+            // Every action must be the recognised primary, a Keep, the Forward+Keep INBOX
+            // companion, or the \Seen flag (= MarkAsRead). Anything else is unsupported.
+            foreach (var a in rule.Actions)
+            {
+                switch (a.Type)
+                {
+                    case SieveActionType.FileInto:
+                    case SieveActionType.Redirect:
+                    case SieveActionType.Reject:
+                    case SieveActionType.Discard:
+                        break;
+                    case SieveActionType.SetFlag:
+                        if (a.Argument != @"\Seen" && a.Argument != @"\\Seen")
+                            return Result.Failure($"The Rainloop format only supports the \\Seen flag (Mark as read), not '{a.Argument}'");
+                        break;
+                    case SieveActionType.Keep:
+                        // Rainloop's JSON 'Keep' field only applies to Forward+Keep; a standalone
+                        // 'keep;' action has no representation in the Snappymail schema.
+                        return Result.Failure("The Rainloop format does not support the Keep action (use the Forward+Keep pattern instead)");
+                    default:
+                        return Result.Failure($"The Rainloop format does not support the {a.Type} action");
+                }
+            }
+
+            return Result.Success();
+        }
+
         private static Result<RainloopFilter> BuildFilter(SieveRule rule)
         {
             if (rule == null) return Result.Failure<RainloopFilter>("Rule is null");

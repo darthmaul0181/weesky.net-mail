@@ -334,6 +334,188 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
             Assert.Contains("BogusField", result.Error);
         }
 
+        // ----- CanRepresent (whitelist) -----
+
+        [Fact]
+        public void CanRepresent_SimpleFileIntoRule_Succeeds()
+        {
+            var rule = new SieveRule
+            {
+                Name = "ok",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+                Actions = { Act(SieveActionType.FileInto, "X") }
+            };
+
+            Assert.True(_sut.CanRepresent(rule).IsSuccess);
+        }
+
+        [Fact]
+        public void CanRepresent_MarkAsReadSeenFlag_Succeeds()
+        {
+            var rule = new SieveRule
+            {
+                Name = "seen",
+                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+                Actions =
+                {
+                    Act(SieveActionType.SetFlag, @"\Seen"),
+                    Act(SieveActionType.FileInto, "X")
+                }
+            };
+
+            Assert.True(_sut.CanRepresent(rule).IsSuccess);
+        }
+
+        [Fact]
+        public void CanRepresent_ExtendedFlag_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "flag",
+                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+                Actions =
+                {
+                    Act(SieveActionType.SetFlag, @"\Flagged"),
+                    Act(SieveActionType.FileInto, "X")
+                }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Seen", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_MultiplePrimaryActions_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "multi",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+                Actions =
+                {
+                    Act(SieveActionType.FileInto, "A"),
+                    Act(SieveActionType.Redirect, "y@z.com")
+                }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("one primary action", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_ForwardWithKeepInbox_Succeeds()
+        {
+            var rule = new SieveRule
+            {
+                Name = "fwd+keep",
+                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+                Actions =
+                {
+                    Act(SieveActionType.FileInto, "INBOX"),
+                    Act(SieveActionType.Redirect, "y@z.com")
+                }
+            };
+
+            Assert.True(_sut.CanRepresent(rule).IsSuccess);
+        }
+
+        [Fact]
+        public void CanRepresent_KeepAction_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "keep",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+                Actions =
+                {
+                    Act(SieveActionType.FileInto, "X"),
+                    Act(SieveActionType.Keep)
+                }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Keep", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_NoPrimaryAction_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "keeponly",
+                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+                Actions = { Act(SieveActionType.Keep) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("requires exactly one", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_EnvelopeFromCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "envelope-test",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.EnvelopeFrom, Operator = SieveConditionOperator.Contains, Value = "noreply" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("EnvelopeFrom", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_RecipientDetailCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "subaddress-test",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.RecipientDetail, Operator = SieveConditionOperator.Equals, Value = "support" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("RecipientDetail", result.Error);
+        }
+
+        [Fact]
+        public void CanRepresent_BodyCondition_Fails()
+        {
+            var rule = new SieveRule
+            {
+                Name = "body-search",
+                Conditions =
+                {
+                    new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Contains, Value = "casino" }
+                },
+                Actions = { Act(SieveActionType.Discard) }
+            };
+
+            var result = _sut.CanRepresent(rule);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("Body", result.Error);
+        }
+
         // ----- Helpers -----
 
         private static SieveCondition Cond(SieveConditionField f, SieveConditionOperator o, string v) =>

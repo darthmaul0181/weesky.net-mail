@@ -97,6 +97,20 @@ function GripIcon() {
   )
 }
 
+// ── HelpTooltip (local copy, same pattern/classes as AliasesPage) ──
+
+function HelpTooltip({ text }) {
+  return (
+    <div className="help-tooltip-wrap">
+      <div className="help-tooltip-icon">?</div>
+      <div className="help-tooltip-bubble">{text}</div>
+    </div>
+  )
+}
+
+const EXTENDED_RULES_HELP =
+  'Rules created in extended mode are not compatible with the Rainloop rules editor and will no longer be visible there.'
+
 // ── Constants ─────────────────────────────────────────────────
 
 const CONDITION_FIELDS = [
@@ -105,6 +119,10 @@ const CONDITION_FIELDS = [
   { value: 'Subject',   label: 'Subject' },
   { value: 'Header',    label: 'Custom header' },
   { value: 'Size',      label: 'Size (bytes)' },
+  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'Matches'] },
+  { value: 'EnvelopeFrom',   label: 'Envelope from',     extendedOnly: true },
+  { value: 'EnvelopeTo',     label: 'Envelope to',       extendedOnly: true },
+  { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true },
 ]
 
 const CONDITION_OPERATORS = [
@@ -120,6 +138,7 @@ const ACTION_TYPES = [
   { value: 'Redirect', label: 'Redirect to',         hasArg: true,  argPlaceholder: 'email@address.com' },
   { value: 'Discard',  label: 'Discard',             hasArg: false, argPlaceholder: '' },
   { value: 'Reject',   label: 'Reject with message', hasArg: true,  argPlaceholder: 'Message (optional)' },
+  { value: 'Keep',     label: 'Keep in inbox',       hasArg: false, argPlaceholder: '', extendedOnly: true },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -145,11 +164,14 @@ function summarizeAction(a, compact = false) {
   switch (a.type) {
     case 'FileInto': return compact ? `→ ${a.argument ?? '?'}` : (a.argument ?? '?')
     case 'Redirect': return `⇥ ${a.argument ?? '?'}`
-    case 'SetFlag':  return 'Mark as read'
-    case 'Keep':     return 'Keep'
-    case 'Discard':  return 'Discard'
-    case 'Reject':   return 'Reject'
-    default:         return a.type
+    case 'SetFlag':
+      if (a.argument === '\\Seen'    || a.argument === '\\\\Seen')    return 'Mark as read'
+      if (a.argument === '\\Flagged' || a.argument === '\\\\Flagged') return '⭐ Flagged'
+      return `Flag: ${a.argument}`
+    case 'Keep':    return 'Keep in inbox'
+    case 'Discard': return 'Discard'
+    case 'Reject':  return 'Reject'
+    default:        return a.type
   }
 }
 
@@ -236,20 +258,36 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
 
 // ── ConditionRow ──────────────────────────────────────────────
 
-export function ConditionRow({ condition, onChange, onRemove }) {
+export function ConditionRow({ condition, onChange, onRemove, extended = false }) {
+  const availableFields = extended ? CONDITION_FIELDS : CONDITION_FIELDS.filter(f => !f.extendedOnly)
+  const fieldDef = CONDITION_FIELDS.find(f => f.value === condition.field)
+  const availableOperators = fieldDef?.operators
+    ? CONDITION_OPERATORS.filter(o => fieldDef.operators.includes(o.value))
+    : CONDITION_OPERATORS
+
   return (
     <div className="rule-row">
       <select
         value={condition.field}
-        onChange={e => onChange({ ...condition, field: e.target.value, headerName: null })}
+        onChange={e => {
+          const newField = e.target.value
+          const newDef = CONDITION_FIELDS.find(f => f.value === newField)
+          const opValid = !newDef?.operators || newDef.operators.includes(condition.operator)
+          onChange({
+            ...condition,
+            field: newField,
+            headerName: null,
+            operator: opValid ? condition.operator : (newDef?.operators?.[0] ?? 'Contains'),
+          })
+        }}
       >
-        {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        {availableFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
       </select>
       <select
         value={condition.operator}
         onChange={e => onChange({ ...condition, operator: e.target.value })}
       >
-        {CONDITION_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {availableOperators.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {condition.field === 'Header' && (
         <input
@@ -278,8 +316,9 @@ export function ConditionRow({ condition, onChange, onRemove }) {
 
 // ── ActionRow ─────────────────────────────────────────────────
 
-export function ActionRow({ action, onChange, onRemove, foldersDatalistId }) {
-  const def = ACTION_TYPES.find(t => t.value === action.type) ?? ACTION_TYPES[0]
+export function ActionRow({ action, onChange, onRemove, foldersDatalistId, extended = false }) {
+  const availableTypes = extended ? ACTION_TYPES : ACTION_TYPES.filter(t => !t.extendedOnly)
+  const def = availableTypes.find(t => t.value === action.type) ?? availableTypes[0]
   return (
     <div className="rule-row">
       <select
@@ -290,7 +329,7 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId }) {
           onChange({ type, argument: arg })
         }}
       >
-        {ACTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        {availableTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
       </select>
       {def.hasArg && (
         <input
@@ -312,14 +351,17 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId }) {
 
 // ── RuleEditorModal ───────────────────────────────────────────
 
-export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
+export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended = false }) {
   const isNew = !initialRule
   const [rule, setRule] = useState(() => {
     const base = initialRule ? JSON.parse(JSON.stringify(initialRule)) : makeEmptyRule()
     return { ...base, actions: base.actions.filter(a => a.type !== 'SetFlag') }
   })
   const [markAsRead, setMarkAsRead] = useState(() =>
-    initialRule?.actions?.some(a => a.type === 'SetFlag') ?? false
+    initialRule?.actions?.some(a => a.type === 'SetFlag' && (a.argument === '\\Seen' || a.argument === '\\\\Seen')) ?? false
+  )
+  const [markAsFlagged, setMarkAsFlagged] = useState(() =>
+    initialRule?.actions?.some(a => a.type === 'SetFlag' && (a.argument === '\\Flagged' || a.argument === '\\\\Flagged')) ?? false
   )
   const [error, setError] = useState(null)
   const [folders, setFolders] = useState([])
@@ -361,10 +403,11 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
     if (rule.conditions.length === 0) { setError('At least one condition is required'); return }
     if (rule.actions.length === 0) { setError('At least one action is required'); return }
     setError(null)
-    const fullActions = markAsRead
-      ? [{ type: 'SetFlag', argument: '\\Seen' }, ...rule.actions]
-      : rule.actions
-    onSave({ ...rule, actions: fullActions })
+    const flagActions = [
+      ...(markAsRead    ? [{ type: 'SetFlag', argument: '\\Seen' }]    : []),
+      ...(markAsFlagged ? [{ type: 'SetFlag', argument: '\\Flagged' }] : []),
+    ]
+    onSave({ ...rule, actions: [...flagActions, ...rule.actions] })
   }
 
   return (
@@ -428,7 +471,8 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
                 {rule.conditions.map((c, i) => (
                   <ConditionRow key={i} condition={c}
                     onChange={cond => updateCondition(i, cond)}
-                    onRemove={() => removeCondition(i)} />
+                    onRemove={() => removeCondition(i)}
+                    extended={extended} />
                 ))}
                 {rule.conditions.length === 0 && (
                   <p className="rule-editor-empty">No conditions — applies to all messages.</p>
@@ -444,12 +488,15 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
               <div className="rule-wizard-body">
                 <div className="rule-wizard-step-header">
                   <span className="rule-wizard-title">Actions</span>
-                  <button type="button" className="rule-editor-add-btn" onClick={addAction}>
-                    <PlusIcon /> Add
-                  </button>
+                  {(extended || rule.actions.length === 0) && (
+                    <button type="button" className="rule-editor-add-btn" onClick={addAction}>
+                      <PlusIcon /> Add
+                    </button>
+                  )}
                 </div>
                 {rule.actions.map((a, i) => (
                   <ActionRow key={i} action={a}
+                    extended={extended}
                     onChange={action => updateAction(i, action)}
                     onRemove={() => removeAction(i)}
                     foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
@@ -474,6 +521,16 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose }) {
                   </label>
                   <span className="rule-wizard-toggle-label">Mark as read</span>
                 </div>
+                {extended && (
+                  <div className="rule-wizard-toggle-row">
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={markAsFlagged}
+                        onChange={e => setMarkAsFlagged(e.target.checked)} />
+                      <span className="toggle-track" />
+                    </label>
+                    <span className="rule-wizard-toggle-label">Mark as flagged ⭐</span>
+                  </div>
+                )}
                 <div className="rule-wizard-toggle-row">
                   <label className="toggle-switch">
                     <input type="checkbox" checked={rule.stopAfter}
@@ -525,6 +582,41 @@ function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
   )
 }
 
+// ── ConvertConfirmModal (weesky → rainloop, lists rules that will be lost) ──
+
+export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Turn off extended rules?</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <p style={{ margin: '0 0 12px', fontSize: '14px' }}>
+          The following {incompatible.length} rule{incompatible.length !== 1 ? 's' : ''} use
+          features the Rainloop format can&apos;t store and will be <strong>deleted</strong>:
+        </p>
+        <ul className="convert-lost-list">
+          {incompatible.map(r => (
+            <li key={r.id}>
+              <span className="convert-lost-name">{r.name || '(unnamed rule)'}</span>
+              <span className="convert-lost-reason">{r.reason}</span>
+            </li>
+          ))}
+        </ul>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="btn btn-primary"
+            style={{ width: 'auto', background: 'var(--danger)', borderColor: 'var(--danger)' }}
+            onClick={onConfirm} disabled={loading}>
+            {loading ? <span className="spinner" /> : 'Delete & switch'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── RulesPage ─────────────────────────────────────────────────
 
 export default function RulesPage({ onClose }) {
@@ -539,6 +631,11 @@ export default function RulesPage({ onClose }) {
   const [ruleToEdit, setRuleToEdit] = useState(undefined)
   const [ruleToDelete, setRuleToDelete] = useState(null)
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const [pendingConversion, setPendingConversion] = useState(null)
+
+  // Slider ON = extended (Weesky provider); OFF = Rainloop (Snappymail interop).
+  const extended = ruleSet?.providerId === 'weesky'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -581,6 +678,54 @@ export default function RulesPage({ onClose }) {
     } finally {
       setDeleting(false)
     }
+  }
+
+  // Switch provider by recompiling the current rules with the target provider. We pass a null
+  // script name so the backend writes to the target provider's default script (and cleans up
+  // the old one). Then we reflect the new providerId locally so the slider/editor track it.
+  async function switchToProvider(targetProviderId, rulesToSave) {
+    setSwitching(true)
+    try {
+      await api.saveRules(rulesToSave, targetProviderId, null)
+      setRules(rulesToSave)
+      setRuleSet(prev => prev ? { ...prev, providerId: targetProviderId, scriptName: null } : prev)
+      addToast(targetProviderId === 'weesky' ? 'Extended rules enabled' : 'Switched to Rainloop')
+    } catch (err) {
+      addToast(extractError(err) || 'Failed to switch rule format', 'error')
+    } finally {
+      setSwitching(false)
+    }
+  }
+
+  async function handleToggleExtended(nextExtended) {
+    if (nextExtended === extended || switching || saving) return
+    if (nextExtended) {
+      // rainloop → weesky: Weesky is a superset, lossless. No confirmation needed.
+      await switchToProvider('weesky', rules)
+      return
+    }
+    // weesky → rainloop: preview which rules the Rainloop format can't keep.
+    setSwitching(true)
+    try {
+      const res = await api.checkCompatibility('rainloop', rules)
+      if (res?.compatible) {
+        setSwitching(false)
+        await switchToProvider('rainloop', rules)
+      } else {
+        setSwitching(false)
+        setPendingConversion(res?.incompatible ?? [])
+      }
+    } catch (err) {
+      setSwitching(false)
+      addToast(extractError(err) || 'Failed to check compatibility', 'error')
+    }
+  }
+
+  async function handleConfirmConversion() {
+    const lostIds = new Set((pendingConversion ?? []).map(r => r.id))
+    const kept = rules.filter(r => !lostIds.has(r.id))
+    setPendingConversion(null)
+    await switchToProvider('rainloop', kept)
   }
 
   function handleSaveRule(rule) {
@@ -675,9 +820,23 @@ export default function RulesPage({ onClose }) {
                     {rules.length} rule{rules.length !== 1 ? 's' : ''}
                     {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
                   </span>
+                  <div className="extended-rules-toggle" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label className="toggle-switch" title="Extended rules">
+                      <input
+                        type="checkbox"
+                        checked={extended}
+                        disabled={switching || saving}
+                        onChange={e => handleToggleExtended(e.target.checked)}
+                      />
+                      <span className="toggle-track" />
+                    </label>
+                    <span className="rule-wizard-toggle-label">Extended rules</span>
+                    <HelpTooltip text={EXTENDED_RULES_HELP} />
+                    {switching && <span className="spinner" />}
+                  </div>
                   <button
                     className="btn btn-primary"
-                    style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}
+                    style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}
                     onClick={() => setRuleToEdit(null)}
                   >
                     <PlusIcon /> New rule
@@ -719,8 +878,18 @@ export default function RulesPage({ onClose }) {
       {ruleToEdit !== undefined && (
         <RuleEditorModal
           rule={ruleToEdit}
+          extended={extended}
           onSave={handleSaveRule}
           onClose={() => setRuleToEdit(undefined)}
+        />
+      )}
+
+      {pendingConversion && (
+        <ConvertConfirmModal
+          incompatible={pendingConversion}
+          onConfirm={handleConfirmConversion}
+          onClose={() => setPendingConversion(null)}
+          loading={switching}
         />
       )}
 

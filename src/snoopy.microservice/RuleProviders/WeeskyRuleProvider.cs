@@ -94,6 +94,14 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             return Result.Success(sb.ToString());
         }
 
+        /// <summary>
+        /// The Weesky format is a superset of every supported rule feature, so it can
+        /// represent any rule that compiles. We surface compile-level validation here so a
+        /// structurally invalid rule (e.g. missing name) is reported rather than silently
+        /// passing a compatibility check.
+        /// </summary>
+        public Result CanRepresent(SieveRule rule) => Validate(rule);
+
         // ---------- Validation ----------
 
         private static Result Validate(SieveRule rule)
@@ -123,6 +131,11 @@ namespace weesky.Snoopy.Microservice.RuleProviders
 
             if (isSize && !isSizeOp) return Result.Failure("Size condition requires the Larger or Smaller operator");
             if (!isSize && isSizeOp) return Result.Failure("Larger/Smaller operator is only valid for the Size field");
+
+            if (c.Field == SieveConditionField.Body &&
+                c.Operator != SieveConditionOperator.Contains &&
+                c.Operator != SieveConditionOperator.Matches)
+                return Result.Failure("Body condition only supports the Contains or Matches operator");
 
             if (c.Field == SieveConditionField.Header && string.IsNullOrWhiteSpace(c.HeaderName))
                 return Result.Failure("Header name is required when matching a custom header");
@@ -178,6 +191,11 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                         case SieveActionType.SetFlag: set.Add("imap4flags"); break;
                     }
                 }
+                foreach (var c in rule.Conditions)
+                {
+                    if (c.Field == SieveConditionField.Body) set.Add("body");
+                    if (c.Field == SieveConditionField.RecipientDetail) set.Add("subaddress");
+                }
             }
             return set.ToList();
         }
@@ -217,6 +235,12 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 return $"size {op} {c.Value.Trim()}";
             }
 
+            if (c.Field == SieveConditionField.Body)
+            {
+                var bodyOp = c.Operator == SieveConditionOperator.Matches ? ":matches" : ":contains";
+                return $"body :text {bodyOp} {Quote(c.Value)}";
+            }
+
             var matchOp = c.Operator switch
             {
                 SieveConditionOperator.Contains => ":contains",
@@ -228,6 +252,17 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             if (c.Field == SieveConditionField.Recipient)
             {
                 return $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+            }
+
+            if (c.Field == SieveConditionField.EnvelopeFrom || c.Field == SieveConditionField.EnvelopeTo)
+            {
+                var part = c.Field == SieveConditionField.EnvelopeFrom ? "from" : "to";
+                return $"envelope {matchOp} {Quote(part)} {Quote(c.Value)}";
+            }
+
+            if (c.Field == SieveConditionField.RecipientDetail)
+            {
+                return $"address :detail {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
             }
 
             var headerName = c.Field switch

@@ -128,6 +128,9 @@ export const api = {
   deleteRules: () =>
     request('DELETE', '/api/Rules'),
 
+  checkCompatibility: (providerId, rules) =>
+    request('POST', '/api/Rules/CompatibilityCheck', { providerId, rules }),
+
   getRawScript: () =>
     request('GET', '/api/Rules/Raw'),
 
