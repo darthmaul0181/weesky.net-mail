@@ -210,7 +210,6 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
 
             foreach (var (rule, filter) in filters)
             {
-                if (!rule.Enabled) continue;
                 EmitFilterBlock(sb, rule, filter);
             }
 
@@ -350,11 +349,20 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
             }
             sb.Append("END:HEADER\r\n");
             sb.Append("*/\r\n");
-            sb.Append("\r\n");
 
-            EmitSieveBody(sb, rule, filter);
+            if (!rule.Enabled)
+            {
+                sb.Append("/* @Filter is disabled\r\n");
+                EmitSieveBody(sb, rule, filter);
+                sb.Append("\r\n*/\r\n");
+            }
+            else
+            {
+                sb.Append("\r\n");
+                EmitSieveBody(sb, rule, filter);
+                sb.Append("\r\n");
+            }
 
-            sb.Append("\r\n");
             sb.Append("/* END:FILTER */\r\n");
             sb.Append("\r\n");
         }
