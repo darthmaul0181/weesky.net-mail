@@ -1713,6 +1713,13 @@ body {
   flex-shrink: 0;
 }
 
+/* Essai : pas d'encadré autour des icônes d'action dans la popup Rules.
+   (On pourra les remettre en retirant ce bloc.) */
+.rule-card-btns .admin-icon-btn {
+  border: none;
+  border-radius: 0;
+}
+
 .rule-card-body {
   display: flex;
   align-items: flex-start;
