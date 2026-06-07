@@ -760,7 +760,7 @@ function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
 export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: '570px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">Turn off extended rules?</span>
           <button className="modal-close" onClick={onClose}>✕</button>
