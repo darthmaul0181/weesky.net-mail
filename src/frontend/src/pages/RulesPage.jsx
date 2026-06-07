@@ -460,6 +460,20 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
   const [error, setError] = useState(null)
   const [folders, setFolders] = useState([])
 
+  const step1Done = rule.name.trim() !== ''
+  const step2Done = rule.conditions.length > 0
+  const step3Done = rule.actions.length > 0
+  const step2Unlocked = step1Done
+  const step3Unlocked = step1Done && step2Done
+  const step4Unlocked = step1Done && step2Done && step3Done
+  const canSubmit = step1Done && step2Done && step3Done
+
+  function circleClass(isUnlocked, isDone) {
+    if (!isUnlocked) return 'rule-wizard-circle rule-wizard-circle--locked'
+    if (!isDone)     return 'rule-wizard-circle rule-wizard-circle--active'
+    return 'rule-wizard-circle'
+  }
+
   useEffect(() => {
     api.getFolders().then(data => { if (Array.isArray(data)) setFolders(data) }).catch(() => {})
   }, [])
@@ -524,7 +538,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
             <div className="rule-wizard-step">
               <div className="rule-wizard-indicator">
-                <div className="rule-wizard-circle">1</div>
+                <div className={circleClass(true, step1Done)}>1</div>
                 <div className="rule-wizard-line" />
               </div>
               <div className="rule-wizard-body">
@@ -542,10 +556,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
             <div className="rule-wizard-step">
               <div className="rule-wizard-indicator">
-                <div className="rule-wizard-circle">2</div>
+                <div className={circleClass(step2Unlocked, step2Done)}>2</div>
                 <div className="rule-wizard-line" />
               </div>
-              <div className="rule-wizard-body">
+              <div className={`rule-wizard-body${step2Unlocked ? '' : ' rule-wizard-body--locked'}`}>
                 <div className="rule-wizard-step-header">
                   <span className="rule-wizard-title">Conditions</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -576,10 +590,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
             <div className="rule-wizard-step">
               <div className="rule-wizard-indicator">
-                <div className="rule-wizard-circle">3</div>
+                <div className={circleClass(step3Unlocked, step3Done)}>3</div>
                 <div className="rule-wizard-line" />
               </div>
-              <div className="rule-wizard-body">
+              <div className={`rule-wizard-body${step3Unlocked ? '' : ' rule-wizard-body--locked'}`}>
                 <div className="rule-wizard-step-header">
                   <span className="rule-wizard-title">Actions</span>
                   {(extended || rule.actions.length === 0) && (
@@ -603,9 +617,9 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
             <div className="rule-wizard-step">
               <div className="rule-wizard-indicator">
-                <div className="rule-wizard-circle">4</div>
+                <div className={circleClass(step4Unlocked, step4Unlocked)}>4</div>
               </div>
-              <div className="rule-wizard-body">
+              <div className={`rule-wizard-body${step4Unlocked ? '' : ' rule-wizard-body--locked'}`}>
                 <div className="rule-wizard-title">Options</div>
                 <div className="rule-wizard-toggle-row">
                   <label className="toggle-switch">
@@ -640,7 +654,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}>
+            <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={!canSubmit}>
               {isNew ? 'Create rule' : 'Save changes'}
             </button>
           </div>
