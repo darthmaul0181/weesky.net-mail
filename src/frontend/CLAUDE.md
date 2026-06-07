@@ -20,7 +20,7 @@ Tests use Vitest + jsdom + `@testing-library/react`. Run with:
 npm run test          # run once
 npm run test -- --watch   # watch mode
 ```
-`src/api.test.js` covers token management, all api methods, and 401 handling. `src/pages/AliasesPage.main.test.jsx` covers `Toasts`, `QuotaBlock`, `ChangePasswordModal`, `AccountPanel`, and the `AliasesPage` default export (alias CRUD, toasts, modal open/close). `src/pages/AliasesPage.admin.test.jsx` covers `AccountPanel` admin visibility, `DeleteConfirmModal`, `AddEditUserModal`, `AddEditDomainModal`, `AccountsTab`, `DomainsTab`, `OwnershipTab`, and `AdminModal`. Components under test must carry a named `export` keyword in addition to the file's default export — the test files import them individually from `AliasesPage.jsx`.
+`src/api.test.js` covers token management, all api methods (account, aliases, admin, and rules), and 401 handling. `src/pages/AliasesPage.main.test.jsx` covers `Toasts`, `QuotaBlock`, `ChangePasswordModal`, `AccountPanel`, and the `AliasesPage` default export (alias CRUD, toasts, modal open/close). `src/pages/AliasesPage.admin.test.jsx` covers `AccountPanel` admin visibility, `DeleteConfirmModal`, `AddEditUserModal`, `AddEditDomainModal`, `AccountsTab`, `DomainsTab`, `OwnershipTab`, and `AdminModal`. `src/pages/RulesPage.test.jsx` covers `RuleCard`, the `summarizeCondition`/`summarizeAction` helpers (via card expansion), `RuleEditorModal` (wizard step gating), `ConvertConfirmModal`, the validity helpers, and the `RulesPage` default export (initial load, rule CRUD, reorder, delete-all, and the extended-rules provider toggle). `src/pages/LoginPage.test.jsx` covers the login form. Components under test must carry a named `export` keyword in addition to the file's default export — the test files import them individually from their page module.
 
 ESLint is configured (`eslint.config.js`) with `eslint-plugin-react` and `eslint-plugin-react-hooks`. Run with `npm run lint`.
 
@@ -36,7 +36,11 @@ ESLint is configured (`eslint.config.js`) with `eslint-plugin-react` and `eslint
 
 **API client** — all backend calls go through the `request()` helper in `src/api.js` and are exported as named methods on `api`. The backend base URL is the hardcoded constant `BASE` at the top of that file.
 
-**Pages** — `AliasesPage.jsx` is the main view and contains all self-contained sub-components defined in the same file. No shared component library is used. Key components:
+**Pages** — `AliasesPage.jsx` is the main view; `RulesPage.jsx` is the Sieve rules manager (opened as a modal from `AliasesPage`). Each contains all its self-contained sub-components defined in the same file. No shared component library is used.
+
+`RulesPage.jsx` key components: `RuleCard` (collapsible rule row with reorder/edit/delete/enable controls and inline action pills), `RuleEditorModal` (step-by-step wizard: name → conditions → actions → options), `ConditionRow`/`ActionRow`, `ConvertConfirmModal`. The **Extended rules** toggle switches the active provider: ON = Weesky (extended, full feature set), OFF = Rainloop (Snappymail-interop, restricted). Turning OFF runs `api.checkCompatibility` first and shows `ConvertConfirmModal` listing rules that would be dropped. Rules talk to the backend via `api.getRules`/`saveRules`/`deleteRules`/`checkCompatibility`/`getRawScript`/`saveRawScript`/`getFolders`/`getRuleProviders` in `api.js`. See the repo-root `DESIGN-rules.md` for the interop rationale.
+
+`AliasesPage.jsx` key components:
 - `AccountPanel` — slide-in settings panel (see below)
 - `ChangePasswordModal` — password change dialog
 - `AdminModal` — 800px admin panel with tab sidebar (Accounts / Domains / Ownerships). Only rendered when `adminOpen === true`.

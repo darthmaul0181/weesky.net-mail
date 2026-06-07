@@ -112,4 +112,28 @@ export const api = {
 
   adminRemoveVirtualDomainOwner: (domainId, userId) =>
     request('DELETE', `/api/Admin/domains/virtuals/${domainId}/${userId}`),
+
+  getFolders: () =>
+    request('GET', '/api/Account/Folders'),
+
+  getRuleProviders: () =>
+    request('GET', '/api/Rules/Providers'),
+
+  getRules: () =>
+    request('GET', '/api/Rules'),
+
+  saveRules: (rules, providerId, scriptName) =>
+    request('PUT', '/api/Rules', { rules, providerId, scriptName }),
+
+  deleteRules: () =>
+    request('DELETE', '/api/Rules'),
+
+  checkCompatibility: (providerId, rules) =>
+    request('POST', '/api/Rules/CompatibilityCheck', { providerId, rules }),
+
+  getRawScript: () =>
+    request('GET', '/api/Rules/Raw'),
+
+  saveRawScript: (content, scriptName) =>
+    request('PUT', '/api/Rules/Raw', { content, scriptName }),
 }

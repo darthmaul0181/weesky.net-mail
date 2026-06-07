@@ -157,6 +157,121 @@ namespace weesky.Snoopy.Microservice.Tests.Services
             Assert.IsAssignableFrom<OperationCanceledException>(ex);
         }
 
+        [Fact]
+        public async Task GetMailboxesAsync_WithNullUser_ThrowsArgumentNullException()
+        {
+            var sut = CreateSut();
+
+            await Assert.ThrowsAsync<ArgumentNullException>(() => sut.GetMailboxesAsync(null!));
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithMissingApiUrl_ReturnsFailure()
+        {
+            var sut = CreateSut(options: new DovecotOptions { ApiUrl = "", ApiKey = "key" });
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithMissingApiKey_ReturnsFailure()
+        {
+            var sut = CreateSut(options: new DovecotOptions { ApiUrl = "http://fake/api", ApiKey = "" });
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithHttpError_ReturnsFailure()
+        {
+            var sut = CreateSut(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithValidResponse_ReturnsSuccess()
+        {
+            var json = """[["doveadmResponse",[{"mailbox":"INBOX"},{"mailbox":"Sent"},{"mailbox":"Trash"}],"m1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsSuccess);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_ParsesMailboxNames()
+        {
+            var json = """[["doveadmResponse",[{"mailbox":"INBOX"},{"mailbox":"Sent"},{"mailbox":"Trash"}],"m1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.Equal(new[] { "INBOX", "Sent", "Trash" }, result.Value);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithEmptyMailboxList_ReturnsEmptySuccess()
+        {
+            var json = """[["doveadmResponse",[],"m1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsSuccess);
+            Assert.Empty(result.Value);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithDovecotErrorKind_ReturnsFailure()
+        {
+            var json = """[["error",{"type":"NOTFOUND","exitCode":68},"m1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithEmptyArray_ReturnsFailure()
+        {
+            var sut = CreateSut(JsonResponse("[]"));
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WithNetworkException_ReturnsFailure()
+        {
+            var http = new HttpClient(new ExceptionHttpMessageHandler());
+            var sut = new DovecotQuotaClient(http, Options.Create(ValidOptions), Mock.Of<ILogger<DovecotQuotaClient>>());
+
+            var result = await sut.GetMailboxesAsync(new User("john@example.com"));
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task GetMailboxesAsync_WhenCancelled_PropagatesCancellation()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var sut = CreateSut();
+
+            var ex = await Record.ExceptionAsync(() => sut.GetMailboxesAsync(new User("john@example.com"), cts.Token));
+            Assert.IsAssignableFrom<OperationCanceledException>(ex);
+        }
+
         private sealed class FakeHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
         {
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

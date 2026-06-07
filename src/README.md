@@ -15,11 +15,12 @@ src/
 ASP.NET Core (.NET 10) REST API on top of the `dovecot` database (MariaDB/MySQL).
 
 - **Login** (`/api/login`) — issues a signed JWT, also set as an `HttpOnly; Secure; SameSite=Strict` cookie. Rate limited (5 req/min/IP).
-- **Account** (`/api/account`) — mailbox info, quota (via the remote `doveadm` HTTP API) and password change.
+- **Account** (`/api/account`) — mailbox info, quota (via the remote `doveadm` HTTP API), IMAP folder list, and password change.
 - **Aliases** (`/api/aliases`) — CRUD scoped to domains owned by the caller (via `MailDomainOwnership`).
 - **Admin** (`/api/Admin`) — admin-only CRUD for users, domains, and alias domain ownerships.
+- **Rules** (`/api/Rules`) — Sieve mail-filtering rules over the ManageSieve protocol, with a Weesky native provider and a Rainloop/Snappymail-interop provider (see [`/DESIGN-rules.md`](../DESIGN-rules.md)).
 
-Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), `CryptSharp` (Dovecot-compatible crypt hashing), Serilog, Swashbuckle.
+Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), Serilog, Swashbuckle. Passwords are stored plaintext — MariaDB triggers apply the Dovecot-compatible SHA-512 crypt encryption.
 
 ```bash
 cd snoopy.microservice
@@ -31,11 +32,13 @@ See [`snoopy.microservice/DESIGN.md`](snoopy.microservice/DESIGN.md) for archite
 
 ## frontend
 
-React SPA (Vite) for alias and account management. Talks to the API at `https://api.mail.weesky.net`.
+React SPA (Vite) for alias, account, and mail-rule management. Talks to the API at `https://api.mail.weesky.net`.
 
 - JWT authentication (bearer + cookie), state persisted in `localStorage` with expiry.
 - No React Router: state-driven navigation (`LoginPage` / `AliasesPage`).
 - Centralized API client in `src/api.js` (`request()` helper, `setUnauthorizedHandler` to fall back to the login screen on 401).
+- Sieve rules manager (`RulesPage`) with a step-by-step rule editor and an Extended-rules toggle (Weesky vs Rainloop/Snappymail interop).
+- Tested with Vitest + Testing Library (`npm run test`); linted with ESLint (`npm run lint`).
 
 ```bash
 cd frontend

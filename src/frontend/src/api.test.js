@@ -278,6 +278,119 @@ describe('admin api methods', () => {
       expect.objectContaining({ method: 'GET' })
     )
   })
+
+  it('adminGetVirtualDomains calls GET /api/Admin/domains/virtuals', async () => {
+    const { api } = await import('./api.js')
+    await api.adminGetVirtualDomains()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/virtuals'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('adminAddVirtualDomainOwner calls PUT /api/Admin/domains/virtuals/:domainId', async () => {
+    const { api } = await import('./api.js')
+    await api.adminAddVirtualDomainOwner('dom1', 42)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/virtuals/dom1'),
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
+
+  it('adminRemoveVirtualDomainOwner calls DELETE /api/Admin/domains/virtuals/:domainId/:userId', async () => {
+    const { api } = await import('./api.js')
+    await api.adminRemoveVirtualDomainOwner('dom1', 42)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/virtuals/dom1/42'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+})
+
+describe('rules api methods', () => {
+  beforeEach(async () => {
+    vi.resetModules()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: () => Promise.resolve({}),
+    }))
+    const { markLoggedIn } = await import('./api.js')
+    markLoggedIn()
+  })
+
+  it('getFolders calls GET /api/Account/Folders', async () => {
+    const { api } = await import('./api.js')
+    await api.getFolders()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Account/Folders'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('getRuleProviders calls GET /api/Rules/Providers', async () => {
+    const { api } = await import('./api.js')
+    await api.getRuleProviders()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules/Providers'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('getRules calls GET /api/Rules', async () => {
+    const { api } = await import('./api.js')
+    await api.getRules()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('saveRules calls PUT /api/Rules with body', async () => {
+    const { api } = await import('./api.js')
+    const rules = [{ id: '1', name: 'r' }]
+    await api.saveRules(rules, 'weesky', null)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ rules, providerId: 'weesky', scriptName: null }) })
+    )
+  })
+
+  it('deleteRules calls DELETE /api/Rules', async () => {
+    const { api } = await import('./api.js')
+    await api.deleteRules()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('checkCompatibility calls POST /api/Rules/CompatibilityCheck', async () => {
+    const { api } = await import('./api.js')
+    await api.checkCompatibility('rainloop', [])
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules/CompatibilityCheck'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('getRawScript calls GET /api/Rules/Raw', async () => {
+    const { api } = await import('./api.js')
+    await api.getRawScript()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules/Raw'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('saveRawScript calls PUT /api/Rules/Raw with body', async () => {
+    const { api } = await import('./api.js')
+    await api.saveRawScript('keep;', 'myscript')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Rules/Raw'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ content: 'keep;', scriptName: 'myscript' }) })
+    )
+  })
 })
 
 describe('401 handling', () => {

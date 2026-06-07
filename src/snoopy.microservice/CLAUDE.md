@@ -25,13 +25,16 @@ Release procedure lives in the `ship-microservice` skill (`.claude/skills/ship-m
 
 **Controllers** (`Controllers/`) receive HTTP requests and return `ResultEnveloppe<T>` responses via helpers in `ApiBaseController`. The main controllers are:
 - `LoginController` — `POST /api/login` (issue JWT), `DELETE /api/login` (revoke cookie)
-- `AccountController` — `GET /api/account` (info), `GET /api/account/quota` (Dovecot quota), `PATCH /api/account/changesecret` (password change)
+- `AccountController` — `GET /api/account` (info), `GET /api/account/quota` (Dovecot quota), `GET /api/account/folders` (IMAP folder list for the rules editor), `PATCH /api/account/changesecret` (password change)
 - `AliasesController` — `GET/POST/DELETE /api/aliases` (alias CRUD, scoped to caller's owned domains)
 - `AdminController` — admin-only CRUD (requires `admin='Y'` on the authenticated user): users (`GET/POST/PUT/DELETE /api/Admin/users`, `GET /api/Admin/users/{id}/quota`), domains (`GET/POST/PUT/DELETE /api/Admin/domains`), alias domain ownerships (`GET /api/Admin/ownerships`, `PUT /api/Admin/ownerships/{domainId}`, `DELETE /api/Admin/ownerships/{domainId}/{userId}`)
+- `RulesController` — Sieve mail-filtering rules: `GET/PUT/DELETE /api/Rules` (structured `SieveRule[]`), `GET/PUT /api/Rules/Raw` (unparsed script for Advanced scripts), `POST /api/Rules/CompatibilityCheck` (preview rules a target provider can't represent), `GET /api/Rules/Providers` (registered providers + default flag). See `DESIGN.md` and the repo-root `DESIGN-rules.md`.
 
-**Repositories** (`Repositories/`) handle all database access via EF Core. `UsersRepository` validates credentials and updates passwords; `AliasesRepository` lists/creates/deletes aliases and enforces domain ownership via the `MailDomainOwnership` join table.
+**Repositories** (`Repositories/`) handle all database access via EF Core. `UsersRepository` validates credentials and updates passwords; `AliasesRepository` lists/creates/deletes aliases and enforces domain ownership via the `MailDomainOwnership` join table. `SieveRepository` (behind `ISieveRepository`) is the exception — it does **not** use EF Core; it reads/writes Sieve scripts over ManageSieve (`IManageSieveClient`), detecting/compiling/parsing them through the `RuleProviders`.
 
-**Services** (`Services/`) wrap external integrations. `DovecotQuotaClient` (typed `HttpClient`) calls the remote doveadm HTTP API (`quotaGet`) to retrieve live mailbox quota.
+**Services** (`Services/`) wrap external integrations. `DovecotQuotaClient` (typed `HttpClient`) calls the remote doveadm HTTP API (`quotaGet`) to retrieve live mailbox quota. `ManageSieveClient` (behind `IManageSieveClient`) opens authenticated ManageSieve sessions (RFC 5804, port 4190, SASL PLAIN via a master user impersonating the mailbox) exposing list/get/put/setactive/delete script verbs.
+
+**RuleProviders** (`RuleProviders/`) compile/parse the shared `SieveRule[]` model to/from on-disk Sieve. `WeeskyRuleProvider` is the native superset (everything); `RainloopRuleProvider` is the Snappymail-interop format with a strict `CanRepresent` whitelist. `RuleProviderRegistry` holds them: `Default`=`weesky` (compilation fallback), `NewAccountDefault`=`rainloop` (new mailboxes are visible in the Snappymail webmail), plus `GetById`/`Detect`.
 
 **Authentication** (`Authentication/`) configures JWT bearer + HTTP-only cookie auth. `UserAuthenticator` validates credentials; `TokenManager` + `TokenBuilder` issue signed JWTs. Token constants (issuer, audience, expiry, signing key, cookie name) come from `appsettings.json` under the `"Token"` key.
 
