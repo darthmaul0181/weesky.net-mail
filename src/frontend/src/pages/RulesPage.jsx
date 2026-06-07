@@ -117,6 +117,25 @@ function GripIcon() {
   )
 }
 
+// Sliders icon — the conventional "filters / rules" control (used in the side
+// menu and next to the Rules popup title). Exported so AliasesPage can reuse it.
+export function RulesIcon({ size = 15 }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="21" y1="4"  x2="14" y2="4" />
+      <line x1="10" y1="4"  x2="3"  y2="4" />
+      <line x1="21" y1="12" x2="12" y2="12" />
+      <line x1="8"  y1="12" x2="3"  y2="12" />
+      <line x1="21" y1="20" x2="16" y2="20" />
+      <line x1="12" y1="20" x2="3"  y2="20" />
+      <line x1="14" y1="2"  x2="14" y2="6" />
+      <line x1="8"  y1="10" x2="8"  y2="14" />
+      <line x1="16" y1="18" x2="16" y2="22" />
+    </svg>
+  )
+}
+
 // ── HelpTooltip (local copy, same pattern/classes as AliasesPage) ──
 
 function HelpTooltip({ text }) {
@@ -943,6 +962,7 @@ export default function RulesPage({ onClose }) {
         <div className="modal modal-rules" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <span className="modal-title">
+              <RulesIcon size={17} />
               Rules
               {providerLabel && <span className="provider-badge" style={{ marginLeft: '8px' }}>{providerLabel}</span>}
             </span>

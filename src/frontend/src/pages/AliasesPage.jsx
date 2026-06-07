@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, clearSession, setIsAdmin } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
-import RulesPage from './RulesPage.jsx'
+import RulesPage, { RulesIcon } from './RulesPage.jsx'
 
 function useToasts() {
   const [toasts, setToasts] = useState([])
@@ -95,15 +95,6 @@ function ShieldIcon() {
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
       fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  )
-}
-
-function FilterIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
     </svg>
   )
 }
@@ -392,7 +383,7 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
                 </button>
               )}
               <button className="panel-link" onClick={() => { setOpen(false); onRules() }}>
-                <FilterIcon />
+                <RulesIcon />
                 Mail rules
               </button>
               <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
