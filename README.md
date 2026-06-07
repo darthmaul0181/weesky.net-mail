@@ -17,14 +17,14 @@ weesky.net-mail/
 
 ### `src/snoopy.microservice` — weesky.mail.snoopy
 
-ASP.NET Core (.NET 10) REST API exposing admin operations on top of the `dovecot` database (MariaDB/MySQL).
+ASP.NET Core (.NET 10) REST API exposing admin operations on top of the `dovecot` database (MariaDB/MySQL): accounts, aliases, domains, and Sieve mail-filtering rules (over ManageSieve).
 
-Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), `CryptSharp` (Dovecot-compatible crypt hashing), Serilog, Swashbuckle.
+Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), Serilog, Swashbuckle. Passwords are stored plaintext — MariaDB triggers apply the Dovecot-compatible SHA-512 crypt encryption.
 
-See [`src/snoopy.microservice/DESIGN.md`](src/snoopy.microservice/DESIGN.md) for architecture details and [`src/snoopy.microservice/CLAUDE.md`](src/snoopy.microservice/CLAUDE.md) for commands.
+See [`src/snoopy.microservice/DESIGN.md`](src/snoopy.microservice/DESIGN.md) for architecture details and [`src/snoopy.microservice/CLAUDE.md`](src/snoopy.microservice/CLAUDE.md) for commands. The Sieve rules feature has its own design note at [`DESIGN-rules.md`](DESIGN-rules.md).
 
 ### `src/frontend`
 
-React SPA (Vite) for alias and account management. Talks to the API at `https://api.mail.weesky.net`.
+React SPA (Vite) for alias, account, and mail-rule management. Talks to the API at `https://api.mail.weesky.net`.
 
 See [`src/frontend/CLAUDE.md`](src/frontend/CLAUDE.md) for details.

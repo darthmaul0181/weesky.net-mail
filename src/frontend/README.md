@@ -14,20 +14,23 @@ A React SPA for managing email aliases on the weesky.net mail service. It talks 
 npm run dev        # start the Vite dev server on port 5173
 npm run build      # production build → dist/
 npm run preview    # preview the production build locally
+npm run test       # run the Vitest suite once (--watch for watch mode)
+npm run lint       # ESLint (eslint-plugin-react + react-hooks)
 npm run ship       # build + deploy to production via SSH
 ```
 
-There are no tests and no linter configured.
+Tests use Vitest + jsdom + `@testing-library/react` and live next to the code as `*.test.js`/`*.test.jsx`.
 
 ## Project layout
 
 ```
 src/
   api.js          # backend client + auth token handling
+  api.test.js     # api client tests
   App.jsx         # top-level LoginPage / AliasesPage switch
   main.jsx        # React entry point
   index.css
-  pages/          # LoginPage, AliasesPage and their sub-components
+  pages/          # LoginPage, AliasesPage, RulesPage and their sub-components (+ *.test.jsx)
 ```
 
 ## Auth

@@ -5,7 +5,7 @@
 > Les arbitrages actés sont dans la section « Décisions ».
 >
 > **État au 2026-06-07 : toutes les fonctionnalités planifiées sont implémentées.**
-> Tests : 361 backend (xUnit) · 223 frontend (Vitest).
+> Tests : 444 backend (xUnit) · 309 frontend (Vitest).
 
 ## Contexte
 
@@ -23,14 +23,16 @@ Tout ce qui y figure est utilisable dans un script `.sieve`. C'est donc le
 catalogue de ce qu'on *pourrait* implémenter.
 
 Implémenté dans nos providers :
-- `fileinto` (Move to), `redirect` (Forward), `reject`, `discard`
+- `fileinto` (Move to) + `:create` auto-création de dossier (slider ON), `redirect` (Forward), `reject`, `discard`
 - `imap4flags` — `\Seen` (Mark as read) + `\Flagged` (étoile, slider ON)
 - `keep;` standalone (slider ON)
 - `body` — conditions sur le corps du message (slider ON)
 - `envelope` — conditions sur l'enveloppe SMTP (slider ON, test core = pas de `require`)
 - `subaddress` — condition sur le `+detail` d'une adresse (slider ON, `require ["subaddress"]`)
-- conditions : From, To, Cc, Recipient (To/Cc), Subject, Header custom, Size, Body\*, EnvelopeFrom\*, EnvelopeTo\*, RecipientDetail\* (\* = slider ON uniquement)
-- opérateurs : Contains (`:contains`), Equals (`:is`), Matches (`:matches` / regex), Larger/Smaller (Size uniquement)
+- `date` / `index` — conditions date-based : Current date, Message date, Current weekday, Current hour (slider ON, `require ["date"]`)
+- `duplicate` — détection de doublons avec fenêtre en secondes optionnelle (slider ON, `require ["duplicate"]`)
+- conditions : From, To, Cc, Recipient (To/Cc), Subject, Header custom, Size, Body\*, EnvelopeFrom\*, EnvelopeTo\*, RecipientDetail\*, Duplicate\*, CurrentDate\*, MessageDate\*, CurrentWeekday\*, CurrentHour\* (\* = slider ON uniquement)
+- opérateurs : Contains (`:contains`), Equals (`:is`), Matches (`:matches`), Regex (`:regex`, slider ON), Larger/Smaller (Size uniquement), Before/OnOrAfter (date, slider ON)
 - actions multiples par règle (slider ON)
 
 ## La contrainte centrale : interopérabilité Rainloop / Snappymail
@@ -226,12 +228,21 @@ visibles*. Ex. :
 - **`subaddress`** (RFC 5233) — matcher le `+detail` d'une adresse
   (`moi+shopping@` → dossier Shopping). Complément léger au système d'alias.
 
+### Implémentées depuis (provider Weesky / slider ON)
+
+- ✅ `date` / `index` (RFC 5260) — filtrer selon date/heure/jour : Current date,
+  Message date, Current weekday, Current hour. `require ["date"]`.
+- ✅ `duplicate` (RFC 7352) — anti-doublon, fenêtre en secondes optionnelle.
+  `require ["duplicate"]`.
+- ✅ `:regex` (RFC 5228, extension `regex`) — opérateur de correspondance par
+  expression régulière (en plus de `:matches` wildcard).
+- ✅ Auto-create folder (`fileinto :create`, RFC 5490) — case « Create » dans
+  l'éditeur étendu.
+
 ### Écartées / plus tard (hors périmètre actuel)
 
-- `date` (RFC 5260) — filtrer selon date/heure/jour. _Plus tard._
 - `relational` + `comparator-i;ascii-numeric` (RFC 5231) — comparaisons
   numériques, `:count`. _Niche._
-- `duplicate` (RFC 7352) — anti-doublon. _Niche._
 - `enotify` (RFC 5435) — notifications. ❌ Déconseillé (config serveur,
   délivrabilité).
 - `editheader` (RFC 5293) — ajouter/supprimer des en-têtes. ❌ Déconseillé.
@@ -298,9 +309,11 @@ visibles*. Ex. :
 - **Fonctionnalités confirmées :**
   - *Compatibles (deux modes)* : Forward+Keep.
   - *Étendues (slider ON, toutes implémentées)* : `keep;` standalone, flags `\Flagged`,
-    actions multiples, `body`, `envelope`, `subaddress`.
-- **Écartées :** `vacation` ❌ ; `enotify` ❌ ; `editheader` ❌ ; Auto-create folder ❌.
-  **Plus tard :** `date`, `:count`/relational, `duplicate`.
+    actions multiples, `body`, `envelope`, `subaddress`, auto-create folder
+    (`fileinto :create`), `date`/`index` (Current/Message date, Current weekday/hour),
+    `duplicate`, opérateur `:regex`.
+- **Écartées :** `vacation` ❌ ; `enotify` ❌ ; `editheader` ❌.
+  **Plus tard :** `:count`/relational.
 - **`subaddress` + `envelope` :** packagés ensemble (subaddress plus fiable via
   l'envelope).
 - **Flags à exposer dans l'UI :** ✅ `\Flagged` uniquement (étoile/drapeau).
