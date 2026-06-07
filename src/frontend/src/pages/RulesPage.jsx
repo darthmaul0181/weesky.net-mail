@@ -113,17 +113,19 @@ const EXTENDED_RULES_HELP =
 
 // ── Constants ─────────────────────────────────────────────────
 
+const TEXT_OPS = ['Contains', 'Equals', 'Matches', 'Regex']
+
 const CONDITION_FIELDS = [
-  { value: 'From',           label: 'From' },
-  { value: 'Recipient',      label: 'To / Cc' },
-  { value: 'Subject',        label: 'Subject' },
-  { value: 'Header',         label: 'Custom header' },
-  { value: 'Size',           label: 'Size (bytes)',      operators: ['Larger', 'Smaller'] },
-  { value: 'Body',           label: 'Body',              extendedOnly: true, operators: ['Contains', 'Matches', 'Regex'] },
-  { value: 'EnvelopeFrom',   label: 'Envelope from',     extendedOnly: true },
-  { value: 'EnvelopeTo',     label: 'Envelope to',       extendedOnly: true },
-  { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true },
-  { value: 'Duplicate',      label: 'Duplicate message', extendedOnly: true, noOperator: true },
+  { value: 'From',            label: 'From',              operators: TEXT_OPS },
+  { value: 'Recipient',       label: 'To / Cc',           operators: TEXT_OPS },
+  { value: 'Subject',         label: 'Subject',           operators: TEXT_OPS },
+  { value: 'Header',          label: 'Custom header',     operators: TEXT_OPS },
+  { value: 'Size',            label: 'Size (bytes)',       operators: ['Larger', 'Smaller'] },
+  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'Matches', 'Regex'] },
+  { value: 'EnvelopeFrom',    label: 'Envelope from',     extendedOnly: true, operators: TEXT_OPS },
+  { value: 'EnvelopeTo',      label: 'Envelope to',       extendedOnly: true, operators: TEXT_OPS },
+  { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true, operators: TEXT_OPS },
+  { value: 'Duplicate',       label: 'Duplicate message', extendedOnly: true, noOperator: true },
   { value: 'CurrentDate',    label: 'Current date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
   { value: 'MessageDate',    label: 'Message date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
   { value: 'CurrentWeekday', label: 'Current weekday',   extendedOnly: true, noOperator: true, inputType: 'weekday' },
