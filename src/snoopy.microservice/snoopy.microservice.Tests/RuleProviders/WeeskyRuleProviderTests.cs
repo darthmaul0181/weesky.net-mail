@@ -198,6 +198,40 @@ namespace weesky.Snoopy.Microservice.Tests.RuleProviders
 
         // ----- Helpers -----
 
+        // ----- SetFlag emission -----
+
+        [Fact]
+        public void Compile_SetFlagSeen_EmitsAddflag()
+        {
+            // Must use addflag (not setflag) so multiple flag actions don't clobber each other.
+            var rule = MakeRule("Read",
+                Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x"),
+                Act(SieveActionType.SetFlag, @"\Seen"));
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("addflag \"\\\\Seen\";", script);
+            Assert.DoesNotContain("setflag", script);
+        }
+
+        [Fact]
+        public void Compile_SeenAndFlaggedTogether_BothFlagsPresent()
+        {
+            var rule = MakeRule("ReadAndFlag",
+                new[] { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+                new[]
+                {
+                    Act(SieveActionType.SetFlag, @"\Seen"),
+                    Act(SieveActionType.SetFlag, @"\Flagged"),
+                    Act(SieveActionType.FileInto, "X"),
+                });
+
+            var script = _sut.Compile(new[] { rule }).Value;
+
+            Assert.Contains("addflag \"\\\\Seen\";", script);
+            Assert.Contains("addflag \"\\\\Flagged\";", script);
+        }
+
         // ----- Body condition -----
 
         [Fact]

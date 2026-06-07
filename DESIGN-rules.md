@@ -5,7 +5,7 @@
 > Les arbitrages actés sont dans la section « Décisions ».
 >
 > **État au 2026-06-07 : toutes les fonctionnalités planifiées sont implémentées.**
-> Tests : 359 backend (xUnit) · 223 frontend (Vitest).
+> Tests : 361 backend (xUnit) · 223 frontend (Vitest).
 
 ## Contexte
 
@@ -276,7 +276,7 @@ visibles*. Ex. :
      compile en `address :detail :op ["To","Cc"] "..."` ; ajoute `"subaddress"` à
      `require[]`.
 
-**Tests finaux : 359 backend · 223 frontend.**
+**Tests finaux : 361 backend · 223 frontend.**
 
 ## Décisions
 
@@ -308,6 +308,5 @@ visibles*. Ex. :
 
 ## Questions ouvertes
 
-- **`subaddress` — validation empirique :** `recipient_delimiter = +` ✅ confirmé
-  côté Dovecot. Reste à vérifier par un mail de test réel que le `+detail` survit
-  à la couche alias / Postfix avant d'exposer la fonctionnalité aux utilisateurs.
+Aucune — toutes les fonctionnalités ont été validées en production.
+`+detail` (subaddress) ✅ confirmé empiriquement : survit à la couche alias / Postfix.

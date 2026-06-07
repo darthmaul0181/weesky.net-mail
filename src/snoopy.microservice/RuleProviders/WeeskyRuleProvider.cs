@@ -284,7 +284,7 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             SieveActionType.Redirect => $"redirect {Quote(a.Argument!)};",
             SieveActionType.Discard => "discard;",
             SieveActionType.Reject => $"reject {Quote(a.Argument!)};",
-            SieveActionType.SetFlag => $"setflag {Quote(a.Argument!)};",
+            SieveActionType.SetFlag => $"addflag {Quote(a.Argument!)};",
             SieveActionType.Keep => "keep;",
             _ => throw new InvalidOperationException($"Unknown action type {a.Type}")
         };
