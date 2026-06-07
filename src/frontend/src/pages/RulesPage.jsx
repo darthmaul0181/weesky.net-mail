@@ -210,6 +210,31 @@ function summarizeAction(a, compact = false) {
   }
 }
 
+// A condition counts as "filled in" once it has the data the backend needs.
+export function isConditionValid(c) {
+  if (!c) return false
+  if (c.field === 'Duplicate') return true            // seconds window is optional
+  if (c.field === 'Header' && !(c.headerName ?? '').trim()) return false
+  return (c.value ?? '').toString().trim() !== ''
+}
+
+// An action counts as "filled in" once any required argument is present.
+export function isActionValid(a) {
+  if (!a) return false
+  switch (a.type) {
+    case 'FileInto':
+    case 'Redirect':
+    case 'Reject':
+    case 'SetFlag':
+      return (a.argument ?? '').trim() !== ''
+    case 'Discard':
+    case 'Keep':
+      return true
+    default:
+      return false
+  }
+}
+
 function makeEmptyRule() {
   return {
     id: null,
@@ -461,8 +486,8 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
   const [folders, setFolders] = useState([])
 
   const step1Done = rule.name.trim() !== ''
-  const step2Done = rule.conditions.length > 0
-  const step3Done = rule.actions.length > 0
+  const step2Done = rule.conditions.length > 0 && rule.conditions.every(isConditionValid)
+  const step3Done = rule.actions.length > 0 && rule.actions.every(isActionValid)
   const step2Unlocked = step1Done
   const step3Unlocked = step1Done && step2Done
   const step4Unlocked = step1Done && step2Done && step3Done
