@@ -904,7 +904,7 @@ describe('summarize helpers', () => {
 
   it('FileInto with autoCreate shows ✚ in expanded view', () => {
     renderExpanded(cardWithAction({ type: 'FileInto', argument: 'Archive', autoCreate: true }))
-    expect(screen.getByText('Archive ✚')).toBeInTheDocument()
+    expect(screen.getByText('→ Archive ✚')).toBeInTheDocument()
   })
 
   it('FileInto collapsed pill shows → prefix', () => {
