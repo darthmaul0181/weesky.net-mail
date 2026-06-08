@@ -152,7 +152,7 @@ const EXTENDED_RULES_HELP =
 
 // ── Constants ─────────────────────────────────────────────────
 
-const TEXT_OPS = ['Contains', 'NotContains', 'Equals', 'NotEquals', 'Matches', 'Regex']
+const TEXT_OPS = ['Contains', 'NotContains', 'Equals', 'NotEquals', 'Regex']
 
 const CONDITION_FIELDS = [
   { value: 'From',            label: 'From',              operators: TEXT_OPS },
@@ -160,7 +160,7 @@ const CONDITION_FIELDS = [
   { value: 'Subject',         label: 'Subject',           operators: TEXT_OPS },
   { value: 'Header',          label: 'Custom header',     operators: TEXT_OPS },
   { value: 'Size',            label: 'Size (bytes)',       operators: ['Larger', 'Smaller'] },
-  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'NotContains', 'Matches', 'Regex'] },
+  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'NotContains', 'Regex'] },
   { value: 'EnvelopeFrom',    label: 'Envelope from',     extendedOnly: true, operators: TEXT_OPS },
   { value: 'EnvelopeTo',      label: 'Envelope to',       extendedOnly: true, operators: TEXT_OPS },
   { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true, operators: TEXT_OPS },
@@ -188,7 +188,7 @@ const CONDITION_OPERATORS = [
   { value: 'NotContains', label: 'does not contain' },
   { value: 'Equals',      label: 'equals' },
   { value: 'NotEquals',   label: 'does not equal' },
-  { value: 'Matches',     label: 'matches (wildcard)' },
+  { value: 'Matches',     label: 'matches (wildcard)' }, // kept for display of legacy rules only
   { value: 'Regex',       label: 'matches (regex)' },
   { value: 'Larger',      label: 'is larger than' },
   { value: 'Smaller',     label: 'is smaller than' },

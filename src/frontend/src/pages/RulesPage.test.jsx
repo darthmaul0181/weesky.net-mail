@@ -299,7 +299,7 @@ describe('ConditionRow body field', () => {
     expect(Array.from(condFieldSelect.options).some(o => o.value === 'Body')).toBe(false)
   })
 
-  it('limits operators to Contains, NotContains, Matches and Regex when Body is selected', () => {
+  it('limits operators to Contains, NotContains and Regex when Body is selected', () => {
     const rule = {
       ...fileIntoRule('a', 'r1'),
       conditions: [{ field: 'Body', operator: 'Contains', value: 'casino', headerName: null }],
@@ -311,7 +311,7 @@ describe('ConditionRow body field', () => {
     const opSelect = Array.from(selects).find(s =>
       Array.from(s.options).some(o => o.value === 'Contains') &&
       !Array.from(s.options).some(o => o.value === 'FileInto'))
-    expect(Array.from(opSelect.options).map(o => o.value)).toEqual(['Contains', 'NotContains', 'Matches', 'Regex'])
+    expect(Array.from(opSelect.options).map(o => o.value)).toEqual(['Contains', 'NotContains', 'Regex'])
   })
 })
 
