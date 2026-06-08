@@ -1824,6 +1824,10 @@ body {
   margin-bottom: 8px;
 }
 
+.rule-card-collapsed .rule-card-header {
+  margin-bottom: 0;
+}
+
 .rule-card-name {
   font-size: 14px;
   font-weight: 600;
@@ -1896,12 +1900,6 @@ body {
   color: var(--primary);
 }
 
-.rule-card-arrow {
-  font-size: 16px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  line-height: 1.6;
-}
 
 .rule-card-stop {
   font-size: 10px;
@@ -2236,10 +2234,14 @@ body {
   box-shadow: 0 -3px 0 0 var(--primary), 0 0 0 1px rgba(52, 80, 163, 0.25);
 }
 
-.rule-card-inline-actions {
+.rule-card-inline-actions,
+.rule-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.rule-card-inline-actions {
   flex: 1;
   min-width: 0;
 }

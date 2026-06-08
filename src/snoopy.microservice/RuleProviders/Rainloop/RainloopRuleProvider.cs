@@ -134,11 +134,13 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
         {
             var op = c.Type switch
             {
-                "Contains" => SieveConditionOperator.Contains,
-                "EqualTo" => SieveConditionOperator.Equals,
-                "Regex" => SieveConditionOperator.Matches,
-                "Over" => SieveConditionOperator.Larger,
-                "Under" => SieveConditionOperator.Smaller,
+                "Contains"    => SieveConditionOperator.Contains,
+                "NotContains" => SieveConditionOperator.NotContains,
+                "EqualTo"     => SieveConditionOperator.Equals,
+                "NotEqualTo"  => SieveConditionOperator.NotEquals,
+                "Regex"       => SieveConditionOperator.Matches,
+                "Over"        => SieveConditionOperator.Larger,
+                "Under"       => SieveConditionOperator.Smaller,
                 _ => (SieveConditionOperator?)null
             };
             if (op == null) return Result.Failure<SieveCondition>($"Unsupported Rainloop condition type: {c.Type}");
@@ -365,11 +367,13 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
 
             var type = c.Operator switch
             {
-                SieveConditionOperator.Contains => "Contains",
-                SieveConditionOperator.Equals => "EqualTo",
-                SieveConditionOperator.Matches => "Regex",
-                SieveConditionOperator.Larger => "Over",
-                SieveConditionOperator.Smaller => "Under",
+                SieveConditionOperator.Contains    => "Contains",
+                SieveConditionOperator.NotContains => "NotContains",
+                SieveConditionOperator.Equals      => "EqualTo",
+                SieveConditionOperator.NotEquals   => "NotEqualTo",
+                SieveConditionOperator.Matches     => "Regex",
+                SieveConditionOperator.Larger      => "Over",
+                SieveConditionOperator.Smaller     => "Under",
                 _ => null
             };
             if (type == null) return Result.Failure<RainloopCondition>($"Unsupported operator for Rainloop: {c.Operator}");
@@ -479,27 +483,32 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
                 return $"size {op} {c.Value.Trim()}";
             }
 
+            bool negate = c.Operator is SieveConditionOperator.NotContains or SieveConditionOperator.NotEquals;
             var matchOp = c.Operator switch
             {
-                SieveConditionOperator.Contains => ":contains",
-                SieveConditionOperator.Equals => ":is",
-                SieveConditionOperator.Matches => ":matches",
+                SieveConditionOperator.Contains or SieveConditionOperator.NotContains => ":contains",
+                SieveConditionOperator.Equals   or SieveConditionOperator.NotEquals   => ":is",
+                SieveConditionOperator.Matches  => ":matches",
                 _ => throw new InvalidOperationException()
             };
 
+            string expr;
             if (c.Field == SieveConditionField.Recipient)
-                return $"header {matchOp} [\"To\", \"CC\"] {QuoteSimple(c.Value)}";
-
-            var name = c.Field switch
+                expr = $"header {matchOp} [\"To\", \"CC\"] {QuoteSimple(c.Value)}";
+            else
             {
-                SieveConditionField.From => "From",
-                SieveConditionField.To => "To",
-                SieveConditionField.Cc => "Cc",
-                SieveConditionField.Subject => "Subject",
-                SieveConditionField.Header => c.HeaderName!,
-                _ => throw new InvalidOperationException()
-            };
-            return $"header {matchOp} [{QuoteSimple(name)}] {QuoteSimple(c.Value)}";
+                var name = c.Field switch
+                {
+                    SieveConditionField.From    => "From",
+                    SieveConditionField.To      => "To",
+                    SieveConditionField.Cc      => "Cc",
+                    SieveConditionField.Subject => "Subject",
+                    SieveConditionField.Header  => c.HeaderName!,
+                    _ => throw new InvalidOperationException()
+                };
+                expr = $"header {matchOp} [{QuoteSimple(name)}] {QuoteSimple(c.Value)}";
+            }
+            return negate ? $"not {expr}" : expr;
         }
 
         private static string QuoteSimple(string s)
