@@ -2234,10 +2234,14 @@ body {
   box-shadow: 0 -3px 0 0 var(--primary), 0 0 0 1px rgba(52, 80, 163, 0.25);
 }
 
-.rule-card-inline-actions {
+.rule-card-inline-actions,
+.rule-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.rule-card-inline-actions {
   flex: 1;
   min-width: 0;
 }
