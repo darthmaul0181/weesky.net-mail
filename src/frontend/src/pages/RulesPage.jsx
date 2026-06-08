@@ -338,16 +338,13 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
             </div>
           </div>
           {hasActions && (
-            <>
-              <span className="rule-card-arrow">→</span>
-              <div className="rule-card-side">
-                <div className="rule-card-actions">
-                  {rule.actions.map((a, i) => (
-                    <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a)}</span>
-                  ))}
-                </div>
+            <div className="rule-card-side">
+              <div className="rule-card-actions">
+                {rule.actions.map((a, i) => (
+                  <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a, true)}</span>
+                ))}
               </div>
-            </>
+            </div>
           )}
           {rule.stopAfter && <span className="rule-card-stop">stop</span>}
         </div>

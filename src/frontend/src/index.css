@@ -1900,12 +1900,6 @@ body {
   color: var(--primary);
 }
 
-.rule-card-arrow {
-  font-size: 16px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  line-height: 1.6;
-}
 
 .rule-card-stop {
   font-size: 10px;
