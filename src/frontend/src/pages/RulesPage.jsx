@@ -185,9 +185,9 @@ const WEEKDAY_OPTIONS = [
 
 const CONDITION_OPERATORS = [
   { value: 'Contains',    label: 'contains' },
-  { value: 'NotContains', label: 'does not contain' },
+  { value: 'NotContains', label: 'not contains' },
   { value: 'Equals',      label: 'equals' },
-  { value: 'NotEquals',   label: 'does not equal' },
+  { value: 'NotEquals',   label: 'not equal to' },
   { value: 'Matches',     label: 'matches (wildcard)' }, // kept for display of legacy rules only
   { value: 'Regex',       label: 'matches (regex)' },
   { value: 'Larger',      label: 'is larger than' },
