@@ -1824,6 +1824,10 @@ body {
   margin-bottom: 8px;
 }
 
+.rule-card-collapsed .rule-card-header {
+  margin-bottom: 0;
+}
+
 .rule-card-name {
   font-size: 14px;
   font-weight: 600;
