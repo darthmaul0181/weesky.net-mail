@@ -152,7 +152,7 @@ const EXTENDED_RULES_HELP =
 
 // ── Constants ─────────────────────────────────────────────────
 
-const TEXT_OPS = ['Contains', 'Equals', 'Matches', 'Regex']
+const TEXT_OPS = ['Contains', 'NotContains', 'Equals', 'NotEquals', 'Matches', 'Regex']
 
 const CONDITION_FIELDS = [
   { value: 'From',            label: 'From',              operators: TEXT_OPS },
@@ -160,7 +160,7 @@ const CONDITION_FIELDS = [
   { value: 'Subject',         label: 'Subject',           operators: TEXT_OPS },
   { value: 'Header',          label: 'Custom header',     operators: TEXT_OPS },
   { value: 'Size',            label: 'Size (bytes)',       operators: ['Larger', 'Smaller'] },
-  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'Matches', 'Regex'] },
+  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'NotContains', 'Matches', 'Regex'] },
   { value: 'EnvelopeFrom',    label: 'Envelope from',     extendedOnly: true, operators: TEXT_OPS },
   { value: 'EnvelopeTo',      label: 'Envelope to',       extendedOnly: true, operators: TEXT_OPS },
   { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true, operators: TEXT_OPS },
@@ -184,14 +184,16 @@ const WEEKDAY_OPTIONS = [
 ]
 
 const CONDITION_OPERATORS = [
-  { value: 'Contains',   label: 'contains' },
-  { value: 'Equals',     label: 'equals' },
-  { value: 'Matches',    label: 'matches (wildcard)' },
-  { value: 'Regex',      label: 'matches (regex)',    extendedOnly: true },
-  { value: 'Larger',     label: 'is larger than' },
-  { value: 'Smaller',    label: 'is smaller than' },
-  { value: 'Before',     label: 'is before',         extendedOnly: true },
-  { value: 'OnOrAfter',  label: 'is on or after',    extendedOnly: true },
+  { value: 'Contains',    label: 'contains' },
+  { value: 'NotContains', label: 'does not contain',  extendedOnly: true },
+  { value: 'Equals',      label: 'equals' },
+  { value: 'NotEquals',   label: 'does not equal',    extendedOnly: true },
+  { value: 'Matches',     label: 'matches (wildcard)' },
+  { value: 'Regex',       label: 'matches (regex)' },
+  { value: 'Larger',      label: 'is larger than' },
+  { value: 'Smaller',     label: 'is smaller than' },
+  { value: 'Before',      label: 'is before',         extendedOnly: true },
+  { value: 'OnOrAfter',   label: 'is on or after',    extendedOnly: true },
 ]
 
 const ACTION_TYPES = [

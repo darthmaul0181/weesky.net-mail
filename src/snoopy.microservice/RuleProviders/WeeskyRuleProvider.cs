@@ -187,9 +187,10 @@ namespace weesky.Snoopy.Microservice.RuleProviders
 
             if (c.Field == SieveConditionField.Body &&
                 c.Operator != SieveConditionOperator.Contains &&
+                c.Operator != SieveConditionOperator.NotContains &&
                 c.Operator != SieveConditionOperator.Matches &&
                 c.Operator != SieveConditionOperator.Regex)
-                return Result.Failure("Body condition only supports the Contains, Matches or Regex operator");
+                return Result.Failure("Body condition only supports the Contains, NotContains, Matches or Regex operator");
 
             if (c.Field == SieveConditionField.Header && string.IsNullOrWhiteSpace(c.HeaderName))
                 return Result.Failure("Header name is required when matching a custom header");
@@ -348,51 +349,56 @@ namespace weesky.Snoopy.Microservice.RuleProviders
 
             if (c.Field == SieveConditionField.Body)
             {
+                bool bodyNegate = c.Operator == SieveConditionOperator.NotContains;
                 var bodyOp = c.Operator switch
                 {
                     SieveConditionOperator.Matches => ":matches",
                     SieveConditionOperator.Regex   => ":regex",
                     _                              => ":contains"
                 };
-                return $"body :text {bodyOp} {Quote(c.Value)}";
+                var bodyExpr = $"body :text {bodyOp} {Quote(c.Value)}";
+                return bodyNegate ? $"not {bodyExpr}" : bodyExpr;
             }
 
+            bool negate = c.Operator is SieveConditionOperator.NotContains or SieveConditionOperator.NotEquals;
             var matchOp = c.Operator switch
             {
-                SieveConditionOperator.Contains => ":contains",
-                SieveConditionOperator.Equals   => ":is",
-                SieveConditionOperator.Matches  => ":matches",
-                SieveConditionOperator.Regex    => ":regex",
+                SieveConditionOperator.Contains    or SieveConditionOperator.NotContains => ":contains",
+                SieveConditionOperator.Equals      or SieveConditionOperator.NotEquals   => ":is",
+                SieveConditionOperator.Matches     => ":matches",
+                SieveConditionOperator.Regex       => ":regex",
                 _ => throw new InvalidOperationException($"Operator {c.Operator} is not valid for a text field")
             };
 
+            string expr;
             if (c.Field == SieveConditionField.Recipient)
             {
-                return $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+                expr = $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
             }
-
-            if (c.Field == SieveConditionField.EnvelopeFrom || c.Field == SieveConditionField.EnvelopeTo)
+            else if (c.Field == SieveConditionField.EnvelopeFrom || c.Field == SieveConditionField.EnvelopeTo)
             {
                 var part = c.Field == SieveConditionField.EnvelopeFrom ? "from" : "to";
-                return $"envelope {matchOp} {Quote(part)} {Quote(c.Value)}";
+                expr = $"envelope {matchOp} {Quote(part)} {Quote(c.Value)}";
+            }
+            else if (c.Field == SieveConditionField.RecipientDetail)
+            {
+                expr = $"address :detail {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+            }
+            else
+            {
+                var headerName = c.Field switch
+                {
+                    SieveConditionField.From    => "From",
+                    SieveConditionField.To      => "To",
+                    SieveConditionField.Cc      => "Cc",
+                    SieveConditionField.Subject => "Subject",
+                    SieveConditionField.Header  => c.HeaderName!,
+                    _ => throw new InvalidOperationException($"Field {c.Field} is not a text field")
+                };
+                expr = $"header {matchOp} {Quote(headerName)} {Quote(c.Value)}";
             }
 
-            if (c.Field == SieveConditionField.RecipientDetail)
-            {
-                return $"address :detail {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
-            }
-
-            var headerName = c.Field switch
-            {
-                SieveConditionField.From => "From",
-                SieveConditionField.To => "To",
-                SieveConditionField.Cc => "Cc",
-                SieveConditionField.Subject => "Subject",
-                SieveConditionField.Header => c.HeaderName!,
-                _ => throw new InvalidOperationException($"Field {c.Field} is not a text field")
-            };
-
-            return $"header {matchOp} {Quote(headerName)} {Quote(c.Value)}";
+            return negate ? $"not {expr}" : expr;
         }
 
         private static string BuildAction(SieveAction a) => a.Type switch
