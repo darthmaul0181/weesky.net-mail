@@ -25,6 +25,6 @@ See [`src/snoopy.microservice/DESIGN.md`](src/snoopy.microservice/DESIGN.md) for
 
 ### `src/frontend`
 
-React SPA (Vite) for alias, account, and mail-rule management. Talks to the API at `https://api.mail.weesky.net`.
+React SPA (Vite) for alias, account, and mail-rule management.
 
 See [`src/frontend/CLAUDE.md`](src/frontend/CLAUDE.md) for details.
