@@ -3,34 +3,34 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace weesky.Snoopy.Microservice.Data
 {
-	public class ApplicationDbContext : DbContext
-	{
-		public ApplicationDbContext(DbContextOptions options)
-			: base(options)
-		{
-		}
+    public class ApplicationDbContext : DbContext
+    {
+        public ApplicationDbContext(DbContextOptions options)
+            : base(options)
+        {
+        }
 
-		protected override void OnModelCreating(ModelBuilder modelBuilder)
-		{
-			modelBuilder.Entity<MailUser>()
-				.Property(u => u.Active)
-				.HasConversion(new EnumToStringConverter<ActiveState>());
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<MailUser>()
+                .Property(u => u.Active)
+                .HasConversion(new EnumToStringConverter<ActiveState>());
 
-			modelBuilder.Entity<MailUser>()
-				.Property(u => u.Admin)
-				.HasConversion(new EnumToStringConverter<ActiveState>());
+            modelBuilder.Entity<MailUser>()
+                .Property(u => u.Admin)
+                .HasConversion(new EnumToStringConverter<ActiveState>());
 
-			modelBuilder.Entity<MailDomainOwnership>()
-				.HasKey(o => new { o.DomainId, o.UserId });
+            modelBuilder.Entity<MailDomainOwnership>()
+                .HasKey(o => new { o.DomainId, o.UserId });
 
-			modelBuilder.Entity<LastLogin>()
-				.HasKey(l => new { l.UserId, l.Service });
-		}
+            modelBuilder.Entity<LastLogin>()
+                .HasKey(l => new { l.UserId, l.Service });
+        }
 
-		public DbSet<MailUser> Users {get; set;}
-		public DbSet<MailDomain> Domains { get; set; }
-		public DbSet<MailAlias> Aliases { get; set; }
-		public DbSet<MailDomainOwnership> DomainsOwnerships { get; set; }
-		public DbSet<LastLogin> LastLogins { get; set; }
-	}
+        public DbSet<MailUser> Users { get; set; }
+        public DbSet<MailDomain> Domains { get; set; }
+        public DbSet<MailAlias> Aliases { get; set; }
+        public DbSet<MailDomainOwnership> DomainsOwnerships { get; set; }
+        public DbSet<LastLogin> LastLogins { get; set; }
+    }
 }

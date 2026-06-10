@@ -40,11 +40,11 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- FindByEmail ---
 
         [Fact]
-        public void FindByEmail_WhenUserExists_ReturnsUser()
+        public async Task FindByEmail_WhenUserExists_ReturnsUser()
         {
             var (repo, _) = CreateSut();
 
-            var user = repo.FindByEmail(TestEmail);
+            var user = await repo.FindByEmailAsync(TestEmail);
 
             Assert.NotNull(user);
             Assert.Equal("john", user.Name);
@@ -52,31 +52,31 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void FindByEmail_IsCaseInsensitiveForUsername()
+        public async Task FindByEmail_IsCaseInsensitiveForUsername()
         {
             var (repo, _) = CreateSut();
 
-            var user = repo.FindByEmail("JOHN@weesky.be");
+            var user = await repo.FindByEmailAsync("JOHN@weesky.be");
 
             Assert.NotNull(user);
         }
 
         [Fact]
-        public void FindByEmail_WhenDomainNotFound_ReturnsNull()
+        public async Task FindByEmail_WhenDomainNotFound_ReturnsNull()
         {
             var (repo, _) = CreateSut();
 
-            var user = repo.FindByEmail("john@unknown-domain.com");
+            var user = await repo.FindByEmailAsync("john@unknown-domain.com");
 
             Assert.Null(user);
         }
 
         [Fact]
-        public void FindByEmail_WhenUsernameNotFound_ReturnsNull()
+        public async Task FindByEmail_WhenUsernameNotFound_ReturnsNull()
         {
             var (repo, _) = CreateSut();
 
-            var user = repo.FindByEmail("nobody@weesky.be");
+            var user = await repo.FindByEmailAsync("nobody@weesky.be");
 
             Assert.Null(user);
         }
@@ -84,11 +84,11 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Theory]
         [InlineData("notanemail")]
         [InlineData("a@b@c")]
-        public void FindByEmail_WithInvalidEmailFormat_ReturnsNull(string email)
+        public async Task FindByEmail_WithInvalidEmailFormat_ReturnsNull(string email)
         {
             var (repo, _) = CreateSut();
 
-            var user = repo.FindByEmail(email);
+            var user = await repo.FindByEmailAsync(email);
 
             Assert.Null(user);
         }
@@ -96,59 +96,59 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- IsValidPassword ---
 
         [Fact]
-        public void IsValidPassword_WithCorrectPassword_ReturnsTrue()
+        public async Task IsValidPassword_WithCorrectPassword_ReturnsTrue()
         {
             var (repo, _) = CreateSut();
             var user = new User(TestEmail);
 
-            Assert.True(repo.IsValidPassword(user, TestPassword));
+            Assert.True(await repo.IsValidPasswordAsync(user, TestPassword));
         }
 
         [Fact]
-        public void IsValidPassword_WithWrongPassword_ReturnsFalse()
+        public async Task IsValidPassword_WithWrongPassword_ReturnsFalse()
         {
             var (repo, _) = CreateSut();
             var user = new User(TestEmail);
 
-            Assert.False(repo.IsValidPassword(user, "WrongPassword!"));
+            Assert.False(await repo.IsValidPasswordAsync(user, "WrongPassword!"));
         }
 
         [Fact]
-        public void IsValidPassword_WhenDomainNotFound_ReturnsFalse()
+        public async Task IsValidPassword_WhenDomainNotFound_ReturnsFalse()
         {
             var (repo, _) = CreateSut();
             var user = new User("john@nonexistent.com");
 
-            Assert.False(repo.IsValidPassword(user, TestPassword));
+            Assert.False(await repo.IsValidPasswordAsync(user, TestPassword));
         }
 
         [Fact]
-        public void IsValidPassword_WhenUserNotFound_ReturnsFalse()
+        public async Task IsValidPassword_WhenUserNotFound_ReturnsFalse()
         {
             var (repo, _) = CreateSut();
             var user = new User("nobody@weesky.be");
 
-            Assert.False(repo.IsValidPassword(user, TestPassword));
+            Assert.False(await repo.IsValidPasswordAsync(user, TestPassword));
         }
 
         // --- GetAccountInfo ---
 
         [Fact]
-        public void GetAccountInfo_WhenUserExists_ReturnsSuccess()
+        public async Task GetAccountInfo_WhenUserExists_ReturnsSuccess()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.GetAccountInfo(new User(TestEmail));
+            var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
             Assert.True(result.IsSuccess);
         }
 
         [Fact]
-        public void GetAccountInfo_WhenUserExists_ReturnsCorrectInfo()
+        public async Task GetAccountInfo_WhenUserExists_ReturnsCorrectInfo()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.GetAccountInfo(new User(TestEmail));
+            var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
             Assert.Equal("john", result.Value.UserName);
             Assert.Equal("John Doe", result.Value.FullName);
@@ -156,73 +156,73 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAccountInfo_WhenNoDomainOwnerships_ReturnsPrimaryDomainInList()
+        public async Task GetAccountInfo_WhenNoDomainOwnerships_ReturnsPrimaryDomainInList()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.GetAccountInfo(new User(TestEmail));
+            var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
             Assert.Single(result.Value.Domains);
             Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
         }
 
         [Fact]
-        public void GetAccountInfo_WithOwnedDomains_ReturnsAllOwnedDomains()
+        public async Task GetAccountInfo_WithOwnedDomains_ReturnsAllOwnedDomains()
         {
             var (repo, context) = CreateSut();
             var userId = context.Users.First(u => u.Name == "john").Id;
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
             context.SaveChanges();
 
-            var result = repo.GetAccountInfo(new User(TestEmail));
+            var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
             Assert.Contains(result.Value.Domains, d => d.Name == "other.com");
         }
 
         [Fact]
-        public void GetAccountInfo_WithOwnedDomains_AlsoIncludesPrimaryDomain()
+        public async Task GetAccountInfo_WithOwnedDomains_AlsoIncludesPrimaryDomain()
         {
             var (repo, context) = CreateSut();
             var userId = context.Users.First(u => u.Name == "john").Id;
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
             context.SaveChanges();
 
-            var result = repo.GetAccountInfo(new User(TestEmail));
+            var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
             Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
             Assert.Contains(result.Value.Domains, d => d.Name == "other.com");
         }
 
         [Fact]
-        public void GetAccountInfo_WhenPrimaryDomainIsInOwnerships_NoDuplicates()
+        public async Task GetAccountInfo_WhenPrimaryDomainIsInOwnerships_NoDuplicates()
         {
             var (repo, context) = CreateSut();
             var userId = context.Users.First(u => u.Name == "john").Id;
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "WKY", UserId = userId });
             context.SaveChanges();
 
-            var result = repo.GetAccountInfo(new User(TestEmail));
+            var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
             Assert.Single(result.Value.Domains);
             Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
         }
 
         [Fact]
-        public void GetAccountInfo_WhenDomainNotFound_ReturnsFailure()
+        public async Task GetAccountInfo_WhenDomainNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.GetAccountInfo(new User("john@nonexistent.com"));
+            var result = await repo.GetAccountInfoAsync(new User("john@nonexistent.com"));
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void GetAccountInfo_WhenUserNotFound_ReturnsFailure()
+        public async Task GetAccountInfo_WhenUserNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.GetAccountInfo(new User("nobody@weesky.be"));
+            var result = await repo.GetAccountInfoAsync(new User("nobody@weesky.be"));
 
             Assert.True(result.IsFailure);
         }
@@ -230,41 +230,41 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- ChangePassword ---
 
         [Fact]
-        public void ChangePassword_WithWeakPassword_ReturnsFailure()
+        public async Task ChangePassword_WithWeakPassword_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangePassword(new User(TestEmail), "short", TestPassword);
+            var result = await repo.ChangePasswordAsync(new User(TestEmail), "short", TestPassword);
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void ChangePassword_WithWrongOldPassword_ReturnsFailure()
+        public async Task ChangePassword_WithWrongOldPassword_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangePassword(new User(TestEmail), "NewPassword123!", "WrongOldPassword");
+            var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", "WrongOldPassword");
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void ChangePassword_WhenUserNotFound_ReturnsFailure()
+        public async Task ChangePassword_WhenUserNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangePassword(new User("nobody@weesky.be"), "NewPassword123!", TestPassword);
+            var result = await repo.ChangePasswordAsync(new User("nobody@weesky.be"), "NewPassword123!", TestPassword);
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void ChangePassword_WithValidData_ReturnsSuccess()
+        public async Task ChangePassword_WithValidData_ReturnsSuccess()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangePassword(new User(TestEmail), "NewPassword123!", TestPassword);
+            var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", TestPassword);
 
             Assert.True(result.IsSuccess);
         }
@@ -272,21 +272,21 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Theory]
         [InlineData("1234567")]
         [InlineData("")]
-        public void ChangePassword_WithPasswordTooShort_ReturnsFailure(string newPassword)
+        public async Task ChangePassword_WithPasswordTooShort_ReturnsFailure(string newPassword)
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangePassword(new User(TestEmail), newPassword, TestPassword);
+            var result = await repo.ChangePasswordAsync(new User(TestEmail), newPassword, TestPassword);
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void ChangePassword_WhenDomainNotFound_ReturnsFailure()
+        public async Task ChangePassword_WhenDomainNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangePassword(new User("john@nonexistent.com"), "NewPassword123!", TestPassword);
+            var result = await repo.ChangePasswordAsync(new User("john@nonexistent.com"), "NewPassword123!", TestPassword);
 
             Assert.True(result.IsFailure);
         }
@@ -294,41 +294,41 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- ChangeFullName ---
 
         [Fact]
-        public void ChangeFullName_WithValidUser_ReturnsSuccess()
+        public async Task ChangeFullName_WithValidUser_ReturnsSuccess()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangeFullName(new User(TestEmail), "New Name");
+            var result = await repo.ChangeFullNameAsync(new User(TestEmail), "New Name");
 
             Assert.True(result.IsSuccess);
         }
 
         [Fact]
-        public void ChangeFullName_WithValidUser_PersistsNewName()
+        public async Task ChangeFullName_WithValidUser_PersistsNewName()
         {
             var (repo, context) = CreateSut();
 
-            repo.ChangeFullName(new User(TestEmail), "New Name");
+            await repo.ChangeFullNameAsync(new User(TestEmail), "New Name");
 
             Assert.Equal("New Name", context.Users.First(u => u.Name == "john").FullName);
         }
 
         [Fact]
-        public void ChangeFullName_WhenDomainNotFound_ReturnsFailure()
+        public async Task ChangeFullName_WhenDomainNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangeFullName(new User("john@nonexistent.com"), "New Name");
+            var result = await repo.ChangeFullNameAsync(new User("john@nonexistent.com"), "New Name");
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void ChangeFullName_WhenUserNotFound_ReturnsFailure()
+        public async Task ChangeFullName_WhenUserNotFound_ReturnsFailure()
         {
             var (repo, _) = CreateSut();
 
-            var result = repo.ChangeFullName(new User("nobody@weesky.be"), "New Name");
+            var result = await repo.ChangeFullNameAsync(new User("nobody@weesky.be"), "New Name");
 
             Assert.True(result.IsFailure);
         }

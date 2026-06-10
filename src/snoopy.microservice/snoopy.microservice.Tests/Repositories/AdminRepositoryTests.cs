@@ -41,95 +41,95 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── IsAdmin ───────────────────────────────────────────
 
         [Fact]
-        public void IsAdmin_WhenDomainNotFound_ReturnsFalse()
+        public async Task IsAdmin_WhenDomainNotFound_ReturnsFalse()
         {
             using var ctx = CreateContext();
-            Assert.False(new AdminRepository(ctx).IsAdmin("alice", "unknown.com"));
+            Assert.False(await new AdminRepository(ctx).IsAdminAsync("alice", "unknown.com"));
         }
 
         [Fact]
-        public void IsAdmin_WhenUserNotInDomain_ReturnsFalse()
+        public async Task IsAdmin_WhenUserNotInDomain_ReturnsFalse()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            Assert.False(new AdminRepository(ctx).IsAdmin("nobody", "weesky.be"));
+            Assert.False(await new AdminRepository(ctx).IsAdminAsync("nobody", "weesky.be"));
         }
 
         [Fact]
-        public void IsAdmin_WhenUserAdminFlagIsN_ReturnsFalse()
+        public async Task IsAdmin_WhenUserAdminFlagIsN_ReturnsFalse()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY", admin: ActiveState.N);
-            Assert.False(new AdminRepository(ctx).IsAdmin("alice", "weesky.be"));
+            Assert.False(await new AdminRepository(ctx).IsAdminAsync("alice", "weesky.be"));
         }
 
         [Fact]
-        public void IsAdmin_WhenUserAdminFlagIsY_ReturnsTrue()
+        public async Task IsAdmin_WhenUserAdminFlagIsY_ReturnsTrue()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
-            Assert.True(new AdminRepository(ctx).IsAdmin("alice", "weesky.be"));
+            Assert.True(await new AdminRepository(ctx).IsAdminAsync("alice", "weesky.be"));
         }
 
         [Fact]
-        public void IsAdmin_IsCaseInsensitiveForUsername()
+        public async Task IsAdmin_IsCaseInsensitiveForUsername()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
-            Assert.True(new AdminRepository(ctx).IsAdmin("ALICE", "weesky.be"));
+            Assert.True(await new AdminRepository(ctx).IsAdminAsync("ALICE", "weesky.be"));
         }
 
         // ── GetAllUsers ───────────────────────────────────────
 
         [Fact]
-        public void GetAllUsers_WithNoUsers_ReturnsEmpty()
+        public async Task GetAllUsers_WithNoUsers_ReturnsEmpty()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            Assert.Empty(new AdminRepository(ctx).GetAllUsers());
+            Assert.Empty(await new AdminRepository(ctx).GetAllUsersAsync());
         }
 
         [Fact]
-        public void GetAllUsers_ReturnsAllUsersWithDomainName()
+        public async Task GetAllUsers_ReturnsAllUsersWithDomainName()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             AddUser(ctx, "alice", "WSY");
             AddUser(ctx, "bob", "WSY");
-            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
             Assert.Equal(2, users.Count);
             Assert.All(users, u => Assert.Equal("weesky.be", u.DomainName));
         }
 
         [Fact]
-        public void GetAllUsers_MapsActiveFlagCorrectly()
+        public async Task GetAllUsers_MapsActiveFlagCorrectly()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "active", "WSY", active: ActiveState.Y);
             AddUser(ctx, "inactive", "WSY", active: ActiveState.N);
-            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
             Assert.True(users.First(u => u.UserName == "active").Active);
             Assert.False(users.First(u => u.UserName == "inactive").Active);
         }
 
         [Fact]
-        public void GetAllUsers_MapsAdminFlagCorrectly()
+        public async Task GetAllUsers_MapsAdminFlagCorrectly()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "superuser", "WSY", admin: ActiveState.Y);
             AddUser(ctx, "regular", "WSY", admin: ActiveState.N);
-            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
             Assert.True(users.First(u => u.UserName == "superuser").Admin);
             Assert.False(users.First(u => u.UserName == "regular").Admin);
         }
 
         [Fact]
-        public void GetAllUsers_MapsLastLoginsWhenPresent()
+        public async Task GetAllUsers_MapsLastLoginsWhenPresent()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -138,7 +138,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = ts });
             ctx.SaveChanges();
 
-            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
             var alice = users.Single(u => u.UserName == "alice");
             Assert.Single(alice.LastLogins);
             Assert.Equal("imap", alice.LastLogins[0].Service);
@@ -146,17 +146,17 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllUsers_ReturnsEmptyLastLoginsWhenNone()
+        public async Task GetAllUsers_ReturnsEmptyLastLoginsWhenNone()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY");
-            var users = new AdminRepository(ctx).GetAllUsers().ToList();
+            var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
             Assert.Empty(users.Single().LastLogins);
         }
 
         [Fact]
-        public void GetAllUsers_OrdersLastLoginsMostRecentFirst()
+        public async Task GetAllUsers_OrdersLastLoginsMostRecentFirst()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -167,7 +167,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = newer });
             ctx.SaveChanges();
 
-            var logins = new AdminRepository(ctx).GetAllUsers().Single().LastLogins;
+            var logins = (await new AdminRepository(ctx).GetAllUsersAsync()).Single().LastLogins;
             Assert.Equal("imap", logins[0].Service);
             Assert.Equal("lmtp", logins[1].Service);
         }
@@ -175,20 +175,20 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── GetUserById ───────────────────────────────────────
 
         [Fact]
-        public void GetUserById_WhenNotFound_ReturnsNull()
+        public async Task GetUserById_WhenNotFound_ReturnsNull()
         {
             using var ctx = CreateContext();
-            Assert.Null(new AdminRepository(ctx).GetUserById(999));
+            Assert.Null(await new AdminRepository(ctx).GetUserByIdAsync(999));
         }
 
         [Fact]
-        public void GetUserById_WhenFound_ReturnsUserWithDomainName()
+        public async Task GetUserById_WhenFound_ReturnsUserWithDomainName()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y, quotaMb: 2048, fullName: "Alice Smith");
 
-            var info = new AdminRepository(ctx).GetUserById(user.Id);
+            var info = await new AdminRepository(ctx).GetUserByIdAsync(user.Id);
 
             Assert.NotNull(info);
             Assert.Equal(user.Id, info.Id);
@@ -202,74 +202,90 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── CreateUser ────────────────────────────────────────
 
         [Fact]
-        public void CreateUser_WhenUsernameBlank_ReturnsFailure()
+        public async Task CreateUser_WhenUsernameBlank_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            var result = new AdminRepository(ctx).CreateUser(
-                new AdminUserRequest { UserName = "   ", DomainId = "WSY", Password = "pw" });
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "   ", DomainId = "WSY", Password = "password123" });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void CreateUser_WhenPasswordNull_ReturnsFailure()
+        public async Task CreateUser_WhenPasswordNull_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            var result = new AdminRepository(ctx).CreateUser(
+            var result = await new AdminRepository(ctx).CreateUserAsync(
                 new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = null });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void CreateUser_WhenPasswordEmpty_ReturnsFailure()
+        public async Task CreateUser_WhenPasswordEmpty_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            var result = new AdminRepository(ctx).CreateUser(
+            var result = await new AdminRepository(ctx).CreateUserAsync(
                 new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "" });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void CreateUser_WhenDomainNotFound_ReturnsFailure()
+        public async Task CreateUser_WhenPasswordTooShort_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            var result = new AdminRepository(ctx).CreateUser(
-                new AdminUserRequest { UserName = "alice", DomainId = "ZZZ", Password = "pw" });
+            AddDomain(ctx);
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "short77" });
+            Assert.True(result.IsFailure);
+            Assert.Equal("Password must contain at least 8 characters", result.Error);
+        }
+
+        [Fact]
+        public async Task CreateUser_WhenDomainNotFound_ReturnsFailure()
+        {
+            using var ctx = CreateContext();
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "alice", DomainId = "ZZZ", Password = "password123" });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void CreateUser_WhenUsernameAlreadyExistsInDomain_ReturnsFailure()
+        public async Task CreateUser_WhenUsernameAlreadyExistsInDomain_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY");
-            var result = new AdminRepository(ctx).CreateUser(
-                new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "pw" });
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "password123" });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void CreateUser_DuplicateCheckIsCaseInsensitive()
+        public async Task CreateUser_DuplicateCheckIsCaseInsensitive()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY");
-            var result = new AdminRepository(ctx).CreateUser(
-                new AdminUserRequest { UserName = "ALICE", DomainId = "WSY", Password = "pw" });
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "ALICE", DomainId = "WSY", Password = "password123" });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void CreateUser_WithValidRequest_ReturnsSuccess()
+        public async Task CreateUser_WithValidRequest_ReturnsSuccess()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
-            var result = new AdminRepository(ctx).CreateUser(new AdminUserRequest
+            var result = await new AdminRepository(ctx).CreateUserAsync(new AdminUserRequest
             {
-                UserName = "alice", DomainId = "WSY", Password = "secret",
-                FullName = "Alice Smith", QuotaMb = 2048, Active = true, Admin = false
+                UserName = "alice",
+                DomainId = "WSY",
+                Password = "secret123",
+                FullName = "Alice Smith",
+                QuotaMb = 2048,
+                Active = true,
+                Admin = false
             });
             Assert.True(result.IsSuccess);
             Assert.Equal("alice", result.Value.UserName);
@@ -280,32 +296,32 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void CreateUser_NormalisesUsernameLowercase()
+        public async Task CreateUser_NormalisesUsernameLowercase()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            var result = new AdminRepository(ctx).CreateUser(
-                new AdminUserRequest { UserName = "ALICE", DomainId = "WSY", Password = "pw" });
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "ALICE", DomainId = "WSY", Password = "password123" });
             Assert.Equal("alice", result.Value.UserName);
         }
 
         [Fact]
-        public void CreateUser_StoresPasswordAsPlaintext()
+        public async Task CreateUser_StoresPasswordAsPlaintext()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            new AdminRepository(ctx).CreateUser(
+            await new AdminRepository(ctx).CreateUserAsync(
                 new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "mysecret" });
             Assert.Equal("mysecret", ctx.Users.First(u => u.Name == "alice").Password);
         }
 
         [Fact]
-        public void CreateUser_AssignsAdminFlag()
+        public async Task CreateUser_AssignsAdminFlag()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            var result = new AdminRepository(ctx).CreateUser(
-                new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "pw", Admin = true });
+            var result = await new AdminRepository(ctx).CreateUserAsync(
+                new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "password123", Admin = true });
             Assert.True(result.Value.Admin);
             Assert.Equal(ActiveState.Y, ctx.Users.First(u => u.Name == "alice").Admin);
         }
@@ -313,90 +329,104 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── UpdateUser ────────────────────────────────────────
 
         [Fact]
-        public void UpdateUser_WhenUserNotFound_ReturnsFailure()
+        public async Task UpdateUser_WhenUserNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            var result = new AdminRepository(ctx).UpdateUser(999,
+            var result = await new AdminRepository(ctx).UpdateUserAsync(999,
                 new AdminUserRequest { UserName = "x", QuotaMb = 1024 });
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void UpdateUser_UpdatesFullName()
+        public async Task UpdateUser_UpdatesFullName()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY", fullName: "Old Name");
-            var result = new AdminRepository(ctx).UpdateUser(user.Id,
+            var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
                 new AdminUserRequest { UserName = "alice", FullName = "New Name", QuotaMb = 1024 });
             Assert.True(result.IsSuccess);
             Assert.Equal("New Name", result.Value.FullName);
         }
 
         [Fact]
-        public void UpdateUser_UpdatesQuota()
+        public async Task UpdateUser_UpdatesQuota()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY", quotaMb: 1024);
-            var result = new AdminRepository(ctx).UpdateUser(user.Id,
+            var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
                 new AdminUserRequest { UserName = "alice", QuotaMb = 4096 });
             Assert.Equal(4096, result.Value.QuotaMb);
         }
 
         [Fact]
-        public void UpdateUser_WhenPasswordNull_DoesNotChangePassword()
+        public async Task UpdateUser_WhenPasswordNull_DoesNotChangePassword()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY");
             var originalPw = ctx.Users.First(u => u.Id == user.Id).Password;
-            new AdminRepository(ctx).UpdateUser(user.Id,
+            await new AdminRepository(ctx).UpdateUserAsync(user.Id,
                 new AdminUserRequest { UserName = "alice", Password = null, QuotaMb = 1024 });
             Assert.Equal(originalPw, ctx.Users.First(u => u.Id == user.Id).Password);
         }
 
         [Fact]
-        public void UpdateUser_WhenPasswordEmpty_DoesNotChangePassword()
+        public async Task UpdateUser_WhenPasswordEmpty_DoesNotChangePassword()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY");
             var originalPw = ctx.Users.First(u => u.Id == user.Id).Password;
-            new AdminRepository(ctx).UpdateUser(user.Id,
+            await new AdminRepository(ctx).UpdateUserAsync(user.Id,
                 new AdminUserRequest { UserName = "alice", Password = "", QuotaMb = 1024 });
             Assert.Equal(originalPw, ctx.Users.First(u => u.Id == user.Id).Password);
         }
 
         [Fact]
-        public void UpdateUser_WhenPasswordProvided_UpdatesPasswordAsPlaintext()
+        public async Task UpdateUser_WhenPasswordTooShort_ReturnsFailureAndDoesNotChangePassword()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY");
-            new AdminRepository(ctx).UpdateUser(user.Id,
-                new AdminUserRequest { UserName = "alice", Password = "newpass", QuotaMb = 1024 });
-            Assert.Equal("newpass", ctx.Users.First(u => u.Id == user.Id).Password);
+            var originalPw = ctx.Users.First(u => u.Id == user.Id).Password;
+            var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+                new AdminUserRequest { UserName = "alice", Password = "short77", QuotaMb = 1024 });
+            Assert.True(result.IsFailure);
+            Assert.Equal("Password must contain at least 8 characters", result.Error);
+            Assert.Equal(originalPw, ctx.Users.First(u => u.Id == user.Id).Password);
         }
 
         [Fact]
-        public void UpdateUser_UpdatesActiveFlag()
+        public async Task UpdateUser_WhenPasswordProvided_UpdatesPasswordAsPlaintext()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx);
+            var user = AddUser(ctx, "alice", "WSY");
+            await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+                new AdminUserRequest { UserName = "alice", Password = "newpass123", QuotaMb = 1024 });
+            Assert.Equal("newpass123", ctx.Users.First(u => u.Id == user.Id).Password);
+        }
+
+        [Fact]
+        public async Task UpdateUser_UpdatesActiveFlag()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY", active: ActiveState.Y);
-            var result = new AdminRepository(ctx).UpdateUser(user.Id,
+            var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
                 new AdminUserRequest { UserName = "alice", QuotaMb = 1024, Active = false });
             Assert.False(result.Value.Active);
         }
 
         [Fact]
-        public void UpdateUser_UpdatesAdminFlag()
+        public async Task UpdateUser_UpdatesAdminFlag()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.N);
-            var result = new AdminRepository(ctx).UpdateUser(user.Id,
+            var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
                 new AdminUserRequest { UserName = "alice", QuotaMb = 1024, Admin = true });
             Assert.True(result.Value.Admin);
         }
@@ -404,47 +434,47 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── DeleteUser ────────────────────────────────────────
 
         [Fact]
-        public void DeleteUser_WhenNotFound_ReturnsFailure()
+        public async Task DeleteUser_WhenNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).DeleteUser(999).IsFailure);
+            Assert.True((await new AdminRepository(ctx).DeleteUserAsync(999)).IsFailure);
         }
 
         [Fact]
-        public void DeleteUser_WhenFound_ReturnsSuccess()
+        public async Task DeleteUser_WhenFound_ReturnsSuccess()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY");
-            Assert.True(new AdminRepository(ctx).DeleteUser(user.Id).IsSuccess);
+            Assert.True((await new AdminRepository(ctx).DeleteUserAsync(user.Id)).IsSuccess);
         }
 
         [Fact]
-        public void DeleteUser_RemovesUserFromDatabase()
+        public async Task DeleteUser_RemovesUserFromDatabase()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             var user = AddUser(ctx, "alice", "WSY");
-            new AdminRepository(ctx).DeleteUser(user.Id);
+            await new AdminRepository(ctx).DeleteUserAsync(user.Id);
             Assert.False(ctx.Users.Any(u => u.Id == user.Id));
         }
 
         // ── GetAllDomains ─────────────────────────────────────
 
         [Fact]
-        public void GetAllDomains_WithNoDomains_ReturnsEmpty()
+        public async Task GetAllDomains_WithNoDomains_ReturnsEmpty()
         {
             using var ctx = CreateContext();
-            Assert.Empty(new AdminRepository(ctx).GetAllDomains());
+            Assert.Empty(await new AdminRepository(ctx).GetAllDomainsAsync());
         }
 
         [Fact]
-        public void GetAllDomains_ReturnsAllDomains()
+        public async Task GetAllDomains_ReturnsAllDomains()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             AddDomain(ctx, "TST", "test.com");
-            var domains = new AdminRepository(ctx).GetAllDomains().ToList();
+            var domains = (await new AdminRepository(ctx).GetAllDomainsAsync()).ToList();
             Assert.Equal(2, domains.Count);
             Assert.Contains(domains, d => d.Id == "WSY" && d.Name == "weesky.be");
             Assert.Contains(domains, d => d.Id == "TST" && d.Name == "test.com");
@@ -453,135 +483,135 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── CreateDomain ──────────────────────────────────────
 
         [Fact]
-        public void CreateDomain_WhenIdEmpty_ReturnsFailure()
+        public async Task CreateDomain_WhenIdEmpty_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).CreateDomain(
-                new AdminDomainRequest { Id = "", Name = "test.com" }).IsFailure);
+            Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+                new AdminDomainRequest { Id = "", Name = "test.com" })).IsFailure);
         }
 
         [Fact]
-        public void CreateDomain_WhenIdTooLong_ReturnsFailure()
+        public async Task CreateDomain_WhenIdTooLong_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).CreateDomain(
-                new AdminDomainRequest { Id = "ABCD", Name = "test.com" }).IsFailure);
+            Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+                new AdminDomainRequest { Id = "ABCD", Name = "test.com" })).IsFailure);
         }
 
         [Fact]
-        public void CreateDomain_WhenNameEmpty_ReturnsFailure()
+        public async Task CreateDomain_WhenNameEmpty_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).CreateDomain(
-                new AdminDomainRequest { Id = "TST", Name = "" }).IsFailure);
+            Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+                new AdminDomainRequest { Id = "TST", Name = "" })).IsFailure);
         }
 
         [Fact]
-        public void CreateDomain_WhenIdAlreadyExists_ReturnsFailure()
+        public async Task CreateDomain_WhenIdAlreadyExists_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
-            Assert.True(new AdminRepository(ctx).CreateDomain(
-                new AdminDomainRequest { Id = "WSY", Name = "other.com" }).IsFailure);
+            Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+                new AdminDomainRequest { Id = "WSY", Name = "other.com" })).IsFailure);
         }
 
         [Fact]
-        public void CreateDomain_WithValidRequest_ReturnsSuccess()
+        public async Task CreateDomain_WithValidRequest_ReturnsSuccess()
         {
             using var ctx = CreateContext();
-            var result = new AdminRepository(ctx).CreateDomain(
+            var result = await new AdminRepository(ctx).CreateDomainAsync(
                 new AdminDomainRequest { Id = "TST", Name = "test.com" });
             Assert.True(result.IsSuccess);
             Assert.Equal("test.com", result.Value.Name);
         }
 
         [Fact]
-        public void CreateDomain_NormalisesIdToUppercase()
+        public async Task CreateDomain_NormalisesIdToUppercase()
         {
             using var ctx = CreateContext();
-            var result = new AdminRepository(ctx).CreateDomain(
+            var result = await new AdminRepository(ctx).CreateDomainAsync(
                 new AdminDomainRequest { Id = "tst", Name = "test.com" });
             Assert.Equal("TST", result.Value.Id);
         }
 
         [Fact]
-        public void CreateDomain_PersistsDomainToDatabase()
+        public async Task CreateDomain_PersistsDomainToDatabase()
         {
             using var ctx = CreateContext();
-            new AdminRepository(ctx).CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" });
+            await new AdminRepository(ctx).CreateDomainAsync(new AdminDomainRequest { Id = "TST", Name = "test.com" });
             Assert.True(ctx.Domains.Any(d => d.Id == "TST"));
         }
 
         // ── UpdateDomain ──────────────────────────────────────
 
         [Fact]
-        public void UpdateDomain_WhenNameEmpty_ReturnsFailure()
+        public async Task UpdateDomain_WhenNameEmpty_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).UpdateDomain("WSY",
-                new AdminDomainRequest { Name = "" }).IsFailure);
+            Assert.True((await new AdminRepository(ctx).UpdateDomainAsync("WSY",
+                new AdminDomainRequest { Name = "" })).IsFailure);
         }
 
         [Fact]
-        public void UpdateDomain_WhenDomainNotFound_ReturnsFailure()
+        public async Task UpdateDomain_WhenDomainNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).UpdateDomain("ZZZ",
-                new AdminDomainRequest { Name = "new.com" }).IsFailure);
+            Assert.True((await new AdminRepository(ctx).UpdateDomainAsync("ZZZ",
+                new AdminDomainRequest { Name = "new.com" })).IsFailure);
         }
 
         [Fact]
-        public void UpdateDomain_WithValidRequest_ReturnsSuccess()
+        public async Task UpdateDomain_WithValidRequest_ReturnsSuccess()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
-            var result = new AdminRepository(ctx).UpdateDomain("WSY",
+            var result = await new AdminRepository(ctx).UpdateDomainAsync("WSY",
                 new AdminDomainRequest { Name = "new.weesky.be" });
             Assert.True(result.IsSuccess);
             Assert.Equal("new.weesky.be", result.Value.Name);
         }
 
         [Fact]
-        public void UpdateDomain_PersistsNameChangeToDatabase()
+        public async Task UpdateDomain_PersistsNameChangeToDatabase()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
-            new AdminRepository(ctx).UpdateDomain("WSY", new AdminDomainRequest { Name = "updated.be" });
+            await new AdminRepository(ctx).UpdateDomainAsync("WSY", new AdminDomainRequest { Name = "updated.be" });
             Assert.Equal("updated.be", ctx.Domains.First(d => d.Id == "WSY").Name);
         }
 
         // ── DeleteDomain ──────────────────────────────────────
 
         [Fact]
-        public void DeleteDomain_WhenNotFound_ReturnsFailure()
+        public async Task DeleteDomain_WhenNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).DeleteDomain("ZZZ").IsFailure);
+            Assert.True((await new AdminRepository(ctx).DeleteDomainAsync("ZZZ")).IsFailure);
         }
 
         [Fact]
-        public void DeleteDomain_WhenDomainHasUsers_ReturnsFailure()
+        public async Task DeleteDomain_WhenDomainHasUsers_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
             AddUser(ctx, "alice", "WSY");
-            Assert.True(new AdminRepository(ctx).DeleteDomain("WSY").IsFailure);
+            Assert.True((await new AdminRepository(ctx).DeleteDomainAsync("WSY")).IsFailure);
         }
 
         [Fact]
-        public void DeleteDomain_WhenDomainEmpty_ReturnsSuccess()
+        public async Task DeleteDomain_WhenDomainEmpty_ReturnsSuccess()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            Assert.True(new AdminRepository(ctx).DeleteDomain("WSY").IsSuccess);
+            Assert.True((await new AdminRepository(ctx).DeleteDomainAsync("WSY")).IsSuccess);
         }
 
         [Fact]
-        public void DeleteDomain_RemovesDomainFromDatabase()
+        public async Task DeleteDomain_RemovesDomainFromDatabase()
         {
             using var ctx = CreateContext();
             AddDomain(ctx);
-            new AdminRepository(ctx).DeleteDomain("WSY");
+            await new AdminRepository(ctx).DeleteDomainAsync("WSY");
             Assert.False(ctx.Domains.Any(d => d.Id == "WSY"));
         }
 
@@ -594,40 +624,40 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllVirtualDomains_WithNoDomains_ReturnsEmpty()
+        public async Task GetAllVirtualDomains_WithNoDomains_ReturnsEmpty()
         {
             using var ctx = CreateContext();
-            Assert.Empty(new AdminRepository(ctx).GetAllVirtualDomains());
+            Assert.Empty(await new AdminRepository(ctx).GetAllVirtualDomainsAsync());
         }
 
         [Fact]
-        public void GetAllVirtualDomains_ExcludesPrimaryDomainWithNoOwnership()
+        public async Task GetAllVirtualDomains_ExcludesPrimaryDomainWithNoOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             AddUser(ctx, "alice", "WSY");
-            Assert.Empty(new AdminRepository(ctx).GetAllVirtualDomains());
+            Assert.Empty(await new AdminRepository(ctx).GetAllVirtualDomainsAsync());
         }
 
         [Fact]
-        public void GetAllVirtualDomains_IncludesPrimaryDomainWhenInOwnershipsTable()
+        public async Task GetAllVirtualDomains_IncludesPrimaryDomainWhenInOwnershipsTable()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var alice = AddUser(ctx, "alice", "WSY");
             AddOwnership(ctx, "WSY", alice.Id);
-            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
+            var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
             Assert.Single(result);
             Assert.Equal("WSY", result[0].DomainId);
             Assert.Contains(result[0].Owners, o => o.OwnerId == alice.Id);
         }
 
         [Fact]
-        public void GetAllVirtualDomains_ReturnsAliasDomainWithNoOwner()
+        public async Task GetAllVirtualDomains_ReturnsAliasDomainWithNoOwner()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "EXT", "extra.com");
-            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
+            var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
             Assert.Single(result);
             Assert.Equal("EXT", result[0].DomainId);
             Assert.Equal("extra.com", result[0].DomainName);
@@ -635,14 +665,14 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllVirtualDomains_ReturnsAliasDomainWithOwner()
+        public async Task GetAllVirtualDomains_ReturnsAliasDomainWithOwner()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", user.Id);
-            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
+            var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
             Assert.Single(result);
             Assert.Equal("EXT", result[0].DomainId);
             Assert.Single(result[0].Owners);
@@ -651,7 +681,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void GetAllVirtualDomains_ReturnsAliasDomainWithMultipleOwners()
+        public async Task GetAllVirtualDomains_ReturnsAliasDomainWithMultipleOwners()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -660,7 +690,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
             AddOwnership(ctx, "EXT", bob.Id);
-            var result = new AdminRepository(ctx).GetAllVirtualDomains().ToList();
+            var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
             Assert.Single(result);
             Assert.Equal(2, result[0].Owners.Count);
             Assert.Contains(result[0].Owners, o => o.OwnerEmail == "alice@weesky.be");
@@ -670,28 +700,28 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── AddVirtualDomainOwner ──────────────────────────────────────
 
         [Fact]
-        public void AddVirtualDomainOwner_WhenDomainNotFound_ReturnsFailure()
+        public async Task AddVirtualDomainOwner_WhenDomainNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).AddVirtualDomainOwner("ZZZ", 1).IsFailure);
+            Assert.True((await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("ZZZ", 1)).IsFailure);
         }
 
         [Fact]
-        public void AddVirtualDomainOwner_WhenUserNotFound_ReturnsFailure()
+        public async Task AddVirtualDomainOwner_WhenUserNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "EXT", "extra.com");
-            Assert.True(new AdminRepository(ctx).AddVirtualDomainOwner("EXT", 999).IsFailure);
+            Assert.True((await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", 999)).IsFailure);
         }
 
         [Fact]
-        public void AddVirtualDomainOwner_WhenValid_CreatesOwnership()
+        public async Task AddVirtualDomainOwner_WhenValid_CreatesOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
-            var result = new AdminRepository(ctx).AddVirtualDomainOwner("EXT", user.Id);
+            var result = await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", user.Id);
             Assert.True(result.IsSuccess);
             Assert.Equal("EXT", result.Value.DomainId);
             Assert.Single(result.Value.Owners);
@@ -701,7 +731,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         }
 
         [Fact]
-        public void AddVirtualDomainOwner_WithSecondUser_AddsSecondOwner()
+        public async Task AddVirtualDomainOwner_WithSecondUser_AddsSecondOwner()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -709,21 +739,21 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             var bob = AddUser(ctx, "bob", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
-            var result = new AdminRepository(ctx).AddVirtualDomainOwner("EXT", bob.Id);
+            var result = await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", bob.Id);
             Assert.True(result.IsSuccess);
             Assert.Equal(2, result.Value.Owners.Count);
             Assert.Equal(2, ctx.DomainsOwnerships.Count());
         }
 
         [Fact]
-        public void AddVirtualDomainOwner_WhenSameUserAlreadyOwns_IsIdempotent()
+        public async Task AddVirtualDomainOwner_WhenSameUserAlreadyOwns_IsIdempotent()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var alice = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
-            var result = new AdminRepository(ctx).AddVirtualDomainOwner("EXT", alice.Id);
+            var result = await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", alice.Id);
             Assert.True(result.IsSuccess);
             Assert.Single(ctx.DomainsOwnerships);
         }
@@ -731,27 +761,27 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // ── RemoveVirtualDomainOwner ───────────────────────────────────
 
         [Fact]
-        public void RemoveVirtualDomainOwner_WhenNotFound_ReturnsFailure()
+        public async Task RemoveVirtualDomainOwner_WhenNotFound_ReturnsFailure()
         {
             using var ctx = CreateContext();
-            Assert.True(new AdminRepository(ctx).RemoveVirtualDomainOwner("EXT", 1).IsFailure);
+            Assert.True((await new AdminRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", 1)).IsFailure);
         }
 
         [Fact]
-        public void RemoveVirtualDomainOwner_WhenValid_RemovesOwnership()
+        public async Task RemoveVirtualDomainOwner_WhenValid_RemovesOwnership()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
             var user = AddUser(ctx, "alice", "WSY");
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", user.Id);
-            var result = new AdminRepository(ctx).RemoveVirtualDomainOwner("EXT", user.Id);
+            var result = await new AdminRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", user.Id);
             Assert.True(result.IsSuccess);
             Assert.Empty(ctx.DomainsOwnerships);
         }
 
         [Fact]
-        public void RemoveVirtualDomainOwner_WhenMultipleOwners_OnlyRemovesSpecified()
+        public async Task RemoveVirtualDomainOwner_WhenMultipleOwners_OnlyRemovesSpecified()
         {
             using var ctx = CreateContext();
             AddDomain(ctx, "WSY", "weesky.be");
@@ -760,7 +790,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             AddDomain(ctx, "EXT", "extra.com");
             AddOwnership(ctx, "EXT", alice.Id);
             AddOwnership(ctx, "EXT", bob.Id);
-            var result = new AdminRepository(ctx).RemoveVirtualDomainOwner("EXT", alice.Id);
+            var result = await new AdminRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", alice.Id);
             Assert.True(result.IsSuccess);
             Assert.Single(ctx.DomainsOwnerships);
             Assert.Equal(bob.Id, ctx.DomainsOwnerships.Single().UserId);

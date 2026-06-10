@@ -8,32 +8,32 @@ using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Authentication.Services
 {
-	public class TokenManager : ITokenManager
-	{
-		private IOptions<TokenConstants> TokenConstants { get;}
+    public class TokenManager : ITokenManager
+    {
+        private IOptions<TokenConstants> TokenConstants { get; }
 
-		public TokenManager(IOptions<TokenConstants> tokenConstants)
-		{
-			TokenConstants = tokenConstants;
-		}
+        public TokenManager(IOptions<TokenConstants> tokenConstants)
+        {
+            TokenConstants = tokenConstants;
+        }
 
-		public AuthToken Generate(User user)
-		{
-			var tokenBuilder = new TokenBuilder();
+        public AuthToken Generate(User user)
+        {
+            var tokenBuilder = new TokenBuilder();
 
-			JwtSecurityToken token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
-				.AddClaim(ClaimTypes.Dns, user.Domain)
-				.AddIssuer(TokenConstants.Value.Issuer)
-				.AddAudience(TokenConstants.Value.Audience)
-				.AddExpiry(TokenConstants.Value.ExpiryInMinutes)
-				.AddKey(TokenConstants.Value.Key)
-				.Build();
+            JwtSecurityToken token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
+                .AddClaim(ClaimTypes.Dns, user.Domain)
+                .AddIssuer(TokenConstants.Value.Issuer)
+                .AddAudience(TokenConstants.Value.Audience)
+                .AddExpiry(TokenConstants.Value.ExpiryInMinutes)
+                .AddKey(TokenConstants.Value.Key)
+                .Build();
 
-			return new AuthToken
-			{
-				ExpiresIn = TokenConstants.Value.ExpiryInMinutes,
-				Token = token.SerializeToString()
-			};
-		}
-	}
+            return new AuthToken
+            {
+                ExpiresIn = TokenConstants.Value.ExpiryInMinutes,
+                Token = token.SerializeToString()
+            };
+        }
+    }
 }

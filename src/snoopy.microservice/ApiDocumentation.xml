@@ -622,7 +622,7 @@
             3. Otherwise null (no script at all).
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUser(System.String,System.String)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUserAsync(System.String,System.String)">
             <summary>
             Resolves the domain by name then the mailbox user within it (name matched
             case-insensitively). Returns null when either is missing.

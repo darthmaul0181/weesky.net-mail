@@ -8,9 +8,9 @@ using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Authentication.Extensions
 {
-	[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-	public static class AuthorizationExtension
-	{
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    public static class AuthorizationExtension
+    {
         /// <summary>
         /// Adds JwtBearer Middleware to the Pipeline. The bearer options are configured
         /// through the named-options pipeline so <see cref="TokenConstants"/> is resolved
@@ -59,7 +59,7 @@ namespace weesky.Snoopy.Microservice.Authentication.Extensions
 
                             return Task.CompletedTask;
                         },
-                        OnTokenValidated = context =>
+                        OnTokenValidated = async context =>
                         {
                             var claims = context.Principal?.Claims ?? Enumerable.Empty<Claim>();
                             var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Upn)?.Value;
@@ -68,16 +68,14 @@ namespace weesky.Snoopy.Microservice.Authentication.Extensions
                             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(domain))
                             {
                                 context.Fail("Missing required claims");
-                                return Task.CompletedTask;
+                                return;
                             }
 
                             var repo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
-                            if (repo.FindByEmail($"{name}@{domain}") == null)
+                            if (await repo.FindByEmailAsync($"{name}@{domain}") == null)
                             {
                                 context.Fail("User no longer exists");
                             }
-
-                            return Task.CompletedTask;
                         }
                     };
                 });

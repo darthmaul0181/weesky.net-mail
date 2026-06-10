@@ -55,19 +55,20 @@ builder.Host.UseSerilog((ctx, cfg) =>
 // Add services to the container.
 
 var connectionString = new MySqlConnector.MySqlConnectionStringBuilder(
-	builder.Configuration.GetConnectionString("MailUserAccountsDatabase")
-		?? throw new InvalidOperationException("Connection string 'MailUserAccountsDatabase' is missing"))
+    builder.Configuration.GetConnectionString("MailUserAccountsDatabase")
+        ?? throw new InvalidOperationException("Connection string 'MailUserAccountsDatabase' is missing"))
 {
-	ConvertZeroDateTime = true
+    ConvertZeroDateTime = true
 }.ToString();
 
 // Detect the server version once at startup: ServerVersion.AutoDetect opens a database
 // connection, so it must not run on every DbContext instantiation.
 var serverVersion = ServerVersion.AutoDetect(connectionString);
 
-builder.Services.AddDbContext<ApplicationDbContext>(options => {
-	options.UseMySql(connectionString, serverVersion, mySqlOptions => mySqlOptions.EnableStringComparisonTranslations())
-	.LogTo(Console.WriteLine, LogLevel.Warning);
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseMySql(connectionString, serverVersion, mySqlOptions => mySqlOptions.EnableStringComparisonTranslations())
+    .LogTo(Console.WriteLine, LogLevel.Warning);
 });
 
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
@@ -135,7 +136,7 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
-    o.JsonSerializerOptions.IgnoreNullValues = true;
+    o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
@@ -185,8 +186,8 @@ app.Use(async (context, next) =>
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-	app.UseSwagger();
-	app.UseSwaggerUI();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseCors("Frontend");

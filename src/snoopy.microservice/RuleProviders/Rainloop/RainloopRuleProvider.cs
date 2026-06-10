@@ -134,13 +134,13 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
         {
             var op = c.Type switch
             {
-                "Contains"    => SieveConditionOperator.Contains,
+                "Contains" => SieveConditionOperator.Contains,
                 "NotContains" => SieveConditionOperator.NotContains,
-                "EqualTo"     => SieveConditionOperator.Equals,
-                "NotEqualTo"  => SieveConditionOperator.NotEquals,
-                "Regex"       => SieveConditionOperator.Matches,
-                "Over"        => SieveConditionOperator.Larger,
-                "Under"       => SieveConditionOperator.Smaller,
+                "EqualTo" => SieveConditionOperator.Equals,
+                "NotEqualTo" => SieveConditionOperator.NotEquals,
+                "Regex" => SieveConditionOperator.Matches,
+                "Over" => SieveConditionOperator.Larger,
+                "Under" => SieveConditionOperator.Smaller,
                 _ => (SieveConditionOperator?)null
             };
             if (op == null) return Result.Failure<SieveCondition>($"Unsupported Rainloop condition type: {c.Type}");
@@ -367,13 +367,13 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
 
             var type = c.Operator switch
             {
-                SieveConditionOperator.Contains    => "Contains",
+                SieveConditionOperator.Contains => "Contains",
                 SieveConditionOperator.NotContains => "NotContains",
-                SieveConditionOperator.Equals      => "EqualTo",
-                SieveConditionOperator.NotEquals   => "NotEqualTo",
-                SieveConditionOperator.Matches     => "Regex",
-                SieveConditionOperator.Larger      => "Over",
-                SieveConditionOperator.Smaller     => "Under",
+                SieveConditionOperator.Equals => "EqualTo",
+                SieveConditionOperator.NotEquals => "NotEqualTo",
+                SieveConditionOperator.Matches => "Regex",
+                SieveConditionOperator.Larger => "Over",
+                SieveConditionOperator.Smaller => "Under",
                 _ => null
             };
             if (type == null) return Result.Failure<RainloopCondition>($"Unsupported operator for Rainloop: {c.Operator}");
@@ -487,8 +487,8 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
             var matchOp = c.Operator switch
             {
                 SieveConditionOperator.Contains or SieveConditionOperator.NotContains => ":contains",
-                SieveConditionOperator.Equals   or SieveConditionOperator.NotEquals   => ":is",
-                SieveConditionOperator.Matches  => ":matches",
+                SieveConditionOperator.Equals or SieveConditionOperator.NotEquals => ":is",
+                SieveConditionOperator.Matches => ":matches",
                 _ => throw new InvalidOperationException()
             };
 
@@ -499,11 +499,11 @@ namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop
             {
                 var name = c.Field switch
                 {
-                    SieveConditionField.From    => "From",
-                    SieveConditionField.To      => "To",
-                    SieveConditionField.Cc      => "Cc",
+                    SieveConditionField.From => "From",
+                    SieveConditionField.To => "To",
+                    SieveConditionField.Cc => "Cc",
                     SieveConditionField.Subject => "Subject",
-                    SieveConditionField.Header  => c.HeaderName!,
+                    SieveConditionField.Header => c.HeaderName!,
                     _ => throw new InvalidOperationException()
                 };
                 expr = $"header {matchOp} [{QuoteSimple(name)}] {QuoteSimple(c.Value)}";

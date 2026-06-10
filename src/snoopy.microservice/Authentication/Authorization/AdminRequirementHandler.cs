@@ -13,19 +13,17 @@ namespace weesky.Snoopy.Microservice.Authentication.Authorization
             _adminRepository = adminRepository;
         }
 
-        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, AdminRequirement requirement)
+        protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, AdminRequirement requirement)
         {
             var name = context.User.FindFirst(ClaimTypes.Upn)?.Value;
             var domain = context.User.FindFirst(ClaimTypes.Dns)?.Value;
 
             if (!string.IsNullOrWhiteSpace(name) &&
                 !string.IsNullOrWhiteSpace(domain) &&
-                _adminRepository.IsAdmin(name, domain))
+                await _adminRepository.IsAdminAsync(name, domain))
             {
                 context.Succeed(requirement);
             }
-
-            return Task.CompletedTask;
         }
     }
 }

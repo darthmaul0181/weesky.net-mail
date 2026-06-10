@@ -316,13 +316,13 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 bool isCurrent = c.Field == SieveConditionField.CurrentDate;
                 return c.Operator switch
                 {
-                    SieveConditionOperator.Before    => isCurrent
+                    SieveConditionOperator.Before => isCurrent
                         ? $"currentdate :value \"lt\" \"date\" {dateValue}"
                         : $"date :value \"lt\" \"date\" \"Date\" {dateValue}",
                     SieveConditionOperator.OnOrAfter => isCurrent
                         ? $"currentdate :value \"ge\" \"date\" {dateValue}"
                         : $"date :value \"ge\" \"date\" \"Date\" {dateValue}",
-                    _                                => isCurrent
+                    _ => isCurrent
                         ? $"currentdate :is \"date\" {dateValue}"
                         : $"date :is \"date\" \"Date\" {dateValue}"
                 };
@@ -341,9 +341,9 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 var hourVal = Quote(c.Value!.Trim());
                 return c.Operator switch
                 {
-                    SieveConditionOperator.Before    => $"currentdate :value \"lt\" \"hour\" {hourVal}",
+                    SieveConditionOperator.Before => $"currentdate :value \"lt\" \"hour\" {hourVal}",
                     SieveConditionOperator.OnOrAfter => $"currentdate :value \"ge\" \"hour\" {hourVal}",
-                    _                                => $"currentdate :is \"hour\" {hourVal}"
+                    _ => $"currentdate :is \"hour\" {hourVal}"
                 };
             }
 
@@ -353,8 +353,8 @@ namespace weesky.Snoopy.Microservice.RuleProviders
                 var bodyOp = c.Operator switch
                 {
                     SieveConditionOperator.Matches => ":matches",
-                    SieveConditionOperator.Regex   => ":regex",
-                    _                              => ":contains"
+                    SieveConditionOperator.Regex => ":regex",
+                    _ => ":contains"
                 };
                 var bodyExpr = $"body :text {bodyOp} {Quote(c.Value)}";
                 return bodyNegate ? $"not {bodyExpr}" : bodyExpr;
@@ -363,10 +363,10 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             bool negate = c.Operator is SieveConditionOperator.NotContains or SieveConditionOperator.NotEquals;
             var matchOp = c.Operator switch
             {
-                SieveConditionOperator.Contains    or SieveConditionOperator.NotContains => ":contains",
-                SieveConditionOperator.Equals      or SieveConditionOperator.NotEquals   => ":is",
-                SieveConditionOperator.Matches     => ":matches",
-                SieveConditionOperator.Regex       => ":regex",
+                SieveConditionOperator.Contains or SieveConditionOperator.NotContains => ":contains",
+                SieveConditionOperator.Equals or SieveConditionOperator.NotEquals => ":is",
+                SieveConditionOperator.Matches => ":matches",
+                SieveConditionOperator.Regex => ":regex",
                 _ => throw new InvalidOperationException($"Operator {c.Operator} is not valid for a text field")
             };
 
@@ -388,11 +388,11 @@ namespace weesky.Snoopy.Microservice.RuleProviders
             {
                 var headerName = c.Field switch
                 {
-                    SieveConditionField.From    => "From",
-                    SieveConditionField.To      => "To",
-                    SieveConditionField.Cc      => "Cc",
+                    SieveConditionField.From => "From",
+                    SieveConditionField.To => "To",
+                    SieveConditionField.Cc => "Cc",
                     SieveConditionField.Subject => "Subject",
-                    SieveConditionField.Header  => c.HeaderName!,
+                    SieveConditionField.Header => c.HeaderName!,
                     _ => throw new InvalidOperationException($"Field {c.Field} is not a text field")
                 };
                 expr = $"header {matchOp} {Quote(headerName)} {Quote(c.Value)}";

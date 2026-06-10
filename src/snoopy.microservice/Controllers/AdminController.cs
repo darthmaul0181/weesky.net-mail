@@ -30,9 +30,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<IEnumerable<AdminUserInfo>> GetUsers()
+        public async Task<ActionResult<IEnumerable<AdminUserInfo>>> GetUsers()
         {
-            return Ok(_adminRepository.GetAllUsers());
+            return Ok(await _adminRepository.GetAllUsersAsync());
         }
 
         /// <summary>Creates a new user</summary>
@@ -45,11 +45,11 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<AdminUserInfo> CreateUser(AdminUserRequest request)
+        public async Task<ActionResult<AdminUserInfo>> CreateUser(AdminUserRequest request)
         {
             if (string.IsNullOrEmpty(request.Password))
                 return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Password is required"));
-            Result<AdminUserInfo> result = _adminRepository.CreateUser(request);
+            Result<AdminUserInfo> result = await _adminRepository.CreateUserAsync(request);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
             return StatusCode(StatusCodes.Status201Created, result.Value);
         }
@@ -64,9 +64,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<AdminUserInfo> UpdateUser(int id, AdminUserRequest request)
+        public async Task<ActionResult<AdminUserInfo>> UpdateUser(int id, AdminUserRequest request)
         {
-            Result<AdminUserInfo> result = _adminRepository.UpdateUser(id, request);
+            Result<AdminUserInfo> result = await _adminRepository.UpdateUserAsync(id, request);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
             return Ok(result.Value);
         }
@@ -81,9 +81,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult DeleteUser(int id)
+        public async Task<ActionResult> DeleteUser(int id)
         {
-            Result result = _adminRepository.DeleteUser(id);
+            Result result = await _adminRepository.DeleteUserAsync(id);
             return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
@@ -95,9 +95,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<IEnumerable<Domain>> GetDomains()
+        public async Task<ActionResult<IEnumerable<Domain>>> GetDomains()
         {
-            return Ok(_adminRepository.GetAllDomains());
+            return Ok(await _adminRepository.GetAllDomainsAsync());
         }
 
         /// <summary>Creates a new domain</summary>
@@ -110,9 +110,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<Domain> CreateDomain(AdminDomainRequest request)
+        public async Task<ActionResult<Domain>> CreateDomain(AdminDomainRequest request)
         {
-            Result<Domain> result = _adminRepository.CreateDomain(request);
+            Result<Domain> result = await _adminRepository.CreateDomainAsync(request);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
             return StatusCode(StatusCodes.Status201Created, result.Value);
         }
@@ -127,9 +127,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<Domain> UpdateDomain(string id, AdminDomainRequest request)
+        public async Task<ActionResult<Domain>> UpdateDomain(string id, AdminDomainRequest request)
         {
-            Result<Domain> result = _adminRepository.UpdateDomain(id, request);
+            Result<Domain> result = await _adminRepository.UpdateDomainAsync(id, request);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
             return Ok(result.Value);
         }
@@ -148,7 +148,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status502BadGateway)]
         public async Task<ActionResult<Quota>> GetUserQuota(int id, CancellationToken cancellationToken)
         {
-            var userInfo = _adminRepository.GetUserById(id);
+            var userInfo = await _adminRepository.GetUserByIdAsync(id);
             if (userInfo == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"User {id} not found"));
 
             var user = new User($"{userInfo.UserName}@{userInfo.DomainName}");
@@ -166,9 +166,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult DeleteDomain(string id)
+        public async Task<ActionResult> DeleteDomain(string id)
         {
-            Result result = _adminRepository.DeleteDomain(id);
+            Result result = await _adminRepository.DeleteDomainAsync(id);
             return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
@@ -180,9 +180,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<IEnumerable<VirtualDomainInfo>> GetVirtualDomains()
+        public async Task<ActionResult<IEnumerable<VirtualDomainInfo>>> GetVirtualDomains()
         {
-            return Ok(_adminRepository.GetAllVirtualDomains());
+            return Ok(await _adminRepository.GetAllVirtualDomainsAsync());
         }
 
         /// <summary>Adds an owner to a virtual domain</summary>
@@ -195,9 +195,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult<VirtualDomainInfo> AddVirtualDomainOwner(string domainId, AdminVirtualDomainOwnerRequest request)
+        public async Task<ActionResult<VirtualDomainInfo>> AddVirtualDomainOwner(string domainId, AdminVirtualDomainOwnerRequest request)
         {
-            Result<VirtualDomainInfo> result = _adminRepository.AddVirtualDomainOwner(domainId, request.UserId);
+            Result<VirtualDomainInfo> result = await _adminRepository.AddVirtualDomainOwnerAsync(domainId, request.UserId);
             if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
             return Ok(result.Value);
         }
@@ -212,9 +212,9 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public ActionResult RemoveVirtualDomainOwner(string domainId, int userId)
+        public async Task<ActionResult> RemoveVirtualDomainOwner(string domainId, int userId)
         {
-            Result result = _adminRepository.RemoveVirtualDomainOwner(domainId, userId);
+            Result result = await _adminRepository.RemoveVirtualDomainOwnerAsync(domainId, userId);
             return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
     }

@@ -37,16 +37,16 @@ Exposed controllers:
 |---|---|---|---|---|
 | `LoginController` | `/api/login` | POST, DELETE | POST anonymous / DELETE `[Authorize]` | POST goes through the `login` rate limiter (5 req/min per IP). |
 | `AccountController` | `/api/account` | GET, GET `Quota`, GET `Folders`, PATCH `ChangeSecret` | `[Authorize]` | `Quota` delegates to `IDovecotQuotaClient`; `Folders` lists IMAP mailboxes (for the rules editor folder picker); `ChangeSecret` requires the old password. |
-| `AliasesController` | `/api/aliases` | GET, POST, DELETE | `[Authorize]` | Every operation goes through `UserOwnsDomain`. |
-| `AdminController` | `/api/Admin/users`, `/api/Admin/domains`, `/api/Admin/ownerships` | GET, POST, PUT, DELETE | `[Authorize]` + `admin='Y'` check | User CRUD + quota proxy; domain CRUD; alias domain ownership GET/PUT/DELETE. All endpoints check `IsAdmin()` and return 401 if false. |
+| `AliasesController` | `/api/aliases` | GET, POST, DELETE | `[Authorize]` | Every operation goes through `UserOwnsDomainAsync`. |
+| `AdminController` | `/api/Admin/users`, `/api/Admin/domains`, `/api/Admin/ownerships` | GET, POST, PUT, DELETE | `[Authorize(Policy = "Admin")]` | User CRUD + quota proxy; domain CRUD; alias domain ownership GET/PUT/DELETE. The class-level admin policy (`AdminRequirementHandler` → `IsAdminAsync`) returns 403 for authenticated non-admins, 401 for anonymous callers. |
 | `RulesController` | `/api/Rules` | GET, PUT, DELETE, GET/PUT `Raw`, POST `CompatibilityCheck`, GET `Providers` | `[Authorize]` | Sieve rules CRUD via `ISieveRepository`. `GET`/`PUT` exchange structured `SieveRule[]`; `Raw` exchanges the unparsed script for Advanced scripts; `CompatibilityCheck` previews which rules a target provider can't represent; `Providers` lists registered providers with the default flag. |
 
 ### Repositories (`Repositories/`)
 
-Wrap EF Core access. Return `Result` / `Result<T>` — no business exceptions are thrown under nominal conditions (only null argument checks throw).
+Wrap EF Core access. All methods are async (`Async` suffix) and return `Task<Result>` / `Task<Result<T>>` — no business exceptions are thrown under nominal conditions (only null argument checks throw).
 
-- `UsersRepository`: `FindByEmail`, `IsValidPassword`, `GetAccountInfo`, `ChangePassword`. Passwords are stored **plaintext** — the MariaDB `INSERT_PASSWORD`/`UPDATE_PASSWORD` triggers do the SHA-512 crypt encryption.
-- `AliasesRepository`: `GetAliases`, `AddAlias`, `DeleteAlias`, plus the `UserOwnsDomain` guard that joins `MailDomainOwnership` with the mailbox's direct domain.
+- `UsersRepository`: `FindByEmailAsync`, `IsValidPasswordAsync`, `GetAccountInfoAsync`, `ChangePasswordAsync`. Passwords are stored **plaintext** — the MariaDB `INSERT_PASSWORD`/`UPDATE_PASSWORD` triggers do the SHA-512 crypt encryption.
+- `AliasesRepository`: `GetAliasesAsync`, `AddAliasAsync`, `DeleteAliasAsync`, plus the `UserOwnsDomainAsync` guard that joins `MailDomainOwnership` with the mailbox's direct domain.
 - `SieveRepository` (behind `ISieveRepository`): the only repository that does **not** touch EF Core — it talks to the mail server over ManageSieve via `IManageSieveClient`. Opens a fresh authenticated session per call. `GetRuleSetAsync` lists scripts, picks the active one, detects its provider (`RuleProviderRegistry.Detect`) and parses it into a `SieveRuleSet` (Structured if the provider can parse it, otherwise Advanced with the raw body). `SaveRulesAsync` compiles the `SieveRule[]` with the target provider, PUTs + activates the script, then `CleanupOtherManagedScriptsAsync` removes the other providers' managed scripts (never the active one, never an unknown/Advanced script). `GetRawScriptAsync`/`SaveRawScriptAsync` handle the unparsed-script path; `DeleteAllRulesAsync` deactivates and deletes.
 
 Every mutation emits a structured log `Audit: <action> user=... outcome=success|failure reason=...` for infra-side audit trails.
@@ -137,7 +137,5 @@ Key `appsettings.json` entries:
 ## Known caveats / tech debt
 
 - `StringComparison.InvariantCultureIgnoreCase` comparisons in EF Core `Where` clauses: depend on `EnableStringComparisonTranslations` being enabled on the Pomelo side — any provider regression would silently break case-insensitive lookups.
-- `AddJwtBearerAuthentication` calls `BuildServiceProvider()` at setup time: anti-pattern (root scope) to be replaced with `IPostConfigureOptions<JwtBearerOptions>` if `TokenConstants` become dynamic.
-- `GetAliases` does not return a `Result<IEnumerable<Alias>>` — failures are invisible. Should be aligned with the other repositories if a real error condition appears.
-- `UserOwnsDomain`: the current join ignores the `domainName` parameter in the `DomainsOwnerships` branch (any owned domain matches). To fix: filter explicitly on `domain.Name == domainName`.
+- `GetAliasesAsync` does not return a `Result<IEnumerable<Alias>>` — failures are invisible. Should be aligned with the other repositories if a real error condition appears.
 - Repositories access `DbContext` directly, without a testable abstraction. Tests use EF Core InMemory; real DB behaviour (e.g. case-insensitive collation) is not covered.

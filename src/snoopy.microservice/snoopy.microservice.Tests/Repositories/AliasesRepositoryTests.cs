@@ -48,113 +48,113 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- UserOwnsDomain ---
 
         [Fact]
-        public void UserOwnsDomain_WithPrimaryDomain_ReturnsTrue()
+        public async Task UserOwnsDomain_WithPrimaryDomain_ReturnsTrue()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.True(repo.UserOwnsDomain(AuthUser, PrimaryDomain));
+            Assert.True(await repo.UserOwnsDomainAsync(AuthUser, PrimaryDomain));
         }
 
         [Fact]
-        public void UserOwnsDomain_WithOwnedDomain_ReturnsTrue()
+        public async Task UserOwnsDomain_WithOwnedDomain_ReturnsTrue()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.True(repo.UserOwnsDomain(AuthUser, OwnedDomain));
+            Assert.True(await repo.UserOwnsDomainAsync(AuthUser, OwnedDomain));
         }
 
         [Fact]
-        public void UserOwnsDomain_WithUnownedDomain_ReturnsFalse()
+        public async Task UserOwnsDomain_WithUnownedDomain_ReturnsFalse()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.False(repo.UserOwnsDomain(AuthUser, UnownedDomain));
+            Assert.False(await repo.UserOwnsDomainAsync(AuthUser, UnownedDomain));
         }
 
         [Fact]
-        public void UserOwnsDomain_WhenUserNotFound_ReturnsFalse()
+        public async Task UserOwnsDomain_WhenUserNotFound_ReturnsFalse()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.False(repo.UserOwnsDomain(new User("nobody@" + PrimaryDomain), OwnedDomain));
+            Assert.False(await repo.UserOwnsDomainAsync(new User("nobody@" + PrimaryDomain), OwnedDomain));
         }
 
         [Fact]
-        public void UserOwnsDomain_WhenDomainDoesNotExist_ReturnsFalse()
+        public async Task UserOwnsDomain_WhenDomainDoesNotExist_ReturnsFalse()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.False(repo.UserOwnsDomain(AuthUser, "doesnotexist.com"));
+            Assert.False(await repo.UserOwnsDomainAsync(AuthUser, "doesnotexist.com"));
         }
 
         // --- AddAlias ---
 
         [Fact]
-        public void AddAlias_WithPrimaryDomain_ReturnsSuccess()
+        public async Task AddAlias_WithPrimaryDomain_ReturnsSuccess()
         {
             var (repo, _, _) = CreateSut();
 
-            var result = repo.AddAlias(AuthUser, new Alias { Name = "johnny", Domain = PrimaryDomain });
+            var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = PrimaryDomain });
 
             Assert.True(result.IsSuccess);
         }
 
         [Fact]
-        public void AddAlias_WithOwnedDomain_ReturnsSuccess()
+        public async Task AddAlias_WithOwnedDomain_ReturnsSuccess()
         {
             var (repo, _, _) = CreateSut();
 
-            var result = repo.AddAlias(AuthUser, new Alias { Name = "johnny", Domain = OwnedDomain });
+            var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = OwnedDomain });
 
             Assert.True(result.IsSuccess);
         }
 
         [Fact]
-        public void AddAlias_WithUnownedDomain_ReturnsFailure()
+        public async Task AddAlias_WithUnownedDomain_ReturnsFailure()
         {
             var (repo, _, _) = CreateSut();
 
-            var result = repo.AddAlias(AuthUser, new Alias { Name = "johnny", Domain = UnownedDomain });
+            var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = UnownedDomain });
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void AddAlias_WhenAliasAlreadyExists_ReturnsFailure()
+        public async Task AddAlias_WhenAliasAlreadyExists_ReturnsFailure()
         {
             var (repo, _, _) = CreateSut();
-            repo.AddAlias(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
 
-            var result = repo.AddAlias(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
+            var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void AddAlias_DuplicateCheckIsCaseInsensitive()
+        public async Task AddAlias_DuplicateCheckIsCaseInsensitive()
         {
             var (repo, _, _) = CreateSut();
-            repo.AddAlias(AuthUser, new Alias { Name = "Duplicate", Domain = PrimaryDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "Duplicate", Domain = PrimaryDomain });
 
-            var result = repo.AddAlias(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
+            var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void AddAlias_WithNullAlias_ThrowsArgumentNullException()
+        public async Task AddAlias_WithNullAlias_ThrowsArgumentNullException()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.Throws<ArgumentNullException>(() => repo.AddAlias(AuthUser, null!));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => repo.AddAliasAsync(AuthUser, null!));
         }
 
         [Fact]
-        public void AddAlias_PersistsAliasToDatabase()
+        public async Task AddAlias_PersistsAliasToDatabase()
         {
             var (repo, context, userId) = CreateSut();
 
-            repo.AddAlias(AuthUser, new Alias { Name = "newone", Domain = PrimaryDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "newone", Domain = PrimaryDomain });
 
             Assert.True(context.Aliases.Any(a => a.Name == "newone" && a.DestinationUserId == userId));
         }
@@ -162,51 +162,51 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- DeleteAlias ---
 
         [Fact]
-        public void DeleteAlias_WhenAliasExists_ReturnsSuccess()
+        public async Task DeleteAlias_WhenAliasExists_ReturnsSuccess()
         {
             var (repo, _, _) = CreateSut();
-            repo.AddAlias(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain });
 
-            var result = repo.DeleteAlias(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain });
+            var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain });
 
             Assert.True(result.IsSuccess);
         }
 
         [Fact]
-        public void DeleteAlias_WhenAliasNotFound_ReturnsFailure()
+        public async Task DeleteAlias_WhenAliasNotFound_ReturnsFailure()
         {
             var (repo, _, _) = CreateSut();
 
-            var result = repo.DeleteAlias(AuthUser, new Alias { Name = "nonexistent", Domain = PrimaryDomain });
+            var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "nonexistent", Domain = PrimaryDomain });
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void DeleteAlias_WithUnownedDomain_ReturnsFailure()
+        public async Task DeleteAlias_WithUnownedDomain_ReturnsFailure()
         {
             var (repo, _, _) = CreateSut();
 
-            var result = repo.DeleteAlias(AuthUser, new Alias { Name = "alias", Domain = UnownedDomain });
+            var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "alias", Domain = UnownedDomain });
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void DeleteAlias_WithNullAlias_ThrowsArgumentNullException()
+        public async Task DeleteAlias_WithNullAlias_ThrowsArgumentNullException()
         {
             var (repo, _, _) = CreateSut();
 
-            Assert.Throws<ArgumentNullException>(() => repo.DeleteAlias(AuthUser, null!));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => repo.DeleteAliasAsync(AuthUser, null!));
         }
 
         [Fact]
-        public void DeleteAlias_RemovesAliasFromDatabase()
+        public async Task DeleteAlias_RemovesAliasFromDatabase()
         {
             var (repo, context, userId) = CreateSut();
-            repo.AddAlias(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain });
 
-            repo.DeleteAlias(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain });
+            await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain });
 
             Assert.False(context.Aliases.Any(a => a.Name == "gone" && a.DestinationUserId == userId));
         }
@@ -214,39 +214,39 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         // --- GetAliases ---
 
         [Fact]
-        public void GetAliases_WithNoAliases_ReturnsEmptyList()
+        public async Task GetAliases_WithNoAliases_ReturnsEmptyList()
         {
             var (repo, _, _) = CreateSut();
 
-            var aliases = repo.GetAliases(AuthUser).ToList();
+            var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
 
             Assert.Empty(aliases);
         }
 
         [Fact]
-        public void GetAliases_ReturnsPrimaryDomainAliases()
+        public async Task GetAliases_ReturnsPrimaryDomainAliases()
         {
             var (repo, _, _) = CreateSut();
-            repo.AddAlias(AuthUser, new Alias { Name = "alias1", Domain = PrimaryDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "alias1", Domain = PrimaryDomain });
 
-            var aliases = repo.GetAliases(AuthUser).ToList();
+            var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
 
             Assert.Contains(aliases, a => a.Name == "alias1" && a.Domain == PrimaryDomain);
         }
 
         [Fact]
-        public void GetAliases_ReturnsOwnedDomainAliases()
+        public async Task GetAliases_ReturnsOwnedDomainAliases()
         {
             var (repo, _, _) = CreateSut();
-            repo.AddAlias(AuthUser, new Alias { Name = "alias2", Domain = OwnedDomain });
+            await repo.AddAliasAsync(AuthUser, new Alias { Name = "alias2", Domain = OwnedDomain });
 
-            var aliases = repo.GetAliases(AuthUser).ToList();
+            var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
 
             Assert.Contains(aliases, a => a.Name == "alias2" && a.Domain == OwnedDomain);
         }
 
         [Fact]
-        public void GetAliases_DoesNotReturnAliasesOfOtherUsers()
+        public async Task GetAliases_DoesNotReturnAliasesOfOtherUsers()
         {
             var (repo, context, _) = CreateSut();
             var otherUser = new MailUser { Name = "alice", Password = "x", DomainId = "WKY", Active = ActiveState.Y, FullName = "Alice Smith" };
@@ -256,7 +256,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             context.Aliases.Add(new MailAlias { Name = "alice-alias", Domain = "WKY", DestinationUserId = otherUserId });
             context.SaveChanges();
 
-            var aliases = repo.GetAliases(AuthUser).ToList();
+            var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
 
             Assert.DoesNotContain(aliases, a => a.Name == "alice-alias");
         }

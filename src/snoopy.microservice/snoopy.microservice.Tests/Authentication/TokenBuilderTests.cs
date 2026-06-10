@@ -78,7 +78,6 @@ namespace weesky.Snoopy.Microservice.Tests.Authentication
                 .AddKey(TestKey)
                 .Build();
 
-            // ValidTo is returned in UTC; AddExpiry uses DateTime.Now (local) which the JWT library converts
             var minutesToExpiry = (token.ValidTo - DateTime.UtcNow).TotalMinutes;
             Assert.InRange(minutesToExpiry, 29.9, 30.1);
         }

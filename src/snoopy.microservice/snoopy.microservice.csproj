@@ -6,19 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>weesky.Snoopy.Microservice</RootNamespace>
     <UserSecretsId>b81de570-7bd0-40c9-a3c5-bb7a63bbfe84</UserSecretsId>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <NoWarn>1701;1702;CS8600</NoWarn>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <!-- Swagger reads ApiDocumentation.xml at startup, so generate it in every configuration. -->
     <DocumentationFile>ApiDocumentation.xml</DocumentationFile>
-    <NoWarn>1591</NoWarn>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <NoWarn>1701;1702;CS8600</NoWarn>
+    <!-- 1591: missing XML comments; nullable warnings are configured in .editorconfig -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

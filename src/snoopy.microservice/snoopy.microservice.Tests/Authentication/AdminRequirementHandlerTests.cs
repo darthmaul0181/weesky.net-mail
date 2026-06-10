@@ -31,7 +31,7 @@ namespace weesky.Snoopy.Microservice.Tests.Authentication
         [Fact]
         public async Task WhenUserIsAdmin_Succeeds()
         {
-            _repo.Setup(r => r.IsAdmin("john", "example.com")).Returns(true);
+            _repo.Setup(r => r.IsAdminAsync("john", "example.com")).ReturnsAsync(true);
             var context = await EvaluateAsync(CreatePrincipal("john", "example.com"));
             Assert.True(context.HasSucceeded);
         }
@@ -39,7 +39,7 @@ namespace weesky.Snoopy.Microservice.Tests.Authentication
         [Fact]
         public async Task WhenUserIsNotAdmin_DoesNotSucceed()
         {
-            _repo.Setup(r => r.IsAdmin("john", "example.com")).Returns(false);
+            _repo.Setup(r => r.IsAdminAsync("john", "example.com")).ReturnsAsync(false);
             var context = await EvaluateAsync(CreatePrincipal("john", "example.com"));
             Assert.False(context.HasSucceeded);
         }
@@ -49,7 +49,7 @@ namespace weesky.Snoopy.Microservice.Tests.Authentication
         {
             var context = await EvaluateAsync(CreatePrincipal(domain: "example.com"));
             Assert.False(context.HasSucceeded);
-            _repo.Verify(r => r.IsAdmin(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _repo.Verify(r => r.IsAdminAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
@@ -57,7 +57,7 @@ namespace weesky.Snoopy.Microservice.Tests.Authentication
         {
             var context = await EvaluateAsync(CreatePrincipal(username: "john"));
             Assert.False(context.HasSucceeded);
-            _repo.Verify(r => r.IsAdmin(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _repo.Verify(r => r.IsAdminAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
