@@ -1,6 +1,8 @@
 using CSharpFunctionalExtensions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
@@ -15,25 +17,31 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         private readonly Mock<IAdminRepository> _repo = new();
         private readonly Mock<IDovecotQuotaClient> _dovecot = new();
 
-        private AdminController CreateController(bool isAdmin = true)
+        private AdminController CreateController()
         {
             var controller = new AdminController(_repo.Object, _dovecot.Object);
             controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
-            _repo.Setup(r => r.IsAdmin("john", "example.com")).Returns(isAdmin);
             return controller;
+        }
+
+        // ── Authorization ─────────────────────────────────────
+
+        [Fact]
+        public void Controller_IsProtectedByAdminPolicy()
+        {
+            var attribute = typeof(AdminController)
+                .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+                .Cast<AuthorizeAttribute>()
+                .FirstOrDefault();
+
+            Assert.NotNull(attribute);
+            Assert.Equal(AdminRequirement.PolicyName, attribute.Policy);
         }
 
         // ── GetUsers ───────────────────────────────────────────
 
         [Fact]
-        public void GetUsers_WhenNotAdmin_Returns401()
-        {
-            var result = CreateController(isAdmin: false).GetUsers();
-            Assert.IsType<UnauthorizedResult>(result.Result);
-        }
-
-        [Fact]
-        public void GetUsers_WhenAdmin_Returns200WithList()
+        public void GetUsers_Returns200WithList()
         {
             var users = new[] { new AdminUserInfo { UserName = "alice" } };
             _repo.Setup(r => r.GetAllUsers()).Returns(users);
@@ -42,14 +50,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         // ── CreateUser ────────────────────────────────────────
-
-        [Fact]
-        public void CreateUser_WhenNotAdmin_Returns401()
-        {
-            var result = CreateController(isAdmin: false)
-                .CreateUser(new AdminUserRequest { UserName = "alice", Password = "pw" });
-            Assert.IsType<UnauthorizedResult>(result.Result);
-        }
 
         [Fact]
         public void CreateUser_WhenPasswordNull_Returns400()
@@ -94,14 +94,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         // ── UpdateUser ────────────────────────────────────────
 
         [Fact]
-        public void UpdateUser_WhenNotAdmin_Returns401()
-        {
-            var result = CreateController(isAdmin: false)
-                .UpdateUser(1, new AdminUserRequest { UserName = "alice" });
-            Assert.IsType<UnauthorizedResult>(result.Result);
-        }
-
-        [Fact]
         public void UpdateUser_WhenRepositoryFails_Returns400WithEnvelope()
         {
             _repo.Setup(r => r.UpdateUser(It.IsAny<int>(), It.IsAny<AdminUserRequest>()))
@@ -127,12 +119,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         // ── DeleteUser ────────────────────────────────────────
 
         [Fact]
-        public void DeleteUser_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).DeleteUser(1));
-        }
-
-        [Fact]
         public void DeleteUser_WhenRepositoryFails_Returns400WithEnvelope()
         {
             _repo.Setup(r => r.DeleteUser(It.IsAny<int>()))
@@ -152,13 +138,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         // ── GetDomains ────────────────────────────────────────
 
         [Fact]
-        public void GetDomains_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).GetDomains().Result);
-        }
-
-        [Fact]
-        public void GetDomains_WhenAdmin_Returns200WithList()
+        public void GetDomains_Returns200WithList()
         {
             var domains = new[] { new Domain { Id = "WSY", Name = "weesky.be" } };
             _repo.Setup(r => r.GetAllDomains()).Returns(domains);
@@ -167,13 +147,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         // ── CreateDomain ──────────────────────────────────────
-
-        [Fact]
-        public void CreateDomain_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false)
-                .CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" }).Result);
-        }
 
         [Fact]
         public void CreateDomain_WhenRepositoryFails_Returns400WithEnvelope()
@@ -202,13 +175,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         // ── UpdateDomain ──────────────────────────────────────
 
         [Fact]
-        public void UpdateDomain_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false)
-                .UpdateDomain("WSY", new AdminDomainRequest { Name = "new.com" }).Result);
-        }
-
-        [Fact]
         public void UpdateDomain_WhenRepositoryFails_Returns400WithEnvelope()
         {
             _repo.Setup(r => r.UpdateDomain(It.IsAny<string>(), It.IsAny<AdminDomainRequest>()))
@@ -234,12 +200,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         // ── DeleteDomain ──────────────────────────────────────
 
         [Fact]
-        public void DeleteDomain_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).DeleteDomain("WSY"));
-        }
-
-        [Fact]
         public void DeleteDomain_WhenRepositoryFails_Returns400WithEnvelope()
         {
             _repo.Setup(r => r.DeleteDomain(It.IsAny<string>()))
@@ -257,13 +217,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         // ── GetUserQuota ──────────────────────────────────────
-
-        [Fact]
-        public async Task GetUserQuota_WhenNotAdmin_Returns401()
-        {
-            var result = await CreateController(isAdmin: false).GetUserQuota(1, CancellationToken.None);
-            Assert.IsType<UnauthorizedResult>(result.Result);
-        }
 
         [Fact]
         public async Task GetUserQuota_WhenUserNotFound_Returns400()
@@ -315,13 +268,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         // ── GetVirtualDomains ─────────────────────────────────
 
         [Fact]
-        public void GetVirtualDomains_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).GetVirtualDomains().Result);
-        }
-
-        [Fact]
-        public void GetVirtualDomains_WhenAdmin_Returns200WithList()
+        public void GetVirtualDomains_Returns200WithList()
         {
             var virtualDomains = new[] { new VirtualDomainInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() } };
             _repo.Setup(r => r.GetAllVirtualDomains()).Returns(virtualDomains);
@@ -330,13 +277,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         // ── AddVirtualDomainOwner ─────────────────────────────
-
-        [Fact]
-        public void AddVirtualDomainOwner_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false)
-                .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 }).Result);
-        }
 
         [Fact]
         public void AddVirtualDomainOwner_WhenRepositoryFails_Returns400WithEnvelope()
@@ -361,12 +301,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         // ── RemoveVirtualDomainOwner ──────────────────────────
-
-        [Fact]
-        public void RemoveVirtualDomainOwner_WhenNotAdmin_Returns401()
-        {
-            Assert.IsType<UnauthorizedResult>(CreateController(isAdmin: false).RemoveVirtualDomainOwner("EXT", 1));
-        }
 
         [Fact]
         public void RemoveVirtualDomainOwner_WhenRepositoryFails_Returns400WithEnvelope()

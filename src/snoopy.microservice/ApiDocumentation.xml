@@ -4,6 +4,12 @@
         <name>snoopy.microservice</name>
     </assembly>
     <members>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Authorization.AdminRequirement">
+            <summary>
+            Authorization requirement satisfied when the authenticated user has admin='Y'
+            in the mail database. Evaluated by <see cref="T:weesky.Snoopy.Microservice.Authentication.Authorization.AdminRequirementHandler"/>.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Authentication.Extensions.AuthorizationExtension.AddJwtBearerAuthentication(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Boolean)">
             <summary>
             Adds JwtBearer Middleware to the Pipeline
@@ -64,72 +70,84 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetUsers">
             <summary>Returns all users</summary>
             <response code="200">User list</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateUser(weesky.Snoopy.Microservice.Models.AdminUserRequest)">
             <summary>Creates a new user</summary>
             <response code="201">User created</response>
             <response code="400">Validation error</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateUser(System.Int32,weesky.Snoopy.Microservice.Models.AdminUserRequest)">
             <summary>Updates an existing user</summary>
             <response code="200">User updated</response>
             <response code="400">Validation error</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteUser(System.Int32)">
             <summary>Deletes a user</summary>
             <response code="204">User deleted</response>
             <response code="400">User not found</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetDomains">
             <summary>Returns all domains</summary>
             <response code="200">Domain list</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateDomain(weesky.Snoopy.Microservice.Models.AdminDomainRequest)">
             <summary>Creates a new domain</summary>
             <response code="201">Domain created</response>
             <response code="400">Validation error</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateDomain(System.String,weesky.Snoopy.Microservice.Models.AdminDomainRequest)">
             <summary>Updates an existing domain</summary>
             <response code="200">Domain updated</response>
             <response code="400">Validation error</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetUserQuota(System.Int32,System.Threading.CancellationToken)">
             <summary>Returns the Dovecot mailbox quota for a specific user</summary>
             <response code="200">Quota information</response>
             <response code="400">User not found</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
             <response code="502">Unable to reach Dovecot</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteDomain(System.String)">
             <summary>Deletes a domain</summary>
             <response code="204">Domain deleted</response>
             <response code="400">Domain not found or still has users</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetVirtualDomains">
             <summary>Returns all virtual (alias) domains with their owners</summary>
             <response code="200">Virtual domain list</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.AddVirtualDomainOwner(System.String,weesky.Snoopy.Microservice.Models.AdminVirtualDomainOwnerRequest)">
             <summary>Adds an owner to a virtual domain</summary>
             <response code="200">Owner added</response>
             <response code="400">Validation error</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.RemoveVirtualDomainOwner(System.String,System.Int32)">
             <summary>Removes a specific owner from a virtual domain</summary>
             <response code="204">Owner removed</response>
             <response code="400">Owner not found</response>
-            <response code="401">Unauthenticated or not an admin</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.Add(weesky.Snoopy.Microservice.Models.Alias)">
             <summary>
@@ -439,8 +457,14 @@
         <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionField.CurrentHour">
             <summary>Hour of day at delivery time (0-23) — emits <c>currentdate :value OP "hour" "N"</c> or <c>:is</c> (requires "date"; also "relational" for Before/OnOrAfter). Weesky-only.</summary>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionOperator.NotContains">
+            <summary>Emits <c>not … :contains</c>. Weesky-only (Rainloop format cannot represent negation).</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionOperator.NotEquals">
+            <summary>Emits <c>not … :is</c>. Weesky-only (Rainloop format cannot represent negation).</summary>
+        </member>
         <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionOperator.Regex">
-            <summary>POSIX extended regex — emits <c>:regex</c> (requires "regex" extension). Weesky-only.</summary>
+            <summary>POSIX extended regex — emits <c>:regex</c> (requires "regex" extension).</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Models.SieveConditionOperator.Before">
             <summary>Date comparison — emits <c>:value "lt"</c> (date fields only; requires "relational"). Weesky-only.</summary>
@@ -594,6 +618,12 @@
             1. A script whose name matches any provider's default name (prefer the active one).
             2. Otherwise the currently active script (will be treated as Advanced if no provider matches).
             3. Otherwise null (no script at all).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUser(System.String,System.String)">
+            <summary>
+            Resolves the domain by name then the mailbox user within it (name matched
+            case-insensitively). Returns null when either is missing.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.RuleProviders.IRuleProvider">
