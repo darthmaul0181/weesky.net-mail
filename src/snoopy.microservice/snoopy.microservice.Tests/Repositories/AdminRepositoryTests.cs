@@ -172,6 +172,33 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             Assert.Equal("lmtp", logins[1].Service);
         }
 
+        // ── GetUserById ───────────────────────────────────────
+
+        [Fact]
+        public void GetUserById_WhenNotFound_ReturnsNull()
+        {
+            using var ctx = CreateContext();
+            Assert.Null(new AdminRepository(ctx).GetUserById(999));
+        }
+
+        [Fact]
+        public void GetUserById_WhenFound_ReturnsUserWithDomainName()
+        {
+            using var ctx = CreateContext();
+            AddDomain(ctx, "WSY", "weesky.be");
+            var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y, quotaMb: 2048, fullName: "Alice Smith");
+
+            var info = new AdminRepository(ctx).GetUserById(user.Id);
+
+            Assert.NotNull(info);
+            Assert.Equal(user.Id, info.Id);
+            Assert.Equal("alice", info.UserName);
+            Assert.Equal("weesky.be", info.DomainName);
+            Assert.Equal("Alice Smith", info.FullName);
+            Assert.Equal(2048, info.QuotaMb);
+            Assert.True(info.Admin);
+        }
+
         // ── CreateUser ────────────────────────────────────────
 
         [Fact]

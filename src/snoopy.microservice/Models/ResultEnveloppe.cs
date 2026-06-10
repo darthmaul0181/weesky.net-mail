@@ -13,7 +13,7 @@ namespace weesky.Snoopy.Microservice.Models
 			};
 		}
 
-		public static ResultEnveloppe CrateErrorEnveloppe(string message)
+		public static ResultEnveloppe CreateErrorEnveloppe(string message)
 		{
 			return new ResultEnveloppe
 			{

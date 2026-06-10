@@ -34,7 +34,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         {
             Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
             if (result.IsSuccess) return Ok(result.Value);
-            return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
         }
 
         /// <summary>
@@ -51,11 +51,11 @@ namespace weesky.Snoopy.Microservice.Controllers
         public async Task<ActionResult<ResultEnveloppe>> Replace([FromBody] SaveRulesRequest request, CancellationToken cancellationToken)
         {
             if (request == null)
-                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Request body is required"));
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
 
             Result result = await _sieveRepository.SaveRulesAsync(
                 AuthenticatedUser, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
-            return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
+            return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
         /// <summary>
@@ -69,7 +69,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         public async Task<ActionResult<ResultEnveloppe>> DeleteAll(CancellationToken cancellationToken)
         {
             Result result = await _sieveRepository.DeleteAllRulesAsync(AuthenticatedUser, cancellationToken);
-            return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
+            return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
         /// <summary>
@@ -84,7 +84,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         {
             Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
             if (result.IsFailure)
-                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe(result.Error));
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
 
             return Ok(new SieveRawScript
             {
@@ -106,11 +106,11 @@ namespace weesky.Snoopy.Microservice.Controllers
         public async Task<ActionResult<ResultEnveloppe>> PutRaw([FromBody] SieveRawScript script, CancellationToken cancellationToken)
         {
             if (script == null)
-                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Request body is required"));
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
 
             Result result = await _sieveRepository.SaveRawScriptAsync(
                 AuthenticatedUser, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
-            return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
+            return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
         }
 
         /// <summary>
@@ -126,13 +126,13 @@ namespace weesky.Snoopy.Microservice.Controllers
         public ActionResult<CompatibilityCheckResult> CompatibilityCheck([FromBody] CompatibilityCheckRequest request)
         {
             if (request == null)
-                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe("Request body is required"));
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
 
             var provider = request.ProviderId != null
                 ? _providers.GetById(request.ProviderId)
                 : _providers.Default;
             if (provider == null)
-                return BadRequest(ResultEnveloppe.CrateErrorEnveloppe($"Unknown rule provider: {request.ProviderId}"));
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"Unknown rule provider: {request.ProviderId}"));
 
             var incompatible = new List<IncompatibleRule>();
             foreach (var rule in request.Rules ?? new List<SieveRule>())

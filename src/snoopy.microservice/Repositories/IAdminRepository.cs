@@ -7,6 +7,7 @@ namespace weesky.Snoopy.Microservice.Repositories
     {
         bool IsAdmin(string username, string domainName);
         IEnumerable<AdminUserInfo> GetAllUsers();
+        AdminUserInfo? GetUserById(int id);
         Result<AdminUserInfo> CreateUser(AdminUserRequest request);
         Result<AdminUserInfo> UpdateUser(int id, AdminUserRequest request);
         Result DeleteUser(int id);

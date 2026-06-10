@@ -36,33 +36,20 @@ namespace weesky.Snoopy.Microservice.Repositories
                     join domain in _context.Domains on user.DomainId equals domain.Id
                     select new { user, domain })
                 .ToList()
-                .Select(x =>
-                {
-                    var email = $"{x.user.Name}@{x.domain.Name}";
-                    var logins = loginsByUser.TryGetValue(email, out var entries)
-                        ? entries
-                            .Select(e => new LastLoginEntry
-                            {
-                                Service = e.Service,
-                                At = DateTimeOffset.FromUnixTimeSeconds(e.LastAccess).UtcDateTime,
-                            })
-                            .OrderByDescending(e => e.At)
-                            .ToList()
-                        : new List<LastLoginEntry>();
+                .Select(x => MapToAdminUserInfo(x.user, x.domain.Name,
+                    BuildLastLogins(loginsByUser, $"{x.user.Name}@{x.domain.Name}")))
+                .ToList();
+        }
 
-                    return new AdminUserInfo
-                    {
-                        Id = x.user.Id,
-                        UserName = x.user.Name,
-                        DomainId = x.user.DomainId,
-                        DomainName = x.domain.Name,
-                        FullName = x.user.FullName,
-                        QuotaMb = x.user.QuotaMb,
-                        Active = x.user.Active == ActiveState.Y,
-                        Admin = x.user.Admin == ActiveState.Y,
-                        LastLogins = logins
-                    };
-                }).ToList();
+        public AdminUserInfo? GetUserById(int id)
+        {
+            var row = (from user in _context.Users
+                       join domain in _context.Domains on user.DomainId equals domain.Id
+                       where user.Id == id
+                       select new { user, domain })
+                .FirstOrDefault();
+
+            return row == null ? null : MapToAdminUserInfo(row.user, row.domain.Name);
         }
 
         public Result<AdminUserInfo> CreateUser(AdminUserRequest request)
@@ -98,17 +85,7 @@ namespace weesky.Snoopy.Microservice.Repositories
             _context.Users.Add(newUser);
             _context.SaveChanges();
 
-            return Result.Success(new AdminUserInfo
-            {
-                Id = newUser.Id,
-                UserName = newUser.Name,
-                DomainId = newUser.DomainId,
-                DomainName = domain.Name,
-                FullName = newUser.FullName,
-                QuotaMb = newUser.QuotaMb,
-                Active = newUser.Active == ActiveState.Y,
-                Admin = newUser.Admin == ActiveState.Y
-            });
+            return Result.Success(MapToAdminUserInfo(newUser, domain.Name));
         }
 
         public Result<AdminUserInfo> UpdateUser(int id, AdminUserRequest request)
@@ -132,17 +109,7 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             _context.SaveChanges();
 
-            return Result.Success(new AdminUserInfo
-            {
-                Id = user.Id,
-                UserName = user.Name,
-                DomainId = user.DomainId,
-                DomainName = domain?.Name ?? user.DomainId,
-                FullName = user.FullName,
-                QuotaMb = user.QuotaMb,
-                Active = user.Active == ActiveState.Y,
-                Admin = user.Admin == ActiveState.Y
-            });
+            return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
         }
 
         public Result DeleteUser(int id)
@@ -221,36 +188,14 @@ namespace weesky.Snoopy.Microservice.Repositories
                 .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
                 .ToList();
 
-            var ownerships = _context.DomainsOwnerships.ToList();
-
-            var userProjections = _context.Users
-                .Select(u => new { u.Id, u.Name, u.DomainId })
-                .ToList();
-
-            var domainNames = _context.Domains
-                .Select(d => new { d.Id, d.Name })
-                .ToDictionary(d => d.Id, d => d.Name);
-
-            return aliasDomains.Select(domain =>
-            {
-                var owners = ownerships
-                    .Where(o => o.DomainId == domain.Id)
-                    .Select(o =>
-                    {
-                        var owner = userProjections.FirstOrDefault(u => u.Id == o.UserId);
-                        if (owner == null || !domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
-                            return null;
-                        return new OwnerInfo { OwnerId = o.UserId, OwnerEmail = $"{owner.Name}@{ownerDomainName}" };
-                    })
-                    .OfType<OwnerInfo>()
-                    .ToList();
-                return new VirtualDomainInfo
+            return aliasDomains
+                .Select(domain => new VirtualDomainInfo
                 {
                     DomainId = domain.Id,
                     DomainName = domain.Name,
-                    Owners = owners
-                };
-            }).ToList();
+                    Owners = GetDomainOwners(domain.Id)
+                })
+                .ToList();
         }
 
         public Result<VirtualDomainInfo> AddVirtualDomainOwner(string domainId, int userId)
@@ -259,39 +204,20 @@ namespace weesky.Snoopy.Microservice.Repositories
             if (domain == null)
                 return Result.Failure<VirtualDomainInfo>($"Domain '{domainId}' not found");
 
-            var user = _context.Users
-                .Where(u => u.Id == userId)
-                .Select(u => new { u.Id, u.Name, u.DomainId })
-                .FirstOrDefault();
-            if (user == null)
+            if (!_context.Users.Any(u => u.Id == userId))
                 return Result.Failure<VirtualDomainInfo>($"User with id {userId} not found");
 
-            var existing = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
-            if (existing == null)
+            if (!_context.DomainsOwnerships.Any(o => o.DomainId == domainId && o.UserId == userId))
+            {
                 _context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
-
-            _context.SaveChanges();
-
-            var userProjections = _context.Users.Select(u => new { u.Id, u.Name, u.DomainId }).ToList();
-            var domainNames = _context.Domains.Select(d => new { d.Id, d.Name }).ToDictionary(d => d.Id, d => d.Name);
-            var owners = _context.DomainsOwnerships
-                .Where(o => o.DomainId == domainId)
-                .ToList()
-                .Select(o =>
-                {
-                    var owner = userProjections.FirstOrDefault(u => u.Id == o.UserId);
-                    if (owner == null || !domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
-                        return null;
-                    return new OwnerInfo { OwnerId = o.UserId, OwnerEmail = $"{owner.Name}@{ownerDomainName}" };
-                })
-                .OfType<OwnerInfo>()
-                .ToList();
+                _context.SaveChanges();
+            }
 
             return Result.Success(new VirtualDomainInfo
             {
                 DomainId = domain.Id,
                 DomainName = domain.Name,
-                Owners = owners
+                Owners = GetDomainOwners(domainId)
             });
         }
 
@@ -304,6 +230,49 @@ namespace weesky.Snoopy.Microservice.Repositories
             _context.DomainsOwnerships.Remove(ownership);
             _context.SaveChanges();
             return Result.Success();
+        }
+
+        // ---------- Helpers ----------
+
+        private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null)
+        {
+            return new AdminUserInfo
+            {
+                Id = user.Id,
+                UserName = user.Name,
+                DomainId = user.DomainId,
+                DomainName = domainName,
+                FullName = user.FullName,
+                QuotaMb = user.QuotaMb,
+                Active = user.Active == ActiveState.Y,
+                Admin = user.Admin == ActiveState.Y,
+                LastLogins = lastLogins ?? new List<LastLoginEntry>()
+            };
+        }
+
+        private static List<LastLoginEntry> BuildLastLogins(Dictionary<string, List<LastLogin>> loginsByUser, string email)
+        {
+            if (!loginsByUser.TryGetValue(email, out var entries))
+                return new List<LastLoginEntry>();
+
+            return entries
+                .Select(e => new LastLoginEntry
+                {
+                    Service = e.Service,
+                    At = DateTimeOffset.FromUnixTimeSeconds(e.LastAccess).UtcDateTime,
+                })
+                .OrderByDescending(e => e.At)
+                .ToList();
+        }
+
+        private List<OwnerInfo> GetDomainOwners(string domainId)
+        {
+            return (from ownership in _context.DomainsOwnerships
+                    join user in _context.Users on ownership.UserId equals user.Id
+                    join domain in _context.Domains on user.DomainId equals domain.Id
+                    where ownership.DomainId == domainId
+                    select new OwnerInfo { OwnerId = ownership.UserId, OwnerEmail = user.Name + "@" + domain.Name })
+                .ToList();
         }
     }
 }

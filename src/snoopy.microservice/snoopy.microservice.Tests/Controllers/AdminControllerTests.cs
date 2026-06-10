@@ -221,30 +221,32 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public async Task GetUserQuota_WhenUserNotFound_Returns400()
         {
-            _repo.Setup(r => r.GetAllUsers()).Returns(Array.Empty<AdminUserInfo>());
+            _repo.Setup(r => r.GetUserById(1)).Returns((AdminUserInfo?)null);
             var result = await CreateController().GetUserQuota(1, CancellationToken.None);
             var obj = Assert.IsType<BadRequestObjectResult>(result.Result);
             Assert.Equal(400, obj.StatusCode);
         }
 
         [Fact]
-        public async Task GetUserQuota_WhenDovecotFails_Returns502()
+        public async Task GetUserQuota_WhenDovecotFails_Returns502WithEnvelope()
         {
-            _repo.Setup(r => r.GetAllUsers()).Returns(
-                new[] { new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" } });
+            _repo.Setup(r => r.GetUserById(1)).Returns(
+                new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
             _dovecot.Setup(d => d.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<Quota>("Unreachable"));
             var result = await CreateController().GetUserQuota(1, CancellationToken.None);
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(502, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(502, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Unreachable", envelope.Message);
         }
 
         [Fact]
         public async Task GetUserQuota_WhenSuccess_Returns200WithQuota()
         {
             var quota = new Quota { StorageBytesUsed = 1024 };
-            _repo.Setup(r => r.GetAllUsers()).Returns(
-                new[] { new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" } });
+            _repo.Setup(r => r.GetUserById(1)).Returns(
+                new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
             _dovecot.Setup(d => d.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success(quota));
             var result = await CreateController().GetUserQuota(1, CancellationToken.None);
@@ -255,8 +257,8 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public async Task GetUserQuota_CallsDovecotWithCorrectEmail()
         {
-            _repo.Setup(r => r.GetAllUsers()).Returns(
-                new[] { new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" } });
+            _repo.Setup(r => r.GetUserById(1)).Returns(
+                new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
             _dovecot.Setup(d => d.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<Quota>("err"));
             await CreateController().GetUserQuota(1, CancellationToken.None);

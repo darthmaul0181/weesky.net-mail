@@ -24,19 +24,42 @@ namespace weesky.Snoopy.Microservice.Services
             _logger = logger;
         }
 
-        public async Task<Result<Quota>> GetQuotaAsync(User user, CancellationToken cancellationToken = default)
+        public Task<Result<Quota>> GetQuotaAsync(User user, CancellationToken cancellationToken = default) =>
+            CallDoveadmAsync(user, command: "quotaGet", tag: "q1",
+                notConfiguredMessage: "Quota service is not configured",
+                failureMessage: "Unable to retrieve quota",
+                ParseQuotaRows, cancellationToken);
+
+        public Task<Result<IReadOnlyList<string>>> GetMailboxesAsync(User user, CancellationToken cancellationToken = default) =>
+            CallDoveadmAsync(user, command: "mailboxList", tag: "m1",
+                notConfiguredMessage: "Mailbox service is not configured",
+                failureMessage: "Unable to retrieve mailboxes",
+                ParseMailboxRows, cancellationToken);
+
+        /// <summary>
+        /// Sends a single doveadm command for the given user and hands the response rows
+        /// (the payload of the "doveadmResponse" envelope) to <paramref name="parseRows"/>.
+        /// </summary>
+        private async Task<Result<T>> CallDoveadmAsync<T>(
+            User user,
+            string command,
+            string tag,
+            string notConfiguredMessage,
+            string failureMessage,
+            Func<JsonElement, Result<T>> parseRows,
+            CancellationToken cancellationToken)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
 
             if (string.IsNullOrWhiteSpace(_options.ApiUrl) || string.IsNullOrWhiteSpace(_options.ApiKey))
             {
                 _logger.LogError("Dovecot API is not configured (ApiUrl/ApiKey missing)");
-                return Result.Failure<Quota>("Quota service is not configured");
+                return Result.Failure<T>(notConfiguredMessage);
             }
 
             var payload = new object[]
             {
-                new object[] { "quotaGet", new { user = user.Email }, "q1" }
+                new object[] { command, new { user = user.Email }, tag }
             };
 
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.ApiUrl)
@@ -51,14 +74,18 @@ namespace weesky.Snoopy.Microservice.Services
                 using var response = await _http.SendAsync(request, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("Dovecot quotaGet HTTP {Status} for user={User}", (int)response.StatusCode, user.Email);
-                    return Result.Failure<Quota>("Unable to retrieve quota");
+                    _logger.LogWarning("Dovecot {Command} HTTP {Status} for user={User}", command, (int)response.StatusCode, user.Email);
+                    return Result.Failure<T>(failureMessage);
                 }
 
                 await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
-                return ParseQuotaResponse(doc.RootElement, user);
+                var rows = ExtractDoveadmRows(doc.RootElement, command, user, failureMessage);
+                if (rows.IsFailure)
+                    return Result.Failure<T>(rows.Error);
+
+                return parseRows(rows.Value);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -66,81 +93,43 @@ namespace weesky.Snoopy.Microservice.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dovecot quotaGet failed for user={User}", user.Email);
-                return Result.Failure<Quota>("Unable to retrieve quota");
+                _logger.LogError(ex, "Dovecot {Command} failed for user={User}", command, user.Email);
+                return Result.Failure<T>(failureMessage);
             }
         }
 
-        public async Task<Result<IReadOnlyList<string>>> GetMailboxesAsync(User user, CancellationToken cancellationToken = default)
-        {
-            if (user == null) throw new ArgumentNullException(nameof(user));
-
-            if (string.IsNullOrWhiteSpace(_options.ApiUrl) || string.IsNullOrWhiteSpace(_options.ApiKey))
-            {
-                _logger.LogError("Dovecot API is not configured (ApiUrl/ApiKey missing)");
-                return Result.Failure<IReadOnlyList<string>>("Mailbox service is not configured");
-            }
-
-            var payload = new object[]
-            {
-                new object[] { "mailboxList", new { user = user.Email }, "m1" }
-            };
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, _options.ApiUrl)
-            {
-                Content = JsonContent.Create(payload)
-            };
-            var apiKeyB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_options.ApiKey));
-            request.Headers.TryAddWithoutValidation("Authorization", "X-Dovecot-API " + apiKeyB64);
-
-            try
-            {
-                using var response = await _http.SendAsync(request, cancellationToken);
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning("Dovecot mailboxList HTTP {Status} for user={User}", (int)response.StatusCode, user.Email);
-                    return Result.Failure<IReadOnlyList<string>>("Unable to retrieve mailboxes");
-                }
-
-                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-                return ParseMailboxesResponse(doc.RootElement, user);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Dovecot mailboxList failed for user={User}", user.Email);
-                return Result.Failure<IReadOnlyList<string>>("Unable to retrieve mailboxes");
-            }
-        }
-
-        private Result<IReadOnlyList<string>> ParseMailboxesResponse(JsonElement root, User user)
+        /// <summary>
+        /// Validates the doveadm response envelope <c>[["doveadmResponse", rows, tag]]</c>
+        /// and returns the rows array.
+        /// </summary>
+        private Result<JsonElement> ExtractDoveadmRows(JsonElement root, string command, User user, string failureMessage)
         {
             if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
-                return Result.Failure<IReadOnlyList<string>>("Unexpected response from Dovecot");
+                return Result.Failure<JsonElement>("Unexpected response from Dovecot");
 
             var first = root[0];
             if (first.ValueKind != JsonValueKind.Array || first.GetArrayLength() < 2)
-                return Result.Failure<IReadOnlyList<string>>("Unexpected response from Dovecot");
+                return Result.Failure<JsonElement>("Unexpected response from Dovecot");
 
             var kind = first[0].GetString();
             if (kind == "error")
             {
-                _logger.LogWarning("Dovecot mailboxList error for user={User}: {Payload}", user.Email, first[1].GetRawText());
-                return Result.Failure<IReadOnlyList<string>>("Unable to retrieve mailboxes");
+                _logger.LogWarning("Dovecot {Command} error for user={User}: {Payload}", command, user.Email, first[1].GetRawText());
+                return Result.Failure<JsonElement>(failureMessage);
             }
 
             if (kind != "doveadmResponse")
-                return Result.Failure<IReadOnlyList<string>>("Unexpected response from Dovecot");
+                return Result.Failure<JsonElement>("Unexpected response from Dovecot");
 
             var rows = first[1];
             if (rows.ValueKind != JsonValueKind.Array)
-                return Result.Failure<IReadOnlyList<string>>("Unexpected response from Dovecot");
+                return Result.Failure<JsonElement>("Unexpected response from Dovecot");
 
+            return Result.Success(rows);
+        }
+
+        private static Result<IReadOnlyList<string>> ParseMailboxRows(JsonElement rows)
+        {
             var mailboxes = new List<string>();
             foreach (var row in rows.EnumerateArray())
             {
@@ -155,29 +144,8 @@ namespace weesky.Snoopy.Microservice.Services
             return Result.Success<IReadOnlyList<string>>(mailboxes);
         }
 
-        private Result<Quota> ParseQuotaResponse(JsonElement root, User user)
+        private static Result<Quota> ParseQuotaRows(JsonElement rows)
         {
-            if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
-                return Result.Failure<Quota>("Unexpected response from Dovecot");
-
-            var first = root[0];
-            if (first.ValueKind != JsonValueKind.Array || first.GetArrayLength() < 2)
-                return Result.Failure<Quota>("Unexpected response from Dovecot");
-
-            var kind = first[0].GetString();
-            if (kind == "error")
-            {
-                _logger.LogWarning("Dovecot quotaGet error for user={User}: {Payload}", user.Email, first[1].GetRawText());
-                return Result.Failure<Quota>("Unable to retrieve quota");
-            }
-
-            if (kind != "doveadmResponse")
-                return Result.Failure<Quota>("Unexpected response from Dovecot");
-
-            var rows = first[1];
-            if (rows.ValueKind != JsonValueKind.Array)
-                return Result.Failure<Quota>("Unexpected response from Dovecot");
-
             var quota = new Quota();
             foreach (var row in rows.EnumerateArray())
             {

@@ -33,7 +33,7 @@ namespace weesky.Snoopy.Microservice.Controllers
 		public ActionResult<ResultEnveloppe> Add(Alias alias)
 		{
 			Result result = _userRepository.AddAlias(AuthenticatedUser, alias);
-			return FromResultWithEnveloppe(result, successStatusCode : StatusCodes.Status204NoContent);
+			return FromResult(result, successStatusCode : StatusCodes.Status204NoContent);
 		}
 
 		/// <summary>
@@ -65,7 +65,7 @@ namespace weesky.Snoopy.Microservice.Controllers
 		public ActionResult<ResultEnveloppe> Delete(Alias alias)
 		{
 			Result result = _userRepository.DeleteAlias(AuthenticatedUser, alias);
-			return FromResultWithEnveloppe(result, successStatusCode: StatusCodes.Status204NoContent);
+			return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
 		}
 	}
 }

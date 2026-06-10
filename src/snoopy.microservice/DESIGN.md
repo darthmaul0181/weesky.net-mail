@@ -29,7 +29,7 @@ Four functional responsibilities:
 Receive HTTP requests and return either the requested DTO or a `ResultEnveloppe` for errors. All inherit from `ApiBaseController`, which exposes:
 
 - `AuthenticatedUser` — rebuilds the current `User` from JWT claims (`ClaimTypes.Upn` = name, `ClaimTypes.Dns` = domain).
-- `FromResult(...)` / `FromResultWithEnveloppe(...)` — translate a `Result` / `Result<T>` from CSharpFunctionalExtensions into an `ActionResult` with the correct HTTP status code.
+- `FromResult(...)` — translates a `Result` / `Result<T>` from CSharpFunctionalExtensions into an `ActionResult` with the correct HTTP status code; failures always carry a `ResultEnveloppe` body with the error message.
 
 Exposed controllers:
 

@@ -42,8 +42,10 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
 
             var result = CreateController().Authenticate(new Credentials { Email = "user@domain.com", Password = "wrong" });
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(401, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(401, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Authentication failed", envelope.Message);
         }
 
         [Fact]

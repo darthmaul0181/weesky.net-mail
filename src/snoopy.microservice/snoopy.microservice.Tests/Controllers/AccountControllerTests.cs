@@ -36,15 +36,17 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public void GetAccountInfo_WhenUserNotFound_Returns404()
+        public void GetAccountInfo_WhenUserNotFound_Returns404WithEnvelope()
         {
             _usersRepo.Setup(r => r.GetAccountInfo(It.IsAny<User>()))
                 .Returns(Result.Failure<AccountInfo>("Account not found"));
 
             var result = CreateController().GetAccountInfo();
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(404, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(404, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Account not found", envelope.Message);
         }
 
         [Fact]
@@ -61,15 +63,17 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public async Task GetQuota_WhenFailed_Returns502()
+        public async Task GetQuota_WhenFailed_Returns502WithEnvelope()
         {
             _dovecotClient.Setup(c => c.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<Quota>("Unreachable"));
 
             var result = await CreateController().GetQuota(CancellationToken.None);
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(502, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(502, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Unreachable", envelope.Message);
         }
 
         [Fact]
@@ -86,15 +90,17 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public async Task GetFolders_WhenFailed_Returns502()
+        public async Task GetFolders_WhenFailed_Returns502WithEnvelope()
         {
             _dovecotClient.Setup(c => c.GetMailboxesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<IReadOnlyList<string>>("Unreachable"));
 
             var result = await CreateController().GetFolders(CancellationToken.None);
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(502, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(502, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Unreachable", envelope.Message);
         }
 
         [Fact]

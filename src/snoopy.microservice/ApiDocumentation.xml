@@ -12,7 +12,9 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Authentication.Extensions.AuthorizationExtension.AddJwtBearerAuthentication(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Boolean)">
             <summary>
-            Adds JwtBearer Middleware to the Pipeline
+            Adds JwtBearer Middleware to the Pipeline. The bearer options are configured
+            through the named-options pipeline so <see cref="T:weesky.Snoopy.Microservice.Authentication.Models.TokenConstants"/> is resolved
+            lazily from the application container (no BuildServiceProvider).
             </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Authentication.Models.AuthToken.ExpiresIn">
@@ -743,6 +745,18 @@
             <summary>
             Queries a remote Dovecot server via its doveadm HTTP API.
             See https://doc.dovecot.org/admin_manual/doveadm_http_api/
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.CallDoveadmAsync``1(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.String,System.Func{System.Text.Json.JsonElement,CSharpFunctionalExtensions.Result{``0}},System.Threading.CancellationToken)">
+            <summary>
+            Sends a single doveadm command for the given user and hands the response rows
+            (the payload of the "doveadmResponse" envelope) to <paramref name="parseRows"/>.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.ExtractDoveadmRows(System.Text.Json.JsonElement,System.String,weesky.Snoopy.Microservice.Models.User,System.String)">
+            <summary>
+            Validates the doveadm response envelope <c>[["doveadmResponse", rows, tag]]</c>
+            and returns the rows array.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
