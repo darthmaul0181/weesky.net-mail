@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 
@@ -6,6 +7,8 @@ namespace weesky.Snoopy.Microservice.Repositories
 {
     public class AdminRepository : IAdminRepository
     {
+        private const int MinPasswordLength = 8;
+
         private readonly ApplicationDbContext _context;
 
         public AdminRepository(ApplicationDbContext context)
@@ -13,59 +16,52 @@ namespace weesky.Snoopy.Microservice.Repositories
             _context = context;
         }
 
-        public bool IsAdmin(string username, string domainName)
+        public async Task<bool> IsAdminAsync(string username, string domainName)
         {
-            var domain = _context.Domains.FirstOrDefault(d => d.Name == domainName);
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Name == domainName);
             if (domain == null) return false;
 
-            var user = _context.Users.FirstOrDefault(u =>
+            var user = await _context.Users.FirstOrDefaultAsync(u =>
                 string.Equals(u.Name, username, StringComparison.InvariantCultureIgnoreCase) &&
                 u.DomainId == domain.Id);
 
             return user?.Admin == ActiveState.Y;
         }
 
-        public IEnumerable<AdminUserInfo> GetAllUsers()
+        public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync()
         {
-            var loginsByUser = _context.LastLogins
-                .ToList()
+            var users = await (from user in _context.Users
+                               join domain in _context.Domains on user.DomainId equals domain.Id
+                               select new { user, domainName = domain.Name })
+                .ToListAsync();
+
+            // LastLogins keys on the full email; only fetch rows for users we are returning
+            // (skips stale rows of deleted accounts instead of loading the whole table).
+            var emails = users.Select(x => x.user.Name + "@" + x.domainName).ToList();
+            var loginsByUser = (await _context.LastLogins
+                    .Where(l => emails.Contains(l.UserId))
+                    .ToListAsync())
                 .GroupBy(l => l.UserId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            return (from user in _context.Users
-                    join domain in _context.Domains on user.DomainId equals domain.Id
-                    select new { user, domain })
-                .ToList()
-                .Select(x =>
-                {
-                    var email = $"{x.user.Name}@{x.domain.Name}";
-                    var logins = loginsByUser.TryGetValue(email, out var entries)
-                        ? entries
-                            .Select(e => new LastLoginEntry
-                            {
-                                Service = e.Service,
-                                At = DateTimeOffset.FromUnixTimeSeconds(e.LastAccess).UtcDateTime,
-                            })
-                            .OrderByDescending(e => e.At)
-                            .ToList()
-                        : new List<LastLoginEntry>();
-
-                    return new AdminUserInfo
-                    {
-                        Id = x.user.Id,
-                        UserName = x.user.Name,
-                        DomainId = x.user.DomainId,
-                        DomainName = x.domain.Name,
-                        FullName = x.user.FullName,
-                        QuotaMb = x.user.QuotaMb,
-                        Active = x.user.Active == ActiveState.Y,
-                        Admin = x.user.Admin == ActiveState.Y,
-                        LastLogins = logins
-                    };
-                }).ToList();
+            return users
+                .Select(x => MapToAdminUserInfo(x.user, x.domainName,
+                    BuildLastLogins(loginsByUser, $"{x.user.Name}@{x.domainName}")))
+                .ToList();
         }
 
-        public Result<AdminUserInfo> CreateUser(AdminUserRequest request)
+        public async Task<AdminUserInfo?> GetUserByIdAsync(int id)
+        {
+            var row = await (from user in _context.Users
+                             join domain in _context.Domains on user.DomainId equals domain.Id
+                             where user.Id == id
+                             select new { user, domain })
+                .FirstOrDefaultAsync();
+
+            return row == null ? null : MapToAdminUserInfo(row.user, row.domain.Name);
+        }
+
+        public async Task<Result<AdminUserInfo>> CreateUserAsync(AdminUserRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.UserName))
                 return Result.Failure<AdminUserInfo>("Username is required");
@@ -73,11 +69,14 @@ namespace weesky.Snoopy.Microservice.Repositories
             if (string.IsNullOrEmpty(request.Password))
                 return Result.Failure<AdminUserInfo>("Password is required");
 
-            var domain = _context.Domains.FirstOrDefault(d => d.Id == request.DomainId);
+            if (request.Password.Length < MinPasswordLength)
+                return Result.Failure<AdminUserInfo>($"Password must contain at least {MinPasswordLength} characters");
+
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == request.DomainId);
             if (domain == null)
                 return Result.Failure<AdminUserInfo>($"Domain '{request.DomainId}' not found");
 
-            bool duplicate = _context.Users.Any(u =>
+            bool duplicate = await _context.Users.AnyAsync(u =>
                 string.Equals(u.Name, request.UserName, StringComparison.InvariantCultureIgnoreCase) &&
                 u.DomainId == request.DomainId);
             if (duplicate)
@@ -96,28 +95,21 @@ namespace weesky.Snoopy.Microservice.Repositories
             };
 
             _context.Users.Add(newUser);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
-            return Result.Success(new AdminUserInfo
-            {
-                Id = newUser.Id,
-                UserName = newUser.Name,
-                DomainId = newUser.DomainId,
-                DomainName = domain.Name,
-                FullName = newUser.FullName,
-                QuotaMb = newUser.QuotaMb,
-                Active = newUser.Active == ActiveState.Y,
-                Admin = newUser.Admin == ActiveState.Y
-            });
+            return Result.Success(MapToAdminUserInfo(newUser, domain.Name));
         }
 
-        public Result<AdminUserInfo> UpdateUser(int id, AdminUserRequest request)
+        public async Task<Result<AdminUserInfo>> UpdateUserAsync(int id, AdminUserRequest request)
         {
-            var user = _context.Users.FirstOrDefault(u => u.Id == id);
+            if (!string.IsNullOrEmpty(request.Password) && request.Password.Length < MinPasswordLength)
+                return Result.Failure<AdminUserInfo>($"Password must contain at least {MinPasswordLength} characters");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
             if (user == null)
                 return Result.Failure<AdminUserInfo>($"User with id {id} not found");
 
-            var domain = _context.Domains.FirstOrDefault(d => d.Id == user.DomainId);
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
 
             user.FullName = request.FullName ?? user.FullName;
             user.QuotaMb = request.QuotaMb;
@@ -130,40 +122,30 @@ namespace weesky.Snoopy.Microservice.Repositories
                 user.LastUpdate = DateTime.UtcNow;
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
-            return Result.Success(new AdminUserInfo
-            {
-                Id = user.Id,
-                UserName = user.Name,
-                DomainId = user.DomainId,
-                DomainName = domain?.Name ?? user.DomainId,
-                FullName = user.FullName,
-                QuotaMb = user.QuotaMb,
-                Active = user.Active == ActiveState.Y,
-                Admin = user.Admin == ActiveState.Y
-            });
+            return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
         }
 
-        public Result DeleteUser(int id)
+        public async Task<Result> DeleteUserAsync(int id)
         {
-            var user = _context.Users.FirstOrDefault(u => u.Id == id);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
             if (user == null)
                 return Result.Failure($"User with id {id} not found");
 
             _context.Users.Remove(user);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return Result.Success();
         }
 
-        public IEnumerable<Domain> GetAllDomains()
+        public async Task<IEnumerable<Domain>> GetAllDomainsAsync()
         {
-            return _context.Domains
+            return await _context.Domains
                 .Select(d => new Domain { Id = d.Id, Name = d.Name })
-                .ToList();
+                .ToListAsync();
         }
 
-        public Result<Domain> CreateDomain(AdminDomainRequest request)
+        public async Task<Result<Domain>> CreateDomainAsync(AdminDomainRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Id) || request.Id.Length > 3)
                 return Result.Failure<Domain>("Domain id must be 1-3 characters");
@@ -171,139 +153,145 @@ namespace weesky.Snoopy.Microservice.Repositories
             if (string.IsNullOrWhiteSpace(request.Name))
                 return Result.Failure<Domain>("Domain name is required");
 
-            if (_context.Domains.Any(d => d.Id == request.Id))
+            if (await _context.Domains.AnyAsync(d => d.Id == request.Id))
                 return Result.Failure<Domain>($"Domain id '{request.Id}' already exists");
 
             var domain = new MailDomain { Id = request.Id.ToUpperInvariant(), Name = request.Name };
             _context.Domains.Add(domain);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
         }
 
-        public Result<Domain> UpdateDomain(string id, AdminDomainRequest request)
+        public async Task<Result<Domain>> UpdateDomainAsync(string id, AdminDomainRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Name))
                 return Result.Failure<Domain>("Domain name is required");
 
-            var domain = _context.Domains.FirstOrDefault(d => d.Id == id);
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == id);
             if (domain == null)
                 return Result.Failure<Domain>($"Domain '{id}' not found");
 
             domain.Name = request.Name;
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
         }
 
-        public Result DeleteDomain(string id)
+        public async Task<Result> DeleteDomainAsync(string id)
         {
-            var domain = _context.Domains.FirstOrDefault(d => d.Id == id);
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == id);
             if (domain == null)
                 return Result.Failure($"Domain '{id}' not found");
 
-            if (_context.Users.Any(u => u.DomainId == id))
+            if (await _context.Users.AnyAsync(u => u.DomainId == id))
                 return Result.Failure($"Cannot delete domain '{id}': it still has associated users");
 
             _context.Domains.Remove(domain);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return Result.Success();
         }
 
-        public IEnumerable<VirtualDomainInfo> GetAllVirtualDomains()
+        public async Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync()
         {
-            var primaryDomainIds = _context.Users.Select(u => u.DomainId).Distinct().ToHashSet();
-            var ownedDomainIds = _context.DomainsOwnerships.Select(o => o.DomainId).ToHashSet();
+            var primaryDomainIds = (await _context.Users.Select(u => u.DomainId).Distinct().ToListAsync()).ToHashSet();
+            var ownedDomainIds = (await _context.DomainsOwnerships.Select(o => o.DomainId).ToListAsync()).ToHashSet();
 
-            var aliasDomains = _context.Domains
-                .Select(d => new { d.Id, d.Name })
-                .ToList()
+            var aliasDomains = (await _context.Domains
+                    .Select(d => new { d.Id, d.Name })
+                    .ToListAsync())
                 .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
                 .ToList();
 
-            var ownerships = _context.DomainsOwnerships.ToList();
-
-            var userProjections = _context.Users
-                .Select(u => new { u.Id, u.Name, u.DomainId })
-                .ToList();
-
-            var domainNames = _context.Domains
-                .Select(d => new { d.Id, d.Name })
-                .ToDictionary(d => d.Id, d => d.Name);
-
-            return aliasDomains.Select(domain =>
+            var result = new List<VirtualDomainInfo>();
+            foreach (var domain in aliasDomains)
             {
-                var owners = ownerships
-                    .Where(o => o.DomainId == domain.Id)
-                    .Select(o =>
-                    {
-                        var owner = userProjections.FirstOrDefault(u => u.Id == o.UserId);
-                        if (owner == null || !domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
-                            return null;
-                        return new OwnerInfo { OwnerId = o.UserId, OwnerEmail = $"{owner.Name}@{ownerDomainName}" };
-                    })
-                    .OfType<OwnerInfo>()
-                    .ToList();
-                return new VirtualDomainInfo
+                result.Add(new VirtualDomainInfo
                 {
                     DomainId = domain.Id,
                     DomainName = domain.Name,
-                    Owners = owners
-                };
-            }).ToList();
+                    Owners = await GetDomainOwnersAsync(domain.Id)
+                });
+            }
+
+            return result;
         }
 
-        public Result<VirtualDomainInfo> AddVirtualDomainOwner(string domainId, int userId)
+        public async Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId)
         {
-            var domain = _context.Domains.FirstOrDefault(d => d.Id == domainId);
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == domainId);
             if (domain == null)
                 return Result.Failure<VirtualDomainInfo>($"Domain '{domainId}' not found");
 
-            var user = _context.Users
-                .Where(u => u.Id == userId)
-                .Select(u => new { u.Id, u.Name, u.DomainId })
-                .FirstOrDefault();
-            if (user == null)
+            if (!await _context.Users.AnyAsync(u => u.Id == userId))
                 return Result.Failure<VirtualDomainInfo>($"User with id {userId} not found");
 
-            var existing = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
-            if (existing == null)
+            if (!await _context.DomainsOwnerships.AnyAsync(o => o.DomainId == domainId && o.UserId == userId))
+            {
                 _context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
-
-            _context.SaveChanges();
-
-            var userProjections = _context.Users.Select(u => new { u.Id, u.Name, u.DomainId }).ToList();
-            var domainNames = _context.Domains.Select(d => new { d.Id, d.Name }).ToDictionary(d => d.Id, d => d.Name);
-            var owners = _context.DomainsOwnerships
-                .Where(o => o.DomainId == domainId)
-                .ToList()
-                .Select(o =>
-                {
-                    var owner = userProjections.FirstOrDefault(u => u.Id == o.UserId);
-                    if (owner == null || !domainNames.TryGetValue(owner.DomainId, out var ownerDomainName))
-                        return null;
-                    return new OwnerInfo { OwnerId = o.UserId, OwnerEmail = $"{owner.Name}@{ownerDomainName}" };
-                })
-                .OfType<OwnerInfo>()
-                .ToList();
+                await _context.SaveChangesAsync();
+            }
 
             return Result.Success(new VirtualDomainInfo
             {
                 DomainId = domain.Id,
                 DomainName = domain.Name,
-                Owners = owners
+                Owners = await GetDomainOwnersAsync(domainId)
             });
         }
 
-        public Result RemoveVirtualDomainOwner(string domainId, int userId)
+        public async Task<Result> RemoveVirtualDomainOwnerAsync(string domainId, int userId)
         {
-            var ownership = _context.DomainsOwnerships.FirstOrDefault(o => o.DomainId == domainId && o.UserId == userId);
+            var ownership = await _context.DomainsOwnerships.FirstOrDefaultAsync(o => o.DomainId == domainId && o.UserId == userId);
             if (ownership == null)
                 return Result.Failure($"No ownership found for domain '{domainId}' and user {userId}");
 
             _context.DomainsOwnerships.Remove(ownership);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return Result.Success();
+        }
+
+        // ---------- Helpers ----------
+
+        private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null)
+        {
+            return new AdminUserInfo
+            {
+                Id = user.Id,
+                UserName = user.Name,
+                DomainId = user.DomainId,
+                DomainName = domainName,
+                FullName = user.FullName,
+                QuotaMb = user.QuotaMb,
+                Active = user.Active == ActiveState.Y,
+                Admin = user.Admin == ActiveState.Y,
+                LastLogins = lastLogins ?? new List<LastLoginEntry>()
+            };
+        }
+
+        private static List<LastLoginEntry> BuildLastLogins(Dictionary<string, List<LastLogin>> loginsByUser, string email)
+        {
+            if (!loginsByUser.TryGetValue(email, out var entries))
+                return new List<LastLoginEntry>();
+
+            return entries
+                .Select(e => new LastLoginEntry
+                {
+                    Service = e.Service,
+                    At = DateTimeOffset.FromUnixTimeSeconds(e.LastAccess).UtcDateTime,
+                })
+                .OrderByDescending(e => e.At)
+                .ToList();
+        }
+
+        private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId)
+        {
+            return (from ownership in _context.DomainsOwnerships
+                    join user in _context.Users on ownership.UserId equals user.Id
+                    join domain in _context.Domains on user.DomainId equals domain.Id
+                    where ownership.DomainId == domainId
+                    select new OwnerInfo { OwnerId = ownership.UserId, OwnerEmail = user.Name + "@" + domain.Name })
+                .ToListAsync();
         }
     }
 }

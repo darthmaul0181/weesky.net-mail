@@ -21,36 +21,36 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public void Add_WhenSuccess_Returns204()
+        public async Task Add_WhenSuccess_Returns204()
         {
-            _repo.Setup(r => r.AddAlias(It.IsAny<User>(), It.IsAny<Alias>()))
-                .Returns(Result.Success());
+            _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+                .ReturnsAsync(Result.Success());
 
-            var result = CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
+            var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
 
             var status = Assert.IsType<StatusCodeResult>(result.Result);
             Assert.Equal(204, status.StatusCode);
         }
 
         [Fact]
-        public void Add_WhenFailure_Returns400WithEnvelope()
+        public async Task Add_WhenFailure_Returns400WithEnvelope()
         {
-            _repo.Setup(r => r.AddAlias(It.IsAny<User>(), It.IsAny<Alias>()))
-                .Returns(Result.Failure("Alias already exists"));
+            _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+                .ReturnsAsync(Result.Failure("Alias already exists"));
 
-            var result = CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
+            var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
 
             var obj = Assert.IsType<ObjectResult>(result.Result);
             Assert.Equal(400, obj.StatusCode);
         }
 
         [Fact]
-        public void Add_WhenFailure_EnvelopeContainsErrorMessage()
+        public async Task Add_WhenFailure_EnvelopeContainsErrorMessage()
         {
-            _repo.Setup(r => r.AddAlias(It.IsAny<User>(), It.IsAny<Alias>()))
-                .Returns(Result.Failure("Alias already exists"));
+            _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+                .ReturnsAsync(Result.Failure("Alias already exists"));
 
-            var result = CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
+            var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
 
             var obj = Assert.IsType<ObjectResult>(result.Result);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -58,61 +58,61 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public void List_ReturnsAliasesFromRepository()
+        public async Task List_ReturnsAliasesFromRepository()
         {
             var aliases = new[] { new Alias { Name = "alias1", Domain = "example.com" } };
-            _repo.Setup(r => r.GetAliases(It.IsAny<User>())).Returns(aliases);
+            _repo.Setup(r => r.GetAliasesAsync(It.IsAny<User>())).ReturnsAsync(aliases);
 
-            var result = CreateController().List();
+            var result = await CreateController().List();
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             Assert.Same(aliases, ok.Value);
         }
 
         [Fact]
-        public void List_WithNoAliases_ReturnsEmptyCollection()
+        public async Task List_WithNoAliases_ReturnsEmptyCollection()
         {
-            _repo.Setup(r => r.GetAliases(It.IsAny<User>())).Returns(Enumerable.Empty<Alias>());
+            _repo.Setup(r => r.GetAliasesAsync(It.IsAny<User>())).ReturnsAsync(Enumerable.Empty<Alias>());
 
-            var result = CreateController().List();
+            var result = await CreateController().List();
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             Assert.Empty((IEnumerable<Alias>)ok.Value!);
         }
 
         [Fact]
-        public void Delete_WhenSuccess_Returns204()
+        public async Task Delete_WhenSuccess_Returns204()
         {
-            _repo.Setup(r => r.DeleteAlias(It.IsAny<User>(), It.IsAny<Alias>()))
-                .Returns(Result.Success());
+            _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+                .ReturnsAsync(Result.Success());
 
-            var result = CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" });
+            var result = await CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" });
 
             var status = Assert.IsType<StatusCodeResult>(result.Result);
             Assert.Equal(204, status.StatusCode);
         }
 
         [Fact]
-        public void Delete_WhenFailure_Returns400WithEnvelope()
+        public async Task Delete_WhenFailure_Returns400WithEnvelope()
         {
-            _repo.Setup(r => r.DeleteAlias(It.IsAny<User>(), It.IsAny<Alias>()))
-                .Returns(Result.Failure("Alias not found"));
+            _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+                .ReturnsAsync(Result.Failure("Alias not found"));
 
-            var result = CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" });
+            var result = await CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" });
 
             var obj = Assert.IsType<ObjectResult>(result.Result);
             Assert.Equal(400, obj.StatusCode);
         }
 
         [Fact]
-        public void Delete_PassesAuthenticatedUserToRepository()
+        public async Task Delete_PassesAuthenticatedUserToRepository()
         {
-            _repo.Setup(r => r.DeleteAlias(It.IsAny<User>(), It.IsAny<Alias>()))
-                .Returns(Result.Success());
+            _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+                .ReturnsAsync(Result.Success());
 
-            CreateController().Delete(new Alias { Name = "x", Domain = "example.com" });
+            await CreateController().Delete(new Alias { Name = "x", Domain = "example.com" });
 
-            _repo.Verify(r => r.DeleteAlias(
+            _repo.Verify(r => r.DeleteAliasAsync(
                 It.Is<User>(u => u.Name == "john" && u.Domain == "example.com"),
                 It.IsAny<Alias>()),
                 Times.Once);

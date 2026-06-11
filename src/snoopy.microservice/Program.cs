@@ -2,9 +2,11 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.Authorization;
 using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
+using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
@@ -52,11 +54,21 @@ builder.Host.UseSerilog((ctx, cfg) =>
 
 // Add services to the container.
 
-var connectionString = builder.Configuration.GetConnectionString("MailUserAccountsDatabase");
+var connectionString = new MySqlConnector.MySqlConnectionStringBuilder(
+    builder.Configuration.GetConnectionString("MailUserAccountsDatabase")
+        ?? throw new InvalidOperationException("Connection string 'MailUserAccountsDatabase' is missing"))
+{
+    ConvertZeroDateTime = true
+}.ToString();
 
-builder.Services.AddDbContext<ApplicationDbContext>(options => {
-	options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
-	.LogTo(Console.WriteLine, LogLevel.Warning);
+// Detect the server version once at startup: ServerVersion.AutoDetect opens a database
+// connection, so it must not run on every DbContext instantiation.
+var serverVersion = ServerVersion.AutoDetect(connectionString);
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseMySql(connectionString, serverVersion, mySqlOptions => mySqlOptions.EnableStringComparisonTranslations())
+    .LogTo(Console.WriteLine, LogLevel.Warning);
 });
 
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
@@ -78,6 +90,13 @@ builder.Services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =
 });
 
 builder.Services.AddJwtBearerAuthentication(true);
+
+builder.Services.AddScoped<IAuthorizationHandler, AdminRequirementHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AdminRequirement.PolicyName, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new AdminRequirement()));
+});
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? Array.Empty<string>();
@@ -117,7 +136,7 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
-    o.JsonSerializerOptions.IgnoreNullValues = true;
+    o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
@@ -167,8 +186,8 @@ app.Use(async (context, next) =>
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-	app.UseSwagger();
-	app.UseSwaggerUI();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseCors("Frontend");

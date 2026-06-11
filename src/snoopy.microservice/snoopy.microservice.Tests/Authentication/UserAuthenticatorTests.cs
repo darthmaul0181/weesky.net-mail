@@ -17,73 +17,73 @@ namespace weesky.Snoopy.Microservice.Tests.Authentication
             new(_usersRepo.Object, _tokenManager.Object, Mock.Of<ILogger<UserAuthenticator>>());
 
         [Fact]
-        public void Authenticate_WithUnknownUser_ReturnsFailure()
+        public async Task Authenticate_WithUnknownUser_ReturnsFailure()
         {
-            _usersRepo.Setup(r => r.FindByEmail(It.IsAny<string>())).Returns((User)null!);
+            _usersRepo.Setup(r => r.FindByEmailAsync(It.IsAny<string>())).ReturnsAsync((User)null!);
 
-            var result = CreateSut().Authenticate("unknown@example.com", "password");
+            var result = await CreateSut().AuthenticateAsync("unknown@example.com", "password");
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void Authenticate_WithBadPassword_ReturnsFailure()
+        public async Task Authenticate_WithBadPassword_ReturnsFailure()
         {
             var user = new User("john@example.com");
-            _usersRepo.Setup(r => r.FindByEmail("john@example.com")).Returns(user);
-            _usersRepo.Setup(r => r.IsValidPassword(user, "wrong")).Returns(false);
+            _usersRepo.Setup(r => r.FindByEmailAsync("john@example.com")).ReturnsAsync(user);
+            _usersRepo.Setup(r => r.IsValidPasswordAsync(user, "wrong")).ReturnsAsync(false);
 
-            var result = CreateSut().Authenticate("john@example.com", "wrong");
+            var result = await CreateSut().AuthenticateAsync("john@example.com", "wrong");
 
             Assert.True(result.IsFailure);
         }
 
         [Fact]
-        public void Authenticate_WithValidCredentials_ReturnsSuccess()
+        public async Task Authenticate_WithValidCredentials_ReturnsSuccess()
         {
             var user = new User("john@example.com");
             var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
-            _usersRepo.Setup(r => r.FindByEmail("john@example.com")).Returns(user);
-            _usersRepo.Setup(r => r.IsValidPassword(user, "correct")).Returns(true);
+            _usersRepo.Setup(r => r.FindByEmailAsync("john@example.com")).ReturnsAsync(user);
+            _usersRepo.Setup(r => r.IsValidPasswordAsync(user, "correct")).ReturnsAsync(true);
             _tokenManager.Setup(t => t.Generate(user)).Returns(token);
 
-            var result = CreateSut().Authenticate("john@example.com", "correct");
+            var result = await CreateSut().AuthenticateAsync("john@example.com", "correct");
 
             Assert.True(result.IsSuccess);
         }
 
         [Fact]
-        public void Authenticate_WithValidCredentials_ReturnsGeneratedToken()
+        public async Task Authenticate_WithValidCredentials_ReturnsGeneratedToken()
         {
             var user = new User("john@example.com");
             var expected = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
-            _usersRepo.Setup(r => r.FindByEmail("john@example.com")).Returns(user);
-            _usersRepo.Setup(r => r.IsValidPassword(user, "correct")).Returns(true);
+            _usersRepo.Setup(r => r.FindByEmailAsync("john@example.com")).ReturnsAsync(user);
+            _usersRepo.Setup(r => r.IsValidPasswordAsync(user, "correct")).ReturnsAsync(true);
             _tokenManager.Setup(t => t.Generate(user)).Returns(expected);
 
-            var result = CreateSut().Authenticate("john@example.com", "correct");
+            var result = await CreateSut().AuthenticateAsync("john@example.com", "correct");
 
             Assert.Same(expected, result.Value);
         }
 
         [Fact]
-        public void Authenticate_WithUnknownUser_NeverCallsTokenManager()
+        public async Task Authenticate_WithUnknownUser_NeverCallsTokenManager()
         {
-            _usersRepo.Setup(r => r.FindByEmail(It.IsAny<string>())).Returns((User)null!);
+            _usersRepo.Setup(r => r.FindByEmailAsync(It.IsAny<string>())).ReturnsAsync((User)null!);
 
-            CreateSut().Authenticate("unknown@example.com", "password");
+            await CreateSut().AuthenticateAsync("unknown@example.com", "password");
 
             _tokenManager.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
         }
 
         [Fact]
-        public void Authenticate_WithBadPassword_NeverCallsTokenManager()
+        public async Task Authenticate_WithBadPassword_NeverCallsTokenManager()
         {
             var user = new User("john@example.com");
-            _usersRepo.Setup(r => r.FindByEmail(It.IsAny<string>())).Returns(user);
-            _usersRepo.Setup(r => r.IsValidPassword(user, It.IsAny<string>())).Returns(false);
+            _usersRepo.Setup(r => r.FindByEmailAsync(It.IsAny<string>())).ReturnsAsync(user);
+            _usersRepo.Setup(r => r.IsValidPasswordAsync(user, It.IsAny<string>())).ReturnsAsync(false);
 
-            CreateSut().Authenticate("john@example.com", "wrong");
+            await CreateSut().AuthenticateAsync("john@example.com", "wrong");
 
             _tokenManager.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
         }

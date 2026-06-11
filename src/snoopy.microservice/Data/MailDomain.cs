@@ -4,18 +4,18 @@ using System.Diagnostics;
 
 namespace weesky.Snoopy.Microservice.Data
 {
-	[Table("domains")]
-	[DebuggerDisplay("{Name} ({Id})")]
-	public class MailDomain
-	{
-		[Key]
-		[Column("id")]
-		[StringLength(3)]
-		public string Id { get; set; }
+    [Table("domains")]
+    [DebuggerDisplay("{Name} ({Id})")]
+    public class MailDomain
+    {
+        [Key]
+        [Column("id")]
+        [StringLength(3)]
+        public string Id { get; set; }
 
-		[Required]
-		[Column("name")]
-		[StringLength(30)]
-		public string Name { get; set; }
-	}
+        [Required]
+        [Column("name")]
+        [StringLength(30)]
+        public string Name { get; set; }
+    }
 }

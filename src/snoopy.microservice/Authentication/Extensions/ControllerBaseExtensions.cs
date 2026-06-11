@@ -5,25 +5,25 @@ using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Authentication.Extensions
 {
-	public static class ControllerBaseExtensions
-	{
-		public static User GetUser(this ControllerBase controller)
-		{
-			User user = null;
-			IEnumerable<Claim> claims = controller.HttpContext?.User?.Claims ?? Enumerable.Empty<Claim>();
+    public static class ControllerBaseExtensions
+    {
+        public static User GetUser(this ControllerBase controller)
+        {
+            User user = null;
+            IEnumerable<Claim> claims = controller.HttpContext?.User?.Claims ?? Enumerable.Empty<Claim>();
 
-			if (claims.Any())
-			{
-				string name = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Upn)?.Value;
-				string domain = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Dns)?.Value;
+            if (claims.Any())
+            {
+                string name = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Upn)?.Value;
+                string domain = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Dns)?.Value;
 
-				if(!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(domain))
-				{
-					user = new User($"{name}@{domain}");
-				}
-			}
+                if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(domain))
+                {
+                    user = new User($"{name}@{domain}");
+                }
+            }
 
-			return user;
-		}
-	}
+            return user;
+        }
+    }
 }

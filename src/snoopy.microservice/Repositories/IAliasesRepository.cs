@@ -3,10 +3,10 @@ using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Repositories
 {
-	public interface IAliasesRepository
-	{
-		IEnumerable<Alias> GetAliases(User user);
-		Result AddAlias(User user, Alias alias);
-		Result DeleteAlias(User user, Alias alias);
-	}
+    public interface IAliasesRepository
+    {
+        Task<IEnumerable<Alias>> GetAliasesAsync(User user);
+        Task<Result> AddAliasAsync(User user, Alias alias);
+        Task<Result> DeleteAliasAsync(User user, Alias alias);
+    }
 }

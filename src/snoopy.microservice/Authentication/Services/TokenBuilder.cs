@@ -5,8 +5,8 @@ using System.Text;
 
 namespace weesky.Snoopy.Microservice.Authentication.Services
 {
-	public class TokenBuilder
-	{
+    public class TokenBuilder
+    {
         #region Members
         private string _issuer;
         private string _audience;
@@ -17,13 +17,13 @@ namespace weesky.Snoopy.Microservice.Authentication.Services
         #endregion
 
         public TokenBuilder()
-		{
+        {
             _claims = new List<Claim>();
-		}
+        }
 
         public TokenBuilder AddClaims(params Claim[] claims)
         {
-           _claims.AddRange(claims);
+            _claims.AddRange(claims);
             return this;
         }
 
@@ -34,10 +34,10 @@ namespace weesky.Snoopy.Microservice.Authentication.Services
         }
 
         public TokenBuilder AddClaim(string type, string value)
-		{
+        {
             _claims.Add(new Claim(type, value));
             return this;
-		}
+        }
 
         public TokenBuilder AddIssuer(string issuer)
         {
@@ -53,7 +53,7 @@ namespace weesky.Snoopy.Microservice.Authentication.Services
 
         public TokenBuilder AddExpiry(int minutes)
         {
-            _expires = DateTime.Now.AddMinutes(minutes);
+            _expires = DateTime.UtcNow.AddMinutes(minutes);
             return this;
         }
 
@@ -61,7 +61,7 @@ namespace weesky.Snoopy.Microservice.Authentication.Services
         {
             _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
             _credentials = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256);
-            
+
             return this;
         }
 

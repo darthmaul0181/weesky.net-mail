@@ -1,4 +1,13 @@
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
 [*.cs]
+indent_style = space
+indent_size = 4
 
 # CS8618: Non nullable field _name is not initialized. Consider declare the field as nullable type
 dotnet_diagnostic.CS8618.severity = none

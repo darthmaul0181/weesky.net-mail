@@ -1,149 +1,143 @@
 using CryptSharp.Core;
 using CSharpFunctionalExtensions;
+using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Repositories
 {
-	public class UsersRepository : IUsersRepository
-	{
-		private readonly ApplicationDbContext _context;
-		private readonly ILogger<UsersRepository> _logger;
+    public class UsersRepository : IUsersRepository
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly ILogger<UsersRepository> _logger;
 
-		public UsersRepository(ApplicationDbContext dbContext, ILogger<UsersRepository> logger)
-		{
-			_context = dbContext;
-			_logger = logger;
-		}
+        public UsersRepository(ApplicationDbContext dbContext, ILogger<UsersRepository> logger)
+        {
+            _context = dbContext;
+            _logger = logger;
+        }
 
-		public User FindByEmail(string email)
-		{
-			string[] emailParts = email.Split(new char[] { '@' });
+        public async Task<User> FindByEmailAsync(string email)
+        {
+            string[] emailParts = email.Split(new char[] { '@' });
 
-			if (emailParts == null || emailParts.Length != 2)
-			{
-				return null;
-			}
+            if (emailParts == null || emailParts.Length != 2)
+            {
+                return null;
+            }
 
-			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == emailParts[1]);
-			if (domain == null)
-			{
-				return null;
-			}
+            var match = await FindMailUserAsync(emailParts[0], emailParts[1]);
+            if (match == null)
+            {
+                return null;
+            }
 
-			MailUser user = _context.Users.FirstOrDefault(o => string.Equals(o.Name, emailParts[0], StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-			if (user == null)
-			{
-				return null;
-			}
+            return new User($"{match.Value.MailUser.Name}@{match.Value.Domain.Name}");
+        }
 
-			return new User($"{user.Name}@{domain.Name}");
-		}
+        public async Task<bool> IsValidPasswordAsync(User user, string password)
+        {
+            var match = await FindMailUserAsync(user.Name, user.Domain);
+            return match != null && PasswordMatches(match.Value.MailUser, password);
+        }
 
-		public bool IsValidPassword(User user, string password)
-		{
-			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
-			if (domain == null)
-			{
-				return false;
-			}
+        public async Task<Result<AccountInfo>> GetAccountInfoAsync(User user)
+        {
+            var match = await FindMailUserAsync(user.Name, user.Domain);
+            if (match == null)
+                return Result.Failure<AccountInfo>("Account not found");
 
-			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-			if (mailUser == null)
-			{
-				return false;
-			}
+            var (mailUser, domain) = match.Value;
 
-			return Crypter.Sha512.Crypt(password, mailUser.Password) == mailUser.Password;
-		}
+            var ownedDomains = await _context.DomainsOwnerships
+                .Where(o => o.UserId == mailUser.Id)
+                .Join(_context.Domains, o => o.DomainId, d => d.Id, (o, d) => new Domain { Id = d.Id, Name = d.Name })
+                .ToListAsync();
 
-		public Result<AccountInfo> GetAccountInfo(User user)
-		{
-			MailDomain domain = _context.Domains.FirstOrDefault(d => d.Name == user.Domain);
-			if (domain == null)
-				return Result.Failure<AccountInfo>("Account not found");
+            if (ownedDomains.All(d => d.Id != domain.Id))
+                ownedDomains.Add(new Domain { Id = domain.Id, Name = domain.Name });
 
-			MailUser mailUser = _context.Users.FirstOrDefault(u =>
-				string.Equals(u.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) &&
-				u.DomainId == domain.Id);
-			if (mailUser == null)
-				return Result.Failure<AccountInfo>("Account not found");
+            return Result.Success(new AccountInfo
+            {
+                UserId = mailUser.Id,
+                UserName = mailUser.Name,
+                FullName = mailUser.FullName,
+                Mailbox = mailUser.DomainId,
+                Domains = ownedDomains,
+                IsAdmin = mailUser.Admin == ActiveState.Y
+            });
+        }
 
-			var ownedDomains = _context.DomainsOwnerships
-				.Where(o => o.UserId == mailUser.Id)
-				.Join(_context.Domains, o => o.DomainId, d => d.Id, (o, d) => new Domain { Id = d.Id, Name = d.Name })
-				.ToList();
+        public async Task<Result> ChangeFullNameAsync(User user, string fullName)
+        {
+            var match = await FindMailUserAsync(user.Name, user.Domain);
+            if (match == null)
+            {
+                _logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
+                return Result.Failure($"User {user.Name}@{user.Domain} not found");
+            }
 
-			if (ownedDomains.All(d => d.Id != domain.Id))
-				ownedDomains.Add(new Domain { Id = domain.Id, Name = domain.Name });
+            match.Value.MailUser.FullName = fullName;
+            await _context.SaveChangesAsync();
 
-			return Result.Success(new AccountInfo
-			{
-				UserId = mailUser.Id,
-				UserName = mailUser.Name,
-				FullName = mailUser.FullName,
-				Mailbox = mailUser.DomainId,
-				Domains = ownedDomains,
-				IsAdmin = mailUser.Admin == ActiveState.Y
-			});
-		}
+            _logger.LogInformation("Audit: change_fullname user={User} outcome=success", user.Email);
+            return Result.Success();
+        }
 
-		public Result ChangeFullName(User user, string fullName)
-		{
-			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
-			if (domain == null)
-			{
-				_logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
-				return Result.Failure($"User {user.Name}@{user.Domain} not found");
-			}
+        public async Task<Result> ChangePasswordAsync(User user, string newPassword, string oldPassword)
+        {
+            if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
+            {
+                _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=weak_password", user.Email);
+                return Result.Failure($"Your password should contains 8 chars at least");
+            }
 
-			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-			if (mailUser == null)
-			{
-				_logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
-				return Result.Failure($"User {user.Name}@{user.Domain} not found");
-			}
+            var match = await FindMailUserAsync(user.Name, user.Domain);
+            if (match == null)
+            {
+                _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
+                return Result.Failure($"User {user.Name}@{user.Domain} not found");
+            }
 
-			mailUser.FullName = fullName;
-			_context.SaveChanges();
+            MailUser mailUser = match.Value.MailUser;
 
-			_logger.LogInformation("Audit: change_fullname user={User} outcome=success", user.Email);
-			return Result.Success();
-		}
+            if (!PasswordMatches(mailUser, oldPassword))
+            {
+                _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
+                return Result.Failure($"Invalid password");
+            }
 
-		public Result ChangePassword(User user, string newPassword, string oldPassword)
-		{
-			if(string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
-			{
-				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=weak_password", user.Email);
-				return Result.Failure($"Your password should contains 8 chars at least");
-			}
+            mailUser.Password = newPassword;
+            await _context.SaveChangesAsync();
 
-			MailDomain domain = _context.Domains.FirstOrDefault(dom => dom.Name == user.Domain);
-			if (domain == null)
-			{
-				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
-				return Result.Failure($"User {user.Name}@{user.Domain} not found");
-			}
+            _logger.LogInformation("Audit: change_password user={User} outcome=success", user.Email);
+            return Result.Success();
+        }
 
-			MailUser mailUser = _context.Users.FirstOrDefault(o => string.Equals(o.Name, user.Name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-			if (mailUser == null)
-			{
-				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
-				return Result.Failure($"User {user.Name}@{user.Domain} not found");
-			}
+        /// <summary>
+        /// Resolves the domain by name then the mailbox user within it (name matched
+        /// case-insensitively). Returns null when either is missing.
+        /// </summary>
+        private async Task<(MailUser MailUser, MailDomain Domain)?> FindMailUserAsync(string name, string domainName)
+        {
+            MailDomain domain = await _context.Domains.FirstOrDefaultAsync(dom => dom.Name == domainName);
+            if (domain == null)
+            {
+                return null;
+            }
 
-			if(!IsValidPassword(user, oldPassword))
-			{
-				_logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
-				return Result.Failure($"Invalid password");
-			}
+            MailUser mailUser = await _context.Users.FirstOrDefaultAsync(o => string.Equals(o.Name, name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
+            if (mailUser == null)
+            {
+                return null;
+            }
 
-			mailUser.Password = newPassword;
-			_context.SaveChanges();
+            return (mailUser, domain);
+        }
 
-			_logger.LogInformation("Audit: change_password user={User} outcome=success", user.Email);
-			return Result.Success();
-		}
-	}
+        private static bool PasswordMatches(MailUser mailUser, string password)
+        {
+            return Crypter.Sha512.Crypt(password, mailUser.Password) == mailUser.Password;
+        }
+    }
 }

@@ -23,28 +23,30 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public void GetAccountInfo_WhenUserFound_Returns200WithAccountInfo()
+        public async Task GetAccountInfo_WhenUserFound_Returns200WithAccountInfo()
         {
             var accountInfo = new AccountInfo { UserId = 1, UserName = "john" };
-            _usersRepo.Setup(r => r.GetAccountInfo(It.IsAny<User>()))
-                .Returns(Result.Success(accountInfo));
+            _usersRepo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>()))
+                .ReturnsAsync(Result.Success(accountInfo));
 
-            var result = CreateController().GetAccountInfo();
+            var result = await CreateController().GetAccountInfo();
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             Assert.Same(accountInfo, ok.Value);
         }
 
         [Fact]
-        public void GetAccountInfo_WhenUserNotFound_Returns404()
+        public async Task GetAccountInfo_WhenUserNotFound_Returns404WithEnvelope()
         {
-            _usersRepo.Setup(r => r.GetAccountInfo(It.IsAny<User>()))
-                .Returns(Result.Failure<AccountInfo>("Account not found"));
+            _usersRepo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>()))
+                .ReturnsAsync(Result.Failure<AccountInfo>("Account not found"));
 
-            var result = CreateController().GetAccountInfo();
+            var result = await CreateController().GetAccountInfo();
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(404, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(404, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Account not found", envelope.Message);
         }
 
         [Fact]
@@ -61,15 +63,17 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public async Task GetQuota_WhenFailed_Returns502()
+        public async Task GetQuota_WhenFailed_Returns502WithEnvelope()
         {
             _dovecotClient.Setup(c => c.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<Quota>("Unreachable"));
 
             var result = await CreateController().GetQuota(CancellationToken.None);
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(502, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(502, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Unreachable", envelope.Message);
         }
 
         [Fact]
@@ -86,48 +90,50 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public async Task GetFolders_WhenFailed_Returns502()
+        public async Task GetFolders_WhenFailed_Returns502WithEnvelope()
         {
             _dovecotClient.Setup(c => c.GetMailboxesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<IReadOnlyList<string>>("Unreachable"));
 
             var result = await CreateController().GetFolders(CancellationToken.None);
 
-            var status = Assert.IsType<StatusCodeResult>(result.Result);
-            Assert.Equal(502, status.StatusCode);
+            var obj = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(502, obj.StatusCode);
+            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+            Assert.Equal("Unreachable", envelope.Message);
         }
 
         [Fact]
-        public void ChangePassword_WhenSuccess_Returns204()
+        public async Task ChangePassword_WhenSuccess_Returns204()
         {
-            _usersRepo.Setup(r => r.ChangePassword(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
-                .Returns(Result.Success());
+            _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Success());
 
-            var result = CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "OldPass" });
+            var result = await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "OldPass" });
 
             var status = Assert.IsType<StatusCodeResult>(result);
             Assert.Equal(204, status.StatusCode);
         }
 
         [Fact]
-        public void ChangePassword_WhenFailed_Returns400WithEnvelope()
+        public async Task ChangePassword_WhenFailed_Returns400WithEnvelope()
         {
-            _usersRepo.Setup(r => r.ChangePassword(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
-                .Returns(Result.Failure("Invalid password"));
+            _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Failure("Invalid password"));
 
-            var result = CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" });
+            var result = await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" });
 
             var obj = Assert.IsType<ObjectResult>(result);
             Assert.Equal(400, obj.StatusCode);
         }
 
         [Fact]
-        public void ChangePassword_WhenFailed_EnvelopeContainsErrorMessage()
+        public async Task ChangePassword_WhenFailed_EnvelopeContainsErrorMessage()
         {
-            _usersRepo.Setup(r => r.ChangePassword(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
-                .Returns(Result.Failure("Invalid password"));
+            _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Failure("Invalid password"));
 
-            var result = CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" });
+            var result = await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" });
 
             var obj = Assert.IsType<ObjectResult>(result);
             var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -136,24 +142,24 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         [Fact]
-        public void ChangeFullName_WhenSuccess_Returns204()
+        public async Task ChangeFullName_WhenSuccess_Returns204()
         {
-            _usersRepo.Setup(r => r.ChangeFullName(It.IsAny<User>(), It.IsAny<string>()))
-                .Returns(Result.Success());
+            _usersRepo.Setup(r => r.ChangeFullNameAsync(It.IsAny<User>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Success());
 
-            var result = CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
+            var result = await CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
 
             var status = Assert.IsType<StatusCodeResult>(result);
             Assert.Equal(204, status.StatusCode);
         }
 
         [Fact]
-        public void ChangeFullName_WhenFailed_Returns400WithEnvelope()
+        public async Task ChangeFullName_WhenFailed_Returns400WithEnvelope()
         {
-            _usersRepo.Setup(r => r.ChangeFullName(It.IsAny<User>(), It.IsAny<string>()))
-                .Returns(Result.Failure("User not found"));
+            _usersRepo.Setup(r => r.ChangeFullNameAsync(It.IsAny<User>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Failure("User not found"));
 
-            var result = CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
+            var result = await CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
 
             var obj = Assert.IsType<ObjectResult>(result);
             Assert.Equal(400, obj.StatusCode);

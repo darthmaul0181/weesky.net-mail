@@ -21,9 +21,9 @@ public class ResultEnveloppeTests
     }
 
     [Fact]
-    public void CrateErrorEnveloppe_SetsErrorStateAndMessage()
+    public void CreateErrorEnveloppe_SetsErrorStateAndMessage()
     {
-        var result = ResultEnveloppe.CrateErrorEnveloppe("oops");
+        var result = ResultEnveloppe.CreateErrorEnveloppe("oops");
         Assert.Equal(ResultState.Error, result.State);
         Assert.Equal("oops", result.Message);
     }
