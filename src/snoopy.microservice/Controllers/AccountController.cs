@@ -13,12 +13,12 @@ namespace weesky.Snoopy.Microservice.Controllers
     public class AccountController : ApiBaseController
     {
         private readonly IUsersRepository _usersRepository;
-        private readonly IDovecotQuotaClient _dovecotQuotaClient;
+        private readonly IDoveadmClient _doveadm;
 
-        public AccountController(IUsersRepository usersRepository, IDovecotQuotaClient dovecotQuotaClient)
+        public AccountController(IUsersRepository usersRepository, IDoveadmClient doveadm)
         {
             _usersRepository = usersRepository;
-            _dovecotQuotaClient = dovecotQuotaClient;
+            _doveadm = doveadm;
         }
 
         /// <summary>
@@ -49,7 +49,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status502BadGateway)]
         public async Task<ActionResult<Quota>> GetQuota(CancellationToken cancellationToken)
         {
-            Result<Quota> result = await _dovecotQuotaClient.GetQuotaAsync(AuthenticatedUser, cancellationToken);
+            Result<Quota> result = await _doveadm.GetQuotaAsync(AuthenticatedUser, cancellationToken);
             return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
         }
 
@@ -65,7 +65,7 @@ namespace weesky.Snoopy.Microservice.Controllers
         [ProducesResponseType(StatusCodes.Status502BadGateway)]
         public async Task<ActionResult<IReadOnlyList<string>>> GetFolders(CancellationToken cancellationToken)
         {
-            Result<IReadOnlyList<string>> result = await _dovecotQuotaClient.GetMailboxesAsync(AuthenticatedUser, cancellationToken);
+            Result<IReadOnlyList<string>> result = await _doveadm.GetMailboxesAsync(AuthenticatedUser, cancellationToken);
             return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
         }
 

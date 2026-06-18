@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories
 {
@@ -10,10 +11,12 @@ namespace weesky.Snoopy.Microservice.Repositories
         private const int MinPasswordLength = 8;
 
         private readonly ApplicationDbContext _context;
+        private readonly IDoveadmClient _doveadm;
 
-        public AdminRepository(ApplicationDbContext context)
+        public AdminRepository(ApplicationDbContext context, IDoveadmClient doveadm)
         {
             _context = context;
+            _doveadm = doveadm;
         }
 
         public async Task<bool> IsAdminAsync(string username, string domainName)
@@ -124,6 +127,11 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             await _context.SaveChangesAsync();
 
+            // Best-effort: invalidate Dovecot's auth cache so updated credentials/quota take
+            // effect immediately. Failures are logged by the client and must not fail the update.
+            if (domain != null)
+                await _doveadm.FlushAuthCacheAsync($"{user.Name}@{domain.Name}");
+
             return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
         }
 
@@ -133,8 +141,17 @@ namespace weesky.Snoopy.Microservice.Repositories
             if (user == null)
                 return Result.Failure($"User with id {id} not found");
 
+            // Resolve the domain name before deletion so we can flush the auth cache afterwards.
+            var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
+
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
+
+            // Best-effort: drop any cached auth entry so the deleted account can no longer
+            // authenticate from the cache. Failures are logged by the client.
+            if (domain != null)
+                await _doveadm.FlushAuthCacheAsync($"{user.Name}@{domain.Name}");
+
             return Result.Success();
         }
 

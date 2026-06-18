@@ -1,9 +1,11 @@
 using CryptSharp.Core;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -14,7 +16,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         private const string TestEmail = "john@weesky.be";
         private const string TestPassword = "Password123!";
 
-        private static (UsersRepository Repo, ApplicationDbContext Context) CreateSut()
+        private static (UsersRepository Repo, ApplicationDbContext Context, Mock<IDoveadmClient> Doveadm) CreateSut()
         {
             var context = new TestDbContext(Guid.NewGuid().ToString());
 
@@ -33,8 +35,12 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
             context.Users.Add(user);
             context.SaveChanges();
 
-            var repo = new UsersRepository(context, Mock.Of<ILogger<UsersRepository>>());
-            return (repo, context);
+            var doveadm = new Mock<IDoveadmClient>();
+            doveadm.Setup(d => d.FlushAuthCacheAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Success());
+
+            var repo = new UsersRepository(context, Mock.Of<ILogger<UsersRepository>>(), doveadm.Object);
+            return (repo, context, doveadm);
         }
 
         // --- FindByEmail ---
@@ -42,7 +48,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task FindByEmail_WhenUserExists_ReturnsUser()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var user = await repo.FindByEmailAsync(TestEmail);
 
@@ -54,7 +60,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task FindByEmail_IsCaseInsensitiveForUsername()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var user = await repo.FindByEmailAsync("JOHN@weesky.be");
 
@@ -64,7 +70,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task FindByEmail_WhenDomainNotFound_ReturnsNull()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var user = await repo.FindByEmailAsync("john@unknown-domain.com");
 
@@ -74,7 +80,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task FindByEmail_WhenUsernameNotFound_ReturnsNull()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var user = await repo.FindByEmailAsync("nobody@weesky.be");
 
@@ -86,7 +92,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [InlineData("a@b@c")]
         public async Task FindByEmail_WithInvalidEmailFormat_ReturnsNull(string email)
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var user = await repo.FindByEmailAsync(email);
 
@@ -98,7 +104,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task IsValidPassword_WithCorrectPassword_ReturnsTrue()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
             var user = new User(TestEmail);
 
             Assert.True(await repo.IsValidPasswordAsync(user, TestPassword));
@@ -107,7 +113,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task IsValidPassword_WithWrongPassword_ReturnsFalse()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
             var user = new User(TestEmail);
 
             Assert.False(await repo.IsValidPasswordAsync(user, "WrongPassword!"));
@@ -116,7 +122,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task IsValidPassword_WhenDomainNotFound_ReturnsFalse()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
             var user = new User("john@nonexistent.com");
 
             Assert.False(await repo.IsValidPasswordAsync(user, TestPassword));
@@ -125,7 +131,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task IsValidPassword_WhenUserNotFound_ReturnsFalse()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
             var user = new User("nobody@weesky.be");
 
             Assert.False(await repo.IsValidPasswordAsync(user, TestPassword));
@@ -136,7 +142,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WhenUserExists_ReturnsSuccess()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
@@ -146,7 +152,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WhenUserExists_ReturnsCorrectInfo()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
@@ -158,7 +164,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WhenNoDomainOwnerships_ReturnsPrimaryDomainInList()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.GetAccountInfoAsync(new User(TestEmail));
 
@@ -169,7 +175,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WithOwnedDomains_ReturnsAllOwnedDomains()
         {
-            var (repo, context) = CreateSut();
+            var (repo, context, _) = CreateSut();
             var userId = context.Users.First(u => u.Name == "john").Id;
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
             context.SaveChanges();
@@ -182,7 +188,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WithOwnedDomains_AlsoIncludesPrimaryDomain()
         {
-            var (repo, context) = CreateSut();
+            var (repo, context, _) = CreateSut();
             var userId = context.Users.First(u => u.Name == "john").Id;
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
             context.SaveChanges();
@@ -196,7 +202,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WhenPrimaryDomainIsInOwnerships_NoDuplicates()
         {
-            var (repo, context) = CreateSut();
+            var (repo, context, _) = CreateSut();
             var userId = context.Users.First(u => u.Name == "john").Id;
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "WKY", UserId = userId });
             context.SaveChanges();
@@ -210,7 +216,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WhenDomainNotFound_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.GetAccountInfoAsync(new User("john@nonexistent.com"));
 
@@ -220,7 +226,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task GetAccountInfo_WhenUserNotFound_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.GetAccountInfoAsync(new User("nobody@weesky.be"));
 
@@ -232,7 +238,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangePassword_WithWeakPassword_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangePasswordAsync(new User(TestEmail), "short", TestPassword);
 
@@ -242,7 +248,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangePassword_WithWrongOldPassword_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", "WrongOldPassword");
 
@@ -252,7 +258,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangePassword_WhenUserNotFound_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangePasswordAsync(new User("nobody@weesky.be"), "NewPassword123!", TestPassword);
 
@@ -262,11 +268,43 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangePassword_WithValidData_ReturnsSuccess()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", TestPassword);
 
             Assert.True(result.IsSuccess);
+        }
+
+        [Fact]
+        public async Task ChangePassword_WithValidData_FlushesAuthCache()
+        {
+            var (repo, _, doveadm) = CreateSut();
+
+            await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", TestPassword);
+
+            doveadm.Verify(d => d.FlushAuthCacheAsync(TestEmail, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ChangePassword_WhenFlushFails_StillReturnsSuccess()
+        {
+            var (repo, _, doveadm) = CreateSut();
+            doveadm.Setup(d => d.FlushAuthCacheAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Failure("Dovecot unreachable"));
+
+            var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", TestPassword);
+
+            Assert.True(result.IsSuccess);
+        }
+
+        [Fact]
+        public async Task ChangePassword_WhenOldPasswordWrong_DoesNotFlushAuthCache()
+        {
+            var (repo, _, doveadm) = CreateSut();
+
+            await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", "WrongOldPassword");
+
+            doveadm.Verify(d => d.FlushAuthCacheAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Theory]
@@ -274,7 +312,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [InlineData("")]
         public async Task ChangePassword_WithPasswordTooShort_ReturnsFailure(string newPassword)
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangePasswordAsync(new User(TestEmail), newPassword, TestPassword);
 
@@ -284,7 +322,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangePassword_WhenDomainNotFound_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangePasswordAsync(new User("john@nonexistent.com"), "NewPassword123!", TestPassword);
 
@@ -296,7 +334,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangeFullName_WithValidUser_ReturnsSuccess()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangeFullNameAsync(new User(TestEmail), "New Name");
 
@@ -306,7 +344,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangeFullName_WithValidUser_PersistsNewName()
         {
-            var (repo, context) = CreateSut();
+            var (repo, context, _) = CreateSut();
 
             await repo.ChangeFullNameAsync(new User(TestEmail), "New Name");
 
@@ -316,7 +354,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangeFullName_WhenDomainNotFound_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangeFullNameAsync(new User("john@nonexistent.com"), "New Name");
 
@@ -326,7 +364,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories
         [Fact]
         public async Task ChangeFullName_WhenUserNotFound_ReturnsFailure()
         {
-            var (repo, _) = CreateSut();
+            var (repo, _, _) = CreateSut();
 
             var result = await repo.ChangeFullNameAsync(new User("nobody@weesky.be"), "New Name");
 

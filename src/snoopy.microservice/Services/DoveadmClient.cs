@@ -8,49 +8,78 @@ using weesky.Snoopy.Microservice.Models;
 namespace weesky.Snoopy.Microservice.Services
 {
     /// <summary>
-    /// Queries a remote Dovecot server via its doveadm HTTP API.
+    /// Talks to a remote Dovecot server via its doveadm HTTP API.
     /// See https://doc.dovecot.org/admin_manual/doveadm_http_api/
     /// </summary>
-    public class DovecotQuotaClient : IDovecotQuotaClient
+    public class DoveadmClient : IDoveadmClient
     {
         private readonly HttpClient _http;
         private readonly DovecotOptions _options;
-        private readonly ILogger<DovecotQuotaClient> _logger;
+        private readonly ILogger<DoveadmClient> _logger;
 
-        public DovecotQuotaClient(HttpClient http, IOptions<DovecotOptions> options, ILogger<DovecotQuotaClient> logger)
+        public DoveadmClient(HttpClient http, IOptions<DovecotOptions> options, ILogger<DoveadmClient> logger)
         {
             _http = http;
             _options = options.Value;
             _logger = logger;
         }
 
-        public Task<Result<Quota>> GetQuotaAsync(User user, CancellationToken cancellationToken = default) =>
-            CallDoveadmAsync(user, command: "quotaGet", tag: "q1",
+        public Task<Result<Quota>> GetQuotaAsync(User user, CancellationToken cancellationToken = default)
+        {
+            if (user == null) throw new ArgumentNullException(nameof(user));
+            return CallDoveadmAsync(command: "quotaGet", parameters: new { user = user.Email }, tag: "q1",
+                logTarget: user.Email,
                 notConfiguredMessage: "Quota service is not configured",
                 failureMessage: "Unable to retrieve quota",
                 ParseQuotaRows, cancellationToken);
+        }
 
-        public Task<Result<IReadOnlyList<string>>> GetMailboxesAsync(User user, CancellationToken cancellationToken = default) =>
-            CallDoveadmAsync(user, command: "mailboxList", tag: "m1",
+        public Task<Result<IReadOnlyList<string>>> GetMailboxesAsync(User user, CancellationToken cancellationToken = default)
+        {
+            if (user == null) throw new ArgumentNullException(nameof(user));
+            return CallDoveadmAsync(command: "mailboxList", parameters: new { user = user.Email }, tag: "m1",
+                logTarget: user.Email,
                 notConfiguredMessage: "Mailbox service is not configured",
                 failureMessage: "Unable to retrieve mailboxes",
                 ParseMailboxRows, cancellationToken);
+        }
+
+        public async Task<Result> FlushAuthCacheAsync(string email, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("Email is required", nameof(email));
+            return await FlushAuthCacheAsync(parameters: new { users = new[] { email } }, logTarget: email, cancellationToken);
+        }
+
+        public Task<Result> FlushAllAuthCacheAsync(CancellationToken cancellationToken = default) =>
+            FlushAuthCacheAsync(parameters: new { }, logTarget: "*", cancellationToken);
+
+        // doveadm "auth cache flush" returns a single { "count": N } row we don't need;
+        // we only care whether the command succeeded.
+        private async Task<Result> FlushAuthCacheAsync(object parameters, string logTarget, CancellationToken cancellationToken)
+        {
+            var result = await CallDoveadmAsync(command: "authCacheFlush", parameters, tag: "f1",
+                logTarget: logTarget,
+                notConfiguredMessage: "Auth cache service is not configured",
+                failureMessage: "Unable to flush auth cache",
+                parseRows: _ => Result.Success(true), cancellationToken);
+
+            return result.IsSuccess ? Result.Success() : Result.Failure(result.Error);
+        }
 
         /// <summary>
-        /// Sends a single doveadm command for the given user and hands the response rows
+        /// Sends a single doveadm command and hands the response rows
         /// (the payload of the "doveadmResponse" envelope) to <paramref name="parseRows"/>.
         /// </summary>
         private async Task<Result<T>> CallDoveadmAsync<T>(
-            User user,
             string command,
+            object parameters,
             string tag,
+            string logTarget,
             string notConfiguredMessage,
             string failureMessage,
             Func<JsonElement, Result<T>> parseRows,
             CancellationToken cancellationToken)
         {
-            if (user == null) throw new ArgumentNullException(nameof(user));
-
             if (string.IsNullOrWhiteSpace(_options.ApiUrl) || string.IsNullOrWhiteSpace(_options.ApiKey))
             {
                 _logger.LogError("Dovecot API is not configured (ApiUrl/ApiKey missing)");
@@ -59,7 +88,7 @@ namespace weesky.Snoopy.Microservice.Services
 
             var payload = new object[]
             {
-                new object[] { command, new { user = user.Email }, tag }
+                new object[] { command, parameters, tag }
             };
 
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.ApiUrl)
@@ -74,14 +103,14 @@ namespace weesky.Snoopy.Microservice.Services
                 using var response = await _http.SendAsync(request, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("Dovecot {Command} HTTP {Status} for user={User}", command, (int)response.StatusCode, user.Email);
+                    _logger.LogWarning("Dovecot {Command} HTTP {Status} for target={Target}", command, (int)response.StatusCode, logTarget);
                     return Result.Failure<T>(failureMessage);
                 }
 
                 await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
-                var rows = ExtractDoveadmRows(doc.RootElement, command, user, failureMessage);
+                var rows = ExtractDoveadmRows(doc.RootElement, command, logTarget, failureMessage);
                 if (rows.IsFailure)
                     return Result.Failure<T>(rows.Error);
 
@@ -93,7 +122,7 @@ namespace weesky.Snoopy.Microservice.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dovecot {Command} failed for user={User}", command, user.Email);
+                _logger.LogError(ex, "Dovecot {Command} failed for target={Target}", command, logTarget);
                 return Result.Failure<T>(failureMessage);
             }
         }
@@ -102,7 +131,7 @@ namespace weesky.Snoopy.Microservice.Services
         /// Validates the doveadm response envelope <c>[["doveadmResponse", rows, tag]]</c>
         /// and returns the rows array.
         /// </summary>
-        private Result<JsonElement> ExtractDoveadmRows(JsonElement root, string command, User user, string failureMessage)
+        private Result<JsonElement> ExtractDoveadmRows(JsonElement root, string command, string logTarget, string failureMessage)
         {
             if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
                 return Result.Failure<JsonElement>("Unexpected response from Dovecot");
@@ -114,7 +143,7 @@ namespace weesky.Snoopy.Microservice.Services
             var kind = first[0].GetString();
             if (kind == "error")
             {
-                _logger.LogWarning("Dovecot {Command} error for user={User}: {Payload}", command, user.Email, first[1].GetRawText());
+                _logger.LogWarning("Dovecot {Command} error for target={Target}: {Payload}", command, logTarget, first[1].GetRawText());
                 return Result.Failure<JsonElement>(failureMessage);
             }
 
