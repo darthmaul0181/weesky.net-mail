@@ -9,7 +9,7 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services
 {
-    public class DovecotQuotaClientTests
+    public class DoveadmClientTests
     {
         private static readonly DovecotOptions ValidOptions = new()
         {
@@ -17,13 +17,23 @@ namespace weesky.Snoopy.Microservice.Tests.Services
             ApiKey = "test-api-key"
         };
 
-        private static DovecotQuotaClient CreateSut(HttpResponseMessage? response = null, DovecotOptions? options = null)
+        private static DoveadmClient CreateSut(HttpResponseMessage? response = null, DovecotOptions? options = null)
         {
             var handler = response != null
                 ? new FakeHttpMessageHandler(response)
                 : new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
             var http = new HttpClient(handler);
-            return new DovecotQuotaClient(http, Options.Create(options ?? ValidOptions), Mock.Of<ILogger<DovecotQuotaClient>>());
+            return new DoveadmClient(http, Options.Create(options ?? ValidOptions), Mock.Of<ILogger<DoveadmClient>>());
+        }
+
+        // CreateSut variant that captures the outgoing request body for payload assertions.
+        private static (DoveadmClient Sut, CapturingHttpMessageHandler Handler) CreateCapturingSut(string responseJson)
+        {
+            var response = JsonResponse(responseJson);
+            var handler = new CapturingHttpMessageHandler(response);
+            var http = new HttpClient(handler);
+            var sut = new DoveadmClient(http, Options.Create(ValidOptions), Mock.Of<ILogger<DoveadmClient>>());
+            return (sut, handler);
         }
 
         private static HttpResponseMessage JsonResponse(string json) =>
@@ -138,7 +148,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         public async Task GetQuotaAsync_WithNetworkException_ReturnsFailure()
         {
             var http = new HttpClient(new ExceptionHttpMessageHandler());
-            var sut = new DovecotQuotaClient(http, Options.Create(ValidOptions), Mock.Of<ILogger<DovecotQuotaClient>>());
+            var sut = new DoveadmClient(http, Options.Create(ValidOptions), Mock.Of<ILogger<DoveadmClient>>());
 
             var result = await sut.GetQuotaAsync(new User("john@example.com"));
 
@@ -254,7 +264,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         public async Task GetMailboxesAsync_WithNetworkException_ReturnsFailure()
         {
             var http = new HttpClient(new ExceptionHttpMessageHandler());
-            var sut = new DovecotQuotaClient(http, Options.Create(ValidOptions), Mock.Of<ILogger<DovecotQuotaClient>>());
+            var sut = new DoveadmClient(http, Options.Create(ValidOptions), Mock.Of<ILogger<DoveadmClient>>());
 
             var result = await sut.GetMailboxesAsync(new User("john@example.com"));
 
@@ -272,12 +282,110 @@ namespace weesky.Snoopy.Microservice.Tests.Services
             Assert.IsAssignableFrom<OperationCanceledException>(ex);
         }
 
+        // ── FlushAuthCacheAsync ────────────────────────────────
+
+        [Fact]
+        public async Task FlushAuthCacheAsync_WithBlankEmail_ThrowsArgumentException()
+        {
+            var sut = CreateSut();
+
+            await Assert.ThrowsAsync<ArgumentException>(() => sut.FlushAuthCacheAsync("   "));
+        }
+
+        [Fact]
+        public async Task FlushAuthCacheAsync_WithMissingApiKey_ReturnsFailure()
+        {
+            var sut = CreateSut(options: new DovecotOptions { ApiUrl = "http://fake/api", ApiKey = "" });
+
+            var result = await sut.FlushAuthCacheAsync("john@example.com");
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task FlushAuthCacheAsync_WithHttpError_ReturnsFailure()
+        {
+            var sut = CreateSut(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+            var result = await sut.FlushAuthCacheAsync("john@example.com");
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task FlushAuthCacheAsync_WithDovecotErrorKind_ReturnsFailure()
+        {
+            var json = """[["error",{"type":"NOTFOUND","exitCode":68},"f1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.FlushAuthCacheAsync("john@example.com");
+
+            Assert.True(result.IsFailure);
+        }
+
+        [Fact]
+        public async Task FlushAuthCacheAsync_WithValidResponse_ReturnsSuccess()
+        {
+            var json = """[["doveadmResponse",[{"count":"1"}],"f1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.FlushAuthCacheAsync("john@example.com");
+
+            Assert.True(result.IsSuccess);
+        }
+
+        [Fact]
+        public async Task FlushAuthCacheAsync_SendsAuthCacheFlushCommandWithUser()
+        {
+            var (sut, handler) = CreateCapturingSut("""[["doveadmResponse",[{"count":"1"}],"f1"]]""");
+
+            await sut.FlushAuthCacheAsync("john@example.com");
+
+            Assert.Contains("authCacheFlush", handler.LastRequestBody);
+            Assert.Contains("john@example.com", handler.LastRequestBody);
+            Assert.Contains("users", handler.LastRequestBody);
+        }
+
+        [Fact]
+        public async Task FlushAllAuthCacheAsync_WithValidResponse_ReturnsSuccess()
+        {
+            var json = """[["doveadmResponse",[{"count":"7"}],"f1"]]""";
+            var sut = CreateSut(JsonResponse(json));
+
+            var result = await sut.FlushAllAuthCacheAsync();
+
+            Assert.True(result.IsSuccess);
+        }
+
+        [Fact]
+        public async Task FlushAllAuthCacheAsync_SendsAuthCacheFlushCommandWithoutUsers()
+        {
+            var (sut, handler) = CreateCapturingSut("""[["doveadmResponse",[{"count":"7"}],"f1"]]""");
+
+            await sut.FlushAllAuthCacheAsync();
+
+            Assert.Contains("authCacheFlush", handler.LastRequestBody);
+            Assert.DoesNotContain("users", handler.LastRequestBody);
+        }
+
         private sealed class FakeHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
         {
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return Task.FromResult(response);
+            }
+        }
+
+        private sealed class CapturingHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
+        {
+            public string LastRequestBody { get; private set; } = string.Empty;
+
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                if (request.Content != null)
+                    LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
+                return response;
             }
         }
 

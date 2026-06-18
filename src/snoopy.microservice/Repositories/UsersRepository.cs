@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories
 {
@@ -10,11 +11,13 @@ namespace weesky.Snoopy.Microservice.Repositories
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<UsersRepository> _logger;
+        private readonly IDoveadmClient _doveadm;
 
-        public UsersRepository(ApplicationDbContext dbContext, ILogger<UsersRepository> logger)
+        public UsersRepository(ApplicationDbContext dbContext, ILogger<UsersRepository> logger, IDoveadmClient doveadm)
         {
             _context = dbContext;
             _logger = logger;
+            _doveadm = doveadm;
         }
 
         public async Task<User> FindByEmailAsync(string email)
@@ -109,6 +112,10 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             mailUser.Password = newPassword;
             await _context.SaveChangesAsync();
+
+            // Best-effort: invalidate Dovecot's auth cache so the new password takes effect
+            // immediately. Failures are logged by the client and must not fail the change.
+            await _doveadm.FlushAuthCacheAsync(user.Email);
 
             _logger.LogInformation("Audit: change_password user={User} outcome=success", user.Email);
             return Result.Success();

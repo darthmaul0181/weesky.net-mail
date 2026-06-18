@@ -14,12 +14,12 @@ namespace weesky.Snoopy.Microservice.Controllers
     public class AdminController : ApiBaseController
     {
         private readonly IAdminRepository _adminRepository;
-        private readonly IDovecotQuotaClient _dovecotQuotaClient;
+        private readonly IDoveadmClient _doveadm;
 
-        public AdminController(IAdminRepository adminRepository, IDovecotQuotaClient dovecotQuotaClient)
+        public AdminController(IAdminRepository adminRepository, IDoveadmClient doveadm)
         {
             _adminRepository = adminRepository;
-            _dovecotQuotaClient = dovecotQuotaClient;
+            _doveadm = doveadm;
         }
 
         /// <summary>Returns all users</summary>
@@ -152,7 +152,44 @@ namespace weesky.Snoopy.Microservice.Controllers
             if (userInfo == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"User {id} not found"));
 
             var user = new User($"{userInfo.UserName}@{userInfo.DomainName}");
-            Result<Quota> result = await _dovecotQuotaClient.GetQuotaAsync(user, cancellationToken);
+            Result<Quota> result = await _doveadm.GetQuotaAsync(user, cancellationToken);
+            return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+        }
+
+        /// <summary>Flushes the Dovecot auth cache entry for a specific user</summary>
+        /// <response code="200">Auth cache flushed</response>
+        /// <response code="400">User not found</response>
+        /// <response code="401">Unauthenticated</response>
+        /// <response code="403">Not an admin</response>
+        /// <response code="502">Unable to reach Dovecot</response>
+        [HttpPost("users/{id}/flushcache")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult> FlushUserAuthCache(int id, CancellationToken cancellationToken)
+        {
+            var userInfo = await _adminRepository.GetUserByIdAsync(id);
+            if (userInfo == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"User {id} not found"));
+
+            Result result = await _doveadm.FlushAuthCacheAsync($"{userInfo.UserName}@{userInfo.DomainName}", cancellationToken);
+            return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+        }
+
+        /// <summary>Flushes the entire Dovecot auth cache (all users)</summary>
+        /// <response code="200">Auth cache flushed</response>
+        /// <response code="401">Unauthenticated</response>
+        /// <response code="403">Not an admin</response>
+        /// <response code="502">Unable to reach Dovecot</response>
+        [HttpPost("flushcache")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult> FlushAuthCache(CancellationToken cancellationToken)
+        {
+            Result result = await _doveadm.FlushAllAuthCacheAsync(cancellationToken);
             return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
         }
 

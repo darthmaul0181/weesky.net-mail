@@ -84,7 +84,7 @@ builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
 builder.Services.AddScoped<ITokenManager, TokenManager>();
-builder.Services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>
+builder.Services.AddHttpClient<IDoveadmClient, DoveadmClient>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
 });

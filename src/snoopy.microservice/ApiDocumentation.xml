@@ -124,6 +124,21 @@
             <response code="403">Not an admin</response>
             <response code="502">Unable to reach Dovecot</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.FlushUserAuthCache(System.Int32,System.Threading.CancellationToken)">
+            <summary>Flushes the Dovecot auth cache entry for a specific user</summary>
+            <response code="200">Auth cache flushed</response>
+            <response code="400">User not found</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
+            <response code="502">Unable to reach Dovecot</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.FlushAuthCache(System.Threading.CancellationToken)">
+            <summary>Flushes the entire Dovecot auth cache (all users)</summary>
+            <response code="200">Auth cache flushed</response>
+            <response code="401">Unauthenticated</response>
+            <response code="403">Not an admin</response>
+            <response code="502">Unable to reach Dovecot</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteDomain(System.String)">
             <summary>Deletes a domain</summary>
             <response code="204">Domain deleted</response>
@@ -741,23 +756,29 @@
             passing a compatibility check.
             </summary>
         </member>
-        <member name="T:weesky.Snoopy.Microservice.Services.DovecotQuotaClient">
+        <member name="T:weesky.Snoopy.Microservice.Services.DoveadmClient">
             <summary>
-            Queries a remote Dovecot server via its doveadm HTTP API.
+            Talks to a remote Dovecot server via its doveadm HTTP API.
             See https://doc.dovecot.org/admin_manual/doveadm_http_api/
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.CallDoveadmAsync``1(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.String,System.Func{System.Text.Json.JsonElement,CSharpFunctionalExtensions.Result{``0}},System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Services.DoveadmClient.CallDoveadmAsync``1(System.String,System.Object,System.String,System.String,System.String,System.String,System.Func{System.Text.Json.JsonElement,CSharpFunctionalExtensions.Result{``0}},System.Threading.CancellationToken)">
             <summary>
-            Sends a single doveadm command for the given user and hands the response rows
+            Sends a single doveadm command and hands the response rows
             (the payload of the "doveadmResponse" envelope) to <paramref name="parseRows"/>.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.ExtractDoveadmRows(System.Text.Json.JsonElement,System.String,weesky.Snoopy.Microservice.Models.User,System.String)">
+        <member name="M:weesky.Snoopy.Microservice.Services.DoveadmClient.ExtractDoveadmRows(System.Text.Json.JsonElement,System.String,System.String,System.String)">
             <summary>
             Validates the doveadm response envelope <c>[["doveadmResponse", rows, tag]]</c>
             and returns the rows array.
             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IDoveadmClient.FlushAuthCacheAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Flushes the Dovecot auth cache entry for a single user.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IDoveadmClient.FlushAllAuthCacheAsync(System.Threading.CancellationToken)">
+            <summary>Flushes the entire Dovecot auth cache (all users).</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
             <summary>

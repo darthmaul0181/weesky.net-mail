@@ -13,7 +13,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
     public class AccountControllerTests
     {
         private readonly Mock<IUsersRepository> _usersRepo = new();
-        private readonly Mock<IDovecotQuotaClient> _dovecotClient = new();
+        private readonly Mock<IDoveadmClient> _dovecotClient = new();
 
         private AccountController CreateController()
         {

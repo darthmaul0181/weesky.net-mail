@@ -15,7 +15,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
     public class AdminControllerTests
     {
         private readonly Mock<IAdminRepository> _repo = new();
-        private readonly Mock<IDovecotQuotaClient> _dovecot = new();
+        private readonly Mock<IDoveadmClient> _dovecot = new();
 
         private AdminController CreateController()
         {
@@ -265,6 +265,69 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
             _dovecot.Verify(d => d.GetQuotaAsync(
                 It.Is<User>(u => u.Email == "alice@weesky.be"),
                 It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        // ── FlushUserAuthCache ────────────────────────────────
+
+        [Fact]
+        public async Task FlushUserAuthCache_WhenUserNotFound_Returns400()
+        {
+            _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync((AdminUserInfo?)null);
+            var obj = Assert.IsType<BadRequestObjectResult>(await CreateController().FlushUserAuthCache(1, CancellationToken.None));
+            Assert.Equal(400, obj.StatusCode);
+        }
+
+        [Fact]
+        public async Task FlushUserAuthCache_WhenDovecotFails_Returns502()
+        {
+            _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync(
+                new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
+            _dovecot.Setup(d => d.FlushAuthCacheAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Failure("Unreachable"));
+            var obj = Assert.IsType<ObjectResult>(await CreateController().FlushUserAuthCache(1, CancellationToken.None));
+            Assert.Equal(502, obj.StatusCode);
+        }
+
+        [Fact]
+        public async Task FlushUserAuthCache_WhenSuccess_Returns200()
+        {
+            _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync(
+                new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
+            _dovecot.Setup(d => d.FlushAuthCacheAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Success());
+            var status = Assert.IsType<StatusCodeResult>(await CreateController().FlushUserAuthCache(1, CancellationToken.None));
+            Assert.Equal(200, status.StatusCode);
+        }
+
+        [Fact]
+        public async Task FlushUserAuthCache_CallsDovecotWithCorrectEmail()
+        {
+            _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync(
+                new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
+            _dovecot.Setup(d => d.FlushAuthCacheAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Success());
+            await CreateController().FlushUserAuthCache(1, CancellationToken.None);
+            _dovecot.Verify(d => d.FlushAuthCacheAsync("alice@weesky.be", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        // ── FlushAuthCache (global) ───────────────────────────
+
+        [Fact]
+        public async Task FlushAuthCache_WhenSuccess_Returns200()
+        {
+            _dovecot.Setup(d => d.FlushAllAuthCacheAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Success());
+            var status = Assert.IsType<StatusCodeResult>(await CreateController().FlushAuthCache(CancellationToken.None));
+            Assert.Equal(200, status.StatusCode);
+        }
+
+        [Fact]
+        public async Task FlushAuthCache_WhenDovecotFails_Returns502()
+        {
+            _dovecot.Setup(d => d.FlushAllAuthCacheAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Result.Failure("Unreachable"));
+            var obj = Assert.IsType<ObjectResult>(await CreateController().FlushAuthCache(CancellationToken.None));
+            Assert.Equal(502, obj.StatusCode);
         }
 
         // ── GetVirtualDomains ─────────────────────────────────
