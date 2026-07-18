@@ -37,7 +37,7 @@ chacune avec son cycle spec → plan → implémentation, chacune utilisable seu
 |---|---|---|
 | **2a** | Connexion IMAP, arborescence de dossiers + création/renommage/suppression + visibilité (abonnements), liste de messages paginée, volet de lecture, pièces jointes, layout 3 panneaux, couche de données | **Un webmail consultable** |
 | 2b | Drapeaux (lu/non-lu, suivi), déplacement/copie, corbeille, archivage, indésirables, sélection multiple, recherche IMAP | Un webmail où l'on organise |
-| 2c | Rédaction, identités (dérivées des alias), pièces jointes sortantes, brouillons, réponse/réponse à tous/transfert, signatures, envoi SMTP | Un webmail complet |
+| 2c | Rédaction avec **éditeur riche** (police, taille, couleur, listes, liens — niveau Outlook), identités (dérivées des alias), pièces jointes sortantes, brouillons, réponse/réponse à tous/transfert, signatures, envoi SMTP | Un webmail complet |
 | 2d | Domaines additionnels (CRUD admin), liaison de comptes, stockage chiffré des credentials externes, bascule dans le menu d'avatar | Le multi-comptes |
 
 ---
@@ -434,6 +434,12 @@ Le corps HTML d'un message est du contenu hostile par construction.
 La bibliothèque d'assainissement est le seul ajout NuGet à décider au moment du plan (candidat :
 `HtmlSanitizer` de mganss) ; MailKit/MimeKit sont les autres.
 
+**La liste blanche est un contrat partagé avec la tranche 2c.** L'éditeur riche de la rédaction
+devra produire du HTML qui passe ce même filtre, et la citation d'un message dans une réponse
+ou un transfert fait transiter du contenu assaini vers l'éditeur puis de nouveau vers l'envoi.
+La liste blanche définie ici est donc conçue comme un **sous-ensemble commun** à la lecture et
+à l'écriture, pas comme un réglage local au lecteur — voir § 6.5.
+
 ---
 
 ## 6. Architecture frontend
@@ -491,7 +497,41 @@ aucun consommateur : il a été provisionné pour ce module.
 Le CSS du module va dans un nouveau `src/styles/mail.css` — `index.css` fait 2225 lignes et ne
 doit plus grossir.
 
-### 6.4 Icônes
+### 6.4 Identité visuelle
+
+Aucune nouvelle décision esthétique : la vue mail **est** la maquette validée au sous-projet 1.
+Le rail vertical, la colonne de dossiers, la liste avec ses pastilles de non-lus et le volet de
+lecture y figuraient déjà ; le shell n'en construisait que le cadre. `--accent-unread`
+(`#e2674a` en palette night) est précisément la pastille corail de cette maquette, provisionnée
+alors et sans consommateur depuis — cette tranche est celle où elle sert.
+
+### 6.5 Éditeur riche — contraintes posées ici, réalisation en 2c
+
+La rédaction appartient à 2c, mais deux de ses contraintes se décident maintenant parce
+qu'elles engagent le lecteur de 2a.
+
+**Le HTML d'un email n'est pas du HTML web.** Les clients destinataires — Outlook desktop en
+tête, qui s'appuie sur le moteur de rendu de Word — ignorent les feuilles de style externes,
+traitent mal les balises `<style>` et ne comprennent qu'un sous-ensemble ancien de CSS. Un
+message doit donc reposer sur des **styles en ligne** et un jeu de balises restreint. Choisir
+une police dans l'éditeur est trivial ; faire en sorte que le destinataire la voie exige une
+étape de **sérialisation vers du HTML email** (inlining du CSS, restriction aux propriétés
+supportées). C'est cette étape qui fait le travail, pas la barre d'outils.
+
+**Conséquences pour 2a :** la liste blanche du sanitizer (§ 5.6) est le contrat commun aux deux
+tranches. Une réponse ou un transfert fait transiter le corps assaini du message d'origine vers
+l'éditeur, puis de nouveau vers l'envoi ; si les deux extrémités ne s'accordent pas sur le même
+sous-ensemble, le formatage se dégrade à chaque aller-retour.
+
+**Orientation, à confirmer dans la spec 2c :** TipTap (ProseMirror). Headless — la barre
+d'outils reste dans notre langage visuel au lieu d'importer celui d'une bibliothèque —,
+extensions activables à la carte pour n'autoriser que ce qui survit en email, et sortie HTML
+propre à passer dans l'inliner. Ce serait la 5ᵉ dépendance runtime du projet.
+
+À traiter également en 2c : la génération de la **partie texte brut** du `multipart/alternative`
+à partir du contenu riche.
+
+### 6.6 Icônes
 
 `src/icons/` compte 9 icônes en 20×20 sans props. Le module mail en demande beaucoup plus
 (dossier, dossier ouvert, pièce jointe, chevron, enveloppe ouverte/fermée, corbeille, actualiser)
