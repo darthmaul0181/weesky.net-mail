@@ -167,34 +167,6 @@ describe('api methods', () => {
   })
 })
 
-describe('isAdmin state', () => {
-  it('getIsAdmin is false by default', async () => {
-    const { getIsAdmin } = await import('./api.js')
-    expect(getIsAdmin()).toBe(false)
-  })
-
-  it('setIsAdmin(true) makes getIsAdmin return true', async () => {
-    const { setIsAdmin, getIsAdmin } = await import('./api.js')
-    setIsAdmin(true)
-    expect(getIsAdmin()).toBe(true)
-  })
-
-  it('setIsAdmin(false) makes getIsAdmin return false', async () => {
-    const { setIsAdmin, getIsAdmin } = await import('./api.js')
-    setIsAdmin(true)
-    setIsAdmin(false)
-    expect(getIsAdmin()).toBe(false)
-  })
-
-  it('clearSession resets isAdmin to false', async () => {
-    const { markLoggedIn, setIsAdmin, clearSession, getIsAdmin } = await import('./api.js')
-    markLoggedIn()
-    setIsAdmin(true)
-    clearSession()
-    expect(getIsAdmin()).toBe(false)
-  })
-})
-
 describe('admin api methods', () => {
   beforeEach(() => mockFetch(200))
 

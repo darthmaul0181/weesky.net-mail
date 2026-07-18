@@ -2,6 +2,8 @@ const BASE = import.meta.env.VITE_API_BASE || 'https://api.mail.weesky.net'
 const SESSION_KEY = 'sessionActive'
 
 let unauthorizedHandler = null
+// Write-only mirror: AuthContext writes via setIsAdmin, no public getter reads it back (see CLAUDE.md Auth section).
+// eslint-disable-next-line no-unused-vars
 let isAdmin = false
 
 export function markLoggedIn() {
@@ -14,7 +16,6 @@ export function clearSession() {
 }
 
 export function setIsAdmin(value) { isAdmin = value }
-export function getIsAdmin() { return isAdmin }
 
 export function hasSession() {
   return localStorage.getItem(SESSION_KEY) === '1'

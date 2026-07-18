@@ -81,7 +81,7 @@ Session state is **cookie-based**, not a localStorage bearer token — `api.js` 
 - `account` / `accountLoaded` — populated by `refreshAccount()` (calls `api.getAccount()`), which runs automatically whenever `isLoggedIn` flips true.
 - `identity` — `deriveIdentity(account)` or `null` before the account loads.
 - `activeAccount` / `accounts` — **multi-account scaffolding for sub-project 2**: today `accounts` always has length ≤ 1 (the primary account) and `activeAccount` mirrors it; the shape (`{ id, email, displayName, isPrimary }`) exists so `AvatarMenu`'s account-switcher list and future account-scoping logic don't need to change when linked accounts ship.
-- `isAdmin` — derived from `account?.isAdmin === true` (also mirrored into `api.js`'s module-level `isAdmin` flag via `setIsAdmin`, kept for legacy code paths that read `getIsAdmin()` directly).
+- `isAdmin` — derived from `account?.isAdmin === true` (also mirrored into `api.js`'s module-level `isAdmin` flag via `setIsAdmin`; `api.js` exposes no public getter for it — the mirror is kept solely because `AuthContext` writes it, not because anything currently reads it back).
 
 **401 handling** — `api.js`'s `request()` calls `clearSession()` and the registered `unauthorizedHandler` on any 401. `AuthContext` registers that handler on mount, setting `isLoggedIn = false` / clearing `account`. Since every authenticated route sits under `RequireAuth`, the next render redirects to `/login` — no page needs to know about auth internals.
 

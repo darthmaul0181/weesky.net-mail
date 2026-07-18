@@ -13,10 +13,18 @@ const mocks = vi.hoisted(() => ({
   clearSession: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
   setIsAdmin: vi.fn(),
+  adminGetUsers: vi.fn(),
+  adminGetDomains: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
-  api: { getAccount: mocks.getAccount, getQuota: mocks.getQuota, logout: mocks.logout },
+  api: {
+    getAccount: mocks.getAccount,
+    getQuota: mocks.getQuota,
+    logout: mocks.logout,
+    adminGetUsers: mocks.adminGetUsers,
+    adminGetDomains: mocks.adminGetDomains,
+  },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
@@ -43,6 +51,8 @@ describe('settings section', () => {
     vi.clearAllMocks()
     mocks.hasSession.mockReturnValue(true)
     mocks.getQuota.mockResolvedValue(null)
+    mocks.adminGetUsers.mockResolvedValue([])
+    mocks.adminGetDomains.mockResolvedValue([])
   })
 
   it('/settings redirects to /settings/account', async () => {
@@ -75,5 +85,15 @@ describe('settings section', () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     const router = renderAt('/settings/admin')
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
+  })
+
+  it('renders AdminPage for admins at /settings/admin (RequireAdmin happy path)', async () => {
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+    const router = renderAt('/settings/admin')
+    expect(await screen.findByRole('button', { name: 'Accounts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Domains' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Virtual domains' })).toBeInTheDocument()
+    expect(await screen.findByText('Accounts (0)')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/settings/admin')
   })
 })
