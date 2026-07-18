@@ -1,10 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import {
-  QuotaMini,
-  AccountPanel,
-} from './AliasesPage.jsx'
+import { AccountPanel } from './AliasesPage.jsx'
+import { QuotaMini } from '../components/QuotaBlock.jsx'
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 
 vi.mock('../api.js', () => ({
@@ -72,7 +70,6 @@ describe('AccountPanel isAdmin', () => {
         subDomains={[]}
         quota={null}
         onLogout={vi.fn()}
-        onChangePassword={vi.fn()}
         onAdmin={onAdmin}
         isAdmin={isAdmin}
         alphaMode={false}

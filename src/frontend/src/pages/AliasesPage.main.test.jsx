@@ -3,10 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api, clearSession } from '../api.js'
 import AliasesPage, {
-  ChangePasswordModal,
-  QuotaBlock,
   AccountPanel,
 } from './AliasesPage.jsx'
+import { QuotaBlock } from '../components/QuotaBlock.jsx'
 import Toasts from '../components/Toasts.jsx'
 
 vi.mock('../api.js', () => ({
@@ -137,64 +136,6 @@ describe('QuotaBlock', () => {
   })
 })
 
-// ── ChangePasswordModal ───────────────────────────────────────
-
-describe('ChangePasswordModal', () => {
-  it('renders three password fields', () => {
-    const { container } = render(<ChangePasswordModal onClose={vi.fn()} />)
-    expect(container.querySelectorAll('input[type="password"]')).toHaveLength(3)
-  })
-
-  it('calls onClose when the ✕ button is clicked', async () => {
-    const onClose = vi.fn()
-    render(<ChangePasswordModal onClose={onClose} />)
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
-    expect(onClose).toHaveBeenCalledOnce()
-  })
-
-  it('shows error when new password is too short', async () => {
-    const { container } = render(<ChangePasswordModal onClose={vi.fn()} />)
-    const [old, newPw, confirm] = container.querySelectorAll('input[type="password"]')
-    await userEvent.type(old, 'oldpassword')
-    await userEvent.type(newPw, 'short')
-    await userEvent.type(confirm, 'short')
-    await userEvent.click(screen.getByRole('button', { name: 'Update password' }))
-    expect(screen.getByText('Password is too short (minimum 10 characters).')).toBeInTheDocument()
-  })
-
-  it('shows mismatch error when new passwords differ', async () => {
-    const { container } = render(<ChangePasswordModal onClose={vi.fn()} />)
-    const [old, newPw, confirm] = container.querySelectorAll('input[type="password"]')
-    await userEvent.type(old, 'oldpassword')
-    await userEvent.type(newPw, 'newpassword1')
-    await userEvent.type(confirm, 'newpassword2')
-    await userEvent.click(screen.getByRole('button', { name: 'Update password' }))
-    expect(screen.getByText('Passwords do not match.')).toBeInTheDocument()
-  })
-
-  it('shows success message after a successful change', async () => {
-    api.changePassword.mockResolvedValue(null)
-    const { container } = render(<ChangePasswordModal onClose={vi.fn()} />)
-    const [old, newPw, confirm] = container.querySelectorAll('input[type="password"]')
-    await userEvent.type(old, 'oldpassword')
-    await userEvent.type(newPw, 'newpassword1')
-    await userEvent.type(confirm, 'newpassword1')
-    await userEvent.click(screen.getByRole('button', { name: 'Update password' }))
-    await waitFor(() => expect(screen.getByText('Password changed successfully.')).toBeInTheDocument())
-  })
-
-  it('shows error message when API call fails', async () => {
-    api.changePassword.mockRejectedValue(new Error('wrong'))
-    const { container } = render(<ChangePasswordModal onClose={vi.fn()} />)
-    const [old, newPw, confirm] = container.querySelectorAll('input[type="password"]')
-    await userEvent.type(old, 'oldpassword')
-    await userEvent.type(newPw, 'samepassword')
-    await userEvent.type(confirm, 'samepassword')
-    await userEvent.click(screen.getByRole('button', { name: 'Update password' }))
-    await waitFor(() => expect(screen.getByText('Current password is incorrect.')).toBeInTheDocument())
-  })
-})
-
 // ── AccountPanel ──────────────────────────────────────────────
 
 describe('AccountPanel', () => {
@@ -207,7 +148,6 @@ describe('AccountPanel', () => {
         subDomains={[]}
         quota={null}
         onLogout={vi.fn()}
-        onChangePassword={vi.fn()}
         onAdmin={vi.fn()}
         isAdmin={false}
         alphaMode={false}
@@ -242,14 +182,6 @@ describe('AccountPanel', () => {
     renderPanel({ quota: { storageBytesUsed: 100 * MB, storageBytesLimit: 500 * MB } })
     await userEvent.click(screen.getByRole('button', { name: 'JD' }))
     expect(screen.getByText('Storage')).toBeInTheDocument()
-  })
-
-  it('calls onChangePassword when Change password is clicked', async () => {
-    const onChangePassword = vi.fn()
-    renderPanel({ onChangePassword })
-    await userEvent.click(screen.getByRole('button', { name: 'JD' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Change password' }))
-    expect(onChangePassword).toHaveBeenCalledOnce()
   })
 
   it('calls onLogout when Sign out is clicked', async () => {
@@ -438,14 +370,6 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('Alias exists')).toBeInTheDocument()
   })
 
-  it('opens the change password modal when Change password is clicked', async () => {
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getByTitle('john@weesky.be'))
-    await userEvent.click(screen.getByRole('button', { name: 'Change password' }))
-    expect(screen.getByRole('button', { name: 'Update password' })).toBeInTheDocument()
-  })
-
   it('calls clearSession and onLogout when Sign out is clicked', async () => {
     const onLogout = vi.fn()
     renderPage({ onLogout })
@@ -519,16 +443,6 @@ describe('AliasesPage', () => {
     await userEvent.click(screen.getAllByTitle('Delete')[0])
     await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
     await waitFor(() => expect(api.getAliases).toHaveBeenCalledTimes(2))
-  })
-
-  it('closes the change password modal when ✕ is clicked', async () => {
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getByTitle('john@weesky.be'))
-    await userEvent.click(screen.getByRole('button', { name: 'Change password' }))
-    expect(screen.getByRole('button', { name: 'Update password' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
-    expect(screen.queryByRole('button', { name: 'Update password' })).not.toBeInTheDocument()
   })
 
   it('fires alpha nav letter click (scrollToLetter)', async () => {

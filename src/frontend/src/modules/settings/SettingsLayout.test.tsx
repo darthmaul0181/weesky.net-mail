@@ -7,6 +7,7 @@ import { routes } from '../../routes'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
+  getQuota: vi.fn(),
   logout: vi.fn(),
   hasSession: vi.fn(() => true),
   clearSession: vi.fn(),
@@ -15,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../api.js', () => ({
-  api: { getAccount: mocks.getAccount, logout: mocks.logout },
+  api: { getAccount: mocks.getAccount, getQuota: mocks.getQuota, logout: mocks.logout },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
@@ -41,6 +42,7 @@ describe('settings section', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.hasSession.mockReturnValue(true)
+    mocks.getQuota.mockResolvedValue(null)
   })
 
   it('/settings redirects to /settings/account', async () => {

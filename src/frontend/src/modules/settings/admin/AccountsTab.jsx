@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../../api.js'
-import { QuotaMini } from '../../../pages/AliasesPage.jsx'
+import { QuotaMini } from '../../../components/QuotaBlock.jsx'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'

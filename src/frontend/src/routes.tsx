@@ -6,6 +6,7 @@ import AppShell from './layouts/AppShell'
 import LoginRoute from './pages/LoginRoute'
 import ComingSoon from './components/ComingSoon'
 import SettingsLayout from './modules/settings/SettingsLayout'
+import AccountPage from './modules/settings/account/AccountPage'
 
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
@@ -27,7 +28,7 @@ export const routes: RouteObject[] = [
             element: <SettingsLayout />,
             children: [
               { index: true, element: <Navigate to="/settings/account" replace /> },
-              { path: 'account', element: <ComingSoon module="Account" /> },        // Task 11
+              { path: 'account', element: <AccountPage /> },
               { path: 'accounts', element: <ComingSoon module="Linked accounts" /> }, // sub-project 2
               { path: 'appearance', element: <ComingSoon module="Appearance" /> },  // Task 12
               { path: 'aliases', element: <ComingSoon module="Aliases" /> },        // Task 13

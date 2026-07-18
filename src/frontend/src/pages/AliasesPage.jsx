@@ -5,19 +5,10 @@ import weeskyLogo from '../assets/weesky_net.png'
 import { useToasts } from '../hooks/useToasts.js'
 import Toasts from '../components/Toasts.jsx'
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
+import { QuotaBlock } from '../components/QuotaBlock.jsx'
 import TrashIcon from '../icons/TrashIcon.jsx'
 import PencilIcon from '../icons/PencilIcon.jsx'
 import ShieldIcon from '../icons/ShieldIcon.jsx'
-
-function LockIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
 
 function CheckIcon() {
   return (
@@ -38,130 +29,7 @@ function XIcon() {
   )
 }
 
-export function ChangePasswordModal({ onClose }) {
-  const [oldPassword, setOldPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (newPassword.length < 10) {
-      setError('Password is too short (minimum 10 characters).')
-      return
-    }
-    if (newPassword !== confirm) {
-      setError('Passwords do not match.')
-      return
-    }
-    setError(null)
-    setLoading(true)
-    try {
-      await api.changePassword(oldPassword, newPassword)
-      setSuccess(true)
-    } catch {
-      setError('Current password is incorrect.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title"><LockIcon />Change password</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-
-        {success ? (
-          <div className="modal-success">Password changed successfully.</div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            {error && <div className="alert alert-error">{error}</div>}
-            <div className="field">
-              <label htmlFor="old-password">Current password</label>
-              <input id="old-password" type="password" value={oldPassword}
-                onChange={e => setOldPassword(e.target.value)} required autoFocus />
-            </div>
-            <div className="field">
-              <label htmlFor="new-password">New password</label>
-              <input id="new-password" type="password" value={newPassword}
-                onChange={e => setNewPassword(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="confirm-password">Confirm new password</label>
-              <input id="confirm-password" type="password" value={confirm}
-                onChange={e => setConfirm(e.target.value)} required />
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? <span className="spinner" /> : 'Update password'}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const MB = 1024 * 1024
-const GB = 1024 * MB
-
-export function QuotaBlock({ quota }) {
-  if (!quota || !quota.storageBytesLimit) return null
-
-  const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB
-  const divisor = useGb ? GB : MB
-  const unit = useGb ? 'GB' : 'MB'
-  const used = quota.storageBytesUsed / divisor
-  const total = quota.storageBytesLimit / divisor
-  const percent = Math.min(100, Math.max(0, (quota.storageBytesUsed / quota.storageBytesLimit) * 100))
-  const format = v => (v >= 100 ? v.toFixed(0) : v.toFixed(1))
-  const levelClass = percent >= 90 ? 'is-danger' : percent >= 75 ? 'is-warn' : ''
-
-  return (
-    <div className="panel-quota">
-      <div className="panel-quota-label">Storage</div>
-      <div className="panel-quota-values">
-        <span className="panel-quota-used">{format(used)} {unit}</span>
-        <span className="panel-quota-sep"> / </span>
-        <span className="panel-quota-total">{format(total)} {unit}</span>
-        <span className="panel-quota-percent">{percent.toFixed(0)}%</span>
-      </div>
-      <div className={`panel-quota-bar ${levelClass}`}>
-        <div className="panel-quota-bar-fill" style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  )
-}
-
-export function QuotaMini({ quota }) {
-  if (!quota || !quota.storageBytesLimit) return <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
-
-  const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB
-  const divisor = useGb ? GB : MB
-  const unit = useGb ? 'GB' : 'MB'
-  const used = quota.storageBytesUsed / divisor
-  const total = quota.storageBytesLimit / divisor
-  const percent = Math.min(100, Math.max(0, (quota.storageBytesUsed / quota.storageBytesLimit) * 100))
-  const format = v => (v >= 100 ? v.toFixed(0) : v.toFixed(1))
-  const levelClass = percent >= 90 ? 'is-danger' : percent >= 75 ? 'is-warn' : ''
-
-  return (
-    <div style={{ width: '145px' }}>
-      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-        {format(used)} / {format(total)} {unit}
-      </div>
-      <div className={`panel-quota-bar ${levelClass}`}>
-        <div className="panel-quota-bar-fill" style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  )
-}
-
-export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onChangePassword, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange, theme, onThemeChange }) {
+export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quota, onLogout, onAdmin, isAdmin, alphaMode, onAlphaModeChange, onFullNameChange, theme, onThemeChange }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -289,10 +157,6 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
                   Administration
                 </button>
               )}
-              <button className="panel-link" onClick={() => { setOpen(false); onChangePassword() }}>
-                <LockIcon />
-                Change password
-              </button>
               <button className="panel-link panel-link-danger" onClick={onLogout}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -332,7 +196,6 @@ export default function AliasesPage({ onLogout }) {
   const [deletingKey, setDeletingKey] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [highlightedKey, setHighlightedKey] = useState(null)
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [alphaMode, setAlphaMode] = useState(() => localStorage.getItem('alias_alpha_mode') === 'true')
   const [theme, setTheme] = useState(() => localStorage.getItem('appearance_theme') || 'system')
@@ -505,7 +368,6 @@ export default function AliasesPage({ onLogout }) {
           subDomains={subDomains}
           quota={quota}
           onLogout={handleLogout}
-          onChangePassword={() => setChangePasswordOpen(true)}
           isAdmin={isAdminUser}
           onFullNameChange={handleFullNameChange}
           alphaMode={alphaMode}
@@ -660,9 +522,6 @@ export default function AliasesPage({ onLogout }) {
           onClose={() => setPendingDelete(null)}
           loading={deletingKey === `${pendingDelete.name}@${pendingDelete.domain}`}
         />
-      )}
-      {changePasswordOpen && (
-        <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       )}
     </div>
 
