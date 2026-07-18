@@ -58,7 +58,8 @@ modification de la coquille**. C'est le critère de réussite.
 | Mode alphabétique des alias | Cesse d'être une préférence globale du panneau, devient un **contrôle local** de `/settings/aliases` |
 | `AccountPanel` (panneau coulissant) | **Supprimé**, remplacé par le menu d'avatar de la TopBar |
 | Multi-comptes (cible) | L'utilisateur lie des comptes additionnels à sa session ; le **switch se fait dans le menu d'avatar** (pattern Rainloop/Gmail, coin haut-droit). Livraison au sous-projet 2, le shell prépare la structure |
-| Domaines additionnels (cible) | CRUD admin : nom + config IMAP/SMTP/Sieve. Le serveur local est le **domaine par défaut, implicite** — il n'apparaît jamais dans cette liste. Les comptes liés peuvent aussi être **locaux** (boîtes partagées) |
+| Domaines additionnels (cible) | CRUD admin : nom + config **IMAP/SMTP uniquement** — pas de Sieve. Le serveur local est le **domaine par défaut, implicite** — il n'apparaît jamais dans cette liste. Les comptes liés peuvent aussi être **locaux** (boîtes partagées) |
+| Sieve (cible) | Supporté **uniquement pour le serveur maison** : le client ManageSieve existant (master user) reste l'unique chemin Sieve, jamais de ManageSieve vers des serveurs externes |
 | Route par défaut | `/` redirige vers **`/mail`** dès ce sous-projet, même en écran « à venir » — la nav s'installe dans sa forme définitive |
 | Barre supérieure | **Bandeau fin** : marque à gauche, avatar à droite (emplacement futur de la recherche globale) |
 | Responsive | **Desktop d'abord, plancher 1024 px** ; en dessous, rien de garanti mais rien d'illisible. Le travail mobile est un sous-projet ultérieur |
@@ -189,13 +190,14 @@ pour le rendu optimiste, et bascule vers `/login` sur 401 via le handler déjà 
 
 Cible (sous-projet 2) : l'utilisateur lie des comptes additionnels à sa session, choisis
 parmi le serveur local (boîtes partagées, avec le mot de passe du compte lié) et les
-domaines additionnels définis par l'admin (nom + config IMAP/SMTP/Sieve). **La session et
-le compte actif sont deux choses distinctes** : on se connecte une fois avec son compte
-weesky ; le switch change le contexte mail, pas l'identité de session.
+domaines additionnels définis par l'admin (nom + config IMAP/SMTP — **pas de Sieve**).
+**La session et le compte actif sont deux choses distinctes** : on se connecte une fois
+avec son compte weesky ; le switch change le contexte mail, pas l'identité de session.
 
 Les fonctionnalités sont asymétriques : alias, quota, mot de passe et admin ne s'appliquent
-qu'au compte principal local (base dovecot/doveadm) ; les règles Sieve s'appliquent à tout
-compte dont le domaine a une config Sieve ; le mail s'applique à tous.
+qu'au compte principal local (base dovecot/doveadm) ; les règles Sieve s'appliquent aux
+seuls comptes du serveur maison (le client ManageSieve existant reste l'unique chemin
+Sieve) ; le mail s'applique à tous.
 
 Pour ne pas payer cette cible en refactoring, le shell pose dès maintenant trois choses :
 
@@ -371,7 +373,7 @@ qui n'existent pas — le code expose `/api/Admin/domains/virtuals` — et omet
 | Sous-projet | Contenu | Dépend de |
 |---|---|---|
 | 1. Shell | ce document | — |
-| 2. Mail | MailKit côté backend (IMAP/SMTP), vue 3 panneaux, rédaction ; refresh token ; **multi-comptes** : domaines additionnels (CRUD admin, config IMAP/SMTP/Sieve), liaison de comptes (locaux et additionnels), stockage chiffré des credentials, activation du switch dans le menu d'avatar | 1 |
+| 2. Mail | MailKit côté backend (IMAP/SMTP), vue 3 panneaux, rédaction ; refresh token ; **multi-comptes** : domaines additionnels (CRUD admin, config IMAP/SMTP — pas de Sieve), liaison de comptes (locaux et additionnels), stockage chiffré des credentials, activation du switch dans le menu d'avatar | 1 |
 | 3. Calendrier | tables MariaDB, API REST, vues mois/semaine/jour | 1 |
 | 4. Contacts | tables MariaDB, API REST, carnet + intégration à la rédaction | 1, 2 |
 
