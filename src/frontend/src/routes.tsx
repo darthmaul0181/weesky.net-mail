@@ -9,6 +9,7 @@ import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
 import AppearancePage from './modules/settings/appearance/AppearancePage'
 
+const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.jsx'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
 
@@ -32,7 +33,7 @@ export const routes: RouteObject[] = [
               { path: 'account', element: <AccountPage /> },
               { path: 'accounts', element: <ComingSoon module="Linked accounts" /> }, // sub-project 2
               { path: 'appearance', element: <AppearancePage /> },
-              { path: 'aliases', element: <ComingSoon module="Aliases" /> },        // Task 13
+              { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
               { path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> },
               {
                 element: <RequireAdmin />,
