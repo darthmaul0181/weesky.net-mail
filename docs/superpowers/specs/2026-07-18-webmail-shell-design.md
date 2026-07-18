@@ -373,8 +373,42 @@ qui n'existent pas — le code expose `/api/Admin/domains/virtuals` — et omet
 | Sous-projet | Contenu | Dépend de |
 |---|---|---|
 | 1. Shell | ce document | — |
-| 2. Mail | MailKit côté backend (IMAP/SMTP), vue 3 panneaux, rédaction ; refresh token ; **multi-comptes** : domaines additionnels (CRUD admin, config IMAP/SMTP — pas de Sieve), liaison de comptes (locaux et additionnels), stockage chiffré des credentials, activation du switch dans le menu d'avatar | 1 |
+| 2. Mail | **découpé en quatre tranches**, voir ci-dessous | 1 |
 | 3. Calendrier | tables MariaDB, API REST, vues mois/semaine/jour | 1 |
-| 4. Contacts | tables MariaDB, API REST, carnet + intégration à la rédaction | 1, 2 |
+| 4. Contacts | tables MariaDB, API REST, carnet + intégration à la rédaction | 1, 2c |
 
 Chaque sous-projet suit son propre cycle spec → plan → implémentation.
+
+### Découpage du sous-projet 2 (Mail)
+
+L'inventaire réel d'un client mail à parité fonctionnelle avec Rainloop — arborescence de
+dossiers et leur gestion, liste paginée, recherche, threads, lecture HTML assainie, pièces
+jointes, rédaction, brouillons, identités, signatures, drapeaux, déplacements, sélection
+multiple, raccourcis clavier, multi-comptes — représente quatre à six fois ce sous-projet.
+Il est donc découpé en quatre tranches, **chacune avec son propre cycle spec → plan →
+implémentation, et chacune utilisable seule**.
+
+| Tranche | Contenu | Livrable | Dépend de |
+|---|---|---|---|
+| **2a** | Connexion IMAP (MailKit), arborescence de dossiers + création/renommage/suppression + visibilité (abonnements), liste de messages paginée, volet de lecture, pièces jointes, layout 3 panneaux, couche de données (TanStack Query) ; fondations de session (renouvellement glissant, cache du contrôle par requête) | **Un webmail consultable** | 1 |
+| **2b** | Drapeaux (lu/non-lu, suivi), déplacement/copie, corbeille, archivage, indésirables, sélection multiple, recherche IMAP | Un webmail où l'on organise | 2a |
+| **2c** | Rédaction, identités (dérivées des alias), pièces jointes sortantes, brouillons, réponse/réponse à tous/transfert, signatures, envoi SMTP | Un webmail complet | 2a |
+| **2d** | Domaines additionnels (CRUD admin, config IMAP/SMTP — pas de Sieve), liaison de comptes (locaux et additionnels), stockage chiffré des credentials externes, activation de la bascule dans le menu d'avatar | Le multi-comptes | 2a, 2c |
+
+Spec de la tranche 2a : `docs/superpowers/specs/2026-07-18-webmail-mail-2a-design.md`.
+
+**Deux décisions du sous-projet 2 qui infirment des hypothèses de ce document :**
+
+- Le § 8 anticipait un **refresh token** pour le JWT de 30 minutes. La tranche 2a retient à la
+  place un **renouvellement glissant des cookies** — même effet, sans nouvel endpoint ni store.
+- Le § 4 (« Multi-comptes ») évoquait un **master user** pour l'impersonation IMAP, sur le
+  modèle de ManageSieve. Il est **écarté** : il ne fonctionne que sur le serveur maison et
+  imposerait deux chemins d'authentification, le second inévitable dès qu'un compte externe
+  entre en jeu. Le modèle retenu est celui de Rainloop/Snappymail — credentials de
+  l'utilisateur chiffrés dans un cookie. ManageSieve conserve son master user : c'est un cas
+  distinct, limité au serveur maison par construction.
+
+**Stratégie de branche.** Les quatre tranches se construisent sur la branche `webmail`.
+`master` est la production ; le merge n'intervient qu'une fois l'ensemble du webmail
+implémenté. La CI déploie `webmail` en continu sur l'environnement de développement, qui sert
+de recette permanente tranche par tranche.
