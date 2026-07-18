@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -79,6 +80,22 @@ describe('routing', () => {
   it('redirects authenticated users away from /login', async () => {
     mocks.hasSession.mockReturnValue(true)
     const router = renderAt('/login')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+  })
+
+  it('logs in through the form and navigates to /mail', async () => {
+    mocks.hasSession.mockReturnValue(false)
+    mocks.login.mockResolvedValue(undefined)
+    mocks.markLoggedIn.mockImplementation(() => {
+      mocks.hasSession.mockReturnValue(true)
+    })
+    const user = userEvent.setup()
+    const router = renderAt('/login')
+
+    await user.type(await screen.findByPlaceholderText('Email address'), 'mick@weesky.be')
+    await user.type(screen.getByPlaceholderText('Password'), 'hunter2')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
   })
 })
