@@ -219,12 +219,18 @@ sauvegarde ou de disque seul ne donne rien. C'est un cran plus solide que le mod
 Tout le mécanisme repose sur un key ring Data Protection qui survit aux redémarrages. S'il est
 perdu, tous les cookies de credentials deviennent indéchiffrables.
 
-**Le comportement par défaut est le pire des cas.** Data Protection cherche successivement
-Azure, IIS, puis `$HOME/.aspnet/DataProtection-Keys`, et **à défaut génère des clés éphémères
-en mémoire** avec un simple avertissement. Un service systemd n'a pas nécessairement `HOME`
-défini : sans configuration explicite, chaque redémarrage — donc chaque déploiement —
-déconnecterait tout le monde du mail tandis que le cookie JWT continue d'affirmer que la
-session est valide.
+**Le comportement par défaut fonctionne, mais par accident.** Data Protection cherche
+successivement Azure, IIS, puis `$HOME/.aspnet/DataProtection-Keys`, et à défaut génère des
+clés éphémères en mémoire. L'unité systemd déclare `User=root` et systemd renseigne `$HOME`
+depuis la base utilisateurs dès que `User=` est présent : les clés atterrissent donc
+aujourd'hui dans `/root/.aspnet/DataProtection-Keys` et **persistent correctement**.
+
+Le risque n'est donc pas une déconnexion imminente, il est plus sournois : cet emplacement est
+**implicite, non documenté et non maîtrisé**. Le jour où quelqu'un durcit le service en
+remplaçant `User=root` par un utilisateur dédié — ce qui serait une bonne chose —, les clés
+changent de place silencieusement et toutes les sessions mail tombent sans cause évidente.
+L'objet de ce qui suit est de rendre l'emplacement explicite et stable, pas de parer à une
+catastrophe imminente.
 
 **Le key ring ne doit pas vivre sous le répertoire de déploiement.** Le `tar` d'extraction ne
 supprime rien, mais les étapes suivantes du déploiement appliquent
@@ -245,8 +251,15 @@ déploiement, donc intouché par le `tar`, le `chmod -R` et le `chown -R`.
 
 ```csharp
 var stateDir = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
+
+// Le repli est réservé au développement : WorkingDirectory pointe sur le répertoire de
+// déploiement, où les clés ne doivent jamais atterrir (chmod/chown récursifs à chaque livraison).
+if (string.IsNullOrEmpty(stateDir) && !builder.Environment.IsDevelopment())
+    throw new InvalidOperationException(
+        "STATE_DIRECTORY is not set. Add StateDirectory= to the systemd unit.");
+
 var keyRing = string.IsNullOrEmpty(stateDir)
-    ? Path.Combine(builder.Environment.ContentRootPath, "keys")   // repli développement
+    ? Path.Combine(builder.Environment.ContentRootPath, "keys")   // développement uniquement
     : Path.Combine(stateDir, "keys");
 
 builder.Services.AddDataProtection()
@@ -254,9 +267,13 @@ builder.Services.AddDataProtection()
     .SetApplicationName($"snoopy.microservice.{builder.Environment.EnvironmentName}");
 ```
 
-**Garde-fou au démarrage.** En Production, si le répertoire résolu n'est pas accessible en
-écriture, le service **refuse de démarrer**. Un échec bruyant vaut mieux qu'un repli silencieux
-sur des clés éphémères dont la conséquence n'apparaîtra qu'au déploiement suivant.
+**Garde-fou au démarrage.** Hors développement, l'absence de `STATE_DIRECTORY` ou un répertoire
+non accessible en écriture fait **échouer le démarrage**. Un échec bruyant vaut mieux qu'un
+repli silencieux dont la conséquence n'apparaîtrait qu'au déploiement suivant.
+
+L'unité porte `Restart=always` et `RestartSec=60` : une mauvaise configuration produira donc
+une boucle de redémarrage toutes les minutes, visible dans syslog. C'est le comportement voulu
+— à ne pas prendre pour un défaut.
 
 **Isolation dev / prod.** `snoopy.microservice` et `snoopy.microservice-dev` cohabitent sur le
 même hôte et doivent avoir des key rings distincts — sinon une compromission de
@@ -280,10 +297,34 @@ de clés déchiffrant des credentials, pour un bénéfice qui vaut une reconnexi
 
 **Prérequis serveur.** `StateDirectory=` vit dans l'unité systemd, qui n'est pas versionnée et
 le restera (décision assumée). C'est donc une **modification manuelle côté serveur**, à
-appliquer avant le premier déploiement de cette tranche, que le plan portera comme une tâche
-explicite et non comme du code. Vérification associée : le répertoire existe, appartient au
-bon utilisateur, et le service journalise au démarrage le chemin de key ring effectivement
-retenu.
+appliquer aux **deux** unités (`snoopy.microservice` et `snoopy.microservice-dev`) avant le
+premier déploiement de cette tranche, que le plan portera comme une tâche explicite et non
+comme du code. Vérification associée : le répertoire existe, appartient au bon utilisateur, et
+le service journalise au démarrage le chemin de key ring effectivement retenu.
+
+Migration : les clés existantes éventuellement présentes sous `/root/.aspnet/DataProtection-Keys`
+ne sont **pas** reprises. Rien n'en dépend aujourd'hui — aucun composant du service n'utilise
+Data Protection avant cette tranche — donc il n'y a rien à migrer.
+
+#### Configuration : ce qui va où
+
+`EnvironmentFile=/etc/snoopy.microservice/secrets.env` est le mécanisme d'injection des
+secrets, hors du répertoire de déploiement — d'où leur survie au `tar`. ASP.NET Core mappe
+`Sieve__MasterPassword` sur `Sieve:MasterPassword`.
+
+**Les variables d'environnement priment sur `appsettings.json` et ne sont lues qu'au
+démarrage.** Une valeur placée dans `secrets.env` échapperait donc au rechargement à chaud
+d'`IOptionsMonitor` (§ 5.2). Règle qui en découle : **les valeurs de connexion `Mail:*` restent
+dans `appsettings.json`** — elles ne sont pas secrètes, et c'est ce qui rend leur ajustement
+possible sans redémarrage. `secrets.env` ne reçoit que ce qui est réellement secret.
+
+#### Posture connue
+
+Le service tourne en `User=root`. Ce n'est pas introduit par cette tranche, mais le rapport
+risque/bénéfice change quand le processus détient des credentials utilisateurs déchiffrables.
+Un utilisateur dédié serait un durcissement réel ; il impliquerait d'accorder le `chown -R
+root:$DEPLOY_USER` du déploiement et le `User=` de l'unité, ce qui dépasse le périmètre de 2a.
+Consigné ici pour que la décision reste visible plutôt que oubliée.
 
 ### 5.4 Structure du code
 
