@@ -4,7 +4,8 @@ import './styles/tokens.css'
 import './styles/theme-night.css'
 import './styles/theme-classic.css'
 import './index.css'
-import App from './App.jsx'
+import './styles/shell.css'
+import App from './App'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
