@@ -1,0 +1,57 @@
+/* Palette "night" — Nuit & corail (default). */
+[data-palette='night'] {
+  --bg: #faf8f6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f4f1ee;
+  --border: #e5e0da;
+  --text: #1c1a18;
+  --text-muted: #6f6a64;
+  --topbar-bg: #182238;
+  --topbar-fg: #ffffff;
+  --rail-bg: #182238;
+  --rail-fg: #c3ccdd;
+  --rail-item: #26334f;
+  --rail-item-active: #e2674a;
+  --rail-item-active-fg: #ffffff;
+  --pane-item-hover: #f0ece8;
+  --pane-item-active-bg: #ffffff;
+  --pane-item-active-fg: #182238;
+  --accent-unread: #e2674a;
+  --action-primary: #182238;
+  --action-primary-hover: #26334f;
+  --action-primary-fg: #ffffff;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+}
+
+/* Deliberate: --action-primary shifts hue between modes (navy in light,
+   coral in dark) — navy would dissolve into a dark background. The ROLE
+   is stable, the hue is not. Do not "fix" this. */
+[data-palette='night'][data-theme='dark'] {
+  --bg: #17191d;
+  --surface: #212429;
+  --surface-raised: #262a31;
+  --surface-sunken: #1c1f24;
+  --border: #2c3038;
+  --text: #e9e5e1;
+  --text-muted: #9b968f;
+  --topbar-bg: #0f1626;
+  --topbar-fg: #e9e5e1;
+  --rail-bg: #0f1626;
+  --rail-fg: #aab6cc;
+  --rail-item: #1e2942;
+  --rail-item-active: #f0785c;
+  --rail-item-active-fg: #1a0f0b;
+  --pane-item-hover: #262a31;
+  --pane-item-active-bg: #262a31;
+  --pane-item-active-fg: #f3efeb;
+  --accent-unread: #f0785c;
+  --action-primary: #f0785c;
+  --action-primary-hover: #f28a72;
+  --action-primary-fg: #1a0f0b;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --success: #4ade80;
+}

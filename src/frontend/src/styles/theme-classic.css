@@ -1,0 +1,54 @@
+/* Palette "classic" — Continuité (the current weesky admin look). */
+[data-palette='classic'] {
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f7f8fa;
+  --border: #dde1e7;
+  --text: #1a1d23;
+  --text-muted: #6b7280;
+  --topbar-bg: #3450a3;
+  --topbar-fg: #ffffff;
+  --rail-bg: #e4e9f2;
+  --rail-fg: #4b5563;
+  --rail-item: #d3dae7;
+  --rail-item-active: #3450a3;
+  --rail-item-active-fg: #ffffff;
+  --pane-item-hover: #e7eaf0;
+  --pane-item-active-bg: #dbe3f5;
+  --pane-item-active-fg: #25397a;
+  --accent-unread: #3450a3;
+  --action-primary: #3450a3;
+  --action-primary-hover: #2a4090;
+  --action-primary-fg: #ffffff;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+}
+
+[data-palette='classic'][data-theme='dark'] {
+  /* --bg, --surface, --border, --text, --text-muted: copied verbatim from
+     index.css's former [data-theme="dark"] block. --danger and --success
+     are not overridden there, so they fall back to the light values above. */
+  --bg: #1e2229;
+  --surface: #272d38;
+  --border: #3b4253;
+  --text: #dce1e9;
+  --text-muted: #8b95a8;
+  --surface-raised: #2c3340;
+  --surface-sunken: #212630;
+  --topbar-bg: #232833;
+  --topbar-fg: #e6e9ee;
+  --rail-bg: #232833;
+  --rail-fg: #9aa4b5;
+  --rail-item: #333b49;
+  --rail-item-active: #84aad8;
+  --rail-item-active-fg: #12161c;
+  --pane-item-hover: #2f3849;
+  --pane-item-active-bg: #33405c;
+  --pane-item-active-fg: #bcd2ec;
+  --accent-unread: #84aad8;
+  --action-primary: #84aad8;
+  --action-primary-hover: #9dbde4;
+  --action-primary-fg: #12161c;
+}
