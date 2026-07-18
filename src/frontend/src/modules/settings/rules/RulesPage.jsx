@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api } from '../api.js'
-import { useToasts } from '../hooks/useToasts.js'
-import Toasts from '../components/Toasts.jsx'
-import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
-import HelpTooltip from '../components/HelpTooltip.jsx'
-import TrashIcon from '../icons/TrashIcon.jsx'
-import PencilIcon from '../icons/PencilIcon.jsx'
+import { api } from '../../../api.js'
+import { useToasts } from '../../../hooks/useToasts.js'
+import Toasts from '../../../components/Toasts.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import HelpTooltip from '../../../components/HelpTooltip.jsx'
+import TrashIcon from '../../../icons/TrashIcon.jsx'
+import PencilIcon from '../../../icons/PencilIcon.jsx'
 
 // ── Icons ─────────────────────────────────────────────────────
 
@@ -802,7 +802,7 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
 
 // ── RulesPage ─────────────────────────────────────────────────
 
-export default function RulesPage({ onClose }) {
+export default function RulesPage() {
   const { toasts, addToast, removeToast } = useToasts()
 
   const [ruleSet, setRuleSet] = useState(null)
@@ -968,17 +968,15 @@ export default function RulesPage({ onClose }) {
 
   return (
     <>
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal modal-rules" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <span className="modal-title">
-              <RulesIcon size={17} />
-              Rules
-              {providerLabel && <span className="provider-badge" style={{ marginLeft: '8px' }}>{providerLabel}</span>}
-            </span>
-            <button className="modal-close" onClick={onClose}>✕</button>
-          </div>
-          <div className="rules-modal-body">
+      <div className="settings-page">
+        <div className="settings-page-header">
+          <span className="settings-page-title">
+            <RulesIcon size={17} />
+            Rules
+            {providerLabel && <span className="provider-badge" style={{ marginLeft: '8px' }}>{providerLabel}</span>}
+          </span>
+        </div>
+        <div className="rules-modal-body">
             <p className="rules-modal-desc">
               Create and manage rules that define how your incoming messages are handled. Rules are processed from top to bottom.
             </p>
@@ -1055,7 +1053,6 @@ export default function RulesPage({ onClose }) {
                 )}
               </div>
             )}
-          </div>
         </div>
       </div>
 

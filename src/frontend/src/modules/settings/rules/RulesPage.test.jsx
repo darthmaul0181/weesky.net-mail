@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api } from '../api.js'
+import { api } from '../../../api.js'
 import RulesPage, {
   RuleEditorModal,
   ConvertConfirmModal,
@@ -10,7 +10,7 @@ import RulesPage, {
   isActionValid,
 } from './RulesPage.jsx'
 
-vi.mock('../api.js', () => ({
+vi.mock('../../../api.js', () => ({
   api: {
     getRules: vi.fn(),
     saveRules: vi.fn(),
