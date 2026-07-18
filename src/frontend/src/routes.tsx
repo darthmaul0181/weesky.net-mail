@@ -7,6 +7,7 @@ import LoginRoute from './pages/LoginRoute'
 import ComingSoon from './components/ComingSoon'
 import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
+import AppearancePage from './modules/settings/appearance/AppearancePage'
 
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
@@ -30,7 +31,7 @@ export const routes: RouteObject[] = [
               { index: true, element: <Navigate to="/settings/account" replace /> },
               { path: 'account', element: <AccountPage /> },
               { path: 'accounts', element: <ComingSoon module="Linked accounts" /> }, // sub-project 2
-              { path: 'appearance', element: <ComingSoon module="Appearance" /> },  // Task 12
+              { path: 'appearance', element: <AppearancePage /> },
               { path: 'aliases', element: <ComingSoon module="Aliases" /> },        // Task 13
               { path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> },
               {

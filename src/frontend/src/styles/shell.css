@@ -186,3 +186,5 @@
   color: var(--text-muted);
   margin-bottom: 8px;
 }
+
+.radio-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
