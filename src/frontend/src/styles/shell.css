@@ -162,3 +162,16 @@
   overflow: auto;
   padding: 24px 28px;
 }
+
+.settings-page-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.settings-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
