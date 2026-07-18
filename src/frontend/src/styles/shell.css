@@ -127,3 +127,38 @@
 }
 .avatar-menu-actions a:hover,
 .avatar-menu-actions button:hover { background: var(--pane-item-hover); }
+
+.settings-layout { display: flex; height: 100%; }
+
+.context-pane {
+  width: 200px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+}
+
+.pane-item {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.pane-item:hover { background: var(--pane-item-hover); }
+
+.pane-item.is-active {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 24px 28px;
+}
