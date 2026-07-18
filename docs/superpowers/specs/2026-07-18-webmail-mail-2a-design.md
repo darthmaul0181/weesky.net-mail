@@ -214,10 +214,48 @@ sauvegarde ou de disque seul ne donne rien. C'est un cran plus solide que le mod
   résout rien pour un serveur externe arbitraire, où l'on retombe sur un mot de passe. Hors de
   proportion aujourd'hui ; à reconsidérer si le besoin apparaît.
 
+#### Le key ring : de quoi il s'agit
+
+Data Protection n'utilise pas *une* clé de chiffrement mais un **ensemble de clés** — un
+trousseau, d'où le terme *key ring*.
+
+À un instant donné, une seule clé du trousseau est **active** : c'est elle qui chiffre les
+nouvelles données. Toutes les autres restent présentes uniquement pour **déchiffrer** ce qui a
+été chiffré de leur vivant. Chaque clé porte un identifiant (GUID) et des dates de création,
+d'activation et d'expiration — et, mécanisme central, **chaque donnée chiffrée embarque dans
+son en-tête le GUID de la clé qui l'a produite**. Pour déchiffrer, Data Protection lit ce
+GUID, cherche la clé correspondante dans le trousseau, et s'en sert.
+
+Physiquement, avec `PersistKeysToFileSystem`, c'est un répertoire contenant un fichier XML par
+clé :
+
+```
+/var/lib/snoopy.microservice/keys/
+  key-9c2f7a13-4e8b-4a21-b0d5-1f2c3e4a5b6c.xml
+  key-b41e0d88-7c93-4f10-8e22-9a0b1c2d3e4f.xml
+```
+
+Chaque fichier contient les métadonnées de la clé et son matériel secret (`<masterKey><value>`,
+en base64). Sur Windows ce matériel serait enveloppé par DPAPI ; **sur Linux il est en clair**
+— c'est la raison pour laquelle le permissionnement du répertoire est le contrôle qui compte.
+
+Trois conséquences directes pour cette tranche :
+
+- **La rotation ne casse rien.** Tous les 90 jours une nouvelle clé devient active, mais
+  l'ancienne reste dans le trousseau : un cookie chiffré la semaine précédente se déchiffre
+  toujours. C'est précisément parce qu'il s'agit d'un trousseau et non d'une clé unique.
+- **La perte du trousseau casse tout.** Si le répertoire disparaît ou change de place,
+  l'application en crée un nouveau, vide ; les cookies existants nomment des clés introuvables.
+- **Partager le trousseau, c'est partager le pouvoir de déchiffrer** — d'où l'exigence de
+  trousseaux distincts entre production et développement.
+
+Tout ce qui suit se ramène donc à une seule question : **où vit ce répertoire, et qui peut le
+lire ?**
+
 #### Persistance du key ring
 
-Tout le mécanisme repose sur un key ring Data Protection qui survit aux redémarrages. S'il est
-perdu, tous les cookies de credentials deviennent indéchiffrables.
+Le mécanisme repose sur un trousseau qui survit aux redémarrages. S'il est perdu, tous les
+cookies de credentials deviennent indéchiffrables.
 
 **Le comportement par défaut fonctionne, mais par accident.** Data Protection cherche
 successivement Azure, IIS, puis `$HOME/.aspnet/DataProtection-Keys`, et à défaut génère des
