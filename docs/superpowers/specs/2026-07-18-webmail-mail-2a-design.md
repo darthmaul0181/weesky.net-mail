@@ -1,0 +1,403 @@
+# Webmail weesky — Sous-projet 2, tranche 2a : Dossiers & lecture
+
+**Date :** 2026-07-18
+**Statut :** design validé, prêt pour la planification d'implémentation
+**Dépend de :** sous-projet 1 (shell), branche `webmail` (`24e5a05`)
+
+**Branche :** le travail se poursuit sur `webmail`. `master` est la production ; le merge
+n'aura lieu qu'une fois **l'ensemble du webmail** implémenté (tranches 2a à 2d). La CI déploie
+donc `webmail` en continu sur l'environnement de développement
+(`account-dev.mail.weesky.net`, service `snoopy.microservice-dev`), ce qui donne un
+environnement de recette permanent pour chaque tranche.
+
+---
+
+## 1. Contexte
+
+Le shell applicatif est livré : routing, rail vertical, contextes Auth/Theme, contrat de
+tokens à deux palettes, et le portage des pages Alias/Règles/Admin/Compte. La route
+`/mail` affiche un écran « à venir ».
+
+L'objectif du sous-projet 2 est un client mail complet, aux fonctionnalités équivalentes à
+Rainloop/Snappymail, dans le langage visuel mis en place par le shell.
+
+L'inventaire réel de ce périmètre — arborescence de dossiers et leur gestion, liste paginée,
+recherche, threads, lecture HTML assainie, pièces jointes, rédaction, brouillons, identités,
+signatures, drapeaux, déplacements, sélection multiple, raccourcis clavier, multi-comptes —
+représente quatre à six fois le sous-projet shell. Il est donc découpé en quatre tranches,
+chacune avec son cycle spec → plan → implémentation, chacune utilisable seule.
+
+**Ce document couvre la tranche 2a uniquement.**
+
+---
+
+## 2. Découpage du sous-projet 2
+
+| Tranche | Contenu | Livrable |
+|---|---|---|
+| **2a** | Connexion IMAP, arborescence de dossiers + création/renommage/suppression + visibilité (abonnements), liste de messages paginée, volet de lecture, pièces jointes, layout 3 panneaux, couche de données | **Un webmail consultable** |
+| 2b | Drapeaux (lu/non-lu, suivi), déplacement/copie, corbeille, archivage, indésirables, sélection multiple, recherche IMAP | Un webmail où l'on organise |
+| 2c | Rédaction, identités (dérivées des alias), pièces jointes sortantes, brouillons, réponse/réponse à tous/transfert, signatures, envoi SMTP | Un webmail complet |
+| 2d | Domaines additionnels (CRUD admin), liaison de comptes, stockage chiffré des credentials externes, bascule dans le menu d'avatar | Le multi-comptes |
+
+---
+
+## 3. Décisions de conception validées
+
+| Sujet | Décision |
+|---|---|
+| Dialogue serveur mail | **Le backend seul** parle IMAP/SMTP. Le frontend ne parle qu'au backend, en REST/JSON |
+| Agnosticisme serveur | **Aucune connaissance de la configuration Dovecot.** Tout fait spécifique au serveur est découvert à l'exécution via les capacités IMAP |
+| Configuration | Seule la **configuration de connexion** existe (hôte, port, mode TLS). Le serveur maison est une entrée pré-remplie de la même forme que celle qu'un admin saisira en 2d |
+| Authentification IMAP | **Credentials de l'utilisateur**, capturés à la connexion, chiffrés via Data Protection dans un second cookie — le modèle de Rainloop/Snappymail. Un seul chemin d'authentification, identique pour le serveur maison et les serveurs externes (§ 5.3) |
+| Master user | **Écarté.** Il ne fonctionne que sur le serveur maison et imposerait deux chemins d'authentification. ManageSieve le garde pour les règles Sieve — c'est un cas distinct |
+| Connexions IMAP | **Une connexion par requête**, comme Rainloop. Le pooling reste une optimisation ultérieure, à justifier par des mesures |
+| Couche de données frontend | **TanStack Query** — 4ᵉ dépendance runtime du projet |
+| Rendu HTML | Assainissement **côté backend**, rendu dans une **iframe sandboxée** côté frontend. Images distantes bloquées par défaut |
+| Connexion | **Entièrement configurable** : hôte, port, mode de sécurité (`SslOnConnect`/`StartTls`/…), délai, certificats invalides — pour IMAP comme pour la soumission. Défauts standard : IMAP 993 implicite, soumission 587 STARTTLS. Rechargement à chaud via `IOptionsMonitor` (§ 5.2) |
+
+---
+
+## 4. Périmètre de la tranche 2a
+
+**Dans le périmètre**
+
+- Client IMAP backend (MailKit) et gestion des credentials de session
+- Arborescence de dossiers : lecture, hiérarchie, dossiers spéciaux, compteurs
+- Gestion des dossiers : création, renommage/déplacement, suppression
+- Visibilité des dossiers : abonnement / désabonnement (`SUBSCRIBE`/`UNSUBSCRIBE`)
+- Liste de messages paginée (enveloppes seules)
+- Volet de lecture : corps HTML assaini et texte brut, en-têtes, liste des pièces jointes
+- Téléchargement de pièces jointes
+- Layout 3 panneaux du module mail
+- Couche de données TanStack Query
+- Fondations : extension de `request()`, renouvellement glissant de session (§ 8)
+
+**Hors périmètre**
+
+- Toute modification d'état d'un message (drapeaux, déplacement, suppression) — 2b
+- Recherche — 2b
+- Rédaction et envoi — 2c
+- Multi-comptes et domaines additionnels — 2d
+- Threads de conversation, IDLE / rafraîchissement temps réel, raccourcis clavier — à répartir
+  entre 2b et 2c lors de leurs specs respectives
+
+Le volet de lecture de 2a est **en lecture seule** : aucun bouton d'action n'y figure encore.
+
+---
+
+## 5. Architecture backend
+
+### 5.1 Agnosticisme : ce qui est découvert, ce qui est configuré
+
+Rien de ce qui dépend du serveur n'est écrit en dur ni configuré. Tout est interrogé à
+l'ouverture de connexion :
+
+| Fait | Source |
+|---|---|
+| Séparateur de hiérarchie | `client.PersonalNamespaces[0].DirectorySeparator` |
+| Préfixe de namespace | commande `NAMESPACE` |
+| Dossiers spéciaux (Sent, Drafts, Trash, Junk, Archive) | `SPECIAL-USE` / `XLIST`, **avec repli sur une correspondance par nom** si le serveur ne les annonce pas |
+| Mécanismes d'authentification | `client.AuthenticationMechanisms` |
+| Capacités (`MOVE`, `UIDPLUS`, `SORT`…) | `client.Capabilities` |
+| Format de stockage | sans objet — invisible depuis IMAP |
+
+**C'est la contrainte structurante de la tranche.** Un compte additionnel (2d) pointe vers un
+serveur arbitraire dont nous n'aurons jamais la configuration. Une architecture qui a besoin
+de connaître le serveur est fausse dès 2d ; elle doit donc être agnostique dès 2a, sous peine
+d'écrire le module deux fois.
+
+### 5.2 Modèle de connexion
+
+Une seule structure décrit un compte mail, quelle que soit sa provenance :
+
+```
+MailAccountConnection { Host, Port, SecurityMode, Username, Password }
+```
+
+Le serveur maison est une instance **pré-remplie depuis `appsettings`** (hôte, port, mode TLS)
+complétée par les credentials de session ; en 2d, un domaine additionnel fournira les mêmes
+champs depuis la base. Une seule structure, un seul chemin de code.
+
+Section `appsettings.json`, modelée sur la section `Sieve` existante :
+
+```json
+"Mail": {
+  "ImapHost": "mail.weesky.net",
+  "ImapPort": 993,
+  "ImapSecurity": "SslOnConnect",
+  "SmtpHost": "mail.weesky.net",
+  "SmtpPort": 587,
+  "SmtpSecurity": "StartTls",
+  "TimeoutSeconds": 30,
+  "AllowInvalidCertificate": false
+}
+```
+
+(`SmtpHost`/`SmtpPort`/`SmtpSecurity` sont posés dès maintenant mais consommés en 2c.)
+
+**Aucune valeur de connexion n'est écrite en dur.** Hôte, port, mode de sécurité, délai
+d'expiration et tolérance aux certificats invalides sont tous configurables, pour IMAP comme
+pour la soumission. Les valeurs ci-dessus sont les valeurs par défaut standard, pas des
+constantes.
+
+`ImapSecurity`/`SmtpSecurity` se lient sur l'énumération `SecureSocketOptions` de MailKit et
+acceptent donc `None`, `Auto`, `SslOnConnect` (TLS implicite), `StartTls` (STARTTLS exigé) et
+`StartTlsWhenAvailable` (STARTTLS opportuniste). Passer d'un serveur en 993 implicite à un
+serveur en 143 + STARTTLS est un changement de configuration, jamais un changement de code.
+
+**Rechargement à chaud.** Les autres options du service utilisent `IOptions<T>`, figé au
+démarrage. Ici les options sont consommées via **`IOptionsMonitor<MailOptions>`**, de sorte
+qu'une correction dans `appsettings.json` prenne effet sans redémarrer le service — donc sans
+interrompre les sessions en cours. C'est un écart assumé à la convention existante, justifié
+par le fait que ces valeurs seront ajustées en exploitation, contrairement aux autres.
+
+### 5.3 Credentials de session — mécanisme et modèle de menace
+
+Le mot de passe utilisateur est nécessaire pour ouvrir IMAP et n'est **pas récupérable en
+base** : MariaDB stocke du SHA-512 crypt produit par les triggers. Il est donc capturé au
+moment de la connexion, où `LoginController` l'a déjà en main.
+
+**Mécanisme :** ASP.NET Core Data Protection (`IDataProtector`, purpose `"weesky.imap.credentials"`).
+
+1. `POST /api/Login` chiffre le mot de passe et le pose dans un second cookie
+   `HttpOnly; Secure; SameSite=Strict`, de durée alignée sur le cookie JWT.
+2. Chaque requête mail déchiffre le cookie pour ouvrir IMAP. Rien n'est conservé côté serveur
+   entre deux requêtes.
+3. `DELETE /api/Login` supprime **les deux** cookies.
+4. Le key ring est persisté (`PersistKeysToFileSystem`) dans le répertoire de service, afin
+   que les redémarrages — donc chaque déploiement — n'invalident pas les sessions.
+5. Un échec de déchiffrement (rotation de clé, key ring effacé) renvoie **401 avec un code
+   distinguable** (`ResultEnveloppe` portant `credentials_unavailable`), sur lequel le
+   frontend force une reconnexion propre plutôt que d'afficher des erreurs IMAP opaques.
+
+#### Modèle de menace
+
+**Ce qui change par rapport à aujourd'hui.** La base ne contient qu'un SHA-512 crypt : une
+fonction à sens unique. Un attaquant qui vole intégralement MariaDB n'obtient aucun mot de
+passe utilisable, seulement des empreintes à casser. À partir de cette tranche, il existe
+pendant la durée d'une session un **chemin réversible** entre ce que le système détient et le
+mot de passe réel de l'utilisateur. Pour l'exploiter il faut réunir **le key ring** (disque du
+serveur) **et le cookie chiffré** (navigateur de l'utilisateur, ou capté en vol) ; avec les
+deux, on obtient des credentials qui ouvrent IMAP, la soumission SMTP et le webmail.
+
+**Cette propriété est inhérente à tout webmail qui proxifie IMAP**, pas à cette
+implémentation. Un serveur qui ouvre une connexion IMAP au nom d'un utilisateur doit détenir
+de quoi s'authentifier comme lui.
+
+| Webmail | Modèle |
+|---|---|
+| **Rainloop / Snappymail** | Credentials chiffrés stockés **côté client**, dans un cookie — identique à ce qui est retenu ici |
+| **Roundcube** | Mot de passe chiffré avec une clé de configuration, stocké dans la **session serveur** : le serveur détient clé et chiffré au repos |
+| **SOGo** | Credentials en session serveur, même famille |
+| **Gmail / Outlook web** | Non comparable : ils possèdent le stockage des messages, il n'y a aucun IMAP à proxifier |
+
+**Propriété de la conception retenue :** le serveur ne détient **jamais les deux moitiés au
+repos** — la clé est sur son disque, le chiffré est dans le navigateur. Une compromission de
+sauvegarde ou de disque seul ne donne rien. C'est un cran plus solide que le modèle Roundcube.
+
+**Les seules alternatives réelles**, pour mémoire :
+
+- **Master user / PREAUTH** — ne fonctionne que sur un serveur que l'on contrôle, donc jamais
+  pour un compte additionnel (2d). Imposerait deux chemins d'authentification. Écarté.
+- **OAuth2 / XOAUTH2** — un jeton limité et révocable remplace le mot de passe ; Dovecot sait
+  faire `OAUTHBEARER`. Suppose de monter un fournisseur OAuth pour le serveur maison, et ne
+  résout rien pour un serveur externe arbitraire, où l'on retombe sur un mot de passe. Hors de
+  proportion aujourd'hui ; à reconsidérer si le besoin apparaît.
+
+### 5.4 Structure du code
+
+Conventions existantes à suivre à la lettre (`Controllers → Repositories → Services`,
+`Result<T>`, `ApiBaseController.FromResult`, options non validées + garde à l'appel,
+502 pour une défaillance de système externe) :
+
+```
+Services/
+  IImapConnectionFactory.cs / ImapConnectionFactory.cs   ouvre et authentifie un ImapClient
+  IMailCredentialStore.cs   / MailCredentialStore.cs     chiffre/déchiffre le cookie
+  IHtmlSanitizer.cs         / HtmlSanitizer.cs           assainissement du corps HTML
+Repositories/
+  IMailFolderRepository.cs  / MailFolderRepository.cs    arborescence + CRUD + abonnements
+  IMailMessageRepository.cs / MailMessageRepository.cs   liste, message, pièces jointes
+Models/Mail/
+  MailOptions, MailFolderNode, MailMessageSummary, MailMessageDetail,
+  MailAttachmentInfo, MailFolderPage
+Controllers/
+  MailController.cs
+```
+
+`ImapConnectionFactory` renvoie un `Result<IImapSession>` sur le modèle exact de
+`IManageSieveClient.OpenSessionAsync` : garde sur options non configurées, message générique
+côté client et détail journalisé, transfert de propriété de la connexion à la session,
+`await using` par méthode de repository.
+
+**Seam de test :** `ManageSieveClient` (socket/TLS/SASL) n'a aucun test unitaire, la logique
+testable ayant été isolée dans une classe travaillant sur un `Stream`. On reproduit ce
+découpage : les repositories dépendent d'une interface `IImapSession` mockable ; la fabrique
+concrète, elle, n'est pas testée unitairement.
+
+### 5.5 Endpoints
+
+Tous sous `[Authorize]`, route `api/[controller]`.
+
+| Verbe | Route | Rôle |
+|---|---|---|
+| `GET` | `/api/Mail/Folders` | arborescence complète : chemin, nom affiché, enfants, rôle spécial, abonné, total, non-lus, `UidValidity` |
+| `POST` | `/api/Mail/Folders` | création — corps `{ parentPath, name }` |
+| `PUT` | `/api/Mail/Folders` | renommage/déplacement — corps `{ path, newParentPath, newName }` |
+| `DELETE` | `/api/Mail/Folders` | suppression — corps `{ path }` |
+| `PUT` | `/api/Mail/Folders/Subscription` | visibilité — corps `{ path, subscribed }` |
+| `GET` | `/api/Mail/Messages?folder=&page=&pageSize=` | page d'enveloppes, du plus récent au plus ancien |
+| `GET` | `/api/Mail/Messages/Detail?folder=&uid=` | message complet : HTML assaini, texte brut, en-têtes, pièces jointes |
+| `GET` | `/api/Mail/Messages/Attachment?folder=&uid=&index=` | flux binaire, `Content-Disposition: attachment` |
+
+**Le chemin de dossier voyage en corps ou en query, jamais en segment de route** : le
+séparateur de hiérarchie peut être `/`, ce qui casserait le routage. C'est une contrainte
+d'API, pas un détail d'implémentation.
+
+**`UidValidity` accompagne chaque réponse liée à un dossier.** Si le serveur la change, les
+UID mis en cache côté client deviennent invalides et le frontend doit vider ce dossier de son
+cache. Sans cela, un webmail affiche des messages faux après une opération serveur.
+
+### 5.6 Assainissement du HTML
+
+Le corps HTML d'un message est du contenu hostile par construction.
+
+- **Backend** : assainissement par liste blanche avant sérialisation — suppression des
+  `<script>`, gestionnaires `on*`, `<iframe>`, `<object>`, `<embed>`, `<form>`, des URL
+  `javascript:`/`data:` (hors images inline), et des CSS d'échappement de conteneur.
+- **Images distantes bloquées par défaut** : chaque `src` externe est déplacé vers
+  `data-blocked-src` et le nombre d'images bloquées est renvoyé, afin que le frontend propose
+  « afficher les images » sans nouvel aller-retour serveur.
+- **Frontend** : rendu dans une `<iframe sandbox>` sans `allow-same-origin` ni
+  `allow-scripts`, jamais en `dangerouslySetInnerHTML`. Deux barrières indépendantes.
+
+La bibliothèque d'assainissement est le seul ajout NuGet à décider au moment du plan (candidat :
+`HtmlSanitizer` de mganss) ; MailKit/MimeKit sont les autres.
+
+---
+
+## 6. Architecture frontend
+
+### 6.1 Layout 3 panneaux
+
+Le shell fournit un unique `<Outlet/>` dans `.app-content` ; **la colonne contextuelle est à
+la charge du module** (c'est ainsi que `SettingsLayout` procède). `MailLayout` construit donc
+ses trois colonnes à l'intérieur :
+
+```
+src/modules/mail/
+  MailLayout.tsx          3 colonnes, en TypeScript
+  folders/FolderTree.tsx  arborescence, repli, menu contextuel, dialogues CRUD
+  list/MessageList.tsx    liste virtualisée/paginée
+  reader/MessageReader.tsx iframe sandboxée, en-têtes, pièces jointes
+  api/mailApi.ts          appels typés
+  queries.ts              clés et hooks TanStack Query
+```
+
+Deux contraintes du shell à respecter : `.app-content` porte `overflow: auto` — `MailLayout`
+doit le neutraliser sur son conteneur pour obtenir trois colonnes à défilement indépendant ;
+et `.app-shell` fait `height: 100vh`, donc `height: 100%` se propage correctement.
+
+Route : `/mail` devient un layout avec enfants (`/mail/:folderPath?`), le dossier courant
+vivant dans l'URL — c'est le bénéfice du routing acquis en sous-projet 1 (liens profonds,
+bouton retour).
+
+### 6.2 Couche de données
+
+TanStack Query, avec des clés portant **l'identifiant du compte actif dès maintenant**
+(`useAuth().activeAccount.id`), afin que 2d n'impose aucune réécriture :
+
+```
+['mail', accountId, 'folders']
+['mail', accountId, 'messages', folderPath, page]
+['mail', accountId, 'message', folderPath, uid]
+```
+
+Ce que la bibliothèque nous apporte ici, et que le `useEffect` maison actuel ne donne pas :
+invalidation croisée (une action sur un message doit rafraîchir la ligne **et** le compteur du
+dossier), déduplication, annulation lors d'un changement rapide de dossier,
+stale-while-revalidate, et pagination.
+
+### 6.3 Tokens à ajouter
+
+Le contrat de tokens impose qu'un token nomme un rôle, jamais une couleur, et qu'un ajout soit
+décliné dans **les deux palettes × les deux modes**. `--accent-unread` existe déjà et n'a
+aucun consommateur : il a été provisionné pour ce module.
+
+À ajouter : `--list-row-hover`, `--list-row-selected-bg`, `--list-row-selected-fg`,
+`--list-row-unread-bg`, `--list-separator`, `--badge-count-bg`, `--badge-count-fg`,
+`--reader-header-border`, `--quote-text`, `--attachment-chip-bg`.
+
+Le CSS du module va dans un nouveau `src/styles/mail.css` — `index.css` fait 2225 lignes et ne
+doit plus grossir.
+
+### 6.4 Icônes
+
+`src/icons/` compte 9 icônes en 20×20 sans props. Le module mail en demande beaucoup plus
+(dossier, dossier ouvert, pièce jointe, chevron, enveloppe ouverte/fermée, corbeille, actualiser)
+et à des tailles variées. **Les icônes existantes gagnent une prop `size` avec la valeur
+actuelle par défaut** — même reconciliation additive que celle appliquée à `TrashIcon` lors du
+sous-projet 1.
+
+---
+
+## 7. Ce que 2a change dans l'existant
+
+- **`api.js` — `request()` est étendu** : exposition du code de statut HTTP sur l'erreur levée
+  (aujourd'hui perdu, donc un 404 « message supprimé » est indistinguable d'un 500), support
+  d'`AbortSignal`, et un helper séparé pour les réponses binaires (pièces jointes).
+- **`GET /api/Account/Folders`** existe déjà et passe par doveadm (`mailboxList`), pour le
+  sélecteur de dossiers des règles Sieve. Il ne renvoie que des noms plats — ni hiérarchie, ni
+  abonnements, ni compteurs. Il est **conservé tel quel** en 2a : le migrer vers IMAP est un
+  travail de 2b, quand les règles et le mail partageront la même notion de dossier.
+- **Le quota continue de passer par doveadm** (`DovecotQuotaClient`) — inchangé.
+- **`ComingSoon module="Mail"`** disparaît, ainsi que le bloc de `ComingSoon.tsx` qui pointe
+  vers Alias et Règles. Les tests du shell qui l'assertent doivent être adaptés, pas supprimés.
+- **`src/frontend/CLAUDE.md`** décrit Mail comme une page placeholder — à mettre à jour.
+
+---
+
+## 8. Fondations de session à traiter dans cette tranche
+
+Deux constats du sous-projet 1, qui deviennent bloquants ici :
+
+- **Le JWT expire en 30 minutes sans renouvellement.** Un webmail ouvert la journée y sera
+  déconnecté en pleine lecture. Correction retenue : **renouvellement glissant** des deux
+  cookies (JWT et credentials) sur toute requête authentifiée au-delà de la moitié de leur
+  durée de vie. Pas de refresh token, pas de nouvel endpoint, pas de store — le mécanisme le
+  plus simple qui règle le problème.
+- **`OnTokenValidated` interroge la base à chaque requête** pour vérifier que l'utilisateur
+  existe. Correction : mise en cache mémoire de ce contrôle, TTL 60 secondes. Mesure de
+  précaution proportionnée ; à ne pas transformer en chantier.
+
+---
+
+## 9. Vérification
+
+1. `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build` — verts.
+2. `dotnet test` — verts, avec des tests de repository sur `IImapSession` mocké couvrant :
+   arborescence à plusieurs niveaux, dossier spécial détecté par flag **et** par repli sur le
+   nom, création/renommage/suppression, abonnement, pagination, message multipart avec pièces
+   jointes.
+3. Tests d'assainissement HTML : un corpus de charges hostiles (script inline, `onerror`,
+   `javascript:`, iframe, CSS d'échappement) doit ressortir inerte.
+4. Les 4 combinaisons de thème sur la vue mail — c'est là que se voient les couleurs en dur.
+5. Bout en bout contre le serveur de dev : arborescence conforme à celle d'un client IMAP de
+   référence (Thunderbird), dossier créé depuis le webmail visible dans ce client et
+   réciproquement, message avec pièce jointe lu et téléchargé, message HTML hostile rendu inerte.
+6. Liens profonds : `/mail/<dossier>` restaure le dossier ; le bouton retour est cohérent.
+7. Session : après expiration ou échec de déchiffrement des credentials, retour propre à
+   `/login` — pas d'erreur IMAP affichée à l'utilisateur.
+
+---
+
+## 10. Suite
+
+| Tranche | Dépend de |
+|---|---|
+| 2b — Actions & organisation | 2a |
+| 2c — Écriture | 2a (2b souhaitable) |
+| 2d — Multi-comptes | 2a, 2c |
+| 3 — Calendrier | 1 |
+| 4 — Contacts | 1, 2c |
