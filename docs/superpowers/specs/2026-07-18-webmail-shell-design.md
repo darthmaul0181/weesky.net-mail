@@ -54,7 +54,13 @@ modification de la coquille**. C'est le critère de réussite.
 | Modules à venir | Icônes visibles dans le rail, menant à un écran « à venir » |
 | Règles & Admin | Cessent d'être des modales, deviennent des **pages routées** |
 | Changement de mot de passe | Cesse d'être une modale, devient une **section de `/settings/account`** |
+| Apparence | Sort de la page Compte, devient une **page dédiée** `/settings/appearance` (2 palettes × 3 modes ne tiennent plus dans une case à cocher) |
+| Mode alphabétique des alias | Cesse d'être une préférence globale du panneau, devient un **contrôle local** de `/settings/aliases` |
 | `AccountPanel` (panneau coulissant) | **Supprimé**, remplacé par un menu d'avatar à trois entrées |
+| Route par défaut | `/` redirige vers **`/mail`** dès ce sous-projet, même en écran « à venir » — la nav s'installe dans sa forme définitive |
+| Barre supérieure | **Bandeau fin** : marque à gauche, avatar à droite (emplacement futur de la recherche globale) |
+| Responsive | **Desktop d'abord, plancher 1024 px** ; en dessous, rien de garanti mais rien d'illisible. Le travail mobile est un sous-projet ultérieur |
+| Page de connexion | Garde son identité actuelle (image de fond + carte en verre), **indépendante de la palette** — c'est l'écran de marque |
 | Calendrier / Contacts (cible) | Tables maison dans MariaDB (décision de cadrage, hors périmètre ici) |
 | Snappymail | Cohabitation pendant le développement, retrait à terme → l'interop Sieve Rainloop reste requise |
 
@@ -71,14 +77,16 @@ modification de la coquille**. C'est le critère de réussite.
 - Bibliothèque de composants et d'icônes partagés
 - Portage des pages existantes sous `modules/settings/`
 - Écrans « à venir » pour Mail, Calendrier, Contacts
-- Mise à jour de `src/frontend/CLAUDE.md` (voir § 9)
+- Mise à jour de `src/frontend/CLAUDE.md` et correction documentaire de
+  `src/snoopy.microservice/CLAUDE.md` (voir § 9)
 
 **Hors périmètre**
 
 - IMAP / SMTP / MailKit — sous-projet 2
 - Calendrier — sous-projet 3
 - Contacts — sous-projet 4
-- Toute modification du backend
+- Toute modification du **code** backend (seule sa documentation est touchée)
+- Adaptation mobile / responsive sous 1024 px — sous-projet ultérieur
 
 Le shell se livre avec Mail affichant lui aussi un écran « à venir ».
 
@@ -104,10 +112,11 @@ src/
     AuthContext.tsx
     ThemeContext.tsx
   layouts/
-    AppShell.tsx             rail + colonne contextuelle + <Outlet/>
+    AppShell.tsx             barre supérieure + rail + colonne contextuelle + <Outlet/>
+    TopBar.tsx               bandeau fin : marque à gauche, avatar à droite
     AppRail.tsx
     ContextPane.tsx          2ᵉ colonne, contenu fourni par le module actif
-    AvatarMenu.tsx
+    AvatarMenu.tsx           menu ouvert par l'avatar de la TopBar
   components/                Toast, Modal, ConfirmDialog, Switch, Tooltip, QuotaBar…
   icons/                     les 8 SVG aujourd'hui inlinés dans les pages
   hooks/
@@ -124,16 +133,20 @@ src/
       admin/         page portée
   api/
   styles/
-    tokens.css       contrat de rôles
-    theme-b.css      palette par défaut
-    theme-a.css      palette de continuité
+    tokens.css           contrat de rôles
+    theme-night.css      palette « Nuit & corail » (défaut)
+    theme-classic.css    palette « Continuité »
 ```
+
+`index.html` référence `/src/main.jsx` en dur — le renommage en `main.tsx` inclut la mise
+à jour de cette balise `<script>`.
 
 ### Arbre de routes
 
 | Route | Contenu |
 |---|---|
-| `/mail` | `ComingSoon` (sous-projet 2) |
+| `/` | redirige vers `/mail` |
+| `/mail` | `ComingSoon` (sous-projet 2) — **destination par défaut après connexion** ; l'écran d'attente propose des liens vers Alias et Règles |
 | `/calendar` | `ComingSoon` (sous-projet 3) |
 | `/contacts` | `ComingSoon` (sous-projet 4) |
 | `/settings` | redirige vers `/settings/account` |
@@ -142,13 +155,20 @@ src/
 | `/settings/aliases` | page portée (avec le mode alphabétique comme contrôle local) |
 | `/settings/rules` | page portée |
 | `/settings/admin` | page portée, protégée par un garde de route |
-| `/login` | hors coquille |
+| `/login` | hors coquille — garde son identité visuelle actuelle (image de fond + carte en verre), indépendante de la palette |
 
 La colonne contextuelle affiche, en section Paramètres, la nav :
 **Compte · Apparence · Alias · Règles · Administration** (la dernière conditionnée au flag admin).
 
 Le passage des Règles et de l'Admin de modales à pages est le gain direct du routing : il
 apporte les liens profonds et le bouton retour, aujourd'hui absents.
+
+### Responsive
+
+Le shell est conçu pour **1024 px et plus**. En dessous, rien n'est garanti mais rien ne
+doit être cassé au point d'être illisible (pas de chevauchement, pas de contenu inaccessible).
+Le vrai travail mobile — rail réductible, colonnes empilées — est un sous-projet ultérieur,
+après le module Mail qui en est le principal consommateur.
 
 ### État d'authentification
 
@@ -168,8 +188,9 @@ pour le rendu optimiste, et bascule vers `/login` sur 401 via le handler déjà 
 Pièce centrale du sous-projet, puisque les deux palettes sont livrées ensemble.
 
 **Règle : un token nomme un rôle, jamais une couleur.** Pas de `--bleu-fonce`, mais
-`--rail-bg`. C'est ce qui permet à B d'avoir un rail sombre et un point « non-lu » corail,
-là où A garde un rail clair et un point bleu, sans qu'aucun composant ne connaisse la différence.
+`--rail-bg`. C'est ce qui permet à night d'avoir un rail sombre et un point « non-lu » corail,
+là où classic garde un rail clair et un point bleu, sans qu'aucun composant ne connaisse
+la différence.
 
 ```
 --rail-bg  --rail-fg  --rail-item  --rail-item-active
@@ -179,14 +200,17 @@ là où A garde un rail clair et un point bleu, sans qu'aucun composant ne conna
 --radius-sm  --radius-md  --font
 ```
 
-**Sélection :** `data-theme="light|dark"` (existant) × `data-palette="b|a"` (nouveau), les
-deux appliqués par le script bloquant déjà présent dans `src/frontend/index.html` — le
-mécanisme anti-FOUC existe, il gagne un attribut. Préférences persistées en `localStorage`
-(`appearance_theme` existant, `appearance_palette` nouveau).
+**Sélection :** `data-theme="light|dark"` (existant) × `data-palette="night|classic"`
+(nouveau), les deux appliqués par le script bloquant déjà présent dans
+`src/frontend/index.html` — le mécanisme anti-FOUC existe, il gagne un attribut.
+Préférences persistées en `localStorage` (`appearance_theme` existant,
+`appearance_palette` nouveau). Les identifiants sont sémantiques (`night` = « Nuit &
+corail », `classic` = « Continuité ») : les lettres A/B des maquettes ne doivent pas
+fuir dans le code ni dans le `localStorage`.
 
 **Valeurs de référence**
 
-| Rôle | B clair | B sombre | A clair | A sombre |
+| Rôle | night clair | night sombre | classic clair | classic sombre |
 |---|---|---|---|---|
 | `--rail-bg` | `#182238` | `#0f1626` | `#e4e9f2` | `#232833` |
 | `--bg` | `#faf8f6` | `#17191d` | `#f0f2f5` | `#1e2229` |
@@ -194,8 +218,12 @@ mécanisme anti-FOUC existe, il gagne un attribut. Préférences persistées en 
 | `--accent-unread` | `#e2674a` | `#f0785c` | `#3450a3` | `#84aad8` |
 | `--action-primary` | `#182238` | `#f0785c` | `#3450a3` | `#84aad8` |
 
-En sombre, le rail de B reste **plus sombre que les surfaces** : la structure survit au
+En sombre, le rail de night reste **plus sombre que les surfaces** : la structure survit au
 changement de mode au lieu de se dissoudre.
+
+**Note voulue, à ne pas « corriger » :** dans la palette night, `--action-primary` change
+de teinte entre les modes (navy `#182238` en clair, corail `#f0785c` en sombre). C'est
+délibéré — le navy se dissoudrait dans un fond sombre. Le rôle est stable, pas la teinte.
 
 **Point de vigilance.** `src/frontend/src/index.css` fait 2247 lignes et référence les tokens
 actuels (`--primary`, `--bg`, `--radius`…). Le renommage vers des rôles le traverse largement.
@@ -218,7 +246,11 @@ une page dont le contenu principal serait un bouton ouvrant autre chose n'a plus
 `ConvertConfirmModal` (bascule de provider de règles), `RuleEditorModal` (assistant à étapes,
 déjà écrit et testé ainsi).
 
-**Deviennent des pages :** Règles, Administration, Changement de mot de passe.
+**Deviennent des pages :** Règles, Administration.
+
+**Devient une section de page :** le changement de mot de passe, intégré directement à
+`/settings/account` — en faire une page dont le contenu principal serait un unique
+formulaire recréerait la couche inutile qu'on vient de supprimer.
 
 ---
 
@@ -240,11 +272,11 @@ disparaît d'elle-même : un composant extrait dans son propre fichier s'importe
 
 ### Zone à risque identifiée
 
-La suppression de l'`AccountPanel` est **le seul endroit où le filet de tests ne joue pas**.
-Ce composant est couvert par une partie des 92 tests de `AliasesPage.admin.test.jsx` et des
-68 de `AliasesPage.main.test.jsx` ; ces tests ne se portent pas, ils se réécrivent contre
-`/settings/account` et `AvatarMenu`. C'est là que les régressions passeront si on n'y prête
-pas attention.
+La suppression de l'`AccountPanel` et de la `ChangePasswordModal` est **le seul endroit où
+le filet de tests ne joue pas**. Ces composants sont couverts par une partie des 92 tests de
+`AliasesPage.admin.test.jsx` et des 68 de `AliasesPage.main.test.jsx` ; ces tests ne se
+portent pas, ils se réécrivent contre `/settings/account` et `AvatarMenu` en couvrant les
+mêmes comportements. C'est là que les régressions passeront si on n'y prête pas attention.
 
 Le menu d'avatar qui le remplace porte trois entrées : identité, lien vers Paramètres,
 Déconnexion.
@@ -276,26 +308,31 @@ suivant s'il n'est pas repris :
 - Le composant nommé `OwnershipTab` s'appelle aujourd'hui `VirtualDomainsTab`.
 - La contrainte d'`export` nommé pour les tests devient caduque (§ 7).
 
-À noter aussi, découvert lors de l'exploration mais hors périmètre :
+Également dans le périmètre (correction documentaire pure, aucun code touché) :
 `src/snoopy.microservice/CLAUDE.md` documente des routes admin `/api/Admin/ownerships`
-qui n'existent pas — le code expose `/api/Admin/domains/virtuals`.
+qui n'existent pas — le code expose `/api/Admin/domains/virtuals` — et omet
+`POST /api/Account/FullName`.
 
 ---
 
 ## 10. Vérification
 
 1. `npm run lint` — sans erreur.
-2. `npm run test` — les 309 tests existants restent verts ; nouveaux tests sur `AuthContext`,
-   `ThemeContext`, `AppShell`, le garde de route admin et `/settings/account`.
+2. `npm run test` — **aucun test perdu sans remplaçant** : les tests des pages portées
+   restent verts tels quels ; ceux de l'`AccountPanel` et de la `ChangePasswordModal`
+   (dont le sujet disparaît, § 7) sont remplacés par des tests équivalents contre
+   `/settings/account` et `AvatarMenu`, couvrant les mêmes comportements. Nouveaux tests
+   sur `AuthContext`, `ThemeContext`, `AppShell` et le garde de route admin.
 3. `npm run test:coverage` — la couverture ne régresse pas.
 4. `npm run build` — compilation TypeScript sans erreur.
 5. **Vérification manuelle des 4 combinaisons de thème** (B/A × clair/sombre) sur chaque
    route. C'est le seul moyen de détecter les couleurs codées en dur, et c'est l'étape à ne
    pas sauter.
 6. Navigation : liens profonds fonctionnels sur chaque route, bouton retour cohérent,
-   `/settings` redirige bien vers `/settings/account`, `/settings/admin` inaccessible à un
-   compte non-admin.
+   `/` redirige vers `/mail`, `/settings` vers `/settings/account`, `/settings/admin`
+   inaccessible à un compte non-admin.
 7. Session : un 401 depuis n'importe quelle route ramène à `/login`.
+8. À 1024 px de large : aucune colonne ne déborde, aucun contenu inaccessible.
 
 ---
 
