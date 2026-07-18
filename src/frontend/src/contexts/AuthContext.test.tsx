@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { AuthProvider, useAuth } from './AuthContext'
 
 const mocks = vi.hoisted(() => ({
@@ -64,8 +64,14 @@ describe('AuthContext', () => {
   it('registers an unauthorized handler that logs out the UI', async () => {
     mocks.hasSession.mockReturnValue(true)
     render(<AuthProvider><Probe /></AuthProvider>)
+    await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
     const handler = mocks.setUnauthorizedHandler.mock.calls[0][0]
     expect(typeof handler).toBe('function')
+
+    act(() => { handler() })
+
+    await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
+    expect(screen.getByTestId('loaded')).toHaveTextContent('false')
   })
 
   it('logout calls the API, clears the session, resets state', async () => {
