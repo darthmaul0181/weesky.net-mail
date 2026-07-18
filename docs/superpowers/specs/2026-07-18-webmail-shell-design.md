@@ -56,7 +56,9 @@ modification de la coquille**. C'est le critère de réussite.
 | Changement de mot de passe | Cesse d'être une modale, devient une **section de `/settings/account`** |
 | Apparence | Sort de la page Compte, devient une **page dédiée** `/settings/appearance` (2 palettes × 3 modes ne tiennent plus dans une case à cocher) |
 | Mode alphabétique des alias | Cesse d'être une préférence globale du panneau, devient un **contrôle local** de `/settings/aliases` |
-| `AccountPanel` (panneau coulissant) | **Supprimé**, remplacé par un menu d'avatar à trois entrées |
+| `AccountPanel` (panneau coulissant) | **Supprimé**, remplacé par le menu d'avatar de la TopBar |
+| Multi-comptes (cible) | L'utilisateur lie des comptes additionnels à sa session ; le **switch se fait dans le menu d'avatar** (pattern Rainloop/Gmail, coin haut-droit). Livraison au sous-projet 2, le shell prépare la structure |
+| Domaines additionnels (cible) | CRUD admin : nom + config IMAP/SMTP/Sieve. Le serveur local est le **domaine par défaut, implicite** — il n'apparaît jamais dans cette liste. Les comptes liés peuvent aussi être **locaux** (boîtes partagées) |
 | Route par défaut | `/` redirige vers **`/mail`** dès ce sous-projet, même en écran « à venir » — la nav s'installe dans sa forme définitive |
 | Barre supérieure | **Bandeau fin** : marque à gauche, avatar à droite (emplacement futur de la recherche globale) |
 | Responsive | **Desktop d'abord, plancher 1024 px** ; en dessous, rien de garanti mais rien d'illisible. Le travail mobile est un sous-projet ultérieur |
@@ -151,6 +153,7 @@ src/
 | `/contacts` | `ComingSoon` (sous-projet 4) |
 | `/settings` | redirige vers `/settings/account` |
 | `/settings/account` | **page d'atterrissage de la section** — identité, autres domaines, quota, mot de passe |
+| `/settings/accounts` | comptes liés — `ComingSoon` (sous-projet 2) |
 | `/settings/appearance` | thème + palette |
 | `/settings/aliases` | page portée (avec le mode alphabétique comme contrôle local) |
 | `/settings/rules` | page portée |
@@ -158,7 +161,8 @@ src/
 | `/login` | hors coquille — garde son identité visuelle actuelle (image de fond + carte en verre), indépendante de la palette |
 
 La colonne contextuelle affiche, en section Paramètres, la nav :
-**Compte · Apparence · Alias · Règles · Administration** (la dernière conditionnée au flag admin).
+**Compte · Comptes liés · Apparence · Alias · Règles · Administration**
+(la dernière conditionnée au flag admin).
 
 Le passage des Règles et de l'Admin de modales à pages est le gain direct du routing : il
 apporte les liens profonds et le bouton retour, aujourd'hui absents.
@@ -180,6 +184,31 @@ de route pour l'admin.
 Le mécanisme de session reste inchangé et fonctionne : JWT en cookie httpOnly posé par le
 backend, `credentials: 'include'` sur chaque requête, drapeau `sessionActive` en `localStorage`
 pour le rendu optimiste, et bascule vers `/login` sur 401 via le handler déjà en place.
+
+### Multi-comptes : ce que le shell prépare
+
+Cible (sous-projet 2) : l'utilisateur lie des comptes additionnels à sa session, choisis
+parmi le serveur local (boîtes partagées, avec le mot de passe du compte lié) et les
+domaines additionnels définis par l'admin (nom + config IMAP/SMTP/Sieve). **La session et
+le compte actif sont deux choses distinctes** : on se connecte une fois avec son compte
+weesky ; le switch change le contexte mail, pas l'identité de session.
+
+Les fonctionnalités sont asymétriques : alias, quota, mot de passe et admin ne s'appliquent
+qu'au compte principal local (base dovecot/doveadm) ; les règles Sieve s'appliquent à tout
+compte dont le domaine a une config Sieve ; le mail s'applique à tous.
+
+Pour ne pas payer cette cible en refactoring, le shell pose dès maintenant trois choses :
+
+1. **`AuthContext` distingue identité de session et compte actif** dès le premier jour —
+   le compte actif est simplement le compte principal tant que le sous-projet 2 n'existe pas.
+2. **Le menu d'avatar est structuré en sections** : identité du compte actif, liste des
+   comptes (réduite au principal pour l'instant), lien vers Paramètres, Déconnexion.
+   La liste s'allonge au sous-projet 2 sans changer la structure du menu.
+3. **La route `/settings/accounts` existe** en écran « à venir », cohérente avec la
+   décision prise pour Mail/Calendrier/Contacts.
+
+Le stockage des credentials des comptes liés (chiffrement au repos côté serveur) est un
+sujet de sécurité à part entière, à traiter dans la spec du sous-projet 2.
 
 ---
 
@@ -278,8 +307,9 @@ le filet de tests ne joue pas**. Ces composants sont couverts par une partie des
 portent pas, ils se réécrivent contre `/settings/account` et `AvatarMenu` en couvrant les
 mêmes comportements. C'est là que les régressions passeront si on n'y prête pas attention.
 
-Le menu d'avatar qui le remplace porte trois entrées : identité, lien vers Paramètres,
-Déconnexion.
+Le menu d'avatar qui le remplace est structuré en sections (voir § 4, Multi-comptes) :
+identité du compte actif, liste des comptes — réduite au compte principal dans ce
+sous-projet —, lien vers Paramètres, Déconnexion.
 
 ---
 
@@ -341,7 +371,7 @@ qui n'existent pas — le code expose `/api/Admin/domains/virtuals` — et omet
 | Sous-projet | Contenu | Dépend de |
 |---|---|---|
 | 1. Shell | ce document | — |
-| 2. Mail | MailKit côté backend (IMAP/SMTP), vue 3 panneaux, rédaction ; refresh token | 1 |
+| 2. Mail | MailKit côté backend (IMAP/SMTP), vue 3 panneaux, rédaction ; refresh token ; **multi-comptes** : domaines additionnels (CRUD admin, config IMAP/SMTP/Sieve), liaison de comptes (locaux et additionnels), stockage chiffré des credentials, activation du switch dans le menu d'avatar | 1 |
 | 3. Calendrier | tables MariaDB, API REST, vues mois/semaine/jour | 1 |
 | 4. Contacts | tables MariaDB, API REST, carnet + intégration à la rédaction | 1, 2 |
 
