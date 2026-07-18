@@ -100,4 +100,29 @@ describe('AccountPage', () => {
     await waitFor(() =>
       expect(mocks.changePassword).toHaveBeenCalledWith('old-pass-123', 'long-enough-pw'))
   })
+
+  it('surfaces an API error and keeps the entered values when the password change fails', async () => {
+    mocks.changePassword.mockRejectedValue(new Error('boom'))
+    renderPage()
+    const oldInput = await screen.findByLabelText(/current password/i)
+    const newInput = screen.getByLabelText(/^new password/i)
+    const confirmInput = screen.getByLabelText(/confirm/i)
+    fireEvent.change(oldInput, { target: { value: 'old-pass-123' } })
+    fireEvent.change(newInput, { target: { value: 'long-enough-pw' } })
+    fireEvent.change(confirmInput, { target: { value: 'long-enough-pw' } })
+    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    expect(await screen.findByText(/incorrect/i)).toBeInTheDocument()
+    expect(oldInput).toHaveValue('old-pass-123')
+    expect(newInput).toHaveValue('long-enough-pw')
+    expect(confirmInput).toHaveValue('long-enough-pw')
+  })
+
+  it('blocks submission when the current password is empty', async () => {
+    renderPage()
+    fireEvent.change(await screen.findByLabelText(/^new password/i), { target: { value: 'long-enough-pw' } })
+    fireEvent.change(screen.getByLabelText(/confirm/i), { target: { value: 'long-enough-pw' } })
+    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    expect(await screen.findByText(/current password is required/i)).toBeInTheDocument()
+    expect(mocks.changePassword).not.toHaveBeenCalled()
+  })
 })
