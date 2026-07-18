@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Superpowers brainstorming companion (mockups, session state)
+.superpowers/
