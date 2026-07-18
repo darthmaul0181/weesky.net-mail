@@ -8,6 +8,7 @@ import ComingSoon from './components/ComingSoon'
 import SettingsLayout from './modules/settings/SettingsLayout'
 
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
+const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginRoute /> },
@@ -33,7 +34,7 @@ export const routes: RouteObject[] = [
               { path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> },
               {
                 element: <RequireAdmin />,
-                children: [{ path: 'admin', element: <ComingSoon module="Administration" /> }], // Task 10
+                children: [{ path: 'admin', element: <Suspense fallback={null}><AdminPage /></Suspense> }],
               },
             ],
           },

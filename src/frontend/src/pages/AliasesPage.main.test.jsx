@@ -456,16 +456,6 @@ describe('AliasesPage', () => {
     expect(onLogout).toHaveBeenCalledOnce()
   })
 
-  it('opens the admin modal when Administration is clicked by an admin user', async () => {
-    api.getAccount.mockResolvedValue({ ...ACCOUNT, isAdmin: true })
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getByTitle('john@weesky.be'))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Administration' })).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: 'Administration' }))
-    expect(await screen.findByText('Accounts')).toBeInTheDocument()
-  })
-
   it('stores the alpha mode preference in localStorage when toggled', async () => {
     renderPage()
     await screen.findByText('alias1')
@@ -539,18 +529,6 @@ describe('AliasesPage', () => {
     expect(screen.getByRole('button', { name: 'Update password' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '✕' }))
     expect(screen.queryByRole('button', { name: 'Update password' })).not.toBeInTheDocument()
-  })
-
-  it('closes the admin modal when ✕ is clicked', async () => {
-    api.getAccount.mockResolvedValue({ ...ACCOUNT, isAdmin: true })
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getByTitle('john@weesky.be'))
-    await waitFor(() => screen.getByRole('button', { name: 'Administration' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Administration' }))
-    expect(await screen.findByRole('button', { name: 'Virtual domains' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Virtual domains' })).not.toBeInTheDocument())
   })
 
   it('fires alpha nav letter click (scrollToLetter)', async () => {
