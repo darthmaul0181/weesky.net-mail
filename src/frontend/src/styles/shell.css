@@ -73,3 +73,57 @@
 
 .coming-soon h1 { color: var(--text); font-size: 22px; }
 .coming-soon-links a { color: var(--action-primary); }
+
+.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
+.topbar-wordmark { height: 16px; }
+
+.avatar-menu-root { position: relative; }
+
+.topbar-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--topbar-fg);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.avatar-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  min-width: 240px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 50;
+}
+
+.avatar-menu-identity { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.avatar-menu-name { font-weight: 600; }
+.avatar-menu-email { color: var(--text-muted); font-size: 12px; }
+
+.avatar-menu-accounts { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.avatar-menu-account { padding: 7px 14px; font-size: 13px; }
+.avatar-menu-account.is-active { font-weight: 600; }
+
+.avatar-menu-actions { display: flex; flex-direction: column; padding: 6px 0; }
+.avatar-menu-actions a,
+.avatar-menu-actions button {
+  text-align: left;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.avatar-menu-actions a:hover,
+.avatar-menu-actions button:hover { background: var(--pane-item-hover); }
