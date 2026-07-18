@@ -214,6 +214,77 @@ sauvegarde ou de disque seul ne donne rien. C'est un cran plus solide que le mod
   résout rien pour un serveur externe arbitraire, où l'on retombe sur un mot de passe. Hors de
   proportion aujourd'hui ; à reconsidérer si le besoin apparaît.
 
+#### Persistance du key ring
+
+Tout le mécanisme repose sur un key ring Data Protection qui survit aux redémarrages. S'il est
+perdu, tous les cookies de credentials deviennent indéchiffrables.
+
+**Le comportement par défaut est le pire des cas.** Data Protection cherche successivement
+Azure, IIS, puis `$HOME/.aspnet/DataProtection-Keys`, et **à défaut génère des clés éphémères
+en mémoire** avec un simple avertissement. Un service systemd n'a pas nécessairement `HOME`
+défini : sans configuration explicite, chaque redémarrage — donc chaque déploiement —
+déconnecterait tout le monde du mail tandis que le cookie JWT continue d'affirmer que la
+session est valide.
+
+**Le key ring ne doit pas vivre sous le répertoire de déploiement.** Le `tar` d'extraction ne
+supprime rien, mais les étapes suivantes du déploiement appliquent
+`find $DEPLOY_PATH -type f -exec chmod 660` et `chown -R root:$DEPLOY_USER` **récursivement** :
+les fichiers de clés verraient leurs droits et leur propriétaire réécrits à chaque livraison.
+Correct par accident aujourd'hui, cassé silencieusement demain.
+
+**Mécanisme retenu : `StateDirectory=` de systemd.**
+
+```ini
+StateDirectory=snoopy.microservice
+StateDirectoryMode=0700
+```
+
+systemd crée `/var/lib/snoopy.microservice`, l'attribue au `User=` du service, le préserve
+entre les redémarrages et expose son chemin dans `$STATE_DIRECTORY`. Il est hors du chemin de
+déploiement, donc intouché par le `tar`, le `chmod -R` et le `chown -R`.
+
+```csharp
+var stateDir = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
+var keyRing = string.IsNullOrEmpty(stateDir)
+    ? Path.Combine(builder.Environment.ContentRootPath, "keys")   // repli développement
+    : Path.Combine(stateDir, "keys");
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRing))
+    .SetApplicationName($"snoopy.microservice.{builder.Environment.EnvironmentName}");
+```
+
+**Garde-fou au démarrage.** En Production, si le répertoire résolu n'est pas accessible en
+écriture, le service **refuse de démarrer**. Un échec bruyant vaut mieux qu'un repli silencieux
+sur des clés éphémères dont la conséquence n'apparaîtra qu'au déploiement suivant.
+
+**Isolation dev / prod.** `snoopy.microservice` et `snoopy.microservice-dev` cohabitent sur le
+même hôte et doivent avoir des key rings distincts — sinon une compromission de
+l'environnement de développement permettrait de déchiffrer les cookies de production.
+`StateDirectory=` le garantit par le nom de l'unité ; le `SetApplicationName` dérivé de
+l'environnement est une seconde barrière.
+
+**Les clés au repos.** Linux n'a pas d'équivalent DPAPI : les clés sont stockées en XML clair.
+`ProtectKeysWithCertificate` existe mais déplace le problème — la clé privée du certificat vit
+sur le même disque, lisible par le même service. Le contrôle réaliste est le permissionnement
+(`StateDirectoryMode=0700` et un `User=` dédié). Le chiffrement par certificat ne protégerait
+que d'un attaquant capable de lire des fichiers sans pouvoir s'exécuter en tant que service :
+il est **écarté** comme une couche qui rassure sans protéger.
+
+**Rotation et perte.** La rotation automatique (90 jours) n'invalide rien : elle ajoute une
+clé active et conserve les anciennes pour le déchiffrement. Seule la perte du ring casse les
+sessions, et elle est récupérable — échec de déchiffrement → 401 `credentials_unavailable` →
+reconnexion propre. Coût réel : une reconnexion pour tout le monde, pas une perte de données.
+**Le key ring n'est donc pas sauvegardé** : une copie de sauvegarde serait un second exemplaire
+de clés déchiffrant des credentials, pour un bénéfice qui vaut une reconnexion.
+
+**Prérequis serveur.** `StateDirectory=` vit dans l'unité systemd, qui n'est pas versionnée et
+le restera (décision assumée). C'est donc une **modification manuelle côté serveur**, à
+appliquer avant le premier déploiement de cette tranche, que le plan portera comme une tâche
+explicite et non comme du code. Vérification associée : le répertoire existe, appartient au
+bon utilisateur, et le service journalise au démarrage le chemin de key ring effectivement
+retenu.
+
 ### 5.4 Structure du code
 
 Conventions existantes à suivre à la lettre (`Controllers → Repositories → Services`,
@@ -398,6 +469,10 @@ Deux constats du sous-projet 1, qui deviennent bloquants ici :
 6. Liens profonds : `/mail/<dossier>` restaure le dossier ; le bouton retour est cohérent.
 7. Session : après expiration ou échec de déchiffrement des credentials, retour propre à
    `/login` — pas d'erreur IMAP affichée à l'utilisateur.
+8. **Key ring** : le service journalise au démarrage le chemin retenu ; ce chemin est bien sous
+   `/var/lib/…` et non sous le répertoire de déploiement ; **une session mail survit à un
+   `systemctl restart`** — c'est le test qui prouve que la persistance fonctionne, et il doit
+   être rejoué après chaque modification de l'unité systemd.
 
 ---
 
