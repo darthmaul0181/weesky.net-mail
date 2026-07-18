@@ -3,40 +3,12 @@ import { api, clearSession, setIsAdmin } from '../api.js'
 import logoCircle from '../assets/logo_circle.jpg'
 import weeskyLogo from '../assets/weesky_net.png'
 import RulesPage, { RulesIcon } from './RulesPage.jsx'
-
-function useToasts() {
-  const [toasts, setToasts] = useState([])
-
-  const removeToast = useCallback((id) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
-
-  const addToast = useCallback((message, type = 'success') => {
-    const id = Date.now()
-    setToasts(prev => [...prev, { id, message, type }])
-    if (type !== 'error') {
-      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
-    }
-  }, [])
-
-  return { toasts, addToast, removeToast }
-}
-
-export function Toasts({ toasts, onRemove }) {
-  if (!toasts.length) return null
-  return (
-    <div className="toast-container">
-      {toasts.map(t => (
-        <div key={t.id} className={`toast toast-${t.type}`}>
-          <span>{t.message}</span>
-          {t.type === 'error' && (
-            <button className="toast-close" onClick={() => onRemove(t.id)}>✕</button>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
+import { useToasts } from '../hooks/useToasts.js'
+import Toasts from '../components/Toasts.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
+import HelpTooltip from '../components/HelpTooltip.jsx'
+import TrashIcon from '../icons/TrashIcon.jsx'
+import PencilIcon from '../icons/PencilIcon.jsx'
 
 function LockIcon() {
   return (
@@ -44,29 +16,6 @@ function LockIcon() {
       fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14H6L5 6" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M9 6V4h6v2" />
-    </svg>
-  )
-}
-
-function PencilIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   )
 }
@@ -119,15 +68,6 @@ function GlobeIcon() {
       <line x1="2" y1="12" x2="22" y2="12" />
       <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
     </svg>
-  )
-}
-
-function HelpTooltip({ text }) {
-  return (
-    <div className="help-tooltip-wrap">
-      <div className="help-tooltip-icon">?</div>
-      <div className="help-tooltip-bubble">{text}</div>
-    </div>
   )
 }
 
@@ -404,29 +344,6 @@ export function AccountPanel({ initials, fullName, primaryEmail, subDomains, quo
         </>
       )}
     </>
-  )
-}
-
-export function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading }) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Confirm deletion</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
-          Delete <strong>{entityLabel}</strong>? This action cannot be undone.
-        </p>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
-            onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Delete'}
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 

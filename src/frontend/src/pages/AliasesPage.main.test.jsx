@@ -5,9 +5,9 @@ import { api, clearSession } from '../api.js'
 import AliasesPage, {
   ChangePasswordModal,
   QuotaBlock,
-  Toasts,
   AccountPanel,
 } from './AliasesPage.jsx'
+import Toasts from '../components/Toasts.jsx'
 
 vi.mock('../api.js', () => ({
   api: {

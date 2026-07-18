@@ -5,7 +5,6 @@ import { api } from '../api.js'
 import {
   QuotaMini,
   AccountPanel,
-  DeleteConfirmModal,
   AddEditUserModal,
   AddEditDomainModal,
   AccountsTab,
@@ -13,6 +12,7 @@ import {
   VirtualDomainsTab,
   AdminModal,
 } from './AliasesPage.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 
 vi.mock('../api.js', () => ({
   api: {
