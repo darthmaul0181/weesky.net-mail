@@ -54,7 +54,7 @@ chacune avec son cycle spec → plan → implémentation, chacune utilisable seu
 | Connexions IMAP | **Une connexion par requête**, comme Rainloop. Le pooling reste une optimisation ultérieure, à justifier par des mesures |
 | Couche de données frontend | **TanStack Query** — 4ᵉ dépendance runtime du projet |
 | Rendu HTML | Assainissement **côté backend**, rendu dans une **iframe sandboxée** côté frontend. Images distantes bloquées par défaut |
-| Connexion | **Entièrement configurable** : hôte, port, mode de sécurité (`SslOnConnect`/`StartTls`/…), délai, certificats invalides — pour IMAP comme pour la soumission. Défauts standard : IMAP 993 implicite, soumission 587 STARTTLS. Rechargement à chaud via `IOptionsMonitor` (§ 5.2) |
+| Connexion | **Entièrement configurable** : hôte, port, mode de sécurité (`SslOnConnect`/`StartTls`/…), délai, certificats invalides — pour IMAP comme pour la soumission. Serveur maison : `mail.weesky.net`, IMAP 143 STARTTLS, soumission 587 STARTTLS. Rechargement à chaud via `IOptionsMonitor` (§ 5.2) |
 
 ---
 
@@ -124,8 +124,8 @@ Section `appsettings.json`, modelée sur la section `Sieve` existante :
 ```json
 "Mail": {
   "ImapHost": "mail.weesky.net",
-  "ImapPort": 993,
-  "ImapSecurity": "SslOnConnect",
+  "ImapPort": 143,
+  "ImapSecurity": "StartTls",
   "SmtpHost": "mail.weesky.net",
   "SmtpPort": 587,
   "SmtpSecurity": "StartTls",
@@ -134,12 +134,21 @@ Section `appsettings.json`, modelée sur la section `Sieve` existante :
 }
 ```
 
+Ce sont les **valeurs réelles du serveur maison** : IMAP sur 143 avec STARTTLS, soumission sur
+587 avec STARTTLS. Pas de TLS implicite sur 993.
+
 (`SmtpHost`/`SmtpPort`/`SmtpSecurity` sont posés dès maintenant mais consommés en 2c.)
 
 **Aucune valeur de connexion n'est écrite en dur.** Hôte, port, mode de sécurité, délai
 d'expiration et tolérance aux certificats invalides sont tous configurables, pour IMAP comme
-pour la soumission. Les valeurs ci-dessus sont les valeurs par défaut standard, pas des
-constantes.
+pour la soumission. Les valeurs ci-dessus sont des valeurs par défaut, pas des constantes.
+
+**`StartTls`, pas `StartTlsWhenAvailable`.** Le premier échoue si le serveur n'annonce pas
+STARTTLS ; le second se rabat silencieusement sur une connexion en clair. Sur le port 143,
+qui accepte aussi le trafic non chiffré, cette distinction décide si un défaut de
+configuration expose les credentials en clair sur le réseau. C'est le mode exigeant qui est
+retenu, et un serveur additionnel (2d) ne devra être configuré en `StartTlsWhenAvailable` que
+délibérément.
 
 `ImapSecurity`/`SmtpSecurity` se lient sur l'énumération `SecureSocketOptions` de MailKit et
 acceptent donc `None`, `Auto`, `SslOnConnect` (TLS implicite), `StartTls` (STARTTLS exigé) et
