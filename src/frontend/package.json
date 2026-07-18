@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "deploy": "tar --exclude=node_modules -cf - -C D:/development/repos/weesky.net-mail/src/frontend . | ssh root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/account.frontend\"",
     "test": "vitest run",
@@ -23,6 +24,8 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.1",
     "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^9.39.4",
@@ -30,6 +33,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
     "vite": "^5.4.0",
     "vitest": "^4.1.5"
   }
