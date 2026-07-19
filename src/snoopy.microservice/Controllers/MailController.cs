@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
@@ -25,15 +26,18 @@ namespace weesky.Snoopy.Microservice.Controllers
         private readonly IMailFolderRepository _folders;
         private readonly IMailMessageRepository _messages;
         private readonly IMailCredentialStore _credentials;
+        private readonly IFolderRoleStore _roleStore;
 
         public MailController(
             IMailFolderRepository folders,
             IMailMessageRepository messages,
-            IMailCredentialStore credentials)
+            IMailCredentialStore credentials,
+            IFolderRoleStore roleStore)
         {
             _folders = folders;
             _messages = messages;
             _credentials = credentials;
+            _roleStore = roleStore;
         }
 
         /// <summary>
@@ -54,7 +58,17 @@ namespace weesky.Snoopy.Microservice.Controllers
             if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
 
             var result = await _folders.GetTreeAsync(AuthenticatedUser, password.Value, cancellationToken);
-            return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+            if (result.IsFailure)
+                return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+
+            // The tree's SpecialUse is the resolution chain's output, not raw discovery: a
+            // user override reassigns the role, and the displaced folder shows under its own
+            // name (spec § 4.1).
+            var overrides = await _roleStore.GetAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+            var resolution = FolderRoleResolver.Resolve(result.Value, overrides);
+            StampRoles(result.Value, resolution.RoleByPath);
+
+            return Ok(result.Value);
         }
 
         /// <summary>
@@ -168,6 +182,111 @@ namespace weesky.Snoopy.Microservice.Controllers
             return FromResult(result,
                 errorStatusCode: StatusCodes.Status502BadGateway,
                 successStatusCode: StatusCodes.Status204NoContent);
+        }
+
+        /// <summary>
+        /// The five assignable roles, each with what it resolves to and why: the user's
+        /// override, a server SPECIAL-USE flag, or a name match. A stale override — its folder
+        /// renamed or deleted outside this app — is signalled alongside whatever discovery
+        /// now yields; it is kept, never auto-deleted (spec § 5.3).
+        /// </summary>
+        /// <param name="cancellationToken">cancellation token</param>
+        /// <response code="200">The five roles</response>
+        /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+        /// <response code="502">The mail server could not be reached</response>
+        [HttpGet("FolderRoles")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult<IReadOnlyList<FolderRoleEntry>>> GetFolderRoles(CancellationToken cancellationToken)
+        {
+            var password = _credentials.Retrieve(Request);
+            if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+            var tree = await _folders.GetTreeAsync(AuthenticatedUser, password.Value, cancellationToken);
+            if (tree.IsFailure)
+                return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
+
+            var overrides = await _roleStore.GetAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+            var resolution = FolderRoleResolver.Resolve(tree.Value, overrides);
+
+            return Ok(resolution.Roles);
+        }
+
+        /// <summary>
+        /// Assigns a role to a folder. Validated against the live mailbox, never against the
+        /// client's tree: the folder must exist, be selectable, and not be the inbox. The
+        /// identity guard (uid_validity, mailbox_id) is captured server-side from the live
+        /// folder — the client only names the role and the path.
+        /// </summary>
+        /// <param name="request">role and folder path</param>
+        /// <param name="cancellationToken">cancellation token</param>
+        /// <response code="204">Override stored</response>
+        /// <response code="400">Unknown role, missing path, inbox target, non-selectable folder, or folder already holding another role</response>
+        /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+        /// <response code="404">The folder no longer exists</response>
+        /// <response code="502">The mail server could not be reached</response>
+        [HttpPut("FolderRoles")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult> SetFolderRole(SetFolderRoleRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            if (!FolderRoles.IsValid(request.Role)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Unknown folder role"));
+            if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder path is required"));
+            if (string.Equals(request.FolderPath, "INBOX", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The inbox cannot be assigned a role"));
+
+            var password = _credentials.Retrieve(Request);
+            if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+            var status = await _folders.GetFolderStatusAsync(AuthenticatedUser, password.Value, request.FolderPath, cancellationToken);
+            if (status.IsFailure)
+            {
+                return status.Error == ImapSession.FolderNotFound
+                    ? NotFound(ResultEnveloppe.CreateErrorEnveloppe(status.Error))
+                    : StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(status.Error));
+            }
+
+            if (!status.Value.Selectable)
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("This folder cannot hold messages"));
+
+            var accountId = FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email);
+            var overrides = await _roleStore.GetAsync(accountId, cancellationToken);
+            if (overrides.Any(o => o.FolderPath == request.FolderPath && o.Role != request.Role))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("This folder already holds another role"));
+
+            await _roleStore.UpsertAsync(new FolderRoleOverride
+            {
+                AccountId = accountId,
+                Role = request.Role!,
+                FolderPath = request.FolderPath,
+                UidValidity = status.Value.UidValidity,
+                MailboxId = status.Value.MailboxId
+            }, cancellationToken);
+
+            return NoContent();
+        }
+
+        /// <summary>Clears an override; the role goes back to discovery. Idempotent.</summary>
+        /// <param name="role">role to clear</param>
+        /// <param name="cancellationToken">cancellation token</param>
+        /// <response code="204">Override cleared, or was already absent</response>
+        /// <response code="400">Unknown role</response>
+        /// <response code="401">Not authenticated</response>
+        [HttpDelete("FolderRoles")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult> ClearFolderRole([FromQuery] string? role, CancellationToken cancellationToken)
+        {
+            if (!FolderRoles.IsValid(role)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Unknown folder role"));
+
+            await _roleStore.DeleteAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), role!, cancellationToken);
+            return NoContent();
         }
 
         /// <summary>
@@ -288,6 +407,15 @@ namespace weesky.Snoopy.Microservice.Controllers
             }
 
             return File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+        }
+
+        private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
+        {
+            foreach (var node in nodes)
+            {
+                node.SpecialUse = roleByPath.TryGetValue(node.Path, out var role) ? role : null;
+                StampRoles(node.Children, roleByPath);
+            }
         }
     }
 }

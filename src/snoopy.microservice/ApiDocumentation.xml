@@ -288,6 +288,41 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server refused the operation</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetFolderRoles(System.Threading.CancellationToken)">
+            <summary>
+            The five assignable roles, each with what it resolves to and why: the user's
+            override, a server SPECIAL-USE flag, or a name match. A stale override — its folder
+            renamed or deleted outside this app — is signalled alongside whatever discovery
+            now yields; it is kept, never auto-deleted (spec § 5.3).
+            </summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The five roles</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SetFolderRole(weesky.Snoopy.Microservice.Models.Mail.SetFolderRoleRequest,System.Threading.CancellationToken)">
+            <summary>
+            Assigns a role to a folder. Validated against the live mailbox, never against the
+            client's tree: the folder must exist, be selectable, and not be the inbox. The
+            identity guard (uid_validity, mailbox_id) is captured server-side from the live
+            folder — the client only names the role and the path.
+            </summary>
+            <param name="request">role and folder path</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Override stored</response>
+            <response code="400">Unknown role, missing path, inbox target, non-selectable folder, or folder already holding another role</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">The folder no longer exists</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.ClearFolderRole(System.String,System.Threading.CancellationToken)">
+            <summary>Clears an override; the role goes back to discovery. Idempotent.</summary>
+            <param name="role">role to clear</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Override cleared, or was already absent</response>
+            <response code="400">Unknown role</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetMessages(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
             <summary>
             One page of a folder, newest message first. The folder path travels in the query

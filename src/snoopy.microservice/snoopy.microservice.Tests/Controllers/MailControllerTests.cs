@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using weesky.Snoopy.Microservice.Controllers;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
@@ -17,12 +18,15 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         private readonly Mock<IMailFolderRepository> _folders = new();
         private readonly Mock<IMailMessageRepository> _messages = new();
         private readonly Mock<IMailCredentialStore> _credentials = new();
+        private readonly Mock<IFolderRoleStore> _roleStore = new();
 
         private MailController CreateController()
         {
             _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success("hunter2"));
+            _roleStore.Setup(s => s.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                      .ReturnsAsync(new List<FolderRoleOverride>());
 
-            return new MailController(_folders.Object, _messages.Object, _credentials.Object)
+            return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object)
             {
                 ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be")
             };
@@ -451,6 +455,159 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
 
             var status = Assert.IsType<ObjectResult>(result);
             Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        }
+
+        // ── Folder roles ────────────────────────────────────────────────────
+
+        private static MailFolderNode RoleNode(string path, string? attributeRole = null, uint uidValidity = 1) =>
+            new() { Path = path, Name = path, AttributeRole = attributeRole, UidValidity = uidValidity };
+
+        private void SetupOverrides(params FolderRoleOverride[] rows)
+            => _roleStore.Setup(s => s.GetAsync("alice@weesky.be", It.IsAny<CancellationToken>()))
+                         .ReturnsAsync(rows.ToList());
+
+        private void SetupStatus(string path, uint uidValidity = 1, string? mailboxId = null, bool selectable = true)
+            => _folders.Setup(f => f.GetFolderStatusAsync(It.IsAny<User>(), It.IsAny<string>(), path, It.IsAny<CancellationToken>()))
+                       .ReturnsAsync(Result.Success(new MailFolderStatus
+                       { Path = path, UidValidity = uidValidity, MailboxId = mailboxId, Selectable = selectable }));
+
+        // GET /Folders now returns the chain's output, not raw discovery: the overridden
+        // folder carries the overridden role, and the flagged one loses it.
+        [Fact]
+        public async Task GetFolders_StampsTheResolvedRolesOntoTheTree()
+        {
+            // CreateController() must run first: it installs a catch-all GetAsync stub, and
+            // Moq resolves overlapping setups by recency, not specificity — so the
+            // account-specific override below has to be configured after it to take effect.
+            var controller = CreateController();
+            SetupTree(RoleNode("Deleted Items", attributeRole: "trash"), RoleNode("Corbeille"));
+            SetupOverrides(new FolderRoleOverride
+            { AccountId = "alice@weesky.be", Role = "trash", FolderPath = "Corbeille", UidValidity = 1 });
+
+            var result = await controller.GetFolders(CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var tree = Assert.IsAssignableFrom<IReadOnlyList<MailFolderNode>>(ok.Value);
+            Assert.Equal("trash", tree.Single(n => n.Path == "Corbeille").SpecialUse);
+            Assert.Null(tree.Single(n => n.Path == "Deleted Items").SpecialUse);
+        }
+
+        [Fact]
+        public async Task GetFolderRoles_ReturnsTheFiveRolesWithProvenance()
+        {
+            SetupTree(RoleNode("INBOX", attributeRole: "inbox"), RoleNode("Sent", attributeRole: "sent"));
+
+            var result = await CreateController().GetFolderRoles(CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var roles = Assert.IsAssignableFrom<IReadOnlyList<FolderRoleEntry>>(ok.Value);
+            Assert.Equal(5, roles.Count);
+            Assert.Equal("specialUse", roles.Single(r => r.Role == "sent").Provenance);
+            Assert.Null(roles.Single(r => r.Role == "archive").FolderPath);
+        }
+
+        [Fact]
+        public async Task SetFolderRole_RejectsAMissingBody()
+        {
+            var result = await CreateController().SetFolderRole(null, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Theory]
+        [InlineData("inbox")]
+        [InlineData("corbeille")]
+        [InlineData("")]
+        public async Task SetFolderRole_RejectsAnUnknownRole(string role)
+        {
+            var result = await CreateController().SetFolderRole(
+                new SetFolderRoleRequest { Role = role, FolderPath = "X" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task SetFolderRole_RejectsTheInboxAsTarget()
+        {
+            var result = await CreateController().SetFolderRole(
+                new SetFolderRoleRequest { Role = "trash", FolderPath = "INBOX" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        // The client's tree can be stale — another client may have deleted the folder. The
+        // PUT validates against the live mailbox, never against what the client displayed.
+        [Fact]
+        public async Task SetFolderRole_Returns404WhenTheFolderIsGone()
+        {
+            _folders.Setup(f => f.GetFolderStatusAsync(It.IsAny<User>(), It.IsAny<string>(), "Gone", It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(Result.Failure<MailFolderStatus>(ImapSession.FolderNotFound));
+
+            var result = await CreateController().SetFolderRole(
+                new SetFolderRoleRequest { Role = "trash", FolderPath = "Gone" }, CancellationToken.None);
+
+            Assert.IsType<NotFoundObjectResult>(result);
+        }
+
+        // A trash that cannot hold messages is not a trash — and 2b would fail writing to it.
+        [Fact]
+        public async Task SetFolderRole_RejectsANonSelectableFolder()
+        {
+            SetupStatus("Container", selectable: false);
+
+            var result = await CreateController().SetFolderRole(
+                new SetFolderRoleRequest { Role = "trash", FolderPath = "Container" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task SetFolderRole_RejectsAFolderAlreadyHoldingAnotherRole()
+        {
+            // See the comment in GetFolders_StampsTheResolvedRolesOntoTheTree: CreateController()
+            // must run before the account-specific override is configured.
+            var controller = CreateController();
+            SetupStatus("X");
+            SetupOverrides(new FolderRoleOverride
+            { AccountId = "alice@weesky.be", Role = "junk", FolderPath = "X", UidValidity = 1 });
+
+            var result = await controller.SetFolderRole(
+                new SetFolderRoleRequest { Role = "trash", FolderPath = "X" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        // uid_validity and mailbox_id come from the live folder, captured server-side — the
+        // client never supplies them.
+        [Fact]
+        public async Task SetFolderRole_StoresTheLiveIdentityUnderTheCanonicalAccount()
+        {
+            SetupStatus("Corbeille", uidValidity: 77, mailboxId: "M1");
+
+            var result = await CreateController().SetFolderRole(
+                new SetFolderRoleRequest { Role = "trash", FolderPath = "Corbeille" }, CancellationToken.None);
+
+            Assert.IsType<NoContentResult>(result);
+            _roleStore.Verify(s => s.UpsertAsync(It.Is<FolderRoleOverride>(o =>
+                o.AccountId == "alice@weesky.be" && o.Role == "trash" && o.FolderPath == "Corbeille"
+                && o.UidValidity == 77UL && o.MailboxId == "M1"), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ClearFolderRole_RejectsAnUnknownRole()
+        {
+            var result = await CreateController().ClearFolderRole("poubelle", CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task ClearFolderRole_DeletesAndReturns204()
+        {
+            var result = await CreateController().ClearFolderRole("trash", CancellationToken.None);
+
+            Assert.IsType<NoContentResult>(result);
+            _roleStore.Verify(s => s.DeleteAsync("alice@weesky.be", "trash", It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }
