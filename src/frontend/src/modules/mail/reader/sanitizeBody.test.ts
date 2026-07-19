@@ -85,6 +85,12 @@ describe('renderBodyDocument', () => {
     expect(renderBodyDocument('<p>x</p>')).toMatch(/img\s*\{[^}]*max-width:\s*100%/)
   })
 
+  // height:auto recomputed every image from its intrinsic ratio: a 1x1 spacer gif stretched to
+  // 154x10 by attributes became 154px tall, turning a newsletter button into a tower.
+  it('leaves image height attributes alone', () => {
+    expect(renderBodyDocument('<p>x</p>')).not.toContain('height: auto')
+  })
+
   // Mail HTML is written against a white canvas; inverting it would make a body's own colours
   // unreadable. The sheet stays light whatever the app's theme.
   it('pins the body to a light sheet in every theme', () => {

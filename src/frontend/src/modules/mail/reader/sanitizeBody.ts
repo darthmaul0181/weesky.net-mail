@@ -60,8 +60,10 @@ export function renderBodyDocument(fragment: string): string {
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   /* A wide image or a long unbroken URL — this mailbox is largely made of the latter — would
-     otherwise scroll the body sideways. */
-  img { max-width: 100%; height: auto; }
+     otherwise scroll the body sideways. No height:auto - it recomputes every height from the
+     intrinsic ratio, and a 1x1 spacer gif stretched to 154x10 by attributes became 154px tall,
+     turning a newsletter button into a tower. */
+  img { max-width: 100%; }
   body { overflow-wrap: anywhere; }
   /* Tables are the one thing that must keep its width, so it scrolls in its own box. */
   table { max-width: 100%; }
