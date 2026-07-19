@@ -30,5 +30,49 @@ namespace weesky.Snoopy.Microservice.Repositories
 
             return await session.ListFoldersAsync(cancellationToken);
         }
+
+        public async Task<Result<string>> CreateFolderAsync(User user, string password, string parentPath, string name, CancellationToken cancellationToken)
+        {
+            if (user == null) throw new ArgumentNullException(nameof(user));
+
+            var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+            if (sessionResult.IsFailure) return Result.Failure<string>(sessionResult.Error);
+            await using var session = sessionResult.Value;
+
+            return await session.CreateFolderAsync(parentPath, name, cancellationToken);
+        }
+
+        public async Task<Result<string>> RenameFolderAsync(User user, string password, string path, string newParentPath, string newName, CancellationToken cancellationToken)
+        {
+            if (user == null) throw new ArgumentNullException(nameof(user));
+
+            var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+            if (sessionResult.IsFailure) return Result.Failure<string>(sessionResult.Error);
+            await using var session = sessionResult.Value;
+
+            return await session.RenameFolderAsync(path, newParentPath, newName, cancellationToken);
+        }
+
+        public async Task<Result> DeleteFolderAsync(User user, string password, string path, CancellationToken cancellationToken)
+        {
+            if (user == null) throw new ArgumentNullException(nameof(user));
+
+            var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+            if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+            await using var session = sessionResult.Value;
+
+            return await session.DeleteFolderAsync(path, cancellationToken);
+        }
+
+        public async Task<Result> SetSubscriptionAsync(User user, string password, string path, bool subscribed, CancellationToken cancellationToken)
+        {
+            if (user == null) throw new ArgumentNullException(nameof(user));
+
+            var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+            if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+            await using var session = sessionResult.Value;
+
+            return await session.SetSubscriptionAsync(path, subscribed, cancellationToken);
+        }
     }
 }

@@ -237,6 +237,47 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server could not be reached</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.CreateFolder(weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest,System.Threading.CancellationToken)">
+            <summary>
+            Creates a folder and subscribes it, so it appears without a further step.
+            </summary>
+            <param name="request">parent path and leaf name</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Full path of the new folder</response>
+            <response code="400">The request body or the folder name is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RenameFolder(weesky.Snoopy.Microservice.Models.Mail.RenameFolderRequest,System.Threading.CancellationToken)">
+            <summary>Renames a folder, optionally moving it under a different parent.</summary>
+            <param name="request">current path, new parent path and new leaf name</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Path of the renamed folder</response>
+            <response code="400">The request body, the path or the new name is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.DeleteFolder(weesky.Snoopy.Microservice.Models.Mail.DeleteFolderRequest,System.Threading.CancellationToken)">
+            <summary>Deletes a folder. The inbox cannot be deleted.</summary>
+            <param name="request">path of the folder to delete</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Folder deleted</response>
+            <response code="400">The request body or the path is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SetFolderSubscription(weesky.Snoopy.Microservice.Models.Mail.FolderSubscriptionRequest,System.Threading.CancellationToken)">
+            <summary>
+            Subscribes or unsubscribes a folder. This is how a folder is hidden from the
+            folder list without deleting it.
+            </summary>
+            <param name="request">folder path and desired subscription state</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Visibility changed</response>
+            <response code="400">The request body or the path is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
             Returns the authenticated user's Sieve configuration: structured rules when a
@@ -389,6 +430,24 @@
             <summary>
             Value of the Dovecot `doveadm_api_key` shared with the service.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest">
+            <summary>
+            Folder paths travel in the body, never in a route segment: the hierarchy separator may
+            be '/', which would break routing.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest.ParentPath">
+            <summary>Parent folder path. Empty creates at the namespace root.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest.Name">
+            <summary>Leaf name of the new folder. Must not contain the hierarchy separator.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.RenameFolderRequest.NewParentPath">
+            <summary>New parent path. Same as the current one for a pure rename.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderSubscriptionRequest.Subscribed">
+            <summary>True subscribes the folder, false hides it from the folder list.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode">
             <summary>A folder as the client sees it. Children are nested, not flattened.</summary>
@@ -694,6 +753,18 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetTreeAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Threading.CancellationToken)">
             <summary>The user's full folder tree, subscribed and unsubscribed alike.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.CreateFolderAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Creates a folder and subscribes it. Returns its full path.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.RenameFolderAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Renames a folder, optionally moving it under a different parent.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.DeleteFolderAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Deletes a folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.SetSubscriptionAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Subscribes or unsubscribes a folder.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
             High-level Sieve management API used by controllers. Each method opens its own
@@ -892,6 +963,22 @@
         <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListFoldersAsync(System.Threading.CancellationToken)">
             <summary>The full folder tree, subscribed and unsubscribed alike.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.CreateFolderAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Creates a folder and subscribes it — a folder the user just created should be
+            visible. Returns its full path, which only the server can compose since it owns
+            the separator.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.RenameFolderAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Renames a folder, optionally moving it under a different parent.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.DeleteFolderAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Deletes a folder. Refuses the inbox.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SetSubscriptionAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Subscribes or unsubscribes a folder, which is how the UI hides it.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
              <summary>
              Carries the user's mail password between requests, encrypted into a cookie.
@@ -953,6 +1040,12 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ParentPath(System.String,System.Char)">
             <summary>Parent path, or null when the folder sits at the namespace root.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.IsValidLeafName(System.String,System.Char)">
+            <summary>
+            A leaf name may not contain the hierarchy separator: it would silently create a
+            nested folder instead of the one the user asked for.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUse(MailKit.FolderAttributes,System.String,System.Boolean)">
             <summary>
