@@ -1,6 +1,7 @@
-using CSharpFunctionalExtensions;
+﻿using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
+using MailKit.Search;
 using MimeKit;
 using weesky.Snoopy.Microservice.Models.Mail;
 
@@ -280,6 +281,27 @@ internal sealed class ImapSession : IImapSession
                 PageSize = pageSize
             };
 
+            // SORT asks the server for date order. Without it the page is a window on the
+            // sequence numbers, which is arrival-into-the-folder order — the same thing in an
+            // inbox, but not in a folder messages are *moved* to: a trash lists by when each
+            // message was thrown away, not by its date.
+            if (_client.Capabilities.HasFlag(ImapCapabilities.Sort))
+            {
+                var sorted = await folder.SortAsync(
+                    SearchQuery.All, [OrderBy.ReverseDate], cancellationToken);
+
+                var wanted = PageOf(sorted, page, pageSize).ToList();
+                if (wanted.Count == 0) return Result.Success(result);
+
+                var sortedItems = await folder.FetchAsync(wanted, SummaryItems, cancellationToken);
+                foreach (var item in InOrderOf(sortedItems, wanted, item => item.UniqueId))
+                {
+                    result.Messages.Add(ToSummary(item));
+                }
+
+                return Result.Success(result);
+            }
+
             var (start, end) = ComputePageWindow(folder.Count, page, pageSize);
             if (start < 0) return Result.Success(result);
 
@@ -486,6 +508,27 @@ internal sealed class ImapSession : IImapSession
 
         var start = Math.Max(0, end - pageSize + 1);
         return (start, end);
+    }
+
+    /// <summary>Slice of an already-ordered list, or empty when the page lies past its end.</summary>
+    public static IReadOnlyList<T> PageOf<T>(IEnumerable<T> ordered, int page, int pageSize)
+    {
+        if (page < 0 || pageSize <= 0) return [];
+
+        return ordered.Skip(page * pageSize).Take(pageSize).ToList();
+    }
+
+    /// <summary>
+    /// Re-orders fetched items to match the order they were asked for. A server answers a UID
+    /// FETCH in whatever order it likes — ascending UID in practice, which is exactly not the
+    /// sort order requested.
+    /// </summary>
+    public static IReadOnlyList<T> InOrderOf<T, TKey>(
+        IEnumerable<T> items, IEnumerable<TKey> order, Func<T, TKey> keyOf) where TKey : notnull
+    {
+        var byKey = items.GroupBy(keyOf).ToDictionary(group => group.Key, group => group.First());
+
+        return order.Where(byKey.ContainsKey).Select(key => byKey[key]).ToList();
     }
 
     /// <summary>

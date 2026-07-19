@@ -1,4 +1,4 @@
-using MailKit;
+﻿using MailKit;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -283,6 +283,54 @@ public sealed class ImapSessionTests
 
         Assert.Equal(expectedStart, start);
         Assert.Equal(expectedEnd, end);
+    }
+
+    // ── Sorted paging (IMAP SORT) ───────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 3, new[] { 9, 8, 7 })]
+    [InlineData(1, 3, new[] { 6, 5, 4 })]
+    [InlineData(3, 3, new[] { 0 })]          // partial last page
+    [InlineData(4, 3, new int[0])]           // past the end
+    [InlineData(-1, 3, new int[0])]
+    [InlineData(0, 0, new int[0])]
+    public void PageOf_SlicesTheOrderedList(int page, int pageSize, int[] expected)
+    {
+        int[] newestFirst = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+
+        Assert.Equal(expected, ImapSession.PageOf(newestFirst, page, pageSize));
+    }
+
+    // The server may answer a UID FETCH in any order — in practice ascending UID, which is
+    // precisely not the sort order asked for. Restoring it is what makes SORT worth using.
+    [Fact]
+    public void InOrderOf_RestoresTheRequestedOrder()
+    {
+        var fetched = new[] { (Uid: 4, Subject: "d"), (Uid: 9, Subject: "a"), (Uid: 7, Subject: "b") };
+
+        var ordered = ImapSession.InOrderOf(fetched, [9, 7, 4], item => item.Uid);
+
+        Assert.Equal(["a", "b", "d"], ordered.Select(item => item.Subject));
+    }
+
+    [Fact]
+    public void InOrderOf_DropsAnItemTheOrderDoesNotMention()
+    {
+        var fetched = new[] { (Uid: 4, Subject: "d"), (Uid: 99, Subject: "stray") };
+
+        var ordered = ImapSession.InOrderOf(fetched, [4], item => item.Uid);
+
+        Assert.Equal(["d"], ordered.Select(item => item.Subject));
+    }
+
+    [Fact]
+    public void InOrderOf_SkipsAnOrderEntryThatWasNotFetched()
+    {
+        var fetched = new[] { (Uid: 4, Subject: "d") };
+
+        var ordered = ImapSession.InOrderOf(fetched, [9, 4], item => item.Uid);
+
+        Assert.Equal(["d"], ordered.Select(item => item.Subject));
     }
 
     [Theory]
