@@ -90,6 +90,17 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains(attribute, _sut.Sanitize(html).Html);
     }
 
+    // The Amazon navbar sets background-color, then overrides it with a gradient shorthand.
+    // The shorthand expands to background-image; dropping it left white links on white.
+    [Fact]
+    public void Sanitize_KeepsAGradientBackground()
+    {
+        var result = _sut.Sanitize(
+            "<table><tr><td style=\"background: linear-gradient(to right, #232F3E, #232F3E)\">x</td></tr></table>").Html;
+
+        Assert.Contains("linear-gradient", result);
+    }
+
     // A url() in CSS would fetch without consent, bypassing the image-blocking model.
     [Theory]
     [InlineData("<div style=\"background: url(http://evil.example/pix.gif)\">x</div>")]
@@ -111,6 +122,30 @@ public sealed class MailHtmlSanitizerTests
         var result = _sut.Sanitize($"<div style=\"{declaration}\">x</div>").Html;
 
         Assert.DoesNotContain(declaration.Split(':')[0], result);
+    }
+
+    // A url() anywhere in CSS fetches without consent, bypassing the image-blocking model.
+    [Theory]
+    [InlineData("<style>.x { background: url(http://evil.example/p.gif) }</style><p>hi</p>")]
+    [InlineData("<style>@import url(http://evil.example/a.css); .x { color: red }</style><p>hi</p>")]
+    [InlineData("<style>@font-face { font-family: f; src: url(http://evil.example/f.woff) }</style><p>hi</p>")]
+    public void Sanitize_NeverKeepsAUrlInASheet(string html)
+    {
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain("evil.example", result);
+        Assert.Contains("hi", result);
+    }
+
+    // A CSS string value must not be able to close the style element early.
+    [Fact]
+    public void Sanitize_NeutralisesAStyleBreakoutAttempt()
+    {
+        var result = _sut.Sanitize(
+            "<style>.x { font-family: \"</style><img src=x onerror=alert(1)>\" }</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("onerror", result);
+        Assert.Contains("hi", result);
     }
 
     [Fact]

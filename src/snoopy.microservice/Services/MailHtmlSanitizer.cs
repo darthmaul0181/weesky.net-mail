@@ -53,7 +53,8 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         _sanitizer.AllowedCssProperties.Clear();
         foreach (var property in new[]
         {
-            "color", "background", "background-color",
+            "color", "background", "background-color", "background-image",
+            "background-repeat", "background-position", "background-size",
             "font", "font-family", "font-size", "font-style", "font-weight",
             "text-align", "text-decoration", "text-decoration-line", "text-decoration-style",
             "text-decoration-color", "text-transform", "letter-spacing", "white-space",
@@ -90,6 +91,19 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         // Second pass on the already-sanitised markup, using the same parser the sanitiser
         // uses so the two cannot disagree about the tree.
         var document = _parser.ParseDocument(cleaned);
+
+        // background-image is allowed for gradients, so a url() must be culled by value: it
+        // would fetch without consent, bypassing the image-blocking model below.
+        foreach (var styled in document.QuerySelectorAll("[style]"))
+        {
+            var style = styled.GetAttribute("style")!;
+            if (!style.Contains("url", StringComparison.OrdinalIgnoreCase) && !style.Contains('\\')) continue;
+
+            var kept = style.Split(';').Where(declaration =>
+                !declaration.Contains("url", StringComparison.OrdinalIgnoreCase)
+                && !declaration.Contains('\\'));
+            styled.SetAttribute("style", string.Join(';', kept));
+        }
 
         var blocked = 0;
         foreach (var image in document.QuerySelectorAll("img"))
