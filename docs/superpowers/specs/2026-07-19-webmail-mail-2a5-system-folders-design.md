@@ -360,7 +360,7 @@ dans [`docs/superpowers/mail-2a5-database-prerequisite.md`](../mail-2a5-database
 
 Ce qu'il pose, en résumé :
 
-- **Deux bases**, `snoopy_webmail` et `snoopy_webmail-dev` — le développement déploie la branche
+- **Deux bases**, `snoopy_webmail` et `snoopy_webmail_dev` — le développement déploie la branche
   `webmail` en continu et ne doit jamais toucher aux préférences de production
 - **Deux utilisateurs MySQL dédiés**, distincts de celui qui lit `dovecot` : si l'un des jeux
   d'identifiants fuit ou tourne, l'autre n'est pas concerné

@@ -37,13 +37,6 @@ Avant de l'exécuter, remplace les trois valeurs suivantes :
 | `__PASSWORD_PROD__` | un mot de passe généré, jamais réutilisé |
 | `__PASSWORD_DEV__` | un autre mot de passe généré, différent du précédent |
 
-> **Le tiret de `snoopy_webmail-dev` impose les backticks en SQL.** Le nom suit celui de l'unité
-> systemd (`snoopy.microservice-dev`), ce qui est cohérent, mais MySQL lit un tiret non protégé
-> comme un opérateur de soustraction : `USE snoopy_webmail-dev;` échoue, `` USE `snoopy_webmail-dev`; ``
-> fonctionne. Le script ci-dessous protège toutes ses références. À garder en tête pour le SQL
-> tapé à la main — les chaînes de connexion et les arguments de `mysqldump`, eux, ne sont pas du
-> SQL et n'ont besoin de rien.
-
 ```sql
 -- ============================================================================
 --  Webmail weesky — base des préférences utilisateur
@@ -107,11 +100,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 --  DÉVELOPPEMENT — base et utilisateur distincts
 -- ---------------------------------------------------------------------------
 
-CREATE DATABASE IF NOT EXISTS `snoopy_webmail-dev`
+CREATE DATABASE IF NOT EXISTS `snoopy_webmail_dev`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_bin;
 
-CREATE TABLE IF NOT EXISTS `snoopy_webmail-dev`.`folder_role_overrides` (
+CREATE TABLE IF NOT EXISTS `snoopy_webmail_dev`.`folder_role_overrides` (
   `account_id`   VARCHAR(255)  NOT NULL,
   `role`         VARCHAR(16)   NOT NULL,
   `folder_path`  VARCHAR(1024) NOT NULL,
@@ -128,12 +121,12 @@ CREATE TABLE IF NOT EXISTS `snoopy_webmail-dev`.`folder_role_overrides` (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_bin;
 
-CREATE USER IF NOT EXISTS 'snoopy_webmail-dev'@'__HOST__'
+CREATE USER IF NOT EXISTS 'snoopy_webmail_dev'@'__HOST__'
   IDENTIFIED BY '__PASSWORD_DEV__';
 
 GRANT SELECT, INSERT, UPDATE, DELETE
-  ON `snoopy_webmail-dev`.*
-  TO 'snoopy_webmail-dev'@'__HOST__';
+  ON `snoopy_webmail_dev`.*
+  TO 'snoopy_webmail_dev'@'__HOST__';
 
 FLUSH PRIVILEGES;
 ```
@@ -153,7 +146,7 @@ WebmailPreferencesDatabase =
 
 ```
 WebmailPreferencesDatabase =
-  Server=<hôte>;Port=3306;Database=snoopy_webmail-dev;User=snoopy_webmail-dev;Password=<...>;
+  Server=<hôte>;Port=3306;Database=snoopy_webmail_dev;User=snoopy_webmail_dev;Password=<...>;
 ```
 
 Le service **refuse de démarrer** si cette chaîne est absente hors Development, avec un message
@@ -207,9 +200,9 @@ DROP TABLE folder_role_overrides;
 
 ```sql
 DROP DATABASE IF EXISTS `snoopy_webmail`;
-DROP DATABASE IF EXISTS `snoopy_webmail-dev`;
+DROP DATABASE IF EXISTS `snoopy_webmail_dev`;
 DROP USER IF EXISTS 'snoopy_webmail'@'__HOST__';
-DROP USER IF EXISTS 'snoopy_webmail-dev'@'__HOST__';
+DROP USER IF EXISTS 'snoopy_webmail_dev'@'__HOST__';
 FLUSH PRIVILEGES;
 ```
 
