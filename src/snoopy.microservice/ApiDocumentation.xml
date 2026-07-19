@@ -362,6 +362,48 @@
             Value of the Dovecot `doveadm_api_key` shared with the service.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions">
+            <summary>
+            Connection settings for the mail server. Only connection parameters live here:
+            everything server-specific (hierarchy separator, namespaces, special-use folders,
+            capabilities) is discovered at runtime from the IMAP session, so that additional
+            domains can point at arbitrary external servers we will never hold configuration for.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.ImapHost">
+            <summary>IMAP host name.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.ImapPort">
+            <summary>IMAP port. 143 for STARTTLS, 993 for implicit TLS.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.ImapSecurity">
+            <summary>
+            IMAP transport security. StartTls fails when the server does not advertise
+            STARTTLS; StartTlsWhenAvailable silently falls back to cleartext, which on port
+            143 would put credentials on the wire. Prefer StartTls.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.SmtpHost">
+            <summary>Submission host name. Consumed when composing lands.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.SmtpPort">
+            <summary>Submission port. Consumed when composing lands.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.SmtpSecurity">
+            <summary>Submission transport security. Consumed when composing lands.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.TimeoutSeconds">
+            <summary>Connect and command timeout, in seconds.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.AllowInvalidCertificate">
+            <summary>
+            Accept invalid server certificates. Development only — logged as a warning on
+            every connection when enabled.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.IsImapConfigured">
+            <summary>True when enough is configured to attempt an IMAP connection.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Quota">
             <summary>
             Mailbox quota usage reported by Dovecot.

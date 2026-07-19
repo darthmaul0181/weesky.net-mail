@@ -236,7 +236,9 @@ Add `using Microsoft.AspNetCore.DataProtection;` and `using weesky.Snoopy.Micros
 
 - [ ] **Step 8: Verify**
 
-Run: `dotnet build` → succeeds. `dotnet test` → all pass (461 existing + 3 new). `dotnet run` → starts, and the log line shows a `keys` directory under the content root (development path).
+Run: `dotnet build` → succeeds. `dotnet test` → all pass (**442 existing** + 3 new = 445; the "461" quoted during exploration was a count of `[Fact]`/`[Theory]` attributes, not of tests).
+
+`dotnet run` cannot be used to check the key-ring log line locally: `ServerVersion.AutoDetect` opens a database connection *before* `builder.Build()`, so the app will not start without the dev database. Verify the log line on the dev server instead — it is item 1 of the manual checklist in Task 16.
 
 - [ ] **Step 9: Commit**
 

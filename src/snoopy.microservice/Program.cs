@@ -10,8 +10,10 @@ using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
+using Microsoft.AspNetCore.DataProtection;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.HealthChecks;
 using weesky.Snoopy.Microservice.RuleProviders;
@@ -74,6 +76,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
 builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
 builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSection("Sieve"));
+builder.Services.AddOptions<MailOptions>().Bind(builder.Configuration.GetSection("Mail"));
 builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
 builder.Services.AddSingleton<IRuleProvider, WeeskyRuleProvider>();
 builder.Services.AddSingleton<IRuleProvider, RainloopRuleProvider>();
@@ -161,7 +164,32 @@ builder.Services.AddSwaggerGen(options =>
     options.IncludeXmlComments(filePath);
 });
 
+// Data Protection key ring. It encrypts the IMAP credentials cookie, so it must survive
+// restarts: losing it makes every live credentials cookie undecryptable and forces every user
+// to sign in again. systemd's StateDirectory= provides a directory outside the deployment path
+// (which the release chmod/chown walk recursively) and owned by the service user.
+var stateDirectory = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
+
+if (string.IsNullOrEmpty(stateDirectory) && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "STATE_DIRECTORY is not set. Add 'StateDirectory=snoopy.microservice' to the systemd unit. " +
+        "Refusing to start rather than falling back to a key ring under the deployment directory.");
+}
+
+var keyRingPath = string.IsNullOrEmpty(stateDirectory)
+    ? Path.Combine(builder.Environment.ContentRootPath, "keys")   // development only
+    : Path.Combine(stateDirectory, "keys");
+
+Directory.CreateDirectory(keyRingPath);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
+    .SetApplicationName($"snoopy.microservice.{builder.Environment.EnvironmentName}");
+
 var app = builder.Build();
+
+app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
 
 app.UseSerilogRequestLogging(options =>
 {
