@@ -115,7 +115,11 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
               <label>
                 <input
                   type="checkbox"
-                  checked={node.subscribed}
+                  // The inbox is always visible and its subscription flag is meaningless —
+                  // Dovecot leaves it unsubscribed — so offering to hide it would be a
+                  // control that either does nothing or loses the user their mail.
+                  checked={node.specialUse === 'inbox' ? true : node.subscribed}
+                  disabled={node.specialUse === 'inbox'}
                   aria-label={`Show ${node.name}`}
                   onChange={e => run(
                     () => setSubscription.mutateAsync({ path: node.path, subscribed: e.target.checked }),

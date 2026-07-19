@@ -112,6 +112,23 @@ describe('managing folders', () => {
     expect(screen.getByLabelText('Show Alpha')).not.toBeChecked()
   })
 
+  // Regression, same root cause as the tree: Dovecot reports INBOX unsubscribed, so the
+  // checkbox rendered unchecked and invited the user to "show" a folder that is always shown —
+  // or worse, to unsubscribe it.
+  it('shows the inbox as always visible and refuses to toggle it', () => {
+    render(
+      <FolderDialogs
+        folders={[node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false })]}
+        selectedPath={null}
+        onNotify={vi.fn()}
+      />)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+
+    const toggle = screen.getByLabelText('Show INBOX')
+    expect(toggle).toBeChecked()
+    expect(toggle).toBeDisabled()
+  })
+
   it('offers no Delete for the inbox', () => {
     renderDialogs()
     fireEvent.click(screen.getByRole('button', { name: 'Manage' }))

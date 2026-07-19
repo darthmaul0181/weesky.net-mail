@@ -102,6 +102,18 @@ l'ouverture de connexion :
 | Capacités (`MOVE`, `UIDPLUS`, `SORT`…) | `client.Capabilities` |
 | Format de stockage | sans objet — invisible depuis IMAP |
 
+**Ce que le serveur maison a effectivement répondu** (relevé le 2026-07-19 contre `mail.weesky.net`,
+compte de test) — à titre d'information seulement : rien de ceci n'est écrit dans le code.
+
+- Séparateur : **`.`** — et non `/`. Préfixe de namespace vide.
+- `SPECIAL-USE` **supporté** ; `XLIST` non. Flags posés sur Trash (`Deleted Items`), Drafts, Junk
+  (`Junk E-mail`), Sent, Inbox. **`Archive` n'a aucun flag** et n'est reconnu que par le repli sur
+  le nom — la voie de secours n'est donc pas théorique, elle sert dès le premier serveur.
+- `PREVIEW` **supporté**, et `MessageSummaryItems.PreviewText` renvoie bien un extrait.
+- **`INBOX` est rapportée `subscribed=false`.** Voir § 6.1.
+- Également disponibles pour les tranches suivantes : `MOVE`, `SORT`, `THREAD`, `IDLE`,
+  `CONDSTORE`, `QRESYNC`, `UIDPLUS`.
+
 **C'est la contrainte structurante de la tranche.** Un compte additionnel (2d) pointe vers un
 serveur arbitraire dont nous n'aurons jamais la configuration. Une architecture qui a besoin
 de connaître le serveur est fausse dès 2d ; elle doit donc être agnostique dès 2a, sous peine
@@ -463,6 +475,15 @@ src/modules/mail/
 Deux contraintes du shell à respecter : `.app-content` porte `overflow: auto` — `MailLayout`
 doit le neutraliser sur son conteneur pour obtenir trois colonnes à défilement indépendant ;
 et `.app-shell` fait `height: 100vh`, donc `height: 100%` se propage correctement.
+
+**La boîte de réception est toujours visible, abonnée ou non.** Dovecot rapporte `INBOX` avec
+`subscribed=false` : le drapeau d'abonnement n'a pas de sens pour un dossier toujours
+disponible. Filtrer l'arborescence sur le seul abonnement faisait donc **disparaître la boîte
+de réception**. Le filtre est `subscribed || specialUse === 'inbox'`, et la case de visibilité
+de la boîte de réception est cochée et désactivée dans la gestion des dossiers.
+
+Défaut trouvé contre le serveur réel, pas par les tests : toutes les fixtures posaient
+`subscribed: true`. Deux tests de régression le figent.
 
 Route : `/mail` devient un layout avec enfants (`/mail/:folderPath?`), le dossier courant
 vivant dans l'URL — c'est le bénéfice du routing acquis en sous-projet 1 (liens profonds,

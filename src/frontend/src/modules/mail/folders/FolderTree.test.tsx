@@ -98,6 +98,34 @@ describe('FolderTree', () => {
     expect(names).toEqual(['INBOX', 'Trash', 'Alpha', 'Zebra'])
   })
 
+  // Regression: Dovecot reports INBOX as subscribed=false, because the subscription flag is
+  // meaningless for a folder that is always available. Filtering on subscription alone hid the
+  // inbox entirely. Found against a live server, not by the mocks — every fixture here used to
+  // say subscribed: true.
+  it('always shows the inbox even when the server reports it unsubscribed', () => {
+    const asDovecotReportsIt = [
+      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false, unread: 3 }),
+      node({ path: 'Sent', name: 'Sent', specialUse: 'sent', subscribed: true }),
+    ]
+
+    render(<FolderTree folders={asDovecotReportsIt} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('INBOX')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
+  })
+
+  it('still hides an ordinary unsubscribed folder', () => {
+    const folders = [
+      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
+      node({ path: 'Archive', name: 'Archive', specialUse: 'archive', subscribed: false }),
+    ]
+
+    render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('INBOX')).toBeInTheDocument()
+    expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+  })
+
   it('hides an unsubscribed child of a visible parent', () => {
     const withHiddenChild = [node({
       path: 'INBOX', name: 'INBOX', specialUse: 'inbox',

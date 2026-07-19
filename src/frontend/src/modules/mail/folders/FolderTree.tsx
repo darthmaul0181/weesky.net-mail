@@ -19,6 +19,15 @@ export function sortFolders(folders: MailFolderNode[]): MailFolderNode[] {
   })
 }
 
+/**
+ * The inbox is always shown, subscribed or not. Dovecot does not mark INBOX as subscribed —
+ * it is implicitly always available, so the subscription flag is meaningless for it — and
+ * filtering on subscription alone would hide the one folder that can never be hidden.
+ */
+export function isVisible(folder: MailFolderNode): boolean {
+  return folder.subscribed || folder.specialUse === 'inbox'
+}
+
 function FolderRow({
   folder,
   selectedPath,
@@ -29,7 +38,7 @@ function FolderRow({
   onSelect: (path: string) => void
 }) {
   const [open, setOpen] = useState(folder.specialUse === 'inbox')
-  const visibleChildren = sortFolders(folder.children.filter(child => child.subscribed))
+  const visibleChildren = sortFolders(folder.children.filter(isVisible))
   const isActive = folder.path === selectedPath
 
   return (
@@ -73,11 +82,12 @@ function FolderRow({
   )
 }
 
-/** Unsubscribed folders are hidden: that is what the subscription state is for. */
+/** Unsubscribed folders are hidden — that is what the subscription state is for, except for
+ *  the inbox, which is always shown (see isVisible). */
 export default function FolderTree({ folders, selectedPath, onSelect }: Props) {
   return (
     <nav aria-label="Folders">
-      {sortFolders(folders.filter(folder => folder.subscribed)).map(folder => (
+      {sortFolders(folders.filter(isVisible)).map(folder => (
         <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} onSelect={onSelect} />
       ))}
     </nav>
