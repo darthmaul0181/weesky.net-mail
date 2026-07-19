@@ -119,6 +119,20 @@ describe('SystemFoldersPage', () => {
     expect(await screen.findByText('This folder already holds another role')).toBeInTheDocument()
   })
 
+  it('surfaces the backend message when clearing a role fails', async () => {
+    mocks.clearFolderRole.mockRejectedValue(new Error('Could not clear this role'))
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'trash'),
+      entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
+
+    expect(await screen.findByText('Could not clear this role')).toBeInTheDocument()
+  })
+
   // A stale override is kept and signalled (§ 5.3) — the notice and the discovery-resolved
   // value coexist on screen.
   it('signals an invalidated choice next to what resolution now yields', async () => {
@@ -134,6 +148,44 @@ describe('SystemFoldersPage', () => {
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
     expect(screen.getByLabelText('Trash')).toHaveDisplayValue(/Automatic — Deleted Items/)
+  })
+
+  // The stale notice and the resolved value key off independent fields on the entry, so a
+  // role can be stale with *nothing* currently resolved. The notice must still show, and must
+  // not be mistaken for (or hide) a resolved value that doesn't exist.
+  it('signals an invalidated choice even when automatic resolves to nothing', async () => {
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'trash'),
+      entry({
+        role: 'trash', folderPath: null, provenance: null,
+        staleOverride: { folderPath: 'Old Trash' },
+      }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Trash')).toHaveDisplayValue('Automatic — not set')
+  })
+
+  // Fix for the accessibility gap: DOM adjacency alone doesn't announce the notice to a
+  // screen-reader user tabbing through the fields — it must be wired via aria-describedby.
+  it('associates the stale notice with its select via aria-describedby', async () => {
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'trash'),
+      entry({
+        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
+        staleOverride: { folderPath: 'Old Trash' },
+      }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    const select = await screen.findByLabelText('Trash')
+    const notice = await screen.findByText(/“Old Trash” was renamed or deleted/)
+
+    expect(select).toHaveAttribute('aria-describedby', notice.id)
+    expect(notice.id).toBeTruthy()
   })
 
   it('never offers the inbox or a non-selectable folder', async () => {

@@ -77,6 +77,7 @@ export default function SystemFoldersPage() {
                 value={selected}
                 disabled={pendingRole === role}
                 onChange={event => onChange(role, event.target.value)}
+                aria-describedby={entry?.staleOverride ? `role-${role}-stale` : undefined}
               >
                 <option value="">{automaticLabel(entry, nameOf)}</option>
                 {options.map(({ node, depth }) => (
@@ -86,8 +87,13 @@ export default function SystemFoldersPage() {
             </div>
             {entry?.staleOverride && (
               // Kept and signalled, never silently dropped: the user's choice was invalidated
-              // outside this app, and this is the place where they can act on it.
-              <p style={{ color: 'var(--text-muted)', fontSize: 12.5, margin: '-6px 0 12px 126px' }}>
+              // outside this app, and this is the place where they can act on it. Linked to the
+              // select via aria-describedby so a screen-reader user hears it on focus, not just
+              // sighted users relying on DOM adjacency.
+              <p
+                id={`role-${role}-stale`}
+                style={{ color: 'var(--text-muted)', fontSize: 12.5, margin: '-6px 0 12px 126px' }}
+              >
                 Your previous choice &ldquo;{entry.staleOverride.folderPath}&rdquo; was renamed
                 or deleted outside this app.
               </p>
