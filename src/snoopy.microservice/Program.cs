@@ -85,6 +85,7 @@ builder.Services.AddScoped<ISieveRepository, SieveRepository>();
 builder.Services.AddScoped<IUsersRepository, UsersRepository>();
 builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
+builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
 builder.Services.AddScoped<ITokenManager, TokenManager>();
 builder.Services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>

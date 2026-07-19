@@ -195,6 +195,12 @@
             <summary>
             Login with user credentials and cookie generation.
             </summary>
+            <remarks>
+            On success two cookies are issued: the JWT auth cookie, and an encrypted
+            credentials cookie the mail endpoints need to open IMAP on the user's behalf.
+            The password is unrecoverable from the database, so this is the only moment it
+            can be captured.
+            </remarks>
             <param name="credentials">user credentials</param>
             <returns></returns>
             <response code="200">Login successful</response>
@@ -801,6 +807,29 @@
             and returns the rows array.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
+             <summary>
+             Carries the user's mail password between requests, encrypted into a cookie.
+            
+             The password cannot be recovered from the database — MariaDB stores SHA-512 crypt —
+             so it is captured at login. It is encrypted with Data Protection and kept in the
+             client's cookie rather than in server-side session state, so the server never holds
+             both the key and the ciphertext at rest.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Store(Microsoft.AspNetCore.Http.HttpResponse,System.String,System.TimeSpan)">
+            <summary>Encrypts the password into the credentials cookie.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Retrieve(Microsoft.AspNetCore.Http.HttpRequest)">
+            <summary>
+            Decrypts the credentials cookie. Fails with "credentials_unavailable" when the
+            cookie is absent or no longer decryptable, which the caller must surface as a 401
+            so the client can sign in again rather than show an opaque IMAP error.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Clear(Microsoft.AspNetCore.Http.HttpResponse)">
+            <summary>Expires the credentials cookie.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
             <summary>
             Opens authenticated ManageSieve sessions on behalf of any mailbox user, using the
@@ -825,6 +854,9 @@
             <summary>
             Activate a script by name. Pass an empty string to deactivate all scripts.
             </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">
+            <summary>Cookie name. Distinct from the JWT cookie so both can be cleared independently.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ManageSieveClient">
             <summary>

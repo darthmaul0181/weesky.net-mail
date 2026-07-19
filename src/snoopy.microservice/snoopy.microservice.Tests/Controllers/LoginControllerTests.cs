@@ -7,6 +7,7 @@ using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -24,10 +25,11 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         };
 
         private readonly Mock<IUserAuthenticator> _authenticator = new();
+        private readonly Mock<IMailCredentialStore> _credentialStore = new();
 
         private LoginController CreateController(DefaultHttpContext? httpContext = null)
         {
-            var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants));
+            var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object);
             controller.ControllerContext = new ControllerContext
             {
                 HttpContext = httpContext ?? new DefaultHttpContext()
@@ -90,12 +92,49 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public void Logout_Returns204()
         {
-            var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants));
+            var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object);
             controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
 
             var result = controller.Logout();
 
             Assert.IsType<NoContentResult>(result);
+        }
+
+        [Fact]
+        public async Task Login_OnSuccess_StoresTheCredentialsCookie()
+        {
+            _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
+
+            await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "hunter2" });
+
+            _credentialStore.Verify(
+                s => s.Store(It.IsAny<HttpResponse>(), "hunter2", TimeSpan.FromMinutes(30)),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task Login_OnFailure_DoesNotStoreTheCredentialsCookie()
+        {
+            _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(Result.Failure<AuthToken>("Invalid credentials"));
+
+            await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" });
+
+            _credentialStore.Verify(
+                s => s.Store(It.IsAny<HttpResponse>(), It.IsAny<string>(), It.IsAny<TimeSpan>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public void Logout_ClearsTheCredentialsCookie()
+        {
+            var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object);
+            controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
+
+            controller.Logout();
+
+            _credentialStore.Verify(s => s.Clear(It.IsAny<HttpResponse>()), Times.Once);
         }
     }
 }
