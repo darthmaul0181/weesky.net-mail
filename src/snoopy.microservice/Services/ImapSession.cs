@@ -33,11 +33,14 @@ namespace weesky.Snoopy.Microservice.Services
             try
             {
                 var personal = _client.PersonalNamespaces[0];
-                var folders = await _client.GetFoldersAsync(
-                    personal,
-                    StatusItems.Count | StatusItems.Unread | StatusItems.UidValidity,
-                    subscribedOnly: false,
-                    cancellationToken);
+
+                // Asking for a STATUS item the server never advertised is a protocol error, so
+                // the capability gates the request itself, not just the reading of the result.
+                var statusItems = StatusItems.Count | StatusItems.Unread | StatusItems.UidValidity;
+                if (_client.Capabilities.HasFlag(ImapCapabilities.ObjectID))
+                    statusItems |= StatusItems.MailboxId;
+
+                var folders = await _client.GetFoldersAsync(personal, statusItems, subscribedOnly: false, cancellationToken);
 
                 var nodes = new Dictionary<string, MailFolderNode>(StringComparer.Ordinal);
                 var roots = new List<MailFolderNode>();
@@ -45,8 +48,12 @@ namespace weesky.Snoopy.Microservice.Services
                 // Ordinal sort puts a parent before its children, so the lookup below always
                 // finds the parent already built.
                 var ordered = folders.OrderBy(f => f.FullName, StringComparer.Ordinal).ToList();
+                var attributeRoles = ordered.ToDictionary(
+                    f => f.FullName,
+                    f => SpecialUseFromAttributes(f.Attributes, IsInbox(f)),
+                    StringComparer.Ordinal);
                 var roleByPath = ResolveSpecialUses(
-                    ordered.Select(f => (f.FullName, f.Name, f.Attributes, IsInbox(f))));
+                    ordered.Select(f => (f.FullName, f.Name, attributeRoles[f.FullName])));
 
                 foreach (var folder in ordered)
                 {
@@ -57,7 +64,11 @@ namespace weesky.Snoopy.Microservice.Services
                     {
                         Path = folder.FullName,
                         Name = folder.Name,
-                        SpecialUse = roleByPath.GetValueOrDefault(folder.FullName),
+                        SpecialUse = roleByPath.TryGetValue(folder.FullName, out var assignment)
+                            ? assignment.Role
+                            : null,
+                        AttributeRole = attributeRoles[folder.FullName],
+                        MailboxId = folder.Id,
                         Selectable = selectable,
                         Subscribed = folder.IsSubscribed,
                         Total = selectable ? folder.Count : null,
@@ -204,6 +215,52 @@ namespace weesky.Snoopy.Microservice.Services
             {
                 _logger.LogError(ex, "Failed to set subscription on {Path}", path);
                 return Result.Failure("Unable to change the folder visibility");
+            }
+        }
+
+        public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+
+            try
+            {
+                var folder = await _client.GetFolderAsync(path, cancellationToken);
+
+                var selectable = (folder.Attributes & FolderAttributes.NonExistent) == 0
+                                 && (folder.Attributes & FolderAttributes.NoSelect) == 0;
+
+                // STATUS on a \NoSelect folder is a protocol error; the caller rejects the
+                // folder on Selectable alone, so there is nothing more to read.
+                if (!selectable)
+                {
+                    return Result.Success(new MailFolderStatus { Path = folder.FullName, Selectable = false });
+                }
+
+                var items = StatusItems.UidValidity;
+                if (_client.Capabilities.HasFlag(ImapCapabilities.ObjectID))
+                    items |= StatusItems.MailboxId;
+                await folder.StatusAsync(items, cancellationToken);
+
+                return Result.Success(new MailFolderStatus
+                {
+                    Path = folder.FullName,
+                    UidValidity = folder.UidValidity,
+                    MailboxId = folder.Id,
+                    Selectable = true
+                });
+            }
+            catch (FolderNotFoundException)
+            {
+                return Result.Failure<MailFolderStatus>(FolderNotFound);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to read the status of {Folder}", path);
+                return Result.Failure<MailFolderStatus>("Unable to read the folder");
             }
         }
 
@@ -395,6 +452,7 @@ namespace weesky.Snoopy.Microservice.Services
         /// </summary>
         public const string MessageNotFound = "Message not found";
         public const string AttachmentNotFound = "Attachment not found";
+        public const string FolderNotFound = "Folder not found";
 
         private static bool IsInbox(IMailFolder folder)
             => string.Equals(folder.FullName, "INBOX", StringComparison.OrdinalIgnoreCase);
@@ -433,42 +491,54 @@ namespace weesky.Snoopy.Microservice.Services
         }
 
         /// <summary>
+        /// Assigns discovered roles, each to at most one folder — and each folder to at most
+        /// one role.
+        /// </summary>
+        /// <remarks>
+        /// Two claim sets, not one. Claimed roles keep a mailbox holding both "Drafts" and
+        /// "Brouillons" from ending up with two drafts folders. Claimed folders keep one
+        /// folder from holding two roles — a folder flagged \Sent but named "Trash" used to
+        /// claim both, which is undecidable to display. Callers may seed both sets: the role
+        /// resolver runs user overrides first and hands discovery only the leftovers.
+        /// </remarks>
+        public static IReadOnlyDictionary<string, SpecialUseAssignment> ResolveSpecialUses(
+            IEnumerable<(string Path, string Name, string? AttributeRole)> folders,
+            IEnumerable<string>? claimedRoles = null,
+            IEnumerable<string>? claimedFolders = null)
+        {
+            var candidates = folders.ToList();
+            var roles = new HashSet<string>(claimedRoles ?? [], StringComparer.Ordinal);
+            var taken = new HashSet<string>(claimedFolders ?? [], StringComparer.Ordinal);
+            var result = new Dictionary<string, SpecialUseAssignment>(StringComparer.Ordinal);
+
+            foreach (var folder in candidates)
+            {
+                if (folder.AttributeRole is { } role && !roles.Contains(role) && !taken.Contains(folder.Path))
+                {
+                    roles.Add(role);
+                    taken.Add(folder.Path);
+                    result[folder.Path] = new SpecialUseAssignment(role, SpecialUseAssignment.FromFlag);
+                }
+            }
+
+            foreach (var folder in candidates)
+            {
+                if (SpecialUseFromName(folder.Name) is { } role && !roles.Contains(role) && !taken.Contains(folder.Path))
+                {
+                    roles.Add(role);
+                    taken.Add(folder.Path);
+                    result[folder.Path] = new SpecialUseAssignment(role, SpecialUseAssignment.FromName);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the
         /// server advertises none, fall back to matching well-known names, which is the only
         /// option on servers without the extension.
         /// </summary>
-        /// <summary>
-        /// Assigns each well-known role to at most one folder, path by path.
-        /// </summary>
-        /// <remarks>
-        /// Two passes, because the two sources of a role are not equally trustworthy. A folder
-        /// the server flagged SPECIAL-USE genuinely holds that role; a folder we merely
-        /// recognised by name is a guess, made only because the server advertised nothing.
-        /// Running the guesses second, and only into roles still unclaimed, keeps a mailbox
-        /// holding both "Drafts" and "Brouillons" from ending up with two drafts folders —
-        /// and keeps the guess from overruling the server.
-        /// </remarks>
-        public static IReadOnlyDictionary<string, string> ResolveSpecialUses(
-            IEnumerable<(string Path, string Name, FolderAttributes Attributes, bool IsInbox)> folders)
-        {
-            var candidates = folders.ToList();
-            var claimedBy = new Dictionary<string, string>(StringComparer.Ordinal);
-
-            foreach (var folder in candidates)
-            {
-                if (SpecialUseFromAttributes(folder.Attributes, folder.IsInbox) is { } role)
-                    claimedBy.TryAdd(role, folder.Path);
-            }
-
-            foreach (var folder in candidates)
-            {
-                if (SpecialUseFromName(folder.Name) is { } role)
-                    claimedBy.TryAdd(role, folder.Path);
-            }
-
-            return claimedBy.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
-        }
-
         public static string? ResolveSpecialUse(FolderAttributes attributes, string name, bool isInbox)
             => SpecialUseFromAttributes(attributes, isInbox) ?? SpecialUseFromName(name);
 

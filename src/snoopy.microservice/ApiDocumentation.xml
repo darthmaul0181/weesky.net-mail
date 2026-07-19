@@ -587,6 +587,16 @@
             is stale and must be discarded, or the client will show the wrong messages.
             </summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.AttributeRole">
+            <summary>
+            Role derived from the folder's SPECIAL-USE flags alone, before uniqueness. Internal
+            plumbing for the resolution chain — never serialised to the client, which only sees
+            the final SpecialUse.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.MailboxId">
+            <summary>RFC 8474 MAILBOXID when the server supports OBJECTID. Internal plumbing.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage">
             <summary>One page of a folder, newest message first.</summary>
         </member>
@@ -602,6 +612,12 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.Page">
             <summary>Zero-based page index.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderStatus">
+            <summary>Identity snapshot of one live folder, read for override bookkeeping.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderStatus.MailboxId">
+            <summary>RFC 8474 MAILBOXID when the server supports OBJECTID; null otherwise.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail">
             <summary>A single message, ready to render.</summary>
@@ -1183,6 +1199,13 @@
         <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SetSubscriptionAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
             <summary>Subscribes or unsubscribes a folder, which is how the UI hides it.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.GetFolderStatusAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Identity snapshot of one folder, read live: path, UIDVALIDITY, MAILBOXID when the
+            server supports OBJECTID, and selectability. Fails with ImapSession.FolderNotFound
+            when the path no longer resolves.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListMessagesAsync(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
             <summary>
             One page of a folder, newest message first, envelope-level only. Carries the
@@ -1294,23 +1317,25 @@
             past the end, or when the arguments make no sense.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,MailKit.FolderAttributes,System.Boolean}})">
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.String}},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Assigns discovered roles, each to at most one folder — and each folder to at most
+            one role.
+            </summary>
+            <remarks>
+            Two claim sets, not one. Claimed roles keep a mailbox holding both "Drafts" and
+            "Brouillons" from ending up with two drafts folders. Claimed folders keep one
+            folder from holding two roles — a folder flagged \Sent but named "Trash" used to
+            claim both, which is undecidable to display. Callers may seed both sets: the role
+            resolver runs user overrides first and hands discovery only the leftovers.
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUse(MailKit.FolderAttributes,System.String,System.Boolean)">
             <summary>
             Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the
             server advertises none, fall back to matching well-known names, which is the only
             option on servers without the extension.
             </summary>
-            <summary>
-            Assigns each well-known role to at most one folder, path by path.
-            </summary>
-            <remarks>
-            Two passes, because the two sources of a role are not equally trustworthy. A folder
-            the server flagged SPECIAL-USE genuinely holds that role; a folder we merely
-            recognised by name is a guess, made only because the server advertised nothing.
-            Running the guesses second, and only into roles still unclaimed, keeps a mailbox
-            holding both "Drafts" and "Brouillons" from ending up with two drafts folders —
-            and keeps the guess from overruling the server.
-            </remarks>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SpecialUseFromName(System.String)">
             <summary>
@@ -1358,6 +1383,12 @@
             <summary>
             One entry in the LISTSCRIPTS response from a ManageSieve server.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SpecialUseAssignment">
+            <summary>Where a discovered role came from: a server SPECIAL-USE flag, or a name guess.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SpecialUseAssignment.#ctor(System.String,System.String)">
+            <summary>Where a discovered role came from: a server SPECIAL-USE flag, or a name guess.</summary>
         </member>
     </members>
 </doc>

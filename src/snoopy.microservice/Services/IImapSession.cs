@@ -35,6 +35,13 @@ namespace weesky.Snoopy.Microservice.Services
         Task<Result> SetSubscriptionAsync(string path, bool subscribed, CancellationToken cancellationToken);
 
         /// <summary>
+        /// Identity snapshot of one folder, read live: path, UIDVALIDITY, MAILBOXID when the
+        /// server supports OBJECTID, and selectability. Fails with ImapSession.FolderNotFound
+        /// when the path no longer resolves.
+        /// </summary>
+        Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken);
+
+        /// <summary>
         /// One page of a folder, newest message first, envelope-level only. Carries the
         /// folder's UidValidity so the client knows when its cached UIDs went stale.
         /// </summary>

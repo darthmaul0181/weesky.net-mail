@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace weesky.Snoopy.Microservice.Models.Mail
 {
     /// <summary>A folder as the client sees it. Children are nested, not flattened.</summary>
@@ -35,6 +37,18 @@ namespace weesky.Snoopy.Microservice.Models.Mail
         /// is stale and must be discarded, or the client will show the wrong messages.
         /// </summary>
         public uint UidValidity { get; set; }
+
+        /// <summary>
+        /// Role derived from the folder's SPECIAL-USE flags alone, before uniqueness. Internal
+        /// plumbing for the resolution chain — never serialised to the client, which only sees
+        /// the final SpecialUse.
+        /// </summary>
+        [JsonIgnore]
+        public string? AttributeRole { get; set; }
+
+        /// <summary>RFC 8474 MAILBOXID when the server supports OBJECTID. Internal plumbing.</summary>
+        [JsonIgnore]
+        public string? MailboxId { get; set; }
 
         public List<MailFolderNode> Children { get; set; } = new();
     }

@@ -68,11 +68,11 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("Drafts", "Drafts", FolderAttributes.None, false),
-                ("Brouillons", "Brouillons", FolderAttributes.None, false)
+                ("Drafts", "Drafts", null),
+                ("Brouillons", "Brouillons", null)
             ]);
 
-            Assert.Equal("drafts", roles["Drafts"]);
+            Assert.Equal("drafts", roles["Drafts"].Role);
             Assert.False(roles.ContainsKey("Brouillons"));
         }
 
@@ -81,11 +81,12 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("Drafts", "Drafts", FolderAttributes.None, false),
-                ("Brouillons", "Brouillons", FolderAttributes.Drafts, false)
+                ("Drafts", "Drafts", null),
+                ("Brouillons", "Brouillons", "drafts")
             ]);
 
-            Assert.Equal("drafts", roles["Brouillons"]);
+            Assert.Equal("drafts", roles["Brouillons"].Role);
+            Assert.Equal(SpecialUseAssignment.FromFlag, roles["Brouillons"].Source);
             Assert.False(roles.ContainsKey("Drafts"));
         }
 
@@ -94,16 +95,55 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("INBOX", "INBOX", FolderAttributes.None, true),
-                ("Sent", "Sent", FolderAttributes.None, false),
-                ("Archive", "Archive", FolderAttributes.None, false),
-                ("Projects", "Projects", FolderAttributes.None, false)
+                ("INBOX", "INBOX", "inbox"),
+                ("Sent", "Sent", null),
+                ("Archive", "Archive", null),
+                ("Projects", "Projects", null)
             ]);
 
-            Assert.Equal("inbox", roles["INBOX"]);
-            Assert.Equal("sent", roles["Sent"]);
-            Assert.Equal("archive", roles["Archive"]);
+            Assert.Equal("inbox", roles["INBOX"].Role);
+            Assert.Equal("sent", roles["Sent"].Role);
+            Assert.Equal(SpecialUseAssignment.FromName, roles["Sent"].Source);
+            Assert.Equal("archive", roles["Archive"].Role);
             Assert.False(roles.ContainsKey("Projects"));
+        }
+
+        // A folder flagged \Sent but named "Trash" used to claim both roles, and the
+        // path→role inversion then crashed on the duplicate key. One folder, one role.
+        [Fact]
+        public void ResolveSpecialUses_NeverGivesOneFolderTwoRoles()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                ("Weird", "Trash", "sent")
+            ]);
+
+            Assert.Equal("sent", roles["Weird"].Role);
+            Assert.DoesNotContain(roles.Values, a => a.Role == "trash");
+        }
+
+        [Fact]
+        public void ResolveSpecialUses_ASeededRoleIsNotClaimable()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+                [("Drafts", "Drafts", "drafts")],
+                claimedRoles: ["drafts"]);
+
+            Assert.Empty(roles);
+        }
+
+        // Spec § 4.1, second half: the folder is taken by an override, so its flag claims
+        // nothing — and the name pass hands the freed role to the next candidate.
+        [Fact]
+        public void ResolveSpecialUses_ASeededFolderClaimsNothingAndTheRolePassesOn()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+                [("Drafts", "Drafts", "drafts"), ("Brouillons", "Brouillons", null)],
+                claimedFolders: ["Drafts"]);
+
+            Assert.False(roles.ContainsKey("Drafts"));
+            Assert.Equal("drafts", roles["Brouillons"].Role);
+            Assert.Equal(SpecialUseAssignment.FromName, roles["Brouillons"].Source);
         }
 
         [Theory]
