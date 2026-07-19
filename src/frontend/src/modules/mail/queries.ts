@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
-import type { MailFolderNode, MailFolderPage, MailMessageDetail } from './api/mailTypes'
+import type { MailFolderNode, MailFolderPage, MailMessageDetail, FolderRoleEntry } from './api/mailTypes'
 
 export const PAGE_SIZE = 50
 
@@ -16,6 +16,7 @@ export const mailKeys = {
     ['mail', accountId, 'messages', folder, page] as const,
   message: (accountId: string, folder: string, uid: number) =>
     ['mail', accountId, 'message', folder, uid] as const,
+  folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
 }
 
 function useAccountId(): string {
@@ -52,6 +53,39 @@ export function useMessage(folderPath: string | null, uid: number | null) {
     enabled: folderPath !== null && uid !== null,
   })
 }
+
+export function useFolderRoles() {
+  const accountId = useAccountId()
+
+  return useQuery<FolderRoleEntry[]>({
+    queryKey: mailKeys.folderRoles(accountId),
+    queryFn: ({ signal }) => api.getFolderRoles({ signal }),
+  })
+}
+
+/**
+ * Role mutations invalidate the roles AND the folder tree: the tree's labels are the chain's
+ * output, so changing a role changes what the tree displays.
+ */
+function useRoleMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: mailKeys.folderRoles(accountId) })
+      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+    },
+  })
+}
+
+export const useSetFolderRole = () =>
+  useRoleMutation<{ role: string; folderPath: string }>(
+    ({ role, folderPath }) => api.setFolderRole(role, folderPath))
+
+export const useClearFolderRole = () =>
+  useRoleMutation<{ role: string }>(({ role }) => api.clearFolderRole(role))
 
 /**
  * Folder mutations all invalidate the tree: creating, renaming, deleting and subscribing each

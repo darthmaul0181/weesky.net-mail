@@ -225,6 +225,15 @@ export const api = {
 
   getMailMessage: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
+
+  getFolderRoles: (options) =>
+    request('GET', '/api/Mail/FolderRoles', undefined, options),
+
+  setFolderRole: (role, folderPath) =>
+    request('PUT', '/api/Mail/FolderRoles', { role, folderPath }),
+
+  clearFolderRole: (role) =>
+    request('DELETE', `/api/Mail/FolderRoles?role=${encodeURIComponent(role)}`),
 }
 
 /** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */

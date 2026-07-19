@@ -65,3 +65,16 @@ export interface MailMessageDetail {
   blockedImageCount: number
   attachments: MailAttachmentInfo[]
 }
+
+export interface FolderRoleStaleOverride {
+  folderPath: string
+}
+
+/** One assignable role: what it resolves to today, and why. */
+export interface FolderRoleEntry {
+  role: string
+  folderPath: string | null
+  provenance: 'override' | 'specialUse' | 'name' | null
+  /** The user's stored choice no longer matches a live folder — kept and signalled. */
+  staleOverride: FolderRoleStaleOverride | null
+}
