@@ -215,6 +215,28 @@
             <response code="204">Logout successful</response>
             <response code="401">Try to logout an unauthenticated user</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.MailController">
+             <summary>
+             Mail access over IMAP.
+            
+             Two conventions hold across every action. Folder paths never appear in a route
+             segment — the hierarchy separator may be '/', which would break routing — so they
+             travel in the query string or the request body. And the two failure modes are
+             distinct: a missing or undecryptable credentials cookie is 401 with the code
+             "credentials_unavailable" so the client can sign in again, while anything the mail
+             server refuses is 502.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetFolders(System.Threading.CancellationToken)">
+            <summary>
+            Returns the caller's folder tree: hierarchy, well-known roles, subscription state
+            and message counts.
+            </summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The folder tree</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
             Returns the authenticated user's Sieve configuration: structured rules when a
@@ -669,6 +691,9 @@
             The full name of the user.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetTreeAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Threading.CancellationToken)">
+            <summary>The user's full folder tree, subscribed and unsubscribed alike.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
             High-level Sieve management API used by controllers. Each method opens its own
@@ -690,6 +715,12 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.DeleteAllRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
             <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.MailFolderRepository">
+            <summary>
+            Folder access over IMAP. One session per method, opened and disposed inside it — the
+            same shape as SieveRepository over ManageSieve.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.SieveRepository.CleanupOtherManagedScriptsAsync(weesky.Snoopy.Microservice.Services.IManageSieveSession,System.String,System.Threading.CancellationToken)">
             <summary>
