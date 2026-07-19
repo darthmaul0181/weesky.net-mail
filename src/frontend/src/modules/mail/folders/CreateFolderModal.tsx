@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
 import { useCreateFolder } from '../queries'
-import { flatten, indent } from './folderNodes'
+import { flatten, indent, sortFolders } from './folderNodes'
 import type { MailFolderNode } from '../api/mailTypes'
 
 interface Props {
@@ -22,7 +22,8 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
   const [parent, setParent] = useState(defaultParent)
   const createFolder = useCreateFolder()
 
-  const all = flatten(folders)
+  // Same order as the folders list: the user is hunting for a name here too.
+  const all = flatten(sortFolders(folders))
 
   return (
     <div className="modal-overlay" onClick={onClose}>

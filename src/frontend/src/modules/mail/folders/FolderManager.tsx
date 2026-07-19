@@ -4,7 +4,7 @@ import PencilIcon from '../../../icons/PencilIcon.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import { useDeleteFolder, useRenameFolder, useSetFolderSubscription } from '../queries'
 import { roleLabel } from '../roleLabel'
-import { flatten, isSystemFolder, parentOf } from './folderNodes'
+import { flatten, isSystemFolder, parentOf, sortFolders } from './folderNodes'
 import type { MailFolderNode } from '../api/mailTypes'
 
 interface Props {
@@ -43,7 +43,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
   return (
     <>
       <ul className="folder-manage-list">
-        {flatten(folders).map(({ node, depth }) => {
+        {flatten(sortFolders(folders)).map(({ node, depth }) => {
           const isInbox = node.specialUse === 'inbox'
           const isSystem = isSystemFolder(node)
 

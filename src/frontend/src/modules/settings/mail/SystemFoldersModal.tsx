@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import SlidersIcon from '../../../icons/SlidersIcon'
-import { flatten, indent } from '../../mail/folders/folderNodes'
+import { flatten, indent, sortFolders } from '../../mail/folders/folderNodes'
 import { roleLabel } from '../../mail/roleLabel'
 import { useClearFolderRole, useFolderRoles, useFolders, useSetFolderRole } from '../../mail/queries'
 import type { FolderRoleEntry, FolderRoleStaleOverride } from '../../mail/api/mailTypes'
@@ -29,7 +29,7 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
   const loading = foldersLoading || rolesLoading
   const failed = foldersError || rolesError || !folders || !roles
 
-  const all = failed || loading ? [] : flatten(folders)
+  const all = failed || loading ? [] : flatten(sortFolders(folders))
   const overrideByPath = new Map(
     (roles ?? [])
       .filter(entry => entry.provenance === 'override' && entry.folderPath)

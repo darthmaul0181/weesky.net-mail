@@ -49,6 +49,24 @@ describe('the folder list', () => {
     expect(screen.getByLabelText('Show Alpha')).toBeInTheDocument()
   })
 
+  // The inbox first, then everything by name — system folders included, sitting under their own
+  // name rather than in a block. Server order here is INBOX, Corbeille, Projects.
+  it('renders in the sorted order, not the order the server sent', () => {
+    const { container } = render(
+      <FolderManager
+        folders={[
+          node({ path: 'Zeta', name: 'Zeta' }),
+          node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+          node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+          node({ path: 'Alpha', name: 'Alpha' }),
+        ]}
+        onNotify={vi.fn()}
+      />)
+
+    const rows = Array.from(container.querySelectorAll('.folder-manage-label'))
+    expect(rows.map(r => r.textContent)).toEqual(['INBOX', 'Alpha', 'Corbeille', 'Zeta'])
+  })
+
   it('toggles visibility with the inverted state', async () => {
     mocks.subscribe.mockResolvedValue(undefined)
     renderManager()
