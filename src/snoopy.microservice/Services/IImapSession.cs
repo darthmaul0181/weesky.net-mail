@@ -39,5 +39,17 @@ namespace weesky.Snoopy.Microservice.Services
         /// folder's UidValidity so the client knows when its cached UIDs went stale.
         /// </summary>
         Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// A single message: sanitised HTML body, plain-text body, headers and the attachment
+        /// list. Fails with ImapSession.MessageNotFound when the UID no longer resolves.
+        /// </summary>
+        Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// One decoded attachment, addressed by MIME part specifier. Fails with
+        /// ImapSession.MessageNotFound or ImapSession.AttachmentNotFound.
+        /// </summary>
+        Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken);
     }
 }

@@ -206,5 +206,88 @@ namespace weesky.Snoopy.Microservice.Controllers
 
             return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
         }
+
+        /// <summary>
+        /// A single message: sanitised HTML body, plain-text body, headers and attachment list.
+        /// Remote images are withheld and counted, so the client can offer to load them.
+        /// </summary>
+        /// <param name="folder">full folder path</param>
+        /// <param name="uid">message UID, valid only for the folder's current UidValidity</param>
+        /// <param name="cancellationToken">cancellation token</param>
+        /// <response code="200">The message</response>
+        /// <response code="400">The folder is missing</response>
+        /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+        /// <response code="404">No message with that UID in that folder</response>
+        /// <response code="502">The mail server could not be reached</response>
+        [HttpGet("Messages/Detail")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult<MailMessageDetail>> GetMessage(
+            [FromQuery] string folder,
+            [FromQuery] uint uid,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(folder)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+
+            var password = _credentials.Retrieve(Request);
+            if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+            var result = await _messages.GetAsync(AuthenticatedUser, password.Value, folder, uid, cancellationToken);
+
+            if (result.IsFailure && result.Error == ImapSession.MessageNotFound)
+            {
+                return NotFound(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+            }
+
+            return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+        }
+
+        /// <summary>
+        /// Downloads one attachment. Always served as an attachment disposition: message
+        /// content must never render inline in the browser.
+        /// </summary>
+        /// <param name="folder">full folder path</param>
+        /// <param name="uid">message UID</param>
+        /// <param name="part">MIME part specifier, taken from the message's attachment list</param>
+        /// <param name="cancellationToken">cancellation token</param>
+        /// <response code="200">The attachment bytes</response>
+        /// <response code="400">The folder or the part is missing</response>
+        /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+        /// <response code="404">No such message, or no such part on it</response>
+        /// <response code="502">The mail server could not be reached</response>
+        [HttpGet("Messages/Attachment")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<ActionResult> GetAttachment(
+            [FromQuery] string folder,
+            [FromQuery] uint uid,
+            [FromQuery] string part,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(folder)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+            if (string.IsNullOrWhiteSpace(part)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A part is required"));
+
+            var password = _credentials.Retrieve(Request);
+            if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+            var result = await _messages.GetAttachmentAsync(AuthenticatedUser, password.Value, folder, uid, part, cancellationToken);
+
+            if (result.IsFailure)
+            {
+                var status = result.Error is ImapSession.MessageNotFound or ImapSession.AttachmentNotFound
+                    ? StatusCodes.Status404NotFound
+                    : StatusCodes.Status502BadGateway;
+
+                return StatusCode(status, ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+            }
+
+            return File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+        }
     }
 }

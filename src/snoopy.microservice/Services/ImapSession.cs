@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
+using MimeKit;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services
@@ -8,12 +9,14 @@ namespace weesky.Snoopy.Microservice.Services
     public sealed class ImapSession : IImapSession
     {
         private readonly ImapClient _client;
+        private readonly IMailHtmlSanitizer _sanitizer;
         private readonly ILogger _logger;
         private bool _disposed;
 
-        public ImapSession(ImapClient client, ILogger logger)
+        public ImapSession(ImapClient client, IMailHtmlSanitizer sanitizer, ILogger logger)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _sanitizer = sanitizer ?? throw new ArgumentNullException(nameof(sanitizer));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             DirectorySeparator = client.PersonalNamespaces.Count > 0
@@ -266,6 +269,122 @@ namespace weesky.Snoopy.Microservice.Services
                 Preview = item.PreviewText ?? string.Empty
             };
         }
+
+        public async Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+
+            try
+            {
+                var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+                await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+                var uniqueId = new UniqueId(folder.UidValidity, uid);
+
+                var summaries = await folder.FetchAsync(
+                    new[] { uniqueId },
+                    MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.BodyStructure,
+                    cancellationToken);
+
+                var summary = summaries.FirstOrDefault();
+                if (summary == null) return Result.Failure<MailMessageDetail>(MessageNotFound);
+
+                var message = await folder.GetMessageAsync(uniqueId, cancellationToken);
+                var sanitized = _sanitizer.Sanitize(message.HtmlBody ?? string.Empty);
+                var sender = message.From?.Mailboxes?.FirstOrDefault();
+
+                var detail = new MailMessageDetail
+                {
+                    Uid = uid,
+                    FolderPath = folder.FullName,
+                    UidValidity = folder.UidValidity,
+                    Subject = message.Subject ?? string.Empty,
+                    FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty,
+                    FromAddress = sender?.Address ?? string.Empty,
+                    To = message.To?.Mailboxes?.Select(m => m.Address).ToList() ?? new List<string>(),
+                    Cc = message.Cc?.Mailboxes?.Select(m => m.Address).ToList() ?? new List<string>(),
+                    Date = message.Date,
+                    HtmlBody = sanitized.Html,
+                    TextBody = message.TextBody ?? string.Empty,
+                    BlockedImageCount = sanitized.BlockedImageCount
+                };
+
+                foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())
+                {
+                    if (!part.IsAttachment && string.IsNullOrEmpty(part.FileName)) continue;
+
+                    detail.Attachments.Add(new MailAttachmentInfo
+                    {
+                        Part = part.PartSpecifier,
+                        FileName = string.IsNullOrEmpty(part.FileName) ? "attachment" : part.FileName,
+                        ContentType = part.ContentType?.MimeType ?? "application/octet-stream",
+                        Size = part.Octets,
+                        IsInline = !part.IsAttachment
+                    });
+                }
+
+                return Result.Success(detail);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath);
+                return Result.Failure<MailMessageDetail>("Unable to read the message");
+            }
+        }
+
+        public async Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+
+            try
+            {
+                var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+                await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+                var uniqueId = new UniqueId(folder.UidValidity, uid);
+
+                var summaries = await folder.FetchAsync(new[] { uniqueId }, MessageSummaryItems.BodyStructure, cancellationToken);
+                var summary = summaries.FirstOrDefault();
+                if (summary == null) return Result.Failure<MailAttachmentContent>(MessageNotFound);
+
+                var part = summary.BodyParts.OfType<BodyPartBasic>()
+                    .FirstOrDefault(p => string.Equals(p.PartSpecifier, partSpecifier, StringComparison.Ordinal));
+                if (part == null) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
+
+                var entity = await folder.GetBodyPartAsync(uniqueId, part, cancellationToken);
+                if (entity is not MimePart mimePart) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
+
+                using var buffer = new MemoryStream();
+                await mimePart.Content.DecodeToAsync(buffer, cancellationToken);
+
+                return Result.Success(new MailAttachmentContent
+                {
+                    Content = buffer.ToArray(),
+                    FileName = string.IsNullOrEmpty(part.FileName) ? "attachment" : part.FileName,
+                    ContentType = part.ContentType?.MimeType ?? "application/octet-stream"
+                });
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to read attachment {Part} of message {Uid}", partSpecifier, uid);
+                return Result.Failure<MailAttachmentContent>("Unable to read the attachment");
+            }
+        }
+
+        /// <summary>
+        /// Sentinel errors the controller maps to 404 rather than 502. Shared constants so the
+        /// two layers cannot drift apart on the exact wording.
+        /// </summary>
+        public const string MessageNotFound = "Message not found";
+        public const string AttachmentNotFound = "Attachment not found";
 
         private static bool IsInbox(IMailFolder folder)
             => string.Equals(folder.FullName, "INBOX", StringComparison.OrdinalIgnoreCase);

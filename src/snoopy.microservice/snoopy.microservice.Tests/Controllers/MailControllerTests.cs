@@ -340,5 +340,117 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
             => _messages.Verify(m => m.ListAsync(
                 It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
                 Times.Never);
+
+        // ── Message detail ──────────────────────────────────────────────────
+
+        [Fact]
+        public async Task GetMessage_ReturnsTheDetail()
+        {
+            _messages.Setup(m => m.GetAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Success(new MailMessageDetail { Uid = 42, Subject = "Re: facture" }));
+
+            var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Equal("Re: facture", Assert.IsType<MailMessageDetail>(ok.Value).Subject);
+        }
+
+        [Fact]
+        public async Task GetMessage_Returns404WhenTheUidDoesNotResolve()
+        {
+            _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Failure<MailMessageDetail>(ImapSession.MessageNotFound));
+
+            var result = await CreateController().GetMessage("INBOX", 999, CancellationToken.None);
+
+            Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+
+        [Fact]
+        public async Task GetMessage_Returns502ForAnyOtherFailure()
+        {
+            _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Failure<MailMessageDetail>("Unable to read the message"));
+
+            var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+            var status = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        }
+
+        [Fact]
+        public async Task GetMessage_Returns400ForABlankFolder()
+        {
+            var result = await CreateController().GetMessage("", 42, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+        }
+
+        [Fact]
+        public async Task GetMessage_Returns401WhenCredentialsAreUnavailable()
+        {
+            var controller = CreateController();
+            _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                        .Returns(Result.Failure<string>("credentials_unavailable"));
+
+            var result = await controller.GetMessage("INBOX", 42, CancellationToken.None);
+
+            Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        }
+
+        // ── Attachment ──────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task GetAttachment_ReturnsTheFileWithAnAttachmentDisposition()
+        {
+            _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, "2", It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Success(new MailAttachmentContent
+                     {
+                         Content = new byte[] { 1, 2, 3 },
+                         FileName = "report.pdf",
+                         ContentType = "application/pdf"
+                     }));
+
+            var result = await CreateController().GetAttachment("INBOX", 42, "2", CancellationToken.None);
+
+            var file = Assert.IsType<FileContentResult>(result);
+            Assert.Equal("application/pdf", file.ContentType);
+            Assert.Equal("report.pdf", file.FileDownloadName);
+            Assert.Equal(new byte[] { 1, 2, 3 }, file.FileContents);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task GetAttachment_Returns400ForABlankPart(string part)
+        {
+            var result = await CreateController().GetAttachment("INBOX", 42, part, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task GetAttachment_Returns404WhenThePartDoesNotResolve()
+        {
+            _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Failure<MailAttachmentContent>(ImapSession.AttachmentNotFound));
+
+            var result = await CreateController().GetAttachment("INBOX", 42, "99", CancellationToken.None);
+
+            var status = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(StatusCodes.Status404NotFound, status.StatusCode);
+        }
+
+        [Fact]
+        public async Task GetAttachment_Returns502ForAnyOtherFailure()
+        {
+            _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Failure<MailAttachmentContent>("Unable to read the attachment"));
+
+            var result = await CreateController().GetAttachment("INBOX", 42, "2", CancellationToken.None);
+
+            var status = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        }
     }
 }

@@ -20,11 +20,16 @@ namespace weesky.Snoopy.Microservice.Services
     public class ImapConnectionFactory : IImapConnectionFactory
     {
         private readonly IOptionsMonitor<MailOptions> _options;
+        private readonly IMailHtmlSanitizer _sanitizer;
         private readonly ILogger<ImapConnectionFactory> _logger;
 
-        public ImapConnectionFactory(IOptionsMonitor<MailOptions> options, ILogger<ImapConnectionFactory> logger)
+        public ImapConnectionFactory(
+            IOptionsMonitor<MailOptions> options,
+            IMailHtmlSanitizer sanitizer,
+            ILogger<ImapConnectionFactory> logger)
         {
             _options = options;
+            _sanitizer = sanitizer;
             _logger = logger;
         }
 
@@ -57,7 +62,7 @@ namespace weesky.Snoopy.Microservice.Services
                     await client.AuthenticateAsync(email, password, connectCts.Token);
                 }
 
-                var session = new ImapSession(client, _logger);
+                var session = new ImapSession(client, _sanitizer, _logger);
                 client = null; // ownership transferred to the session
                 return Result.Success<IImapSession>(session);
             }
