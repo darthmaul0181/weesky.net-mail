@@ -377,3 +377,171 @@ describe('401 handling', () => {
     expect(hasSession()).toBe(false)
   })
 })
+
+describe('ApiError', () => {
+  it('carries the HTTP status', async () => {
+    mockFetch(502, { ok: false, text: JSON.stringify({ message: 'Unable to connect to the mail service' }) })
+    const { api } = await import('./api.js')
+
+    await expect(api.getMailFolders()).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 502,
+      message: 'Unable to connect to the mail service',
+    })
+  })
+
+  it('exposes the backend error string as a code', async () => {
+    mockFetch(404, { ok: false, text: JSON.stringify({ message: 'Message not found' }) })
+    const { api } = await import('./api.js')
+
+    await expect(api.getMailMessage('INBOX', 1)).rejects.toMatchObject({
+      status: 404,
+      code: 'Message not found',
+    })
+  })
+
+  it('exposes the credentials code on a 401', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 401,
+      text: () => Promise.resolve(JSON.stringify({ message: 'credentials_unavailable' })),
+    }))
+    const { api } = await import('./api.js')
+
+    await expect(api.getMailFolders()).rejects.toMatchObject({ status: 401, code: 'credentials_unavailable' })
+  })
+
+  it('falls back to plain text when the body is not JSON', async () => {
+    mockFetch(400, { ok: false, text: 'A folder name is required' })
+    const { api } = await import('./api.js')
+
+    await expect(api.getMailFolders()).rejects.toMatchObject({
+      status: 400,
+      message: 'A folder name is required',
+      code: null,
+    })
+  })
+
+  it('is still an Error, so existing catch blocks keep working', async () => {
+    mockFetch(400, { ok: false, text: 'Bad Request' })
+    const { api } = await import('./api.js')
+
+    await expect(api.getMailFolders()).rejects.toBeInstanceOf(Error)
+  })
+})
+
+describe('abort support', () => {
+  it('passes the signal through to fetch', async () => {
+    mockFetch(200, { json: [] })
+    const { api } = await import('./api.js')
+    const controller = new AbortController()
+
+    await api.getMailFolders({ signal: controller.signal })
+
+    expect(globalThis.fetch.mock.calls[0][1].signal).toBe(controller.signal)
+  })
+
+  it('sends no signal when none is given', async () => {
+    mockFetch(200, { json: [] })
+    const { api } = await import('./api.js')
+
+    await api.getMailFolders()
+
+    expect(globalThis.fetch.mock.calls[0][1].signal).toBeUndefined()
+  })
+})
+
+describe('mail endpoints', () => {
+  it('encodes folder paths, which may contain a slash', async () => {
+    mockFetch(200, { json: {} })
+    const { api } = await import('./api.js')
+
+    await api.getMailMessages('INBOX/Projects', 0, 50)
+
+    expect(globalThis.fetch.mock.calls[0][0]).toContain('folder=INBOX%2FProjects')
+  })
+
+  it('sends folder paths in the body for mutations', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.deleteMailFolder('INBOX/Projects')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Folders'),
+      expect.objectContaining({ method: 'DELETE', body: JSON.stringify({ path: 'INBOX/Projects' }) })
+    )
+  })
+
+  it('passes the subscription state', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.setMailFolderSubscription('Projects', false)
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Folders/Subscription'),
+      expect.objectContaining({ body: JSON.stringify({ path: 'Projects', subscribed: false }) })
+    )
+  })
+})
+
+describe('mailAttachmentUrl', () => {
+  it('encodes both the folder and the part', async () => {
+    const { mailAttachmentUrl } = await import('./api.js')
+
+    const url = mailAttachmentUrl('INBOX/Projects', 42, '2.1')
+
+    expect(url).toContain('folder=INBOX%2FProjects')
+    expect(url).toContain('uid=42')
+    expect(url).toContain('part=2.1')
+  })
+})
+
+describe('requestBlob', () => {
+  function mockBlobFetch({ status = 200, disposition = null, ok = true, text = '' } = {}) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status,
+      ok,
+      statusText: text,
+      headers: { get: (h) => (h.toLowerCase() === 'content-disposition' ? disposition : null) },
+      blob: () => Promise.resolve(new Blob(['data'])),
+      text: () => Promise.resolve(text),
+    }))
+  }
+
+  it('returns the blob and the file name from Content-Disposition', async () => {
+    mockBlobFetch({ disposition: 'attachment; filename="report.pdf"' })
+    const { requestBlob } = await import('./api.js')
+
+    const result = await requestBlob('/api/Mail/Messages/Attachment?folder=INBOX&uid=1&part=2')
+
+    expect(result.fileName).toBe('report.pdf')
+    expect(result.blob).toBeInstanceOf(Blob)
+  })
+
+  it('falls back to a default file name', async () => {
+    mockBlobFetch({ disposition: null })
+    const { requestBlob } = await import('./api.js')
+
+    expect((await requestBlob('/x')).fileName).toBe('attachment')
+  })
+
+  it('throws an ApiError carrying the status on failure', async () => {
+    mockBlobFetch({ status: 404, ok: false, text: 'Attachment not found' })
+    const { requestBlob } = await import('./api.js')
+
+    await expect(requestBlob('/x')).rejects.toMatchObject({ name: 'ApiError', status: 404 })
+  })
+
+  it('clears the session on a 401', async () => {
+    mockBlobFetch({ status: 401, ok: false })
+    const { markLoggedIn, setUnauthorizedHandler, hasSession, requestBlob } = await import('./api.js')
+    markLoggedIn()
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+
+    await expect(requestBlob('/x')).rejects.toThrow('Unauthorized')
+    expect(handler).toHaveBeenCalledOnce()
+    expect(hasSession()).toBe(false)
+  })
+})

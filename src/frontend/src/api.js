@@ -25,7 +25,39 @@ export function setUnauthorizedHandler(fn) {
   unauthorizedHandler = fn
 }
 
-async function request(method, path, body) {
+/**
+ * An HTTP failure that keeps its status. The backend puts a stable string in the
+ * ResultEnveloppe message — "credentials_unavailable", "Message not found" — which is
+ * surfaced as `code` so callers can branch on it without matching prose.
+ *
+ * Extends Error, so existing `rejects.toThrow(message)` expectations still hold.
+ */
+export class ApiError extends Error {
+  constructor(message, status, code) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
+async function readError(res) {
+  // Defensive: some callers stub a response with no body reader at all.
+  if (typeof res.text !== 'function') return { message: res.statusText ?? '', code: null }
+
+  const text = await res.text().catch(() => '')
+  if (!text) return { message: res.statusText ?? '', code: null }
+
+  try {
+    const parsed = JSON.parse(text)
+    const message = parsed?.message ?? parsed?.Message ?? text
+    return { message, code: typeof message === 'string' ? message : null }
+  } catch {
+    return { message: text, code: null }
+  }
+}
+
+async function request(method, path, body, options = {}) {
   const headers = {}
   if (body) headers['Content-Type'] = 'application/json'
 
@@ -34,20 +66,52 @@ async function request(method, path, body) {
     headers,
     credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
+    signal: options.signal,
+  })
+
+  if (res.status === 401) {
+    const { code } = await readError(res)
+    clearSession()
+    unauthorizedHandler?.()
+    throw new ApiError('Unauthorized', 401, code)
+  }
+
+  if (res.status === 204) return null
+
+  if (!res.ok) {
+    const { message, code } = await readError(res)
+    throw new ApiError(message || res.statusText, res.status, code)
+  }
+
+  return res.json()
+}
+
+/**
+ * Fetches a binary response — attachments. Separate from request() because that helper always
+ * parses JSON.
+ */
+export async function requestBlob(path, options = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'GET',
+    credentials: 'include',
+    signal: options.signal,
   })
 
   if (res.status === 401) {
     clearSession()
     unauthorizedHandler?.()
-    throw new Error('Unauthorized')
+    throw new ApiError('Unauthorized', 401, null)
   }
 
-  if (res.status === 204) return null
   if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(text || res.statusText)
+    const { message, code } = await readError(res)
+    throw new ApiError(message || res.statusText, res.status, code)
   }
-  return res.json()
+
+  const disposition = res.headers?.get?.('content-disposition') ?? ''
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+
+  return { blob: await res.blob(), fileName: match ? decodeURIComponent(match[1]) : 'attachment' }
 }
 
 export const api = {
@@ -137,4 +201,33 @@ export const api = {
 
   saveRawScript: (content, scriptName) =>
     request('PUT', '/api/Rules/Raw', { content, scriptName }),
+
+  // ── Mail ──────────────────────────────────────────────────────────────────
+  // Folder paths are encoded: they may contain '/', '&' or '#'.
+
+  getMailFolders: (options) =>
+    request('GET', '/api/Mail/Folders', undefined, options),
+
+  createMailFolder: (parentPath, name) =>
+    request('POST', '/api/Mail/Folders', { parentPath, name }),
+
+  renameMailFolder: (path, newParentPath, newName) =>
+    request('PUT', '/api/Mail/Folders', { path, newParentPath, newName }),
+
+  deleteMailFolder: (path) =>
+    request('DELETE', '/api/Mail/Folders', { path }),
+
+  setMailFolderSubscription: (path, subscribed) =>
+    request('PUT', '/api/Mail/Folders/Subscription', { path, subscribed }),
+
+  getMailMessages: (folder, page, pageSize, options) =>
+    request('GET', `/api/Mail/Messages?folder=${encodeURIComponent(folder)}&page=${page}&pageSize=${pageSize}`, undefined, options),
+
+  getMailMessage: (folder, uid, options) =>
+    request('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
+}
+
+/** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */
+export function mailAttachmentUrl(folder, uid, part) {
+  return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}`
 }
