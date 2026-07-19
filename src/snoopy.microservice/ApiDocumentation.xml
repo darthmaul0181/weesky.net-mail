@@ -368,6 +368,42 @@
             Value of the Dovecot `doveadm_api_key` shared with the service.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode">
+            <summary>A folder as the client sees it. Children are nested, not flattened.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Path">
+            <summary>
+            Full IMAP path, separator included. Opaque to the client: the hierarchy separator
+            is whatever the server uses, so the client must never parse or build one.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Name">
+            <summary>Leaf name for display.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.SpecialUse">
+            <summary>
+            Well-known role when the server advertises one, or when a name fallback matched:
+            "inbox", "sent", "drafts", "trash", "junk", "archive". Null for ordinary folders.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Selectable">
+            <summary>False when the folder holds no messages (a container-only node).</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Subscribed">
+            <summary>Whether the user subscribed to this folder — drives visibility in the UI.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Total">
+            <summary>Total message count. Null when not selectable.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Unread">
+            <summary>Unread message count. Null when not selectable.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.UidValidity">
+            <summary>
+            Folder UID validity. When it changes, every UID the client cached for this folder
+            is stale and must be discarded, or the client will show the wrong messages.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions">
             <summary>
             Connection settings for the mail server. Only connection parameters live here:
@@ -807,6 +843,24 @@
             and returns the rows array.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IImapConnectionFactory">
+            <summary>Opens an authenticated IMAP session for one user, for one request.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IImapSession">
+            <summary>
+            An open, authenticated IMAP session. One session per repository method, disposed at the
+            end of it — there is no pooling, which is also how Rainloop operates.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.IImapSession.DirectorySeparator">
+            <summary>
+            Hierarchy separator, read from the server's personal namespace rather than
+            configured: an additional domain may point at a server that uses a different one.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListFoldersAsync(System.Threading.CancellationToken)">
+            <summary>The full folder tree, subscribed and unsubscribed alike.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
              <summary>
              Carries the user's mail password between requests, encrypted into a cookie.
@@ -853,6 +907,27 @@
         <member name="M:weesky.Snoopy.Microservice.Services.IManageSieveSession.SetActiveAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Activate a script by name. Pass an empty string to deactivate all scripts.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ImapConnectionFactory">
+             <summary>
+             Opens one IMAP connection per request — no pooling, the Rainloop model. Modelled on
+             ManageSieveClient.OpenSessionAsync: guard on unconfigured options, a generic message to
+             the client with the detail logged, and ownership of the client transferred to the
+             session on success so the finally block is a no-op on the happy path.
+            
+             Options are read through IOptionsMonitor, not IOptions, so a correction in
+             appsettings.json takes effect without restarting the service and dropping live sessions.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ParentPath(System.String,System.Char)">
+            <summary>Parent path, or null when the folder sits at the namespace root.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUse(MailKit.FolderAttributes,System.String,System.Boolean)">
+            <summary>
+            Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the
+            server advertises none, fall back to matching well-known names, which is the only
+            option on servers without the extension.
             </summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">
