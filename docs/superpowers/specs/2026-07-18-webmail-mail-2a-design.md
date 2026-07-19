@@ -111,6 +111,13 @@ compte de test) — à titre d'information seulement : rien de ceci n'est écrit
   le nom — la voie de secours n'est donc pas théorique, elle sert dès le premier serveur.
 - `PREVIEW` **supporté**, et `MessageSummaryItems.PreviewText` renvoie bien un extrait.
 - **`INBOX` est rapportée `subscribed=false`.** Voir § 6.1.
+- **Le compte porte deux jeux de dossiers spéciaux**, anglais et français : `Drafts` *et*
+  `Brouillons`, `Junk E-mail` *et* `Courrier indésirable`. Aucun des noms français n'est flaggé
+  — ils ont été créés par un client, pas provisionnés par le serveur. La résolution par nom doit
+  donc attribuer chaque rôle à **un seul** dossier, sinon deux dossiers remontent comme
+  « brouillons » et le client n'a plus de moyen de dire lequel. Voir `ResolveSpecialUses` :
+  les flags serveur sont réclamés en premier, les devinettes par nom ne comblent que les rôles
+  restés libres.
 - Également disponibles pour les tranches suivantes : `MOVE`, `SORT`, `THREAD`, `IDLE`,
   `CONDSTORE`, `QRESYNC`, `UIDPLUS`.
 
@@ -442,6 +449,12 @@ Le corps HTML d'un message est du contenu hostile par construction.
   « afficher les images » sans nouvel aller-retour serveur.
 - **Frontend** : rendu dans une `<iframe sandbox>` sans `allow-same-origin` ni
   `allow-scripts`, jamais en `dangerouslySetInnerHTML`. Deux barrières indépendantes.
+- **`sandbox="allow-popups allow-popups-to-escape-sandbox"`**, et non un sandbox vide. Un
+  sandbox entièrement vide retire aussi la navigation : les liens réécrits en `target="_blank"`
+  par l'assainisseur ne faisaient donc **rien** au clic — constaté contre le serveur réel, sur
+  une boîte largement composée de liens. `allow-popups-to-escape-sandbox` est indissociable :
+  sans lui, l'onglet ouvert hérite du sandbox et le site de destination se charge sans script.
+  Ni l'une ni l'autre n'accorde quoi que ce soit **au corps du message**, qui reste inerte.
 
 La bibliothèque d'assainissement est le seul ajout NuGet à décider au moment du plan (candidat :
 `HtmlSanitizer` de mganss) ; MailKit/MimeKit sont les autres.
@@ -484,6 +497,23 @@ de la boîte de réception est cochée et désactivée dans la gestion des dossi
 
 Défaut trouvé contre le serveur réel, pas par les tests : toutes les fixtures posaient
 `subscribed: true`. Deux tests de régression le figent.
+
+**Pas de pastille de non-lus sur la corbeille ni sur les indésirables.** Une pastille invite à
+aller lire ; c'est justifié dans un dossier qu'on garde, jamais dans les deux qu'on ne garde
+pas. Le serveur réel affichait 8 non-lus dans `Deleted Items` — exact, et sans objet. Les
+dossiers restent visibles, seule la pastille disparaît.
+
+**La colonne du milieu porte un en-tête collant** nommant le dossier courant, présent dans tous
+les états (chargement, vide, liste) : sans lui, une fois les lignes défilées, plus rien ne dit
+ce qu'on regarde. Il affiche le nom feuille, pas le chemin — sous un séparateur `.` le chemin
+se lit `INBOX.Linux server`, ce qui n'est pas le nom que l'utilisateur a donné au dossier.
+
+**Date affichée en liste : l'arrivée, pas l'en-tête `Date`.** La fenêtre de pagination est une
+plage de numéros de séquence, donc la liste est ordonnée par arrivée. Afficher l'en-tête `Date`
+y imprimait une date contredisant la position de la ligne — un message écrit en mai mais livré
+en juin apparaissait au milieu des messages de juin en affichant « mai », ce qui se lit comme
+un bug de tri. Le lecteur, lui, garde l'en-tête `Date` : il y répond à une autre question,
+celle de la date de rédaction.
 
 Route : `/mail` devient un layout avec enfants (`/mail/:folderPath?`), le dossier courant
 vivant dans l'URL — c'est le bénéfice du routing acquis en sous-projet 1 (liens profonds,

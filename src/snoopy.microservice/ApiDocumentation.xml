@@ -1239,11 +1239,28 @@
             past the end, or when the arguments make no sense.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUse(MailKit.FolderAttributes,System.String,System.Boolean)">
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,MailKit.FolderAttributes,System.Boolean}})">
             <summary>
             Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the
             server advertises none, fall back to matching well-known names, which is the only
             option on servers without the extension.
+            </summary>
+            <summary>
+            Assigns each well-known role to at most one folder, path by path.
+            </summary>
+            <remarks>
+            Two passes, because the two sources of a role are not equally trustworthy. A folder
+            the server flagged SPECIAL-USE genuinely holds that role; a folder we merely
+            recognised by name is a guess, made only because the server advertised nothing.
+            Running the guesses second, and only into roles still unclaimed, keeps a mailbox
+            holding both "Drafts" and "Brouillons" from ending up with two drafts folders —
+            and keeps the guess from overruling the server.
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SpecialUseFromName(System.String)">
+            <summary>
+            Last-resort guess for servers that advertise no SPECIAL-USE. Covers the localised
+            names a mail client creates when it, not the server, provisioned the folders.
             </summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">

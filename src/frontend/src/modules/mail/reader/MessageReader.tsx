@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
+import { formatReaderDate } from './formatReaderDate'
 import { formatSize } from './formatSize'
 import { revealBlockedImages, sanitizeBody } from './sanitizeBody'
 
@@ -50,7 +51,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
         <h1 className="reader-subject">{data.subject || '(no subject)'}</h1>
         <div className="reader-meta">
           <span>{data.fromName ? `${data.fromName} <${data.fromAddress}>` : data.fromAddress}</span>
-          <span>{new Date(data.date).toLocaleString()}</span>
+          <span>{formatReaderDate(data.date)}</span>
           {data.to.length > 0 && <span>To: {data.to.join(', ')}</span>}
           {data.cc.length > 0 && <span>Cc: {data.cc.join(', ')}</span>}
         </div>
@@ -70,9 +71,16 @@ export default function MessageReader({ folderPath, uid }: Props) {
         // Three independent barriers: the backend sanitised this, DOMPurify sanitised it again
         // with a different parser, and this iframe can neither run scripts nor reach our
         // origin. Message HTML is never rendered into the page itself.
+        //
+        // The two popup permissions are what make links work at all. A fully empty sandbox
+        // withholds every capability including navigation, so target="_blank" anchors — which
+        // is what the sanitiser rewrites every link into — silently do nothing on click. The
+        // escape clause matters as much as the popup one: without it the opened tab inherits
+        // this sandbox and the destination site loads scriptless and broken. Neither grants
+        // allow-scripts or allow-same-origin, so the message body itself stays inert.
         <iframe
           className="reader-body"
-          sandbox=""
+          sandbox="allow-popups allow-popups-to-escape-sandbox"
           title="Message body"
           srcDoc={body}
         />

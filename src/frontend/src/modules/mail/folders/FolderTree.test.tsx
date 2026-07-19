@@ -126,6 +126,25 @@ describe('FolderTree', () => {
     expect(screen.queryByText('Archive')).not.toBeInTheDocument()
   })
 
+  // An unread badge asks the user to go and read something. Deleted mail and filtered spam are
+  // the two places where that prompt is noise — the live mailbox showed 8 unread in the trash.
+  it('does not badge unread counts in the trash or the junk folder', () => {
+    const folders = [
+      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 1 }),
+      node({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash', unread: 8 }),
+      node({ path: 'Junk', name: 'Junk', specialUse: 'junk', unread: 5 }),
+    ]
+
+    render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.queryByText('8')).not.toBeInTheDocument()
+    expect(screen.queryByText('5')).not.toBeInTheDocument()
+    // The folders themselves stay visible — only their badge goes.
+    expect(screen.getByText('Deleted Items')).toBeInTheDocument()
+    expect(screen.getByText('Junk')).toBeInTheDocument()
+  })
+
   it('hides an unsubscribed child of a visible parent', () => {
     const withHiddenChild = [node({
       path: 'INBOX', name: 'INBOX', specialUse: 'inbox',

@@ -28,6 +28,15 @@ export function isVisible(folder: MailFolderNode): boolean {
   return folder.subscribed || folder.specialUse === 'inbox'
 }
 
+/**
+ * An unread badge is a call to go and read something. That reading is worth prompting in a
+ * folder you keep, and not in the two you do not: nobody is behind on their deleted mail, and
+ * an unread count on junk advertises exactly what the filter was meant to spare you.
+ */
+export function showsUnreadCount(folder: MailFolderNode): boolean {
+  return folder.specialUse !== 'trash' && folder.specialUse !== 'junk'
+}
+
 function FolderRow({
   folder,
   selectedPath,
@@ -67,7 +76,9 @@ function FolderRow({
           onClick={() => folder.selectable && onSelect(folder.path)}
         >
           <span className="folder-row-name">{folder.name}</span>
-          {folder.unread ? <span className="folder-row-count">{folder.unread}</span> : null}
+          {folder.unread && showsUnreadCount(folder)
+            ? <span className="folder-row-count">{folder.unread}</span>
+            : null}
         </button>
       </div>
 

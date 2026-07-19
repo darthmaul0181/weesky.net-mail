@@ -52,6 +52,61 @@ describe('MessageList', () => {
     expect(screen.getByText('Merci pour l’envoi')).toBeInTheDocument()
   })
 
+  it('names the folder above the list', async () => {
+    mocks.getMailMessages.mockResolvedValue(page)
+
+    render(
+      <MessageList folderPath="INBOX.Linux server" folderName="Linux server"
+        selectedUid={null} onSelect={vi.fn()} />,
+      { wrapper })
+
+    expect(await screen.findByRole('heading', { name: 'Linux server' })).toBeInTheDocument()
+  })
+
+  it('falls back to the path when the folder name is unknown', async () => {
+    mocks.getMailMessages.mockResolvedValue(page)
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+
+    expect(await screen.findByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+  })
+
+  // The heading is how the column says what it is showing; a state that drops it leaves the
+  // user looking at an unlabelled panel.
+  it('keeps the heading while loading and when the folder is empty', async () => {
+    mocks.getMailMessages.mockResolvedValue({ ...page, total: 0, messages: [] })
+
+    render(
+      <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()} />,
+      { wrapper })
+
+    expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+    expect(await screen.findByText(/no messages/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+  })
+
+  // A message with no body used to render no preview element at all, making its row shorter
+  // than its neighbours. The element is now always present and CSS reserves its line.
+  it('reserves the preview line even when there is nothing to preview', async () => {
+    mocks.getMailMessages.mockResolvedValue(page)
+    const { container } = render(
+      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+
+    await screen.findByText('Alice Martin')
+
+    expect(container.querySelectorAll('.message-row-preview')).toHaveLength(page.messages.length)
+  })
+
+  it('names the attachment marker for assistive technology', async () => {
+    mocks.getMailMessages.mockResolvedValue(page)
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    await screen.findByText('Alice Martin')
+
+    // Only the message that has one — the marker must not be announced on every row.
+    expect(screen.getAllByLabelText(/has attachments/i)).toHaveLength(1)
+  })
+
   it('falls back to the address when there is no display name', async () => {
     mocks.getMailMessages.mockResolvedValue(page)
 

@@ -50,6 +50,63 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         }
 
         [Theory]
+        [InlineData("Brouillons", "drafts")]
+        [InlineData("Courrier indésirable", "junk")]
+        [InlineData("Éléments supprimés", "trash")]
+        [InlineData("Corbeille", "trash")]
+        [InlineData("Envoyés", "sent")]
+        public void SpecialUseFromName_RecognisesLocalisedNames(string name, string expected)
+        {
+            Assert.Equal(expected, ImapSession.SpecialUseFromName(name));
+        }
+
+        // A mailbox provisioned by two clients holds both "Drafts" and "Brouillons". Naming
+        // both as the drafts folder would sort two folders into the well-known block and leave
+        // the client with no way to say which one a draft belongs in.
+        [Fact]
+        public void ResolveSpecialUses_GivesEachRoleToOneFolderOnly()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                ("Drafts", "Drafts", FolderAttributes.None, false),
+                ("Brouillons", "Brouillons", FolderAttributes.None, false)
+            ]);
+
+            Assert.Equal("drafts", roles["Drafts"]);
+            Assert.False(roles.ContainsKey("Brouillons"));
+        }
+
+        [Fact]
+        public void ResolveSpecialUses_LetsTheServerFlagBeatTheNameGuess()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                ("Drafts", "Drafts", FolderAttributes.None, false),
+                ("Brouillons", "Brouillons", FolderAttributes.Drafts, false)
+            ]);
+
+            Assert.Equal("drafts", roles["Brouillons"]);
+            Assert.False(roles.ContainsKey("Drafts"));
+        }
+
+        [Fact]
+        public void ResolveSpecialUses_KeepsDistinctRolesApart()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                ("INBOX", "INBOX", FolderAttributes.None, true),
+                ("Sent", "Sent", FolderAttributes.None, false),
+                ("Archive", "Archive", FolderAttributes.None, false),
+                ("Projects", "Projects", FolderAttributes.None, false)
+            ]);
+
+            Assert.Equal("inbox", roles["INBOX"]);
+            Assert.Equal("sent", roles["Sent"]);
+            Assert.Equal("archive", roles["Archive"]);
+            Assert.False(roles.ContainsKey("Projects"));
+        }
+
+        [Theory]
         [InlineData("INBOX", '/', null)]
         [InlineData("INBOX/Projects", '/', "INBOX")]
         [InlineData("INBOX/Projects/Alpha", '/', "INBOX/Projects")]

@@ -44,7 +44,11 @@ namespace weesky.Snoopy.Microservice.Services
 
                 // Ordinal sort puts a parent before its children, so the lookup below always
                 // finds the parent already built.
-                foreach (var folder in folders.OrderBy(f => f.FullName, StringComparer.Ordinal))
+                var ordered = folders.OrderBy(f => f.FullName, StringComparer.Ordinal).ToList();
+                var roleByPath = ResolveSpecialUses(
+                    ordered.Select(f => (f.FullName, f.Name, f.Attributes, IsInbox(f))));
+
+                foreach (var folder in ordered)
                 {
                     var selectable = (folder.Attributes & FolderAttributes.NonExistent) == 0
                                      && (folder.Attributes & FolderAttributes.NoSelect) == 0;
@@ -53,7 +57,7 @@ namespace weesky.Snoopy.Microservice.Services
                     {
                         Path = folder.FullName,
                         Name = folder.Name,
-                        SpecialUse = ResolveSpecialUse(folder.Attributes, folder.Name, IsInbox(folder)),
+                        SpecialUse = roleByPath.GetValueOrDefault(folder.FullName),
                         Selectable = selectable,
                         Subscribed = folder.IsSubscribed,
                         Total = selectable ? folder.Count : null,
@@ -260,7 +264,13 @@ namespace weesky.Snoopy.Microservice.Services
                 Subject = item.Envelope?.Subject ?? string.Empty,
                 FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty,
                 FromAddress = sender?.Address ?? string.Empty,
-                Date = item.Envelope?.Date ?? item.InternalDate ?? DateTimeOffset.MinValue,
+                // Arrival date, not the Date header. The page window is a range of sequence
+                // numbers, so the list is ordered by arrival; showing the header date would
+                // print a date that contradicts the row's own position — a message written in
+                // May but delivered in June sits among the June messages, and saying "May"
+                // there reads as a sorting bug. The header date is still shown in the reader,
+                // where it answers a different question: when the sender wrote it.
+                Date = item.InternalDate ?? item.Envelope?.Date ?? DateTimeOffset.MinValue,
                 Seen = item.Flags?.HasFlag(MessageFlags.Seen) ?? false,
                 Flagged = item.Flags?.HasFlag(MessageFlags.Flagged) ?? false,
                 Answered = item.Flags?.HasFlag(MessageFlags.Answered) ?? false,
@@ -427,7 +437,42 @@ namespace weesky.Snoopy.Microservice.Services
         /// server advertises none, fall back to matching well-known names, which is the only
         /// option on servers without the extension.
         /// </summary>
+        /// <summary>
+        /// Assigns each well-known role to at most one folder, path by path.
+        /// </summary>
+        /// <remarks>
+        /// Two passes, because the two sources of a role are not equally trustworthy. A folder
+        /// the server flagged SPECIAL-USE genuinely holds that role; a folder we merely
+        /// recognised by name is a guess, made only because the server advertised nothing.
+        /// Running the guesses second, and only into roles still unclaimed, keeps a mailbox
+        /// holding both "Drafts" and "Brouillons" from ending up with two drafts folders —
+        /// and keeps the guess from overruling the server.
+        /// </remarks>
+        public static IReadOnlyDictionary<string, string> ResolveSpecialUses(
+            IEnumerable<(string Path, string Name, FolderAttributes Attributes, bool IsInbox)> folders)
+        {
+            var candidates = folders.ToList();
+            var claimedBy = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (var folder in candidates)
+            {
+                if (SpecialUseFromAttributes(folder.Attributes, folder.IsInbox) is { } role)
+                    claimedBy.TryAdd(role, folder.Path);
+            }
+
+            foreach (var folder in candidates)
+            {
+                if (SpecialUseFromName(folder.Name) is { } role)
+                    claimedBy.TryAdd(role, folder.Path);
+            }
+
+            return claimedBy.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+        }
+
         public static string? ResolveSpecialUse(FolderAttributes attributes, string name, bool isInbox)
+            => SpecialUseFromAttributes(attributes, isInbox) ?? SpecialUseFromName(name);
+
+        public static string? SpecialUseFromAttributes(FolderAttributes attributes, bool isInbox)
         {
             if (isInbox) return "inbox";
 
@@ -437,17 +482,26 @@ namespace weesky.Snoopy.Microservice.Services
             if ((attributes & FolderAttributes.Junk) != 0) return "junk";
             if ((attributes & FolderAttributes.Archive) != 0) return "archive";
 
-            return name.ToLowerInvariant() switch
-            {
-                "inbox" => "inbox",
-                "sent" or "sent messages" or "sent items" => "sent",
-                "drafts" or "draft" => "drafts",
-                "trash" or "deleted" or "deleted messages" or "deleted items" => "trash",
-                "junk" or "spam" or "junk e-mail" => "junk",
-                "archive" or "archives" => "archive",
-                _ => null
-            };
+            return null;
         }
+
+        /// <summary>
+        /// Last-resort guess for servers that advertise no SPECIAL-USE. Covers the localised
+        /// names a mail client creates when it, not the server, provisioned the folders.
+        /// </summary>
+        public static string? SpecialUseFromName(string name) => name.ToLowerInvariant() switch
+        {
+            "inbox" => "inbox",
+            "sent" or "sent messages" or "sent items"
+                or "envoyés" or "éléments envoyés" or "messages envoyés" => "sent",
+            "drafts" or "draft" or "brouillons" => "drafts",
+            "trash" or "deleted" or "deleted messages" or "deleted items"
+                or "corbeille" or "éléments supprimés" => "trash",
+            "junk" or "spam" or "junk e-mail"
+                or "courrier indésirable" or "indésirables" or "pourriel" => "junk",
+            "archive" or "archives" => "archive",
+            _ => null
+        };
 
         private void ThrowIfDisposed()
         {

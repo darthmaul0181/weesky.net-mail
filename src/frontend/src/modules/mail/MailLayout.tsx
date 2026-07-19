@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
-import FolderDialogs from './folders/FolderDialogs'
+import FolderDialogs, { flatten } from './folders/FolderDialogs'
 import FolderTree from './folders/FolderTree'
 import MessageList from './list/MessageList'
 import MessageReader from './reader/MessageReader'
@@ -23,6 +23,12 @@ export default function MailLayout() {
   const folder = params.get('folder')
   const uidParam = params.get('uid')
   const uid = uidParam ? Number(uidParam) : null
+
+  // The list heading wants the leaf name, not the full path: under a '.' separator the path
+  // reads "INBOX.Linux server", which is not what the user called the folder.
+  const folderName = folders && folder
+    ? flatten(folders).find(entry => entry.node.path === folder)?.node.name
+    : undefined
 
   function selectFolder(path: string) {
     // Drops uid: a message id means nothing in another folder.
@@ -48,7 +54,12 @@ export default function MailLayout() {
       </div>
 
       <div className="mail-list">
-        <MessageList folderPath={folder} selectedUid={uid} onSelect={selectMessage} />
+        <MessageList
+          folderPath={folder}
+          folderName={folderName}
+          selectedUid={uid}
+          onSelect={selectMessage}
+        />
       </div>
 
       <div className="mail-reader">

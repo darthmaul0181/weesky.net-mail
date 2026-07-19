@@ -71,6 +71,34 @@ describe('MessageReader', () => {
     expect(iframe!.getAttribute('srcdoc')).toContain('Bonjour')
   })
 
+  // Regression, found against a live mailbox: the sandbox was fully empty, which withholds
+  // navigation as well as scripting. Every link in every message did nothing on click, in a
+  // mailbox largely made of links the user had sent themselves.
+  it('lets links in the body open, without granting the body any capability', async () => {
+    mocks.getMailMessage.mockResolvedValue(detail)
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    const sandbox = container.querySelector('iframe')!.getAttribute('sandbox') ?? ''
+    expect(sandbox).toContain('allow-popups')
+    // Without the escape, the opened tab inherits this sandbox and the destination is broken.
+    expect(sandbox).toContain('allow-popups-to-escape-sandbox')
+    expect(sandbox).not.toContain('allow-scripts')
+    expect(sandbox).not.toContain('allow-same-origin')
+  })
+
+  it('shows the sent date in full rather than a raw timestamp', async () => {
+    mocks.getMailMessage.mockResolvedValue(detail)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    // Seconds were the giveaway that this was an unformatted toLocaleString().
+    expect(screen.queryByText(/:\d\d:\d\d/)).not.toBeInTheDocument()
+    expect(screen.getByText(/2026/)).toBeInTheDocument()
+  })
+
   it('sanitises the body a second time before rendering it', async () => {
     mocks.getMailMessage.mockResolvedValue({
       ...detail,
