@@ -9,6 +9,17 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 {
     private const string BlockedSrcAttribute = "data-blocked-src";
 
+    // Containers whose inner text is not rendered content — dropped with their subtree, while
+    // every other disallowed tag is unwrapped. DOMPurify's FORBID_CONTENTS draws the same line.
+    private static readonly HashSet<string> DropWithContent = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "script", "style", "title", "head", "template", "textarea", "select", "option",
+        "iframe", "frame", "frameset", "object", "embed", "applet",
+        "noscript", "noembed", "noframes", "xmp", "plaintext", "listing",
+        "svg", "math", "annotation-xml", "mi", "mn", "mo", "ms", "mtext", "foreignobject", "desc",
+        "audio", "video", "colgroup"
+    };
+
     private readonly HtmlSanitizer _sanitizer;
     private readonly HtmlParser _parser = new();
 
@@ -61,7 +72,12 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     {
         if (string.IsNullOrEmpty(html)) return new SanitizedHtml();
 
-        var cleaned = _sanitizer.Sanitize(html);
+        // Unwrap pass first: a bpost mail wrapped its whole 62 KB body in one <center>, and the
+        // sanitiser deletes a disallowed tag with its subtree, rendering the message empty.
+        var pre = _parser.ParseDocument(html);
+        UnwrapDisallowedTags(pre.Body!);
+
+        var cleaned = _sanitizer.Sanitize(pre.Body?.InnerHtml ?? string.Empty);
 
         // Second pass on the already-sanitised markup, using the same parser the sanitiser
         // uses so the two cannot disagree about the tree.
@@ -89,5 +105,23 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
             Html = document.Body?.InnerHtml ?? string.Empty,
             BlockedImageCount = blocked
         };
+    }
+
+    // Reverse document order, so children are handled before their parent is unwrapped.
+    private void UnwrapDisallowedTags(AngleSharp.Dom.IElement root)
+    {
+        foreach (var element in root.QuerySelectorAll("*").Reverse())
+        {
+            if (element.Parent is not { } parent) continue;
+            if (DropWithContent.Contains(element.LocalName))
+            {
+                element.Remove();
+            }
+            else if (!_sanitizer.AllowedTags.Contains(element.LocalName))
+            {
+                while (element.FirstChild is { } child) parent.InsertBefore(child, element);
+                element.Remove();
+            }
+        }
     }
 }

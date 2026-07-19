@@ -1,4 +1,4 @@
-using weesky.Snoopy.Microservice.Services;
+﻿using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services;
@@ -30,6 +30,32 @@ public sealed class MailHtmlSanitizerTests
     {
         var result = _sut.Sanitize("<script>alert(1)</script><p>hi</p>").Html;
 
+        Assert.Contains("hi", result);
+    }
+
+    // A bpost notification wrapped its entire 62 KB body in one <center>; removing the tag
+    // with its subtree rendered the message empty. Unwrap disallowed formatting tags instead.
+    [Theory]
+    [InlineData("<center><p>the whole message</p></center>")]
+    [InlineData("<font color=\"red\"><p>the whole message</p></font>")]
+    [InlineData("<section><p>the whole message</p></section>")]
+    public void Sanitize_KeepsTheContentOfADisallowedWrapper(string wrapped)
+    {
+        var result = _sut.Sanitize(wrapped).Html;
+
+        Assert.Contains("the whole message", result);
+    }
+
+    // Unwrapping must not extend to containers whose text is not content.
+    [Theory]
+    [InlineData("<script>alert(1)</script><p>hi</p>", "alert(1)")]
+    [InlineData("<style>body{color:red}</style><p>hi</p>", "color:red")]
+    [InlineData("<title>a subject</title><p>hi</p>", "a subject")]
+    public void Sanitize_DropsTheContentOfNonRenderedContainers(string hostile, string forbidden)
+    {
+        var result = _sut.Sanitize(hostile).Html;
+
+        Assert.DoesNotContain(forbidden, result, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("hi", result);
     }
 
