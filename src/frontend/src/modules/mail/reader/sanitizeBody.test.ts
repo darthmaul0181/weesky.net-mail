@@ -107,7 +107,7 @@ describe('renderBodyDocument', () => {
       const document = renderBodyDocument('<p>x</p>', { dark: true })
 
       expect(document).toMatch(/html\s*\{[^}]*filter:\s*invert\(1\)/)
-      expect(document).not.toMatch(/body\s*\{[^}]*filter:\s*invert\(1\)/)
+      expect(document).not.toMatch(/body\s*\{[^}]*filter:\s*invert\(1\)/)
     })
 
     // Propagation only stops once html paints its own background.
