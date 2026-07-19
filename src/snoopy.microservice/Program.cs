@@ -7,6 +7,7 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
+using weesky.Snoopy.Microservice.Configuration;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Middleware;
 using weesky.Snoopy.Microservice.Authentication.Models;
@@ -165,7 +166,7 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-builder.Services.AddControllers().AddJsonOptions(o =>
+builder.Services.AddControllers(MvcFormatterConfiguration.ConfigureFormatters).AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
