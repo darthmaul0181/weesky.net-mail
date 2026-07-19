@@ -144,6 +144,10 @@ deux moitiés travaillent :
   pris coupe cette réclamation — `Drafts` est la corbeille, et `drafts` reste non défini si
   aucun autre dossier ne le fournit.
 
+Corollaire : un dossier que le serveur a flaggé mais dont le rôle est déjà pris **ne reçoit
+aucun rôle**. Il ne redescend pas dans la passe par nom — une devinette qui contredirait la
+déclaration explicite du serveur est pire que pas de rôle du tout.
+
 Suivre les seuls rôles est le bug naturel de cette implémentation : il produit tous les
 comportements attendus **sauf le second**, et aucun usage courant ne l'exerce. D'où le test
 dédié au § 8.
@@ -410,9 +414,12 @@ Ce qu'il pose, en résumé :
   cette base sert à éviter. En contrepartie, la suppression d'un utilisateur depuis l'écran
   Administration doit purger ses lignes ici : c'est une charge applicative, à ne pas oublier
 
-Le service doit **refuser de démarrer** si la chaîne de connexion est absente hors Development,
-sur le modèle du contrôle existant pour le key ring : un échec au démarrage avec un message
-nommant le correctif vaut mieux qu'une fonctionnalité silencieusement inerte.
+Le service doit **refuser de démarrer** si la chaîne de connexion est absente, dans tous les
+environnements — sur le modèle du contrôle existant pour `MailUserAccountsDatabase`, qui lève
+lui aussi sans exemption. Un `dotnet run` local étant de toute façon impossible sans cette
+première chaîne, une exemption Development ne servirait personne ; et un 500 sur
+`GET /Folders` se diagnostique plus mal qu'un refus au démarrage nommant le document de
+prérequis.
 
 ---
 

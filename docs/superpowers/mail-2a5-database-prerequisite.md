@@ -149,8 +149,9 @@ WebmailPreferencesDatabase =
   Server=<hôte>;Port=3306;Database=snoopy_webmail_dev;User=snoopy_webmail_dev;Password=<...>;
 ```
 
-Le service **refuse de démarrer** si cette chaîne est absente hors Development, avec un message
-nommant ce document — sur le modèle du contrôle existant pour le key ring. Une fonctionnalité
+Le service **refuse de démarrer** si cette chaîne est absente, dans tous les environnements,
+avec un message nommant ce document — comme le contrôle existant pour
+`MailUserAccountsDatabase`, qui lève lui aussi sans exemption. Une fonctionnalité
 silencieusement inerte est pire qu'un échec au démarrage.
 
 ---

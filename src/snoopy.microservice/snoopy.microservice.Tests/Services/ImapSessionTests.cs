@@ -146,6 +146,40 @@ namespace weesky.Snoopy.Microservice.Tests.Services
             Assert.Equal(SpecialUseAssignment.FromName, roles["Brouillons"].Source);
         }
 
+        // Two folders flagged \Sent: the loser must end up with no role at all. Marking only
+        // the winner as taken let the name pass re-purpose the loser, so a guess contradicted
+        // what the server had explicitly declared.
+        [Fact]
+        public void ResolveSpecialUses_AFlaggedFolderThatLosesItsRoleIsNotRenamedByAGuess()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                ("Sent", "Sent", "sent"),
+                ("Weird", "Trash", "sent")
+            ]);
+
+            Assert.Equal("sent", roles["Sent"].Role);
+            Assert.False(roles.ContainsKey("Weird"));
+        }
+
+        // The call shape the override task will use: some roles already filled, and the
+        // folders holding them already spoken for.
+        [Fact]
+        public void ResolveSpecialUses_HonoursBothSeededSetsAtOnce()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+                [("Corbeille", "Corbeille", null), ("Deleted Items", "Deleted Items", "trash"), ("Sent", "Sent", "sent")],
+                claimedRoles: ["trash"],
+                claimedFolders: ["Corbeille"]);
+
+            // trash is held by an override on Corbeille: neither the flagged folder nor the
+            // name-matched one may claim it.
+            Assert.False(roles.ContainsKey("Corbeille"));
+            Assert.False(roles.ContainsKey("Deleted Items"));
+            // A role no override touched still resolves normally.
+            Assert.Equal("sent", roles["Sent"].Role);
+        }
+
         [Theory]
         [InlineData("INBOX", '/', null)]
         [InlineData("INBOX/Projects", '/', "INBOX")]

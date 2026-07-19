@@ -513,12 +513,20 @@ namespace weesky.Snoopy.Microservice.Services
 
             foreach (var folder in candidates)
             {
-                if (folder.AttributeRole is { } role && !roles.Contains(role) && !taken.Contains(folder.Path))
+                if (folder.AttributeRole is not { } role) continue;
+                if (taken.Contains(folder.Path)) continue;
+
+                if (!roles.Contains(role))
                 {
                     roles.Add(role);
-                    taken.Add(folder.Path);
                     result[folder.Path] = new SpecialUseAssignment(role, SpecialUseAssignment.FromFlag);
                 }
+
+                // Taken whether it won the role or lost it. A folder the server flagged is
+                // never a candidate for name guessing: losing the race to another \Sent folder
+                // must leave it with no role at all, because showing it as "Trash" on the
+                // strength of its name would let a guess contradict what the server declared.
+                taken.Add(folder.Path);
             }
 
             foreach (var folder in candidates)
