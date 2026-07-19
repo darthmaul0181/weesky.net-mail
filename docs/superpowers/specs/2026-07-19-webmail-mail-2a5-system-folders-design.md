@@ -89,7 +89,7 @@ Le niveau 2 reste **numéroté et vacant** dans la chaîne, pour que sa place so
 | Configuration serveur | **Aucune.** Rien dans `appsettings.json` : un rôle n'est pas une propriété du serveur |
 | Emplacement UI | **Settings**, pas le module mail — la visibilité est de l'entretien, le rôle est de la configuration |
 | Libellé | Le nom du rôle **remplace** le nom du dossier dans l'arbre ; le nom réel reste en `title` |
-| Repli d'une surcharge périmée | **Signalé** dans Settings, jamais par une interruption pendant la lecture |
+| Surcharge périmée | **Gardée et signalée** dans Settings — jamais supprimée d'office, jamais d'interruption pendant la lecture |
 
 ### 3.1 Ce que `appsettings.json` ne recevra pas
 
@@ -131,11 +131,26 @@ la précédence testable maillon par maillon.
 d'unicité : un rôle n'est attribué qu'à un seul dossier, les flags serveur réclamant avant les
 devinettes par nom.
 
-**Un rôle rempli par un maillon n'est plus disponible pour les suivants.** Si l'utilisateur
-affecte `drafts` à `Brouillons`, alors `Drafts` — qui porte pourtant le flag serveur — réclame
-`drafts` au niveau 3, le trouve pris, et **reste sans rôle**. C'est le résultat voulu : il
-s'affichera sous son propre nom, comme un dossier ordinaire. Cette conséquence tombe de la forme
-en séquence ; elle est notée ici parce qu'une implémentation en `if` imbriqués la manquerait.
+**La chaîne suit deux ensembles : les rôles pris et les dossiers pris.** Un maillon ne remplit
+un rôle que si le rôle est encore libre **et** que le dossier ne porte pas déjà un rôle. Les
+deux moitiés travaillent :
+
+- *Rôle pris.* L'utilisateur affecte `drafts` à `Brouillons` ; `Drafts` — qui porte pourtant le
+  flag serveur — réclame `drafts` au niveau 3, le trouve pris, et reste sans rôle. Il s'affiche
+  sous son propre nom, comme un dossier ordinaire.
+- *Dossier pris.* L'utilisateur affecte `trash` à `Drafts` — choix autorisé, voir § 4.7. Suivre
+  les seuls rôles laisserait `drafts` libre au niveau 3, et `Drafts` le réclamerait : un
+  dossier, deux rôles, l'affichage indécidable que le § 4.7 interdit. Le suivi des dossiers
+  pris coupe cette réclamation — `Drafts` est la corbeille, et `drafts` reste non défini si
+  aucun autre dossier ne le fournit.
+
+Suivre les seuls rôles est le bug naturel de cette implémentation : il produit tous les
+comportements attendus **sauf le second**, et aucun usage courant ne l'exerce. D'où le test
+dédié au § 8.
+
+Le rôle `inbox` n'entre pas dans les surcharges — INBOX est fixée par le protocole lui-même,
+il n'y a rien à corriger. La contrainte `CHECK` du schéma l'exclut et la page Settings ne le
+propose pas ; la découverte (niveaux 3-4) continue de le produire comme en 2a.
 
 ### 4.2 Séparation des responsabilités
 
@@ -165,16 +180,15 @@ serveur mail, et nos préférences partiraient avec. Les politiques de sauvegard
 également. `last_login`, déjà présente, est une table du plugin Dovecot — pas un précédent pour
 y poser les nôtres.
 
-```sql
-CREATE TABLE folder_role_overrides (
-  account_id    VARCHAR(255) NOT NULL,
-  role          VARCHAR(16)  NOT NULL,
-  folder_path   VARCHAR(1024) NOT NULL,
-  uid_validity  BIGINT       NOT NULL,
-  mailbox_id    VARCHAR(255) NULL,
-  PRIMARY KEY (account_id, role)
-);
-```
+**Le schéma fait foi dans le script du prérequis (§ 7), et là seulement.** Une copie reproduite
+ici avait déjà divergé du script à la première relecture — un schéma en deux exemplaires diverge
+toujours. Sa forme, en prose : une ligne par surcharge, clé `(account_id, role)`, portant
+`folder_path`, `uid_validity`, `mailbox_id` nullable et `updated_at` ; contrainte `CHECK` sur
+les cinq rôles ; collation binaire `utf8mb4_bin`.
+
+**`account_id` s'écrit sous une forme canonique.** La collation est binaire :
+`User@Weesky.be` et `user@weesky.be` seraient deux comptes distincts. L'application normalise
+(minuscules) avant toute lecture comme toute écriture.
 
 **`account_id`, jamais `user_id`.** En 2d, un utilisateur aura N comptes liés, chacun avec ses
 propres dossiers ; une table indexée par utilisateur devrait être migrée. C'est la même décision
@@ -214,7 +228,9 @@ sans erreur. C'est ce cas qui condamne le stockage du chemin seul.
    l'identifiant. Immunisé aux renommages, internes comme externes.
 2. Sinon → résoudre par le chemin, sous deux contrôles : il existe dans l'arbre déjà récupéré,
    et l'`uid_validity` du dossier correspond à celle stockée.
-3. Échec de l'un ou l'autre → traiter la surcharge comme **absente** et descendre dans la chaîne.
+3. Échec de l'un ou l'autre → traiter la surcharge comme **absente** et descendre dans la
+   chaîne. La ligne périmée est **conservée** en base pour être signalée (§ 5.3), jamais
+   supprimée d'office.
 
 Le contrôle d'`uid_validity` n'est pas infaillible : un serveur peut légitimement la changer lors
 d'une maintenance, et une surcharge valide serait alors abandonnée. Le mode d'échec devient
@@ -258,6 +274,14 @@ Sous `MailController`, le regroupement suivant le domaine et non l'emplacement d
 | `GET` | `/api/Mail/FolderRoles` | rôle → chemin résolu, **avec la provenance** (niveau 1, 3 ou 4) et l'indication d'une surcharge périmée |
 | `PUT` | `/api/Mail/FolderRoles` | pose une surcharge — corps `{ role, folderPath }` |
 | `DELETE` | `/api/Mail/FolderRoles?role=` | efface la surcharge, retour à la découverte |
+
+**Le `PUT` valide contre l'état vivant, jamais contre l'arbre du client.** Il ouvre la session
+IMAP, exige que le dossier existe — l'arbre affiché peut être périmé, un autre client a pu
+supprimer le dossier entre-temps — et **refuse un dossier non sélectionnable** (`\NoSelect`) :
+une corbeille qui ne peut pas contenir de messages n'en est pas une, et dès 2b une écriture y
+échouerait. C'est aussi le `PUT` qui capture `uid_validity`, et `mailbox_id` si la session
+annonce `OBJECTID`, depuis ce dossier vivant : le client n'envoie que `{ role, folderPath }` et
+ne fournit jamais ces valeurs.
 
 Les chemins de dossier voyagent en query string ou en corps de requête, **jamais en segment de
 route** — ils peuvent contenir le séparateur (règle 2 de la spec 2a).
@@ -320,10 +344,23 @@ Deux pièges à ne pas ouvrir plus tard :
 - **On ne traduit jamais un nom de dossier à la création.** Un dossier créé depuis une interface
   française porte le nom tapé : les noms de dossiers appartiennent à la boîte, pas à la session.
 
-### 5.3 Signalement d'un repli
+### 5.3 Surcharge périmée : garder et signaler
 
-Si une surcharge devient invalide, la page Settings affiche le rôle comme non défini **avec la
-raison** — dossier renommé ou supprimé hors de l'application.
+Une surcharge détectée périmée n'est **jamais supprimée d'office**. La supprimer effacerait
+précisément l'information à montrer — l'utilisateur avait fait un choix, ce choix a été invalidé
+hors de l'application, et il doit l'apprendre à l'endroit où il peut agir. La ligne ne disparaît
+que par action de l'utilisateur : un nouveau choix, ou un effacement explicite.
+
+Pendant ce temps, la résolution descend la chaîne (§ 4.4) : le rôle peut donc **rester
+défini**, par la découverte. La page Settings montre alors deux informations, distinctement :
+
+- le choix de l'utilisateur a été invalidé — dossier renommé ou supprimé hors de l'application
+  (IMAP ne permet pas de distinguer les deux ; ils sont annoncés ensemble) ;
+- ce que la résolution donne à présent : la valeur découverte et sa provenance, ou « non
+  défini » si aucun maillon ne fournit rien.
+
+Afficher « non défini » quand la découverte a repris la main serait faux ; taire le choix
+perdu serait pire.
 
 Pas de notification pendant la lecture. Jeter en silence un choix explicite est malhonnête ;
 interrompre quelqu'un qui lit son courrier pour le lui dire l'est aussi. L'endroit où on
@@ -389,6 +426,9 @@ correspondant à un défaut identifié pendant la conception :
 - Un flag `SPECIAL-USE` bat une correspondance par nom
 - Sans surcharge, la découverte de 2a est inchangée
 - Un rôle sans aucune source reste nul
+- **Un dossier pris par une surcharge ne réclame plus rien à la découverte** : `trash`
+  surchargé sur `Drafts` laisse `drafts` non défini. *C'est le test qui attrape
+  l'implémentation ne suivant que les rôles (§ 4.1) — elle passe tous les autres.*
 
 **Péremption**
 - Chemin absent de l'arbre → repli
@@ -396,6 +436,11 @@ correspondant à un défaut identifié pendant la conception :
 - `mailbox_id` renseigné mais session sans `OBJECTID` → repli sur le chemin
 - `mailbox_id` renseigné et session avec `OBJECTID` → résolution par identifiant, malgré un
   chemin devenu faux
+- Une surcharge périmée est **conservée** en base et signalée dans la réponse — jamais
+  supprimée d'office
+- Surcharge périmée mais découverte encore fructueuse → le rôle est défini, provenance
+  « découverte », et l'invalidation est signalée à côté *(§ 5.3 : les deux informations
+  coexistent)*
 
 **Maintien**
 - Renommage d'un parent → toutes les surcharges du sous-arbre suivent
@@ -403,6 +448,12 @@ correspondant à un défaut identifié pendant la conception :
 - `uid_validity` relue après renommage, pas reportée
 - Suppression → surcharges du sous-arbre purgées
 - Échec de l'écriture en base après succès IMAP → repli, jamais de rôle faux
+
+**Écriture (`PUT`)**
+- Dossier inexistant au moment du `PUT` → rejet explicite *(l'arbre du client peut être périmé)*
+- Dossier non sélectionnable (`\NoSelect`) → rejet
+- `uid_validity` et `mailbox_id` capturés du dossier vivant, jamais fournis par le client
+- `account_id` écrit sous forme canonique : deux casses en entrée, une seule ligne en base
 
 **Unicité**
 - Poser un rôle sur un dossier déjà affecté est rejeté
@@ -417,7 +468,7 @@ correspondant à un défaut identifié pendant la conception :
 | `ImapSession.cs` | Aucun changement de responsabilité ; `ResolveSpecialUses` devient les niveaux 3 et 4 |
 | `MailController.cs` | `GET /Folders` renvoie la sortie de la chaîne ; trois routes `FolderRoles` |
 | `FolderTree.tsx` | Affiche le libellé du rôle, nom réel en `title` |
-| `appsettings.json` | Une chaîne de connexion supplémentaire — **et rien d'autre** |
+| `appsettings.json` | Une **clé** de chaîne de connexion supplémentaire, vide dans le dépôt et remplie au déploiement, comme `MailUserAccountsDatabase` — **et rien d'autre** |
 | Documentation | `CLAUDE.md` backend et frontend, prérequis serveur |
 
 Le repli par nom multilingue introduit le 2026-07-19 reste en place : il est le niveau 4, et 2d
