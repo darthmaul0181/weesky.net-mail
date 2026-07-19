@@ -90,6 +90,39 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains(attribute, _sut.Sanitize(html).Html);
     }
 
+    // Unwrapping <center> kept its content but lost the centring itself, leaving mail headers
+    // hugging the left edge. It and <font> are harmless presentation tags real mail still uses.
+    [Fact]
+    public void Sanitize_KeepsCenterAndFont()
+    {
+        var result = _sut.Sanitize(
+            "<center><font face=\"Arial\" size=\"4\" color=\"#ff0000\">x</font></center>").Html;
+
+        Assert.Contains("<center>", result);
+        Assert.Contains("face=", result);
+        Assert.Contains("color=", result);
+    }
+
+    // Separator rules and card borders ride on per-side longhands, written directly by real
+    // mail (border-top-style, border-bottom-width...) or produced by shorthand expansion.
+    // Dropping them erased every hairline rule the user compared against Rainloop.
+    [Theory]
+    [InlineData("border-top: 1px solid #e0e0e0", "solid")]
+    [InlineData("border-bottom: 2px dashed #cccccc", "dashed")]
+    [InlineData("border-top-width: 1px", "border-top-width")]
+    [InlineData("border-top-style: solid", "border-top-style")]
+    [InlineData("border-top-color: #e0e0e0", "border-top-color")]
+    [InlineData("border-bottom-width: 3px", "border-bottom-width")]
+    [InlineData("border-left-style: solid", "border-left-style")]
+    [InlineData("border-right-color: #cccccc", "border-right-color")]
+    public void Sanitize_KeepsHairlineBorders(string declaration, string expected)
+    {
+        var result = _sut.Sanitize(
+            $"<table><tr><td style=\"{declaration}\">x</td></tr></table>").Html;
+
+        Assert.Contains(expected, result);
+    }
+
     // The Amazon navbar sets background-color, then overrides it with a gradient shorthand.
     // The shorthand expands to background-image; dropping it left white links on white.
     [Fact]

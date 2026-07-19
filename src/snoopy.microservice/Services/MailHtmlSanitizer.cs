@@ -34,7 +34,7 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
             "strong", "b", "em", "i", "u", "s", "sub", "sup",
             "h1", "h2", "h3", "h4", "h5", "h6",
             "ul", "ol", "li", "blockquote", "pre", "code",
-            "a", "img",
+            "a", "img", "center", "font",
             "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption"
         }) _sanitizer.AllowedTags.Add(tag);
 
@@ -43,7 +43,7 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         {
             "href", "src", "alt", "title", "style",
             "colspan", "rowspan", "align", "valign", "width", "height",
-            "cellpadding", "cellspacing", "border", "bgcolor", "dir",
+            "cellpadding", "cellspacing", "border", "bgcolor", "dir", "face", "size", "color",
             BlockedSrcAttribute
         }) _sanitizer.AllowedAttributes.Add(attribute);
 
@@ -69,6 +69,12 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
             "width", "min-width", "max-width", "height", "min-height", "max-height",
             "display", "list-style-type", "line-height", "vertical-align"
         }) _sanitizer.AllowedCssProperties.Add(property);
+
+        // Per-side longhands: real mail writes them directly, and the parser also expands the
+        // allowed shorthands into them. A name allowlist must carry both forms or drop both.
+        foreach (var side in new[] { "top", "right", "bottom", "left" })
+            foreach (var aspect in new[] { "width", "style", "color" })
+                _sanitizer.AllowedCssProperties.Add($"border-{side}-{aspect}");
 
         _sanitizer.AllowedSchemes.Clear();
         _sanitizer.AllowedSchemes.Add("http");
