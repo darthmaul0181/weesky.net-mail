@@ -4,7 +4,7 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
 import { formatReaderDate } from './formatReaderDate'
 import { formatSize } from './formatSize'
-import { revealBlockedImages, sanitizeBody } from './sanitizeBody'
+import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 
 interface Props {
   folderPath: string | null
@@ -82,7 +82,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
           title="Message body"
-          srcDoc={body}
+          srcDoc={renderBodyDocument(body)}
         />
       ) : (
         <div className="reader-text">{data.textBody}</div>

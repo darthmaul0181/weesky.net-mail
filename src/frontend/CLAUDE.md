@@ -65,6 +65,8 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
 - `list/MessageList.tsx` + `list/formatDate.ts` — paginated rows under a sticky folder heading; the page index resets when the folder changes. The preview element is always rendered even when empty, so a bodyless message does not make a shorter row than its neighbours
 - `reader/MessageReader.tsx`, `reader/sanitizeBody.ts`, `reader/formatReaderDate.ts`, `reader/formatSize.ts`
 
+**The iframe gets a document, not a bare fragment** (`renderBodyDocument`). A fragment inherits the browser's defaults: an 8px body margin that left message text visibly out of line with the header, and a serif face for any body carrying no styles. The wrapper sets padding matching `.reader-header`, contains the two overflows a body can inflict on the layout regardless of intent (`overflow-wrap: anywhere` for the long unbroken URLs this mailbox is full of, `img { max-width: 100% }`), and pins `color-scheme: light` with a white background in **every** theme — mail HTML is written against a white canvas, and inverting it makes a body's own colours unreadable. None of it grants the body a capability; the sandbox is unchanged.
+
 **Two dates, two questions.** The list shows the message's *arrival* (`InternalDate`), because arrival is what orders the list — printing the `Date` header there would put a May date among the June rows and read as a sorting bug. The reader shows the `Date` header, spelled out and without seconds, because there the question is when the sender wrote it.
 - `queries.ts` — TanStack Query hooks and keys; `api/mailTypes.ts` — response shapes
 

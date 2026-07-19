@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { revealBlockedImages, sanitizeBody } from './sanitizeBody'
+import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 
 describe('sanitizeBody', () => {
   // These prove the client barrier on its own. The backend already sanitised the body, but
@@ -63,5 +63,41 @@ describe('revealBlockedImages', () => {
     const revealed = revealBlockedImages('<img data-blocked-src="javascript:alert(1)">')
 
     expect(sanitizeBody(revealed)).not.toContain('javascript:')
+  })
+})
+
+describe('renderBodyDocument', () => {
+  it('carries the sanitised body through unchanged', () => {
+    expect(renderBodyDocument('<p>Bonjour</p>')).toContain('<p>Bonjour</p>')
+  })
+
+  // The bare fragment inherited the browser's 8px body margin, which left the message text
+  // visibly out of line with the header above it. The padding here matches .reader-header.
+  it('pads the body to line up with the header above it', () => {
+    expect(renderBodyDocument('<p>x</p>')).toMatch(/padding:\s*18px 22px/)
+  })
+
+  it('keeps a long unbroken URL from scrolling the body sideways', () => {
+    expect(renderBodyDocument('<p>x</p>')).toContain('overflow-wrap: anywhere')
+  })
+
+  it('constrains an oversized image to the reader width', () => {
+    expect(renderBodyDocument('<p>x</p>')).toMatch(/img\s*\{[^}]*max-width:\s*100%/)
+  })
+
+  // Mail HTML is written against a white canvas; inverting it would make a body's own colours
+  // unreadable. The sheet stays light whatever the app's theme.
+  it('pins the body to a light sheet in every theme', () => {
+    const document = renderBodyDocument('<p>x</p>')
+
+    expect(document).toContain('color-scheme: light')
+    expect(document).toMatch(/background:\s*#ffffff/)
+  })
+
+  it('grants the body no capability it did not already have', () => {
+    const document = renderBodyDocument(sanitizeBody('<script>alert(1)</script><p>hi</p>'))
+
+    expect(document).not.toContain('<script')
+    expect(document).toContain('hi')
   })
 })
