@@ -72,7 +72,9 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
      intrinsic ratio, and a 1x1 spacer gif stretched to 154x10 by attributes became 154px tall,
      turning a newsletter button into a tower. */
   img { max-width: 100%; }
-  body { overflow-wrap: anywhere; }
+  /* break-word, not anywhere: both break a long URL, but anywhere also feeds those break
+     points into min-content sizing, so a table column can collapse to a single letter. */
+  body { overflow-wrap: break-word; }
   /* Tables are the one thing that must keep its width, so it scrolls in its own box. */
   table { max-width: 100%; }
   pre { overflow-x: auto; }${dark}

@@ -78,7 +78,14 @@ describe('renderBodyDocument', () => {
   })
 
   it('keeps a long unbroken URL from scrolling the body sideways', () => {
-    expect(renderBodyDocument('<p>x</p>')).toContain('overflow-wrap: anywhere')
+    expect(renderBodyDocument('<p>x</p>')).toMatch(/overflow-wrap:\s*break-word/)
+  })
+
+  // `anywhere` breaks the same words, but unlike `break-word` it also feeds those break points
+  // into min-content sizing — so a table column could shrink to one letter, and a GitHub mail
+  // rendered its "Status" heading vertically with the icons squashed to slivers.
+  it('never uses the value that collapses table columns', () => {
+    expect(renderBodyDocument('<p>x</p>')).not.toContain('overflow-wrap: anywhere')
   })
 
   it('constrains an oversized image to the reader width', () => {
