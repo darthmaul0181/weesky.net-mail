@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`frontend` — a React SPA webmail shell for the weesky.net mail service (mail, calendar, contacts modules plus a settings area covering account, appearance, aliases, mail rules, and admin). It talks to a backend at `https://api.mail.weesky.net`. Mail/Calendar/Contacts are placeholder (`ComingSoon`) pages; the settings module is fully built out.
+`frontend` — a React SPA webmail for the weesky.net mail service (mail, calendar, contacts modules plus a settings area covering account, appearance, aliases, mail rules, and admin). It talks to a backend at `https://api.mail.weesky.net`. **Mail is built for reading**: folder tree with management, paginated message list, reading pane with attachments. Composing, flags and search are not in yet. Calendar and Contacts are still placeholder (`ComingSoon`) pages; the settings module is fully built out.
 
 ## Commands
 
@@ -35,7 +35,7 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
 /login                              LoginRoute (redirects to "/" if already logged in)
 /  (RequireAuth → AppShell)
   index                             → redirect to /mail
-  /mail                             ComingSoon (with links to Aliases/Rules)
+  /mail?folder=&uid=                MailLayout         (lazy-loaded)
   /calendar                         ComingSoon
   /contacts                         ComingSoon
   /settings  (SettingsLayout)
@@ -49,13 +49,26 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
   *                                 → redirect to /mail
 ```
 
-`AliasesPage`, `RulesPage`, and `AdminPage` are the heavy legacy-ported pages; they are `lazy()`-imported in `routes.tsx` and wrapped in `<Suspense fallback={null}>` at the route level, so the shell/settings chrome never waits on their bundle.
+`MailLayout`, `AliasesPage`, `RulesPage`, and `AdminPage` are `lazy()`-imported in `routes.tsx` and wrapped in `<Suspense fallback={null}>` at the route level, so the shell/settings chrome never waits on their bundle.
+
+**Mail selection lives in search params, not route segments.** A folder path may contain `/` — the hierarchy separator is whatever the IMAP server uses — which is the same reason folder paths travel in the query string or request body on the API side rather than in a route segment. `/mail?folder=INBOX&uid=42` keeps deep links and the back button working under any separator. Choosing a folder drops `uid`, because a message id means nothing in another folder.
 
 **`RequireAuth`** (`src/layouts/RequireAuth.tsx`) — reads `isLoggedIn` from `AuthContext`; redirects to `/login` if false, otherwise renders `<Outlet/>`. Everything except `/login` sits behind it.
 
 **`RequireAdmin`** (`src/layouts/RequireAdmin.tsx`) — reads `isAdmin`/`accountLoaded` from `AuthContext`; renders nothing while the account is still loading (avoids a flash-redirect), then redirects non-admins to `/settings/account`.
 
 **Shell layout** — `AppShell` (`src/layouts/AppShell.tsx`) renders `TopBar` + a body split into `AppRail` (left icon rail: Mail/Calendar/Contacts + a spacer + Settings gear, `NavLink`-driven active state) and `<main className="app-content"><Outlet/></main>`. `TopBar` (`src/layouts/TopBar.tsx`) shows the logo/wordmark and `AvatarMenu`. `AvatarMenu` (`src/layouts/AvatarMenu.tsx`) is a click-toggled dropdown (outside-click closes it via a `mousedown` listener) showing identity, the linked-accounts list (length 1 today), a Settings link, and Sign out.
+
+**Mail module** — `MailLayout` (`src/modules/mail/MailLayout.tsx`) builds its own three columns inside the shell's single outlet, the same way `SettingsLayout` does: `.mail-folders` (folder tree plus management), `.mail-list`, `.mail-reader`. Files under `src/modules/mail/`:
+- `folders/FolderTree.tsx` — hides unsubscribed folders, orders well-known ones first (inbox, drafts, sent, archive, junk, trash), refuses to select a container-only folder
+- `folders/FolderDialogs.tsx` — create / rename / delete / visibility. Derives a parent path by stripping the leaf name, which works under any separator because the backend rejects names containing one. Reuses `DeleteConfirmModal`
+- `list/MessageList.tsx` + `list/formatDate.ts` — paginated rows; the page index resets when the folder changes
+- `reader/MessageReader.tsx`, `reader/sanitizeBody.ts`, `reader/formatSize.ts`
+- `queries.ts` — TanStack Query hooks and keys; `api/mailTypes.ts` — response shapes
+
+**Data layer** — TanStack Query, provided in `App.tsx`. This is the only module using it; the settings pages still hand-roll `useEffect`. Query keys are scoped by the active account (`['mail', accountId, …]`) from the outset, so linking a second account later isolates its cache instead of mixing two mailboxes. Folder mutations invalidate the folder tree, since each of them changes either the hierarchy or the counts it displays. A 401 is never retried — it will not succeed, and retrying only delays the redirect to `/login`.
+
+**Rendering message HTML — three independent barriers.** The backend sanitises the body; `reader/sanitizeBody.ts` sanitises it again with DOMPurify; and it is rendered in an `<iframe sandbox="">` with neither `allow-scripts` nor `allow-same-origin`. **Never render message HTML into the page itself.** The two sanitising passes are not redundancy: the bug class that defeats a sanitiser is a parse divergence between it and the browser, and two passes in different engines mean a body must defeat both. Remote images arrive as `data-blocked-src` and are only restored on explicit user consent, per message — loading them tells the sender the message was opened.
 
 **Settings module** — `SettingsLayout` (`src/modules/settings/SettingsLayout.tsx`) renders a `.context-pane` of `NavLink`s (Account / Linked accounts / Appearance / Aliases / Rules / Administration — the last conditional on `isAdmin`) beside a `.settings-content` `<Outlet/>`. Module directories under `src/modules/settings/`:
 - `account/` — `AccountPage.tsx` (identity, other domains, quota via `QuotaBlock`, `ChangePasswordSection.tsx`)
@@ -68,7 +81,9 @@ Shared building blocks live above the module tree: `src/components/` (`Toasts`, 
 
 `RulesPage.jsx` key components: `RuleCard`, `RuleEditorModal` (step wizard: name → conditions → actions → options), `ConditionRow`/`ActionRow`, `ConvertConfirmModal`. The **Extended rules** toggle switches provider: ON = Weesky (native, full feature set), OFF = Rainloop (Snappymail-interop, restricted) — turning OFF runs `api.checkCompatibility` first and shows `ConvertConfirmModal` for rules that would be dropped. See the repo-root `DESIGN-rules.md`.
 
-**API client** — `src/api.js`, unchanged shape: all backend calls go through `request()` and are exported as named methods on `api`. `BASE` is `import.meta.env.VITE_API_BASE || 'https://api.mail.weesky.net'`.
+**API client** — `src/api.js`: all backend calls go through `request()` and are exported as named methods on `api`. `BASE` is `import.meta.env.VITE_API_BASE || 'https://api.mail.weesky.net'`.
+
+Failures throw **`ApiError`**, which extends `Error` and carries `.status` and `.code`. The code is the backend's `ResultEnveloppe` message when it is a stable string — `credentials_unavailable`, `Message not found` — so callers branch on a symbol rather than on prose. `request()` accepts `{ signal }` for cancellation, which the message list relies on so that switching folders quickly cannot race a stale response into the UI. `requestBlob()` handles binary responses (attachments) and reads the file name from `Content-Disposition`. `mailAttachmentUrl()` builds the download URL so its encoding lives in one place. **Folder paths are always `encodeURIComponent`-encoded** — they may contain `/`, `&` or `#`.
 
 ## Auth
 
@@ -91,6 +106,9 @@ Token contract lives in `src/styles/`:
 - `tokens.css` — role tokens only (`--font`, `--radius-sm`, `--radius-md`, ...). **A token names a role, never a color.** Components must never hard-code a color; add a role token instead if one doesn't exist.
 - `theme-night.css` / `theme-classic.css` — the two **palettes**, each defining the actual color values for `[data-palette='night']` / `[data-palette='classic']`, further overridden by `[data-palette='X'][data-theme='dark']` for the dark variant. Four total combinations: night×light, night×dark, classic×light, classic×dark.
 - `shell.css` — application shell layout (topbar, rail, settings pane, etc.), consumes the role tokens.
+- `mail.css` — the mail module's three columns, folder tree, list rows and reader. New CSS goes here rather than into `index.css`, which is already ~2200 lines. Contains no literal color.
+
+Mail added ten role tokens across all four palette-mode blocks, for states a settings pane does not have: `--list-row-hover`, `--list-row-selected-bg`/`-fg`, `--list-row-unread-bg`, `--list-separator`, `--badge-count-bg`/`-fg`, `--reader-header-border`, `--quote-text`, `--attachment-chip-bg`. `--accent-unread` was provisioned in the shell slice and has consumers only since the mail module.
 
 Palette and theme are selected via `data-palette` / `data-theme` attributes on `<html>`, persisted in `localStorage` (`appearance_palette`, `appearance_theme`; theme is `'light' | 'dark' | 'system'`). A blocking inline `<script>` in `index.html` reads both keys and sets the attributes **before first paint** (avoids a flash of the wrong theme) — it duplicates the resolution logic that `ThemeContext` also runs, deliberately, since the context only mounts after React hydrates.
 
