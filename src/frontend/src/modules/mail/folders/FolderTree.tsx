@@ -9,15 +9,47 @@ interface Props {
   onSelect: (path: string) => void
 }
 
-/** Well-known folders first, in reading order, then everything else alphabetically. */
+/** The well-known folders, in the order a reader reaches for them. */
 const SPECIAL_ORDER = ['inbox', 'drafts', 'sent', 'archive', 'junk', 'trash']
 
-export function sortFolders(folders: MailFolderNode[]): MailFolderNode[] {
-  return [...folders].sort((a, b) => {
-    const rankA = a.specialUse ? SPECIAL_ORDER.indexOf(a.specialUse) : SPECIAL_ORDER.length
-    const rankB = b.specialUse ? SPECIAL_ORDER.indexOf(b.specialUse) : SPECIAL_ORDER.length
-    return rankA !== rankB ? rankA - rankB : a.name.localeCompare(b.name)
-  })
+/**
+ * Accented names are everywhere in this mailbox and a codepoint sort would file every one of
+ * them after "Z". Case-insensitive so "e-commerce" lands between "Drafts" and "English".
+ */
+function byName(a: MailFolderNode, b: MailFolderNode): number {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+}
+
+/**
+ * Splits the top level into the two blocks the tree renders with a rule between them: the
+ * folders holding a role, in reading order, then everything else by name.
+ *
+ * The separator is the point. Before it, the two groups ran together and a well-known folder
+ * was only distinguishable from an ordinary one by recognising its name — which fails exactly
+ * where it matters, on a mailbox holding both "Drafts" and "Brouillons".
+ *
+ * Named `splitByRole` rather than a second `sortFolders`: `folderNodes.sortFolders` deliberately
+ * does the opposite, interleaving system folders by name for screens where the user is hunting
+ * for one. Two orders answering two questions must not share a name.
+ */
+export function splitByRole(folders: MailFolderNode[]): {
+  system: MailFolderNode[]
+  others: MailFolderNode[]
+} {
+  const rank = (folder: MailFolderNode) => {
+    const index = SPECIAL_ORDER.indexOf(folder.specialUse ?? '')
+    return index === -1 ? SPECIAL_ORDER.length : index
+  }
+
+  return {
+    system: folders.filter(f => f.specialUse).sort((a, b) => rank(a) - rank(b) || byName(a, b)),
+    others: folders.filter(f => !f.specialUse).sort(byName),
+  }
+}
+
+/** Children are ordinary folders; they sort by name like the block they hang under. */
+export function sortChildren(folders: MailFolderNode[]): MailFolderNode[] {
+  return [...folders].sort(byName)
 }
 
 /**
@@ -48,7 +80,7 @@ function FolderRow({
   onSelect: (path: string) => void
 }) {
   const [open, setOpen] = useState(folder.specialUse === 'inbox')
-  const visibleChildren = sortFolders(folder.children.filter(isVisible))
+  const visibleChildren = sortChildren(folder.children.filter(isVisible))
   const isActive = folder.path === selectedPath
   const label = folder.specialUse ? roleLabel(folder.specialUse) : folder.name
   // Only when a badge is actually rendered does the accessible name grow a suffix — an unread
@@ -74,7 +106,13 @@ function FolderRow({
 
         <button
           type="button"
-          className={isActive ? 'folder-row is-active' : 'folder-row'}
+          className={[
+            'folder-row',
+            // Weight, not colour: the separator already groups them, and this only has to
+            // survive four palette-and-mode combinations.
+            folder.specialUse ? 'is-system' : '',
+            isActive ? 'is-active' : '',
+          ].filter(Boolean).join(' ')}
           aria-current={isActive ? 'true' : undefined}
           // The label and badge spans concatenate into the accessible name with no separator
           // ("Inbox4"), which is a real number losing its meaning, not a decorative artifact —
@@ -106,9 +144,19 @@ function FolderRow({
 /** Unsubscribed folders are hidden — that is what the subscription state is for, except for
  *  the inbox, which is always shown (see isVisible). */
 export default function FolderTree({ folders, selectedPath, onSelect }: Props) {
+  const { system, others } = splitByRole(folders.filter(isVisible))
+
   return (
     <nav aria-label="Folders">
-      {sortFolders(folders.filter(isVisible)).map(folder => (
+      {system.map(folder => (
+        <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} onSelect={onSelect} />
+      ))}
+
+      {/* Only between two populated blocks — a rule under nothing, or above nothing, reads as
+          a rendering fault. A fresh mailbox with no folders of its own is the common case. */}
+      {system.length > 0 && others.length > 0 && <hr className="folder-separator" />}
+
+      {others.map(folder => (
         <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} onSelect={onSelect} />
       ))}
     </nav>

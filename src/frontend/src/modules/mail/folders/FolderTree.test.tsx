@@ -99,6 +99,70 @@ describe('FolderTree', () => {
     expect(names).toEqual(['Inbox', 'Trash', 'Alpha', 'Zebra'])
   })
 
+  // The two blocks used to run together, so a well-known folder was distinguishable from an
+  // ordinary one only by recognising its name — which fails exactly where it matters, on a
+  // mailbox holding both "Drafts" and "Brouillons".
+  it("rules off the well-known folders from the user's own", () => {
+    const { container } = render(
+      <FolderTree
+        folders={[
+          node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+          node({ path: 'Alpha', name: 'Alpha' }),
+        ]}
+        selectedPath={null}
+        onSelect={vi.fn()}
+      />)
+
+    expect(container.querySelectorAll('.folder-separator')).toHaveLength(1)
+  })
+
+  // A rule under nothing, or above nothing, reads as a rendering fault. A freshly provisioned
+  // mailbox with no folders of its own is the common case, not an edge case.
+  it.each([
+    ['no folders of its own', [node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]],
+    ['no well-known folders', [node({ path: 'Alpha', name: 'Alpha' })]],
+  ])('draws no rule when the mailbox has %s', (_, folders) => {
+    const { container } = render(
+      <FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(container.querySelectorAll('.folder-separator')).toHaveLength(0)
+  })
+
+  it('marks the well-known rows so they read as a group', () => {
+    const { container } = render(
+      <FolderTree
+        folders={[
+          node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+          node({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+          node({ path: 'Alpha', name: 'Alpha' }),
+        ]}
+        selectedPath={null}
+        onSelect={vi.fn()}
+      />)
+
+    expect(container.querySelectorAll('.folder-row.is-system')).toHaveLength(2)
+  })
+
+  // Below the rule the question is "where is the folder I am looking for", so the answer is the
+  // same order the folders list uses — accents included, since a codepoint sort files every one
+  // of them after "Z".
+  it("orders the user's own folders by name, accents in their place", () => {
+    render(
+      <FolderTree
+        folders={[
+          node({ path: 'Zebra', name: 'Zebra' }),
+          node({ path: 'Éléments', name: 'Éléments' }),
+          node({ path: 'e-commerce', name: 'e-commerce' }),
+          node({ path: 'English', name: 'English' }),
+        ]}
+        selectedPath={null}
+        onSelect={vi.fn()}
+      />)
+
+    expect(screen.getAllByRole('button').map(b => b.textContent))
+      .toEqual(['e-commerce', 'Éléments', 'English', 'Zebra'])
+  })
+
   // Regression: Dovecot reports INBOX as subscribed=false, because the subscription flag is
   // meaningless for a folder that is always available. Filtering on subscription alone hid the
   // inbox entirely. Found against a live server, not by the mocks — every fixture here used to

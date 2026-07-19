@@ -76,6 +76,17 @@
 
 .folder-row:hover { background: var(--pane-item-hover); }
 
+.folder-row.is-system { font-weight: 600; }
+
+/* Separates the folders holding a role from the user's own. Inset so it reads as a divider
+   inside the list rather than a border on the column. */
+.folder-separator {
+  height: 0;
+  margin: 8px 10px;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
 .folder-row.is-active {
   background: var(--pane-item-active-bg);
   color: var(--pane-item-active-fg);
