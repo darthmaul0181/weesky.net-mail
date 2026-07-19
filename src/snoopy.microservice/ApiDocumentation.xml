@@ -529,6 +529,28 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderSubscriptionRequest.Subscribed">
             <summary>True subscribes the folder, false hides it from the folder list.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.FolderRoles">
+            <summary>
+            The five user-assignable roles. "inbox" is deliberately absent: INBOX is fixed by the
+            IMAP protocol itself, so there is nothing to correct.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry">
+            <summary>One role as the Settings page sees it: what it resolves to, and why.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry.FolderPath">
+            <summary>Resolved folder path, or null when no source provides one.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry.Provenance">
+            <summary>"override", "specialUse" or "name". Null when the role is unresolved.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry.StaleOverride">
+            <summary>
+            Set when the user's stored choice no longer matches a live folder. Kept and
+            signalled, never auto-deleted — the row only dies by the user's hand — and it
+            coexists with a discovery-resolved FolderPath (spec § 5.3).
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent">
             <summary>A decoded attachment, ready to stream to the client.</summary>
         </member>
@@ -1163,6 +1185,33 @@
             <summary>
             Validates the doveadm response envelope <c>[["doveadmResponse", rows, tag]]</c>
             and returns the rows array.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.FolderRoleResolver">
+             <summary>
+             The role resolution chain (spec § 4.1): user overrides, then SPECIAL-USE flags, then
+             name matching — each level filling only what the previous one left. Level 2, an
+             admin-set domain default, was evaluated and rejected; its slot stays vacant on purpose.
+            
+             Pure over its inputs — the tree and the stored overrides. No IMAP, no database, no
+             HTTP: that is what makes every staleness rule testable without a server.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.FolderRoleResolver.ResolveOverride(weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride,System.Collections.Generic.IReadOnlyDictionary{System.String,weesky.Snoopy.Microservice.Models.Mail.MailFolderNode},System.Collections.Generic.IReadOnlyDictionary{System.String,weesky.Snoopy.Microservice.Models.Mail.MailFolderNode})">
+            <summary>
+            A stored override resolves by MAILBOXID when both sides carry one — immune to
+            renames, ours and other clients' alike — and otherwise by path guarded by
+            UIDVALIDITY, which catches the one failure mode that lies rather than degrades: a
+            deleted folder whose path was reused by a different one.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.FolderRoleResolution.Roles">
+            <summary>Exactly the five assignable roles, in FolderRoles.All order.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.FolderRoleResolution.RoleByPath">
+            <summary>
+            Authoritative path→role map, "inbox" included. GET /Folders stamps this onto the
+            tree's SpecialUse, so the client always sees the chain's output.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IImapConnectionFactory">
