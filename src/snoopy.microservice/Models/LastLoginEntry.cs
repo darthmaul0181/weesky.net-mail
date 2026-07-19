@@ -1,8 +1,7 @@
-namespace weesky.Snoopy.Microservice.Models
+namespace weesky.Snoopy.Microservice.Models;
+
+public sealed class LastLoginEntry
 {
-    public class LastLoginEntry
-    {
-        public string Service { get; set; }
-        public DateTime? At { get; set; }
-    }
+    public string Service { get; set; }
+    public DateTime? At { get; set; }
 }

@@ -1,18 +1,17 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace weesky.Snoopy.Microservice.Data
+namespace weesky.Snoopy.Microservice.Data;
+
+[Table("last_login")]
+public sealed class LastLogin
 {
-    [Table("last_login")]
-    public class LastLogin
-    {
-        [Column("userid")]
-        public string UserId { get; set; }      // "username@domainname"
+    [Column("userid")]
+    public string UserId { get; set; }      // "username@domainname"
 
-        [Column("service")]
-        public string Service { get; set; }     // "imap" or "lmtp"
+    [Column("service")]
+    public string Service { get; set; }     // "imap" or "lmtp"
 
-        [Column("last_access")]
-        public long LastAccess { get; set; }    // Unix timestamp (seconds)
+    [Column("last_access")]
+    public long LastAccess { get; set; }    // Unix timestamp (seconds)
 
-    }
 }

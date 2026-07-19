@@ -1,12 +1,11 @@
-namespace weesky.Snoopy.Microservice.Models
+namespace weesky.Snoopy.Microservice.Models;
+
+public enum SieveActionType
 {
-    public enum SieveActionType
-    {
-        FileInto,
-        Redirect,
-        Discard,
-        Reject,
-        SetFlag,
-        Keep
-    }
+    FileInto,
+    Redirect,
+    Discard,
+    Reject,
+    SetFlag,
+    Keep
 }

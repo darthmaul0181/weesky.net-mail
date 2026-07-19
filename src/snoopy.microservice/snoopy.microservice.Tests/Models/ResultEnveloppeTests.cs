@@ -3,7 +3,7 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Models;
 
-public class ResultEnveloppeTests
+public sealed class ResultEnveloppeTests
 {
     [Fact]
     public void CreateSuccessEnveloppe_WithMessage_SetsMessage()

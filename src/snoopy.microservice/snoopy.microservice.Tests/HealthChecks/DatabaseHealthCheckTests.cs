@@ -5,7 +5,7 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.HealthChecks;
 
-public class DatabaseHealthCheckTests
+public sealed class DatabaseHealthCheckTests
 {
     [Fact]
     public async Task CheckHealthAsync_WhenDatabaseReachable_ReturnsHealthy()

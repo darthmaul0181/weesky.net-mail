@@ -1,15 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 
-namespace weesky.Snoopy.Microservice.Tests.Infrastructure
+namespace weesky.Snoopy.Microservice.Tests.Infrastructure;
+
+internal sealed class PreferencesTestDbContext : PreferencesDbContext
 {
-    internal class PreferencesTestDbContext : PreferencesDbContext
+    public PreferencesTestDbContext(string databaseName)
+        : base(new DbContextOptionsBuilder<PreferencesDbContext>()
+              .UseInMemoryDatabase(databaseName)
+              .Options)
     {
-        public PreferencesTestDbContext(string databaseName)
-            : base(new DbContextOptionsBuilder<PreferencesDbContext>()
-                  .UseInMemoryDatabase(databaseName)
-                  .Options)
-        {
-        }
     }
 }

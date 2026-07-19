@@ -2,927 +2,926 @@ using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using Xunit;
 
-namespace weesky.Snoopy.Microservice.Tests.RuleProviders
+namespace weesky.Snoopy.Microservice.Tests.RuleProviders;
+
+public sealed class RainloopRuleProviderTests
 {
-    public class RainloopRuleProviderTests
+    private readonly RainloopRuleProvider _sut = new();
+
+    // ----- Identity -----
+
+    [Fact]
+    public void Metadata_ReportsExpectedValues()
     {
-        private readonly RainloopRuleProvider _sut = new();
-
-        // ----- Identity -----
-
-        [Fact]
-        public void Metadata_ReportsExpectedValues()
-        {
-            Assert.Equal("rainloop", _sut.Id);
-            Assert.Equal("rainloop.user", _sut.DefaultScriptName);
-        }
-
-        // ----- CanHandle -----
-
-        [Fact]
-        public void CanHandle_WithRainloopMarker_ReturnsTrue()
-        {
-            var script = "require [\"fileinto\"];\n# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\n";
-            Assert.True(_sut.CanHandle(script));
-        }
-
-        [Fact]
-        public void CanHandle_WithoutMarker_ReturnsFalse()
-        {
-            Assert.False(_sut.CanHandle("require [\"fileinto\"];\nif true { keep; }"));
-        }
-
-        [Fact]
-        public void CanHandle_WithEmptyString_ReturnsFalse()
-        {
-            Assert.False(_sut.CanHandle(string.Empty));
-        }
-
-        // ----- Round trip via real-world-shaped rules -----
-
-        [Fact]
-        public void RoundTrip_MoveToWithMarkAsReadAndStop_PreservesStructure()
-        {
-            var original = new SieveRule
-            {
-                Id = Guid.NewGuid(),
-                Name = "Zik",
-                MatchAll = false,
-                StopAfter = true,
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[ZIK]") },
-                Actions =
-                {
-                    Act(SieveActionType.SetFlag, @"\Seen"),
-                    Act(SieveActionType.FileInto, "Zik")
-                }
-            };
-
-            var script = _sut.Compile(new[] { original }).Value;
-            var rules = _sut.Parse(script).Value;
-            var rt = Assert.Single(rules);
-
-            Assert.Equal("Zik", rt.Name);
-            Assert.True(rt.StopAfter);
-            Assert.Single(rt.Conditions);
-            Assert.Equal(SieveConditionField.Subject, rt.Conditions[0].Field);
-            Assert.Equal("[ZIK]", rt.Conditions[0].Value);
-            Assert.Equal(2, rt.Actions.Count);
-            Assert.Equal(SieveActionType.SetFlag, rt.Actions[0].Type);
-            Assert.Equal(@"\Seen", rt.Actions[0].Argument);
-            Assert.Equal(SieveActionType.FileInto, rt.Actions[1].Type);
-            Assert.Equal("Zik", rt.Actions[1].Argument);
-        }
-
-        [Fact]
-        public void RoundTrip_MultiConditionAnyofRecipient_PreservesAll()
-        {
-            var original = new SieveRule
-            {
-                Id = Guid.NewGuid(),
-                Name = "e-commerce",
-                MatchAll = false,
-                StopAfter = true,
-                Conditions =
-                {
-                    Cond(SieveConditionField.Recipient, SieveConditionOperator.Contains, "darth_amazon"),
-                    Cond(SieveConditionField.Recipient, SieveConditionOperator.Contains, "darth_ebay"),
-                    Cond(SieveConditionField.From, SieveConditionOperator.Contains, "labelleiloise.fr"),
-                },
-                Actions = { Act(SieveActionType.FileInto, "e-commerce") }
-            };
-
-            var script = _sut.Compile(new[] { original }).Value;
-            var rules = _sut.Parse(script).Value;
-            var rt = Assert.Single(rules);
-
-            Assert.Equal(3, rt.Conditions.Count);
-            Assert.Equal(SieveConditionField.Recipient, rt.Conditions[0].Field);
-            Assert.Equal(SieveConditionField.From, rt.Conditions[2].Field);
-            Assert.True(rt.StopAfter);
-        }
-
-        [Fact]
-        public void RoundTrip_ForwardWithKeep_AddsInboxFileintoAndRecoversAfterParse()
-        {
-            var original = new SieveRule
-            {
-                Id = Guid.NewGuid(),
-                Name = "Test",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[TEST]") },
-                Actions =
-                {
-                    Act(SieveActionType.FileInto, "INBOX"),
-                    Act(SieveActionType.Redirect, "darth@skynet.be")
-                },
-                StopAfter = true
-            };
-
-            var script = _sut.Compile(new[] { original }).Value;
-            Assert.Contains("fileinto \"INBOX\";", script);
-            Assert.Contains("redirect \"darth@skynet.be\";", script);
-
-            var rules = _sut.Parse(script).Value;
-            var rt = Assert.Single(rules);
-
-            // The fileinto INBOX companion is preserved in the action list (Rainloop reconstructs it).
-            Assert.Contains(rt.Actions, a => a.Type == SieveActionType.FileInto && a.Argument == "INBOX");
-            Assert.Contains(rt.Actions, a => a.Type == SieveActionType.Redirect && a.Argument == "darth@skynet.be");
-        }
-
-        [Fact]
-        public void Compile_RuleWithMultipleFileIntoActions_Rejected()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Bad",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions =
-                {
-                    Act(SieveActionType.FileInto, "A"),
-                    Act(SieveActionType.FileInto, "B")
-                }
-            };
-
-            var result = _sut.Compile(new[] { rule });
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("only supports one primary action", result.Error);
-        }
-
-        [Fact]
-        public void Compile_RuleWithFileIntoAndRedirect_Rejected()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Bad",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions =
-                {
-                    Act(SieveActionType.FileInto, "X"),       // not the INBOX companion
-                    Act(SieveActionType.Redirect, "y@z.com")
-                }
-            };
-
-            var result = _sut.Compile(new[] { rule });
-
-            Assert.True(result.IsFailure);
-        }
-
-        [Fact]
-        public void Compile_RuleWithoutPrimaryAction_Rejected()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Bad",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions = { Act(SieveActionType.SetFlag, @"\Seen"), Act(SieveActionType.Keep) }
-            };
-
-            var result = _sut.Compile(new[] { rule });
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("exactly one", result.Error);
-        }
-
-        // ----- Compile output shape -----
-
-        [Fact]
-        public void Compile_EmitsRainloopHeaderComments()
-        {
-            var rule = new SieveRule
-            {
-                Name = "x",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions = { Act(SieveActionType.FileInto, "X") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("# This is RainLoop Webmail sieve script.", script);
-            Assert.Contains("# RAINLOOP:SIEVE", script);
-            Assert.Contains("BEGIN:FILTER:", script);
-            Assert.Contains("BEGIN:HEADER", script);
-            Assert.Contains("END:HEADER", script);
-            Assert.Contains("/* END:FILTER */", script);
-        }
-
-        [Fact]
-        public void Compile_RequiresImap4flagsWhenMarkAsRead()
-        {
-            var rule = new SieveRule
-            {
-                Name = "x",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions = { Act(SieveActionType.SetFlag, @"\Seen"), Act(SieveActionType.FileInto, "X") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("require [\"fileinto\", \"imap4flags\"];", script);
-        }
-
-        // ----- Disabled rules -----
-
-        [Fact]
-        public void Compile_DisabledRule_EmitsFilterBlockWithDisabledComment()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Off",
-                Enabled = false,
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
-                Actions = { Act(SieveActionType.FileInto, "Junk") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("BEGIN:FILTER:", script);
-            Assert.Contains("/* @Filter is disabled", script);
-            Assert.Contains("fileinto \"Junk\";", script);
-            Assert.Contains("/* END:FILTER */", script);
-        }
-
-        [Fact]
-        public void Compile_DisabledRule_SieveCodeIsInsideComment()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Off",
-                Enabled = false,
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
-                Actions = { Act(SieveActionType.FileInto, "Junk") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            var disabledStart = script.IndexOf("/* @Filter is disabled", StringComparison.Ordinal);
-            var disabledEnd = script.IndexOf("*/", disabledStart + 1, StringComparison.Ordinal);
-            var fileIntoPos = script.IndexOf("fileinto \"Junk\";", StringComparison.Ordinal);
-
-            Assert.True(disabledStart >= 0);
-            Assert.True(fileIntoPos > disabledStart && fileIntoPos < disabledEnd,
-                "fileinto instruction should be inside the /* @Filter is disabled ... */ block");
-        }
-
-        [Fact]
-        public void RoundTrip_DisabledRule_PreservesEnabledFalse()
-        {
-            var rule = new SieveRule
-            {
-                Id = Guid.NewGuid(),
-                Name = "Off",
-                Enabled = false,
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
-                Actions = { Act(SieveActionType.FileInto, "Junk") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-            var rules = _sut.Parse(script).Value;
-            var rt = Assert.Single(rules);
-
-            Assert.False(rt.Enabled);
-            Assert.Equal("Off", rt.Name);
-        }
-
-        [Fact]
-        public void Compile_MixedEnabledAndDisabled_EmitsBothBlocks()
-        {
-            var enabled = new SieveRule
-            {
-                Name = "On",
-                Enabled = true,
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[On]") },
-                Actions = { Act(SieveActionType.FileInto, "Inbox") }
-            };
-            var disabled = new SieveRule
-            {
-                Name = "Off",
-                Enabled = false,
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
-                Actions = { Act(SieveActionType.FileInto, "Junk") }
-            };
-
-            var script = _sut.Compile(new[] { enabled, disabled }).Value;
-            var rules = _sut.Parse(script).Value;
-
-            Assert.Equal(2, rules.Count);
-            Assert.True(rules[0].Enabled);
-            Assert.False(rules[1].Enabled);
-        }
-
-        // ----- Parse failure paths -----
-
-        [Fact]
-        public void Parse_MalformedBlock_ReturnsFailure()
-        {
-            var script = "# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\n*/\n";
-            var result = _sut.Parse(script);
-            Assert.True(result.IsFailure);
-        }
-
-        [Fact]
-        public void Parse_UnknownConditionField_ReturnsFailure()
-        {
-            // Build a JSON with a field Rainloop supports but we don't, base64 it.
-            var json = "{\"ID\":\"abc\",\"Enabled\":true,\"Name\":\"x\",\"Conditions\":[{\"Field\":\"BogusField\",\"Type\":\"Contains\",\"Value\":\"v\"}],\"ConditionsType\":\"Any\",\"ActionType\":\"MoveTo\",\"ActionValue\":\"X\",\"Stop\":false,\"Keep\":false,\"MarkAsRead\":false}";
-            var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-            var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
-
-            var result = _sut.Parse(script);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("BogusField", result.Error);
-        }
-
-        // ----- CanRepresent (whitelist) -----
-
-        [Fact]
-        public void CanRepresent_SimpleFileIntoRule_Succeeds()
-        {
-            var rule = new SieveRule
-            {
-                Name = "ok",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions = { Act(SieveActionType.FileInto, "X") }
-            };
-
-            Assert.True(_sut.CanRepresent(rule).IsSuccess);
-        }
-
-        [Fact]
-        public void CanRepresent_MarkAsReadSeenFlag_Succeeds()
-        {
-            var rule = new SieveRule
-            {
-                Name = "seen",
-                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
-                Actions =
-                {
-                    Act(SieveActionType.SetFlag, @"\Seen"),
-                    Act(SieveActionType.FileInto, "X")
-                }
-            };
-
-            Assert.True(_sut.CanRepresent(rule).IsSuccess);
-        }
-
-        [Fact]
-        public void CanRepresent_ExtendedFlag_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "flag",
-                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
-                Actions =
-                {
-                    Act(SieveActionType.SetFlag, @"\Flagged"),
-                    Act(SieveActionType.FileInto, "X")
-                }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("Seen", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_MultiplePrimaryActions_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "multi",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions =
-                {
-                    Act(SieveActionType.FileInto, "A"),
-                    Act(SieveActionType.Redirect, "y@z.com")
-                }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("one primary action", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_ForwardWithKeepInbox_Succeeds()
-        {
-            var rule = new SieveRule
-            {
-                Name = "fwd+keep",
-                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
-                Actions =
-                {
-                    Act(SieveActionType.FileInto, "INBOX"),
-                    Act(SieveActionType.Redirect, "y@z.com")
-                }
-            };
-
-            Assert.True(_sut.CanRepresent(rule).IsSuccess);
-        }
-
-        [Fact]
-        public void CanRepresent_KeepAction_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "keep",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions =
-                {
-                    Act(SieveActionType.FileInto, "X"),
-                    Act(SieveActionType.Keep)
-                }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("Keep", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_NoPrimaryAction_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "keeponly",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions = { Act(SieveActionType.Keep) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("requires exactly one", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_RegexOperator_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "regex-rule",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Regex, Value = "^spam" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("Regex", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_FileIntoWithAutoCreate_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "create-rule",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
-                Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "NewFolder", AutoCreate = true } }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains(":create", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_DuplicateCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "dedup",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("Duplicate", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_EnvelopeFromCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "envelope-test",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.EnvelopeFrom, Operator = SieveConditionOperator.Contains, Value = "noreply" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("EnvelopeFrom", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_RecipientDetailCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "subaddress-test",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.RecipientDetail, Operator = SieveConditionOperator.Equals, Value = "support" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("RecipientDetail", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_BodyCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "body-search",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Contains, Value = "casino" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("Body", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_CurrentDateCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "date-test",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Before, Value = "2026-12-31" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("CurrentDate", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_MessageDateCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "msgdate-test",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.MessageDate, Operator = SieveConditionOperator.OnOrAfter, Value = "2026-01-01" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("MessageDate", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_CurrentWeekdayCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "weekday-test",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "1,2,3,4,5" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("CurrentWeekday", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_CurrentHourCondition_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "hour-test",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Before, Value = "9" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("CurrentHour", result.Error);
-        }
-
-        // ----- Parse edge cases -----
-
-        [Fact]
-        public void Parse_EmptyString_ReturnsEmptyList()
-        {
-            var result = _sut.Parse(string.Empty);
-
-            Assert.True(result.IsSuccess);
-            Assert.Empty(result.Value);
-        }
-
-        [Fact]
-        public void Parse_CorruptBase64InBlock_ReturnsFailure()
-        {
-            var script = "# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n!!notbase64!!\nEND:HEADER\n*/\n";
-
-            var result = _sut.Parse(script);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("Unable to decode", result.Error);
-        }
-
-        [Fact]
-        public void Parse_NullJsonInBlock_ReturnsFailure()
-        {
-            var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("null"));
-            var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
-
-            var result = _sut.Parse(script);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("null", result.Error);
-        }
-
-        [Fact]
-        public void Parse_UnknownActionType_ReturnsFailure()
-        {
-            var json = "{\"ID\":\"abc\",\"Enabled\":true,\"Name\":\"x\",\"Conditions\":[{\"Field\":\"From\",\"Type\":\"Contains\",\"Value\":\"v\"}],\"ConditionsType\":\"Any\",\"ActionType\":\"FlyAway\",\"ActionValue\":\"\",\"Stop\":false,\"Keep\":false,\"MarkAsRead\":false}";
-            var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-            var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
-
-            var result = _sut.Parse(script);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("FlyAway", result.Error);
-        }
-
-        // ----- Compile emission -----
-
-        [Fact]
-        public void Compile_NullRules_Fails()
-        {
-            var result = _sut.Compile(null!);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("required", result.Error);
-        }
-
-        [Fact]
-        public void RoundTrip_RejectAction_PreservesStructure()
-        {
-            var original = new SieveRule
-            {
-                Id = Guid.NewGuid(),
-                Name = "SpamReject",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
-                Actions = { Act(SieveActionType.Reject, "Spam is not accepted.") }
-            };
-
-            var script = _sut.Compile(new[] { original }).Value;
-
-            Assert.Contains("require [\"reject\"];", script);
-            Assert.Contains("reject \"Spam is not accepted.\";", script);
-
-            var rules = _sut.Parse(script).Value;
-            var rt = Assert.Single(rules);
-
-            Assert.Equal("SpamReject", rt.Name);
-            Assert.Equal(SieveActionType.Reject, rt.Actions[0].Type);
-            Assert.Equal("Spam is not accepted.", rt.Actions[0].Argument);
-        }
-
-        [Fact]
-        public void RoundTrip_DiscardAction_PreservesStructure()
-        {
-            var original = new SieveRule
-            {
-                Id = Guid.NewGuid(),
-                Name = "TrashIt",
-                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@") },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var script = _sut.Compile(new[] { original }).Value;
-
-            Assert.Contains("discard;", script);
-
-            var rules = _sut.Parse(script).Value;
-            var rt = Assert.Single(rules);
-
-            Assert.Equal("TrashIt", rt.Name);
-            Assert.Equal(SieveActionType.Discard, rt.Actions[0].Type);
-        }
-
-        [Fact]
-        public void Compile_AllOfMultipleConditions_EmitsSieveAllofBody()
-        {
-            var rule = new SieveRule
-            {
-                Name = "AllOfTest",
-                MatchAll = true,
-                Conditions =
-                {
-                    Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[TEST]"),
-                    Cond(SieveConditionField.From, SieveConditionOperator.Contains, "admin@")
-                },
-                Actions = { Act(SieveActionType.FileInto, "Admin") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("if allof(", script);
-        }
-
-        [Fact]
-        public void Compile_SizeCondition_EmitsSizeOverInSieve()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Large",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Larger, Value = "5M" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("size :over 5M", script);
-        }
-
-        [Fact]
-        public void Compile_ToCondition_EmitsToHeaderInSieve()
-        {
-            var rule = new SieveRule
-            {
-                Name = "ToTest",
-                Conditions = { Cond(SieveConditionField.To, SieveConditionOperator.Contains, "admin@") },
-                Actions = { Act(SieveActionType.FileInto, "Admin") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("[\"To\"]", script);
-        }
-
-        [Fact]
-        public void Compile_CcCondition_EmitsCcHeaderInSieve()
-        {
-            var rule = new SieveRule
-            {
-                Name = "CcTest",
-                Conditions = { Cond(SieveConditionField.Cc, SieveConditionOperator.Contains, "list@") },
-                Actions = { Act(SieveActionType.FileInto, "Lists") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("[\"Cc\"]", script);
-        }
-
-        [Fact]
-        public void Compile_HeaderCondition_EmitsCustomHeaderInSieve()
-        {
-            var rule = new SieveRule
-            {
-                Name = "HeaderTest",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.Header, Operator = SieveConditionOperator.Contains, Value = "magic", HeaderName = "X-Custom" }
-                },
-                Actions = { Act(SieveActionType.FileInto, "Custom") }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("[\"X-Custom\"]", script);
-        }
-
-        // ----- CanRepresent guard cases -----
-
-        [Fact]
-        public void CanRepresent_NullRule_Fails()
-        {
-            var result = _sut.CanRepresent(null!);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("null", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_NoConditions_Fails()
-        {
-            var rule = new SieveRule { Name = "empty", Actions = { Act(SieveActionType.Discard) } };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("condition", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_NoActions_Fails()
-        {
-            var rule = new SieveRule
-            {
-                Name = "noaction",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") }
-            };
-
-            var result = _sut.CanRepresent(rule);
-
-            Assert.True(result.IsFailure);
-            Assert.Contains("action", result.Error);
-        }
-
-        [Fact]
-        public void CanRepresent_RejectAction_Succeeds()
-        {
-            var rule = new SieveRule
-            {
-                Name = "spam-reject",
-                Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
-                Actions = { Act(SieveActionType.Reject, "Not accepted.") }
-            };
-
-            Assert.True(_sut.CanRepresent(rule).IsSuccess);
-        }
-
-        [Fact]
-        public void CanRepresent_DiscardAction_Succeeds()
-        {
-            var rule = new SieveRule
-            {
-                Name = "trash",
-                Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@") },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            Assert.True(_sut.CanRepresent(rule).IsSuccess);
-        }
-
-        [Fact]
-        public void Compile_SizeCondition_EmitsSizeUnderInSieve()
-        {
-            var rule = new SieveRule
-            {
-                Name = "Tiny",
-                Conditions =
-                {
-                    new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Smaller, Value = "10K" }
-                },
-                Actions = { Act(SieveActionType.Discard) }
-            };
-
-            var script = _sut.Compile(new[] { rule }).Value;
-
-            Assert.Contains("size :under 10K", script);
-        }
-
-        // ----- Helpers -----
-
-        private static SieveCondition Cond(SieveConditionField f, SieveConditionOperator o, string v) =>
-            new() { Field = f, Operator = o, Value = v };
-
-        private static SieveAction Act(SieveActionType t, string? arg = null) =>
-            new() { Type = t, Argument = arg };
+        Assert.Equal("rainloop", _sut.Id);
+        Assert.Equal("rainloop.user", _sut.DefaultScriptName);
     }
+
+    // ----- CanHandle -----
+
+    [Fact]
+    public void CanHandle_WithRainloopMarker_ReturnsTrue()
+    {
+        var script = "require [\"fileinto\"];\n# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\n";
+        Assert.True(_sut.CanHandle(script));
+    }
+
+    [Fact]
+    public void CanHandle_WithoutMarker_ReturnsFalse()
+    {
+        Assert.False(_sut.CanHandle("require [\"fileinto\"];\nif true { keep; }"));
+    }
+
+    [Fact]
+    public void CanHandle_WithEmptyString_ReturnsFalse()
+    {
+        Assert.False(_sut.CanHandle(string.Empty));
+    }
+
+    // ----- Round trip via real-world-shaped rules -----
+
+    [Fact]
+    public void RoundTrip_MoveToWithMarkAsReadAndStop_PreservesStructure()
+    {
+        var original = new SieveRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Zik",
+            MatchAll = false,
+            StopAfter = true,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[ZIK]") },
+            Actions =
+            {
+                Act(SieveActionType.SetFlag, @"\Seen"),
+                Act(SieveActionType.FileInto, "Zik")
+            }
+        };
+
+        var script = _sut.Compile(new[] { original }).Value;
+        var rules = _sut.Parse(script).Value;
+        var rt = Assert.Single(rules);
+
+        Assert.Equal("Zik", rt.Name);
+        Assert.True(rt.StopAfter);
+        Assert.Single(rt.Conditions);
+        Assert.Equal(SieveConditionField.Subject, rt.Conditions[0].Field);
+        Assert.Equal("[ZIK]", rt.Conditions[0].Value);
+        Assert.Equal(2, rt.Actions.Count);
+        Assert.Equal(SieveActionType.SetFlag, rt.Actions[0].Type);
+        Assert.Equal(@"\Seen", rt.Actions[0].Argument);
+        Assert.Equal(SieveActionType.FileInto, rt.Actions[1].Type);
+        Assert.Equal("Zik", rt.Actions[1].Argument);
+    }
+
+    [Fact]
+    public void RoundTrip_MultiConditionAnyofRecipient_PreservesAll()
+    {
+        var original = new SieveRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "e-commerce",
+            MatchAll = false,
+            StopAfter = true,
+            Conditions =
+            {
+                Cond(SieveConditionField.Recipient, SieveConditionOperator.Contains, "darth_amazon"),
+                Cond(SieveConditionField.Recipient, SieveConditionOperator.Contains, "darth_ebay"),
+                Cond(SieveConditionField.From, SieveConditionOperator.Contains, "labelleiloise.fr"),
+            },
+            Actions = { Act(SieveActionType.FileInto, "e-commerce") }
+        };
+
+        var script = _sut.Compile(new[] { original }).Value;
+        var rules = _sut.Parse(script).Value;
+        var rt = Assert.Single(rules);
+
+        Assert.Equal(3, rt.Conditions.Count);
+        Assert.Equal(SieveConditionField.Recipient, rt.Conditions[0].Field);
+        Assert.Equal(SieveConditionField.From, rt.Conditions[2].Field);
+        Assert.True(rt.StopAfter);
+    }
+
+    [Fact]
+    public void RoundTrip_ForwardWithKeep_AddsInboxFileintoAndRecoversAfterParse()
+    {
+        var original = new SieveRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[TEST]") },
+            Actions =
+            {
+                Act(SieveActionType.FileInto, "INBOX"),
+                Act(SieveActionType.Redirect, "darth@skynet.be")
+            },
+            StopAfter = true
+        };
+
+        var script = _sut.Compile(new[] { original }).Value;
+        Assert.Contains("fileinto \"INBOX\";", script);
+        Assert.Contains("redirect \"darth@skynet.be\";", script);
+
+        var rules = _sut.Parse(script).Value;
+        var rt = Assert.Single(rules);
+
+        // The fileinto INBOX companion is preserved in the action list (Rainloop reconstructs it).
+        Assert.Contains(rt.Actions, a => a.Type == SieveActionType.FileInto && a.Argument == "INBOX");
+        Assert.Contains(rt.Actions, a => a.Type == SieveActionType.Redirect && a.Argument == "darth@skynet.be");
+    }
+
+    [Fact]
+    public void Compile_RuleWithMultipleFileIntoActions_Rejected()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Bad",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions =
+            {
+                Act(SieveActionType.FileInto, "A"),
+                Act(SieveActionType.FileInto, "B")
+            }
+        };
+
+        var result = _sut.Compile(new[] { rule });
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("only supports one primary action", result.Error);
+    }
+
+    [Fact]
+    public void Compile_RuleWithFileIntoAndRedirect_Rejected()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Bad",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions =
+            {
+                Act(SieveActionType.FileInto, "X"),       // not the INBOX companion
+                Act(SieveActionType.Redirect, "y@z.com")
+            }
+        };
+
+        var result = _sut.Compile(new[] { rule });
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public void Compile_RuleWithoutPrimaryAction_Rejected()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Bad",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions = { Act(SieveActionType.SetFlag, @"\Seen"), Act(SieveActionType.Keep) }
+        };
+
+        var result = _sut.Compile(new[] { rule });
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("exactly one", result.Error);
+    }
+
+    // ----- Compile output shape -----
+
+    [Fact]
+    public void Compile_EmitsRainloopHeaderComments()
+    {
+        var rule = new SieveRule
+        {
+            Name = "x",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions = { Act(SieveActionType.FileInto, "X") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("# This is RainLoop Webmail sieve script.", script);
+        Assert.Contains("# RAINLOOP:SIEVE", script);
+        Assert.Contains("BEGIN:FILTER:", script);
+        Assert.Contains("BEGIN:HEADER", script);
+        Assert.Contains("END:HEADER", script);
+        Assert.Contains("/* END:FILTER */", script);
+    }
+
+    [Fact]
+    public void Compile_RequiresImap4flagsWhenMarkAsRead()
+    {
+        var rule = new SieveRule
+        {
+            Name = "x",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions = { Act(SieveActionType.SetFlag, @"\Seen"), Act(SieveActionType.FileInto, "X") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("require [\"fileinto\", \"imap4flags\"];", script);
+    }
+
+    // ----- Disabled rules -----
+
+    [Fact]
+    public void Compile_DisabledRule_EmitsFilterBlockWithDisabledComment()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Off",
+            Enabled = false,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
+            Actions = { Act(SieveActionType.FileInto, "Junk") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("BEGIN:FILTER:", script);
+        Assert.Contains("/* @Filter is disabled", script);
+        Assert.Contains("fileinto \"Junk\";", script);
+        Assert.Contains("/* END:FILTER */", script);
+    }
+
+    [Fact]
+    public void Compile_DisabledRule_SieveCodeIsInsideComment()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Off",
+            Enabled = false,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
+            Actions = { Act(SieveActionType.FileInto, "Junk") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        var disabledStart = script.IndexOf("/* @Filter is disabled", StringComparison.Ordinal);
+        var disabledEnd = script.IndexOf("*/", disabledStart + 1, StringComparison.Ordinal);
+        var fileIntoPos = script.IndexOf("fileinto \"Junk\";", StringComparison.Ordinal);
+
+        Assert.True(disabledStart >= 0);
+        Assert.True(fileIntoPos > disabledStart && fileIntoPos < disabledEnd,
+            "fileinto instruction should be inside the /* @Filter is disabled ... */ block");
+    }
+
+    [Fact]
+    public void RoundTrip_DisabledRule_PreservesEnabledFalse()
+    {
+        var rule = new SieveRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Off",
+            Enabled = false,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
+            Actions = { Act(SieveActionType.FileInto, "Junk") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+        var rules = _sut.Parse(script).Value;
+        var rt = Assert.Single(rules);
+
+        Assert.False(rt.Enabled);
+        Assert.Equal("Off", rt.Name);
+    }
+
+    [Fact]
+    public void Compile_MixedEnabledAndDisabled_EmitsBothBlocks()
+    {
+        var enabled = new SieveRule
+        {
+            Name = "On",
+            Enabled = true,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[On]") },
+            Actions = { Act(SieveActionType.FileInto, "Inbox") }
+        };
+        var disabled = new SieveRule
+        {
+            Name = "Off",
+            Enabled = false,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
+            Actions = { Act(SieveActionType.FileInto, "Junk") }
+        };
+
+        var script = _sut.Compile(new[] { enabled, disabled }).Value;
+        var rules = _sut.Parse(script).Value;
+
+        Assert.Equal(2, rules.Count);
+        Assert.True(rules[0].Enabled);
+        Assert.False(rules[1].Enabled);
+    }
+
+    // ----- Parse failure paths -----
+
+    [Fact]
+    public void Parse_MalformedBlock_ReturnsFailure()
+    {
+        var script = "# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\n*/\n";
+        var result = _sut.Parse(script);
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public void Parse_UnknownConditionField_ReturnsFailure()
+    {
+        // Build a JSON with a field Rainloop supports but we don't, base64 it.
+        var json = "{\"ID\":\"abc\",\"Enabled\":true,\"Name\":\"x\",\"Conditions\":[{\"Field\":\"BogusField\",\"Type\":\"Contains\",\"Value\":\"v\"}],\"ConditionsType\":\"Any\",\"ActionType\":\"MoveTo\",\"ActionValue\":\"X\",\"Stop\":false,\"Keep\":false,\"MarkAsRead\":false}";
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+        var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
+
+        var result = _sut.Parse(script);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("BogusField", result.Error);
+    }
+
+    // ----- CanRepresent (whitelist) -----
+
+    [Fact]
+    public void CanRepresent_SimpleFileIntoRule_Succeeds()
+    {
+        var rule = new SieveRule
+        {
+            Name = "ok",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions = { Act(SieveActionType.FileInto, "X") }
+        };
+
+        Assert.True(_sut.CanRepresent(rule).IsSuccess);
+    }
+
+    [Fact]
+    public void CanRepresent_MarkAsReadSeenFlag_Succeeds()
+    {
+        var rule = new SieveRule
+        {
+            Name = "seen",
+            Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+            Actions =
+            {
+                Act(SieveActionType.SetFlag, @"\Seen"),
+                Act(SieveActionType.FileInto, "X")
+            }
+        };
+
+        Assert.True(_sut.CanRepresent(rule).IsSuccess);
+    }
+
+    [Fact]
+    public void CanRepresent_ExtendedFlag_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "flag",
+            Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+            Actions =
+            {
+                Act(SieveActionType.SetFlag, @"\Flagged"),
+                Act(SieveActionType.FileInto, "X")
+            }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Seen", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_MultiplePrimaryActions_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "multi",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions =
+            {
+                Act(SieveActionType.FileInto, "A"),
+                Act(SieveActionType.Redirect, "y@z.com")
+            }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("one primary action", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_ForwardWithKeepInbox_Succeeds()
+    {
+        var rule = new SieveRule
+        {
+            Name = "fwd+keep",
+            Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "a@b.c") },
+            Actions =
+            {
+                Act(SieveActionType.FileInto, "INBOX"),
+                Act(SieveActionType.Redirect, "y@z.com")
+            }
+        };
+
+        Assert.True(_sut.CanRepresent(rule).IsSuccess);
+    }
+
+    [Fact]
+    public void CanRepresent_KeepAction_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "keep",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions =
+            {
+                Act(SieveActionType.FileInto, "X"),
+                Act(SieveActionType.Keep)
+            }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Keep", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_NoPrimaryAction_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "keeponly",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions = { Act(SieveActionType.Keep) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("requires exactly one", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_RegexOperator_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "regex-rule",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.Subject, Operator = SieveConditionOperator.Regex, Value = "^spam" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Regex", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_FileIntoWithAutoCreate_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "create-rule",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") },
+            Actions = { new SieveAction { Type = SieveActionType.FileInto, Argument = "NewFolder", AutoCreate = true } }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(":create", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_DuplicateCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "dedup",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.Duplicate, Operator = SieveConditionOperator.Contains, Value = "" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Duplicate", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_EnvelopeFromCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "envelope-test",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.EnvelopeFrom, Operator = SieveConditionOperator.Contains, Value = "noreply" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("EnvelopeFrom", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_RecipientDetailCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "subaddress-test",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.RecipientDetail, Operator = SieveConditionOperator.Equals, Value = "support" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("RecipientDetail", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_BodyCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "body-search",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.Body, Operator = SieveConditionOperator.Contains, Value = "casino" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Body", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_CurrentDateCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "date-test",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.CurrentDate, Operator = SieveConditionOperator.Before, Value = "2026-12-31" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("CurrentDate", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_MessageDateCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "msgdate-test",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.MessageDate, Operator = SieveConditionOperator.OnOrAfter, Value = "2026-01-01" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("MessageDate", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_CurrentWeekdayCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "weekday-test",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.CurrentWeekday, Operator = SieveConditionOperator.Contains, Value = "1,2,3,4,5" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("CurrentWeekday", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_CurrentHourCondition_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "hour-test",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.CurrentHour, Operator = SieveConditionOperator.Before, Value = "9" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("CurrentHour", result.Error);
+    }
+
+    // ----- Parse edge cases -----
+
+    [Fact]
+    public void Parse_EmptyString_ReturnsEmptyList()
+    {
+        var result = _sut.Parse(string.Empty);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value);
+    }
+
+    [Fact]
+    public void Parse_CorruptBase64InBlock_ReturnsFailure()
+    {
+        var script = "# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n!!notbase64!!\nEND:HEADER\n*/\n";
+
+        var result = _sut.Parse(script);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Unable to decode", result.Error);
+    }
+
+    [Fact]
+    public void Parse_NullJsonInBlock_ReturnsFailure()
+    {
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("null"));
+        var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
+
+        var result = _sut.Parse(script);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("null", result.Error);
+    }
+
+    [Fact]
+    public void Parse_UnknownActionType_ReturnsFailure()
+    {
+        var json = "{\"ID\":\"abc\",\"Enabled\":true,\"Name\":\"x\",\"Conditions\":[{\"Field\":\"From\",\"Type\":\"Contains\",\"Value\":\"v\"}],\"ConditionsType\":\"Any\",\"ActionType\":\"FlyAway\",\"ActionValue\":\"\",\"Stop\":false,\"Keep\":false,\"MarkAsRead\":false}";
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+        var script = $"# RAINLOOP:SIEVE\n/*\nBEGIN:FILTER:abc\nBEGIN:HEADER\n{b64}\nEND:HEADER\n*/\n";
+
+        var result = _sut.Parse(script);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("FlyAway", result.Error);
+    }
+
+    // ----- Compile emission -----
+
+    [Fact]
+    public void Compile_NullRules_Fails()
+    {
+        var result = _sut.Compile(null!);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("required", result.Error);
+    }
+
+    [Fact]
+    public void RoundTrip_RejectAction_PreservesStructure()
+    {
+        var original = new SieveRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "SpamReject",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
+            Actions = { Act(SieveActionType.Reject, "Spam is not accepted.") }
+        };
+
+        var script = _sut.Compile(new[] { original }).Value;
+
+        Assert.Contains("require [\"reject\"];", script);
+        Assert.Contains("reject \"Spam is not accepted.\";", script);
+
+        var rules = _sut.Parse(script).Value;
+        var rt = Assert.Single(rules);
+
+        Assert.Equal("SpamReject", rt.Name);
+        Assert.Equal(SieveActionType.Reject, rt.Actions[0].Type);
+        Assert.Equal("Spam is not accepted.", rt.Actions[0].Argument);
+    }
+
+    [Fact]
+    public void RoundTrip_DiscardAction_PreservesStructure()
+    {
+        var original = new SieveRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "TrashIt",
+            Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@") },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var script = _sut.Compile(new[] { original }).Value;
+
+        Assert.Contains("discard;", script);
+
+        var rules = _sut.Parse(script).Value;
+        var rt = Assert.Single(rules);
+
+        Assert.Equal("TrashIt", rt.Name);
+        Assert.Equal(SieveActionType.Discard, rt.Actions[0].Type);
+    }
+
+    [Fact]
+    public void Compile_AllOfMultipleConditions_EmitsSieveAllofBody()
+    {
+        var rule = new SieveRule
+        {
+            Name = "AllOfTest",
+            MatchAll = true,
+            Conditions =
+            {
+                Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[TEST]"),
+                Cond(SieveConditionField.From, SieveConditionOperator.Contains, "admin@")
+            },
+            Actions = { Act(SieveActionType.FileInto, "Admin") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("if allof(", script);
+    }
+
+    [Fact]
+    public void Compile_SizeCondition_EmitsSizeOverInSieve()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Large",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Larger, Value = "5M" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("size :over 5M", script);
+    }
+
+    [Fact]
+    public void Compile_ToCondition_EmitsToHeaderInSieve()
+    {
+        var rule = new SieveRule
+        {
+            Name = "ToTest",
+            Conditions = { Cond(SieveConditionField.To, SieveConditionOperator.Contains, "admin@") },
+            Actions = { Act(SieveActionType.FileInto, "Admin") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("[\"To\"]", script);
+    }
+
+    [Fact]
+    public void Compile_CcCondition_EmitsCcHeaderInSieve()
+    {
+        var rule = new SieveRule
+        {
+            Name = "CcTest",
+            Conditions = { Cond(SieveConditionField.Cc, SieveConditionOperator.Contains, "list@") },
+            Actions = { Act(SieveActionType.FileInto, "Lists") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("[\"Cc\"]", script);
+    }
+
+    [Fact]
+    public void Compile_HeaderCondition_EmitsCustomHeaderInSieve()
+    {
+        var rule = new SieveRule
+        {
+            Name = "HeaderTest",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.Header, Operator = SieveConditionOperator.Contains, Value = "magic", HeaderName = "X-Custom" }
+            },
+            Actions = { Act(SieveActionType.FileInto, "Custom") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("[\"X-Custom\"]", script);
+    }
+
+    // ----- CanRepresent guard cases -----
+
+    [Fact]
+    public void CanRepresent_NullRule_Fails()
+    {
+        var result = _sut.CanRepresent(null!);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("null", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_NoConditions_Fails()
+    {
+        var rule = new SieveRule { Name = "empty", Actions = { Act(SieveActionType.Discard) } };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("condition", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_NoActions_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "noaction",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "x") }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("action", result.Error);
+    }
+
+    [Fact]
+    public void CanRepresent_RejectAction_Succeeds()
+    {
+        var rule = new SieveRule
+        {
+            Name = "spam-reject",
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[SPAM]") },
+            Actions = { Act(SieveActionType.Reject, "Not accepted.") }
+        };
+
+        Assert.True(_sut.CanRepresent(rule).IsSuccess);
+    }
+
+    [Fact]
+    public void CanRepresent_DiscardAction_Succeeds()
+    {
+        var rule = new SieveRule
+        {
+            Name = "trash",
+            Conditions = { Cond(SieveConditionField.From, SieveConditionOperator.Contains, "spam@") },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        Assert.True(_sut.CanRepresent(rule).IsSuccess);
+    }
+
+    [Fact]
+    public void Compile_SizeCondition_EmitsSizeUnderInSieve()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Tiny",
+            Conditions =
+            {
+                new SieveCondition { Field = SieveConditionField.Size, Operator = SieveConditionOperator.Smaller, Value = "10K" }
+            },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        Assert.Contains("size :under 10K", script);
+    }
+
+    // ----- Helpers -----
+
+    private static SieveCondition Cond(SieveConditionField f, SieveConditionOperator o, string v) =>
+        new() { Field = f, Operator = o, Value = v };
+
+    private static SieveAction Act(SieveActionType t, string? arg = null) =>
+        new() { Type = t, Argument = arg };
 }

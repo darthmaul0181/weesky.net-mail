@@ -1,8 +1,7 @@
-namespace weesky.Snoopy.Microservice.Models
+namespace weesky.Snoopy.Microservice.Models;
+
+public sealed class OwnerInfo
 {
-    public class OwnerInfo
-    {
-        public int OwnerId { get; set; }
-        public string OwnerEmail { get; set; }
-    }
+    public int OwnerId { get; set; }
+    public string OwnerEmail { get; set; }
 }

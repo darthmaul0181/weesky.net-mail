@@ -1,7 +1,6 @@
-namespace weesky.Snoopy.Microservice.Models
+namespace weesky.Snoopy.Microservice.Models;
+
+public sealed class AdminVirtualDomainOwnerRequest
 {
-    public class AdminVirtualDomainOwnerRequest
-    {
-        public int UserId { get; set; }
-    }
+    public int UserId { get; set; }
 }

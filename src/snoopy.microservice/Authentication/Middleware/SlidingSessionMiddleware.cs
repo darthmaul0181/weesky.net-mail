@@ -6,68 +6,67 @@ using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Services;
 
-namespace weesky.Snoopy.Microservice.Authentication.Middleware
+namespace weesky.Snoopy.Microservice.Authentication.Middleware;
+
+/// <summary>
+/// Extends a live session in place rather than letting it expire mid-use. A webmail stays
+/// open for hours; a 30-minute token with no renewal would sign the user out while they
+/// read. This achieves that without a refresh token, an extra endpoint or a token store.
+///
+/// Both cookies are renewed together, or neither: renewing the JWT alone would leave a
+/// session that looks alive but can no longer open IMAP.
+/// </summary>
+public sealed class SlidingSessionMiddleware
 {
-    /// <summary>
-    /// Extends a live session in place rather than letting it expire mid-use. A webmail stays
-    /// open for hours; a 30-minute token with no renewal would sign the user out while they
-    /// read. This achieves that without a refresh token, an extra endpoint or a token store.
-    ///
-    /// Both cookies are renewed together, or neither: renewing the JWT alone would leave a
-    /// session that looks alive but can no longer open IMAP.
-    /// </summary>
-    public class SlidingSessionMiddleware
+    private readonly RequestDelegate _next;
+    private readonly IOptions<TokenConstants> _tokenConstants;
+
+    public SlidingSessionMiddleware(RequestDelegate next, IOptions<TokenConstants> tokenConstants)
     {
-        private readonly RequestDelegate _next;
-        private readonly IOptions<TokenConstants> _tokenConstants;
+        _next = next;
+        _tokenConstants = tokenConstants;
+    }
 
-        public SlidingSessionMiddleware(RequestDelegate next, IOptions<TokenConstants> tokenConstants)
+    public async Task InvokeAsync(HttpContext context, ITokenManager tokens, IMailCredentialStore credentials)
+    {
+        TryRenew(context, tokens, credentials);
+        await _next(context);
+    }
+
+    private void TryRenew(HttpContext context, ITokenManager tokens, IMailCredentialStore credentials)
+    {
+        if (context.User?.Identity?.IsAuthenticated != true) return;
+
+        var name = context.User.FindFirst(ClaimTypes.Upn)?.Value;
+        var domain = context.User.FindFirst(ClaimTypes.Dns)?.Value;
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(domain)) return;
+
+        // "exp" rather than "iat": TokenBuilder uses the JwtSecurityToken constructor that
+        // emits an expiry but no issued-at, so remaining lifetime is the only thing
+        // measurable here. Reading a claim that is never present would make this a silent
+        // no-op.
+        var expClaim = context.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
+        if (!long.TryParse(expClaim, out var expiryUnix)) return;
+
+        var lifetime = TimeSpan.FromMinutes(_tokenConstants.Value.ExpiryInMinutes);
+        var remaining = DateTimeOffset.FromUnixTimeSeconds(expiryUnix) - DateTimeOffset.UtcNow;
+        if (remaining > lifetime / 2) return;
+
+        // Renew both or neither.
+        var password = credentials.Retrieve(context.Request);
+        if (password.IsFailure) return;
+
+        var token = tokens.Generate(new User($"{name}@{domain}"));
+        if (string.IsNullOrEmpty(token.Token)) return;
+
+        context.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, token.Token, new CookieOptions
         {
-            _next = next;
-            _tokenConstants = tokenConstants;
-        }
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.Add(lifetime)
+        });
 
-        public async Task InvokeAsync(HttpContext context, ITokenManager tokens, IMailCredentialStore credentials)
-        {
-            TryRenew(context, tokens, credentials);
-            await _next(context);
-        }
-
-        private void TryRenew(HttpContext context, ITokenManager tokens, IMailCredentialStore credentials)
-        {
-            if (context.User?.Identity?.IsAuthenticated != true) return;
-
-            var name = context.User.FindFirst(ClaimTypes.Upn)?.Value;
-            var domain = context.User.FindFirst(ClaimTypes.Dns)?.Value;
-            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(domain)) return;
-
-            // "exp" rather than "iat": TokenBuilder uses the JwtSecurityToken constructor that
-            // emits an expiry but no issued-at, so remaining lifetime is the only thing
-            // measurable here. Reading a claim that is never present would make this a silent
-            // no-op.
-            var expClaim = context.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
-            if (!long.TryParse(expClaim, out var expiryUnix)) return;
-
-            var lifetime = TimeSpan.FromMinutes(_tokenConstants.Value.ExpiryInMinutes);
-            var remaining = DateTimeOffset.FromUnixTimeSeconds(expiryUnix) - DateTimeOffset.UtcNow;
-            if (remaining > lifetime / 2) return;
-
-            // Renew both or neither.
-            var password = credentials.Retrieve(context.Request);
-            if (password.IsFailure) return;
-
-            var token = tokens.Generate(new User($"{name}@{domain}"));
-            if (string.IsNullOrEmpty(token.Token)) return;
-
-            context.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, token.Token, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Strict,
-                Expires = DateTimeOffset.UtcNow.Add(lifetime)
-            });
-
-            credentials.Store(context.Response, password.Value, lifetime);
-        }
+        credentials.Store(context.Response, password.Value, lifetime);
     }
 }

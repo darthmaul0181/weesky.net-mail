@@ -1,99 +1,98 @@
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 
-namespace weesky.Snoopy.Microservice.Repositories
-{
-    public class FolderRoleStore : IFolderRoleStore
-    {
-        private readonly PreferencesDbContext _context;
+namespace weesky.Snoopy.Microservice.Repositories;
 
-        public FolderRoleStore(PreferencesDbContext context)
+internal sealed class FolderRoleStore : IFolderRoleStore
+{
+    private readonly PreferencesDbContext _context;
+
+    public FolderRoleStore(PreferencesDbContext context)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+    }
+
+    /// <summary>
+    /// The table's collation is binary — IMAP paths must compare byte for byte — so the
+    /// account id must be written in exactly one form, or the same user splits into
+    /// several accounts.
+    /// </summary>
+    public static string CanonicalAccountId(string email) => email.Trim().ToLowerInvariant();
+
+    public async Task<IReadOnlyList<FolderRoleOverride>> GetAsync(string accountId, CancellationToken cancellationToken)
+        => await _context.FolderRoleOverrides.AsNoTracking()
+            .Where(o => o.AccountId == accountId)
+            .OrderBy(o => o.Role)
+            .ToListAsync(cancellationToken);
+
+    public async Task UpsertAsync(FolderRoleOverride @override, CancellationToken cancellationToken)
+    {
+        var existing = await _context.FolderRoleOverrides.FirstOrDefaultAsync(
+            o => o.AccountId == @override.AccountId && o.Role == @override.Role, cancellationToken);
+
+        if (existing == null)
         {
-            _context = context ?? throw new ArgumentNullException(nameof(context));
+            @override.UpdatedAt = DateTime.UtcNow;
+            _context.FolderRoleOverrides.Add(@override);
+        }
+        else
+        {
+            existing.FolderPath = @override.FolderPath;
+            existing.UidValidity = @override.UidValidity;
+            existing.MailboxId = @override.MailboxId;
+            existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        /// <summary>
-        /// The table's collation is binary — IMAP paths must compare byte for byte — so the
-        /// account id must be written in exactly one form, or the same user splits into
-        /// several accounts.
-        /// </summary>
-        public static string CanonicalAccountId(string email) => email.Trim().ToLowerInvariant();
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 
-        public async Task<IReadOnlyList<FolderRoleOverride>> GetAsync(string accountId, CancellationToken cancellationToken)
-            => await _context.FolderRoleOverrides.AsNoTracking()
-                .Where(o => o.AccountId == accountId)
-                .OrderBy(o => o.Role)
-                .ToListAsync(cancellationToken);
+    public async Task DeleteAsync(string accountId, string role, CancellationToken cancellationToken)
+    {
+        var existing = await _context.FolderRoleOverrides.FirstOrDefaultAsync(
+            o => o.AccountId == accountId && o.Role == role, cancellationToken);
+        if (existing == null) return;
 
-        public async Task UpsertAsync(FolderRoleOverride @override, CancellationToken cancellationToken)
+        _context.FolderRoleOverrides.Remove(existing);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ApplyRenameAsync(string accountId, string oldPath, string newPath, char separator,
+        ulong newUidValidity, string? newMailboxId, CancellationToken cancellationToken)
+    {
+        var prefix = oldPath + separator;
+        var rows = await _context.FolderRoleOverrides
+            .Where(o => o.AccountId == accountId
+                        && (o.FolderPath == oldPath || o.FolderPath.StartsWith(prefix)))
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in rows)
         {
-            var existing = await _context.FolderRoleOverrides.FirstOrDefaultAsync(
-                o => o.AccountId == @override.AccountId && o.Role == @override.Role, cancellationToken);
-
-            if (existing == null)
+            if (row.FolderPath == oldPath)
             {
-                @override.UpdatedAt = DateTime.UtcNow;
-                _context.FolderRoleOverrides.Add(@override);
+                row.FolderPath = newPath;
+                row.UidValidity = newUidValidity;
+                row.MailboxId = newMailboxId;
             }
             else
             {
-                existing.FolderPath = @override.FolderPath;
-                existing.UidValidity = @override.UidValidity;
-                existing.MailboxId = @override.MailboxId;
-                existing.UpdatedAt = DateTime.UtcNow;
+                row.FolderPath = newPath + row.FolderPath.Substring(oldPath.Length);
             }
-
-            await _context.SaveChangesAsync(cancellationToken);
+            row.UpdatedAt = DateTime.UtcNow;
         }
 
-        public async Task DeleteAsync(string accountId, string role, CancellationToken cancellationToken)
-        {
-            var existing = await _context.FolderRoleOverrides.FirstOrDefaultAsync(
-                o => o.AccountId == accountId && o.Role == role, cancellationToken);
-            if (existing == null) return;
+        // A single SaveChanges: on a relational provider this commits as one transaction.
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 
-            _context.FolderRoleOverrides.Remove(existing);
-            await _context.SaveChangesAsync(cancellationToken);
-        }
+    public async Task RemoveSubtreeAsync(string accountId, string path, char separator, CancellationToken cancellationToken)
+    {
+        var prefix = path + separator;
+        var rows = await _context.FolderRoleOverrides
+            .Where(o => o.AccountId == accountId
+                        && (o.FolderPath == path || o.FolderPath.StartsWith(prefix)))
+            .ToListAsync(cancellationToken);
 
-        public async Task ApplyRenameAsync(string accountId, string oldPath, string newPath, char separator,
-            ulong newUidValidity, string? newMailboxId, CancellationToken cancellationToken)
-        {
-            var prefix = oldPath + separator;
-            var rows = await _context.FolderRoleOverrides
-                .Where(o => o.AccountId == accountId
-                            && (o.FolderPath == oldPath || o.FolderPath.StartsWith(prefix)))
-                .ToListAsync(cancellationToken);
-
-            foreach (var row in rows)
-            {
-                if (row.FolderPath == oldPath)
-                {
-                    row.FolderPath = newPath;
-                    row.UidValidity = newUidValidity;
-                    row.MailboxId = newMailboxId;
-                }
-                else
-                {
-                    row.FolderPath = newPath + row.FolderPath.Substring(oldPath.Length);
-                }
-                row.UpdatedAt = DateTime.UtcNow;
-            }
-
-            // A single SaveChanges: on a relational provider this commits as one transaction.
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-
-        public async Task RemoveSubtreeAsync(string accountId, string path, char separator, CancellationToken cancellationToken)
-        {
-            var prefix = path + separator;
-            var rows = await _context.FolderRoleOverrides
-                .Where(o => o.AccountId == accountId
-                            && (o.FolderPath == path || o.FolderPath.StartsWith(prefix)))
-                .ToListAsync(cancellationToken);
-
-            _context.FolderRoleOverrides.RemoveRange(rows);
-            await _context.SaveChangesAsync(cancellationToken);
-        }
+        _context.FolderRoleOverrides.RemoveRange(rows);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

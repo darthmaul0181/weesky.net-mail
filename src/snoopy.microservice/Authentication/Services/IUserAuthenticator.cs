@@ -1,10 +1,9 @@
 using CSharpFunctionalExtensions;
 using weesky.Snoopy.Microservice.Authentication.Models;
 
-namespace weesky.Snoopy.Microservice.Authentication.Services
+namespace weesky.Snoopy.Microservice.Authentication.Services;
+
+public interface IUserAuthenticator
 {
-    public interface IUserAuthenticator
-    {
-        Task<Result<AuthToken>> AuthenticateAsync(string email, string password);
-    }
+    Task<Result<AuthToken>> AuthenticateAsync(string email, string password);
 }

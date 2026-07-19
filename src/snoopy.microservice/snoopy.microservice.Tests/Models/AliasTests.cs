@@ -3,7 +3,7 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Models;
 
-public class AliasTests
+public sealed class AliasTests
 {
     private static Alias Make(string name = "test", string domain = "example.com")
         => new() { Name = name, Domain = domain };
