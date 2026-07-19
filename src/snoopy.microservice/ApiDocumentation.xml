@@ -37,6 +37,22 @@
             The Json Web Token used to authenticate the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Configuration.MvcFormatterConfiguration">
+            <summary>
+            Output-formatter policy for the API. Lives here rather than inline in Program.cs so the
+            rule can be tested: startup configuration is invisible to controller tests, which invoke
+            actions directly and never run a formatter.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.MvcFormatterConfiguration.ConfigureFormatters(Microsoft.AspNetCore.Mvc.MvcOptions)">
+            <summary>
+            Drops <see cref="T:Microsoft.AspNetCore.Mvc.Formatters.StringOutputFormatter"/>. MVC otherwise writes an action that returns
+            a bare string as <c>text/plain</c>, and the browser client calls <c>res.json()</c> on
+            every response — so creating a folder named "toto" answered with the unquoted five
+            bytes <c>toto</c> and the client threw "toto is not valid JSON" over a request the
+            server had in fact carried out.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetAccountInfo">
             <summary>
             Returns information about the authenticated user account
