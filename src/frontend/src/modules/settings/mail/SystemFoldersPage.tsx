@@ -4,7 +4,7 @@ import { useToasts } from '../../../hooks/useToasts.js'
 import { flatten } from '../../mail/folders/FolderDialogs'
 import { roleLabel } from '../../mail/roleLabel'
 import { useClearFolderRole, useFolderRoles, useFolders, useSetFolderRole } from '../../mail/queries'
-import type { FolderRoleEntry } from '../../mail/api/mailTypes'
+import type { FolderRoleEntry, FolderRoleStaleOverride } from '../../mail/api/mailTypes'
 
 const ROLES = ['sent', 'drafts', 'trash', 'junk', 'archive']
 
@@ -94,8 +94,7 @@ export default function SystemFoldersPage() {
                 id={`role-${role}-stale`}
                 style={{ color: 'var(--text-muted)', fontSize: 12.5, margin: '-6px 0 12px 126px' }}
               >
-                Your previous choice &ldquo;{entry.staleOverride.folderPath}&rdquo; was renamed
-                or deleted outside this app.
+                {staleMessage(entry.staleOverride)}
               </p>
             )}
           </div>
@@ -107,12 +106,39 @@ export default function SystemFoldersPage() {
   )
 }
 
-/** The empty option says what "automatic" currently resolves to, so choosing it is informed. */
+/**
+ * The empty option says what "automatic" currently resolves to, so choosing it is informed —
+ * and *how* it got there. "The server declared this folder is the archive" and "no server said
+ * anything, so we guessed from the folder's name" are the two things this page exists to tell
+ * apart: only the second is worth a second look, and only the second is likely to be wrong.
+ */
 function automaticLabel(
   entry: FolderRoleEntry | undefined,
   nameOf: (path: string | null) => string | null,
 ): string {
   if (!entry || entry.provenance === 'override') return 'Automatic'
   if (!entry.folderPath) return 'Automatic — not set'
-  return `Automatic — ${nameOf(entry.folderPath)}`
+
+  const name = nameOf(entry.folderPath)
+  return entry.provenance === 'name'
+    ? `Automatic — ${name} (detected from the name)`
+    : `Automatic — ${name}`
+}
+
+/**
+ * A stale override has three distinct causes and the notice must state the right one — telling
+ * a user their folder was deleted when it is sitting in the tree, merely unable to hold
+ * messages, sends them looking for a problem that isn't there.
+ */
+function staleMessage(stale: FolderRoleStaleOverride): string {
+  const choice = `Your previous choice “${stale.folderPath}”`
+
+  switch (stale.reason) {
+    case 'notSelectable':
+      return `${choice} can no longer hold messages.`
+    case 'folderTaken':
+      return `${choice} is already used for another role.`
+    default:
+      return `${choice} was renamed or deleted outside this app.`
+  }
 }

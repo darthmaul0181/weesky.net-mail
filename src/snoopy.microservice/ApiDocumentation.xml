@@ -586,6 +586,26 @@
             coexists with a discovery-resolved FolderPath (spec § 5.3).
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons">
+            <summary>
+            Why a stored override no longer holds. The client words its notice from this: a single
+            undifferentiated "stale" flag left it asserting the folder was renamed or deleted even
+            when the folder is right there, and the truth is that it cannot hold messages or that
+            something else already claimed it.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons.Missing">
+            <summary>No live folder matches — deleted, renamed beyond reach, or its path reused.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons.NotSelectable">
+            <summary>The folder is there but is \NoSelect / \NonExistent: it cannot hold messages.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons.FolderTaken">
+            <summary>The folder is there and usable, but INBOX or a higher-priority override owns it.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideInfo.Reason">
+            <summary>One of <see cref="T:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons"/>.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent">
             <summary>A decoded attachment, ready to stream to the client.</summary>
         </member>
@@ -1252,6 +1272,12 @@
             deleted folder whose path was reused by a different one.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.FolderRoleResolver.FirstWins(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Models.Mail.MailFolderNode},System.Func{weesky.Snoopy.Microservice.Models.Mail.MailFolderNode,System.String})">
+            <summary>
+            Index by <paramref name="key"/>, keeping the first node for a repeated key rather
+            than throwing the way ToDictionary does.
+            </summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Services.FolderRoleResolution.Roles">
             <summary>Exactly the five assignable roles, in FolderRoles.All order.</summary>
         </member>
@@ -1413,25 +1439,25 @@
             past the end, or when the arguments make no sense.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.String}},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
-            <summary>
-            Assigns discovered roles, each to at most one folder — and each folder to at most
-            one role.
-            </summary>
-            <remarks>
-            Two claim sets, not one. Claimed roles keep a mailbox holding both "Drafts" and
-            "Brouillons" from ending up with two drafts folders. Claimed folders keep one
-            folder from holding two roles — a folder flagged \Sent but named "Trash" used to
-            claim both, which is undecidable to display. Callers may seed both sets: the role
-            resolver runs user overrides first and hands discovery only the leftovers.
-            </remarks>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUse(MailKit.FolderAttributes,System.String,System.Boolean)">
-            <summary>
-            Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the
-            server advertises none, fall back to matching well-known names, which is the only
-            option on servers without the extension.
-            </summary>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.String,System.Boolean}},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+             <summary>
+             Assigns discovered roles, each to at most one folder — and each folder to at most
+             one role.
+             </summary>
+             <remarks>
+             Two claim sets, not one. Claimed roles keep a mailbox holding both "Drafts" and
+             "Brouillons" from ending up with two drafts folders. Claimed folders keep one
+             folder from holding two roles — a folder flagged \Sent but named "Trash" used to
+             claim both, which is undecidable to display. Callers may seed both sets: the role
+             resolver runs user overrides first and hands discovery only the leftovers.
+            
+             A non-selectable folder never holds a role, in either pass. The ordinary shape
+             that makes this load-bearing: "Archive" exists only as a \NoSelect container for
+             "Archive/2024" and "Archive/2025". Letting the container win the name pass stamped
+             a role on a mailbox that cannot hold a message and locked the real archive folder
+             out of it. Level 1 already refuses a non-selectable override target; the same rule
+             has to hold here.
+             </remarks>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SpecialUseFromName(System.String)">
             <summary>

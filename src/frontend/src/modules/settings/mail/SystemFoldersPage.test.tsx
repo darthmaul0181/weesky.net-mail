@@ -141,7 +141,7 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({
         role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
-        staleOverride: { folderPath: 'Old Trash' },
+        staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
     render(<SystemFoldersPage />, { wrapper })
@@ -159,7 +159,7 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({
         role: 'trash', folderPath: null, provenance: null,
-        staleOverride: { folderPath: 'Old Trash' },
+        staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
     render(<SystemFoldersPage />, { wrapper })
@@ -176,7 +176,7 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({
         role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
-        staleOverride: { folderPath: 'Old Trash' },
+        staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
     render(<SystemFoldersPage />, { wrapper })
@@ -186,6 +186,78 @@ describe('SystemFoldersPage', () => {
 
     expect(select).toHaveAttribute('aria-describedby', notice.id)
     expect(notice.id).toBeTruthy()
+  })
+
+  // One flag for three causes had the page assert the folder was renamed or deleted in all
+  // three. For the other two that statement is simply false about the user's mailbox.
+  it('says the folder can no longer hold messages when that is the cause', async () => {
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'trash'),
+      entry({
+        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
+        staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
+      }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    expect(await screen.findByText(/“Container” can no longer hold messages/)).toBeInTheDocument()
+    expect(screen.queryByText(/renamed or deleted/)).not.toBeInTheDocument()
+  })
+
+  it('says the folder is taken by another role when that is the cause', async () => {
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'junk'),
+      entry({
+        role: 'junk', folderPath: null, provenance: null,
+        staleOverride: { folderPath: 'Corbeille', reason: 'folderTaken' },
+      }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    expect(await screen.findByText(/“Corbeille” is already used for another role/)).toBeInTheDocument()
+    expect(screen.queryByText(/renamed or deleted/)).not.toBeInTheDocument()
+  })
+
+  // Every cause keeps the accessibility wiring, not just the one the first version handled.
+  it('associates a non-missing stale notice with its select too', async () => {
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'trash'),
+      entry({
+        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
+        staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
+      }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    const select = await screen.findByLabelText('Trash')
+    const notice = await screen.findByText(/“Container” can no longer hold messages/)
+
+    expect(select).toHaveAttribute('aria-describedby', notice.id)
+    expect(notice.id).toBeTruthy()
+  })
+
+  // "The server declared this" and "we guessed from the name" are the distinction this page
+  // exists to draw; rendering both as a bare "Automatic — X" threw it away at the last step.
+  it('marks a name-matched role as a guess', async () => {
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getFolderRoles.mockResolvedValue([
+      ...roles.filter(r => r.role !== 'trash'),
+      entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'name' }),
+    ])
+    render(<SystemFoldersPage />, { wrapper })
+
+    expect(await screen.findByLabelText('Trash'))
+      .toHaveDisplayValue('Automatic — Corbeille (detected from the name)')
+  })
+
+  it('leaves a server-declared role unqualified', async () => {
+    renderPage()
+
+    // 'Deleted Items' arrives with provenance 'specialUse'.
+    expect(await screen.findByLabelText('Trash')).toHaveDisplayValue('Automatic — Deleted Items')
   })
 
   it('never offers the inbox or a non-selectable folder', async () => {

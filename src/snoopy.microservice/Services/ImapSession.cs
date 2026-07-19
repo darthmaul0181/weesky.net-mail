@@ -48,12 +48,6 @@ namespace weesky.Snoopy.Microservice.Services
                 // Ordinal sort puts a parent before its children, so the lookup below always
                 // finds the parent already built.
                 var ordered = folders.OrderBy(f => f.FullName, StringComparer.Ordinal).ToList();
-                var attributeRoles = ordered.ToDictionary(
-                    f => f.FullName,
-                    f => SpecialUseFromAttributes(f.Attributes, IsInbox(f)),
-                    StringComparer.Ordinal);
-                var roleByPath = ResolveSpecialUses(
-                    ordered.Select(f => (f.FullName, f.Name, attributeRoles[f.FullName])));
 
                 foreach (var folder in ordered)
                 {
@@ -64,10 +58,14 @@ namespace weesky.Snoopy.Microservice.Services
                     {
                         Path = folder.FullName,
                         Name = folder.Name,
-                        SpecialUse = roleByPath.TryGetValue(folder.FullName, out var assignment)
-                            ? assignment.Role
-                            : null,
-                        AttributeRole = attributeRoles[folder.FullName],
+                        // Deliberately left null: SpecialUse is the *chain's* output, and the
+                        // chain needs the stored overrides this layer has no business reading.
+                        // Resolving it here produced a value every caller had to overwrite or
+                        // ignore, and would have handed the next caller un-overridden roles
+                        // with nothing failing. AttributeRole carries the raw server flag,
+                        // which is all FolderRoleResolver needs as input.
+                        SpecialUse = null,
+                        AttributeRole = SpecialUseFromAttributes(folder.Attributes, IsInbox(folder)),
                         MailboxId = folder.Id,
                         Selectable = selectable,
                         Subscribed = folder.IsSubscribed,
@@ -500,9 +498,16 @@ namespace weesky.Snoopy.Microservice.Services
         /// folder from holding two roles — a folder flagged \Sent but named "Trash" used to
         /// claim both, which is undecidable to display. Callers may seed both sets: the role
         /// resolver runs user overrides first and hands discovery only the leftovers.
+        ///
+        /// A non-selectable folder never holds a role, in either pass. The ordinary shape
+        /// that makes this load-bearing: "Archive" exists only as a \NoSelect container for
+        /// "Archive/2024" and "Archive/2025". Letting the container win the name pass stamped
+        /// a role on a mailbox that cannot hold a message and locked the real archive folder
+        /// out of it. Level 1 already refuses a non-selectable override target; the same rule
+        /// has to hold here.
         /// </remarks>
         public static IReadOnlyDictionary<string, SpecialUseAssignment> ResolveSpecialUses(
-            IEnumerable<(string Path, string Name, string? AttributeRole)> folders,
+            IEnumerable<(string Path, string Name, string? AttributeRole, bool Selectable)> folders,
             IEnumerable<string>? claimedRoles = null,
             IEnumerable<string>? claimedFolders = null)
         {
@@ -513,6 +518,7 @@ namespace weesky.Snoopy.Microservice.Services
 
             foreach (var folder in candidates)
             {
+                if (!folder.Selectable) continue;
                 if (folder.AttributeRole is not { } role) continue;
                 if (taken.Contains(folder.Path)) continue;
 
@@ -531,6 +537,8 @@ namespace weesky.Snoopy.Microservice.Services
 
             foreach (var folder in candidates)
             {
+                if (!folder.Selectable) continue;
+
                 if (SpecialUseFromName(folder.Name) is { } role && !roles.Contains(role) && !taken.Contains(folder.Path))
                 {
                     roles.Add(role);
@@ -541,14 +549,6 @@ namespace weesky.Snoopy.Microservice.Services
 
             return result;
         }
-
-        /// <summary>
-        /// Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the
-        /// server advertises none, fall back to matching well-known names, which is the only
-        /// option on servers without the extension.
-        /// </summary>
-        public static string? ResolveSpecialUse(FolderAttributes attributes, string name, bool isInbox)
-            => SpecialUseFromAttributes(attributes, isInbox) ?? SpecialUseFromName(name);
 
         public static string? SpecialUseFromAttributes(FolderAttributes attributes, bool isInbox)
         {

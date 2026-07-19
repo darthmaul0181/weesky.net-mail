@@ -20,9 +20,12 @@ namespace weesky.Snoopy.Microservice.Services
             var flat = new List<MailFolderNode>();
             Flatten(tree, flat);
 
-            var byPath = flat.ToDictionary(n => n.Path, StringComparer.Ordinal);
-            var byMailboxId = flat.Where(n => n.MailboxId != null)
-                                  .ToDictionary(n => n.MailboxId!, StringComparer.Ordinal);
+            // First wins, duplicates tolerated. ToDictionary throws on a repeated key, and a
+            // server we will never configure is free to report the same path twice or hand
+            // two mailboxes one MAILBOXID. That threw straight past Result<T> and turned an
+            // entire unreadable mailbox out of what should degrade to one unresolved role.
+            var byPath = FirstWins(flat, n => n.Path);
+            var byMailboxId = FirstWins(flat.Where(n => n.MailboxId != null), n => n.MailboxId!);
 
             // The chain tracks BOTH sets. Tracking roles alone is the natural bug: it passes
             // every test except the one where an override takes a flagged folder, whose flag
@@ -51,11 +54,20 @@ namespace weesky.Snoopy.Microservice.Services
                 var @override = overrides.FirstOrDefault(o => o.Role == role);
                 if (@override == null) continue;
 
+                // Three distinct causes, three distinct notices. One flag for all of them made
+                // the Settings page state something false about the mailbox in two cases out
+                // of three, since it can only word a message for the cause it is told about.
                 var node = ResolveOverride(@override, byPath, byMailboxId);
-                if (node != null && node.Selectable && !claimedFolders.Contains(node.Path))
+                var reason =
+                    node == null ? StaleOverrideReasons.Missing
+                    : !node.Selectable ? StaleOverrideReasons.NotSelectable
+                    : claimedFolders.Contains(node.Path) ? StaleOverrideReasons.FolderTaken
+                    : null;
+
+                if (reason == null)
                 {
                     claimedRoles.Add(role);
-                    claimedFolders.Add(node.Path);
+                    claimedFolders.Add(node!.Path);
                     roleByPath[node.Path] = role;
                     entry.FolderPath = node.Path;
                     entry.Provenance = "override";
@@ -64,13 +76,17 @@ namespace weesky.Snoopy.Microservice.Services
                 {
                     // Kept and signalled (§ 5.3), never auto-deleted; discovery below may
                     // still fill the role, and both facts then coexist in the entry.
-                    entry.StaleOverride = new StaleOverrideInfo { FolderPath = @override.FolderPath };
+                    entry.StaleOverride = new StaleOverrideInfo
+                    {
+                        FolderPath = @override.FolderPath,
+                        Reason = reason
+                    };
                 }
             }
 
             // Levels 3 and 4: discovery over whatever roles and folders the overrides left.
             var discovered = ImapSession.ResolveSpecialUses(
-                flat.Select(n => (n.Path, n.Name, n.AttributeRole)),
+                flat.Select(n => (n.Path, n.Name, n.AttributeRole, n.Selectable)),
                 claimedRoles,
                 claimedFolders);
 
@@ -107,6 +123,19 @@ namespace weesky.Snoopy.Microservice.Services
                    && node.UidValidity == @override.UidValidity
                 ? node
                 : null;
+        }
+
+        /// <summary>
+        /// Index by <paramref name="key"/>, keeping the first node for a repeated key rather
+        /// than throwing the way ToDictionary does.
+        /// </summary>
+        private static Dictionary<string, MailFolderNode> FirstWins(
+            IEnumerable<MailFolderNode> nodes,
+            Func<MailFolderNode, string> key)
+        {
+            var map = new Dictionary<string, MailFolderNode>(StringComparer.Ordinal);
+            foreach (var node in nodes) map.TryAdd(key(node), node);
+            return map;
         }
 
         private static void Flatten(IReadOnlyList<MailFolderNode> nodes, List<MailFolderNode> into)

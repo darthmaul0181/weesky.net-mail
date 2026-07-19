@@ -66,8 +66,16 @@ export interface MailMessageDetail {
   attachments: MailAttachmentInfo[]
 }
 
+/**
+ * Why the stored choice no longer holds. The page words its notice from this: one
+ * undifferentiated flag made it assert the folder had been renamed or deleted even when the
+ * folder is plainly still there.
+ */
+export type StaleOverrideReason = 'missing' | 'notSelectable' | 'folderTaken'
+
 export interface FolderRoleStaleOverride {
   folderPath: string
+  reason: StaleOverrideReason
 }
 
 /** One assignable role: what it resolves to today, and why. */

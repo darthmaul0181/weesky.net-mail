@@ -256,8 +256,20 @@ namespace weesky.Snoopy.Microservice.Controllers
 
             var accountId = FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email);
             var overrides = await _roleStore.GetAsync(accountId, cancellationToken);
-            if (overrides.Any(o => o.FolderPath == request.FolderPath && o.Role != request.Role))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("This folder already holds another role"));
+
+            // Guard against the resolver's output, not the raw rows. A stored row whose folder
+            // no longer resolves holds nothing — the resolver reports it stale and the Settings
+            // picker offers that folder again — so a raw-row check rejected exactly the folder
+            // the UI had just offered. The two must read the same data the same way.
+            var tree = await _folders.GetTreeAsync(AuthenticatedUser, password.Value, cancellationToken);
+            if (tree.IsFailure)
+                return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
+
+            var holder = FolderRoleResolver.Resolve(tree.Value, overrides).Roles.FirstOrDefault(
+                e => e.Provenance == "override" && e.FolderPath == request.FolderPath && e.Role != request.Role);
+            if (holder != null)
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                    $"This folder is already assigned to {holder.Role}. Set {holder.Role} back to automatic, or point it at another folder, first."));
 
             await _roleStore.UpsertAsync(new FolderRoleOverride
             {

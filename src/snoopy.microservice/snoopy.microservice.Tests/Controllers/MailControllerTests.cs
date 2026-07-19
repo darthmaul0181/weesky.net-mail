@@ -568,13 +568,55 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
             // must run before the account-specific override is configured.
             var controller = CreateController();
             SetupStatus("X");
+            SetupTree(RoleNode("X"));
             SetupOverrides(new FolderRoleOverride
             { AccountId = "alice@weesky.be", Role = "junk", FolderPath = "X", UidValidity = 1 });
 
             var result = await controller.SetFolderRole(
                 new SetFolderRoleRequest { Role = "trash", FolderPath = "X" }, CancellationToken.None);
 
-            Assert.IsType<BadRequestObjectResult>(result);
+            var bad = Assert.IsType<BadRequestObjectResult>(result);
+            // The refusal has to name the role that holds the folder, and the way out of it.
+            var envelope = Assert.IsType<ResultEnveloppe>(bad.Value);
+            Assert.Contains("junk", envelope.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("automatic", envelope.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // The API rejected a folder its own Settings page offered. The page derives its picker
+        // from the resolver's output, where a stale row holds nothing; the guard read the raw
+        // rows, where it still does. Same data, two readings — this is the row they disagree on.
+        [Fact]
+        public async Task SetFolderRole_AcceptsAFolderWhoseOtherRoleIsOnlyHeldByAStaleRow()
+        {
+            var controller = CreateController();
+            SetupStatus("Corbeille", uidValidity: 42);
+            // The live folder's UIDVALIDITY moved on: deleted and recreated outside this app,
+            // so the stored trash row is stale and Corbeille is free again.
+            SetupTree(RoleNode("Corbeille", uidValidity: 42));
+            SetupOverrides(new FolderRoleOverride
+            { AccountId = "alice@weesky.be", Role = "trash", FolderPath = "Corbeille", UidValidity = 1 });
+
+            var result = await controller.SetFolderRole(
+                new SetFolderRoleRequest { Role = "junk", FolderPath = "Corbeille" }, CancellationToken.None);
+
+            Assert.IsType<NoContentResult>(result);
+            _roleStore.Verify(s => s.UpsertAsync(It.Is<FolderRoleOverride>(o =>
+                o.Role == "junk" && o.FolderPath == "Corbeille"), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task SetFolderRole_Returns502WhenTheTreeCannotBeRead()
+        {
+            var controller = CreateController();
+            SetupStatus("X");
+            _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(Result.Failure<IReadOnlyList<MailFolderNode>>("Unable to read the mailbox folders"));
+
+            var result = await controller.SetFolderRole(
+                new SetFolderRoleRequest { Role = "trash", FolderPath = "X" }, CancellationToken.None);
+
+            var status = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
         }
 
         // uid_validity and mailbox_id come from the live folder, captured server-side — the
@@ -583,6 +625,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         public async Task SetFolderRole_StoresTheLiveIdentityUnderTheCanonicalAccount()
         {
             SetupStatus("Corbeille", uidValidity: 77, mailboxId: "M1");
+            SetupTree(RoleNode("Corbeille", uidValidity: 77));
 
             var result = await CreateController().SetFolderRole(
                 new SetFolderRoleRequest { Role = "trash", FolderPath = "Corbeille" }, CancellationToken.None);

@@ -153,6 +153,117 @@ namespace weesky.Snoopy.Microservice.Tests.Services
             Assert.NotNull(Entry(resolution, "trash").StaleOverride);
         }
 
+        // The container shape: "Archive" is \NoSelect because only "Archive/2024" and
+        // "Archive/2025" hold messages. Discovery must leave the role with the folder that can
+        // actually take it — stamping the container blocked the real one for good, and Settings
+        // then reported a holder it excluded from the picker.
+        [Fact]
+        public void ANoSelectContainerDoesNotTakeARoleFromARealFolder()
+        {
+            var container = Node("Archive", selectable: false);
+            container.Children.Add(Node("Archive/2024", name: "2024"));
+            var real = Node("Archives", name: "Archives");
+
+            var resolution = FolderRoleResolver.Resolve([container, real], []);
+
+            Assert.False(resolution.RoleByPath.ContainsKey("Archive"));
+            Assert.Equal("archive", resolution.RoleByPath["Archives"]);
+            Assert.Equal("Archives", Entry(resolution, "archive").FolderPath);
+        }
+
+        // Same rule for a flagged container, and the role must not simply vanish with it.
+        [Fact]
+        public void ANonSelectableFlaggedFolderIsSkippedByDiscovery()
+        {
+            var tree = new List<MailFolderNode>
+            {
+                Node("Container", attributeRole: "trash", selectable: false),
+                Node("Corbeille", name: "Corbeille"),
+            };
+
+            var resolution = FolderRoleResolver.Resolve(tree, []);
+
+            Assert.False(resolution.RoleByPath.ContainsKey("Container"));
+            Assert.Equal("trash", resolution.RoleByPath["Corbeille"]);
+        }
+
+        // A server we will never configure may report the same path twice, or hand two
+        // mailboxes one MAILBOXID. Indexing with ToDictionary threw ArgumentException straight
+        // past Result<T>, so GET /Folders answered 500 and the whole mailbox went unreadable
+        // instead of one role degrading.
+        [Fact]
+        public void DuplicatePathsAreToleratedRatherThanThrowing()
+        {
+            var tree = new List<MailFolderNode> { Node("Trash"), Node("Trash") };
+
+            var resolution = FolderRoleResolver.Resolve(tree, [Override("trash", "Trash")]);
+
+            Assert.Equal("override", Entry(resolution, "trash").Provenance);
+        }
+
+        [Fact]
+        public void DuplicateMailboxIdsAreToleratedRatherThanThrowing()
+        {
+            var tree = new List<MailFolderNode>
+            {
+                Node("First", mailboxId: "M1"),
+                Node("Second", mailboxId: "M1"),
+            };
+
+            var resolution = FolderRoleResolver.Resolve(tree, [Override("trash", "First", mailboxId: "M1")]);
+
+            // First wins — deterministic, and the mailbox stays readable.
+            Assert.Equal("First", Entry(resolution, "trash").FolderPath);
+        }
+
+        // One flag for three causes made the client state something false in two of them.
+        [Fact]
+        public void AVanishedOverrideReportsTheMissingReason()
+        {
+            var resolution = FolderRoleResolver.Resolve([Node("Other")], [Override("trash", "Gone")]);
+
+            Assert.Equal(StaleOverrideReasons.Missing, Entry(resolution, "trash").StaleOverride!.Reason);
+        }
+
+        [Fact]
+        public void AReusedPathReportsTheMissingReason()
+        {
+            var tree = new List<MailFolderNode> { Node("Trash", uidValidity: 99) };
+
+            var resolution = FolderRoleResolver.Resolve(tree, [Override("trash", "Trash", uidValidity: 10)]);
+
+            Assert.Equal(StaleOverrideReasons.Missing, Entry(resolution, "trash").StaleOverride!.Reason);
+        }
+
+        [Fact]
+        public void ANonSelectableTargetReportsTheNotSelectableReason()
+        {
+            var tree = new List<MailFolderNode> { Node("Container", selectable: false) };
+
+            var resolution = FolderRoleResolver.Resolve(tree, [Override("trash", "Container")]);
+
+            Assert.Equal(StaleOverrideReasons.NotSelectable, Entry(resolution, "trash").StaleOverride!.Reason);
+        }
+
+        [Fact]
+        public void ATargetClaimedByTheInboxReportsTheFolderTakenReason()
+        {
+            var tree = new List<MailFolderNode> { Node("INBOX", attributeRole: "inbox") };
+
+            var resolution = FolderRoleResolver.Resolve(tree, [Override("trash", "INBOX")]);
+
+            Assert.Equal(StaleOverrideReasons.FolderTaken, Entry(resolution, "trash").StaleOverride!.Reason);
+        }
+
+        [Fact]
+        public void ATargetClaimedByAHigherPriorityOverrideReportsTheFolderTakenReason()
+        {
+            var resolution = FolderRoleResolver.Resolve(
+                [Node("X")], [Override("trash", "X"), Override("junk", "X")]);
+
+            Assert.Equal(StaleOverrideReasons.FolderTaken, Entry(resolution, "junk").StaleOverride!.Reason);
+        }
+
         // INBOX is fixed by the protocol: an override pointing at it is invalid, and INBOX
         // keeps its role whatever the stored rows say.
         [Fact]

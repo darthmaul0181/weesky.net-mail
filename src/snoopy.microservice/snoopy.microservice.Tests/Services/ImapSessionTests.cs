@@ -6,15 +6,32 @@ namespace weesky.Snoopy.Microservice.Tests.Services
 {
     public class ImapSessionTests
     {
+        /// <summary>A discovery candidate. Selectable unless a test says otherwise.</summary>
+        private static (string Path, string Name, string? AttributeRole, bool Selectable) F(
+            string path, string name, string? attributeRole = null, bool selectable = true)
+            => (path, name, attributeRole, selectable);
+
         [Theory]
-        [InlineData(FolderAttributes.Sent, "Whatever", "sent")]
-        [InlineData(FolderAttributes.Drafts, "Whatever", "drafts")]
-        [InlineData(FolderAttributes.Trash, "Whatever", "trash")]
-        [InlineData(FolderAttributes.Junk, "Whatever", "junk")]
-        [InlineData(FolderAttributes.Archive, "Whatever", "archive")]
-        public void ResolveSpecialUse_PrefersTheServerFlag(FolderAttributes attributes, string name, string expected)
+        [InlineData(FolderAttributes.Sent, "sent")]
+        [InlineData(FolderAttributes.Drafts, "drafts")]
+        [InlineData(FolderAttributes.Trash, "trash")]
+        [InlineData(FolderAttributes.Junk, "junk")]
+        [InlineData(FolderAttributes.Archive, "archive")]
+        public void SpecialUseFromAttributes_MapsEachServerFlag(FolderAttributes attributes, string expected)
         {
-            Assert.Equal(expected, ImapSession.ResolveSpecialUse(attributes, name, isInbox: false));
+            Assert.Equal(expected, ImapSession.SpecialUseFromAttributes(attributes, isInbox: false));
+        }
+
+        [Fact]
+        public void SpecialUseFromAttributes_ReturnsInboxForTheInbox()
+        {
+            Assert.Equal("inbox", ImapSession.SpecialUseFromAttributes(FolderAttributes.None, isInbox: true));
+        }
+
+        [Fact]
+        public void SpecialUseFromAttributes_ReturnsNullWithoutAFlag()
+        {
+            Assert.Null(ImapSession.SpecialUseFromAttributes(FolderAttributes.None, isInbox: false));
         }
 
         [Theory]
@@ -26,27 +43,21 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         [InlineData("Junk", "junk")]
         [InlineData("Spam", "junk")]
         [InlineData("Archive", "archive")]
-        public void ResolveSpecialUse_FallsBackToTheNameWhenNoFlag(string name, string expected)
+        public void SpecialUseFromName_RecognisesTheWellKnownNames(string name, string expected)
         {
-            Assert.Equal(expected, ImapSession.ResolveSpecialUse(FolderAttributes.None, name, isInbox: false));
+            Assert.Equal(expected, ImapSession.SpecialUseFromName(name));
         }
 
         [Fact]
-        public void ResolveSpecialUse_MatchesTheNameCaseInsensitively()
+        public void SpecialUseFromName_MatchesCaseInsensitively()
         {
-            Assert.Equal("trash", ImapSession.ResolveSpecialUse(FolderAttributes.None, "TRASH", isInbox: false));
+            Assert.Equal("trash", ImapSession.SpecialUseFromName("TRASH"));
         }
 
         [Fact]
-        public void ResolveSpecialUse_ReturnsInboxForTheInbox()
+        public void SpecialUseFromName_ReturnsNullForAnOrdinaryFolder()
         {
-            Assert.Equal("inbox", ImapSession.ResolveSpecialUse(FolderAttributes.None, "INBOX", isInbox: true));
-        }
-
-        [Fact]
-        public void ResolveSpecialUse_ReturnsNullForAnOrdinaryFolder()
-        {
-            Assert.Null(ImapSession.ResolveSpecialUse(FolderAttributes.None, "Projects", isInbox: false));
+            Assert.Null(ImapSession.SpecialUseFromName("Projects"));
         }
 
         [Theory]
@@ -68,8 +79,8 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("Drafts", "Drafts", null),
-                ("Brouillons", "Brouillons", null)
+                F("Drafts", "Drafts"),
+                F("Brouillons", "Brouillons")
             ]);
 
             Assert.Equal("drafts", roles["Drafts"].Role);
@@ -81,8 +92,8 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("Drafts", "Drafts", null),
-                ("Brouillons", "Brouillons", "drafts")
+                F("Drafts", "Drafts"),
+                F("Brouillons", "Brouillons", "drafts")
             ]);
 
             Assert.Equal("drafts", roles["Brouillons"].Role);
@@ -95,10 +106,10 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("INBOX", "INBOX", "inbox"),
-                ("Sent", "Sent", null),
-                ("Archive", "Archive", null),
-                ("Projects", "Projects", null)
+                F("INBOX", "INBOX", "inbox"),
+                F("Sent", "Sent"),
+                F("Archive", "Archive"),
+                F("Projects", "Projects")
             ]);
 
             Assert.Equal("inbox", roles["INBOX"].Role);
@@ -115,7 +126,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("Weird", "Trash", "sent")
+                F("Weird", "Trash", "sent")
             ]);
 
             Assert.Equal("sent", roles["Weird"].Role);
@@ -126,7 +137,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         public void ResolveSpecialUses_ASeededRoleIsNotClaimable()
         {
             var roles = ImapSession.ResolveSpecialUses(
-                [("Drafts", "Drafts", "drafts")],
+                [F("Drafts", "Drafts", "drafts")],
                 claimedRoles: ["drafts"]);
 
             Assert.Empty(roles);
@@ -138,7 +149,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         public void ResolveSpecialUses_ASeededFolderClaimsNothingAndTheRolePassesOn()
         {
             var roles = ImapSession.ResolveSpecialUses(
-                [("Drafts", "Drafts", "drafts"), ("Brouillons", "Brouillons", null)],
+                [F("Drafts", "Drafts", "drafts"), F("Brouillons", "Brouillons")],
                 claimedFolders: ["Drafts"]);
 
             Assert.False(roles.ContainsKey("Drafts"));
@@ -154,8 +165,8 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             var roles = ImapSession.ResolveSpecialUses(
             [
-                ("Sent", "Sent", "sent"),
-                ("Weird", "Trash", "sent")
+                F("Sent", "Sent", "sent"),
+                F("Weird", "Trash", "sent")
             ]);
 
             Assert.Equal("sent", roles["Sent"].Role);
@@ -168,7 +179,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         public void ResolveSpecialUses_HonoursBothSeededSetsAtOnce()
         {
             var roles = ImapSession.ResolveSpecialUses(
-                [("Corbeille", "Corbeille", null), ("Deleted Items", "Deleted Items", "trash"), ("Sent", "Sent", "sent")],
+                [F("Corbeille", "Corbeille"), F("Deleted Items", "Deleted Items", "trash"), F("Sent", "Sent", "sent")],
                 claimedRoles: ["trash"],
                 claimedFolders: ["Corbeille"]);
 
@@ -178,6 +189,50 @@ namespace weesky.Snoopy.Microservice.Tests.Services
             Assert.False(roles.ContainsKey("Deleted Items"));
             // A role no override touched still resolves normally.
             Assert.Equal("sent", roles["Sent"].Role);
+        }
+
+        // The ordinary shape: "Archive" exists only as a \NoSelect container for the year
+        // folders under it. It must not win the name pass — the role would sit on a mailbox
+        // that cannot hold a message, and the real archive folder could never take it back.
+        [Fact]
+        public void ResolveSpecialUses_ANoSelectContainerNeverWinsTheNamePass()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                F("Archive", "Archive", selectable: false),
+                F("Archive/2024", "2024"),
+                F("Archive/2025", "2025"),
+                F("Archives", "Archives")
+            ]);
+
+            Assert.False(roles.ContainsKey("Archive"));
+            Assert.Equal("archive", roles["Archives"].Role);
+            Assert.Equal(SpecialUseAssignment.FromName, roles["Archives"].Source);
+        }
+
+        // Same rule on the flag pass: a server may flag a container it also refuses to open.
+        [Fact]
+        public void ResolveSpecialUses_ANonSelectableFolderNeverWinsTheFlagPass()
+        {
+            var roles = ImapSession.ResolveSpecialUses(
+            [
+                F("Container", "Container", "sent", selectable: false),
+                F("Sent", "Sent", "sent")
+            ]);
+
+            Assert.False(roles.ContainsKey("Container"));
+            Assert.Equal("sent", roles["Sent"].Role);
+            Assert.Equal(SpecialUseAssignment.FromFlag, roles["Sent"].Source);
+        }
+
+        // Skipped, not merely outranked: a non-selectable folder must not consume the role
+        // and leave it unassignable when nothing else can claim it.
+        [Fact]
+        public void ResolveSpecialUses_ANonSelectableFolderDoesNotConsumeTheRole()
+        {
+            var roles = ImapSession.ResolveSpecialUses([F("Trash", "Trash", "trash", selectable: false)]);
+
+            Assert.Empty(roles);
         }
 
         [Theory]

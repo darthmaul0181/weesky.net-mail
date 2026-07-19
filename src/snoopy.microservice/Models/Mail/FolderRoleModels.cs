@@ -30,9 +30,30 @@ namespace weesky.Snoopy.Microservice.Models.Mail
         public StaleOverrideInfo? StaleOverride { get; set; }
     }
 
+    /// <summary>
+    /// Why a stored override no longer holds. The client words its notice from this: a single
+    /// undifferentiated "stale" flag left it asserting the folder was renamed or deleted even
+    /// when the folder is right there, and the truth is that it cannot hold messages or that
+    /// something else already claimed it.
+    /// </summary>
+    public static class StaleOverrideReasons
+    {
+        /// <summary>No live folder matches — deleted, renamed beyond reach, or its path reused.</summary>
+        public const string Missing = "missing";
+
+        /// <summary>The folder is there but is \NoSelect / \NonExistent: it cannot hold messages.</summary>
+        public const string NotSelectable = "notSelectable";
+
+        /// <summary>The folder is there and usable, but INBOX or a higher-priority override owns it.</summary>
+        public const string FolderTaken = "folderTaken";
+    }
+
     public class StaleOverrideInfo
     {
         public string FolderPath { get; set; } = string.Empty;
+
+        /// <summary>One of <see cref="StaleOverrideReasons"/>.</summary>
+        public string Reason { get; set; } = StaleOverrideReasons.Missing;
     }
 
     public class SetFolderRoleRequest
