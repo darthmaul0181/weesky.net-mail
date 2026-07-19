@@ -9,6 +9,7 @@ import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
 import AppearancePage from './modules/settings/appearance/AppearancePage'
 
+const MailLayout = lazy(() => import('./modules/mail/MailLayout'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.jsx'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
@@ -22,7 +23,7 @@ export const routes: RouteObject[] = [
         element: <AppShell />,
         children: [
           { index: true, element: <Navigate to="/mail" replace /> },
-          { path: 'mail', element: <ComingSoon module="Mail" /> },
+          { path: 'mail', element: <Suspense fallback={null}><MailLayout /></Suspense> },
           { path: 'calendar', element: <ComingSoon module="Calendar" /> },
           { path: 'contacts', element: <ComingSoon module="Contacts" /> },
           {

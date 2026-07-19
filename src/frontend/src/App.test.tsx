@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -15,10 +16,16 @@ const mocks = vi.hoisted(() => ({
   setIsAdmin: vi.fn(),
   login: vi.fn(),
   markLoggedIn: vi.fn(),
+  getMailFolders: vi.fn(),
 }))
 
 vi.mock('./api.js', () => ({
-  api: { getAccount: mocks.getAccount, logout: mocks.logout, login: mocks.login },
+  api: {
+    getAccount: mocks.getAccount,
+    logout: mocks.logout,
+    login: mocks.login,
+    getMailFolders: mocks.getMailFolders,
+  },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   markLoggedIn: mocks.markLoggedIn,
@@ -28,12 +35,15 @@ vi.mock('./api.js', () => ({
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <ThemeProvider>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   )
   return router
 }
@@ -47,6 +57,7 @@ describe('routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getAccount.mockResolvedValue(account)
+    mocks.getMailFolders.mockResolvedValue([])
   })
 
   it('redirects unauthenticated users to /login', async () => {
@@ -59,7 +70,8 @@ describe('routing', () => {
     mocks.hasSession.mockReturnValue(true)
     const router = renderAt('/')
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
-    expect(await screen.findByText(/coming soon/i)).toBeInTheDocument()
+    // Replaces the old "coming soon" assertion: /mail now renders the mail module.
+    expect(await screen.findByRole('navigation', { name: 'Folders' })).toBeInTheDocument()
   })
 
   it('renders the rail with the four module links', async () => {
