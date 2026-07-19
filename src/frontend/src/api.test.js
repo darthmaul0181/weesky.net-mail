@@ -483,6 +483,42 @@ describe('mail endpoints', () => {
       expect.objectContaining({ body: JSON.stringify({ path: 'Projects', subscribed: false }) })
     )
   })
+
+  it('fetches folder roles', async () => {
+    mockFetch(200, { json: [] })
+    const { api } = await import('./api.js')
+
+    await api.getFolderRoles()
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/FolderRoles'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('sends the role and folder path in the body when setting a role', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.setFolderRole('Sent', 'INBOX/Projects')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/FolderRoles'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ role: 'Sent', folderPath: 'INBOX/Projects' }) })
+    )
+  })
+
+  it('sends the role as an encoded query parameter when clearing a role', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.clearFolderRole('Sent/Archive')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/FolderRoles?role=Sent%2FArchive'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
 })
 
 describe('mailAttachmentUrl', () => {
