@@ -355,15 +355,27 @@ séparateur `/`.
 Le projet n'utilise pas les migrations EF : le schéma est géré hors EF. La création est donc
 manuelle, documentée au même titre que `StateDirectory=`.
 
-1. Créer la base sur le serveur MySQL existant
-2. Y appliquer le script de création de `folder_role_overrides` (§ 4.3)
-3. Renseigner la nouvelle chaîne de connexion dans la configuration du service
-4. Accorder à l'utilisateur du service les droits sur cette base **et sur elle seule**
+**Le script complet — bases, table, utilisateurs, `GRANT`, vérification et désinstallation — est
+dans [`docs/superpowers/mail-2a5-database-prerequisite.md`](../mail-2a5-database-prerequisite.md).**
 
-À appliquer sur les deux unités, développement et production. Le service doit **refuser de
-démarrer** si la chaîne de connexion est absente hors Development, sur le modèle du contrôle
-existant pour le key ring : un échec au démarrage avec un message nommant le correctif vaut mieux
-qu'une fonctionnalité silencieusement inerte.
+Ce qu'il pose, en résumé :
+
+- **Deux bases**, `weesky_webmail` et `weesky_webmail_dev` — le développement déploie la branche
+  `webmail` en continu et ne doit jamais toucher aux préférences de production
+- **Deux utilisateurs MySQL dédiés**, distincts de celui qui lit `dovecot` : si l'un des jeux
+  d'identifiants fuit ou tourne, l'autre n'est pas concerné
+- **`GRANT` limité aux données** — `SELECT`, `INSERT`, `UPDATE`, `DELETE`, et rien d'autre.
+  L'application ne migre jamais son schéma, elle n'a donc aucune raison de pouvoir le modifier ni
+  de pouvoir le détruire
+- **Collation `utf8mb4_bin`** : les chemins IMAP sont sensibles à la casse et se comparent octet
+  à octet ; `utf8mb4` parce que les noms de dossiers portent des accents
+- **Aucune clé étrangère vers `dovecot`** — une contrainte inter-bases recréerait le couplage que
+  cette base sert à éviter. En contrepartie, la suppression d'un utilisateur depuis l'écran
+  Administration doit purger ses lignes ici : c'est une charge applicative, à ne pas oublier
+
+Le service doit **refuser de démarrer** si la chaîne de connexion est absente hors Development,
+sur le modèle du contrôle existant pour le key ring : un échec au démarrage avec un message
+nommant le correctif vaut mieux qu'une fonctionnalité silencieusement inerte.
 
 ---
 
