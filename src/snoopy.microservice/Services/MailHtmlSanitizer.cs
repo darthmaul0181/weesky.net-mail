@@ -1,4 +1,4 @@
-using AngleSharp.Html.Dom;
+﻿using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using Ganss.Xss;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -43,22 +43,30 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         {
             "href", "src", "alt", "title", "style",
             "colspan", "rowspan", "align", "valign", "width", "height",
+            "cellpadding", "cellspacing", "border", "bgcolor", "dir",
             BlockedSrcAttribute
         }) _sanitizer.AllowedAttributes.Add(attribute);
 
-        // Inline styles only, and only properties email clients actually honour. Anything
-        // positional is excluded: it would let a message escape its container and overlay
-        // the surrounding interface.
+        // Inline styles only. Positional properties stay excluded (position, z-index, float):
+        // even sandboxed, a message overlaying itself invites phishing. Dimension and shape are
+        // what table-based mail layouts ride on — dropping them collapsed real messages.
         _sanitizer.AllowedCssProperties.Clear();
         foreach (var property in new[]
         {
-            "color", "background-color",
-            "font-family", "font-size", "font-style", "font-weight",
-            "text-align", "text-decoration",
+            "color", "background", "background-color",
+            "font", "font-family", "font-size", "font-style", "font-weight",
+            "text-align", "text-decoration", "text-decoration-line", "text-decoration-style",
+            "text-decoration-color", "text-transform", "letter-spacing", "white-space",
+            "word-break", "overflow-wrap", "direction",
             "margin", "margin-top", "margin-bottom", "margin-left", "margin-right",
             "padding", "padding-top", "padding-bottom", "padding-left", "padding-right",
             "border", "border-collapse", "border-color", "border-style", "border-width",
-            "list-style-type", "line-height", "vertical-align"
+            "border-top", "border-right", "border-bottom", "border-left",
+            "border-radius", "border-top-left-radius", "border-top-right-radius",
+            "border-bottom-left-radius", "border-bottom-right-radius",
+            "border-spacing", "table-layout", "box-sizing",
+            "width", "min-width", "max-width", "height", "min-height", "max-height",
+            "display", "list-style-type", "line-height", "vertical-align"
         }) _sanitizer.AllowedCssProperties.Add(property);
 
         _sanitizer.AllowedSchemes.Clear();

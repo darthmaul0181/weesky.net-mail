@@ -59,6 +59,60 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains("hi", result);
     }
 
+    // The bpost layout: a 600px column, a bordered card, a button. All of it rides on
+    // dimension and shape properties the old text-oriented allowlist dropped.
+    [Theory]
+    [InlineData("width: 100%")]
+    [InlineData("max-width: 400px")]
+    [InlineData("height: 40px")]
+    [InlineData("display: inline-block")]
+    [InlineData("border-top-left-radius: 4px")]
+    // The shorthand expands into longhands, which must therefore be in the allowlist too —
+    // this is the bpost button's underline.
+    [InlineData("text-decoration: none")]
+    [InlineData("border-spacing: 0px")]
+    [InlineData("text-transform: none")]
+    [InlineData("word-break: break-all")]
+    [InlineData("direction: ltr")]
+    [InlineData("background: rgb(239, 38, 55)")]
+    public void Sanitize_KeepsLayoutStylesRealMailUses(string declaration)
+    {
+        var result = _sut.Sanitize($"<div style=\"{declaration}\">x</div>").Html;
+
+        Assert.Contains(declaration.Split(':')[0], result);
+    }
+
+    [Theory]
+    [InlineData("<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td>x</td></tr></table>", "cellpadding")]
+    [InlineData("<table><tr><td bgcolor=\"#ef2637\">x</td></tr></table>", "bgcolor")]
+    public void Sanitize_KeepsTableLayoutAttributes(string html, string attribute)
+    {
+        Assert.Contains(attribute, _sut.Sanitize(html).Html);
+    }
+
+    // A url() in CSS would fetch without consent, bypassing the image-blocking model.
+    [Theory]
+    [InlineData("<div style=\"background: url(http://evil.example/pix.gif)\">x</div>")]
+    [InlineData("<div style=\"background-image: url(http://evil.example/pix.gif)\">x</div>")]
+    [InlineData("<div style=\"border-image: url(http://evil.example/pix.gif)\">x</div>")]
+    public void Sanitize_NeverKeepsACssUrl(string html)
+    {
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain("evil.example", result);
+        Assert.Contains("x", result);
+    }
+
+    [Theory]
+    [InlineData("position: fixed")]
+    [InlineData("z-index: 9999")]
+    public void Sanitize_StillDropsPositionalStyles(string declaration)
+    {
+        var result = _sut.Sanitize($"<div style=\"{declaration}\">x</div>").Html;
+
+        Assert.DoesNotContain(declaration.Split(':')[0], result);
+    }
+
     [Fact]
     public void Sanitize_KeepsFormattingTheEditorMustAlsoProduce()
     {
