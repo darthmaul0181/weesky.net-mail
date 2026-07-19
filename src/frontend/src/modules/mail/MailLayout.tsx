@@ -42,14 +42,19 @@ export default function MailLayout() {
 
   return (
     <div className="mail-layout">
+      {/* Each column is a band stack: what scrolls is the middle band only, so the folder
+          actions and the pager stay put instead of hiding below their own content. */}
       <div className="mail-folders">
-        {isLoading && <p className="mail-empty">Loading folders…</p>}
-        {isError && <p className="mail-empty">Could not load folders.</p>}
+        <div className="mail-folders-scroll">
+          {isLoading && <p className="mail-empty">Loading folders…</p>}
+          {isError && <p className="mail-empty">Could not load folders.</p>}
+          {folders && <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder} />}
+        </div>
+
         {folders && (
-          <>
+          <div className="mail-folders-footer">
             <FolderDialogs folders={folders} selectedPath={folder} onNotify={addToast} />
-            <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder} />
-          </>
+          </div>
         )}
       </div>
 

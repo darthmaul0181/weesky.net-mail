@@ -37,6 +37,15 @@ function renderDialogs(onNotify = vi.fn()) {
   return onNotify
 }
 
+/** Both actions are icon buttons in the folder column's footer, named by their aria-label. */
+function openCreate() {
+  fireEvent.click(screen.getByRole('button', { name: 'New folder' }))
+}
+
+function openManage() {
+  fireEvent.click(screen.getByRole('button', { name: 'Manage folders' }))
+}
+
 describe('parentOf', () => {
   it('strips the leaf name whatever the separator', () => {
     expect(parentOf(node({ path: 'INBOX/Projects', name: 'Projects' }))).toBe('INBOX')
@@ -55,12 +64,43 @@ describe('flatten', () => {
   })
 })
 
+describe('the folder actions', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // The two actions are icons in the column footer now. They carry no visible text, so the
+  // accessible name is the only name they have — losing it would leave them unreachable to a
+  // screen reader and unfindable to these tests alike.
+  it('names both icon actions', () => {
+    renderDialogs()
+
+    expect(screen.getByRole('button', { name: 'New folder' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage folders' })).toBeInTheDocument()
+  })
+
+  it('opens nothing until an action is clicked', () => {
+    renderDialogs()
+
+    expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Show Projects')).not.toBeInTheDocument()
+  })
+})
+
 describe('creating a folder', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('closes without creating anything when cancelled', () => {
+    renderDialogs()
+    openCreate()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument()
+  })
+
   it('keeps Create disabled until a name is typed', () => {
     renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'New folder' }))
+    openCreate()
 
     expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled()
   })
@@ -69,7 +109,7 @@ describe('creating a folder', () => {
     mocks.create.mockResolvedValue('INBOX/Reports')
     const onNotify = renderDialogs()
 
-    fireEvent.click(screen.getByRole('button', { name: 'New folder' }))
+    openCreate()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Reports' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
@@ -82,7 +122,7 @@ describe('creating a folder', () => {
     mocks.create.mockRejectedValue(new Error("A folder name cannot be empty or contain '/'"))
     const onNotify = renderDialogs()
 
-    fireEvent.click(screen.getByRole('button', { name: 'New folder' }))
+    openCreate()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'a/b' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
@@ -94,10 +134,28 @@ describe('creating a folder', () => {
 describe('managing folders', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('lists every folder, children included, once opened', () => {
+    renderDialogs()
+    openManage()
+
+    expect(screen.getByLabelText('Show INBOX')).toBeInTheDocument()
+    expect(screen.getByLabelText('Show Projects')).toBeInTheDocument()
+    expect(screen.getByLabelText('Show Alpha')).toBeInTheDocument()
+  })
+
+  it('closes on the close button', () => {
+    renderDialogs()
+    openManage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByLabelText('Show Projects')).not.toBeInTheDocument()
+  })
+
   it('toggles visibility with the inverted state', async () => {
     mocks.subscribe.mockResolvedValue(undefined)
     renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
 
     fireEvent.click(screen.getByLabelText('Show Projects'))
 
@@ -107,7 +165,7 @@ describe('managing folders', () => {
 
   it('shows an unsubscribed folder as unchecked', () => {
     renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
 
     expect(screen.getByLabelText('Show Alpha')).not.toBeChecked()
   })
@@ -122,7 +180,7 @@ describe('managing folders', () => {
         selectedPath={null}
         onNotify={vi.fn()}
       />)
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
 
     const toggle = screen.getByLabelText('Show INBOX')
     expect(toggle).toBeChecked()
@@ -131,7 +189,7 @@ describe('managing folders', () => {
 
   it('offers no Delete for the inbox', () => {
     renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
 
     expect(screen.queryByRole('button', { name: 'Delete INBOX' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete Projects' })).toBeInTheDocument()
@@ -140,7 +198,7 @@ describe('managing folders', () => {
   it('renames through the parent derived from the path', async () => {
     mocks.rename.mockResolvedValue('Projects/Beta')
     renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
     fireEvent.click(screen.getByRole('button', { name: 'Rename Alpha' }))
 
     fireEvent.change(screen.getByLabelText('New name'), { target: { value: 'Beta' } })
@@ -157,7 +215,7 @@ describe('deleting a folder', () => {
 
   it('asks for confirmation before deleting', () => {
     renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
     fireEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
 
     expect(mocks.remove).not.toHaveBeenCalled()
@@ -168,7 +226,7 @@ describe('deleting a folder', () => {
   it('deletes once confirmed', async () => {
     mocks.remove.mockResolvedValue(undefined)
     const onNotify = renderDialogs()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    openManage()
     fireEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
 
     fireEvent.click(screen.getByRole('button', { name: /^Delete$/ }))

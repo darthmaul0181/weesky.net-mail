@@ -7,29 +7,53 @@
   overflow: hidden;   /* .app-content sets overflow:auto; the columns scroll, not the page */
 }
 
+/* Every column is a stack of bands with one scrolling middle. min-height:0 on each is what
+   lets that middle actually shrink — without it a flex child refuses to go below its content
+   height and the scroll lands on the page instead of the band. */
+.mail-folders,
+.mail-list,
+.mail-reader {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .mail-folders {
   width: 240px;
   flex: none;
-  overflow-y: auto;
   border-right: 1px solid var(--border);
-  padding: 12px 8px;
+}
+
+.mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
+
+.mail-folders-footer {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
 }
 
 .mail-list {
   width: 380px;
   flex: none;
-  overflow-y: auto;
   border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+
+.mail-list-footer {
+  flex: none;
+  border-top: 1px solid var(--list-separator);
   background: var(--surface);
 }
 
 .mail-reader {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
   background: var(--surface);
-  display: flex;
-  flex-direction: column;
 }
 
 /* ── Folder tree ─────────────────────────────────────────── */
@@ -97,7 +121,25 @@
 
 /* ── Folder management ───────────────────────────────────── */
 
-.folder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.folder-actions { display: flex; gap: 4px; }
+
+/* Icon-sized hit target, used both in the column footer and in the manage rows. */
+.folder-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.folder-action:hover { background: var(--pane-item-hover); color: var(--text); }
+.folder-action.is-danger:hover { color: var(--danger); }
 
 .folder-form {
   display: flex;
@@ -118,25 +160,65 @@
   color: var(--text-muted);
 }
 
-.folder-manage-list { list-style: none; margin-bottom: 10px; }
+/* ── Manage-folders modal ────────────────────────────────── */
 
-.folder-manage-list li {
+.modal-folders {
+  max-width: 520px;
+  max-height: 78vh;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 0;
-  font-size: 13px;
+  flex-direction: column;
 }
 
-.folder-manage-list label { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.modal-hint {
+  flex: none;
+  margin: -8px 0 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+.folder-manage-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0 -8px;
+}
+
+.folder-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+}
+
+.folder-manage-row:hover { background: var(--pane-item-hover); }
+
+.folder-manage-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  /* The row is 34px tall whether or not it carries action buttons, so the checkboxes stay on
+     one rhythm down the list instead of stepping around the inbox, which has no Delete. */
+  min-height: 34px;
+  cursor: pointer;
+}
+
+.folder-manage-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.folder-manage-actions { display: flex; gap: 2px; flex: none; }
 
 /* ── Message list ────────────────────────────────────────── */
 
-/* Sticky so the column keeps saying which folder it shows once the rows scroll past. */
+/* Its own band above the scrolling one, so it never moves. */
 .message-list-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex: none;
   padding: 10px 12px;
   border-bottom: 1px solid var(--list-separator);
   background: var(--surface);
@@ -210,19 +292,64 @@
   flex: none;
 }
 
-.message-pager {
+/* ── Pager ───────────────────────────────────────────────── */
+
+.pager {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 10px;
+  flex-wrap: wrap;
 }
 
-.message-pager-position { color: var(--text-muted); font-size: 12px; }
+.pager-page,
+.pager-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pager-page:hover:not(.is-current),
+.pager-step:hover:not(:disabled) { background: var(--list-row-hover); }
+
+.pager-page.is-current {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+  font-weight: 650;
+  cursor: default;
+}
+
+.pager-step { color: var(--text-muted); }
+.pager-step:disabled { opacity: 0.35; cursor: default; }
+.pager-step-back { display: flex; transform: rotate(180deg); }
+
+.pager-gap {
+  min-width: 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+}
 
 /* ── Reader ──────────────────────────────────────────────── */
 
-.reader-header { padding: 18px 22px; border-bottom: 1px solid var(--reader-header-border); }
+.reader-header {
+  flex: none;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--reader-header-border);
+}
+
 .reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
 .reader-meta { color: var(--text-muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -239,17 +366,43 @@
 }
 
 /* The article carries the column layout so the body can claim the leftover height. Without
-   this the iframe's flex:1 resolves against a plain block and it collapses to min-height. */
-.mail-reader > article { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+   this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
+   leaving the bottom of the panel empty while the message scrolls in a short window. */
+.mail-reader > article {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 
-.reader-body { flex: 1; width: 100%; min-height: 300px; border: none; }
-.reader-text { padding: 18px 22px; white-space: pre-wrap; font-family: var(--font); }
+/* min-height:0, not the 300px floor it used to carry: a floor taller than the space left over
+   pushes the attachments below the fold, which is the one row that must stay reachable. */
+.reader-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+}
+
+.reader-text {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+  white-space: pre-wrap;
+  font-family: var(--font);
+}
 .reader-quote { color: var(--quote-text); }
 
+/* Pinned under the body, never scrolled away with it. max-height so a message with twenty
+   attachments cannot take the panel over — that band scrolls on its own instead. */
 .reader-attachments {
+  flex: none;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  max-height: 30%;
+  overflow-y: auto;
   padding: 12px 22px;
   border-top: 1px solid var(--reader-header-border);
 }

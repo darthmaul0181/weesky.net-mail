@@ -503,7 +503,25 @@ aller lire ; c'est justifié dans un dossier qu'on garde, jamais dans les deux q
 pas. Le serveur réel affichait 8 non-lus dans `Deleted Items` — exact, et sans objet. Les
 dossiers restent visibles, seule la pastille disparaît.
 
-**La colonne du milieu porte un en-tête collant** nommant le dossier courant, présent dans tous
+**Chaque colonne est une pile de bandes, pas une boîte défilante.** Une seule bande défile
+(`flex: 1; min-height: 0; overflow-y: auto`), les autres sont figées. C'est ce qui maintient à
+l'écran les actions de dossier, l'en-tête de liste, la pagination et la rangée des pièces
+jointes — les quatre se trouvaient auparavant à la fin du contenu de leur colonne et il fallait
+tout faire défiler pour les atteindre. `min-height: 0` porte tout : sans lui, un enfant flex
+refuse de descendre sous la hauteur de son contenu et le défilement retombe sur la colonne.
+
+**Pagination numérotée**, un-based à l'écran, zero-based sur le fil. La bande garde toujours la
+première et la dernière page — les deux destinations qu'on demande par leur nom — plus une
+fenêtre autour de la page courante ; le reste s'élide. Une élision ne remplace jamais une page
+unique : « … » a la largeur du nombre qu'elle cache et coûte un clic.
+
+**Les actions de dossier sont deux icônes en pied de colonne**, et chaque dialogue est une
+popup. Créer et gérer des dossiers est rare à côté de l'acte constant de lire ; deux boutons
+libellés en tête prenaient une bande de la colonne en permanence. La liste de gestion demande
+par dossier une case de visibilité et deux actions, ce qu'une colonne de 240 px ne peut pas
+disposer lisiblement.
+
+**La colonne du milieu porte un en-tête** nommant le dossier courant, présent dans tous
 les états (chargement, vide, liste) : sans lui, une fois les lignes défilées, plus rien ne dit
 ce qu'on regarde. Il affiche le nom feuille, pas le chemin — sous un séparateur `.` le chemin
 se lit `INBOX.Linux server`, ce qui n'est pas le nom que l'utilisateur a donné au dossier.

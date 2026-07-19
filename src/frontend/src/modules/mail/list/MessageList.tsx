@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { PAGE_SIZE, useMessages } from '../queries'
 import { formatListDate } from './formatDate'
+import Pagination from './Pagination'
 
 interface Props {
   folderPath: string | null
@@ -10,6 +11,11 @@ interface Props {
   onSelect: (uid: number) => void
 }
 
+/**
+ * Three bands: a heading, the rows, and the pager. Only the middle one scrolls, so both the
+ * folder you are in and the way off the page you are on stay on screen — the pager used to sit
+ * after the last row, which meant scrolling fifty messages to reach it.
+ */
 export default function MessageList({ folderPath, folderName, selectedUid, onSelect }: Props) {
   const [page, setPage] = useState(0)
 
@@ -20,21 +26,14 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
 
   if (!folderPath) return <p className="mail-empty">Select a folder</p>
 
-  // The heading stays put across every state below, so the column always says which folder is
-  // being shown — including while it loads, and including once the rows have scrolled away.
-  const heading = (
-    <h2 className="message-list-heading">{folderName || folderPath}</h2>
-  )
+  const lastPage = data ? Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1) : 0
 
-  if (isLoading && !data) return <>{heading}<p className="mail-empty">Loading messages…</p></>
-  if (isError) return <>{heading}<p className="mail-empty">Could not load messages.</p></>
-  if (!data || data.messages.length === 0) return <>{heading}<p className="mail-empty">No messages</p></>
+  function rows() {
+    if (isLoading && !data) return <p className="mail-empty">Loading messages…</p>
+    if (isError) return <p className="mail-empty">Could not load messages.</p>
+    if (!data || data.messages.length === 0) return <p className="mail-empty">No messages</p>
 
-  const lastPage = Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1)
-
-  return (
-    <div>
-      {heading}
+    return (
       <ul className="message-list">
         {data.messages.map(message => {
           const classes = ['message-row']
@@ -60,18 +59,21 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
           )
         })}
       </ul>
+    )
+  }
+
+  return (
+    <>
+      {/* Outside the scrolling band, so the column keeps saying which folder it shows. */}
+      <h2 className="message-list-heading">{folderName || folderPath}</h2>
+
+      <div className="mail-list-scroll">{rows()}</div>
 
       {lastPage > 0 && (
-        <div className="message-pager">
-          <button type="button" className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-            Previous page
-          </button>
-          <span className="message-pager-position">{page + 1} / {lastPage + 1}</span>
-          <button type="button" className="btn" disabled={page >= lastPage} onClick={() => setPage(p => p + 1)}>
-            Next page
-          </button>
+        <div className="mail-list-footer">
+          <Pagination page={page} lastPage={lastPage} onSelect={setPage} />
         </div>
       )}
-    </div>
+    </>
   )
 }

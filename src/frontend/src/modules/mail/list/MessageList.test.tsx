@@ -179,6 +179,41 @@ describe('MessageList', () => {
       expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 50, expect.anything()))
   })
 
+  it('offers the pages as numbers', async () => {
+    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    await screen.findByText('Alice Martin')
+
+    // 120 messages over 50 per page is three pages, numbered from one on screen.
+    expect(screen.getByRole('button', { name: 'Page 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Page 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Page 3' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Page 4' })).not.toBeInTheDocument()
+  })
+
+  it('jumps straight to a numbered page', async () => {
+    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Page 3' }))
+
+    // Zero-based on the wire, one-based on screen.
+    await waitFor(() =>
+      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 2, 50, expect.anything()))
+  })
+
+  it('marks the page being shown', async () => {
+    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    await screen.findByText('Alice Martin')
+
+    expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Page 2' })).not.toHaveAttribute('aria-current')
+  })
+
   it('resets to the first page when the folder changes', async () => {
     mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
 
