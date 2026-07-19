@@ -17,6 +17,16 @@
             lazily from the application container (no BuildServiceProvider).
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Middleware.SlidingSessionMiddleware">
+             <summary>
+             Extends a live session in place rather than letting it expire mid-use. A webmail stays
+             open for hours; a 30-minute token with no renewal would sign the user out while they
+             read. This achieves that without a refresh token, an extra endpoint or a token store.
+            
+             Both cookies are renewed together, or neither: renewing the JWT alone would leave a
+             session that looks alive but can no longer open IMAP.
+             </summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Authentication.Models.AuthToken.ExpiresIn">
             <summary>
             Expiry in minutes

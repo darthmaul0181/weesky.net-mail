@@ -8,6 +8,7 @@ using Serilog.Events;
 using Serilog.Filters;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
+using weesky.Snoopy.Microservice.Authentication.Middleware;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -89,6 +90,7 @@ builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IMailFolderRepository, MailFolderRepository>();
 builder.Services.AddScoped<IMailMessageRepository, MailMessageRepository>();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
 builder.Services.AddScoped<ITokenManager, TokenManager>();
@@ -226,6 +228,11 @@ if (app.Environment.IsDevelopment())
 app.UseCors("Frontend");
 app.UseRateLimiter();
 app.UseAuthentication();
+
+// After authentication so the principal exists, before authorization so a renewal still
+// happens on a request that authorization will go on to reject for other reasons.
+app.UseMiddleware<SlidingSessionMiddleware>();
+
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");

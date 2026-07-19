@@ -2600,7 +2600,17 @@ namespace snoopy.microservice.Tests.Authentication
 }
 ```
 
-Read `ITokenManager` and `AuthToken` first: if `Generate` has a different name or signature, adapt the test and the implementation to the real one and note it in your report.
+**Two corrections applied during execution.**
+
+`ITokenManager.Generate` takes a `User`, not `(name, domain)`. Build one from the claims:
+`tokens.Generate(new User($"{name}@{domain}"))`.
+
+**The middleware must read `exp`, not `iat`.** `TokenBuilder.Build()` uses the
+`JwtSecurityToken(issuer, audience, claims, expires, credentials)` constructor, which emits an
+expiry but **no issued-at claim**. Reading `iat` would find nothing, so the renewal would never
+fire — a silent no-op, the worst failure mode for this feature. Measure *remaining lifetime*
+against half the configured lifetime instead; `exp` is guaranteed present because
+`ValidateLifetime` depends on it. A test covers the missing-claim case explicitly.
 
 - [ ] **Step 2: Run to verify it fails, then implement**
 
