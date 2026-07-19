@@ -138,9 +138,7 @@ else label = "Unknown";
 - **ALWAYS** Prefer record types for immutable data structures.
 - **ALWAYS** use ILogger with Structured logging to log, no string interpolation and no other logging methods.
 - **ALWAYS** use cancellation tokens for asynchronous methods.
-- **ALWAYS** use IMemoryCore for time-based in-memory caching, NEVER use IMemoryCache.
 - **ALWAYS** use Data Transfer Objects (DTO) for API communication, validated with attributes.
-- **ALWAYS** use x as a parameter name in lambdas and anonymous functions.
 - **NEVER** use try-catch blocks solely to log and rethrow exceptions.
 - If any backend changes are made, run dotnet build in the root and ensure no build errors for the entire solution.
 
