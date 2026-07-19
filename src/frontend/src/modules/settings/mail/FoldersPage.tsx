@@ -9,10 +9,8 @@ import { useFolders } from '../../mail/queries'
 import SystemFoldersModal from './SystemFoldersModal'
 
 /**
- * Everything about folders in one place: the full list with its per-folder controls, plus the
- * two dialogs that act across the whole set. The mail column keeps its own New folder button —
- * creating a folder while reading is a quick action, not a trip to the settings — but its
- * Manage button leads here rather than opening a list a 240px column cannot lay out.
+ * Everything about folders: the full list, plus the two dialogs acting across the whole set.
+ * The mail column keeps its own New folder button; its Manage button leads here.
  */
 export default function FoldersPage() {
   const { data: folders, isLoading, isError } = useFolders()
@@ -30,8 +28,7 @@ export default function FoldersPage() {
       </p>
 
       <div className="folders-page-actions">
-        {/* btn-ghost, not a bare btn: `.btn` alone carries no border and no background, so both
-            of these rendered as plain text and read as headings rather than controls. */}
+        {/* btn-ghost: a bare `.btn` has no border and no background, and reads as text. */}
         <button type="button" className="btn btn-ghost" onClick={() => setCreating(true)}>
           <FolderPlusIcon size={15} />New folder
         </button>

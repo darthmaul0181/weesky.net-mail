@@ -33,9 +33,7 @@ function renderDialogs(onNotify = vi.fn()) {
 describe('the folder column actions', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  // Both are icons in the column footer. They carry no visible text, so the accessible name is
-  // the only name they have — losing it would leave them unreachable to a screen reader and
-  // unfindable to these tests alike.
+  // Icons with no visible text: the accessible name is the only name they have.
   it('names both icon actions', () => {
     renderDialogs()
 
@@ -43,9 +41,7 @@ describe('the folder column actions', () => {
     expect(screen.getByRole('link', { name: 'Manage folders' })).toBeInTheDocument()
   })
 
-  // Creating stays in the column — it is a quick action, done while looking at the tree it
-  // changes. Managing leads to the settings page, because a row per folder with a switch and
-  // two actions is not something a 240px column can lay out legibly.
+  // Creating is a quick action; managing needs width a 240px column does not have.
   it('sends Manage folders to the folders settings page', () => {
     renderDialogs()
 

@@ -12,17 +12,12 @@ interface Props {
   onNotify: (message: string, type?: 'success' | 'error') => void
 }
 
-/**
- * Creating a folder is reachable from two places — the mail column's footer, where it is a
- * quick action beside the tree, and the folders settings page. One component, so the two can
- * never drift into two dialects of the same dialog.
- */
+/** Shared by the mail column's footer and the folders settings page, so the two cannot drift. */
 export default function CreateFolderModal({ folders, defaultParent = '', onClose, onNotify }: Props) {
   const [name, setName] = useState('')
   const [parent, setParent] = useState(defaultParent)
   const createFolder = useCreateFolder()
 
-  // Same order as the folders list: the user is hunting for a name here too.
   const all = flatten(sortFolders(folders))
 
   return (

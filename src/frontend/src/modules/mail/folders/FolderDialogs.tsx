@@ -12,15 +12,9 @@ interface Props {
 }
 
 /**
- * The folder column's footer actions.
- *
- * Two icons rather than labelled buttons: creating and managing folders are rare next to the
- * constant business of reading, and labelled buttons at the top were taking a band of the
- * column away from the tree every time it was not being used.
- *
- * Creating stays here — it is a quick action, reached while looking at the tree it will change.
- * Managing leads to the folders settings page: a row per folder with a switch and two actions
- * is not something a 240px column can lay out legibly.
+ * The folder column's footer. Icons, not labelled buttons: folder work is rare next to reading
+ * and was costing the tree a permanent band. Creating stays here as a quick action; managing
+ * leads to the settings page, which a 240px column cannot lay out.
  */
 export default function FolderDialogs({ folders, selectedPath, onNotify }: Props) {
   const [creating, setCreating] = useState(false)

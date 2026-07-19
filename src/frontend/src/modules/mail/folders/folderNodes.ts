@@ -21,33 +21,19 @@ export function indent(depth: number): string {
   return ' '.repeat(depth * 3)
 }
 
-/**
- * A folder currently playing a well-known role. These are locked against renaming, deletion
- * and hiding: the first two break the role for every client on the mailbox, the third strands
- * whatever gets filed into it. The API refuses them too — this is not the only guard.
- */
+/** Locked against renaming, deletion and hiding — the API refuses those three too. */
 export function isSystemFolder(node: MailFolderNode): boolean {
   return Boolean(node.specialUse)
 }
 
 /**
- * Orders a tree for the folders list: the inbox first, then everything else by name, at every
- * level.
- *
- * Deliberately *not* the mail column's order, which floats the well-known folders to the top
- * because that is where a reader reaches for them. Here the question is "where is the folder I
- * am looking for", so a system folder sits under its own name among the rest — with "Deleted
- * Items" between "Courrier indésirable" and "Developpement" rather than in a block of its own.
- *
- * Compared with localeCompare: this mailbox is full of accented names, and a codepoint sort
- * would file "Éléments supprimés" after "Zeta". Case-insensitive, so "e-commerce" lands
- * between "Drafts" and "English" rather than after every capitalised name.
+ * Inbox first, then everything by name — system folders interleaved, not grouped: here the
+ * question is "where is the folder I am looking for". `FolderTree.splitByRole` does the
+ * opposite. localeCompare, or every accented name files after "Z".
  */
 export function sortFolders(nodes: MailFolderNode[]): MailFolderNode[] {
   return [...nodes]
     .sort((a, b) => {
-      // The inbox is not a folder among others: it is where mail arrives, it cannot be
-      // renamed, and every client shows it first.
       if (a.specialUse === 'inbox') return -1
       if (b.specialUse === 'inbox') return 1
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })

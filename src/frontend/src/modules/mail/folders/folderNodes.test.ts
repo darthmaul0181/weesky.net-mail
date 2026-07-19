@@ -19,8 +19,7 @@ const tree: MailFolderNode[] = [
 ]
 
 describe('parentOf', () => {
-  // Derived from the leaf name rather than by splitting on a separator, because the separator
-  // belongs to the server: '.' on the home server, '/' elsewhere.
+  // From the leaf name, not by splitting: the separator belongs to the server.
   it('strips the leaf name whatever the separator', () => {
     expect(parentOf(node({ path: 'INBOX/Projects', name: 'Projects' }))).toBe('INBOX')
     expect(parentOf(node({ path: 'INBOX.Projects', name: 'Projects' }))).toBe('INBOX')
@@ -56,8 +55,7 @@ describe('sortFolders', () => {
     ])).toEqual(['INBOX', 'Alpha', 'Zeta'])
   })
 
-  // The point of this order: a system folder sits under its own name among the rest, so the
-  // user finds it where they would look for it rather than in a block of its own.
+  // A system folder sits under its own name, where the user would look for it.
   it('interleaves system folders alphabetically instead of grouping them', () => {
     expect(names([
       node({ path: 'Developpement', name: 'Developpement' }),

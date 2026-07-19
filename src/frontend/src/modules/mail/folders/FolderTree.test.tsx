@@ -99,8 +99,7 @@ describe('FolderTree', () => {
     expect(names).toEqual(['Inbox', 'Trash', 'Alpha', 'Zebra'])
   })
 
-  // The two blocks used to run together, so a well-known folder was distinguishable from an
-  // ordinary one only by recognising its name — which fails exactly where it matters, on a
+  // Without the rule, telling the two apart means recognising the name — which fails on a
   // mailbox holding both "Drafts" and "Brouillons".
   it("rules off the well-known folders from the user's own", () => {
     const { container } = render(
@@ -116,8 +115,7 @@ describe('FolderTree', () => {
     expect(container.querySelectorAll('.folder-separator')).toHaveLength(1)
   })
 
-  // A rule under nothing, or above nothing, reads as a rendering fault. A freshly provisioned
-  // mailbox with no folders of its own is the common case, not an edge case.
+  // A rule under nothing reads as a fault, and a mailbox with no folders of its own is common.
   it.each([
     ['no folders of its own', [node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]],
     ['no well-known folders', [node({ path: 'Alpha', name: 'Alpha' })]],
@@ -143,9 +141,7 @@ describe('FolderTree', () => {
     expect(container.querySelectorAll('.folder-row.is-system')).toHaveLength(2)
   })
 
-  // Below the rule the question is "where is the folder I am looking for", so the answer is the
-  // same order the folders list uses — accents included, since a codepoint sort files every one
-  // of them after "Z".
+  // Same order as the folders list, accents included: a codepoint sort files them after "Z".
   it("orders the user's own folders by name, accents in their place", () => {
     render(
       <FolderTree

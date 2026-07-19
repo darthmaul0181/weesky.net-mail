@@ -13,11 +13,8 @@ interface Props {
 }
 
 /**
- * Assigns the five system roles to folders. "Automatic" follows what the server declares —
- * the right default for a freshly provisioned mailbox — and a pick corrects it where a messy
- * history (say, both "Drafts" and "Brouillons") made the detection guess wrong.
- *
- * A dialog rather than a page: it is opened from the folders list, acted on once, and closed.
+ * Assigns the five system roles. "Automatic" follows the server; a pick corrects it where a
+ * messy history (both "Drafts" and "Brouillons") made detection guess wrong.
  */
 export default function SystemFoldersModal({ onClose, onNotify }: Props) {
   const { data: folders, isLoading: foldersLoading, isError: foldersError } = useFolders()
@@ -99,10 +96,8 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
                     </select>
                   </div>
                   {entry?.staleOverride && (
-                    // Kept and signalled, never silently dropped: the user's choice was
-                    // invalidated outside this app, and this is the place where they can act on
-                    // it. Linked to the select via aria-describedby so a screen-reader user
-                    // hears it on focus, not just sighted users relying on DOM adjacency.
+                    // Kept and signalled, never dropped (§ 5.3). aria-describedby so it is
+                    // announced on focus, not just seen next to the select.
                     <p id={`role-${role}-stale`} className="system-folders-stale">
                       {staleMessage(entry.staleOverride)}
                     </p>
@@ -118,10 +113,8 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
 }
 
 /**
- * The empty option says what "automatic" currently resolves to, so choosing it is informed —
- * and *how* it got there. "The server declared this folder is the archive" and "no server said
- * anything, so we guessed from the folder's name" are the two things this dialog exists to tell
- * apart: only the second is worth a second look, and only the second is likely to be wrong.
+ * Says what "automatic" resolves to and how. "The server declared it" versus "we guessed from
+ * the name" is the distinction this dialog exists for: only the guess is likely to be wrong.
  */
 function automaticLabel(
   entry: FolderRoleEntry | undefined,
@@ -136,11 +129,7 @@ function automaticLabel(
     : `Automatic — ${name}`
 }
 
-/**
- * A stale override has three distinct causes and the notice must state the right one — telling
- * a user their folder was deleted when it is sitting in the tree, merely unable to hold
- * messages, sends them looking for a problem that isn't there.
- */
+/** Three causes, three messages: "deleted" about a folder still in the tree sends the user hunting. */
 function staleMessage(stale: FolderRoleStaleOverride): string {
   const choice = `Your previous choice “${stale.folderPath}”`
 

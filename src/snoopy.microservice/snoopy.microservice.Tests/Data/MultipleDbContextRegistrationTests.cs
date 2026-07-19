@@ -6,10 +6,9 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Data
 {
-    // Registering a second DbContext makes EF reject any context whose constructor takes the
-    // non-generic DbContextOptions. Every test builds its context by hand, so the suite stayed
-    // green while the running service failed on the first request that touched the database.
-    // These resolve both contexts the way Program.cs does, through the container.
+    // Every other test builds its context by hand, so the suite stayed green while the running
+    // service failed on the first request that touched the database. These go through the
+    // container, the way Program.cs does.
     public class MultipleDbContextRegistrationTests
     {
         private static ServiceProvider BuildProviderWithBothContexts()

@@ -462,12 +462,8 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         }
 
         // ── System folders are locked against rename, delete and hide ───────
-        //
-        // The client already hides these controls, but a guard that lives only in one client is
-        // one new screen away from being forgotten. Renaming or deleting a folder holding a role
-        // breaks that role for every client on the mailbox; hiding one strands whatever gets
-        // filed into it. The role is changed on the FolderRoles endpoints, which move the stored
-        // override with it.
+        // The client disables these controls too, but a guard living in one client is one new
+        // screen away from being forgotten.
 
         [Fact]
         public async Task RenameFolder_RefusesAFolderHoldingARole()
@@ -478,8 +474,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
                 new RenameFolderRequest { Path = "Corbeille", NewName = "Poubelle" }, CancellationToken.None);
 
             var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-            // The message has to name the role: "this folder is locked" leaves the user with no
-            // idea which setting to change.
+            // The message must name the role, or the user cannot tell what to change.
             Assert.Contains("trash", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
             _folders.Verify(f => f.RenameFolderAsync(
                 It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -499,8 +494,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
                 It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
-        // Deleting a parent takes its children with it, so a guard that only looked at the
-        // target path could be stepped around one level up.
+        // Deleting a parent takes its children with it.
         [Fact]
         public async Task DeleteFolder_RefusesAFolderWhoseChildHoldsARole()
         {
@@ -529,14 +523,13 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
                 It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
-        // The role can come from a stored override just as well as from a server flag: the guard
-        // reads the resolution chain, not the SPECIAL-USE flags alone.
+        // The guard reads the resolution chain, not the SPECIAL-USE flags alone.
         [Fact]
         public async Task RenameFolder_RefusesAFolderHoldingARoleByOverride()
         {
             SetupTree(RoleNode("Bin", uidValidity: 42));
-            // CreateController first: Moq lets the most recently configured matching setup win
-            // regardless of specificity, so its catch-all GetAsync would shadow this one.
+            // CreateController first: Moq's last matching setup wins, so its catch-all GetAsync
+            // would shadow this one.
             var controller = CreateController();
             SetupOverrides(new FolderRoleOverride
             {
@@ -563,8 +556,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
                 Times.Never);
         }
 
-        // Only hiding is refused. Refusing to subscribe would leave a mailbox whose trash was
-        // hidden by another client stuck that way.
+        // Only hiding is refused.
         [Fact]
         public async Task SetFolderSubscription_AllowsShowingAFolderHoldingARole()
         {

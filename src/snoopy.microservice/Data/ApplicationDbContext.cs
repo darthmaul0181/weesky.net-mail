@@ -5,8 +5,7 @@ namespace weesky.Snoopy.Microservice.Data
 {
     public class ApplicationDbContext : DbContext
     {
-        // Must be the generic DbContextOptions<ApplicationDbContext>: EF refuses a non-generic
-        // one as soon as a second context is registered, and 2a.5 added PreferencesDbContext.
+        // Generic: EF refuses a non-generic DbContextOptions once a second context is registered.
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
             : base(options)
         {

@@ -5,9 +5,8 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Configuration
 {
-    // Controller tests invoke actions directly and never run an output formatter, so nothing in
-    // the suite noticed that CreateFolder answered text/plain. These run the production
-    // configuration itself.
+    // Controller tests never run an output formatter, so nothing caught CreateFolder answering
+    // text/plain. This runs the production configuration itself.
     public class MvcFormatterConfigurationTests
     {
         [Fact]

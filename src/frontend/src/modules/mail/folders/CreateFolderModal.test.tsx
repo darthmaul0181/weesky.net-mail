@@ -50,13 +50,12 @@ describe('CreateFolderModal', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  // Built from the admin module's parts, so a webmail does not end up with two dialects of
-  // form. .field-h is the horizontal label/control row those dialogs use.
+  // Built from the admin module's parts: .field-h is their horizontal label/control row.
   it('lays its fields out the way the admin dialogs do', () => {
     const { container } = renderModal()
 
     expect(container.querySelectorAll('.field-h')).toHaveLength(2)
-    // Labels sit beside their control, so the association has to be explicit to survive.
+    // Labels sit beside their control, so the association must be explicit.
     expect(screen.getByLabelText('Name')).toHaveAttribute('id', 'new-folder-name')
     expect(screen.getByLabelText('Parent')).toHaveAttribute('id', 'new-folder-parent')
   })

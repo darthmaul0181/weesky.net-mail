@@ -24,8 +24,7 @@ function node(partial: Partial<MailFolderNode>): MailFolderNode {
 
 const tree: MailFolderNode[] = [
   node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-  // A system folder that is not the inbox: the inbox is locked for its own reasons, so on its
-  // own it cannot show that the rule covers every role.
+  // Not the inbox: it is locked for its own reasons and cannot show the rule covers every role.
   node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
   node({
     path: 'Projects', name: 'Projects',
@@ -49,8 +48,7 @@ describe('the folder list', () => {
     expect(screen.getByLabelText('Show Alpha')).toBeInTheDocument()
   })
 
-  // The inbox first, then everything by name — system folders included, sitting under their own
-  // name rather than in a block. Server order here is INBOX, Corbeille, Projects.
+  // Inbox first, then everything by name, system folders included.
   it('renders in the sorted order, not the order the server sent', () => {
     const { container } = render(
       <FolderManager
@@ -83,8 +81,7 @@ describe('the folder list', () => {
     expect(screen.getByLabelText('Show Alpha')).not.toBeChecked()
   })
 
-  // Regression, same root cause as the tree: Dovecot reports INBOX unsubscribed, so the
-  // checkbox rendered unchecked and invited the user to "show" a folder that is always shown.
+  // Regression: Dovecot reports INBOX unsubscribed, so the switch rendered off.
   it('shows the inbox as always visible', () => {
     render(
       <FolderManager
@@ -107,10 +104,7 @@ describe('the folder list', () => {
 describe('system folders are locked', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  // Hiding a system folder strands the mail filed into it; renaming or deleting one breaks the
-  // role for every other client on the mailbox. The controls stay on the row, disabled: withheld
-  // entirely they made those rows a different shape from every other one, which reads as a
-  // rendering fault rather than as a rule.
+  // Disabled, not withheld: withheld, those rows are a different shape from the rest.
   it.each([
     ['INBOX', 'Inbox'],
     ['Corbeille', 'Trash'],
@@ -123,7 +117,7 @@ describe('system folders are locked', () => {
     expect(screen.getByText(label)).toBeInTheDocument()
   })
 
-  // Disabled has to mean inert, not merely dimmed — the row still carries a live handler.
+  // Disabled must mean inert: the row still carries a live handler.
   it.each(['Rename Corbeille', 'Delete Corbeille'])('ignores a click on %s', label => {
     renderManager()
 
@@ -133,8 +127,7 @@ describe('system folders are locked', () => {
     expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument()
   })
 
-  // The badge qualifies the folder, so it belongs against the name rather than in a column of
-  // its own at the far edge.
+  // The badge qualifies the folder, so it belongs against the name.
   it('places the role badge next to the name, before the actions', () => {
     const { container } = renderManager()
 

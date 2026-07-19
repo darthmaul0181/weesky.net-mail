@@ -62,7 +62,7 @@ describe('FoldersPage', () => {
     expect(screen.getByLabelText('Show INBOX')).toBeInTheDocument()
   })
 
-  // The two dialogs act across the whole set, so they belong above the list rather than on a row.
+  // These act across the whole set, so they sit above the list, not on a row.
   it('offers both whole-set actions', async () => {
     renderPage()
     await screen.findByLabelText('Show Projects')
@@ -71,9 +71,8 @@ describe('FoldersPage', () => {
     expect(screen.getByRole('button', { name: 'System folders' })).toBeInTheDocument()
   })
 
-  // Both shipped as a bare `.btn`, which carries no border and no background, so they rendered
-  // as plain text and read as headings rather than controls. jsdom applies no stylesheet, so
-  // the variant class is the only part of that this can hold on to.
+  // A bare `.btn` has no border or background and reads as text. jsdom applies no stylesheet,
+  // so the variant class is all this can hold on to.
   it.each(['New folder', 'System folders'])('gives %s a visible button style', async name => {
     renderPage()
     await screen.findByLabelText('Show Projects')

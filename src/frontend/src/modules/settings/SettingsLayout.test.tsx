@@ -61,8 +61,7 @@ describe('settings section', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
   })
 
-  // The folders page grew out of the old system-folders one, whose URL was linked from the mail
-  // column and may sit in a bookmark.
+  // The old URL was linked from the mail column and may sit in a bookmark.
   it('redirects the old system-folders URL to the folders page', async () => {
     const router = renderAt('/settings/system-folders')
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/folders'))

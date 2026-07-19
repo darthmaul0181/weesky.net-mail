@@ -12,25 +12,15 @@ interface Props {
 /** The well-known folders, in the order a reader reaches for them. */
 const SPECIAL_ORDER = ['inbox', 'drafts', 'sent', 'archive', 'junk', 'trash']
 
-/**
- * Accented names are everywhere in this mailbox and a codepoint sort would file every one of
- * them after "Z". Case-insensitive so "e-commerce" lands between "Drafts" and "English".
- */
+/** localeCompare, or every accented name files after "Z"; case-insensitive for "e-commerce". */
 function byName(a: MailFolderNode, b: MailFolderNode): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
 }
 
 /**
- * Splits the top level into the two blocks the tree renders with a rule between them: the
- * folders holding a role, in reading order, then everything else by name.
- *
- * The separator is the point. Before it, the two groups ran together and a well-known folder
- * was only distinguishable from an ordinary one by recognising its name — which fails exactly
- * where it matters, on a mailbox holding both "Drafts" and "Brouillons".
- *
- * Named `splitByRole` rather than a second `sortFolders`: `folderNodes.sortFolders` deliberately
- * does the opposite, interleaving system folders by name for screens where the user is hunting
- * for one. Two orders answering two questions must not share a name.
+ * The two blocks the tree draws a rule between: folders holding a role in reading order, then
+ * the rest by name. Not named `sortFolders` — `folderNodes.sortFolders` does the opposite, and
+ * two orders answering two questions must not share a name.
  */
 export function splitByRole(folders: MailFolderNode[]): {
   system: MailFolderNode[]
@@ -108,8 +98,6 @@ function FolderRow({
           type="button"
           className={[
             'folder-row',
-            // Weight, not colour: the separator already groups them, and this only has to
-            // survive four palette-and-mode combinations.
             folder.specialUse ? 'is-system' : '',
             isActive ? 'is-active' : '',
           ].filter(Boolean).join(' ')}
@@ -152,8 +140,7 @@ export default function FolderTree({ folders, selectedPath, onSelect }: Props) {
         <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} onSelect={onSelect} />
       ))}
 
-      {/* Only between two populated blocks — a rule under nothing, or above nothing, reads as
-          a rendering fault. A fresh mailbox with no folders of its own is the common case. */}
+      {/* Only between two populated blocks: a rule under nothing reads as a fault. */}
       {system.length > 0 && others.length > 0 && <hr className="folder-separator" />}
 
       {others.map(folder => (

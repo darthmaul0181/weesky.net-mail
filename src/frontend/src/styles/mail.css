@@ -78,8 +78,7 @@
 
 .folder-row.is-system { font-weight: 600; }
 
-/* Separates the folders holding a role from the user's own. Inset so it reads as a divider
-   inside the list rather than a border on the column. */
+/* Inset, so it reads as a divider inside the list rather than a border on the column. */
 .folder-separator {
   height: 0;
   margin: 8px 10px;
@@ -155,7 +154,7 @@
 /* The dialogs reuse the admin module's .field-h / .toggle-switch / primary-submit shape from
    index.css; only what is specific to folders lives here. */
 
-/* ── Manage-folders modal ────────────────────────────────── */
+/* ── Folders settings page and its dialogs ───────────────── */
 
 .modal-folders {
   max-width: 520px;
@@ -174,11 +173,8 @@
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
-/* Flows with the settings page rather than scrolling inside a dialog: the list is the page's
-   content now, and a scroll box nested in a scrolling page gives two scrollbars for one list. */
-/* Flows with the settings page rather than scrolling inside a dialog. Bounded because the
-   settings column is as wide as the window: unbounded, a three-word folder name sat with its
-   two actions half a screen away, and the eye had to travel the gap on every row. */
+/* Bounded: the settings column is as wide as the window, which left a folder name and its
+   actions half a screen apart. */
 .folder-manage-list {
   list-style: none;
   margin: 0 -8px;
@@ -205,8 +201,7 @@
   gap: 7px;
 }
 
-/* The dialog's roles scroll if the mailbox has a long enough name list to push them; the band
-   stack of .modal-folders gives this child the room. */
+/* Scrolls inside .modal-folders' band stack when the role list runs long. */
 .system-folders-roles {
   flex: 1;
   min-height: 0;
@@ -216,7 +211,7 @@
 .system-folders-stale {
   color: var(--text-muted);
   font-size: 12.5px;
-  /* Aligned under the control, not the label: .field-h puts the label in a fixed first column. */
+  /* Under the control: .field-h puts the label in a fixed first column. */
   margin: -6px 0 12px 126px;
 }
 
@@ -224,9 +219,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  /* padding-left comes from the depth, inline. A fixed height whether or not the row carries
-     action buttons, so the switches keep one rhythm down the list rather than stepping around
-     the inbox, which has no Delete. */
+  /* padding-left comes from the depth, inline. Fixed height so the switches keep one rhythm. */
   height: 38px;
   padding-right: 8px;
   border-radius: var(--radius-sm);
@@ -235,8 +228,7 @@
 
 .folder-manage-row:hover { background: var(--pane-item-hover); }
 
-/* Shrinks rather than fills, so the role badge sits against the name instead of being pushed
-   to the far edge by a flex:1 label. */
+/* Shrinks rather than fills, or flex:1 pushes the role badge to the far edge. */
 .folder-manage-label {
   flex: 0 1 auto;
   min-width: 0;
@@ -251,8 +243,7 @@
   cursor: not-allowed;
 }
 
-/* Weight alone marks the locked rows: a colour would have to carry the meaning on its own,
-   and the role name beside it already says which rule applies. */
+/* Weight alone: the role name beside it already says which rule applies. */
 .folder-manage-row.is-system .folder-manage-label { font-weight: 600; }
 
 .folder-manage-role {
@@ -266,12 +257,10 @@
   color: var(--badge-count-fg);
 }
 
-/* margin-left:auto is what holds the actions at the right edge now that the label no longer
-   fills the row. */
+/* margin-left:auto holds the actions right, now that the label no longer fills the row. */
 .folder-manage-actions { display: flex; gap: 2px; flex: none; margin-left: auto; }
 
-/* Present but unavailable. Dimmed enough to read as off without disappearing — the point is
-   that the control exists and this row cannot use it. */
+/* Present but unavailable: the control exists, this row cannot use it. */
 .folder-action:disabled {
   opacity: 0.35;
   cursor: not-allowed;

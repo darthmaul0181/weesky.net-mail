@@ -13,12 +13,9 @@ interface Props {
 }
 
 /**
- * Every folder in one flat, indented list: visibility, rename, delete.
- *
- * A folder holding a well-known role carries no control at all — hiding it strands whatever
- * gets filed into it, and renaming or deleting it breaks the role for every client on the
- * mailbox. Its role is named on the row instead, because controls that are merely absent read
- * as a fault rather than as a rule. The role itself is changed in the system-folders dialog.
+ * Every folder in one flat, indented list. A folder holding a role keeps its controls
+ * disabled rather than losing them: withheld, those rows are a different shape from the rest
+ * and read as a rendering fault. Its role is changed in the system-folders dialog.
  */
 export default function FolderManager({ folders, onNotify }: Props) {
   const [renaming, setRenaming] = useState<MailFolderNode | null>(null)
@@ -56,9 +53,8 @@ export default function FolderManager({ folders, onNotify }: Props) {
               <label className="toggle-switch">
                 <input
                   type="checkbox"
-                  // The inbox is always visible and its subscription flag is meaningless —
-                  // Dovecot leaves it unsubscribed — so showing it as off would invite the user
-                  // to "show" a folder that is always shown.
+                  // Dovecot leaves INBOX unsubscribed; showing it off would invite "showing" a
+                  // folder that is always shown.
                   checked={isInbox ? true : node.subscribed}
                   disabled={isSystem}
                   aria-label={`Show ${node.name}`}
@@ -72,17 +68,13 @@ export default function FolderManager({ folders, onNotify }: Props) {
 
               <span className="folder-manage-label">{node.name}</span>
 
-              {/* Beside the name, not off at the right edge: it qualifies the folder, and a
-                  badge parked in its own column reads as a status of the row instead. */}
+              {/* Beside the name: parked in its own column it reads as a row status. */}
               {isSystem && (
                 <span className="folder-manage-role">{roleLabel(node.specialUse!)}</span>
               )}
 
-              {/* Shown disabled rather than withheld. Dropping the buttons made system rows a
-                  different shape from every other one, which reads as a rendering fault; greyed
-                  out beside the role name, the rule explains itself. They are `disabled`, so
-                  neither a click nor a keyboard activation reaches the handler — and the API
-                  refuses these three operations regardless of what this list offers. */}
+              {/* `disabled`, so no click or key reaches the handler. The API refuses these
+                  three regardless of what this list offers. */}
               <div className="folder-manage-actions">
                 <button
                   type="button"
