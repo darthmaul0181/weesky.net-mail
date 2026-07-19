@@ -38,7 +38,8 @@ describe('FolderTree', () => {
   it('marks the selected folder', () => {
     render(<FolderTree folders={tree} selectedPath="INBOX" onSelect={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: 'Inbox' })).toHaveClass('is-active')
+    // INBOX carries unread: 4 in the fixture, so its accessible name includes the count.
+    expect(screen.getByRole('button', { name: 'Inbox, 4 unread' })).toHaveClass('is-active')
   })
 
   it('calls onSelect with the folder path', () => {
@@ -143,6 +144,23 @@ describe('FolderTree', () => {
     // The folders themselves stay visible — only their badge goes.
     expect(screen.getByText('Trash')).toBeInTheDocument()
     expect(screen.getByText('Junk')).toBeInTheDocument()
+  })
+
+  // The visible badge says "Inbox 4" to a sighted user; a bare aria-hidden count would say only
+  // "Inbox" to a screen reader and the four waiting messages would never be announced. The name
+  // must carry both pieces of information — and only when a badge is actually rendered.
+  it('exposes the unread count in the accessible name, but only where the badge is shown', () => {
+    const folders = [
+      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 }),
+      node({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash', unread: 8 }),
+    ]
+
+    render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: 'Inbox, 4 unread' })).toBeInTheDocument()
+    // Trash suppresses the badge entirely, so its accessible name stays the plain label —
+    // an exact-name query for 'Trash' only matches if no suffix leaked in.
+    expect(screen.getByRole('button', { name: 'Trash' })).not.toHaveAccessibleName(/unread/i)
   })
 
   // The role label replaces the folder name — that is the point of assigning roles — but the

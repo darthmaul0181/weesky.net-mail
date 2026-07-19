@@ -50,6 +50,10 @@ function FolderRow({
   const [open, setOpen] = useState(folder.specialUse === 'inbox')
   const visibleChildren = sortFolders(folder.children.filter(isVisible))
   const isActive = folder.path === selectedPath
+  const label = folder.specialUse ? roleLabel(folder.specialUse) : folder.name
+  // Only when a badge is actually rendered does the accessible name grow a suffix — an unread
+  // count on trash or junk never reaches the screen, so it must not reach assistive tech either.
+  const showsBadge = Boolean(folder.unread) && showsUnreadCount(folder)
 
   return (
     <>
@@ -72,6 +76,10 @@ function FolderRow({
           type="button"
           className={isActive ? 'folder-row is-active' : 'folder-row'}
           aria-current={isActive ? 'true' : undefined}
+          // The label and badge spans concatenate into the accessible name with no separator
+          // ("Inbox4"), which is a real number losing its meaning, not a decorative artifact —
+          // so instead of hiding the count from assistive tech, spell it out as words.
+          aria-label={showsBadge ? `${label}, ${folder.unread} unread` : undefined}
           // The role label replaces the name; the real mailbox name stays one hover away, so
           // the user never loses track of which physical folder they are looking at.
           title={folder.specialUse ? folder.name : undefined}
@@ -79,14 +87,8 @@ function FolderRow({
           disabled={!folder.selectable}
           onClick={() => folder.selectable && onSelect(folder.path)}
         >
-          <span className="folder-row-name">
-            {folder.specialUse ? roleLabel(folder.specialUse) : folder.name}
-          </span>
-          {folder.unread && showsUnreadCount(folder)
-            // Decorative count, not a name: it must not merge into the button's accessible
-            // name and turn "Inbox" into "Inbox4" for assistive tech and role queries alike.
-            ? <span className="folder-row-count" aria-hidden="true">{folder.unread}</span>
-            : null}
+          <span className="folder-row-name">{label}</span>
+          {showsBadge ? <span className="folder-row-count">{folder.unread}</span> : null}
         </button>
       </div>
 
