@@ -23,7 +23,7 @@ describe('FolderTree', () => {
   it('renders subscribed folders and hides unsubscribed ones', () => {
     render(<FolderTree folders={tree} selectedPath="INBOX" onSelect={vi.fn()} />)
 
-    expect(screen.getByText('INBOX')).toBeInTheDocument()
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
     expect(screen.getByText('Projects')).toBeInTheDocument()
     expect(screen.queryByText('Hidden')).not.toBeInTheDocument()
   })
@@ -38,7 +38,7 @@ describe('FolderTree', () => {
   it('marks the selected folder', () => {
     render(<FolderTree folders={tree} selectedPath="INBOX" onSelect={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: /INBOX/ })).toHaveClass('is-active')
+    expect(screen.getByRole('button', { name: 'Inbox' })).toHaveClass('is-active')
   })
 
   it('calls onSelect with the folder path', () => {
@@ -95,7 +95,7 @@ describe('FolderTree', () => {
     render(<FolderTree folders={unordered} selectedPath={null} onSelect={vi.fn()} />)
 
     const names = screen.getAllByRole('button').map(b => b.textContent)
-    expect(names).toEqual(['INBOX', 'Trash', 'Alpha', 'Zebra'])
+    expect(names).toEqual(['Inbox', 'Trash', 'Alpha', 'Zebra'])
   })
 
   // Regression: Dovecot reports INBOX as subscribed=false, because the subscription flag is
@@ -110,7 +110,7 @@ describe('FolderTree', () => {
 
     render(<FolderTree folders={asDovecotReportsIt} selectedPath={null} onSelect={vi.fn()} />)
 
-    expect(screen.getByText('INBOX')).toBeInTheDocument()
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 
@@ -122,7 +122,7 @@ describe('FolderTree', () => {
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
 
-    expect(screen.getByText('INBOX')).toBeInTheDocument()
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
     expect(screen.queryByText('Archive')).not.toBeInTheDocument()
   })
 
@@ -141,8 +141,25 @@ describe('FolderTree', () => {
     expect(screen.queryByText('8')).not.toBeInTheDocument()
     expect(screen.queryByText('5')).not.toBeInTheDocument()
     // The folders themselves stay visible — only their badge goes.
-    expect(screen.getByText('Deleted Items')).toBeInTheDocument()
+    expect(screen.getByText('Trash')).toBeInTheDocument()
     expect(screen.getByText('Junk')).toBeInTheDocument()
+  })
+
+  // The role label replaces the folder name — that is the point of assigning roles — but the
+  // real mailbox name must stay reachable: it lives in the button's title.
+  it('shows the role label and keeps the real name as the tooltip', () => {
+    const folders = [
+      node({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash' }),
+      node({ path: 'Perso', name: 'Perso' }),
+    ]
+
+    render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('Trash')).toBeInTheDocument()
+    expect(screen.queryByText('Deleted Items')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Trash' })).toHaveAttribute('title', 'Deleted Items')
+    // An ordinary folder keeps its name and needs no tooltip.
+    expect(screen.getByRole('button', { name: 'Perso' })).not.toHaveAttribute('title')
   })
 
   it('hides an unsubscribed child of a visible parent', () => {

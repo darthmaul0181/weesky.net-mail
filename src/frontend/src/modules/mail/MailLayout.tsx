@@ -6,6 +6,7 @@ import FolderTree from './folders/FolderTree'
 import MessageList from './list/MessageList'
 import MessageReader from './reader/MessageReader'
 import { useFolders } from './queries'
+import { roleLabel } from './roleLabel'
 
 /**
  * The mail module's three columns. The shell provides a single outlet, so a module builds its
@@ -24,10 +25,14 @@ export default function MailLayout() {
   const uidParam = params.get('uid')
   const uid = uidParam ? Number(uidParam) : null
 
-  // The list heading wants the leaf name, not the full path: under a '.' separator the path
-  // reads "INBOX.Linux server", which is not what the user called the folder.
-  const folderName = folders && folder
-    ? flatten(folders).find(entry => entry.node.path === folder)?.node.name
+  // The list heading shows the same label as the tree: the role label when the folder has a
+  // role, the leaf name otherwise — never the full path, which reads "INBOX.Linux server"
+  // under a '.' separator.
+  const folderNode = folders && folder
+    ? flatten(folders).find(entry => entry.node.path === folder)?.node
+    : undefined
+  const folderName = folderNode
+    ? (folderNode.specialUse ? roleLabel(folderNode.specialUse) : folderNode.name)
     : undefined
 
   function selectFolder(path: string) {

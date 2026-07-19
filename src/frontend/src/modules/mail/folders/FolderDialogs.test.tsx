@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import FolderDialogs, { flatten, parentOf } from './FolderDialogs'
 import type { MailFolderNode } from '../api/mailTypes'
 
@@ -33,7 +34,7 @@ const tree: MailFolderNode[] = [
 ]
 
 function renderDialogs(onNotify = vi.fn()) {
-  render(<FolderDialogs folders={tree} selectedPath="INBOX" onNotify={onNotify} />)
+  render(<MemoryRouter><FolderDialogs folders={tree} selectedPath="INBOX" onNotify={onNotify} /></MemoryRouter>)
   return onNotify
 }
 
@@ -202,11 +203,13 @@ describe('managing folders', () => {
   // or worse, to unsubscribe it.
   it('shows the inbox as always visible and refuses to toggle it', () => {
     render(
-      <FolderDialogs
-        folders={[node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false })]}
-        selectedPath={null}
-        onNotify={vi.fn()}
-      />)
+      <MemoryRouter>
+        <FolderDialogs
+          folders={[node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false })]}
+          selectedPath={null}
+          onNotify={vi.fn()}
+        />
+      </MemoryRouter>)
     openManage()
 
     const toggle = screen.getByLabelText('Show INBOX')
@@ -217,7 +220,7 @@ describe('managing folders', () => {
   // A switch, not a bare checkbox: the app shows every boolean this way.
   it('uses the house toggle switch for visibility', () => {
     const { container } = render(
-      <FolderDialogs folders={tree} selectedPath="INBOX" onNotify={vi.fn()} />)
+      <MemoryRouter><FolderDialogs folders={tree} selectedPath="INBOX" onNotify={vi.fn()} /></MemoryRouter>)
     openManage()
 
     expect(container.querySelectorAll('.toggle-switch')).toHaveLength(flatten(tree).length)
@@ -230,6 +233,14 @@ describe('managing folders', () => {
 
     expect(screen.queryByRole('button', { name: 'Delete INBOX' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete Projects' })).toBeInTheDocument()
+  })
+
+  it('links the manage dialog to the system-folders settings', () => {
+    renderDialogs()
+    openManage()
+
+    const link = screen.getByRole('link', { name: /system folders/i })
+    expect(link).toHaveAttribute('href', '/settings/system-folders')
   })
 
   it('renames through the parent derived from the path', async () => {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
@@ -170,7 +171,9 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
             </div>
 
             <p className="modal-hint">
-              Turning a folder off hides it from the tree. Nothing in it is deleted.
+              Turning a folder off hides it from the tree. Nothing in it is deleted. To choose
+              which folders act as Sent, Drafts, Trash, Junk and Archive, use{' '}
+              <Link to="/settings/system-folders">system folders</Link>.
             </p>
 
             <ul className="folder-manage-list">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
+import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
 
 interface Props {
@@ -71,13 +72,20 @@ function FolderRow({
           type="button"
           className={isActive ? 'folder-row is-active' : 'folder-row'}
           aria-current={isActive ? 'true' : undefined}
+          // The role label replaces the name; the real mailbox name stays one hover away, so
+          // the user never loses track of which physical folder they are looking at.
+          title={folder.specialUse ? folder.name : undefined}
           // A container-only folder holds no messages, so selecting it would show nothing.
           disabled={!folder.selectable}
           onClick={() => folder.selectable && onSelect(folder.path)}
         >
-          <span className="folder-row-name">{folder.name}</span>
+          <span className="folder-row-name">
+            {folder.specialUse ? roleLabel(folder.specialUse) : folder.name}
+          </span>
           {folder.unread && showsUnreadCount(folder)
-            ? <span className="folder-row-count">{folder.unread}</span>
+            // Decorative count, not a name: it must not merge into the button's accessible
+            // name and turn "Inbox" into "Inbox4" for assistive tech and role queries alike.
+            ? <span className="folder-row-count" aria-hidden="true">{folder.unread}</span>
             : null}
         </button>
       </div>
