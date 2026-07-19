@@ -168,6 +168,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public async Task RenameFolder_ReturnsThePath()
         {
+            SetupTree(RoleNode("Old"));
             _folders.Setup(f => f.RenameFolderAsync(It.IsAny<User>(), "hunter2", "Old", "INBOX", "New", It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result.Success("INBOX/New"));
 
@@ -198,6 +199,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public async Task DeleteFolder_Returns204OnSuccess()
         {
+            SetupTree(RoleNode("Projects"));
             _folders.Setup(f => f.DeleteFolderAsync(It.IsAny<User>(), "hunter2", "Projects", It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result.Success());
 
@@ -223,11 +225,12 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [Fact]
         public async Task DeleteFolder_Returns502WhenTheServerRefuses()
         {
+            SetupTree(RoleNode("Projects"));
             _folders.Setup(f => f.DeleteFolderAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                    .ReturnsAsync(Result.Failure("The inbox cannot be deleted"));
+                    .ReturnsAsync(Result.Failure("The mail server refused the operation"));
 
             var result = await CreateController().DeleteFolder(
-                new DeleteFolderRequest { Path = "INBOX" }, CancellationToken.None);
+                new DeleteFolderRequest { Path = "Projects" }, CancellationToken.None);
 
             var status = Assert.IsType<ObjectResult>(result);
             Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
@@ -240,6 +243,7 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
         [InlineData(false)]
         public async Task SetFolderSubscription_Returns204AndPassesTheState(bool subscribed)
         {
+            SetupTree(RoleNode("Projects"));
             _folders.Setup(f => f.SetSubscriptionAsync(It.IsAny<User>(), "hunter2", "Projects", subscribed, It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result.Success());
 
@@ -455,6 +459,124 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
 
             var status = Assert.IsType<ObjectResult>(result);
             Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        }
+
+        // ── System folders are locked against rename, delete and hide ───────
+        //
+        // The client already hides these controls, but a guard that lives only in one client is
+        // one new screen away from being forgotten. Renaming or deleting a folder holding a role
+        // breaks that role for every client on the mailbox; hiding one strands whatever gets
+        // filed into it. The role is changed on the FolderRoles endpoints, which move the stored
+        // override with it.
+
+        [Fact]
+        public async Task RenameFolder_RefusesAFolderHoldingARole()
+        {
+            SetupTree(RoleNode("Corbeille", attributeRole: "trash"));
+
+            var result = await CreateController().RenameFolder(
+                new RenameFolderRequest { Path = "Corbeille", NewName = "Poubelle" }, CancellationToken.None);
+
+            var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+            // The message has to name the role: "this folder is locked" leaves the user with no
+            // idea which setting to change.
+            Assert.Contains("trash", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+            _folders.Verify(f => f.RenameFolderAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteFolder_RefusesAFolderHoldingARole()
+        {
+            SetupTree(RoleNode("Sent", attributeRole: "sent"));
+
+            var result = await CreateController().DeleteFolder(
+                new DeleteFolderRequest { Path = "Sent" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+            _folders.Verify(f => f.DeleteFolderAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        // Deleting a parent takes its children with it, so a guard that only looked at the
+        // target path could be stepped around one level up.
+        [Fact]
+        public async Task DeleteFolder_RefusesAFolderWhoseChildHoldsARole()
+        {
+            var parent = RoleNode("Mail");
+            parent.Children = [RoleNode("Mail/Trash", attributeRole: "trash")];
+            SetupTree(parent);
+
+            var result = await CreateController().DeleteFolder(
+                new DeleteFolderRequest { Path = "Mail" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+            _folders.Verify(f => f.DeleteFolderAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteFolder_RefusesTheInbox()
+        {
+            SetupTree(RoleNode("INBOX", attributeRole: "inbox"));
+
+            var result = await CreateController().DeleteFolder(
+                new DeleteFolderRequest { Path = "INBOX" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+            _folders.Verify(f => f.DeleteFolderAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        // The role can come from a stored override just as well as from a server flag: the guard
+        // reads the resolution chain, not the SPECIAL-USE flags alone.
+        [Fact]
+        public async Task RenameFolder_RefusesAFolderHoldingARoleByOverride()
+        {
+            SetupTree(RoleNode("Bin", uidValidity: 42));
+            // CreateController first: Moq lets the most recently configured matching setup win
+            // regardless of specificity, so its catch-all GetAsync would shadow this one.
+            var controller = CreateController();
+            SetupOverrides(new FolderRoleOverride
+            {
+                AccountId = "alice@weesky.be", Role = "trash", FolderPath = "Bin", UidValidity = 42
+            });
+
+            var result = await controller.RenameFolder(
+                new RenameFolderRequest { Path = "Bin", NewName = "Other" }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+        }
+
+        [Fact]
+        public async Task SetFolderSubscription_RefusesToHideAFolderHoldingARole()
+        {
+            SetupTree(RoleNode("Corbeille", attributeRole: "trash"));
+
+            var result = await CreateController().SetFolderSubscription(
+                new FolderSubscriptionRequest { Path = "Corbeille", Subscribed = false }, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+            _folders.Verify(f => f.SetSubscriptionAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        // Only hiding is refused. Refusing to subscribe would leave a mailbox whose trash was
+        // hidden by another client stuck that way.
+        [Fact]
+        public async Task SetFolderSubscription_AllowsShowingAFolderHoldingARole()
+        {
+            SetupTree(RoleNode("Corbeille", attributeRole: "trash"));
+            _folders.Setup(f => f.SetSubscriptionAsync(It.IsAny<User>(), It.IsAny<string>(), "Corbeille", true, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(Result.Success());
+
+            var result = await CreateController().SetFolderSubscription(
+                new FolderSubscriptionRequest { Path = "Corbeille", Subscribed = true }, CancellationToken.None);
+
+            var status = Assert.IsType<StatusCodeResult>(result);
+            Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
         }
 
         // ── Folder roles ────────────────────────────────────────────────────

@@ -253,6 +253,24 @@
              server refuses is 502.
              </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RefuseIfSystemFolderAsync(System.String,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
+             <summary>
+             Refuses an operation on a folder that currently holds a well-known role. Renaming or
+             deleting one breaks the role for every client on the mailbox, and hiding one strands
+             whatever gets filed into it. The role is changed on the FolderRoles endpoints, which
+             move the stored override with it.
+            
+             Returns null when the operation may proceed.
+             </summary>
+             <param name="password">the caller's mail password</param>
+             <param name="path">folder the operation targets</param>
+             <param name="verb">what the caller is trying to do, for the message</param>
+             <param name="includeDescendants">
+             True for deletion: removing a parent takes its children with it, so a guard that only
+             looked at the target path could be stepped around one level up.
+             </param>
+             <param name="cancellationToken">cancellation token</param>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetFolders(System.Threading.CancellationToken)">
             <summary>
             Returns the caller's folder tree: hierarchy, well-known roles, subscription state

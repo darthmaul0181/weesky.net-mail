@@ -41,6 +41,71 @@ namespace weesky.Snoopy.Microservice.Controllers
         }
 
         /// <summary>
+        /// Refuses an operation on a folder that currently holds a well-known role. Renaming or
+        /// deleting one breaks the role for every client on the mailbox, and hiding one strands
+        /// whatever gets filed into it. The role is changed on the FolderRoles endpoints, which
+        /// move the stored override with it.
+        ///
+        /// Returns null when the operation may proceed.
+        /// </summary>
+        /// <param name="password">the caller's mail password</param>
+        /// <param name="path">folder the operation targets</param>
+        /// <param name="verb">what the caller is trying to do, for the message</param>
+        /// <param name="includeDescendants">
+        /// True for deletion: removing a parent takes its children with it, so a guard that only
+        /// looked at the target path could be stepped around one level up.
+        /// </param>
+        /// <param name="cancellationToken">cancellation token</param>
+        private async Task<ActionResult?> RefuseIfSystemFolderAsync(
+            string password, string path, string verb, bool includeDescendants, CancellationToken cancellationToken)
+        {
+            var tree = await _folders.GetTreeAsync(AuthenticatedUser, password, cancellationToken);
+            if (tree.IsFailure)
+                return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
+
+            var overrides = await _roleStore.GetAsync(
+                FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+            var roleByPath = FolderRoleResolver.Resolve(tree.Value, overrides).RoleByPath;
+
+            if (roleByPath.TryGetValue(path, out var role))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                    $"This folder is the {role} folder and cannot be {verb}. Point {role} at another folder first."));
+
+            if (includeDescendants && FindNode(tree.Value, path) is { } target)
+            {
+                // Walking the node's own subtree rather than matching path prefixes: the
+                // hierarchy separator belongs to the server and is never assumed here.
+                foreach (var descendant in Descendants(target))
+                {
+                    if (roleByPath.TryGetValue(descendant.Path, out var childRole))
+                        return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                            $"\"{descendant.Name}\" inside this folder is the {childRole} folder, so deleting it would take {childRole} with it. Point {childRole} at another folder first."));
+                }
+            }
+
+            return null;
+        }
+
+        private static MailFolderNode? FindNode(IEnumerable<MailFolderNode> nodes, string path)
+        {
+            foreach (var node in nodes)
+            {
+                if (node.Path == path) return node;
+                if (FindNode(node.Children, path) is { } found) return found;
+            }
+            return null;
+        }
+
+        private static IEnumerable<MailFolderNode> Descendants(MailFolderNode node)
+        {
+            foreach (var child in node.Children)
+            {
+                yield return child;
+                foreach (var grandchild in Descendants(child)) yield return grandchild;
+            }
+        }
+
+        /// <summary>
         /// Returns the caller's folder tree: hierarchy, well-known roles, subscription state
         /// and message counts.
         /// </summary>
@@ -120,6 +185,10 @@ namespace weesky.Snoopy.Microservice.Controllers
             var password = _credentials.Retrieve(Request);
             if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
 
+            if (await RefuseIfSystemFolderAsync(
+                    password.Value, request.Path, "renamed", includeDescendants: false, cancellationToken) is { } refusal)
+                return refusal;
+
             var result = await _folders.RenameFolderAsync(
                 AuthenticatedUser, password.Value, request.Path, request.NewParentPath ?? string.Empty, request.NewName, cancellationToken);
 
@@ -145,6 +214,10 @@ namespace weesky.Snoopy.Microservice.Controllers
 
             var password = _credentials.Retrieve(Request);
             if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+            if (await RefuseIfSystemFolderAsync(
+                    password.Value, request.Path, "deleted", includeDescendants: true, cancellationToken) is { } refusal)
+                return refusal;
 
             var result = await _folders.DeleteFolderAsync(AuthenticatedUser, password.Value, request.Path, cancellationToken);
 
@@ -175,6 +248,12 @@ namespace weesky.Snoopy.Microservice.Controllers
 
             var password = _credentials.Retrieve(Request);
             if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+            // Only hiding is refused. Subscribing a system folder is harmless, and refusing it
+            // would leave a mailbox whose trash was hidden by another client stuck that way.
+            if (!request.Subscribed && await RefuseIfSystemFolderAsync(
+                    password.Value, request.Path, "hidden", includeDescendants: false, cancellationToken) is { } refusal)
+                return refusal;
 
             var result = await _folders.SetSubscriptionAsync(
                 AuthenticatedUser, password.Value, request.Path, request.Subscribed, cancellationToken);
