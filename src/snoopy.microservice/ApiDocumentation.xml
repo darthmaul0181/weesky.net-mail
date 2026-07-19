@@ -992,6 +992,9 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.SetSubscriptionAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
             <summary>Subscribes or unsubscribes a folder.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetFolderStatusAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Live identity of one folder — used by the role PUT to validate and capture.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.ListAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
             <summary>One page of a folder, newest message first.</summary>
         </member>
@@ -1027,6 +1030,15 @@
             <summary>
             Folder access over IMAP. One session per method, opened and disposed inside it — the
             same shape as SieveRepository over ManageSieve.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.MailFolderRepository.TryMoveOverridesAsync(weesky.Snoopy.Microservice.Services.IImapSession,weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            IMAP first, database second. If this bookkeeping fails, the stored overrides go
+            stale and the resolver's staleness guard degrades them to discovery — the rename
+            the user asked for is never failed over it. The identity is re-read from the
+            renamed folder, not carried over: some servers change UIDVALIDITY on rename, and
+            carrying the old value would make our own rename trip our own guard.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.MailMessageRepository">

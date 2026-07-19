@@ -20,5 +20,8 @@ namespace weesky.Snoopy.Microservice.Repositories
 
         /// <summary>Subscribes or unsubscribes a folder.</summary>
         Task<Result> SetSubscriptionAsync(User user, string password, string path, bool subscribed, CancellationToken cancellationToken);
+
+        /// <summary>Live identity of one folder — used by the role PUT to validate and capture.</summary>
+        Task<Result<MailFolderStatus>> GetFolderStatusAsync(User user, string password, string path, CancellationToken cancellationToken);
     }
 }
