@@ -13,6 +13,7 @@ using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using Microsoft.AspNetCore.DataProtection;
 using weesky.Snoopy.Microservice.Data;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
@@ -74,6 +75,25 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     .LogTo(Console.WriteLine, LogLevel.Warning);
 });
 
+// User preferences (folder roles) live in their own database: the dovecot schema belongs to
+// Dovecot and can be rebuilt by mail-server provisioning, which would take our data with it.
+// Creation is manual — no EF migrations here. See docs/superpowers/mail-2a5-database-prerequisite.md.
+var preferencesConnectionString = builder.Configuration.GetConnectionString("WebmailPreferencesDatabase");
+if (string.IsNullOrEmpty(preferencesConnectionString))
+{
+    throw new InvalidOperationException(
+        "Connection string 'WebmailPreferencesDatabase' is missing. " +
+        "Apply docs/superpowers/mail-2a5-database-prerequisite.md, then configure the connection string. " +
+        "Refusing to start rather than running with folder roles silently inert.");
+}
+
+var preferencesServerVersion = ServerVersion.AutoDetect(preferencesConnectionString);
+builder.Services.AddDbContext<PreferencesDbContext>(options =>
+{
+    options.UseMySql(preferencesConnectionString, preferencesServerVersion)
+        .LogTo(Console.WriteLine, LogLevel.Warning);
+});
+
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
 builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
 builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSection("Sieve"));
@@ -90,6 +110,7 @@ builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IMailFolderRepository, MailFolderRepository>();
 builder.Services.AddScoped<IMailMessageRepository, MailMessageRepository>();
+builder.Services.AddScoped<IFolderRoleStore, FolderRoleStore>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();

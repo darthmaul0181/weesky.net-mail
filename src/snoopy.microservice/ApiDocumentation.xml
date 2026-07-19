@@ -381,6 +381,33 @@
             frontend can offer format selection.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride">
+            <summary>
+            One user-chosen folder-role assignment. Absence of a row means the role falls back to
+            discovery (SPECIAL-USE, then name matching): the override is a correction layer, not a
+            replacement, so a freshly provisioned mailbox needs no rows at all.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.Role">
+            <summary>Stable enum value ("trash", never a localised word). See FolderRoles.All.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.FolderPath">
+            <summary>Always stored: the one identifier IMAP guarantees on every server.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.UidValidity">
+            <summary>Staleness guard: catches a path reused by a different folder.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.MailboxId">
+            <summary>RFC 8474 MAILBOXID — an optional aid, never the key.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.PreferencesDbContext">
+            <summary>
+            Webmail user preferences. A separate database from the dovecot schema on purpose: that
+            schema belongs to Dovecot and can be rebuilt by mail-server provisioning, which would
+            take our data with it. Created manually — no EF migrations in this project; see
+            docs/superpowers/mail-2a5-database-prerequisite.md.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AccountInfo">
             <summary>
             Information about the authenticated user account.
@@ -883,6 +910,34 @@
             <summary>
             The full name of the user.
             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.FolderRoleStore.CanonicalAccountId(System.String)">
+            <summary>
+            The table's collation is binary — IMAP paths must compare byte for byte — so the
+            account id must be written in exactly one form, or the same user splits into
+            several accounts.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore">
+            <summary>
+            Reads and writes folder-role overrides. Knows nothing about IMAP: validity against the
+            live mailbox is the resolver's business, and capturing uid_validity / mailbox_id from a
+            live folder is the caller's.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.DeleteAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Idempotent: clearing an absent override is not an error.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.ApplyRenameAsync(System.String,System.String,System.String,System.Char,System.UInt64,System.String,System.Threading.CancellationToken)">
+            <summary>
+            After a successful IMAP rename. The exact row gets the new path and the freshly
+            re-read identity; subtree rows get their prefix swapped and keep their own
+            identity. The separator comes from the live session — '.' on the home server,
+            '/' elsewhere — never from a constant.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.RemoveSubtreeAsync(System.String,System.String,System.Char,System.Threading.CancellationToken)">
+            <summary>After a successful IMAP delete: purge the folder's row and its subtree's.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetTreeAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Threading.CancellationToken)">
             <summary>The user's full folder tree, subscribed and unsubscribed alike.</summary>
