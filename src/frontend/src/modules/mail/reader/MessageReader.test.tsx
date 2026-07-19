@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -20,6 +20,9 @@ vi.mock('../../../api.js', () => ({
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
 }))
+
+const theme = vi.hoisted(() => ({ isDark: false }))
+vi.mock('../../../contexts/ThemeContext', () => ({ useTheme: () => theme }))
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -182,6 +185,45 @@ describe('MessageReader', () => {
     await screen.findByText('Re: facture')
 
     expect(screen.queryByRole('button', { name: /logo\.png/ })).not.toBeInTheDocument()
+  })
+
+  describe('dark mode', () => {
+    // Inversion is a rendering choice, not a fidelity one: it has to be reversible per message,
+    // because a mail whose own palette inverts badly needs an escape hatch.
+    it('inverts the body when the resolved theme is dark', async () => {
+      theme.isDark = true
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByTitle('Message body')
+
+      expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('invert(1)')
+      theme.isDark = false
+    })
+
+    it('does not invert in light mode, and offers no way back', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByTitle('Message body')
+
+      expect(container.querySelector('iframe')!.getAttribute('srcdoc')).not.toContain('invert(1)')
+      expect(screen.queryByRole('button', { name: /original colours/i })).not.toBeInTheDocument()
+    })
+
+    it('restores the original colours on demand', async () => {
+      theme.isDark = true
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByTitle('Message body')
+
+      fireEvent.click(screen.getByRole('button', { name: /original colours/i }))
+
+      await waitFor(() =>
+        expect(container.querySelector('iframe')!.getAttribute('srcdoc')).not.toContain('invert(1)'))
+      theme.isDark = false
+    })
   })
 
   it('surfaces a load failure', async () => {

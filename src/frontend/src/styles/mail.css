@@ -1,4 +1,4 @@
-/* Mail module. Three independently scrolling columns inside the shell's single outlet.
+﻿/* Mail module. Three independently scrolling columns inside the shell's single outlet.
    Every colour goes through a role token — no literal values in this file. */
 
 .mail-layout {
@@ -420,6 +420,28 @@
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
   font-size: 13px;
+}
+
+/* Same shape as the blocked-images banner: both say what the reader did to the message and
+   offer the way back. Muted, because unlike blocked images this is not a decision to make. */
+.reader-colour-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 22px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.reader-colour-note .btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  font-size: 12.5px;
 }
 
 /* The article carries the column layout so the body can claim the leftover height. Without

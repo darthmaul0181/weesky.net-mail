@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+﻿import { describe, it, expect } from 'vitest'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 
 describe('sanitizeBody', () => {
@@ -89,6 +89,37 @@ describe('renderBodyDocument', () => {
   // 154x10 by attributes became 154px tall, turning a newsletter button into a tower.
   it('leaves image height attributes alone', () => {
     expect(renderBodyDocument('<p>x</p>')).not.toContain('height: auto')
+  })
+
+  describe('dark mode', () => {
+    // The inversion technique Apple Mail and Thunderbird use: invert the whole sheet, then
+    // rotate the hue back so brand colours stay recognisable rather than becoming negatives.
+    it('inverts the body when the reader asks for dark', () => {
+      const document = renderBodyDocument('<p>x</p>', { dark: true })
+
+      expect(document).toMatch(/filter:\s*invert\(1\)\s*hue-rotate\(180deg\)/)
+    })
+
+    // Inverting the sheet inverts the images with it; they need it applied twice to come back.
+    it('re-inverts images so photographs stay themselves', () => {
+      const document = renderBodyDocument('<p>x</p>', { dark: true })
+
+      expect(document).toMatch(/img[^{]*\{[^}]*filter:\s*invert\(1\)\s*hue-rotate\(180deg\)/)
+    })
+
+    // The canvas must stay light for the inversion to land on white and produce black. Setting
+    // it dark first would inverting to white — the bug this whole approach exists to avoid.
+    it('keeps the canvas light so the inversion has something to invert', () => {
+      const document = renderBodyDocument('<p>x</p>', { dark: true })
+
+      expect(document).toContain('color-scheme: light')
+      expect(document).toMatch(/background:\s*#ffffff/)
+    })
+
+    it('leaves the document untouched when dark is off', () => {
+      expect(renderBodyDocument('<p>x</p>', { dark: false })).not.toContain('invert(1)')
+      expect(renderBodyDocument('<p>x</p>')).not.toContain('invert(1)')
+    })
   })
 
   // Mail HTML is written against a white canvas; inverting it would make a body's own colours

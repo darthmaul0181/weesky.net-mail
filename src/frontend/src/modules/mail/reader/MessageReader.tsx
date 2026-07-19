@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
+import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
 import { formatReaderDate } from './formatReaderDate'
@@ -13,12 +14,16 @@ interface Props {
 
 export default function MessageReader({ folderPath, uid }: Props) {
   const { data, isLoading, isError } = useMessage(folderPath, uid)
+  const { isDark } = useTheme()
   const [imagesShown, setImagesShown] = useState(false)
+  const [originalColours, setOriginalColours] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
-  // Consent is per message and never carried to the next one.
+  // Consent is per message and never carried to the next one. So is the colour choice: a mail
+  // that inverts badly says nothing about the next one.
   useEffect(() => {
     setImagesShown(false)
+    setOriginalColours(false)
     setDownloadError(null)
   }, [folderPath, uid])
 
@@ -27,6 +32,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
   if (isError || !data) return <p className="mail-empty">Could not load this message.</p>
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
+  const inverted = isDark && !originalColours
   const body = sanitizeBody(imagesShown ? revealBlockedImages(data.htmlBody) : data.htmlBody)
 
   async function download(part: string, fileName: string) {
@@ -57,6 +63,19 @@ export default function MessageReader({ folderPath, uid }: Props) {
         </div>
       </header>
 
+      {isDark && data.htmlBody && (
+        <div className="reader-colour-note">
+          <span>
+            {inverted
+              ? 'Colours are inverted to match your dark theme.'
+              : 'Showing the colours the sender chose.'}
+          </span>
+          <button type="button" className="btn" onClick={() => setOriginalColours(v => !v)}>
+            {inverted ? 'Original colours' : 'Match my theme'}
+          </button>
+        </div>
+      )}
+
       {data.blockedImageCount > 0 && !imagesShown && (
         <div className="reader-blocked-images">
           <span>
@@ -82,7 +101,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
           title="Message body"
-          srcDoc={renderBodyDocument(body)}
+          srcDoc={renderBodyDocument(body, { dark: inverted })}
         />
       ) : (
         <div className="reader-text">{data.textBody}</div>

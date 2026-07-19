@@ -1,12 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+﻿import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
 function Probe() {
-  const { theme, palette, setTheme, setPalette } = useTheme()
+  const { theme, palette, isDark, setTheme, setPalette } = useTheme()
   return (
     <div>
       <span data-testid="theme">{theme}</span>
+      <span data-testid="isDark">{String(isDark)}</span>
       <span data-testid="palette">{palette}</span>
       <button onClick={() => setTheme('dark')}>dark</button>
       <button onClick={() => setPalette('classic')}>classic</button>
@@ -35,6 +36,17 @@ describe('ThemeContext', () => {
     fireEvent.click(screen.getByText('dark'))
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     expect(localStorage.getItem('appearance_theme')).toBe('dark')
+  })
+
+  // The mail reader inverts the message body when the resolved theme is dark, so it needs the
+  // resolved value, not the preference: "system" alone says nothing.
+  it('resolves isDark from the preference', () => {
+    render(<ThemeProvider><Probe /></ThemeProvider>)
+    expect(screen.getByTestId('isDark')).toHaveTextContent('false')
+
+    fireEvent.click(screen.getByText('dark'))
+
+    expect(screen.getByTestId('isDark')).toHaveTextContent('true')
   })
 
   it('setPalette("classic") applies attribute and persists', () => {

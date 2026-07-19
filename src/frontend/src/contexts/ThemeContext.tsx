@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+﻿import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 export type Palette = 'night' | 'classic'
@@ -6,6 +6,8 @@ export type Palette = 'night' | 'classic'
 interface ThemeContextValue {
   theme: ThemePreference
   palette: Palette
+  /** The preference resolved against the OS — "system" on its own says nothing. */
+  isDark: boolean
   setTheme: (t: ThemePreference) => void
   setPalette: (p: Palette) => void
 }
@@ -27,12 +29,14 @@ function readPalette(): Palette {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemePreference>(readTheme)
   const [palette, setPaletteState] = useState<Palette>(readPalette)
+  const [isDark, setIsDark] = useState(false)
 
   useEffect(() => {
     function apply() {
       const dark = theme === 'dark' ||
         (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+      setIsDark(dark)
     }
     apply()
     if (theme !== 'system') return
@@ -56,7 +60,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, palette, setTheme, setPalette }}>
+    <ThemeContext.Provider value={{ theme, palette, isDark, setTheme, setPalette }}>
       {children}
     </ThemeContext.Provider>
   )

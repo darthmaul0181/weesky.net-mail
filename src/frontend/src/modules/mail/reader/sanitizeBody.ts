@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify'
+﻿import DOMPurify from 'dompurify'
 
 /**
  * Client-side pass over a body the backend already sanitised.
@@ -44,13 +44,26 @@ export function revealBlockedImages(html: string): string {
  * these set a floor for bodies that have none, and contain the two overflows that a body can
  * inflict on the layout regardless of its own intent.
  */
-export function renderBodyDocument(fragment: string): string {
+export function renderBodyDocument(fragment: string, options: { dark?: boolean } = {}): string {
+  // Invert the finished sheet rather than styling it dark: mail declares colours piecemeal —
+  // "color: #333" with no background is common — and a dark canvas turns that into dark on
+  // dark. Inverting whatever the message painted always preserves its contrast. hue-rotate
+  // brings the hues back round, so a red button stays red instead of going cyan; images are
+  // inverted a second time to return to themselves. Apple Mail and Thunderbird do the same.
+  // Only img and video are counter-inverted. Adding a rule for gradient backgrounds kept the
+  // Amazon navbar its original navy, but any image nested inside such a container inverted
+  // twice over and came out negative — and a photograph is content where a gradient is trim.
+  const dark = options.dark
+    ? `
+  body { filter: invert(1) hue-rotate(180deg); }
+  img, video { filter: invert(1) hue-rotate(180deg); }`
+    : ''
+
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8"><style>
-  /* Light, explicitly, in every theme. Mail HTML is written against a white canvas — dark
-     mode would leave a body's own colours unreadable against an inverted background, so the
-     reader keeps a light sheet the way every other mail client does. */
+  /* Light in every theme, dark mode included: the inversion above needs a white canvas to
+     turn black. Painting the canvas dark first would invert it back to white. */
   :root { color-scheme: light; }
   body {
     margin: 0;
@@ -67,7 +80,7 @@ export function renderBodyDocument(fragment: string): string {
   body { overflow-wrap: anywhere; }
   /* Tables are the one thing that must keep its width, so it scrolls in its own box. */
   table { max-width: 100%; }
-  pre { overflow-x: auto; }
+  pre { overflow-x: auto; }${dark}
 </style></head>
 <body>${fragment}</body>
 </html>`
