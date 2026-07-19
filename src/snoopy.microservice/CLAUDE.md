@@ -140,6 +140,3 @@ else label = "Unknown";
 - **ALWAYS** use cancellation tokens for asynchronous methods.
 - **ALWAYS** use Data Transfer Objects (DTO) for API communication, validated with attributes.
 - **NEVER** use try-catch blocks solely to log and rethrow exceptions.
-- If any backend changes are made, run dotnet build in the root and ensure no build errors for the entire solution.
-
-
