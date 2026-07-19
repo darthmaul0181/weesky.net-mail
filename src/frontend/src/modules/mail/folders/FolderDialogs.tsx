@@ -34,6 +34,11 @@ export function parentOf(folder: MailFolderNode): string {
     : ''
 }
 
+/** Nesting shown in a flat <select>, where indentation is the only cue available. */
+function indent(depth: number): string {
+  return ' '.repeat(depth * 3)
+}
+
 /**
  * Folder actions and the dialogs they open.
  *
@@ -41,8 +46,9 @@ export function parentOf(folder: MailFolderNode): string {
  * creating and managing folders are rare next to the constant business of reading, and they
  * were taking a band of the column away from the tree every time it was not being used.
  *
- * Managing happens in a modal. The list needs a row per folder with a visibility control and
- * two actions, which is more than a 240px column can lay out legibly.
+ * The dialogs follow the admin module's shape — `.field-h` rows, `.toggle-switch` for a
+ * boolean, one primary submit, closing on the ✕ — because a webmail with two dialect of
+ * dialog looks like two applications.
  */
 export default function FolderDialogs({ folders, selectedPath, onNotify }: Props) {
   const [creating, setCreating] = useState(false)
@@ -101,46 +107,56 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
 
       {creating && (
         <div className="modal-overlay" onClick={closeCreate}>
-          <div className="modal" onClick={event => event.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: '560px' }} onClick={event => event.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">New folder</span>
+              <span className="modal-title"><FolderPlusIcon />New folder</span>
               <button className="modal-close" aria-label="Close" onClick={closeCreate}>✕</button>
             </div>
 
-            <div className="folder-form">
-              <label>
-                Name
-                <input value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
-              </label>
-              <label>
-                Parent
-                <select value={newParent} onChange={e => setNewParent(e.target.value)}>
+            {/* A form, so Enter submits the way it does in the admin dialogs. */}
+            <form
+              onSubmit={async event => {
+                event.preventDefault()
+                const ok = await run(
+                  () => createFolder.mutateAsync({ parentPath: newParent, name: newName.trim() }),
+                  `Folder "${newName.trim()}" created`, 'Could not create the folder')
+                if (ok) closeCreate()
+              }}
+            >
+              <div className="field-h">
+                <label htmlFor="new-folder-name">Name</label>
+                <input
+                  id="new-folder-name"
+                  type="text"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div className="field-h">
+                <label htmlFor="new-folder-parent">Parent</label>
+                <select
+                  id="new-folder-parent"
+                  value={newParent}
+                  onChange={e => setNewParent(e.target.value)}
+                >
                   <option value="">(top level)</option>
                   {all.map(({ node, depth }) => (
-                    <option key={node.path} value={node.path}>
-                      {' '.repeat(depth * 2)}{node.name}
-                    </option>
+                    <option key={node.path} value={node.path}>{indent(depth)}{node.name}</option>
                   ))}
                 </select>
-              </label>
-            </div>
+              </div>
 
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={closeCreate}>Cancel</button>
               <button
-                type="button"
+                type="submit"
                 className="btn btn-primary"
+                style={{ marginTop: '8px' }}
                 disabled={!newName.trim() || createFolder.isPending}
-                onClick={async () => {
-                  const ok = await run(
-                    () => createFolder.mutateAsync({ parentPath: newParent, name: newName.trim() }),
-                    `Folder "${newName.trim()}" created`, 'Could not create the folder')
-                  if (ok) closeCreate()
-                }}
               >
-                Create
+                {createFolder.isPending ? <span className="spinner" /> : 'Create folder'}
               </button>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -149,12 +165,12 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
         <div className="modal-overlay" onClick={() => setManaging(false)}>
           <div className="modal modal-folders" onClick={event => event.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Manage folders</span>
+              <span className="modal-title"><SlidersIcon />Manage folders</span>
               <button className="modal-close" aria-label="Close" onClick={() => setManaging(false)}>✕</button>
             </div>
 
             <p className="modal-hint">
-              Clearing a folder&rsquo;s checkbox hides it from the tree. Nothing in it is deleted.
+              Turning a folder off hides it from the tree. Nothing in it is deleted.
             </p>
 
             <ul className="folder-manage-list">
@@ -162,8 +178,8 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
                 const isInbox = node.specialUse === 'inbox'
 
                 return (
-                  <li key={node.path} className="folder-manage-row">
-                    <label className="folder-manage-name" style={{ paddingLeft: depth * 16 }}>
+                  <li key={node.path} className="folder-manage-row" style={{ paddingLeft: 8 + depth * 18 }}>
+                    <label className="toggle-switch">
                       <input
                         type="checkbox"
                         // The inbox is always visible and its subscription flag is meaningless —
@@ -177,8 +193,10 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
                           e.target.checked ? `"${node.name}" is now visible` : `"${node.name}" is now hidden`,
                           'Could not change the folder visibility')}
                       />
-                      <span className="folder-manage-label">{node.name}</span>
+                      <span className="toggle-track" />
                     </label>
+
+                    <span className="folder-manage-label">{node.name}</span>
 
                     <div className="folder-manage-actions">
                       <button
@@ -212,39 +230,45 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
 
       {renaming && (
         <div className="modal-overlay" onClick={() => setRenaming(null)}>
-          <div className="modal" onClick={event => event.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: '560px' }} onClick={event => event.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Rename folder</span>
+              <span className="modal-title"><PencilIcon />Rename folder</span>
               <button className="modal-close" aria-label="Close" onClick={() => setRenaming(null)}>✕</button>
             </div>
 
-            <div className="folder-form">
-              <label>
-                New name
-                <input value={renameValue} onChange={e => setRenameValue(e.target.value)} autoFocus />
-              </label>
-            </div>
+            <form
+              onSubmit={async event => {
+                event.preventDefault()
+                const ok = await run(
+                  () => renameFolder.mutateAsync({
+                    path: renaming.path,
+                    newParentPath: parentOf(renaming),
+                    newName: renameValue.trim(),
+                  }),
+                  'Folder renamed', 'Could not rename the folder')
+                if (ok) setRenaming(null)
+              }}
+            >
+              <div className="field-h">
+                <label htmlFor="rename-folder-name">New name</label>
+                <input
+                  id="rename-folder-name"
+                  type="text"
+                  value={renameValue}
+                  onChange={e => setRenameValue(e.target.value)}
+                  autoFocus
+                />
+              </div>
 
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={() => setRenaming(null)}>Cancel</button>
               <button
-                type="button"
+                type="submit"
                 className="btn btn-primary"
+                style={{ marginTop: '8px' }}
                 disabled={!renameValue.trim() || renameFolder.isPending}
-                onClick={async () => {
-                  const ok = await run(
-                    () => renameFolder.mutateAsync({
-                      path: renaming.path,
-                      newParentPath: parentOf(renaming),
-                      newName: renameValue.trim(),
-                    }),
-                    'Folder renamed', 'Could not rename the folder')
-                  if (ok) setRenaming(null)
-                }}
               >
-                Rename
+                {renameFolder.isPending ? <span className="spinner" /> : 'Rename'}
               </button>
-            </div>
+            </form>
           </div>
         </div>
       )}

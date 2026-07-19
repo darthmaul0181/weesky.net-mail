@@ -80,7 +80,7 @@ describe('the folder actions', () => {
   it('opens nothing until an action is clicked', () => {
     renderDialogs()
 
-    expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create folder' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Show Projects')).not.toBeInTheDocument()
   })
 })
@@ -88,21 +88,48 @@ describe('the folder actions', () => {
 describe('creating a folder', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('closes without creating anything when cancelled', () => {
+  // Closing is the ✕ alone, as in the admin dialogs — no separate Cancel button.
+  it('closes without creating anything', () => {
     renderDialogs()
     openCreate()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(mocks.create).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create folder' })).not.toBeInTheDocument()
+  })
+
+  // The dialog is built from the admin module's parts, so a webmail does not end up with two
+  // dialects of form. .field-h is the horizontal label/control row those dialogs use.
+  it('lays its fields out the way the admin dialogs do', () => {
+    const { container } = render(
+      <FolderDialogs folders={tree} selectedPath="INBOX" onNotify={vi.fn()} />)
+    openCreate()
+
+    expect(container.querySelectorAll('.field-h')).toHaveLength(2)
+    // Labels sit beside their control, so the association has to be explicit to survive.
+    expect(screen.getByLabelText('Name')).toHaveAttribute('id', 'new-folder-name')
+    expect(screen.getByLabelText('Parent')).toHaveAttribute('id', 'new-folder-parent')
+  })
+
+  it('submits on Enter, like every other form in the app', async () => {
+    mocks.create.mockResolvedValue('Reports')
+    const { container } = render(
+      <FolderDialogs folders={tree} selectedPath="INBOX" onNotify={vi.fn()} />)
+    openCreate()
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Reports' } })
+    fireEvent.submit(container.querySelector('form')!)
+
+    await waitFor(() =>
+      expect(mocks.create).toHaveBeenCalledWith({ parentPath: 'INBOX', name: 'Reports' }))
   })
 
   it('keeps Create disabled until a name is typed', () => {
     renderDialogs()
     openCreate()
 
-    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create folder' })).toBeDisabled()
   })
 
   it('creates under the chosen parent and notifies', async () => {
@@ -111,7 +138,7 @@ describe('creating a folder', () => {
 
     openCreate()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Reports' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }))
 
     await waitFor(() =>
       expect(mocks.create).toHaveBeenCalledWith({ parentPath: 'INBOX', name: 'Reports' }))
@@ -124,7 +151,7 @@ describe('creating a folder', () => {
 
     openCreate()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'a/b' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }))
 
     await waitFor(() =>
       expect(onNotify).toHaveBeenCalledWith("A folder name cannot be empty or contain '/'", 'error'))
@@ -185,6 +212,16 @@ describe('managing folders', () => {
     const toggle = screen.getByLabelText('Show INBOX')
     expect(toggle).toBeChecked()
     expect(toggle).toBeDisabled()
+  })
+
+  // A switch, not a bare checkbox: the app shows every boolean this way.
+  it('uses the house toggle switch for visibility', () => {
+    const { container } = render(
+      <FolderDialogs folders={tree} selectedPath="INBOX" onNotify={vi.fn()} />)
+    openManage()
+
+    expect(container.querySelectorAll('.toggle-switch')).toHaveLength(flatten(tree).length)
+    expect(screen.getByLabelText('Show Projects').closest('.toggle-switch')).toBeTruthy()
   })
 
   it('offers no Delete for the inbox', () => {
