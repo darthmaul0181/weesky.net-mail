@@ -15,13 +15,14 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
     public class MailControllerTests
     {
         private readonly Mock<IMailFolderRepository> _folders = new();
+        private readonly Mock<IMailMessageRepository> _messages = new();
         private readonly Mock<IMailCredentialStore> _credentials = new();
 
         private MailController CreateController()
         {
             _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success("hunter2"));
 
-            return new MailController(_folders.Object, _credentials.Object)
+            return new MailController(_folders.Object, _messages.Object, _credentials.Object)
             {
                 ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be")
             };
@@ -259,5 +260,85 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers
 
             Assert.IsType<UnauthorizedObjectResult>(result);
         }
+
+        // ── Messages ────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task GetMessages_ReturnsThePage()
+        {
+            _messages.Setup(m => m.ListAsync(It.IsAny<User>(), "hunter2", "INBOX", 0, 50, It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Success(new MailFolderPage
+                     {
+                         FolderPath = "INBOX",
+                         UidValidity = 42,
+                         Total = 1,
+                         Messages = { new MailMessageSummary { Uid = 7, Subject = "Hello" } }
+                     }));
+
+            var result = await CreateController().GetMessages("INBOX", 0, 50, CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var page = Assert.IsType<MailFolderPage>(ok.Value);
+            Assert.Equal(42u, page.UidValidity);
+            Assert.Single(page.Messages);
+        }
+
+        [Fact]
+        public async Task GetMessages_Returns400ForABlankFolder()
+        {
+            var result = await CreateController().GetMessages("  ", 0, 50, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+            VerifyMessagesNeverCalled();
+        }
+
+        [Fact]
+        public async Task GetMessages_Returns400ForANegativePage()
+        {
+            var result = await CreateController().GetMessages("INBOX", -1, 50, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+            VerifyMessagesNeverCalled();
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(201)]
+        public async Task GetMessages_Returns400ForAPageSizeOutOfRange(int pageSize)
+        {
+            var result = await CreateController().GetMessages("INBOX", 0, pageSize, CancellationToken.None);
+
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+            VerifyMessagesNeverCalled();
+        }
+
+        [Fact]
+        public async Task GetMessages_Returns401WhenCredentialsAreUnavailable()
+        {
+            var controller = CreateController();
+            _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                        .Returns(Result.Failure<string>("credentials_unavailable"));
+
+            var result = await controller.GetMessages("INBOX", 0, 50, CancellationToken.None);
+
+            Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        }
+
+        [Fact]
+        public async Task GetMessages_Returns502WhenImapFails()
+        {
+            _messages.Setup(m => m.ListAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(Result.Failure<MailFolderPage>("Unable to read the messages"));
+
+            var result = await CreateController().GetMessages("INBOX", 0, 50, CancellationToken.None);
+
+            var status = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        }
+
+        private void VerifyMessagesNeverCalled()
+            => _messages.Verify(m => m.ListAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+                Times.Never);
     }
 }

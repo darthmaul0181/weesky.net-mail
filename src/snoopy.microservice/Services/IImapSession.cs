@@ -33,5 +33,11 @@ namespace weesky.Snoopy.Microservice.Services
 
         /// <summary>Subscribes or unsubscribes a folder, which is how the UI hides it.</summary>
         Task<Result> SetSubscriptionAsync(string path, bool subscribed, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// One page of a folder, newest message first, envelope-level only. Carries the
+        /// folder's UidValidity so the client knows when its cached UIDs went stale.
+        /// </summary>
+        Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken);
     }
 }

@@ -278,6 +278,20 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server refused the operation</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetMessages(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One page of a folder, newest message first. The folder path travels in the query
+            string rather than a route segment because the hierarchy separator may be '/'.
+            </summary>
+            <param name="folder">full folder path</param>
+            <param name="page">zero-based page index</param>
+            <param name="pageSize">messages per page, 1 to 200</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The page, with the folder's UidValidity</response>
+            <response code="400">The folder is missing, or the paging arguments are out of range</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
             Returns the authenticated user's Sieve configuration: structured rules when a
@@ -484,6 +498,40 @@
             Folder UID validity. When it changes, every UID the client cached for this folder
             is stale and must be discarded, or the client will show the wrong messages.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage">
+            <summary>One page of a folder, newest message first.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.UidValidity">
+            <summary>
+            UID validity at the time of the read. When this changes, every UID the client
+            cached for this folder is meaningless and must be discarded — otherwise the client
+            will open the wrong messages.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.Total">
+            <summary>Total messages in the folder, all pages combined.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.Page">
+            <summary>Zero-based page index.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary">
+            <summary>One row of the message list. Envelope-level only — no body is fetched.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Uid">
+            <summary>IMAP UID. Valid only for the UidValidity of its page.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.FromName">
+            <summary>Display name of the first sender, falling back to the address.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Date">
+            <summary>Date the message claims, falling back to the server's internal date.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Size">
+            <summary>Size in octets.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Preview">
+            <summary>Short body extract for the list row. Empty when the server cannot supply one.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions">
             <summary>
@@ -775,6 +823,9 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.SetSubscriptionAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
             <summary>Subscribes or unsubscribes a folder.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.ListAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>One page of a folder, newest message first.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
             High-level Sieve management API used by controllers. Each method opens its own
@@ -801,6 +852,12 @@
             <summary>
             Folder access over IMAP. One session per method, opened and disposed inside it — the
             same shape as SieveRepository over ManageSieve.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.MailMessageRepository">
+            <summary>
+            Message access over IMAP. One session per method, opened and disposed inside it — the
+            same shape as MailFolderRepository.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.SieveRepository.CleanupOtherManagedScriptsAsync(weesky.Snoopy.Microservice.Services.IManageSieveSession,System.String,System.Threading.CancellationToken)">
@@ -989,6 +1046,12 @@
         <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SetSubscriptionAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
             <summary>Subscribes or unsubscribes a folder, which is how the UI hides it.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListMessagesAsync(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One page of a folder, newest message first, envelope-level only. Carries the
+            folder's UidValidity so the client knows when its cached UIDs went stale.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
              <summary>
              Carries the user's mail password between requests, encrypted into a cookie.
@@ -1067,6 +1130,13 @@
             <summary>
             A leaf name may not contain the hierarchy separator: it would silently create a
             nested folder instead of the one the user asked for.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ComputePageWindow(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Maps a newest-first page onto an IMAP sequence range, which runs oldest-first: page
+            zero is the window at the *end* of the folder. Returns (-1, -1) when the page lies
+            past the end, or when the arguments make no sense.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUse(MailKit.FolderAttributes,System.String,System.Boolean)">

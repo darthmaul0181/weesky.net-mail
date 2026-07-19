@@ -200,6 +200,73 @@ namespace weesky.Snoopy.Microservice.Services
             }
         }
 
+        public async Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+
+            try
+            {
+                var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+                await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+                var result = new MailFolderPage
+                {
+                    FolderPath = folder.FullName,
+                    UidValidity = folder.UidValidity,
+                    Total = folder.Count,
+                    Page = page,
+                    PageSize = pageSize
+                };
+
+                var (start, end) = ComputePageWindow(folder.Count, page, pageSize);
+                if (start < 0) return Result.Success(result);
+
+                var items = await folder.FetchAsync(start, end, SummaryItems, cancellationToken);
+
+                // The fetch runs oldest-first; the list is newest-first.
+                foreach (var item in items.Reverse())
+                {
+                    result.Messages.Add(ToSummary(item));
+                }
+
+                return Result.Success(result);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to list messages in {Folder}", folderPath);
+                return Result.Failure<MailFolderPage>("Unable to read the messages");
+            }
+        }
+
+        private const MessageSummaryItems SummaryItems =
+            MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.Flags |
+            MessageSummaryItems.Size | MessageSummaryItems.BodyStructure | MessageSummaryItems.InternalDate |
+            MessageSummaryItems.PreviewText;
+
+        private static MailMessageSummary ToSummary(IMessageSummary item)
+        {
+            var sender = item.Envelope?.From?.Mailboxes?.FirstOrDefault();
+
+            return new MailMessageSummary
+            {
+                Uid = item.UniqueId.Id,
+                Subject = item.Envelope?.Subject ?? string.Empty,
+                FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty,
+                FromAddress = sender?.Address ?? string.Empty,
+                Date = item.Envelope?.Date ?? item.InternalDate ?? DateTimeOffset.MinValue,
+                Seen = item.Flags?.HasFlag(MessageFlags.Seen) ?? false,
+                Flagged = item.Flags?.HasFlag(MessageFlags.Flagged) ?? false,
+                Answered = item.Flags?.HasFlag(MessageFlags.Answered) ?? false,
+                HasAttachments = item.Attachments?.Any() ?? false,
+                Size = item.Size ?? 0,
+                Preview = item.PreviewText ?? string.Empty
+            };
+        }
+
         private static bool IsInbox(IMailFolder folder)
             => string.Equals(folder.FullName, "INBOX", StringComparison.OrdinalIgnoreCase);
 
@@ -219,6 +286,22 @@ namespace weesky.Snoopy.Microservice.Services
 
         public static string CombinePath(string parentPath, string name, char separator)
             => string.IsNullOrEmpty(parentPath) ? name : $"{parentPath}{separator}{name}";
+
+        /// <summary>
+        /// Maps a newest-first page onto an IMAP sequence range, which runs oldest-first: page
+        /// zero is the window at the *end* of the folder. Returns (-1, -1) when the page lies
+        /// past the end, or when the arguments make no sense.
+        /// </summary>
+        public static (int Start, int End) ComputePageWindow(int total, int page, int pageSize)
+        {
+            if (total <= 0 || page < 0 || pageSize <= 0) return (-1, -1);
+
+            var end = total - 1 - (page * pageSize);
+            if (end < 0) return (-1, -1);
+
+            var start = Math.Max(0, end - pageSize + 1);
+            return (start, end);
+        }
 
         /// <summary>
         /// Maps a folder to a well-known role. The server's SPECIAL-USE flag wins; when the

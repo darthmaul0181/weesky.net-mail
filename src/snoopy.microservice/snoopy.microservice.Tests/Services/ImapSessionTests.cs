@@ -80,5 +80,32 @@ namespace weesky.Snoopy.Microservice.Tests.Services
         {
             Assert.Equal(expected, ImapSession.CombinePath(parent, name, separator));
         }
+
+        [Theory]
+        // total, page, pageSize  =>  startIndex, endIndex
+        [InlineData(100, 0, 50, 50, 99)]   // newest 50
+        [InlineData(100, 1, 50, 0, 49)]    // next 50
+        [InlineData(100, 2, 50, -1, -1)]   // past the end
+        [InlineData(30, 0, 50, 0, 29)]     // fewer messages than a page
+        [InlineData(0, 0, 50, -1, -1)]     // empty folder
+        [InlineData(75, 1, 50, 0, 24)]     // partial last page
+        [InlineData(1, 0, 50, 0, 0)]       // single message
+        public void ComputePageWindow_MapsNewestFirstPagesToSequenceRanges(
+            int total, int page, int pageSize, int expectedStart, int expectedEnd)
+        {
+            var (start, end) = ImapSession.ComputePageWindow(total, page, pageSize);
+
+            Assert.Equal(expectedStart, start);
+            Assert.Equal(expectedEnd, end);
+        }
+
+        [Theory]
+        [InlineData(100, -1, 50)]
+        [InlineData(100, 0, 0)]
+        [InlineData(100, 0, -10)]
+        public void ComputePageWindow_RejectsNonsensicalInput(int total, int page, int pageSize)
+        {
+            Assert.Equal((-1, -1), ImapSession.ComputePageWindow(total, page, pageSize));
+        }
     }
 }
