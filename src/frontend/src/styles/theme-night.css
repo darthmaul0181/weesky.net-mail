@@ -18,6 +18,19 @@
   --pane-item-active-bg: #ffffff;
   --pane-item-active-fg: #182238;
   --accent-unread: #e2674a;
+
+  /* Message list and reader */
+  --list-row-hover: #f4f1ee;
+  --list-row-selected-bg: #fdf3f0;
+  --list-row-selected-fg: #182238;
+  --list-row-unread-bg: #ffffff;
+  --list-separator: #ece7e1;
+  --badge-count-bg: #e2674a;
+  --badge-count-fg: #ffffff;
+  --reader-header-border: #ece7e1;
+  --quote-text: #8a827a;
+  --attachment-chip-bg: #f4f1ee;
+
   --action-primary: #182238;
   --action-primary-hover: #26334f;
   --action-primary-fg: #ffffff;
@@ -48,6 +61,19 @@
   --pane-item-active-bg: #262a31;
   --pane-item-active-fg: #f3efeb;
   --accent-unread: #f0785c;
+
+  /* Message list and reader */
+  --list-row-hover: #262a31;
+  --list-row-selected-bg: #2a2420;
+  --list-row-selected-fg: #f3efeb;
+  --list-row-unread-bg: #212429;
+  --list-separator: #2c3038;
+  --badge-count-bg: #f0785c;
+  --badge-count-fg: #1a0f0b;
+  --reader-header-border: #2c3038;
+  --quote-text: #8b857e;
+  --attachment-chip-bg: #262a31;
+
   --action-primary: #f0785c;
   --action-primary-hover: #f28a72;
   --action-primary-fg: #1a0f0b;

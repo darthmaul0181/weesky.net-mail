@@ -1,0 +1,256 @@
+/* Mail module. Three independently scrolling columns inside the shell's single outlet.
+   Every colour goes through a role token — no literal values in this file. */
+
+.mail-layout {
+  display: flex;
+  height: 100%;
+  overflow: hidden;   /* .app-content sets overflow:auto; the columns scroll, not the page */
+}
+
+.mail-folders {
+  width: 240px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 12px 8px;
+}
+
+.mail-list {
+  width: 380px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mail-reader {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Folder tree ─────────────────────────────────────────── */
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-row:hover { background: var(--pane-item-hover); }
+
+.folder-row.is-active {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+  font-weight: 600;
+}
+
+.folder-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-row-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--badge-count-bg);
+  color: var(--badge-count-fg);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  flex: none;
+}
+
+.folder-line { display: flex; align-items: center; }
+.folder-children { margin-left: 14px; }
+
+.folder-toggle {
+  display: flex;
+  flex: none;
+  width: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.folder-toggle.is-open { transform: rotate(90deg); }
+.folder-toggle-spacer { width: 14px; flex: none; }
+
+/* ── Folder management ───────────────────────────────────── */
+
+.folder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.folder-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.folder-manage-list { list-style: none; margin-bottom: 10px; }
+
+.folder-manage-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.folder-manage-list label { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+
+/* ── Message list ────────────────────────────────────────── */
+
+.message-list { list-style: none; }
+
+.message-row {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-row:hover { background: var(--list-row-hover); }
+
+.message-row.is-unread { background: var(--list-row-unread-bg); }
+.message-row.is-unread .message-row-from,
+.message-row.is-unread .message-row-subject { font-weight: 700; }
+
+.message-row.is-selected {
+  background: var(--list-row-selected-bg);
+  color: var(--list-row-selected-fg);
+  box-shadow: inset 3px 0 0 var(--accent-unread);
+}
+
+.message-row-top { display: flex; align-items: baseline; gap: 8px; }
+
+.message-row-from {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row-date { color: var(--text-muted); font-size: 11px; flex: none; }
+
+.message-row-subject,
+.message-row-preview {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row-preview { color: var(--text-muted); font-size: 12px; }
+
+.message-row-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-unread);
+  flex: none;
+}
+
+.message-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.message-pager-position { color: var(--text-muted); font-size: 12px; }
+
+/* ── Reader ──────────────────────────────────────────────── */
+
+.reader-header { padding: 18px 22px; border-bottom: 1px solid var(--reader-header-border); }
+.reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
+.reader-meta { color: var(--text-muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.reader-blocked-images {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 22px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: 13px;
+}
+
+.reader-body { flex: 1; width: 100%; min-height: 300px; border: none; }
+.reader-text { padding: 18px 22px; white-space: pre-wrap; font-family: var(--font); }
+.reader-quote { color: var(--quote-text); }
+
+.reader-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--reader-header-border);
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--attachment-chip-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.attachment-chip-size { color: var(--text-muted); }
+
+.mail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
