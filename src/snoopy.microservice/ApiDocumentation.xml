@@ -1475,6 +1475,16 @@
             past the end, or when the arguments make no sense.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.PageOf``1(System.Collections.Generic.IEnumerable{``0},System.Int32,System.Int32)">
+            <summary>Slice of an already-ordered list, or empty when the page lies past its end.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.InOrderOf``2(System.Collections.Generic.IEnumerable{``0},System.Collections.Generic.IEnumerable{``1},System.Func{``0,``1})">
+            <summary>
+            Re-orders fetched items to match the order they were asked for. A server answers a UID
+            FETCH in whatever order it likes — ascending UID in practice, which is exactly not the
+            sort order requested.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.String,System.Boolean}},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
              <summary>
              Assigns discovered roles, each to at most one folder — and each folder to at most
