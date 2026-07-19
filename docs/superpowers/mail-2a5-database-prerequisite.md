@@ -37,6 +37,13 @@ Avant de l'exécuter, remplace les trois valeurs suivantes :
 | `__PASSWORD_PROD__` | un mot de passe généré, jamais réutilisé |
 | `__PASSWORD_DEV__` | un autre mot de passe généré, différent du précédent |
 
+> **Le tiret de `snoopy_webmail-dev` impose les backticks en SQL.** Le nom suit celui de l'unité
+> systemd (`snoopy.microservice-dev`), ce qui est cohérent, mais MySQL lit un tiret non protégé
+> comme un opérateur de soustraction : `USE snoopy_webmail-dev;` échoue, `` USE `snoopy_webmail-dev`; ``
+> fonctionne. Le script ci-dessous protège toutes ses références. À garder en tête pour le SQL
+> tapé à la main — les chaînes de connexion et les arguments de `mysqldump`, eux, ne sont pas du
+> SQL et n'ont besoin de rien.
+
 ```sql
 -- ============================================================================
 --  Webmail weesky — base des préférences utilisateur
@@ -47,7 +54,7 @@ Avant de l'exécuter, remplace les trois valeurs suivantes :
 --  PRODUCTION
 -- ---------------------------------------------------------------------------
 
-CREATE DATABASE IF NOT EXISTS `weesky_webmail`
+CREATE DATABASE IF NOT EXISTS `snoopy_webmail`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_bin;
 
@@ -57,7 +64,7 @@ CREATE DATABASE IF NOT EXISTS `weesky_webmail`
 -- utf8mb4 (et non utf8) parce que les noms de dossiers contiennent des
 -- accents et peuvent contenir des emoji : 'Bonsaïs', 'Séries-Films'.
 
-CREATE TABLE IF NOT EXISTS `weesky_webmail`.`folder_role_overrides` (
+CREATE TABLE IF NOT EXISTS `snoopy_webmail`.`folder_role_overrides` (
   `account_id`   VARCHAR(255)  NOT NULL
                  COMMENT 'Aujourd''hui user@domain ; en 2d un identifiant de compte lié',
   `role`         VARCHAR(16)   NOT NULL
@@ -86,25 +93,25 @@ CREATE TABLE IF NOT EXISTS `weesky_webmail`.`folder_role_overrides` (
 -- recréerait exactement le couplage que cette base sert à éviter. La purge
 -- des lignes d'un compte supprimé est à la charge de l'application.
 
-CREATE USER IF NOT EXISTS 'weesky_webmail'@'__HOST__'
+CREATE USER IF NOT EXISTS 'snoopy_webmail'@'__HOST__'
   IDENTIFIED BY '__PASSWORD_PROD__';
 
 -- Droits sur les données seulement. Pas de CREATE, DROP ni ALTER :
 -- l'application ne migre jamais son schéma, elle n'a donc aucune raison de
 -- pouvoir le modifier — ni de pouvoir le détruire.
 GRANT SELECT, INSERT, UPDATE, DELETE
-  ON `weesky_webmail`.*
-  TO 'weesky_webmail'@'__HOST__';
+  ON `snoopy_webmail`.*
+  TO 'snoopy_webmail'@'__HOST__';
 
 -- ---------------------------------------------------------------------------
 --  DÉVELOPPEMENT — base et utilisateur distincts
 -- ---------------------------------------------------------------------------
 
-CREATE DATABASE IF NOT EXISTS `weesky_webmail_dev`
+CREATE DATABASE IF NOT EXISTS `snoopy_webmail-dev`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_bin;
 
-CREATE TABLE IF NOT EXISTS `weesky_webmail_dev`.`folder_role_overrides` (
+CREATE TABLE IF NOT EXISTS `snoopy_webmail-dev`.`folder_role_overrides` (
   `account_id`   VARCHAR(255)  NOT NULL,
   `role`         VARCHAR(16)   NOT NULL,
   `folder_path`  VARCHAR(1024) NOT NULL,
@@ -121,12 +128,12 @@ CREATE TABLE IF NOT EXISTS `weesky_webmail_dev`.`folder_role_overrides` (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_bin;
 
-CREATE USER IF NOT EXISTS 'weesky_webmail_dev'@'__HOST__'
+CREATE USER IF NOT EXISTS 'snoopy_webmail-dev'@'__HOST__'
   IDENTIFIED BY '__PASSWORD_DEV__';
 
 GRANT SELECT, INSERT, UPDATE, DELETE
-  ON `weesky_webmail_dev`.*
-  TO 'weesky_webmail_dev'@'__HOST__';
+  ON `snoopy_webmail-dev`.*
+  TO 'snoopy_webmail-dev'@'__HOST__';
 
 FLUSH PRIVILEGES;
 ```
@@ -141,12 +148,12 @@ Elles suivent le même chemin que `MailUserAccountsDatabase`, qui est vide dans
 
 ```
 WebmailPreferencesDatabase =
-  Server=<hôte>;Port=3306;Database=weesky_webmail;User=weesky_webmail;Password=<...>;
+  Server=<hôte>;Port=3306;Database=snoopy_webmail;User=snoopy_webmail;Password=<...>;
 ```
 
 ```
 WebmailPreferencesDatabase =
-  Server=<hôte>;Port=3306;Database=weesky_webmail_dev;User=weesky_webmail_dev;Password=<...>;
+  Server=<hôte>;Port=3306;Database=snoopy_webmail-dev;User=snoopy_webmail-dev;Password=<...>;
 ```
 
 Le service **refuse de démarrer** si cette chaîne est absente hors Development, avec un message
@@ -161,16 +168,16 @@ silencieusement inerte est pire qu'un échec au démarrage.
 -- La table existe et porte la bonne collation
 SELECT TABLE_NAME, TABLE_COLLATION
   FROM information_schema.TABLES
- WHERE TABLE_SCHEMA = 'weesky_webmail';
+ WHERE TABLE_SCHEMA = 'snoopy_webmail';
 -- attendu : folder_role_overrides | utf8mb4_bin
 
 -- Les droits sont bien limités aux données
-SHOW GRANTS FOR 'weesky_webmail'@'__HOST__';
--- attendu : GRANT SELECT, INSERT, UPDATE, DELETE ON `weesky_webmail`.* — et rien d'autre
+SHOW GRANTS FOR 'snoopy_webmail'@'__HOST__';
+-- attendu : GRANT SELECT, INSERT, UPDATE, DELETE ON `snoopy_webmail`.* — et rien d'autre
 ```
 
 Test d'écriture depuis le compte de service, à exécuter **connecté en tant que
-`weesky_webmail`** :
+`snoopy_webmail`** :
 
 ```sql
 INSERT INTO folder_role_overrides
@@ -199,10 +206,10 @@ DROP TABLE folder_role_overrides;
 ## 5. Désinstallation
 
 ```sql
-DROP DATABASE IF EXISTS `weesky_webmail`;
-DROP DATABASE IF EXISTS `weesky_webmail_dev`;
-DROP USER IF EXISTS 'weesky_webmail'@'__HOST__';
-DROP USER IF EXISTS 'weesky_webmail_dev'@'__HOST__';
+DROP DATABASE IF EXISTS `snoopy_webmail`;
+DROP DATABASE IF EXISTS `snoopy_webmail-dev`;
+DROP USER IF EXISTS 'snoopy_webmail'@'__HOST__';
+DROP USER IF EXISTS 'snoopy_webmail-dev'@'__HOST__';
 FLUSH PRIVILEGES;
 ```
 
