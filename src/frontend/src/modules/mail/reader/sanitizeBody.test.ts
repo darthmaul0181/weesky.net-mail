@@ -100,6 +100,22 @@ describe('renderBodyDocument', () => {
       expect(document).toMatch(/filter:\s*invert\(1\)\s*hue-rotate\(180deg\)/)
     })
 
+    // A filter on <body> leaves the canvas alone: the body's background propagates to it and is
+    // painted outside the filter. Real mail came out light-grey text on white — the content
+    // inverted, the sheet behind it did not. The filter has to sit on the root.
+    it('inverts through the root so the canvas goes dark with the content', () => {
+      const document = renderBodyDocument('<p>x</p>', { dark: true })
+
+      expect(document).toMatch(/html\s*\{[^}]*filter:\s*invert\(1\)/)
+      expect(document).not.toMatch(/body\s*\{[^}]*filter:\s*invert\(1\)/)
+    })
+
+    // Propagation only stops once html paints its own background.
+    it('gives the root a background of its own', () => {
+      expect(renderBodyDocument('<p>x</p>', { dark: true }))
+        .toMatch(/html\s*\{[^}]*background:\s*#ffffff/)
+    })
+
     // Inverting the sheet inverts the images with it; they need it applied twice to come back.
     it('re-inverts images so photographs stay themselves', () => {
       const document = renderBodyDocument('<p>x</p>', { dark: true })

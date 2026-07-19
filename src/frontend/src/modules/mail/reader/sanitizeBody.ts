@@ -45,17 +45,12 @@ export function revealBlockedImages(html: string): string {
  * inflict on the layout regardless of its own intent.
  */
 export function renderBodyDocument(fragment: string, options: { dark?: boolean } = {}): string {
-  // Invert the finished sheet rather than styling it dark: mail declares colours piecemeal —
-  // "color: #333" with no background is common — and a dark canvas turns that into dark on
-  // dark. Inverting whatever the message painted always preserves its contrast. hue-rotate
-  // brings the hues back round, so a red button stays red instead of going cyan; images are
-  // inverted a second time to return to themselves. Apple Mail and Thunderbird do the same.
-  // Only img and video are counter-inverted. Adding a rule for gradient backgrounds kept the
-  // Amazon navbar its original navy, but any image nested inside such a container inverted
-  // twice over and came out negative — and a photograph is content where a gradient is trim.
+  // Invert the finished sheet, as Apple Mail does: mail declares colours piecemeal, so a dark
+  // canvas gives dark on dark, while inverting what the message painted keeps its contrast.
+  // On the root — a body background propagates to the canvas, painted outside body's filter.
   const dark = options.dark
     ? `
-  body { filter: invert(1) hue-rotate(180deg); }
+  html { background: #ffffff; filter: invert(1) hue-rotate(180deg); }
   img, video { filter: invert(1) hue-rotate(180deg); }`
     : ''
 
