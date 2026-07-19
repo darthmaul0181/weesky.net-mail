@@ -1,3 +1,4 @@
+﻿import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
@@ -35,6 +36,17 @@ export default function MailLayout() {
   const folderName = folderNode
     ? (folderNode.specialUse ? roleLabel(folderNode.specialUse) : folderNode.name)
     : undefined
+
+  // Landing on three empty columns asks the user to pick the one folder everybody starts in.
+  // The inbox comes from the resolution chain's role rather than the name "INBOX", so a server
+  // that names it otherwise still lands right. No uid: which message to read stays the user's
+  // call. Replaces the entry, or Back would bounce off the redirect instead of leaving mail.
+  useEffect(() => {
+    if (folder || !folders) return
+
+    const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')
+    if (inbox) setParams({ folder: inbox.node.path }, { replace: true })
+  }, [folder, folders, setParams])
 
   function selectFolder(path: string) {
     // Drops uid: a message id means nothing in another folder.

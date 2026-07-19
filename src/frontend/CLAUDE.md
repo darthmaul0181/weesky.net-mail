@@ -53,7 +53,7 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
 
 `MailLayout`, `AliasesPage`, `RulesPage`, and `AdminPage` are `lazy()`-imported in `routes.tsx` and wrapped in `<Suspense fallback={null}>` at the route level, so the shell/settings chrome never waits on their bundle.
 
-**Mail selection lives in search params, not route segments.** A folder path may contain `/` — the hierarchy separator is whatever the IMAP server uses — which is the same reason folder paths travel in the query string or request body on the API side rather than in a route segment. `/mail?folder=INBOX&uid=42` keeps deep links and the back button working under any separator. Choosing a folder drops `uid`, because a message id means nothing in another folder.
+**Mail selection lives in search params, not route segments.** A folder path may contain `/` — the hierarchy separator is whatever the IMAP server uses — which is the same reason folder paths travel in the query string or request body on the API side rather than in a route segment. `/mail?folder=INBOX&uid=42` keeps deep links and the back button working under any separator. Choosing a folder drops `uid`, because a message id means nothing in another folder. **`MailLayout` opens the inbox when the URL names no folder** — found by the resolution chain's `inbox` role, not by matching the name, and written with `replace` so Back leaves the mail view instead of bouncing off the redirect. It never selects a message: that stays the user's call.
 
 **`RequireAuth`** (`src/layouts/RequireAuth.tsx`) — reads `isLoggedIn` from `AuthContext`; redirects to `/login` if false, otherwise renders `<Outlet/>`. Everything except `/login` sits behind it.
 
