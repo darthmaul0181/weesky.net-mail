@@ -72,30 +72,39 @@ export default function FolderManager({ folders, onNotify }: Props) {
 
               <span className="folder-manage-label">{node.name}</span>
 
-              {isSystem ? (
+              {/* Beside the name, not off at the right edge: it qualifies the folder, and a
+                  badge parked in its own column reads as a status of the row instead. */}
+              {isSystem && (
                 <span className="folder-manage-role">{roleLabel(node.specialUse!)}</span>
-              ) : (
-                <div className="folder-manage-actions">
-                  <button
-                    type="button"
-                    className="folder-action"
-                    aria-label={`Rename ${node.name}`}
-                    title="Rename"
-                    onClick={() => { setRenaming(node); setRenameValue(node.name) }}
-                  >
-                    <PencilIcon size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className="folder-action is-danger"
-                    aria-label={`Delete ${node.name}`}
-                    title="Delete"
-                    onClick={() => setPendingDelete(node)}
-                  >
-                    <TrashIcon size={15} />
-                  </button>
-                </div>
               )}
+
+              {/* Shown disabled rather than withheld. Dropping the buttons made system rows a
+                  different shape from every other one, which reads as a rendering fault; greyed
+                  out beside the role name, the rule explains itself. They are `disabled`, so
+                  neither a click nor a keyboard activation reaches the handler — and the API
+                  refuses these three operations regardless of what this list offers. */}
+              <div className="folder-manage-actions">
+                <button
+                  type="button"
+                  className="folder-action"
+                  aria-label={`Rename ${node.name}`}
+                  title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be renamed` : 'Rename'}
+                  disabled={isSystem}
+                  onClick={() => { setRenaming(node); setRenameValue(node.name) }}
+                >
+                  <PencilIcon size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="folder-action is-danger"
+                  aria-label={`Delete ${node.name}`}
+                  title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be deleted` : 'Delete'}
+                  disabled={isSystem}
+                  onClick={() => setPendingDelete(node)}
+                >
+                  <TrashIcon size={15} />
+                </button>
+              </div>
             </li>
           )
         })}

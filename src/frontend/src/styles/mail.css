@@ -176,10 +176,14 @@
 
 /* Flows with the settings page rather than scrolling inside a dialog: the list is the page's
    content now, and a scroll box nested in a scrolling page gives two scrollbars for one list. */
+/* Flows with the settings page rather than scrolling inside a dialog. Bounded because the
+   settings column is as wide as the window: unbounded, a three-word folder name sat with its
+   two actions half a screen away, and the eye had to travel the gap on every row. */
 .folder-manage-list {
   list-style: none;
   margin: 0 -8px;
   padding: 0;
+  max-width: 560px;
 }
 
 .folders-page-hint {
@@ -231,8 +235,10 @@
 
 .folder-manage-row:hover { background: var(--pane-item-hover); }
 
+/* Shrinks rather than fills, so the role badge sits against the name instead of being pushed
+   to the far edge by a flex:1 label. */
 .folder-manage-label {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -260,7 +266,21 @@
   color: var(--badge-count-fg);
 }
 
-.folder-manage-actions { display: flex; gap: 2px; flex: none; }
+/* margin-left:auto is what holds the actions at the right edge now that the label no longer
+   fills the row. */
+.folder-manage-actions { display: flex; gap: 2px; flex: none; margin-left: auto; }
+
+/* Present but unavailable. Dimmed enough to read as off without disappearing — the point is
+   that the control exists and this row cannot use it. */
+.folder-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.folder-action:disabled:hover {
+  background: none;
+  color: var(--text-muted);
+}
 
 /* ── Message list ────────────────────────────────────────── */
 

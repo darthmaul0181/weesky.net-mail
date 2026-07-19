@@ -30,10 +30,12 @@ export default function FoldersPage() {
       </p>
 
       <div className="folders-page-actions">
-        <button type="button" className="btn" onClick={() => setCreating(true)}>
+        {/* btn-ghost, not a bare btn: `.btn` alone carries no border and no background, so both
+            of these rendered as plain text and read as headings rather than controls. */}
+        <button type="button" className="btn btn-ghost" onClick={() => setCreating(true)}>
           <FolderPlusIcon size={15} />New folder
         </button>
-        <button type="button" className="btn" onClick={() => setAssigningRoles(true)}>
+        <button type="button" className="btn btn-ghost" onClick={() => setAssigningRoles(true)}>
           <SlidersIcon size={15} />System folders
         </button>
       </div>

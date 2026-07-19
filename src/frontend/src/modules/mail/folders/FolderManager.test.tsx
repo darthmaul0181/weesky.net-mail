@@ -108,25 +108,47 @@ describe('system folders are locked', () => {
   beforeEach(() => vi.clearAllMocks())
 
   // Hiding a system folder strands the mail filed into it; renaming or deleting one breaks the
-  // role for every other client on the mailbox. The role is changed in the system-folders
-  // dialog, so this list offers nothing at all on those rows.
+  // role for every other client on the mailbox. The controls stay on the row, disabled: withheld
+  // entirely they made those rows a different shape from every other one, which reads as a
+  // rendering fault rather than as a rule.
   it.each([
     ['INBOX', 'Inbox'],
     ['Corbeille', 'Trash'],
-  ])('offers no action on the %s folder and names its role', (name, label) => {
+  ])('disables every action on the %s folder and names its role', (name, label) => {
     renderManager()
 
-    expect(screen.queryByRole('button', { name: `Rename ${name}` })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: `Delete ${name}` })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Rename ${name}` })).toBeDisabled()
+    expect(screen.getByRole('button', { name: `Delete ${name}` })).toBeDisabled()
     expect(screen.getByLabelText(`Show ${name}`)).toBeDisabled()
     expect(screen.getByText(label)).toBeInTheDocument()
   })
 
-  it('keeps every action on an ordinary folder', () => {
+  // Disabled has to mean inert, not merely dimmed — the row still carries a live handler.
+  it.each(['Rename Corbeille', 'Delete Corbeille'])('ignores a click on %s', label => {
     renderManager()
 
-    expect(screen.getByRole('button', { name: 'Rename Projects' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Delete Projects' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: label }))
+
+    expect(screen.queryByLabelText('New name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument()
+  })
+
+  // The badge qualifies the folder, so it belongs against the name rather than in a column of
+  // its own at the far edge.
+  it('places the role badge next to the name, before the actions', () => {
+    const { container } = renderManager()
+
+    const row = container.querySelector('.folder-manage-row.is-system')!
+    const parts = Array.from(row.children).map(c => c.className.split(' ')[0])
+
+    expect(parts).toEqual(['toggle-switch', 'folder-manage-label', 'folder-manage-role', 'folder-manage-actions'])
+  })
+
+  it('keeps every action live on an ordinary folder', () => {
+    renderManager()
+
+    expect(screen.getByRole('button', { name: 'Rename Projects' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete Projects' })).toBeEnabled()
     expect(screen.getByLabelText('Show Projects')).toBeEnabled()
   })
 

@@ -71,6 +71,16 @@ describe('FoldersPage', () => {
     expect(screen.getByRole('button', { name: 'System folders' })).toBeInTheDocument()
   })
 
+  // Both shipped as a bare `.btn`, which carries no border and no background, so they rendered
+  // as plain text and read as headings rather than controls. jsdom applies no stylesheet, so
+  // the variant class is the only part of that this can hold on to.
+  it.each(['New folder', 'System folders'])('gives %s a visible button style', async name => {
+    renderPage()
+    await screen.findByLabelText('Show Projects')
+
+    expect(screen.getByRole('button', { name })).toHaveClass('btn-ghost')
+  })
+
   it('opens the create dialog', async () => {
     renderPage()
     await screen.findByLabelText('Show Projects')
