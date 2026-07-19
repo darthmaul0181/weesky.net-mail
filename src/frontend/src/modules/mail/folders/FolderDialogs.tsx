@@ -11,6 +11,7 @@ import {
   useRenameFolder,
   useSetFolderSubscription,
 } from '../queries'
+import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
 
 interface Props {
@@ -171,17 +172,27 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
             </div>
 
             <p className="modal-hint">
-              Turning a folder off hides it from the tree. Nothing in it is deleted. To choose
-              which folders act as Sent, Drafts, Trash, Junk and Archive, use{' '}
+              Turning a folder off hides it from the tree. Nothing in it is deleted. Folders
+              holding a system role are locked here — to choose which folders act as Sent,
+              Drafts, Trash, Junk and Archive, use{' '}
               <Link to="/settings/system-folders">system folders</Link>.
             </p>
 
             <ul className="folder-manage-list">
               {all.map(({ node, depth }) => {
                 const isInbox = node.specialUse === 'inbox'
+                // A folder currently playing a well-known role is off limits here: hiding it
+                // would strand the mail the client files into it, and renaming or deleting it
+                // breaks the role for every other client on the mailbox. The assignment is
+                // changed on the system-folders page, which is the screen that owns it.
+                const isSystem = Boolean(node.specialUse)
 
                 return (
-                  <li key={node.path} className="folder-manage-row" style={{ paddingLeft: 8 + depth * 18 }}>
+                  <li
+                    key={node.path}
+                    className={`folder-manage-row${isSystem ? ' is-system' : ''}`}
+                    style={{ paddingLeft: 8 + depth * 18 }}
+                  >
                     <label className="toggle-switch">
                       <input
                         type="checkbox"
@@ -189,7 +200,7 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
                         // Dovecot leaves it unsubscribed — so offering to hide it would be a
                         // control that either does nothing or loses the user their mail.
                         checked={isInbox ? true : node.subscribed}
-                        disabled={isInbox}
+                        disabled={isSystem}
                         aria-label={`Show ${node.name}`}
                         onChange={e => run(
                           () => setSubscription.mutateAsync({ path: node.path, subscribed: e.target.checked }),
@@ -201,17 +212,21 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
 
                     <span className="folder-manage-label">{node.name}</span>
 
-                    <div className="folder-manage-actions">
-                      <button
-                        type="button"
-                        className="folder-action"
-                        aria-label={`Rename ${node.name}`}
-                        title="Rename"
-                        onClick={() => { setRenaming(node); setRenameValue(node.name) }}
-                      >
-                        <PencilIcon size={15} />
-                      </button>
-                      {!isInbox && (
+                    {isSystem ? (
+                      // Naming the role earns the locked row: without it the missing controls
+                      // read as a fault rather than as a rule.
+                      <span className="folder-manage-role">{roleLabel(node.specialUse!)}</span>
+                    ) : (
+                      <div className="folder-manage-actions">
+                        <button
+                          type="button"
+                          className="folder-action"
+                          aria-label={`Rename ${node.name}`}
+                          title="Rename"
+                          onClick={() => { setRenaming(node); setRenameValue(node.name) }}
+                        >
+                          <PencilIcon size={15} />
+                        </button>
                         <button
                           type="button"
                           className="folder-action is-danger"
@@ -221,8 +236,8 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
                         >
                           <TrashIcon size={15} />
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </li>
                 )
               })}

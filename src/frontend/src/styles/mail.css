@@ -194,10 +194,25 @@
   white-space: nowrap;
 }
 
-/* The inbox's switch is on and locked; without this it reads as an ordinary "on". */
+/* A system folder's switch is locked; without this it reads as an ordinary "on". */
 .folder-manage-row .toggle-switch input:disabled + .toggle-track {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Weight alone marks the locked rows: a colour would have to carry the meaning on its own,
+   and the role name beside it already says which rule applies. */
+.folder-manage-row.is-system .folder-manage-label { font-weight: 600; }
+
+.folder-manage-role {
+  flex: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--badge-count-bg);
+  color: var(--badge-count-fg);
 }
 
 .folder-manage-actions { display: flex; gap: 2px; flex: none; }

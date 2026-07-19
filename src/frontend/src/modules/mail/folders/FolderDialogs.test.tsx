@@ -27,6 +27,9 @@ function node(partial: Partial<MailFolderNode>): MailFolderNode {
 
 const tree: MailFolderNode[] = [
   node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  // A system folder that is not the inbox: the inbox is locked for its own reasons, so on its
+  // own it cannot show that the rule covers every role.
+  node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
   node({
     path: 'Projects', name: 'Projects',
     children: [node({ path: 'Projects/Alpha', name: 'Alpha', subscribed: false })],
@@ -61,7 +64,7 @@ describe('parentOf', () => {
 describe('flatten', () => {
   it('includes children with their depth', () => {
     expect(flatten(tree).map(f => [f.node.name, f.depth]))
-      .toEqual([['INBOX', 0], ['Projects', 0], ['Alpha', 1]])
+      .toEqual([['INBOX', 0], ['Corbeille', 0], ['Projects', 0], ['Alpha', 1]])
   })
 })
 
@@ -227,12 +230,38 @@ describe('managing folders', () => {
     expect(screen.getByLabelText('Show Projects').closest('.toggle-switch')).toBeTruthy()
   })
 
-  it('offers no Delete for the inbox', () => {
+  // Hiding a system folder strands the mail filed into it; renaming or deleting one breaks the
+  // role for every other client on the mailbox. The role is changed on the system-folders page,
+  // so this dialog offers nothing at all on those rows.
+  it.each([
+    ['INBOX', 'Inbox'],
+    ['Corbeille', 'Trash'],
+  ])('offers no action on the %s folder and names its role', (name, label) => {
     renderDialogs()
     openManage()
 
-    expect(screen.queryByRole('button', { name: 'Delete INBOX' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `Rename ${name}` })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `Delete ${name}` })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(`Show ${name}`)).toBeDisabled()
+    expect(screen.getByText(label)).toBeInTheDocument()
+  })
+
+  it('keeps every action on an ordinary folder', () => {
+    renderDialogs()
+    openManage()
+
+    expect(screen.getByRole('button', { name: 'Rename Projects' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete Projects' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Show Projects')).toBeEnabled()
+  })
+
+  // The lock has to be visible, not only enforced: an unexplained missing control reads as a bug.
+  it('marks the system rows so they read as different', () => {
+    const { container } = render(
+      <MemoryRouter><FolderDialogs folders={tree} selectedPath="INBOX" onNotify={vi.fn()} /></MemoryRouter>)
+    openManage()
+
+    expect(container.querySelectorAll('.folder-manage-row.is-system')).toHaveLength(2)
   })
 
   it('links the manage dialog to the system-folders settings', () => {
