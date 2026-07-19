@@ -163,12 +163,46 @@
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
+/* Flows with the settings page rather than scrolling inside a dialog: the list is the page's
+   content now, and a scroll box nested in a scrolling page gives two scrollbars for one list. */
 .folder-manage-list {
+  list-style: none;
+  margin: 0 -8px;
+  padding: 0;
+}
+
+.folders-page-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: -8px 0 20px;
+  max-width: 62ch;
+}
+
+.folders-page-actions {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.folders-page-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* The dialog's roles scroll if the mailbox has a long enough name list to push them; the band
+   stack of .modal-folders gives this child the room. */
+.system-folders-roles {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  list-style: none;
-  margin: 0 -8px;
+}
+
+.system-folders-stale {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  /* Aligned under the control, not the label: .field-h puts the label in a fixed first column. */
+  margin: -6px 0 12px 126px;
 }
 
 .folder-manage-row {

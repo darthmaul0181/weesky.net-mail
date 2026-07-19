@@ -8,7 +8,7 @@ import ComingSoon from './components/ComingSoon'
 import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
 import AppearancePage from './modules/settings/appearance/AppearancePage'
-import SystemFoldersPage from './modules/settings/mail/SystemFoldersPage'
+import FoldersPage from './modules/settings/mail/FoldersPage'
 
 const MailLayout = lazy(() => import('./modules/mail/MailLayout'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.jsx'))
@@ -35,7 +35,9 @@ export const routes: RouteObject[] = [
               { path: 'account', element: <AccountPage /> },
               { path: 'accounts', element: <ComingSoon module="Linked accounts" /> }, // sub-project 2
               { path: 'appearance', element: <AppearancePage /> },
-              { path: 'system-folders', element: <SystemFoldersPage /> },
+              { path: 'folders', element: <FoldersPage /> },
+              // The folders page grew out of the old system-folders one; keep its URL working.
+              { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
               { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
               { path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> },
               {

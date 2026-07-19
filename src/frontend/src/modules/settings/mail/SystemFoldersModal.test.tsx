@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import SystemFoldersPage from './SystemFoldersPage'
+import SystemFoldersModal from './SystemFoldersModal'
 import type { FolderRoleEntry, MailFolderNode } from '../../mail/api/mailTypes'
 
 const mocks = vi.hoisted(() => ({
@@ -48,17 +48,20 @@ const roles = [
   entry({ role: 'archive' }),
 ]
 
-function renderPage() {
+const onNotify = vi.fn()
+const onClose = vi.fn()
+
+function renderModal() {
   mocks.getMailFolders.mockResolvedValue(folders)
   mocks.getFolderRoles.mockResolvedValue(roles)
-  return render(<SystemFoldersPage />, { wrapper })
+  return render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 }
 
-describe('SystemFoldersPage', () => {
+describe('SystemFoldersModal', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('offers one labelled select per assignable role', async () => {
-    renderPage()
+    renderModal()
 
     expect(await screen.findByLabelText('Sent')).toBeInTheDocument()
     expect(screen.getByLabelText('Drafts')).toBeInTheDocument()
@@ -70,7 +73,7 @@ describe('SystemFoldersPage', () => {
   })
 
   it('says what automatic currently resolves to', async () => {
-    renderPage()
+    renderModal()
 
     const trash = await screen.findByLabelText('Trash')
     expect(trash).toHaveDisplayValue(/Automatic — Deleted Items/)
@@ -82,14 +85,14 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByLabelText('Trash')).toHaveValue('Corbeille')
   })
 
   it('assigns a role through the API', async () => {
     mocks.setFolderRole.mockResolvedValue(undefined)
-    renderPage()
+    renderModal()
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: 'Corbeille' } })
 
@@ -103,7 +106,7 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
 
@@ -112,11 +115,11 @@ describe('SystemFoldersPage', () => {
 
   it('surfaces the backend message when the assignment fails', async () => {
     mocks.setFolderRole.mockRejectedValue(new Error('This folder already holds another role'))
-    renderPage()
+    renderModal()
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: 'Corbeille' } })
 
-    expect(await screen.findByText('This folder already holds another role')).toBeInTheDocument()
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('This folder already holds another role', 'error'))
   })
 
   it('surfaces the backend message when clearing a role fails', async () => {
@@ -126,11 +129,11 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
 
-    expect(await screen.findByText('Could not clear this role')).toBeInTheDocument()
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not clear this role', 'error'))
   })
 
   // A stale override is kept and signalled (§ 5.3) — the notice and the discovery-resolved
@@ -144,7 +147,7 @@ describe('SystemFoldersPage', () => {
         staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
     expect(screen.getByLabelText('Trash')).toHaveDisplayValue(/Automatic — Deleted Items/)
@@ -162,7 +165,7 @@ describe('SystemFoldersPage', () => {
         staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
     expect(screen.getByLabelText('Trash')).toHaveDisplayValue('Automatic — not set')
@@ -179,7 +182,7 @@ describe('SystemFoldersPage', () => {
         staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     const select = await screen.findByLabelText('Trash')
     const notice = await screen.findByText(/“Old Trash” was renamed or deleted/)
@@ -199,7 +202,7 @@ describe('SystemFoldersPage', () => {
         staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
       }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByText(/“Container” can no longer hold messages/)).toBeInTheDocument()
     expect(screen.queryByText(/renamed or deleted/)).not.toBeInTheDocument()
@@ -214,7 +217,7 @@ describe('SystemFoldersPage', () => {
         staleOverride: { folderPath: 'Corbeille', reason: 'folderTaken' },
       }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByText(/“Corbeille” is already used for another role/)).toBeInTheDocument()
     expect(screen.queryByText(/renamed or deleted/)).not.toBeInTheDocument()
@@ -230,7 +233,7 @@ describe('SystemFoldersPage', () => {
         staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
       }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     const select = await screen.findByLabelText('Trash')
     const notice = await screen.findByText(/“Container” can no longer hold messages/)
@@ -247,21 +250,21 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'trash'),
       entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'name' }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByLabelText('Trash'))
       .toHaveDisplayValue('Automatic — Corbeille (detected from the name)')
   })
 
   it('leaves a server-declared role unqualified', async () => {
-    renderPage()
+    renderModal()
 
     // 'Deleted Items' arrives with provenance 'specialUse'.
     expect(await screen.findByLabelText('Trash')).toHaveDisplayValue('Automatic — Deleted Items')
   })
 
   it('never offers the inbox or a non-selectable folder', async () => {
-    renderPage()
+    renderModal()
 
     const options = Array.from((await screen.findByLabelText('Trash')).querySelectorAll('option'))
       .map(option => option.getAttribute('value'))
@@ -277,7 +280,7 @@ describe('SystemFoldersPage', () => {
       ...roles.filter(r => r.role !== 'junk'),
       entry({ role: 'junk', folderPath: 'Corbeille', provenance: 'override' }),
     ])
-    render(<SystemFoldersPage />, { wrapper })
+    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     const trashOptions = Array.from((await screen.findByLabelText('Trash')).querySelectorAll('option'))
       .map(option => option.getAttribute('value'))

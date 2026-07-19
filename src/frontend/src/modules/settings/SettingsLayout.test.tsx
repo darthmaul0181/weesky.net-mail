@@ -61,6 +61,13 @@ describe('settings section', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
   })
 
+  // The folders page grew out of the old system-folders one, whose URL was linked from the mail
+  // column and may sit in a bookmark.
+  it('redirects the old system-folders URL to the folders page', async () => {
+    const router = renderAt('/settings/system-folders')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/folders'))
+  })
+
   it('shows the nav without Administration for non-admins', async () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     renderAt('/settings/account')
@@ -68,6 +75,7 @@ describe('settings section', () => {
     expect(nav.getByText('Account')).toBeInTheDocument()
     expect(nav.getByText('Linked accounts')).toBeInTheDocument()
     expect(nav.getByText('Appearance')).toBeInTheDocument()
+    expect(nav.getByText('Folders list')).toBeInTheDocument()
     expect(nav.getByText('Aliases')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
     await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(false))

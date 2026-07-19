@@ -43,7 +43,8 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
     /settings/account               AccountPage
     /settings/accounts              ComingSoon ("Linked accounts" — sub-project 2)
     /settings/appearance            AppearancePage
-    /settings/system-folders        SystemFoldersPage
+    /settings/folders               FoldersPage
+    /settings/system-folders        → redirect to /settings/folders
     /settings/aliases               AliasesPage        (lazy-loaded)
     /settings/rules                 RulesPage          (lazy-loaded)
     /settings/admin  (RequireAdmin) AdminPage          (lazy-loaded)
@@ -68,7 +69,12 @@ Files under `src/modules/mail/`:
 - `folders/FolderTree.tsx` — hides unsubscribed folders **except the inbox** (Dovecot reports `INBOX` unsubscribed; the flag is meaningless for a folder that is always available), orders well-known ones first (inbox, drafts, sent, archive, junk, trash), refuses to select a container-only folder, and suppresses the unread badge on trash and junk — an unread count there prompts reading nobody wants to do
 
 **The role label (`roleLabel`, the i18n seam) replaces the folder name in the tree and the list header.** In the tree (`FolderTree.tsx`), the real name stays one hover away via `title` on the row; the list header (`MessageList.tsx`) has no such fallback — the role label is all that's shown there. A stale override is signalled in Settings next to the value that discovery now provides.
-- `folders/FolderDialogs.tsx` — create / rename / delete / visibility, reached from **two icon buttons in the column footer**, each dialog a modal. Folder work is rare next to reading, and labelled buttons at the top were taking a band off the tree permanently; the manage list needs a row per folder with a toggle and two actions, which a 240px column cannot lay out legibly. Derives a parent path by stripping the leaf name, which works under any separator because the backend rejects names containing one. Reuses `DeleteConfirmModal`
+- `folders/FolderDialogs.tsx` — the column footer's **two icon buttons**. Folder work is rare next to reading, and labelled buttons at the top were taking a band off the tree permanently. New folder opens `CreateFolderModal` right there — a quick action, done while looking at the tree it changes. Manage folders is a `<Link>` to `/settings/folders`, because a row per folder with a switch and two actions is not something a 240px column can lay out legibly
+- `folders/CreateFolderModal.tsx` — shared by the column footer and the folders settings page, so the two can never drift into two dialects of the same dialog
+- `folders/FolderManager.tsx` — the flat indented list: visibility, rename, delete, plus their dialogs. Reuses `DeleteConfirmModal`
+- `folders/folderNodes.ts` — `flatten` / `parentOf` / `indent` / `isSystemFolder`. `parentOf` strips the leaf name rather than splitting on a separator, which works under any separator because the backend rejects names containing one
+
+**A folder holding a role carries no control at all in the list** — no switch, no rename, no delete. Hiding one strands whatever gets filed into it; renaming or deleting one breaks the role for every client on the mailbox. The row names its role instead, because controls that are merely absent read as a fault rather than as a rule. **The API refuses these three operations too** (`MailController.RefuseIfSystemFolderAsync`), deletion including the target's whole subtree — a guard living in one client is one new screen away from being forgotten
 
 **The mail dialogs are built from the admin module's parts**, not their own: `.field-h` rows, `.toggle-switch` for a boolean, one `.btn-primary` submit inside a `<form>` so Enter works, and the ✕ as the only way out — `AddEditUserModal` is the reference. A webmail with two dialects of dialog looks like two applications. Because `.field-h` puts the label *beside* its control rather than around it, every field needs an explicit `htmlFor`/`id` pair; without it the control has no accessible name and `getByLabelText` cannot reach it either.
 - `list/MessageList.tsx` + `list/formatDate.ts` — rows between a fixed folder heading and a fixed pager; the page index resets when the folder changes. The preview element is always rendered even when empty, so a bodyless message does not make a shorter row than its neighbours
@@ -84,10 +90,10 @@ Files under `src/modules/mail/`:
 
 **Rendering message HTML — three independent barriers.** The backend sanitises the body; `reader/sanitizeBody.ts` sanitises it again with DOMPurify; and it is rendered in an `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">` — never `allow-scripts`, never `allow-same-origin`. **Never render message HTML into the page itself.** The two popup permissions are load-bearing, not a loosening: a fully empty sandbox withholds navigation too, so the `target="_blank"` links the sanitiser produces silently did nothing on click, and without the escape clause the opened tab inherits the sandbox and the destination site loads broken. The two sanitising passes are not redundancy: the bug class that defeats a sanitiser is a parse divergence between it and the browser, and two passes in different engines mean a body must defeat both. Remote images arrive as `data-blocked-src` and are only restored on explicit user consent, per message — loading them tells the sender the message was opened.
 
-**Settings module** — `SettingsLayout` (`src/modules/settings/SettingsLayout.tsx`) renders a `.context-pane` of `NavLink`s (Account / Linked accounts / Appearance / System folders / Aliases / Rules / Administration — the last conditional on `isAdmin`) beside a `.settings-content` `<Outlet/>`. Module directories under `src/modules/settings/`:
+**Settings module** — `SettingsLayout` (`src/modules/settings/SettingsLayout.tsx`) renders a `.context-pane` of `NavLink`s (Account / Linked accounts / Appearance / Folders list / Aliases / Rules / Administration — the last conditional on `isAdmin`) beside a `.settings-content` `<Outlet/>`. Module directories under `src/modules/settings/`:
 - `account/` — `AccountPage.tsx` (identity, other domains, quota via `QuotaBlock`, `ChangePasswordSection.tsx`)
 - `appearance/` — `AppearancePage.tsx` (theme + palette radio groups, backed by `ThemeContext`)
-- `mail/` — `SystemFoldersPage.tsx` (system role assignment; the `<select>`s exclude the inbox, non-selectable folders, and folders already overridden for another role)
+- `mail/` — `FoldersPage.tsx` (everything about folders in one place: the full list via `FolderManager`, plus the two dialogs that act across the whole set) and `SystemFoldersModal.tsx` (system role assignment; the `<select>`s exclude the inbox, non-selectable folders, and folders already overridden for another role)
 - `aliases/` — `AliasesPage.jsx` (slimmed to alias CRUD only; the old `AccountPanel` slide-in was retired in favor of `AccountPage`)
 - `rules/` — `RulesPage.jsx` (Sieve rules manager, unchanged wizard/provider logic — see below)
 - `admin/` — `AdminPage.jsx` (tab bar: Accounts / Domains / Virtual domains) with `AccountsTab.jsx`, `DomainsTab.jsx`, `VirtualDomainsTab.jsx` (**not** `OwnershipTab` — renamed to match the `domains/virtuals` API and "virtual alias domain" terminology), `AddEditUserModal.jsx`, `AddEditDomainModal.jsx`
@@ -137,7 +143,7 @@ Test files sit next to what they test (`Foo.tsx` → `Foo.test.tsx`, `Foo.jsx` �
 - `src/api.test.js` — token/session management, all `api` methods, 401 handling.
 - `src/App.test.tsx`, `src/contexts/AuthContext.test.tsx`, `src/contexts/ThemeContext.test.tsx`, `src/lib/accountIdentity.test.ts`
 - `src/layouts/AvatarMenu.test.tsx`, `src/modules/settings/SettingsLayout.test.tsx`
-- `src/modules/settings/account/AccountPage.test.tsx`, `src/modules/settings/appearance/AppearancePage.test.tsx`, `src/modules/settings/mail/SystemFoldersPage.test.tsx`
+- `src/modules/settings/account/AccountPage.test.tsx`, `src/modules/settings/appearance/AppearancePage.test.tsx`, `src/modules/settings/mail/FoldersPage.test.tsx`, `src/modules/settings/mail/SystemFoldersModal.test.tsx`
 - `src/modules/settings/aliases/AliasesPage.test.jsx` — alias CRUD, toasts, only the default export (see below).
 - `src/modules/settings/rules/RulesPage.test.jsx` — `RuleCard`, `RuleEditorModal`, `ConvertConfirmModal`, the `isConditionValid`/`isActionValid` helpers, and the `RulesPage` default export.
 - `src/modules/settings/admin/AdminPage.test.jsx` — `AdminPage`, `AccountsTab`, `DomainsTab`, `VirtualDomainsTab`, `AddEditUserModal`, `AddEditDomainModal`.

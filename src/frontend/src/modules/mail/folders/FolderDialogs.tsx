@@ -1,17 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
 import SlidersIcon from '../../../icons/SlidersIcon'
-import TrashIcon from '../../../icons/TrashIcon.jsx'
-import {
-  useCreateFolder,
-  useDeleteFolder,
-  useRenameFolder,
-  useSetFolderSubscription,
-} from '../queries'
-import { roleLabel } from '../roleLabel'
+import CreateFolderModal from './CreateFolderModal'
 import type { MailFolderNode } from '../api/mailTypes'
 
 interface Props {
@@ -20,69 +11,19 @@ interface Props {
   onNotify: (message: string, type?: 'success' | 'error') => void
 }
 
-/** Flattens the tree so the parent picker and the manage list can show every folder. */
-export function flatten(nodes: MailFolderNode[], depth = 0): Array<{ node: MailFolderNode; depth: number }> {
-  return nodes.flatMap(node => [{ node, depth }, ...flatten(node.children, depth + 1)])
-}
-
 /**
- * Derives a folder's parent path by removing its leaf name. Works for any hierarchy
- * separator, because the leaf name is known and cannot contain one — the backend rejects
- * names that do.
- */
-export function parentOf(folder: MailFolderNode): string {
-  return folder.path.length > folder.name.length
-    ? folder.path.slice(0, folder.path.length - folder.name.length - 1)
-    : ''
-}
-
-/** Nesting shown in a flat <select>, where indentation is the only cue available. */
-function indent(depth: number): string {
-  return ' '.repeat(depth * 3)
-}
-
-/**
- * Folder actions and the dialogs they open.
+ * The folder column's footer actions.
  *
- * The two actions are icons in the column's footer rather than labelled buttons at its top:
- * creating and managing folders are rare next to the constant business of reading, and they
- * were taking a band of the column away from the tree every time it was not being used.
+ * Two icons rather than labelled buttons: creating and managing folders are rare next to the
+ * constant business of reading, and labelled buttons at the top were taking a band of the
+ * column away from the tree every time it was not being used.
  *
- * The dialogs follow the admin module's shape — `.field-h` rows, `.toggle-switch` for a
- * boolean, one primary submit, closing on the ✕ — because a webmail with two dialect of
- * dialog looks like two applications.
+ * Creating stays here — it is a quick action, reached while looking at the tree it will change.
+ * Managing leads to the folders settings page: a row per folder with a switch and two actions
+ * is not something a 240px column can lay out legibly.
  */
 export default function FolderDialogs({ folders, selectedPath, onNotify }: Props) {
   const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newParent, setNewParent] = useState('')
-  const [renaming, setRenaming] = useState<MailFolderNode | null>(null)
-  const [renameValue, setRenameValue] = useState('')
-  const [pendingDelete, setPendingDelete] = useState<MailFolderNode | null>(null)
-  const [managing, setManaging] = useState(false)
-
-  const createFolder = useCreateFolder()
-  const renameFolder = useRenameFolder()
-  const deleteFolder = useDeleteFolder()
-  const setSubscription = useSetFolderSubscription()
-
-  const all = flatten(folders)
-
-  async function run(action: () => Promise<unknown>, success: string, failure: string): Promise<boolean> {
-    try {
-      await action()
-      onNotify(success)
-      return true
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : failure, 'error')
-      return false
-    }
-  }
-
-  function closeCreate() {
-    setCreating(false)
-    setNewName('')
-  }
 
   return (
     <>
@@ -92,216 +33,26 @@ export default function FolderDialogs({ folders, selectedPath, onNotify }: Props
           className="folder-action"
           aria-label="New folder"
           title="New folder"
-          onClick={() => { setCreating(true); setNewParent(selectedPath ?? '') }}
+          onClick={() => setCreating(true)}
         >
           <FolderPlusIcon size={17} />
         </button>
-        <button
-          type="button"
+        <Link
+          to="/settings/folders"
           className="folder-action"
           aria-label="Manage folders"
           title="Manage folders"
-          onClick={() => setManaging(true)}
         >
           <SlidersIcon size={17} />
-        </button>
+        </Link>
       </div>
 
       {creating && (
-        <div className="modal-overlay" onClick={closeCreate}>
-          <div className="modal" style={{ maxWidth: '560px' }} onClick={event => event.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title"><FolderPlusIcon />New folder</span>
-              <button className="modal-close" aria-label="Close" onClick={closeCreate}>✕</button>
-            </div>
-
-            {/* A form, so Enter submits the way it does in the admin dialogs. */}
-            <form
-              onSubmit={async event => {
-                event.preventDefault()
-                const ok = await run(
-                  () => createFolder.mutateAsync({ parentPath: newParent, name: newName.trim() }),
-                  `Folder "${newName.trim()}" created`, 'Could not create the folder')
-                if (ok) closeCreate()
-              }}
-            >
-              <div className="field-h">
-                <label htmlFor="new-folder-name">Name</label>
-                <input
-                  id="new-folder-name"
-                  type="text"
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              <div className="field-h">
-                <label htmlFor="new-folder-parent">Parent</label>
-                <select
-                  id="new-folder-parent"
-                  value={newParent}
-                  onChange={e => setNewParent(e.target.value)}
-                >
-                  <option value="">(top level)</option>
-                  {all.map(({ node, depth }) => (
-                    <option key={node.path} value={node.path}>{indent(depth)}{node.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ marginTop: '8px' }}
-                disabled={!newName.trim() || createFolder.isPending}
-              >
-                {createFolder.isPending ? <span className="spinner" /> : 'Create folder'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {managing && (
-        <div className="modal-overlay" onClick={() => setManaging(false)}>
-          <div className="modal modal-folders" onClick={event => event.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title"><SlidersIcon />Manage folders</span>
-              <button className="modal-close" aria-label="Close" onClick={() => setManaging(false)}>✕</button>
-            </div>
-
-            <p className="modal-hint">
-              Turning a folder off hides it from the tree. Nothing in it is deleted. Folders
-              holding a system role are locked here — to choose which folders act as Sent,
-              Drafts, Trash, Junk and Archive, use{' '}
-              <Link to="/settings/system-folders">system folders</Link>.
-            </p>
-
-            <ul className="folder-manage-list">
-              {all.map(({ node, depth }) => {
-                const isInbox = node.specialUse === 'inbox'
-                // A folder currently playing a well-known role is off limits here: hiding it
-                // would strand the mail the client files into it, and renaming or deleting it
-                // breaks the role for every other client on the mailbox. The assignment is
-                // changed on the system-folders page, which is the screen that owns it.
-                const isSystem = Boolean(node.specialUse)
-
-                return (
-                  <li
-                    key={node.path}
-                    className={`folder-manage-row${isSystem ? ' is-system' : ''}`}
-                    style={{ paddingLeft: 8 + depth * 18 }}
-                  >
-                    <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        // The inbox is always visible and its subscription flag is meaningless —
-                        // Dovecot leaves it unsubscribed — so offering to hide it would be a
-                        // control that either does nothing or loses the user their mail.
-                        checked={isInbox ? true : node.subscribed}
-                        disabled={isSystem}
-                        aria-label={`Show ${node.name}`}
-                        onChange={e => run(
-                          () => setSubscription.mutateAsync({ path: node.path, subscribed: e.target.checked }),
-                          e.target.checked ? `"${node.name}" is now visible` : `"${node.name}" is now hidden`,
-                          'Could not change the folder visibility')}
-                      />
-                      <span className="toggle-track" />
-                    </label>
-
-                    <span className="folder-manage-label">{node.name}</span>
-
-                    {isSystem ? (
-                      // Naming the role earns the locked row: without it the missing controls
-                      // read as a fault rather than as a rule.
-                      <span className="folder-manage-role">{roleLabel(node.specialUse!)}</span>
-                    ) : (
-                      <div className="folder-manage-actions">
-                        <button
-                          type="button"
-                          className="folder-action"
-                          aria-label={`Rename ${node.name}`}
-                          title="Rename"
-                          onClick={() => { setRenaming(node); setRenameValue(node.name) }}
-                        >
-                          <PencilIcon size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className="folder-action is-danger"
-                          aria-label={`Delete ${node.name}`}
-                          title="Delete"
-                          onClick={() => setPendingDelete(node)}
-                        >
-                          <TrashIcon size={15} />
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {renaming && (
-        <div className="modal-overlay" onClick={() => setRenaming(null)}>
-          <div className="modal" style={{ maxWidth: '560px' }} onClick={event => event.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title"><PencilIcon />Rename folder</span>
-              <button className="modal-close" aria-label="Close" onClick={() => setRenaming(null)}>✕</button>
-            </div>
-
-            <form
-              onSubmit={async event => {
-                event.preventDefault()
-                const ok = await run(
-                  () => renameFolder.mutateAsync({
-                    path: renaming.path,
-                    newParentPath: parentOf(renaming),
-                    newName: renameValue.trim(),
-                  }),
-                  'Folder renamed', 'Could not rename the folder')
-                if (ok) setRenaming(null)
-              }}
-            >
-              <div className="field-h">
-                <label htmlFor="rename-folder-name">New name</label>
-                <input
-                  id="rename-folder-name"
-                  type="text"
-                  value={renameValue}
-                  onChange={e => setRenameValue(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ marginTop: '8px' }}
-                disabled={!renameValue.trim() || renameFolder.isPending}
-              >
-                {renameFolder.isPending ? <span className="spinner" /> : 'Rename'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {pendingDelete && (
-        <DeleteConfirmModal
-          entityLabel={pendingDelete.name}
-          loading={deleteFolder.isPending}
-          onClose={() => setPendingDelete(null)}
-          onConfirm={async () => {
-            const ok = await run(
-              () => deleteFolder.mutateAsync({ path: pendingDelete.path }),
-              `Folder "${pendingDelete.name}" deleted`, 'Could not delete the folder')
-            if (ok) setPendingDelete(null)
-          }}
+        <CreateFolderModal
+          folders={folders}
+          defaultParent={selectedPath ?? ''}
+          onClose={() => setCreating(false)}
+          onNotify={onNotify}
         />
       )}
     </>

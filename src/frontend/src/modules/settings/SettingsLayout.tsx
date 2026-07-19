@@ -13,7 +13,7 @@ export default function SettingsLayout() {
         <NavLink to="/settings/account" end className={paneClass}>Account</NavLink>
         <NavLink to="/settings/accounts" className={paneClass}>Linked accounts</NavLink>
         <NavLink to="/settings/appearance" className={paneClass}>Appearance</NavLink>
-        <NavLink to="/settings/system-folders" className={paneClass}>System folders</NavLink>
+        <NavLink to="/settings/folders" className={paneClass}>Folders list</NavLink>
         <NavLink to="/settings/aliases" className={paneClass}>Aliases</NavLink>
         <NavLink to="/settings/rules" className={paneClass}>Rules</NavLink>
         {isAdmin && <NavLink to="/settings/admin" className={paneClass}>Administration</NavLink>}
