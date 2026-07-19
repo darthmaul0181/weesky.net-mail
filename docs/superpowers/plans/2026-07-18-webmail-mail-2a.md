@@ -1911,7 +1911,26 @@ namespace weesky.Snoopy.Microservice.Services
 }
 ```
 
-`HtmlAgilityPack` arrives transitively with `HtmlSanitizer`; if it does not resolve, add it explicitly and note it in your report. Verify the `RemovingAttribute` event name against the installed version.
+**Corrections applied during execution.**
+
+`HtmlSanitizer` pulls **AngleSharp**, not HtmlAgilityPack. Use AngleSharp for the second pass
+rather than adding a second HTML parser — using the same parser as the sanitiser means the two
+passes cannot disagree about the tree.
+
+**Version:** `HtmlSanitizer 9.1.949-beta`, not the 9.0.892 stable. The stable pins AngleSharp
+to exactly `[0.17.1]`, which carries GHSA-pgww-w46g-26qg: *mXSS via annotation-xml HTML
+Integration Point Bypass* — AngleSharp builds a different DOM than the browser does for the
+same markup, which is a sanitiser bypass in the sanitiser's own parser. Fixed in AngleSharp
+1.5.0; the beta depends on 1.5.1. The exact-version pin makes overriding AngleSharp
+impossible, so the beta is the only fixed path. Decided with the user, together with adding
+**DOMPurify on the client** (Task 15) so the two barriers use different parsers in different
+engines — a parse divergence in one then cannot propagate through the other.
+
+A regression test covers the `annotation-xml` vector specifically.
+
+**Test-assertion trap, hit and fixed:** `data-blocked-src="…"` *contains* the substring
+`src="…"`, so `Assert.DoesNotContain("src=\"…")` fails against correct output. Assert on
+`" src="` with the leading space — attribute names are whitespace-delimited.
 
 - [ ] **Step 4: Run the tests, register in DI**
 
@@ -4217,6 +4236,13 @@ git commit -m "Add the message list panel"
 - Produces: `MessageReader` with `{ folderPath: string | null, uid: number | null }`.
 
 **The HTML body is rendered in a sandboxed iframe** — `sandbox` with neither `allow-scripts` nor `allow-same-origin` — never with `dangerouslySetInnerHTML`. This is the second of the two independent barriers; the backend sanitiser (Task 6) is the first.
+
+**Also add DOMPurify** (`npm install dompurify`) and run the body through it before setting
+`srcDoc`. Decided during Task 6: the backend sanitiser and the client one then use different
+parsers in different engines, so a parse divergence in one — the class of bug that
+GHSA-pgww-w46g-26qg is — cannot propagate through the other. Test that a body containing
+`<script>` and an `onerror` handler comes out inert after the client pass alone, so the test
+proves the client barrier independently of the server's.
 
 - [ ] **Step 1: Write the failing tests**
 

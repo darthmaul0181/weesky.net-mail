@@ -527,6 +527,16 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.IsImapConfigured">
             <summary>True when enough is configured to attempt an IMAP connection.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml">
+            <summary>A message body made safe to render, plus what was withheld.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml.BlockedImageCount">
+            <summary>
+            Remote images moved to data-blocked-src. The client offers "show images" and swaps
+            them back in without another round trip. Loading them would tell the sender the
+            message was opened, which is why they are withheld until the user asks.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Quota">
             <summary>
             Mailbox quota usage reported by Dovecot.
@@ -1001,6 +1011,18 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Clear(Microsoft.AspNetCore.Http.HttpResponse)">
             <summary>Expires the credentials cookie.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IMailHtmlSanitizer">
+             <summary>
+             Makes a message body safe to render. A message body is hostile input by construction.
+            
+             The allowed tag and style set is a contract shared with the rich editor of the
+             composing slice: replying round-trips a sanitised body through the editor and back out
+             to SMTP, so formatting degrades on every pass if the two ends disagree.
+            
+             This is the first of two independent barriers. The second is the sandboxed iframe the
+             client renders into, which can neither run scripts nor reach our origin.
+             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
             <summary>

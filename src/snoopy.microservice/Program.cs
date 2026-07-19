@@ -79,6 +79,7 @@ builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSectio
 builder.Services.AddOptions<MailOptions>().Bind(builder.Configuration.GetSection("Mail"));
 builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
 builder.Services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
+builder.Services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
 builder.Services.AddSingleton<IRuleProvider, WeeskyRuleProvider>();
 builder.Services.AddSingleton<IRuleProvider, RainloopRuleProvider>();
 builder.Services.AddSingleton<IRuleProviderRegistry, RuleProviderRegistry>();
