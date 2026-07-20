@@ -45,29 +45,23 @@ export function revealBlockedImages(html: string): string {
  * inflict on the layout regardless of its own intent.
  */
 export function renderBodyDocument(fragment: string, options: { dark?: boolean } = {}): string {
-  // Invert the finished sheet, as Apple Mail does: mail declares colours piecemeal, so a dark
-  // canvas gives dark on dark, while inverting what the message painted keeps its contrast.
-  // On the root — a body background propagates to the canvas, painted outside body's filter.
-  // contrast(0.74) after inverting lands white on the app's own dark surface instead of pure
-  // black — every mail declares a white somewhere, and a slab of #000 beside the app's soft
-  // greys is what made this read as harsh. Tuned by rendering candidates against the palette.
-  const dark = options.dark
-    ? `
-  html { background: #ffffff; filter: invert(1) hue-rotate(180deg) contrast(0.74); }
-  img, video { filter: invert(1) hue-rotate(180deg); }`
-    : ''
+  // No filter here: darkenColours has already recoloured what the message declares. These are
+  // the defaults for what it does not — the sheet behind a message that brings no background,
+  // and the text colour of one that names no colour.
+  const sheet = options.dark
+    ? { scheme: 'dark', background: '#212429', text: '#e0e0e0' }
+    : { scheme: 'light', background: '#ffffff', text: '#1a1a1a' }
 
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8"><style>
-  /* Light in every theme, dark mode included: the inversion above needs a white canvas to
-     turn black. Painting the canvas dark first would invert it back to white. */
-  :root { color-scheme: light; }
+  :root { color-scheme: ${sheet.scheme}; }
+  html { background: ${sheet.background}; }
   body {
     margin: 0;
     padding: 18px 22px;
-    background: #ffffff;
-    color: #1a1a1a;
+    background: ${sheet.background};
+    color: ${sheet.text};
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   /* A wide image or a long unbroken URL — this mailbox is largely made of the latter — would
@@ -80,7 +74,7 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
   body { overflow-wrap: break-word; }
   /* Tables are the one thing that must keep its width, so it scrolls in its own box. */
   table { max-width: 100%; }
-  pre { overflow-x: auto; }${dark}
+  pre { overflow-x: auto; }
 </style></head>
 <body>${fragment}</body>
 </html>`

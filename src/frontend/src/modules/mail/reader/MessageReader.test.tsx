@@ -188,26 +188,30 @@ describe('MessageReader', () => {
   })
 
   describe('dark mode', () => {
-    // Inversion is a rendering choice, not a fidelity one: it has to be reversible per message,
-    // because a mail whose own palette inverts badly needs an escape hatch.
-    it('inverts the body when the resolved theme is dark', async () => {
+    // Recolouring is a rendering choice, not a fidelity one: it has to be reversible per
+    // message, because a mail whose own palette recolours badly needs an escape hatch.
+    it('recolours the body when the resolved theme is dark', async () => {
       theme.isDark = true
-      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.getMailMessage.mockResolvedValue({ ...detail, htmlBody: '<p style="color: #000000">x</p>' })
 
       const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
       await screen.findByTitle('Message body')
 
-      expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('invert(1)')
+      const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+      expect(srcdoc).toContain('color-scheme: dark')
+      expect(srcdoc).not.toContain('#000000')
       theme.isDark = false
     })
 
-    it('does not invert in light mode, and offers no way back', async () => {
-      mocks.getMailMessage.mockResolvedValue(detail)
+    it('leaves the sender colours alone in light mode, and offers no way back', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, htmlBody: '<p style="color: #000000">x</p>' })
 
       const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
       await screen.findByTitle('Message body')
 
-      expect(container.querySelector('iframe')!.getAttribute('srcdoc')).not.toContain('invert(1)')
+      const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+      expect(srcdoc).toContain('color-scheme: light')
+      expect(srcdoc).toContain('#000000')
       expect(screen.queryByRole('button', { name: /original colours/i })).not.toBeInTheDocument()
     })
 
@@ -221,7 +225,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: /original colours/i }))
 
       await waitFor(() =>
-        expect(container.querySelector('iframe')!.getAttribute('srcdoc')).not.toContain('invert(1)'))
+        expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('color-scheme: light'))
       theme.isDark = false
     })
   })

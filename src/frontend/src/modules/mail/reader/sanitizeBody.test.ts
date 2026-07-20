@@ -99,67 +99,31 @@ describe('renderBodyDocument', () => {
   })
 
   describe('dark mode', () => {
-    // The inversion technique Apple Mail and Thunderbird use: invert the whole sheet, then
-    // rotate the hue back so brand colours stay recognisable rather than becoming negatives.
-    it('inverts the body when the reader asks for dark', () => {
+    // Colours are recoloured in the markup by darkenColours, not by a CSS filter: a filter
+    // inverts in RGB, which drags hues across the wheel and takes photographs with it.
+    it('applies no filter of its own', () => {
+      expect(renderBodyDocument('<p>x</p>', { dark: true })).not.toContain('filter:')
+    })
+
+    // What the message does not declare has to come from somewhere, and in dark mode that
+    // somewhere cannot be the white sheet.
+    it("gives the sheet the app's dark surface and a light default text", () => {
       const document = renderBodyDocument('<p>x</p>', { dark: true })
 
-      expect(document).toMatch(/filter:\s*invert\(1\)\s*hue-rotate\(180deg\)/)
+      expect(document).toMatch(/html\s*\{[^}]*background:\s*#212429/)
+      expect(document).toMatch(/color:\s*#e0e0e0/)
     })
 
-    // A filter on <body> leaves the canvas alone: the body's background propagates to it and is
-    // painted outside the filter. Real mail came out light-grey text on white — the content
-    // inverted, the sheet behind it did not. The filter has to sit on the root.
-    it('inverts through the root so the canvas goes dark with the content', () => {
-      const document = renderBodyDocument('<p>x</p>', { dark: true })
-
-      expect(document).toMatch(/html\s*\{[^}]*filter:\s*invert\(1\)/)
-      expect(document).not.toMatch(/body\s*\{[^}]*filter:\s*invert\(1\)/)
+    it('tells the browser the sheet is dark', () => {
+      expect(renderBodyDocument('<p>x</p>', { dark: true })).toContain('color-scheme: dark')
     })
 
-    // Propagation only stops once html paints its own background.
-    it('gives the root a background of its own', () => {
-      expect(renderBodyDocument('<p>x</p>', { dark: true }))
-        .toMatch(/html\s*\{[^}]*background:\s*#ffffff/)
-    })
-
-    // Straight inversion sends every white to pure black — the canvas, and every mail that
-    // declares one — which reads as a harsh slab beside the app's soft greys. Compressing the
-    // contrast after inverting lands white on the app's own dark surface instead.
-    it('compresses the contrast so white lands on a soft grey, not pure black', () => {
-      expect(renderBodyDocument('<p>x</p>', { dark: true }))
-        .toMatch(/invert\(1\)\s*hue-rotate\(180deg\)\s*contrast\(0\.74\)/)
-    })
-
-    // Inverting the sheet inverts the images with it; they need it applied twice to come back.
-    it('re-inverts images so photographs stay themselves', () => {
-      const document = renderBodyDocument('<p>x</p>', { dark: true })
-
-      expect(document).toMatch(/img[^{]*\{[^}]*filter:\s*invert\(1\)\s*hue-rotate\(180deg\)/)
-    })
-
-    // The canvas must stay light for the inversion to land on white and produce black. Setting
-    // it dark first would inverting to white — the bug this whole approach exists to avoid.
-    it('keeps the canvas light so the inversion has something to invert', () => {
-      const document = renderBodyDocument('<p>x</p>', { dark: true })
+    it('leaves the document light when dark is off', () => {
+      const document = renderBodyDocument('<p>x</p>')
 
       expect(document).toContain('color-scheme: light')
       expect(document).toMatch(/background:\s*#ffffff/)
     })
-
-    it('leaves the document untouched when dark is off', () => {
-      expect(renderBodyDocument('<p>x</p>', { dark: false })).not.toContain('invert(1)')
-      expect(renderBodyDocument('<p>x</p>')).not.toContain('invert(1)')
-    })
-  })
-
-  // Mail HTML is written against a white canvas; inverting it would make a body's own colours
-  // unreadable. The sheet stays light whatever the app's theme.
-  it('pins the body to a light sheet in every theme', () => {
-    const document = renderBodyDocument('<p>x</p>')
-
-    expect(document).toContain('color-scheme: light')
-    expect(document).toMatch(/background:\s*#ffffff/)
   })
 
   it('grants the body no capability it did not already have', () => {

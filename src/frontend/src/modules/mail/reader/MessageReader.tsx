@@ -5,6 +5,7 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
 import { formatReaderDate } from './formatReaderDate'
 import { formatSize } from './formatSize'
+import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 
 interface Props {
@@ -20,7 +21,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
   // Consent is per message and never carried to the next one. So is the colour choice: a mail
-  // that inverts badly says nothing about the next one.
+  // that recolours badly says nothing about the next one.
   useEffect(() => {
     setImagesShown(false)
     setOriginalColours(false)
@@ -33,7 +34,10 @@ export default function MessageReader({ folderPath, uid }: Props) {
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
   const inverted = isDark && !originalColours
-  const body = sanitizeBody(imagesShown ? revealBlockedImages(data.htmlBody) : data.htmlBody)
+  // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
+  // rest — the same reason revealBlockedImages runs on this side of it.
+  const revealed = imagesShown ? revealBlockedImages(data.htmlBody) : data.htmlBody
+  const body = sanitizeBody(inverted ? darkenColours(revealed) : revealed)
 
   async function download(part: string, fileName: string) {
     setDownloadError(null)
@@ -67,7 +71,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
         <div className="reader-colour-note">
           <span>
             {inverted
-              ? 'Colours are inverted to match your dark theme.'
+              ? 'Colours are adapted to your dark theme.'
               : 'Showing the colours the sender chose.'}
           </span>
           <button type="button" className="btn" onClick={() => setOriginalColours(v => !v)}>
