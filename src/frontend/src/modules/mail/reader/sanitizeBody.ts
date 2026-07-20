@@ -48,9 +48,12 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
   // Invert the finished sheet, as Apple Mail does: mail declares colours piecemeal, so a dark
   // canvas gives dark on dark, while inverting what the message painted keeps its contrast.
   // On the root — a body background propagates to the canvas, painted outside body's filter.
+  // contrast(0.74) after inverting lands white on the app's own dark surface instead of pure
+  // black — every mail declares a white somewhere, and a slab of #000 beside the app's soft
+  // greys is what made this read as harsh. Tuned by rendering candidates against the palette.
   const dark = options.dark
     ? `
-  html { background: #ffffff; filter: invert(1) hue-rotate(180deg); }
+  html { background: #ffffff; filter: invert(1) hue-rotate(180deg) contrast(0.74); }
   img, video { filter: invert(1) hue-rotate(180deg); }`
     : ''
 

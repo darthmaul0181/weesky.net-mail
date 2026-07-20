@@ -123,6 +123,14 @@ describe('renderBodyDocument', () => {
         .toMatch(/html\s*\{[^}]*background:\s*#ffffff/)
     })
 
+    // Straight inversion sends every white to pure black — the canvas, and every mail that
+    // declares one — which reads as a harsh slab beside the app's soft greys. Compressing the
+    // contrast after inverting lands white on the app's own dark surface instead.
+    it('compresses the contrast so white lands on a soft grey, not pure black', () => {
+      expect(renderBodyDocument('<p>x</p>', { dark: true }))
+        .toMatch(/invert\(1\)\s*hue-rotate\(180deg\)\s*contrast\(0\.74\)/)
+    })
+
     // Inverting the sheet inverts the images with it; they need it applied twice to come back.
     it('re-inverts images so photographs stay themselves', () => {
       const document = renderBodyDocument('<p>x</p>', { dark: true })
