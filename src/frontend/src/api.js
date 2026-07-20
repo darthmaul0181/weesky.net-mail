@@ -234,6 +234,16 @@ export const api = {
 
   clearFolderRole: (role) =>
     request('DELETE', `/api/Mail/FolderRoles?role=${encodeURIComponent(role)}`),
+
+  // ── Preferences ───────────────────────────────────────────────────────────
+  // The response covers every known key: defaults live on the backend, so there is no second
+  // copy here to drift from.
+
+  getPreferences: (options) =>
+    request('GET', '/api/Preferences', undefined, options),
+
+  setPreference: (key, value) =>
+    request('PUT', '/api/Preferences', { key, value }),
 }
 
 /** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */

@@ -9,6 +9,7 @@ import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
 import AppearancePage from './modules/settings/appearance/AppearancePage'
 import FoldersPage from './modules/settings/mail/FoldersPage'
+import GeneralPage from './modules/settings/general/GeneralPage'
 
 const MailLayout = lazy(() => import('./modules/mail/MailLayout'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.jsx'))
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <Navigate to="/settings/account" replace /> },
               { path: 'account', element: <AccountPage /> },
+              { path: 'general', element: <GeneralPage /> },
               { path: 'accounts', element: <ComingSoon module="Linked accounts" /> }, // sub-project 2
               { path: 'appearance', element: <AppearancePage /> },
               { path: 'folders', element: <FoldersPage /> },

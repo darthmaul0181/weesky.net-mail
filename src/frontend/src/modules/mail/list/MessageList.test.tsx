@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 
-const mocks = vi.hoisted(() => ({ getMailMessages: vi.fn() }))
+const mocks = vi.hoisted(() => ({ getMailMessages: vi.fn(), getPreferences: vi.fn() }))
 
-vi.mock('../../../api.js', () => ({ api: { getMailMessages: mocks.getMailMessages } }))
+vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
 }))
@@ -33,7 +33,11 @@ const page = {
 }
 
 describe('MessageList', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // The list waits for these rather than assuming a page size, so every test needs them.
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+  })
 
   it('prompts when no folder is selected', () => {
     render(<MessageList folderPath={null} selectedUid={null} onSelect={vi.fn()} />, { wrapper })
@@ -235,5 +239,44 @@ describe('MessageList', () => {
     render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
 
     expect(await screen.findByText(/could not load/i)).toBeInTheDocument()
+  })
+})
+
+describe('the preferences it obeys', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getMailMessages.mockResolvedValue({
+      folderPath: 'INBOX', page: 0, pageSize: 30, total: 1,
+      messages: [{
+        uid: 1, subject: 'Sujet', fromName: 'Alice', fromAddress: 'a@b.c',
+        date: '2026-07-18T09:00:00Z', seen: true, hasAttachments: false, preview: 'Un extrait',
+      }],
+    })
+  })
+
+  it('shows the preview when the preference is on', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.showPreview': 'true' })
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+
+    expect(await screen.findByText('Un extrait')).toBeInTheDocument()
+  })
+
+  it('hides it when the preference is off', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.showPreview': 'false' })
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+
+    await screen.findByText('Sujet')
+    expect(screen.queryByText('Un extrait')).not.toBeInTheDocument()
+  })
+
+  it('asks the server for the stored page size', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
+
+    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+
+    await waitFor(() =>
+      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 10, expect.anything()))
   })
 })

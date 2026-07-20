@@ -72,6 +72,7 @@ describe('settings section', () => {
     renderAt('/settings/account')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     expect(nav.getByText('Account')).toBeInTheDocument()
+    expect(nav.getByText('General')).toBeInTheDocument()
     expect(nav.getByText('Linked accounts')).toBeInTheDocument()
     expect(nav.getByText('Appearance')).toBeInTheDocument()
     expect(nav.getByText('Folders list')).toBeInTheDocument()

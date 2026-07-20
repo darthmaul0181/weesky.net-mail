@@ -3,7 +3,6 @@ import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import type { MailFolderNode, MailFolderPage, MailMessageDetail, FolderRoleEntry } from './api/mailTypes'
 
-export const PAGE_SIZE = 50
 
 /**
  * Every key is scoped by the active account, so linking a second account later isolates its
@@ -12,8 +11,10 @@ export const PAGE_SIZE = 50
 export const mailKeys = {
   all: (accountId: string) => ['mail', accountId] as const,
   folders: (accountId: string) => ['mail', accountId, 'folders'] as const,
-  messages: (accountId: string, folder: string, page: number) =>
-    ['mail', accountId, 'messages', folder, page] as const,
+  // pageSize is part of the key: a cached page was computed under one size and means something
+  // else under another.
+  messages: (accountId: string, folder: string, page: number, pageSize: number) =>
+    ['mail', accountId, 'messages', folder, page, pageSize] as const,
   message: (accountId: string, folder: string, uid: number) =>
     ['mail', accountId, 'message', folder, uid] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
@@ -32,12 +33,12 @@ export function useFolders() {
   })
 }
 
-export function useMessages(folderPath: string | null, page: number) {
+export function useMessages(folderPath: string | null, page: number, pageSize: number) {
   const accountId = useAccountId()
 
   return useQuery<MailFolderPage>({
-    queryKey: mailKeys.messages(accountId, folderPath ?? '', page),
-    queryFn: ({ signal }) => api.getMailMessages(folderPath, page, PAGE_SIZE, { signal }),
+    queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize),
+    queryFn: ({ signal }) => api.getMailMessages(folderPath, page, pageSize, { signal }),
     enabled: folderPath !== null,
     // Keeps the current page on screen while the next one loads, instead of flashing empty.
     placeholderData: (previous) => previous,

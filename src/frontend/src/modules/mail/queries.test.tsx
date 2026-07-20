@@ -37,12 +37,19 @@ function createWrapper() {
 describe('mailKeys', () => {
   it('scopes every key by account id', () => {
     expect(mailKeys.folders('primary')).toEqual(['mail', 'primary', 'folders'])
-    expect(mailKeys.messages('primary', 'INBOX', 0)).toEqual(['mail', 'primary', 'messages', 'INBOX', 0])
+    expect(mailKeys.messages('primary', 'INBOX', 0, 30)).toEqual(['mail', 'primary', 'messages', 'INBOX', 0, 30])
     expect(mailKeys.message('primary', 'INBOX', 42)).toEqual(['mail', 'primary', 'message', 'INBOX', 42])
   })
 
   it('gives different accounts different keys', () => {
     expect(mailKeys.folders('primary')).not.toEqual(mailKeys.folders('linked-1'))
+  })
+
+  // A page fetched at 30 per page is not the same page at 100: without the size in the key,
+  // changing it would serve rows computed under the old one.
+  it('gives different page sizes different keys', () => {
+    expect(mailKeys.messages('primary', 'INBOX', 0, 30))
+      .not.toEqual(mailKeys.messages('primary', 'INBOX', 0, 100))
   })
 })
 
@@ -75,7 +82,7 @@ describe('useMessages', () => {
   it('does not fetch until a folder is selected', () => {
     const { wrapper } = createWrapper()
 
-    renderHook(() => useMessages(null, 0), { wrapper })
+    renderHook(() => useMessages(null, 0, 30), { wrapper })
 
     expect(mocks.getMailMessages).not.toHaveBeenCalled()
   })
@@ -84,10 +91,10 @@ describe('useMessages', () => {
     mocks.getMailMessages.mockResolvedValue({ folderPath: 'INBOX', messages: [], total: 0, page: 1, pageSize: 50 })
     const { wrapper } = createWrapper()
 
-    const { result } = renderHook(() => useMessages('INBOX', 1), { wrapper })
+    const { result } = renderHook(() => useMessages('INBOX', 1, 30), { wrapper })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 50, expect.anything())
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 30, expect.anything())
   })
 })
 

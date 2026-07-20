@@ -581,3 +581,30 @@ describe('requestBlob', () => {
     expect(hasSession()).toBe(false)
   })
 })
+
+describe('preferences', () => {
+  it('reads every preference in one call', async () => {
+    mockFetch(200, { json: { 'mail.pageSize': '30' } })
+    const { api } = await import('./api.js')
+
+    await api.getPreferences()
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Preferences'),
+      expect.objectContaining({ method: 'GET' }))
+  })
+
+  it('sends the key and the value in the body', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.setPreference('mail.pageSize', '50')
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Preferences'),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ key: 'mail.pageSize', value: '50' }),
+      }))
+  })
+})

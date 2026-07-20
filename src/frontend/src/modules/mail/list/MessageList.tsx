@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
-import { PAGE_SIZE, useMessages } from '../queries'
+import { pageSizeOf, showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
+import { useMessages } from '../queries'
 import { formatListDate } from './formatDate'
 import Pagination from './Pagination'
 
@@ -22,14 +23,20 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
   // A page index means nothing in a different folder.
   useEffect(() => { setPage(0) }, [folderPath])
 
-  const { data, isLoading, isError } = useMessages(folderPath, page)
+  // The list waits for the preferences rather than assuming a page size: the backend owns the
+  // defaults, and guessing one here would be a second copy to keep in step.
+  const { data: preferences } = usePreferences()
+  const pageSize = preferences ? pageSizeOf(preferences) : 0
+  const showsPreview = preferences ? showPreviewOf(preferences) : true
+
+  const { data, isLoading, isError } = useMessages(folderPath, page, pageSize)
 
   if (!folderPath) return <p className="mail-empty">Select a folder</p>
 
-  const lastPage = data ? Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1) : 0
+  const lastPage = data && pageSize > 0 ? Math.max(0, Math.ceil(data.total / pageSize) - 1) : 0
 
   function rows() {
-    if (isLoading && !data) return <p className="mail-empty">Loading messages…</p>
+    if (!preferences || (isLoading && !data)) return <p className="mail-empty">Loading messages…</p>
     if (isError) return <p className="mail-empty">Could not load messages.</p>
     if (!data || data.messages.length === 0) return <p className="mail-empty">No messages</p>
 
@@ -50,10 +57,10 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
                   <span className="message-row-date">{formatListDate(message.date)}</span>
                 </div>
                 <div className="message-row-subject">{message.subject || '(no subject)'}</div>
-                {/* Always rendered, even empty: a message with no body would otherwise make a
-                    shorter row than its neighbours and break the rhythm of the column. The
-                    reserved height lives in CSS, so an empty div still occupies its line. */}
-                <div className="message-row-preview">{message.preview}</div>
+                {/* Always rendered when previews are on, even empty: a message with no body
+                    would otherwise make a shorter row than its neighbours and break the rhythm
+                    of the column. The reserved height lives in CSS. */}
+                {showsPreview && <div className="message-row-preview">{message.preview}</div>}
               </button>
             </li>
           )

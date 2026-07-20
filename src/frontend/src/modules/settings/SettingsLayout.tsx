@@ -11,6 +11,7 @@ export default function SettingsLayout() {
     <div className="settings-layout">
       <nav className="context-pane" aria-label="Settings">
         <NavLink to="/settings/account" end className={paneClass}>Account</NavLink>
+        <NavLink to="/settings/general" className={paneClass}>General</NavLink>
         <NavLink to="/settings/accounts" className={paneClass}>Linked accounts</NavLink>
         <NavLink to="/settings/appearance" className={paneClass}>Appearance</NavLink>
         <NavLink to="/settings/folders" className={paneClass}>Folders list</NavLink>

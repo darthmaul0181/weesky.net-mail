@@ -41,6 +41,7 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
   /settings  (SettingsLayout)
     index                           → redirect to /settings/account
     /settings/account               AccountPage
+    /settings/general               GeneralPage
     /settings/accounts              ComingSoon ("Linked accounts" — sub-project 2)
     /settings/appearance            AppearancePage
     /settings/folders               FoldersPage
@@ -90,11 +91,14 @@ Files under `src/modules/mail/`:
 **Two dates, two questions.** The list shows the message's *arrival* (`InternalDate`), because arrival is what orders the list — printing the `Date` header there would put a May date among the June rows and read as a sorting bug. The reader shows the `Date` header, spelled out and without seconds, because there the question is when the sender wrote it.
 - `queries.ts` — TanStack Query hooks and keys; `api/mailTypes.ts` — response shapes
 
+**Preferences** (`src/hooks/usePreferences.ts`) — shared rather than owned by the settings module, because the message list reads them too. `GET /api/Preferences` answers **every** known key with its default already filled in, so **the client keeps no copy of the defaults**: a consumer waits for the answer instead of guessing, which is why `MessageList` shows "Loading messages…" until they arrive. The page size is part of `mailKeys.messages` — a page fetched at 30 per page is a different thing at 100 — and changing any preference invalidates the whole `['mail']` cache for the same reason.
+
 **Data layer** — TanStack Query, provided in `App.tsx`. This is the only module using it; the settings pages still hand-roll `useEffect`. Query keys are scoped by the active account (`['mail', accountId, …]`) from the outset, so linking a second account later isolates its cache instead of mixing two mailboxes. Folder mutations invalidate the folder tree, since each of them changes either the hierarchy or the counts it displays. A 401 is never retried — it will not succeed, and retrying only delays the redirect to `/login`.
 
 **Rendering message HTML — three independent barriers.** The backend sanitises the body; `reader/sanitizeBody.ts` sanitises it again with DOMPurify; and it is rendered in an `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">` — never `allow-scripts`, never `allow-same-origin`. **Never render message HTML into the page itself.** The two popup permissions are load-bearing, not a loosening: a fully empty sandbox withholds navigation too, so the `target="_blank"` links the sanitiser produces silently did nothing on click, and without the escape clause the opened tab inherits the sandbox and the destination site loads broken. The two sanitising passes are not redundancy: the bug class that defeats a sanitiser is a parse divergence between it and the browser, and two passes in different engines mean a body must defeat both. Remote images arrive as `data-blocked-src` and are only restored on explicit user consent, per message — loading them tells the sender the message was opened.
 
-**Settings module** — `SettingsLayout` (`src/modules/settings/SettingsLayout.tsx`) renders a `.context-pane` of `NavLink`s (Account / Linked accounts / Appearance / Folders list / Aliases / Rules / Administration — the last conditional on `isAdmin`) beside a `.settings-content` `<Outlet/>`. Module directories under `src/modules/settings/`:
+**Settings module** — `SettingsLayout` (`src/modules/settings/SettingsLayout.tsx`) renders a `.context-pane` of `NavLink`s (Account / General / Linked accounts / Appearance / Folders list / Aliases / Rules / Administration — the last conditional on `isAdmin`) beside a `.settings-content` `<Outlet/>`. Module directories under `src/modules/settings/`:
+- `general/` — `GeneralPage.tsx` (messages per page, message-list preview)
 - `account/` — `AccountPage.tsx` (identity, other domains, quota via `QuotaBlock`, `ChangePasswordSection.tsx`)
 - `appearance/` — `AppearancePage.tsx` (theme + palette radio groups, backed by `ThemeContext`)
 - `mail/` — `FoldersPage.tsx` (everything about folders in one place: the full list via `FolderManager`, plus the two dialogs that act across the whole set) and `SystemFoldersModal.tsx` (system role assignment; the `<select>`s exclude the inbox, non-selectable folders, and folders already overridden for another role)
