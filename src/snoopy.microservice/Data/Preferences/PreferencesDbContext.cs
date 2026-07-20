@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 namespace weesky.Snoopy.Microservice.Data.Preferences;
 
@@ -18,7 +18,10 @@ public class PreferencesDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.AccountId, o.Role });
+        modelBuilder.Entity<UserPreference>().HasKey(p => new { p.AccountId, p.PreferenceKey });
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
+
+    public DbSet<UserPreference> UserPreferences { get; set; }
 }

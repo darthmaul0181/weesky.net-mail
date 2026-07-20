@@ -1,4 +1,4 @@
-using System.Threading.RateLimiting;
+﻿using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -112,6 +112,7 @@ builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IMailFolderRepository, MailFolderRepository>();
 builder.Services.AddScoped<IMailMessageRepository, MailMessageRepository>();
 builder.Services.AddScoped<IFolderRoleStore, FolderRoleStore>();
+builder.Services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();

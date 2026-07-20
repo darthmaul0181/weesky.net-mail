@@ -393,6 +393,29 @@
             <response code="404">No such message, or no such part on it</response>
             <response code="502">The mail server could not be reached</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.PreferencesController">
+             <summary>
+             The caller's webmail preferences, stored in the separate preferences database.
+            
+             The response always carries every known key: defaults live in the registry on this side, so
+             the client has no second copy to drift from. A key or value the registry does not accept is
+             refused here — the key/value table has no way to check either.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.PreferencesController.GetPreferences(System.Threading.CancellationToken)">
+            <summary>Every known preference, with the account's value where it set one.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Key/value map covering every known preference</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.PreferencesController.SetPreference(weesky.Snoopy.Microservice.Models.SetPreferenceRequest,System.Threading.CancellationToken)">
+            <summary>Sets one preference.</summary>
+            <param name="request">key and value, both from the registry</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Preference stored</response>
+            <response code="400">Unknown key, or a value the key does not accept</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
             Returns the authenticated user's Sieve configuration: structured rules when a
@@ -469,6 +492,22 @@
             take our data with it. Created manually — no EF migrations in this project; see
             docs/superpowers/mail-2a5-database-prerequisite.md.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.UserPreference">
+             <summary>
+             One preference an account has set. Key/value rather than a column per option: this project
+             has no EF migrations, so a typed column would mean a hand-run ALTER on the server for every
+             new setting. Here a new preference is a code change alone.
+            
+             Absence of a row means the default in <see cref="T:weesky.Snoopy.Microservice.Models.UserPreferences"/> applies, so an
+             account that never opened the settings has no rows at all.
+             </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.UserPreference.PreferenceKey">
+            <summary>Dotted and stable, e.g. "mail.pageSize" — never localised, never renamed lightly.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.UserPreference.PreferenceValue">
+            <summary>Always a string. The registry knows how to read it back.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AccountInfo">
             <summary>
@@ -862,6 +901,9 @@
         <member name="P:weesky.Snoopy.Microservice.Models.SaveRulesRequest.ScriptName">
             <summary>When null, the chosen provider's default script name is used.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SetPreferenceRequest">
+            <summary>Body of PUT /api/Preferences. Both fields must name entries the registry knows.</summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.SieveAction.Argument">
             <summary>
             FileInto → folder name. Redirect → email address. Reject → reason text. SetFlag → flag name (e.g. <c>\Seen</c>).
@@ -1040,6 +1082,27 @@
             The full name of the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.PreferenceDefinition">
+            <summary>One preference the client may set, with the values it may take.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.PreferenceDefinition.#ctor(System.String,System.String,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>One preference the client may set, with the values it may take.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.UserPreferences">
+             <summary>
+             The registry of known preferences: the one place a new setting is declared.
+            
+             It is what keeps a key/value table honest. The database cannot check a key or a value, so
+             this does — an unknown key never reaches it, and a row whose value the registry no longer
+             accepts falls back to the default rather than reaching the client.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.UserPreferences.Effective(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Data.Preferences.UserPreference})">
+            <summary>
+            What the account actually gets: every default, with a stored row winning where it is
+            still one the registry accepts.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.FolderRoleStore.CanonicalAccountId(System.String)">
             <summary>
             The table's collation is binary — IMAP paths must compare byte for byte — so the
@@ -1116,6 +1179,15 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.DeleteAllRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
             <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore">
+            <summary>
+            Reads and writes the rows an account has set. Knows nothing about which keys exist or what
+            they may hold — that is the registry's business, and the caller validates before writing.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore.SetAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Sets or corrects one preference. The pair (account, key) is the row.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.MailFolderRepository">
             <summary>
