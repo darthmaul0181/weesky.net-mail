@@ -87,4 +87,16 @@ describe('GeneralPage', () => {
 
     expect(await screen.findByText('Could not load the settings.')).toBeInTheDocument()
   })
+
+  // .field-h was drawn for the admin dialogs: a 110px label column and a control on flex:1.
+  // A settings page is the opposite shape — sentence-length labels in a wide column — so the
+  // rows carry the modifier that widens the label and lets the control size to its content.
+  it('lays its rows out as settings rows, not dialog rows', async () => {
+    const { container } = renderPage()
+    await screen.findByLabelText('Messages per page')
+
+    const rows = container.querySelectorAll('.field-h')
+    expect(rows).toHaveLength(2)
+    rows.forEach(row => expect(row).toHaveClass('is-setting'))
+  })
 })

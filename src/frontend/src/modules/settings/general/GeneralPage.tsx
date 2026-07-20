@@ -33,7 +33,7 @@ export default function GeneralPage() {
 
       {!isLoading && !isError && preferences && (
         <>
-          <div className="field-h">
+          <div className="field-h is-setting">
             <label htmlFor="page-size">Messages per page</label>
             <select
               id="page-size"
@@ -47,7 +47,7 @@ export default function GeneralPage() {
             </select>
           </div>
 
-          <div className="field-h">
+          <div className="field-h is-setting">
             <label htmlFor="show-preview">Preview in the message list</label>
             <label className="toggle-switch">
               <input

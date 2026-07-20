@@ -188,3 +188,17 @@
 }
 
 .radio-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+
+/* Settings rows. `.field-h` was drawn for the admin dialogs — a narrow box with one-word
+   labels — and a settings page is the opposite shape: a wide column with sentence-length
+   labels, and soon twenty of them rather than two. */
+.field-h.is-setting > label:first-child {
+  width: 260px;
+}
+
+/* The control takes the width its own content needs, not the width of the page: a page-size
+   picker stretched across the column reads as a text field and hides how few values it offers. */
+.field-h.is-setting select,
+.field-h.is-setting input[type="number"] {
+  flex: 0 0 auto;
+}
