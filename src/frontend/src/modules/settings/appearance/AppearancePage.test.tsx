@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ThemeProvider, PALETTE_IDS } from '../../../contexts/ThemeContext'
 import AppearancePage from './AppearancePage'
@@ -58,12 +58,24 @@ describe('AppearancePage', () => {
   // The stored preference may be "system", which names no mode: the preview has to show the
   // mode the user is actually in, so it reads the resolved value.
   it('previews in the resolved theme, not the stored preference', () => {
-    localStorage.setItem('appearance_theme', 'dark')
+    localStorage.setItem('appearance_theme', 'system')
+    const original = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(query => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    })
 
     const { container } = render(<ThemeProvider><AppearancePage /></ThemeProvider>)
 
     Array.from(container.querySelectorAll('.palette-preview'))
       .forEach(p => expect(p.getAttribute('data-theme')).toBe('dark'))
+
+    Object.defineProperty(window, 'matchMedia', { writable: true, value: original })
   })
 
   // The label already names the palette; a screen reader has no use for a picture of colours.
