@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -134,6 +134,7 @@ describe('GeneralPage notifications', () => {
     vi.clearAllMocks()
     mocks.desktopPermission.mockReturnValue('default')
   })
+  afterEach(() => vi.unstubAllGlobals())
 
   it('shows both toggles off by default', async () => {
     renderPage()
@@ -151,6 +152,18 @@ describe('GeneralPage notifications', () => {
 
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifySound', 'true'))
+    expect(mocks.playNewMailSound).toHaveBeenCalled()
+  })
+
+  // Asserted with no await between the click and the expectation, because "inside the gesture"
+  // is the property: WebKit revokes transient activation at the first await, so a sound moved
+  // after the save is a sound the browser refuses.
+  it('plays the sound inside the click, before the save is awaited', async () => {
+    renderPage()
+    const toggle = await screen.findByLabelText('Sound on new mail')
+
+    fireEvent.click(toggle)
+
     expect(mocks.playNewMailSound).toHaveBeenCalled()
   })
 
@@ -172,6 +185,18 @@ describe('GeneralPage notifications', () => {
 
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifyDesktop', 'true'))
+  })
+
+  // Same synchronous assertion, same reason: Safari only shows the prompt while the gesture is
+  // live, and an await ahead of the ask makes it silently do nothing.
+  it('asks for permission inside the click, before any await', async () => {
+    mocks.requestDesktopPermission.mockResolvedValue('granted')
+    renderPage()
+    const toggle = await screen.findByLabelText('Desktop notification on new mail')
+
+    fireEvent.click(toggle)
+
+    expect(mocks.requestDesktopPermission).toHaveBeenCalled()
   })
 
   // Storing a true that produces nothing is the lying switch: on, and silent.
@@ -232,6 +257,18 @@ describe('GeneralPage notifications', () => {
     renderPage()
 
     expect(await screen.findByText(/does not support/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Desktop notification on new mail')).toBeDisabled()
+  })
+
+  // Plain HTTP hides Notification entirely, which looks exactly like an old browser. Telling a
+  // staging user their browser is at fault sends them to fix the wrong thing.
+  it('blames the connection, not the browser, outside a secure context', async () => {
+    vi.stubGlobal('isSecureContext', false)
+    mocks.desktopPermission.mockReturnValue('unsupported')
+    renderPage()
+
+    expect(await screen.findByText(/secure connection/i)).toBeInTheDocument()
+    expect(screen.queryByText(/does not support/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Desktop notification on new mail')).toBeDisabled()
   })
 

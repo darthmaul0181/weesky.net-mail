@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../../api.js'
 import {
-  notifyDesktopOf, notifySoundOf, requestSizeOf, usePreferences,
+  notifiesOf, notifyDesktopOf, notifySoundOf, requestSizeOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import { flatten } from '../folders/folderNodes'
 import { snapshotOf, uidValidityBroke, type FolderSnapshot } from '../list/folderDelta'
@@ -53,11 +53,16 @@ export function useMailNotifications(): void {
   const desktop = preferences ? notifyDesktopOf(preferences) : false
   // Nobody asked to be told, so nobody pays for the poll: the shell's own use of the folder
   // query stays off until a setting turns on. /mail enables it separately.
-  const { data: folders } = useFolders(sound || desktop)
+  const { data: folders } = useFolders(preferences ? notifiesOf(preferences) : false)
   const baseline = useRef<Baseline | null>(null)
   const mounted = useRef(true)
 
-  useEffect(() => () => { mounted.current = false }, [])
+  useEffect(() => {
+    // Set on mount, not only cleared on unmount: StrictMode's double-invoke runs
+    // mount → cleanup → mount on the same ref, and would latch this false for the session.
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => {
     // Off, the query is disabled and the tree freezes: kept, the baseline would be hours stale
@@ -90,7 +95,7 @@ export function useMailNotifications(): void {
 
     // Both tabs decided to notify; only one may. The bubble would dedupe itself through its
     // tag, the sound would not.
-    if (!claimNotification(arrivedAt)) return
+    if (!claimNotification(inbox.uidValidity, arrivedAt)) return
 
     const controller = new AbortController()
     void describeArrivals(

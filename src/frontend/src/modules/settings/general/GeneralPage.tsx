@@ -63,7 +63,10 @@ export default function GeneralPage() {
 
   const [permission, setPermission] = useState(desktopPermission)
   const blocked = permission === 'denied'
-  const unsupported = permission === 'unsupported'
+  // Notifications need a secure context, so plain HTTP hides the API entirely. Same symptom as
+  // an old browser, different cure: say which one it is.
+  const insecure = permission === 'unsupported' && window.isSecureContext === false
+  const unsupported = permission === 'unsupported' && !insecure
 
   // The permission changes in browser settings while this page sits open — exactly the trip
   // the blocked note sends the user on. Re-read it on the way back.
@@ -75,7 +78,8 @@ export default function GeneralPage() {
 
   async function toggleSound(on: boolean) {
     // Played inside the click, before any await: WebKit's transient activation is gone by the
-    // time the save resolves, and a failed save must not be confirmed by a sound.
+    // time the save resolves, so the gesture wins over the confirmation — a failed save gets
+    // both the chime and an error toast.
     if (on) playNewMailSound()
     await save(PREFERENCE_KEYS.notifySound, String(on),
       on ? 'New mail will play a sound' : 'New mail will be silent')
@@ -151,7 +155,7 @@ export default function GeneralPage() {
             id="notify-desktop"
             label="Desktop notification on new mail"
             checked={notifyDesktopOf(preferences) && permission === 'granted'}
-            disabled={setPreference.isPending || blocked || unsupported}
+            disabled={setPreference.isPending || blocked || unsupported || insecure}
             onChange={toggleDesktop}
           />
 
@@ -159,6 +163,12 @@ export default function GeneralPage() {
             <p className="settings-note">
               Notifications are blocked by your browser for this site. Allow them in its site
               settings, then switch this back on.
+            </p>
+          )}
+          {insecure && (
+            <p className="settings-note">
+              Desktop notifications need a secure connection. Open this site over HTTPS to switch
+              them on.
             </p>
           )}
           {unsupported && (

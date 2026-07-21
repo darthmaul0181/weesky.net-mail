@@ -32,19 +32,38 @@ export function showDesktopNotification(body: string, tag: string, onClick: () =
   notification.onclick = onClick
 }
 
+interface Claim {
+  uidValidity: number
+  uidNext: number
+}
+
+function storedClaim(): Claim | null {
+  try {
+    const claim = JSON.parse(localStorage.getItem(CLAIM_KEY) ?? 'null') as Claim | null
+    return typeof claim?.uidValidity === 'number' && typeof claim.uidNext === 'number'
+      ? claim
+      : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Cross-tab guard for the sound, which has no equivalent of the notification tag. Not an
  * atomic lock: two tabs poll on independent clocks and practically never land in the same
  * millisecond, and the worst case is one duplicate beep.
+ *
+ * Scoped to the uidValidity it was banked under: a rebuilt mailbox restarts uidNext near 1, and
+ * a bare number from the old numbering would refuse every genuine arrival, in every tab, for good.
  */
-export function claimNotification(uidNext: number): boolean {
+export function claimNotification(uidValidity: number, uidNext: number): boolean {
+  const claim = storedClaim()
+  if (claim && claim.uidValidity === uidValidity && claim.uidNext >= uidNext) return false
+
   try {
-    const claimed = Number(localStorage.getItem(CLAIM_KEY))
-    if (Number.isFinite(claimed) && claimed >= uidNext) return false
-    localStorage.setItem(CLAIM_KEY, String(uidNext))
-    return true
+    localStorage.setItem(CLAIM_KEY, JSON.stringify({ uidValidity, uidNext }))
   } catch {
     // Storage denied (private mode, blocked cookies): notify rather than stay silent.
-    return true
   }
+  return true
 }

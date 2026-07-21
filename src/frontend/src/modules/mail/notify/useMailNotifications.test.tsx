@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderNode } from '../api/mailTypes'
 import { mailKeys } from '../queries'
 import { useMailNotifications } from './useMailNotifications'
@@ -25,6 +25,12 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }))
 let client: QueryClient
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+}
+
+/** What main.tsx actually renders into. Its dev double-invoke runs mount → cleanup → mount on
+    the same refs, which is a different hook lifecycle, not a slower one. */
+function strictWrapper({ children }: { children: ReactNode }) {
+  return <StrictMode>{wrapper({ children })}</StrictMode>
 }
 
 /**
@@ -61,13 +67,13 @@ function pageOf(uids: number[]) {
  * test here, not the poll.
  */
 async function renderWithBaseline(
-  preferences: Record<string, string>, first: MailFolderNode[] = [inbox()],
+  preferences: Record<string, string>, first: MailFolderNode[] = [inbox()], under = wrapper,
 ) {
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', ...preferences })
   mocks.getMailFolders.mockResolvedValue(first)
   client.setQueryData(mailKeys.folders('primary'), first)
 
-  const rendered = renderHook(() => useMailNotifications(), { wrapper })
+  const rendered = renderHook(() => useMailNotifications(), { wrapper: under })
   await waitFor(() => expect(client.getQueryData(['preferences'])).toBeDefined())
   await settle()
 
@@ -120,6 +126,17 @@ describe('useMailNotifications', () => {
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+  })
+
+  // main.tsx renders under StrictMode, so this is the dev server's lifecycle, not an exotic one:
+  // a mounted flag that is only ever cleared latches false on the first cleanup and gags the
+  // whole session, making the feature unverifiable by hand.
+  it('plays the sound under StrictMode, whose double-invoke reuses the refs', async () => {
+    const { tick } = await renderWithBaseline(soundOn, [inbox()], strictWrapper)
+
+    await tick(inbox({ uidNext: 11, total: 6, unread: 3 }))
+
+    await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalled())
   })
 
   it('plays the sound when mail arrives', async () => {
@@ -198,7 +215,7 @@ describe('useMailNotifications', () => {
     await tick(inbox({ uidNext: 12 }))
     await settle()
 
-    expect(mocks.claimNotification).toHaveBeenCalledWith(12)
+    expect(mocks.claimNotification).toHaveBeenCalledWith(100, 12)
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
     expect(mocks.getMailMessages).not.toHaveBeenCalled()
@@ -233,7 +250,8 @@ describe('useMailNotifications', () => {
     await tick(inbox({ uidValidity: 200, uidNext: 4784 }))
 
     await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1))
-    expect(mocks.claimNotification).toHaveBeenCalledWith(4784)
+    // Claimed under the new numbering, so the entry banked before the break cannot gag it.
+    expect(mocks.claimNotification).toHaveBeenCalledWith(200, 4784)
   })
 
   // The role moved to another folder: its uidNext has nothing to do with the old one's.
@@ -343,7 +361,7 @@ describe('useMailNotifications', () => {
 
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
       '1 new message', expect.any(String), expect.any(Function)))
-    expect(mocks.claimNotification).toHaveBeenCalledWith(501)
+    expect(mocks.claimNotification).toHaveBeenCalledWith(100, 501)
   })
 })
 

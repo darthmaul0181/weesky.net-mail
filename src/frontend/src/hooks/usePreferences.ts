@@ -70,3 +70,9 @@ export function notifySoundOf(preferences: Preferences): boolean {
 export function notifyDesktopOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.notifyDesktop] === 'true'
 }
+
+/** "Anything to announce at all" — what puts a tab on the background poll and what arms the
+    notification hook. One predicate, so the two can never disagree about who pays. */
+export function notifiesOf(preferences: Preferences): boolean {
+  return notifySoundOf(preferences) || notifyDesktopOf(preferences)
+}

@@ -153,14 +153,18 @@ describe('useFolders', () => {
 
     renderHook(() => useFolders(), { wrapper })
 
+    // Before the preferences land the flag is false whatever they say, so an assertion made
+    // here passes against a hook that polls in the background for everyone. Settle first.
+    await waitFor(() => expect(client.getQueryData(['preferences'])).toBeDefined())
     await waitFor(() =>
       expect(client.getQueryCache().find({ queryKey: mailKeys.folders('primary') })).toBeDefined())
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+
     // Cast: the cache types its stored options as QueryOptions, which omits the observer-only
     // fields the query is nonetheless created with.
-    await waitFor(() => expect(
-      (client.getQueryCache().find({ queryKey: mailKeys.folders('primary') })!
-        .options as { refetchIntervalInBackground?: boolean }).refetchIntervalInBackground)
-      .toBe(expected))
+    expect((client.getQueryCache().find({ queryKey: mailKeys.folders('primary') })!
+      .options as { refetchIntervalInBackground?: boolean }).refetchIntervalInBackground)
+      .toBe(expected)
   })
 })
 

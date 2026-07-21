@@ -98,26 +98,50 @@ describe('claimNotification', () => {
   beforeEach(() => localStorage.clear())
 
   it('lets the first caller through', () => {
-    expect(claimNotification(42)).toBe(true)
+    expect(claimNotification(100, 42)).toBe(true)
   })
 
   // Two tabs both poll and both decide to notify. The bubble dedupes itself through its tag;
   // the sound cannot, so the claim is what keeps a second tab quiet.
   it('turns away a second tab for the same arrival', () => {
-    claimNotification(42)
+    claimNotification(100, 42)
 
-    expect(claimNotification(42)).toBe(false)
+    expect(claimNotification(100, 42)).toBe(false)
   })
 
   it('lets a later arrival through', () => {
-    claimNotification(42)
+    claimNotification(100, 42)
 
-    expect(claimNotification(43)).toBe(true)
+    expect(claimNotification(100, 43)).toBe(true)
   })
 
-  it('turns away an older arrival', () => {
-    claimNotification(43)
+  it('turns away an older arrival under the same numbering', () => {
+    claimNotification(100, 43)
 
-    expect(claimNotification(42)).toBe(false)
+    expect(claimNotification(100, 42)).toBe(false)
   })
+
+  // A rebuilt or restored mailbox raises uidValidity and restarts uidNext near 1. A claim
+  // banked at 30000 under the old numbering would otherwise gag every tab for good.
+  it('ignores a claim banked under another uidValidity', () => {
+    claimNotification(100, 30000)
+
+    expect(claimNotification(200, 2)).toBe(true)
+  })
+
+  // And having let it through, it re-banks under the new numbering rather than leaving the
+  // stale entry in place for the next tab to trip over.
+  it('re-banks under the new uidValidity', () => {
+    claimNotification(100, 30000)
+    claimNotification(200, 2)
+
+    expect(claimNotification(200, 2)).toBe(false)
+  })
+
+  it.each([['not JSON at all'], ['{"uidNext":}'], ['42']])(
+    'notifies rather than staying silent on stored garbage (%s)', (stored) => {
+      localStorage.setItem('mail.lastNotifiedUidNext', stored)
+
+      expect(claimNotification(100, 42)).toBe(true)
+    })
 })

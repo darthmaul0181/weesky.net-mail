@@ -3,8 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  BLOCK_SIZE, PREFERENCE_KEYS, isStreaming, notifyDesktopOf, notifySoundOf, requestSizeOf,
-  showPreviewOf, usePreferences, useSetPreference,
+  BLOCK_SIZE, PREFERENCE_KEYS, isStreaming, notifiesOf, notifyDesktopOf, notifySoundOf,
+  requestSizeOf, showPreviewOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -113,5 +113,22 @@ describe('the accessors', () => {
       stored === undefined ? {} : { [PREFERENCE_KEYS.notifyDesktop]: stored }
 
     expect(notifyDesktopOf(preferences)).toBe(expected)
+  })
+
+  // The background poll and the notification hook both ask this question; derived twice they
+  // could disagree about who pays for the poll.
+  it.each([
+    ['false', 'false', false],
+    ['true', 'false', true],
+    ['false', 'true', true],
+    ['true', 'true', true],
+  ])('reads notifies for sound %s and desktop %s as %s', (sound, desktop, expected) => {
+    expect(notifiesOf({
+      [PREFERENCE_KEYS.notifySound]: sound, [PREFERENCE_KEYS.notifyDesktop]: desktop,
+    })).toBe(expected)
+  })
+
+  it('reads notifies as false for an empty map', () => {
+    expect(notifiesOf({})).toBe(false)
   })
 })
