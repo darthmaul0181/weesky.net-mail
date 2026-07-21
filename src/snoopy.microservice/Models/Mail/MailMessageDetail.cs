@@ -12,8 +12,8 @@ public sealed class MailMessageDetail
     public string Subject { get; set; } = string.Empty;
     public string FromName { get; set; } = string.Empty;
     public string FromAddress { get; set; } = string.Empty;
-    public List<MailAddressInfo> To { get; set; } = new();
-    public List<MailAddressInfo> Cc { get; set; } = new();
+    public List<MailAddressInfo> To { get; set; } = [];
+    public List<MailAddressInfo> Cc { get; set; } = [];
     public DateTimeOffset Date { get; set; }
 
     /// <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>

@@ -363,7 +363,7 @@ internal sealed class ImapSession : IImapSession
         };
     }
 
-    private static List<MailAddressInfo> ToAddressInfos(InternetAddressList? addresses) =>
+    public static List<MailAddressInfo> ToAddressInfos(InternetAddressList? addresses) =>
         addresses?.Mailboxes?.Select(m => new MailAddressInfo(m.Name ?? string.Empty, m.Address)).ToList() ?? [];
 
     public async Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)

@@ -672,6 +672,12 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideInfo.Reason">
             <summary>One of <see cref="T:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons"/>.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAddressInfo">
+            <summary>One recipient. Name is empty when the message carried no display name.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailAddressInfo.#ctor(System.String,System.String)">
+            <summary>One recipient. Name is empty when the message carried no display name.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent">
             <summary>A decoded attachment, ready to stream to the client.</summary>
         </member>
@@ -790,6 +796,9 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.UidValidity">
             <summary>Folder UID validity — see MailFolderPage for why the client needs it.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.Authentication">
+            <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.HtmlBody">
             <summary>Sanitised HTML body. Empty when the message is text-only.</summary>

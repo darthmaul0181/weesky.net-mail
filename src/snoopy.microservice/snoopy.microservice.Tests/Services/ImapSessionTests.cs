@@ -1,4 +1,6 @@
 ﻿using MailKit;
+using MimeKit;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -340,5 +342,70 @@ public sealed class ImapSessionTests
     public void ComputePageWindow_RejectsNonsensicalInput(int total, int page, int pageSize)
     {
         Assert.Equal((-1, -1), ImapSession.ComputePageWindow(total, page, pageSize));
+    }
+
+    // ── Address info conversion ──────────────────────────────────────
+
+    [Fact]
+    public void ToAddressInfos_PreservesDisplayNameWhenPresent()
+    {
+        var addresses = new InternetAddressList { new MailboxAddress("Bob Smith", "bob@example.com") };
+
+        var result = ImapSession.ToAddressInfos(addresses);
+
+        Assert.Single(result);
+        Assert.Equal("Bob Smith", result[0].Name);
+        Assert.Equal("bob@example.com", result[0].Address);
+    }
+
+    [Fact]
+    public void ToAddressInfos_UsesEmptyStringWhenDisplayNameIsNull()
+    {
+        var addresses = new InternetAddressList { new MailboxAddress(null, "alice@example.com") };
+
+        var result = ImapSession.ToAddressInfos(addresses);
+
+        Assert.Single(result);
+        Assert.Equal(string.Empty, result[0].Name);
+        Assert.Equal("alice@example.com", result[0].Address);
+    }
+
+    [Fact]
+    public void ToAddressInfos_ReturnsEmptyListForNullAddressList()
+    {
+        var result = ImapSession.ToAddressInfos(null);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ToAddressInfos_ReturnsEmptyListForEmptyAddressList()
+    {
+        var addresses = new InternetAddressList();
+
+        var result = ImapSession.ToAddressInfos(addresses);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ToAddressInfos_PreservesOrderWithMultipleRecipients()
+    {
+        var addresses = new InternetAddressList
+        {
+            new MailboxAddress("Charlie", "charlie@example.com"),
+            new MailboxAddress("Diana", "diana@example.com"),
+            new MailboxAddress(null, "eve@example.com")
+        };
+
+        var result = ImapSession.ToAddressInfos(addresses);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal("Charlie", result[0].Name);
+        Assert.Equal("charlie@example.com", result[0].Address);
+        Assert.Equal("Diana", result[1].Name);
+        Assert.Equal("diana@example.com", result[1].Address);
+        Assert.Equal(string.Empty, result[2].Name);
+        Assert.Equal("eve@example.com", result[2].Address);
     }
 }
