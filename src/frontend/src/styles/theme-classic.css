@@ -23,7 +23,6 @@
   --list-row-hover: #f0f2f5;
   --list-row-selected-bg: #dbe3f5;
   --list-row-selected-fg: #25397a;
-  --list-row-unread-bg: #ffffff;
   --list-separator: #e6e9ee;
   --badge-count-bg: #3450a3;
   --badge-count-fg: #ffffff;
@@ -66,7 +65,6 @@
   --list-row-hover: #2f3849;
   --list-row-selected-bg: #33405c;
   --list-row-selected-fg: #bcd2ec;
-  --list-row-unread-bg: #272d38;
   --list-separator: #333b49;
   --badge-count-bg: #84aad8;
   --badge-count-fg: #12161c;

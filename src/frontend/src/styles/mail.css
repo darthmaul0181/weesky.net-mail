@@ -328,7 +328,13 @@
 
 .message-row:hover { background: var(--list-row-hover); }
 
-.message-row.is-unread { background: var(--list-row-unread-bg); }
+/* Unread wears the selected look on purpose — same tokens, so they can never drift apart —
+   plus the dot and the weight. Bold and dot are what still single out unread rows. */
+.message-row.is-unread {
+  background: var(--list-row-selected-bg);
+  color: var(--list-row-selected-fg);
+  box-shadow: inset 3px 0 0 var(--accent-unread);
+}
 .message-row.is-unread .message-row-from,
 .message-row.is-unread .message-row-subject { font-weight: 700; }
 
