@@ -363,6 +363,9 @@ internal sealed class ImapSession : IImapSession
         };
     }
 
+    private static List<MailAddressInfo> ToAddressInfos(InternetAddressList? addresses) =>
+        addresses?.Mailboxes?.Select(m => new MailAddressInfo(m.Name ?? string.Empty, m.Address)).ToList() ?? [];
+
     public async Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -394,12 +397,13 @@ internal sealed class ImapSession : IImapSession
                 Subject = message.Subject ?? string.Empty,
                 FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty,
                 FromAddress = sender?.Address ?? string.Empty,
-                To = message.To?.Mailboxes?.Select(m => m.Address).ToList() ?? new List<string>(),
-                Cc = message.Cc?.Mailboxes?.Select(m => m.Address).ToList() ?? new List<string>(),
+                To = ToAddressInfos(message.To),
+                Cc = ToAddressInfos(message.Cc),
                 Date = message.Date,
                 HtmlBody = sanitized.Html,
                 TextBody = message.TextBody ?? string.Empty,
-                BlockedImageCount = sanitized.BlockedImageCount
+                BlockedImageCount = sanitized.BlockedImageCount,
+                Authentication = MailAuthenticationReader.Parse(message.Headers)
             };
 
             foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())

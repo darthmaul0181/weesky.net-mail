@@ -12,9 +12,12 @@ public sealed class MailMessageDetail
     public string Subject { get; set; } = string.Empty;
     public string FromName { get; set; } = string.Empty;
     public string FromAddress { get; set; } = string.Empty;
-    public List<string> To { get; set; } = new();
-    public List<string> Cc { get; set; } = new();
+    public List<MailAddressInfo> To { get; set; } = new();
+    public List<MailAddressInfo> Cc { get; set; } = new();
     public DateTimeOffset Date { get; set; }
+
+    /// <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>
+    public MailAuthentication? Authentication { get; set; }
 
     /// <summary>Sanitised HTML body. Empty when the message is text-only.</summary>
     public string HtmlBody { get; set; } = string.Empty;
