@@ -44,7 +44,7 @@ export function useSetPreference() {
     of "all" — it is paging, just without a pager. */
 export const BLOCK_SIZE = 100
 
-const ALL = 'all'
+export const ALL = 'all'
 
 export function requestSizeOf(preferences: Preferences): number {
   const stored = preferences[PREFERENCE_KEYS.pageSize]

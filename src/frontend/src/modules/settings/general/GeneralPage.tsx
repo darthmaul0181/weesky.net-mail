@@ -1,7 +1,7 @@
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  PREFERENCE_KEYS, showPreviewOf, usePreferences, useSetPreference,
+  ALL, PREFERENCE_KEYS, showPreviewOf, usePreferences, useSetPreference,
 } from '../../../hooks/usePreferences'
 
 const PAGE_SIZE_OPTIONS = [
@@ -10,11 +10,11 @@ const PAGE_SIZE_OPTIONS = [
   { value: '30', label: '30' },
   { value: '50', label: '50' },
   { value: '100', label: '100' },
-  { value: 'all', label: 'All' },
+  { value: ALL, label: 'All' },
 ]
 
 function pageSizeToast(value: string): string {
-  return value === 'all'
+  return value === ALL
     ? 'The message list now shows every message'
     : `The message list now shows ${value} per page`
 }
