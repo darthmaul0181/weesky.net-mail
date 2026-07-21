@@ -1453,10 +1453,6 @@ body {
   right: 14px;
 }
 
-.help-tooltip-wrap {
-  position: relative;
-  display: inline-flex;
-}
 
 .help-tooltip-icon {
   width: 18px;
@@ -1474,32 +1470,11 @@ body {
   transition: border-color 0.15s, color 0.15s;
 }
 
-.help-tooltip-wrap:hover .help-tooltip-icon {
+.tooltip-wrap:hover .help-tooltip-icon {
   border-color: var(--action-primary);
   color: var(--action-primary);
 }
 
-.help-tooltip-bubble {
-  display: none;
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  width: 280px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
-  z-index: 10;
-  pointer-events: none;
-}
-
-.help-tooltip-wrap:hover .help-tooltip-bubble {
-  display: block;
-}
 
 /* ── Alert warn ──────────────────────────────────────────────  */
 

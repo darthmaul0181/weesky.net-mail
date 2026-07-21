@@ -1,10 +1,10 @@
+import Tooltip from './Tooltip'
+
 export function HelpTooltip({ text }) {
   return (
-    <div className="help-tooltip-wrap">
+    <Tooltip content={text}>
       <div className="help-tooltip-icon">?</div>
-      <div className="help-tooltip-bubble">{text}</div>
-    </div>
+    </Tooltip>
   )
 }
-
 export default HelpTooltip
