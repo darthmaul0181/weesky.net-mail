@@ -35,6 +35,17 @@ public sealed class MailSpamScoreReaderTests
         Assert.Equal(5.0, result.Threshold);
     }
 
+    // "_" is a word character, so \bscore= must not fire inside bayes_score= — the real
+    // score= later in the value is the one that counts.
+    [Fact]
+    public void Parse_DoesNotMistakeAPropertyEndingInScoreForTheScore()
+    {
+        var result = MailSpamScoreReader.Parse(Headers(
+            ("X-Spam-Status", "No, bayes_score=0.9 score=1.2 required=5.0")));
+
+        Assert.Equal(1.2, result!.Score);
+    }
+
     // X-Spam-Score alone carries no threshold; 5.0 is SpamAssassin's universal default.
     [Fact]
     public void Parse_FallsBackToABareSpamAssassinScore()

@@ -264,7 +264,11 @@ internal static partial class MailSpamScoreReader
     private static MailSpamScore? FromExchangeScl(HeaderList headers)
     {
         var header = Topmost(headers, "X-MS-Exchange-Organization-SCL");
-        if (header is null || !int.TryParse(header.Value.Trim(), out var scl)) return null;
+        if (header is null
+            || !int.TryParse(header.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var scl))
+        {
+            return null;
+        }
 
         // SCL -1 is Microsoft's trusted-internal marker; 5 and up is classed as spam.
         return new MailSpamScore(Math.Max(0, scl), 5, Raw(header));
