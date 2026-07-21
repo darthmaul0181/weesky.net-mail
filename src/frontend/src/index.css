@@ -1453,7 +1453,6 @@ body {
   right: 14px;
 }
 
-
 .help-tooltip-icon {
   width: 18px;
   height: 18px;
@@ -1474,7 +1473,6 @@ body {
   border-color: var(--action-primary);
   color: var(--action-primary);
 }
-
 
 /* ── Alert warn ──────────────────────────────────────────────  */
 
