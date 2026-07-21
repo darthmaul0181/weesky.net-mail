@@ -62,8 +62,11 @@ export function requestSizeOf(preferences: Preferences): number
 export function isStreaming(preferences: Preferences): boolean
 ```
 
-`requestSizeOf` always returns a usable number. `isStreaming` is the single place in the codebase
-that compares against the string `"all"`, so a `NaN` can no longer be born anywhere.
+`requestSizeOf` always returns a usable number. The string `"all"` is written once, as the
+exported `ALL` constant; `isStreaming` is the only place that compares the *stored preference*
+against it, so a `NaN` can no longer be born anywhere. `GeneralPage` compares against `ALL` too,
+to pick the toast's wording — but that is the write path, reading the `<select>`'s own value, and
+it never touches the preferences map.
 
 In `GeneralPage`, the combo goes from a list of numbers to a list of value/label pairs, to carry
 `all` → `All`. Labels stay English, like the rest of the interface.
@@ -246,6 +249,19 @@ that call rests on a fake observer, so on an assumption. It is verified by rende
 Edge, as the display bugs were.
 
 ---
+
+## Out of scope: virtualisation
+
+**The next slice's first item**, measured after this one shipped rather than guessed. The list
+renders every loaded row, and the `<ul>` re-maps all of them each time a block arrives — roughly
+seven DOM nodes per row, cost linear in rows loaded, so a full scroll is quadratic. Measured in
+jsdom: 100 rows → 44 ms / 706 nodes; 3,000 → 385 ms / 21,006; 6,000 → 664 ms / 42,006. A real
+browser is about an order of magnitude faster, so call it ~50 ms per re-render at 6,000 rows and
+150–200 ms at 17,000 (~120,000 nodes).
+
+What makes it worth fixing rather than tolerating: that cost lands **while the reader is
+scrolling**, because scrolling is exactly what triggers the block. The 20-row margin hides the
+network wait; it does nothing for this one.
 
 ## Out of scope: periodic refresh
 
