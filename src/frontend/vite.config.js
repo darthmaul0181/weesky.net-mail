@@ -10,7 +10,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    css: { include: [/theme-.*\.css/] },
+    // Palette parity test parses theme-*.css files for token lists; needs real content, not Vitest's empty CSS mock.
+    css: { include: [/src\/styles\/theme-.*\.css/] },
     setupFiles: ['./src/test-setup.js'],
     coverage: {
       provider: 'v8',
