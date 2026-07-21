@@ -40,8 +40,20 @@ export function useSetPreference() {
   })
 }
 
-export function pageSizeOf(preferences: Preferences): number {
-  return Number(preferences[PREFERENCE_KEYS.pageSize])
+/** How many messages one request asks for. Blocks in streaming mode: the wire has no notion
+    of "all" — it is paging, just without a pager. */
+export const BLOCK_SIZE = 100
+
+const ALL = 'all'
+
+export function requestSizeOf(preferences: Preferences): number {
+  const stored = preferences[PREFERENCE_KEYS.pageSize]
+  return stored === ALL ? BLOCK_SIZE : Number(stored)
+}
+
+/** The only reader of the raw "all", so a NaN cannot be born anywhere else. */
+export function isStreaming(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.pageSize] === ALL
 }
 
 export function showPreviewOf(preferences: Preferences): boolean {

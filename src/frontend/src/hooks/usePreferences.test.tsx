@@ -3,7 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  PREFERENCE_KEYS, pageSizeOf, showPreviewOf, usePreferences, useSetPreference,
+  BLOCK_SIZE, PREFERENCE_KEYS, isStreaming, requestSizeOf, showPreviewOf,
+  usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -26,7 +27,7 @@ describe('usePreferences', () => {
     const { result } = renderHook(() => usePreferences(), { wrapper })
 
     await waitFor(() => expect(result.current.data).toBeDefined())
-    expect(pageSizeOf(result.current.data!)).toBe(50)
+    expect(requestSizeOf(result.current.data!)).toBe(50)
   })
 
   // Every cached message page was computed under the old size, so it is not merely stale — it
@@ -56,8 +57,25 @@ describe('usePreferences', () => {
 })
 
 describe('the accessors', () => {
-  it('reads the page size as a number', () => {
-    expect(pageSizeOf({ [PREFERENCE_KEYS.pageSize]: '100' })).toBe(100)
+  it('reads a numeric page size as a number', () => {
+    expect(requestSizeOf({ [PREFERENCE_KEYS.pageSize]: '100' })).toBe(100)
+  })
+
+  // "all" is a string in a field every other value fills with a number. Number('all') is NaN,
+  // and NaN throws nothing: it would travel into the request URL and surface as an empty list.
+  it('reads "all" as the block size, never NaN', () => {
+    const preferences = { [PREFERENCE_KEYS.pageSize]: 'all' }
+
+    expect(requestSizeOf(preferences)).toBe(BLOCK_SIZE)
+    expect(Number.isNaN(requestSizeOf(preferences))).toBe(false)
+  })
+
+  it.each([
+    ['all', true],
+    ['30', false],
+    ['100', false],
+  ])('reads streaming for %s as %s', (stored, expected) => {
+    expect(isStreaming({ [PREFERENCE_KEYS.pageSize]: stored })).toBe(expected)
   })
 
   // Anything but the explicit "false" means shown: a key the backend has not sent yet must not

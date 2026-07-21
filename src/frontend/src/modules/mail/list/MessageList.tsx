@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
-import { pageSizeOf, showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
+import { requestSizeOf, showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
 import { useMessages } from '../queries'
 import { formatListDate } from './formatDate'
 import Pagination from './Pagination'
@@ -26,7 +26,7 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
   // The list waits for the preferences rather than assuming a page size: the backend owns the
   // defaults, and guessing one here would be a second copy to keep in step.
   const { data: preferences } = usePreferences()
-  const pageSize = preferences ? pageSizeOf(preferences) : 0
+  const pageSize = preferences ? requestSizeOf(preferences) : 0
   const showsPreview = preferences ? showPreviewOf(preferences) : true
 
   const { data, isLoading, isError } = useMessages(folderPath, page, pageSize)

@@ -1,10 +1,23 @@
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  PREFERENCE_KEYS, pageSizeOf, showPreviewOf, usePreferences, useSetPreference,
+  PREFERENCE_KEYS, showPreviewOf, usePreferences, useSetPreference,
 } from '../../../hooks/usePreferences'
 
-const PAGE_SIZES = [10, 20, 30, 50, 100]
+const PAGE_SIZE_OPTIONS = [
+  { value: '10', label: '10' },
+  { value: '20', label: '20' },
+  { value: '30', label: '30' },
+  { value: '50', label: '50' },
+  { value: '100', label: '100' },
+  { value: 'all', label: 'All' },
+]
+
+function pageSizeToast(value: string): string {
+  return value === 'all'
+    ? 'The message list now shows every message'
+    : `The message list now shows ${value} per page`
+}
 
 /**
  * Settings that shape the app rather than the account. The values come from the backend with
@@ -37,13 +50,13 @@ export default function GeneralPage() {
             <label htmlFor="page-size">Messages per page</label>
             <select
               id="page-size"
-              value={String(pageSizeOf(preferences))}
+              value={preferences[PREFERENCE_KEYS.pageSize]}
               disabled={setPreference.isPending}
               onChange={event =>
-                save(PREFERENCE_KEYS.pageSize, event.target.value,
-                  `The message list now shows ${event.target.value} per page`)}
+                save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value))}
             >
-              {PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
+              {PAGE_SIZE_OPTIONS.map(option =>
+                <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
 

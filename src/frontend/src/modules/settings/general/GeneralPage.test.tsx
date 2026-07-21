@@ -27,11 +27,27 @@ describe('GeneralPage', () => {
     expect(await screen.findByLabelText('Messages per page')).toHaveValue('100')
   })
 
-  it('offers the five steps', async () => {
+  it('offers the five steps and All', async () => {
     renderPage()
 
     const options = Array.from((await screen.findByLabelText('Messages per page')).querySelectorAll('option'))
-    expect(options.map(o => o.value)).toEqual(['10', '20', '30', '50', '100'])
+    expect(options.map(o => o.value)).toEqual(['10', '20', '30', '50', '100', 'all'])
+    expect(options.map(o => o.textContent)).toEqual(['10', '20', '30', '50', '100', 'All'])
+  })
+
+  it('shows All as the selection when it is stored', async () => {
+    renderPage({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
+
+    expect(await screen.findByLabelText('Messages per page')).toHaveValue('all')
+  })
+
+  it('saves All as the string the backend accepts', async () => {
+    renderPage()
+
+    fireEvent.change(await screen.findByLabelText('Messages per page'), { target: { value: 'all' } })
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.pageSize', 'all'))
   })
 
   it('saves a new page size', async () => {
