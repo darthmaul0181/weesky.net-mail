@@ -16,8 +16,9 @@ Object.defineProperty(window, 'matchMedia', {
 class FakeIntersectionObserver {
   static instances = []
 
-  constructor(callback) {
+  constructor(callback, options) {
     this.callback = callback
+    this.options = options
     FakeIntersectionObserver.instances.push(this)
   }
 

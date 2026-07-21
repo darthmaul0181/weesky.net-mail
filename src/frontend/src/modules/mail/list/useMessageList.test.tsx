@@ -40,6 +40,7 @@ describe('useMessageList', () => {
     await waitFor(() => expect(result.current.paging).not.toBeNull())
     expect(result.current.streaming).toBeNull()
     expect(result.current.paging).toMatchObject({ page: 0, lastPage: 2 })
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 10, expect.anything())
   })
 
   it('streams on "all", and asks for blocks of 100', async () => {

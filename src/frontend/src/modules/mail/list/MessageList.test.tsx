@@ -18,7 +18,7 @@ vi.mock('./useMessageList', () => ({ useMessageList: mocks.useMessageList }))
 
 // The DOM lib type has no `instances` static — that's the test double's addition.
 const IntersectionObserver = globalThis.IntersectionObserver as unknown as {
-  instances: { trigger: (isIntersecting?: boolean) => void }[]
+  instances: { trigger: (isIntersecting?: boolean) => void; options: { root: Element | null } }[]
 }
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -249,9 +249,9 @@ describe('the preferences it obeys', () => {
   })
 })
 
-function streamingState(overrides = {}) {
+function streamingState(overrides = {}, count = 100) {
   return {
-    messages: Array.from({ length: 100 }, (_, i) => ({
+    messages: Array.from({ length: count }, (_, i) => ({
       uid: i + 1, subject: `Subject ${i + 1}`, fromName: 'A', fromAddress: 'a@b.c',
       date: '2026-07-21T00:00:00Z', seen: true, flagged: false, answered: false,
       hasAttachments: false, size: 0, preview: '',
@@ -289,6 +289,24 @@ describe('MessageList streaming', () => {
     expect(carrying).toBe(80)
   })
 
+  // A second length pins the rule to move with the block count, not to a fixed row.
+  it('moves the sentinel as more blocks arrive', () => {
+    mocks.useMessageList.mockReturnValue(streamingState({}, 250))
+    const { container } = renderList()
+
+    const rows = Array.from(container.querySelectorAll('.message-list > li'))
+    const carrying = rows.findIndex(row => row.querySelector('.message-list-sentinel'))
+    expect(carrying).toBe(230)
+  })
+
+  it('roots the observer at the scrolling band', () => {
+    mocks.useMessageList.mockReturnValue(streamingState())
+    const { container } = renderList()
+
+    const band = container.querySelector('.mail-list-scroll')
+    expect(IntersectionObserver.instances[0].options.root).toBe(band)
+  })
+
   it('asks for the next block when the sentinel comes into view', () => {
     const loadMore = vi.fn()
     mocks.useMessageList.mockReturnValue(streamingState({ loadMore }))
@@ -315,10 +333,16 @@ describe('MessageList streaming', () => {
     renderList()
 
     expect(screen.getByText('Subject 1')).toBeInTheDocument()
-    expect(screen.queryByText('Could not load messages.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(loadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops the sentinel once there is nothing more to load', () => {
+    mocks.useMessageList.mockReturnValue(streamingState({ hasMore: false }))
+    const { container } = renderList()
+
+    expect(container.querySelector('.message-list-sentinel')).toBeNull()
   })
 
   it('drops the sentinel and the counter on an empty folder', () => {

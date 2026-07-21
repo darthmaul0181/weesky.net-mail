@@ -41,40 +41,40 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
 
     return (
       <>
-      <ul className="message-list">
-        {messages.map((message, index) => {
-          const classes = ['message-row']
-          if (!message.seen) classes.push('is-unread')
-          if (message.uid === selectedUid) classes.push('is-selected')
+        <ul className="message-list">
+          {messages.map((message, index) => {
+            const classes = ['message-row']
+            if (!message.seen) classes.push('is-unread')
+            if (message.uid === selectedUid) classes.push('is-selected')
 
-          return (
-            <li key={message.uid}>
-              {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
-              <button type="button" className={classes.join(' ')} onClick={() => onSelect(message.uid)}>
-                <div className="message-row-top">
-                  {!message.seen && <span className="message-row-unread-dot" />}
-                  <span className="message-row-from">{message.fromName || message.fromAddress}</span>
-                  {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
-                  <span className="message-row-date">{formatListDate(message.date)}</span>
-                </div>
-                <div className="message-row-subject">{message.subject || '(no subject)'}</div>
-                {/* Always rendered when previews are on, even empty: a message with no body
-                    would otherwise make a shorter row than its neighbours and break the rhythm
-                    of the column. The reserved height lives in CSS. */}
-                {showsPreview && <div className="message-row-preview">{message.preview}</div>}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+            return (
+              <li key={message.uid}>
+                {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
+                <button type="button" className={classes.join(' ')} onClick={() => onSelect(message.uid)}>
+                  <div className="message-row-top">
+                    {!message.seen && <span className="message-row-unread-dot" />}
+                    <span className="message-row-from">{message.fromName || message.fromAddress}</span>
+                    {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
+                    <span className="message-row-date">{formatListDate(message.date)}</span>
+                  </div>
+                  <div className="message-row-subject">{message.subject || '(no subject)'}</div>
+                  {/* Always rendered when previews are on, even empty: a message with no body
+                      would otherwise make a shorter row than its neighbours and break the rhythm
+                      of the column. The reserved height lives in CSS. */}
+                  {showsPreview && <div className="message-row-preview">{message.preview}</div>}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
 
-      {streaming?.isLoadingMore && <p className="mail-block-state">Loading more…</p>}
-      {streaming?.loadMoreFailed && (
-        <p className="mail-block-state">
-          Could not load more.{' '}
-          <button type="button" className="mail-retry" onClick={streaming.loadMore}>Retry</button>
-        </p>
-      )}
+        {streaming?.isLoadingMore && <p className="mail-block-state">Loading more…</p>}
+        {streaming?.loadMoreFailed && (
+          <p className="mail-block-state">
+            Could not load more.{' '}
+            <button type="button" className="mail-retry" onClick={streaming.loadMore}>Retry</button>
+          </p>
+        )}
       </>
     )
   }
