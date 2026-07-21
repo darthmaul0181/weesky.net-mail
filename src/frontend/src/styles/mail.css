@@ -111,15 +111,12 @@
   border-top: 1px solid var(--border);
 }
 
-/* The selected mail's full look, bar included: in night light the background alone sits a few
-   values from the column and disappears — the bar is what actually says "you are here".
-   Square left corners: the inset shadow follows the radius, which rounded the bar's ends. */
+/* Background only — no accent bar. That bar is the message list's language for a row you
+   picked; a navigation pane says "you are here" with its fill and its weight. */
 .folder-row.is-active {
   background: var(--pane-item-active-bg);
   color: var(--pane-item-active-fg);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--accent-unread);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .folder-row-name {
