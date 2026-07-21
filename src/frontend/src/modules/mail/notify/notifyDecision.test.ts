@@ -60,6 +60,12 @@ describe('newSince', () => {
   it('answers empty when none qualify', () => {
     expect(newSince([message(5), message(4)], 10)).toEqual([])
   })
+
+  // sinceUid is the previous UIDNEXT — the next uid the folder was going to assign — so a
+  // single arrival lands exactly on it. A `>` here would miss every one-mail notification.
+  it('includes the message sitting exactly on the boundary', () => {
+    expect(newSince([message(10), message(9)], 10).map(m => m.uid)).toEqual([10])
+  })
 })
 
 describe('notifyBody', () => {
@@ -84,5 +90,15 @@ describe('notifyBody', () => {
   // wrong message is not.
   it('counts when the fetch did not find the arrival', () => {
     expect(notifyBody([], 1)).toBe('1 new message')
+  })
+
+  // The count comes from uidNext, the messages from a fetch: they can disagree. Naming a
+  // message the count does not corroborate would be worse than counting.
+  it('counts when the fetch found more messages than arrived', () => {
+    expect(notifyBody([message(11, 'Alice Dupont', 'Lunch?'), message(10)], 1)).toBe('1 new message')
+  })
+
+  it('counts when the fetch found fewer messages than arrived', () => {
+    expect(notifyBody([message(11, 'Alice Dupont', 'Lunch?')], 2)).toBe('2 new messages')
   })
 })
