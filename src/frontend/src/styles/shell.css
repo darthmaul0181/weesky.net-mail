@@ -209,3 +209,53 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* The palette blocks are attribute selectors, deliberately not anchored to <html>: stamping
+   data-palette and data-theme on the thumbnail re-declares all 33 tokens inside it, so a
+   preview costs no colour of its own. Anchoring those selectors blanks every thumbnail. */
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  max-width: 560px;
+}
+.palette-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+}
+.palette-card:hover { background: var(--pane-item-hover); }
+.palette-card:has(input:checked) { border-color: var(--action-primary); }
+
+.palette-preview {
+  width: 62px;
+  height: 40px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.palette-preview .pp-bar { height: 9px; background: var(--topbar-bg); }
+.palette-preview .pp-body { flex: 1; display: flex; min-height: 0; }
+.palette-preview .pp-rail { width: 10px; background: var(--rail-bg); }
+.palette-preview .pp-rows {
+  flex: 1;
+  background: var(--surface);
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.palette-preview .pp-row { height: 5px; border-radius: 1px; background: var(--list-separator); }
+.palette-preview .pp-row.is-unread {
+  background: var(--list-row-selected-bg);
+  border-left: 2px solid var(--accent-unread);
+}
