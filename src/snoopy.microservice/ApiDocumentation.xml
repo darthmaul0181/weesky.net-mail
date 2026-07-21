@@ -694,6 +694,12 @@
             hides these: they are already visible inside the message.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAuthentication">
+            <summary>SPF and DKIM verdicts as the receiving server reported them, plus the header they came from.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailAuthentication.#ctor(System.String,System.String,System.String)">
+            <summary>SPF and DKIM verdicts as the receiving server reported them, plus the header they came from.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode">
             <summary>A folder as the client sees it. Children are nested, not flattened.</summary>
         </member>
@@ -1590,6 +1596,9 @@
             Last-resort guess for servers that advertise no SPECIAL-USE. Covers the localised
             names a mail client creates when it, not the server, provisioned the folders.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailAuthenticationReader">
+            <summary>Reads the SPF and DKIM verdicts out of the topmost Authentication-Results header (RFC 7601).</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">
             <summary>Cookie name. Distinct from the JWT cookie so both can be cleared independently.</summary>
