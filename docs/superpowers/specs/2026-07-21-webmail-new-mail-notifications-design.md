@@ -108,20 +108,39 @@ it makes a sound" needs no documentation.
 
 ## The sound
 
-**No audio file in the repository.** The sound is synthesised with the Web Audio API — two notes
-and a soft envelope, about twenty lines. The reason is reviewability, not bytes: a binary `.mp3` is
-invisible in a diff, raises a licensing question, and has to be replaced wholesale to change a
-nuance. A sound described in code can be read, tested and tuned.
+**RainLoop's own `new-mail` sound**, the one this webmail is being compared against throughout.
+Synthesising a chime was considered and dropped in its favour: the point of reference is the
+sound the user already knows.
+
+**Licence — checked, not assumed.** RainLoop Webmail is **MIT**, not AGPL as first suspected:
+*"Copyright (c) 2022 RainLoopTeam"*, standard MIT text. MIT permits reuse provided the copyright
+notice travels with it, so this carries **no licence obligation onto this service** — unlike AGPL,
+which for a network-served application would have reached the whole source. The notice goes in
+`src/frontend/THIRD-PARTY.md`; without it the reuse is not licensed.
+
+One limit stated rather than glossed: the sound files carry **no attribution metadata** (only an
+ffmpeg encoder tag), and the upstream directory has no attribution file, so where RainLoop
+originally got the sound cannot be verified. What is verifiable is that RainLoop ships it under
+MIT.
+
+**MP3 only, not both formats.** Upstream ships `new-mail.mp3` and `new-mail.ogg` — a split that
+dates from when Firefox refused MP3 and Safari refused Vorbis. Every current browser decodes MP3,
+so the second file is 15 KB of history. Verified: MP3 with an ID3v2.4 header, OGG Vorbis stereo
+44.1 kHz, **1.91 s**, ~15 KB each.
+
+The asset lives in `src/frontend/src/assets/` beside the images, hashed and bundled by Vite like
+any other.
 
 ### Autoplay: the rule nobody sees coming
 
 Browsers block sound from a page the user has never interacted with. A notification sound is by
 nature played when nobody is interacting — squarely inside the blocked case.
 
-What saves it: **enabling the setting is an interaction**, used twice. The `AudioContext` is created
-inside the click gesture, and **the sound plays immediately as confirmation** — proving it works in
-front of the user and registering the origin engagement that Chrome and Edge then remember. One
-click is both the demonstration and the unlock.
+What saves it: **enabling the setting is an interaction**, used twice. The `Audio` element is
+created and played inside the click gesture, and **the sound plays immediately as confirmation** —
+proving it works in front of the user and registering the origin engagement that Chrome and Edge
+then remember. One click is both the demonstration and the unlock. The same element is kept and
+replayed later, rather than constructed per notification.
 
 It does not cover everything: **Safari is strictest** and may still refuse in a background tab. A
 rejected `play()` is swallowed in silence — never a toast: a notification that failed must not
@@ -132,8 +151,8 @@ produce a second interruption announcing the failure.
 The decision is a pure function — two folder snapshots plus the two settings in, a decision or
 `null` out — carrying the fine cases: baseline, deletion only, read-flip only, settings off,
 cross-tab guard already set, delta greater than one. Around it, fakes for `Notification`,
-`AudioContext` and `localStorage` cover permission denied, permission revoked between sessions, and
-blocked audio.
+`Audio` and `localStorage` cover permission denied, permission revoked between sessions, and
+blocked audio (a rejected `play()` promise must be swallowed, and a test pins that).
 
 ## Out of scope
 
@@ -141,4 +160,4 @@ blocked audio.
 - **Per-folder opt-in.** Only the inbox notifies. Mail filed by a Sieve rule was explicitly
   declared not worth an interruption — ringing for it would undo the rule the user wrote.
 - **Unread count in the tab title.**
-- **A user-chosen sound.**
+- **A user-chosen sound.** One sound, RainLoop's, shipped as an asset.
