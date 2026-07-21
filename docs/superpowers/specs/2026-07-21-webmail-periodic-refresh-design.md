@@ -35,7 +35,9 @@ response.
 
 `StatusItems.UidNext` joins the `STATUS` items in `ImapSession.ListFoldersAsync` — a standard
 RFC 3501 item, no capability gate needed (unlike `MailboxId`, which stays gated on `OBJECTID`).
-`MailFolderNode` gains `UidNext`. No new endpoint, no other backend change.
+`StatusItems.HighestModSeq` joins too, gated on `ImapCapabilities.CondStore`. `MailFolderNode`
+gains `UidNext` and `HighestModSeq` (nullable — null when the server lacks `CONDSTORE`). No new
+endpoint, no other backend change.
 
 ## Frontend: the poll is a query option, not a timer
 
@@ -56,16 +58,29 @@ A pure function compares two snapshots of the **displayed** folder:
 ```ts
 // list/folderDelta.ts
 export type FolderSnapshot = { uidNext: number | null; total: number | null;
-                               unread: number | null; uidValidity: number }
+                               unread: number | null; highestModSeq: number | null;
+                               uidValidity: number }
 export function folderChanged(previous: FolderSnapshot, next: FolderSnapshot): boolean
 export function uidValidityBroke(previous: FolderSnapshot, next: FolderSnapshot): boolean
 ```
 
-`folderChanged` is true when `uidNext`, `total` **or** `unread` moved. Not `uidNext` alone:
+`folderChanged` is true when `uidNext`, `total`, `unread` **or** `highestModSeq` moved. Not
+`uidNext` alone:
 
 - a **deletion** made from another client does not change `uidNext` but changes `total`;
 - a **read/unread flip** elsewhere changes only `unread` — and the unread dots on the visible
-  rows must follow, which they do because the refresh refetches the rows' summaries.
+  rows must follow, which they do because the refresh refetches the rows' summaries;
+- a **flag change** elsewhere — starred, answered, a pair of read/unread flips that nets out —
+  moves **no counter at all**. `HIGHESTMODSEQ` (RFC 7162, CONDSTORE) exists for exactly this: a
+  per-folder modification counter that rises on *every* flag change and can never cancel out.
+
+`HIGHESTMODSEQ` is capability-gated on `CONDSTORE`, the way `MailboxId` is gated on `OBJECTID` —
+asking for a `STATUS` item the server never advertised is a protocol error, and tranche 2d will
+point this code at arbitrary external servers. Without the capability the field stays null, null
+never trips the comparison, and the poll falls back to the three counters and their (accepted)
+blind spots. The trade the other way is also accepted: `HIGHESTMODSEQ` moves on changes with no
+visible effect here (a custom flag set by another client), costing an occasional refetch of one
+page for nothing.
 
 A watcher hook (`useListRefresh`, living beside `useMessageList`) subscribes to the folders
 query, snapshots the displayed folder, and on change refreshes the list:
@@ -101,16 +116,19 @@ through the global handler.
 
 ## Tests
 
-- **`folderDelta.test.ts`** (pure): each field moving alone trips `folderChanged`; nothing moving
-  trips nothing; `uidValidity` moving trips `uidValidityBroke` and not the ordinary refresh;
-  null fields (non-selectable folder) never trip anything.
+- **`folderDelta.test.ts`** (pure): each field moving alone trips `folderChanged` — including
+  `highestModSeq` alone, the flags-only case; nothing moving trips nothing; `uidValidity` moving
+  trips `uidValidityBroke` and not the ordinary refresh; null fields (non-selectable folder, or
+  a server without `CONDSTORE`) never trip anything — in particular a `highestModSeq` going from
+  null to a value, which is discovery, not change.
 - **`useListRefresh`** with fake timers: a tick with a changed `uidNext` refreshes the displayed
   folder's list and no other; a tick with nothing changed issues no list request; a failed tick
   is silent.
 - **The mutation lock:** a test that fails if streaming refresh ever goes through
   `invalidateQueries` on the stream key — proven by mutation, the same way the
   `refetchOnWindowFocus` lock was. This is the costliest regression the feature can have.
-- **Backend:** `ListFoldersAsync` asks for `UidNext` and maps it; the node carries it.
+- **Backend:** `ListFoldersAsync` asks for `UidNext` and maps it; `HighestModSeq` is asked for
+  only when `CONDSTORE` is advertised and maps to null otherwise; the node carries both.
 
 ## Out of scope
 
