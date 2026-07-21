@@ -24,6 +24,8 @@ public sealed class UserPreferencesTests
     [Theory]
     [InlineData(UserPreferences.MailPageSize, "10", true)]
     [InlineData(UserPreferences.MailPageSize, "100", true)]
+    [InlineData(UserPreferences.MailPageSize, "all", true)]
+    [InlineData(UserPreferences.MailPageSize, "ALL", false)]   // the value is a symbol, not prose
     [InlineData(UserPreferences.MailPageSize, "37", false)]      // not one of the offered steps
     [InlineData(UserPreferences.MailPageSize, "0", false)]
     [InlineData(UserPreferences.MailPageSize, "abc", false)]

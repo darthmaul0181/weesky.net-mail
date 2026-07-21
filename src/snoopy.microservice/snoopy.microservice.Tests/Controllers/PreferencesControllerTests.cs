@@ -68,6 +68,17 @@ public sealed class PreferencesControllerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Put_AcceptsAll()
+    {
+        var result = await CreateController().SetPreference(
+            new SetPreferenceRequest { Key = UserPreferences.MailPageSize, Value = "all" }, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        _store.Verify(s => s.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "all",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // The table cannot check a key or a value, so this is the only thing that can: without it
     // the store would accumulate rows nobody reads, and a value the client cannot render.
     [Theory]
