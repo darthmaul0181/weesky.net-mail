@@ -85,22 +85,41 @@ The inbox is found through the **role resolution chain**, never by matching the 
 keeps working against the arbitrary servers of tranche 2d.
 
 **Identifying the new messages, not the first ones.** The `uidNext` delta gives the count. For
-sender and subject, the inbox's first block is read from cache when the list refresh just fetched
-it, otherwise fetched once — a cost paid on arrival, a few dozen times a day, never per tick. The
-new messages are then selected by **`uid >= the previous uidNext`**, not by taking the top rows:
-the server sorts by `Date` header, so a message delivered late lands mid-list and "the first row"
-would name the wrong sender. If the filter does not yield exactly one message, the notification
-falls back to the count — honest rather than wrong.
+sender and subject the inbox's first page is fetched — a cost paid on arrival, a few dozen times a
+day, never per tick. The new messages are then selected by **`uid >= the previous uidNext`**, not
+by taking the top rows: the server sorts by `Date` header, so a message delivered late lands
+mid-list and "the first row" would name the wrong sender. Note the boundary is `>=`, not `>`:
+`UIDNEXT` is the *next* UID the folder will assign, so a single arrival sits exactly on it, and a
+`>` would miss the commonest case of all.
+
+**The cache is never read — an earlier draft of this document said it should be, and was wrong.**
+Reading the inbox's first page from the query cache "when the list refresh just fetched it" looks
+free and is worse than useless: that sibling refresh is *asynchronous* in both modes, while this
+watcher reads synchronously in the same effect pass, so the cached page is always the one from
+**before** the arrival. `newSince` then finds nothing, the notification degrades to "1 new
+message" instead of naming the sender, and clicking it stops opening the message — all of it
+precisely when the user has the inbox open, the case the optimisation was written for. Always
+fetch.
+
+If the filter does not yield exactly one message, the notification falls back to the count —
+honest rather than wrong.
 
 **One notification per tick.** One message → sender and subject. Several → "3 new messages".
 Clicking it focuses the window and, when a single message is known, opens it.
 
 **Two tabs, two different mechanisms.** For the bubble the API already has the answer: an identical
 `tag` makes the browser *replace* rather than stack, so duplicates collapse natively. For the sound
-there is no equivalent — a `localStorage` guard records the last announced `uidNext`, and a tab
+there is no equivalent — a `localStorage` guard records the last announced arrival, and a tab
 finding a value already current stays quiet. Stated plainly: this is not an atomic lock; the two
 tabs poll on independent clocks and practically never land in the same millisecond, and the worst
 case is one duplicate beep.
+
+**The guard stores `{ uidValidity, uidNext }`, not a bare number.** A bare monotone number is a
+trap in both directions. A rebuilt folder raises `uidValidity` and can send `uidNext` leaping —
+the watcher would announce thousands and bank that inflated figure — or restarting near 1, where a
+previously banked 30,000 would refuse every genuine arrival in every tab, for good. Recording the
+numbering the claim belongs to makes a foreign `uidValidity` mean "no claim" rather than a
+permanent gag.
 
 **Notifications fire even when the tab is focused.** Many clients suppress in that case. "Stays
 quiet depending on what I am looking at" is a rule a user cannot predict; "I turned the sound on,
