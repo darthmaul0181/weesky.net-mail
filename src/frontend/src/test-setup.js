@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { beforeEach, vi } from 'vitest'
 import '@testing-library/jest-dom'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -10,3 +10,30 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: vi.fn(),
   })),
 })
+
+// jsdom has no IntersectionObserver. Tests drive this one by hand:
+//   IntersectionObserver.instances[0].trigger()
+class FakeIntersectionObserver {
+  static instances = []
+
+  constructor(callback) {
+    this.callback = callback
+    FakeIntersectionObserver.instances.push(this)
+  }
+
+  observe(element) { this.element = element }
+  unobserve() {}
+  disconnect() {
+    FakeIntersectionObserver.instances =
+      FakeIntersectionObserver.instances.filter(observer => observer !== this)
+  }
+
+  trigger(isIntersecting = true) {
+    this.callback([{ isIntersecting, target: this.element }])
+  }
+}
+
+window.IntersectionObserver = FakeIntersectionObserver
+globalThis.IntersectionObserver = FakeIntersectionObserver
+
+beforeEach(() => { FakeIntersectionObserver.instances = [] })
