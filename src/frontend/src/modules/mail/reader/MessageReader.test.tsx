@@ -40,6 +40,12 @@ const detail = {
   ],
 }
 
+const blocked = {
+  ...detail,
+  blockedImageCount: 2,
+  htmlBody: '<img data-blocked-src="https://t.example/p.gif">',
+}
+
 describe('MessageReader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -122,26 +128,20 @@ describe('MessageReader', () => {
   })
 
   it('offers to show blocked images and reveals them on demand', async () => {
-    mocks.getMailMessage.mockResolvedValue({
-      ...detail,
-      blockedImageCount: 2,
-      htmlBody: '<img data-blocked-src="https://t.example/p.gif">',
-    })
+    mocks.getMailMessage.mockResolvedValue(blocked)
 
     const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
 
     expect(await screen.findByText(/2 remote images were blocked/i)).toBeInTheDocument()
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('data-blocked-src')
     fireEvent.click(screen.getByRole('button', { name: /show images/i }))
 
+    // Absence of the attribute, not just a `src="…"` match: `data-blocked-src="…"` contains it.
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .not.toContain('data-blocked-src'))
     expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
       .toContain('src="https://t.example/p.gif"')
   })
-
-  const blocked = {
-    ...detail,
-    blockedImageCount: 2,
-    htmlBody: '<img data-blocked-src="https://t.example/p.gif">',
-  }
 
   // The whole point of the setting: no banner, no button, nothing to click per message.
   it('shows the images and no banner when the account always shows them', async () => {
@@ -159,6 +159,18 @@ describe('MessageReader', () => {
       .toContain('src="https://t.example/p.gif"')
     expect(screen.queryByText(/remote images were blocked/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /show images/i })).not.toBeInTheDocument()
+  })
+
+  // A cached message can render before a cold preferences cache resolves; alwaysShowImagesOf
+  // must never be called on that still-undefined value.
+  it('blocks images while preferences are still loading, rather than throwing', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    mocks.getPreferences.mockReturnValue(new Promise(() => {}))
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByText(/2 remote images were blocked/i)).toBeInTheDocument()
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('data-blocked-src')
   })
 
   it('keeps blocking when the account has not asked for it', async () => {
