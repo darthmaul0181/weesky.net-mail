@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  BLOCK_SIZE, PREFERENCE_KEYS, isStreaming, notifiesOf, notifyDesktopOf, notifySoundOf,
+  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, isStreaming, notifiesOf, notifyDesktopOf, notifySoundOf,
   requestSizeOf, showPreviewOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
@@ -113,6 +113,19 @@ describe('the accessors', () => {
       stored === undefined ? {} : { [PREFERENCE_KEYS.notifyDesktop]: stored }
 
     expect(notifyDesktopOf(preferences)).toBe(expected)
+  })
+
+  // The mirror of notifySoundOf: an absent or malformed row must keep blocking, never reveal.
+  it.each([
+    ['true', true],
+    ['false', false],
+    ['yes', false],
+    [undefined, false],
+  ])('reads alwaysShowImages %s as %s', (stored, expected) => {
+    const preferences: Record<string, string> =
+      stored === undefined ? {} : { [PREFERENCE_KEYS.alwaysShowImages]: stored }
+
+    expect(alwaysShowImagesOf(preferences)).toBe(expected)
   })
 
   // The background poll and the notification hook both ask this question; derived twice they

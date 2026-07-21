@@ -14,6 +14,7 @@ export const PREFERENCE_KEYS = {
   showPreview: 'mail.showPreview',
   notifySound: 'mail.notifySound',
   notifyDesktop: 'mail.notifyDesktop',
+  alwaysShowImages: 'mail.alwaysShowImages',
 } as const
 
 export type Preferences = Record<string, string>
@@ -60,6 +61,11 @@ export function isStreaming(preferences: Preferences): boolean {
 
 export function showPreviewOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.showPreview] !== 'false'
+}
+
+/** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */
+export function alwaysShowImagesOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.alwaysShowImages] === 'true'
 }
 
 /** Off unless explicitly on — the mirror of showPreviewOf, because silence is the safe default. */
