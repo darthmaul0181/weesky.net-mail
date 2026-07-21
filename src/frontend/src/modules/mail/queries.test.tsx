@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream } from './queries'
 
@@ -49,6 +49,15 @@ describe('mailKeys', () => {
     expect(mailKeys.folders('primary')).toEqual(['mail', 'primary', 'folders'])
     expect(mailKeys.messages('primary', 'INBOX', 0, 30)).toEqual(['mail', 'primary', 'messages', 'INBOX', 0, 30])
     expect(mailKeys.message('primary', 'INBOX', 42)).toEqual(['mail', 'primary', 'message', 'INBOX', 42])
+  })
+
+  // A stream caches a sequence of pages, a page caches one: sharing a key is a type error that
+  // would only show at runtime.
+  it('keeps the stream key apart from the page key', () => {
+    expect(mailKeys.messageStream('primary', 'INBOX', 100))
+      .toEqual(['mail', 'primary', 'messageStream', 'INBOX', 100])
+    expect(mailKeys.messageStream('primary', 'INBOX', 100))
+      .not.toEqual(mailKeys.messages('primary', 'INBOX', 0, 100))
   })
 
   it('gives different accounts different keys', () => {
@@ -132,6 +141,7 @@ describe('useMessage', () => {
 
 describe('useMessageStream', () => {
   beforeEach(() => vi.clearAllMocks())
+  afterEach(() => focusManager.setFocused(undefined))
 
   it('asks for block 0 first', async () => {
     mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 2))
@@ -171,6 +181,24 @@ describe('useMessageStream', () => {
 
     await waitFor(() => expect(result.current.data).toBeDefined())
     expect(result.current.hasNextPage).toBe(false)
+  })
+
+  // App.tsx turns focus refetching on app-wide; here it would refetch *every* loaded block, so
+  // forty blocks would be forty IMAP connections and forty full folder sorts.
+  it('does not refetch its blocks when the window regains focus', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 2))
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessageStream('INBOX', 100, true), { wrapper })
+    await waitFor(() => expect(result.current.data).toBeDefined())
+
+    await act(async () => {
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+      await Promise.resolve()
+    })
+
+    expect(mocks.getMailMessages).toHaveBeenCalledTimes(1)
   })
 })
 

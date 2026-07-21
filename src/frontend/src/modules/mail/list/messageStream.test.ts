@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { BLOCK_SIZE } from '../../../hooks/usePreferences'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { PREFETCH_ROWS, dedupeByUid, nextBlockIndex, sentinelIndexOf } from './messageStream'
 
@@ -25,6 +26,13 @@ describe('dedupeByUid', () => {
   // one and the last row of block 1 reappears at the head of block 2.
   it('keeps the first occurrence when a block repeats a uid', () => {
     expect(dedupeByUid([page([3, 2]), page([2, 1])]).map(m => m.uid)).toEqual([3, 2, 1])
+  })
+
+  // The folder re-sorts as mail arrives, so a uid can resurface blocks later: remembering only
+  // the previous block would let it through a second time.
+  it('keeps the first occurrence when a uid returns several blocks later', () => {
+    expect(dedupeByUid([page([5, 4]), page([3, 2]), page([5, 1])]).map(m => m.uid))
+      .toEqual([5, 4, 3, 2, 1])
   })
 
   it('answers an empty list for no blocks', () => {
@@ -66,5 +74,11 @@ describe('sentinelIndexOf', () => {
   it('sits at the top while the list is shorter than the margin', () => {
     expect(sentinelIndexOf(5)).toBe(0)
     expect(sentinelIndexOf(0)).toBe(0)
+  })
+
+  // Near 80 of 100 each arriving block drops its own fresh sentinel back into view and queues
+  // the next, so the whole folder loads itself without the reader asking.
+  it('stays a small fraction of a block', () => {
+    expect(PREFETCH_ROWS).toBeLessThanOrEqual(BLOCK_SIZE / 4)
   })
 })

@@ -113,6 +113,26 @@ describe('useMessageList', () => {
     expect(result.current.isError).toBe(false)
   })
 
+  // A message arriving mid-scroll shifts every row by one, so the last row of a block comes
+  // back as the first row of the next: the reader must not see it twice.
+  it('shows a uid repeated across blocks once, in its first position', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
+    const first = pageOf(Array.from({ length: 100 }, (_, i) => i + 1), 250)
+    mocks.getMailMessages
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(pageOf([100, 101, 102], 250))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+    await waitFor(() => expect(result.current.messages).toHaveLength(100))
+
+    act(() => { result.current.streaming?.loadMore() })
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(102))
+    const uids = result.current.messages.map(m => m.uid)
+    expect(uids.filter(uid => uid === 100)).toHaveLength(1)
+    expect(uids.indexOf(100)).toBe(99)
+  })
+
   it('does not query a new folder at the previous folder\'s page', async () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
     mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 25))
