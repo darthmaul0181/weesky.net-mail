@@ -65,6 +65,13 @@ export interface MailAuthentication {
   raw: string
 }
 
+/** The spam filter's own verdict: score, the threshold it judges against, and the raw header. */
+export interface MailSpamScore {
+  score: number
+  threshold: number
+  raw: string
+}
+
 export interface MailMessageDetail {
   uid: number
   folderPath: string
@@ -76,6 +83,7 @@ export interface MailMessageDetail {
   cc: MailAddressInfo[]
   date: string
   authentication: MailAuthentication | null
+  spamScore: MailSpamScore | null
   /** Already sanitised by the backend. Still only ever rendered in a sandboxed iframe. */
   htmlBody: string
   textBody: string

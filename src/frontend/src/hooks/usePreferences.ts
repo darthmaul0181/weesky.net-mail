@@ -15,6 +15,7 @@ export const PREFERENCE_KEYS = {
   notifySound: 'mail.notifySound',
   notifyDesktop: 'mail.notifyDesktop',
   alwaysShowImages: 'mail.alwaysShowImages',
+  showSpamScore: 'mail.showSpamScore',
 } as const
 
 export type Preferences = Record<string, string>
@@ -61,6 +62,11 @@ export function isStreaming(preferences: Preferences): boolean {
 
 export function showPreviewOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.showPreview] !== 'false'
+}
+
+/** On unless explicitly off — the gauge ships enabled, like the list preview. */
+export function showSpamScoreOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.showSpamScore] !== 'false'
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */
