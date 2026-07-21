@@ -403,7 +403,8 @@ internal sealed class ImapSession : IImapSession
                 HtmlBody = sanitized.Html,
                 TextBody = message.TextBody ?? string.Empty,
                 BlockedImageCount = sanitized.BlockedImageCount,
-                Authentication = MailAuthenticationReader.Parse(message.Headers)
+                Authentication = MailAuthenticationReader.Parse(message.Headers),
+                SpamScore = MailSpamScoreReader.Parse(message.Headers)
             };
 
             foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())

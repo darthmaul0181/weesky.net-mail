@@ -19,6 +19,9 @@ public sealed class MailMessageDetail
     /// <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>
     public MailAuthentication? Authentication { get; set; }
 
+    /// <summary>The spam filter's verdict. Null when the message carries no recognised anti-spam header.</summary>
+    public MailSpamScore? SpamScore { get; set; }
+
     /// <summary>Sanitised HTML body. Empty when the message is text-only.</summary>
     public string HtmlBody { get; set; } = string.Empty;
 

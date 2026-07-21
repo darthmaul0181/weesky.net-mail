@@ -14,6 +14,7 @@ public sealed class UserPreferencesTests
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailNotifySound);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailNotifyDesktop);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailAlwaysShowImages);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowSpamScore);
     }
 
     [Theory]
@@ -22,6 +23,7 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailNotifySound, "false")]
     [InlineData(UserPreferences.MailNotifyDesktop, "false")]
     [InlineData(UserPreferences.MailAlwaysShowImages, "false")]
+    [InlineData(UserPreferences.MailShowSpamScore, "true")]
     public void Default_IsTheValueAnAccountWithNoRowsGets(string key, string expected)
     {
         Assert.Equal(expected, UserPreferences.All.Single(p => p.Key == key).Default);
@@ -43,6 +45,8 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailNotifyDesktop, "yes", false)]
     [InlineData(UserPreferences.MailAlwaysShowImages, "true", true)]
     [InlineData(UserPreferences.MailAlwaysShowImages, "yes", false)]
+    [InlineData(UserPreferences.MailShowSpamScore, "false", true)]
+    [InlineData(UserPreferences.MailShowSpamScore, "yes", false)]
     public void IsValid_AcceptsOnlyTheOfferedValues(string key, string value, bool expected)
     {
         Assert.Equal(expected, UserPreferences.IsValid(key, value));

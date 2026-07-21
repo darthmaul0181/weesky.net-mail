@@ -19,6 +19,7 @@ public static class UserPreferences
     public const string MailAlwaysShowImages = "mail.alwaysShowImages";
     public const string MailNotifySound = "mail.notifySound";
     public const string MailNotifyDesktop = "mail.notifyDesktop";
+    public const string MailShowSpamScore = "mail.showSpamScore";
 
     private static readonly string[] Booleans = ["true", "false"];
 
@@ -29,6 +30,7 @@ public static class UserPreferences
         new(MailAlwaysShowImages, "false", Booleans),
         new(MailNotifySound, "false", Booleans),
         new(MailNotifyDesktop, "false", Booleans),
+        new(MailShowSpamScore, "true", Booleans),
     ];
 
     public static bool IsValid(string key, string value) =>
