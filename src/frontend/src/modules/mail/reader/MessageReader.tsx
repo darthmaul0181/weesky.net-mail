@@ -3,10 +3,11 @@ import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
-import { alwaysShowImagesOf, usePreferences } from '../../../hooks/usePreferences'
+import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
+import SpamGauge from './SpamGauge'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
@@ -76,6 +77,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
           {data.cc.length > 0 && (
             <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
           )}
+          {!!preferences && showSpamScoreOf(preferences) && <SpamGauge spamScore={data.spamScore} />}
         </div>
       </header>
 

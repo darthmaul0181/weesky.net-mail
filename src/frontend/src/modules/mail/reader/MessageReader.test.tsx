@@ -35,6 +35,7 @@ const detail = {
   subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
   to: [{ name: 'Mick', address: 'mick@weesky.be' }], cc: [],
   date: '2026-07-18T09:00:00Z', authentication: null,
+  spamScore: null,
   htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0,
   attachments: [
     { part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048, isInline: false },
@@ -380,6 +381,40 @@ describe('MessageReader', () => {
       await waitFor(() =>
         expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('color-scheme: light'))
       theme.isDark = false
+    })
+  })
+
+  describe('the spam gauge', () => {
+    const scored = {
+      ...detail,
+      spamScore: { score: 7, threshold: 16, raw: 'X-Spamd-Result: default: False [7.00 / 16.00];' },
+    }
+
+    it('shows the gauge when the message carries a score', async () => {
+      mocks.getMailMessage.mockResolvedValue(scored)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      expect(await screen.findByText('7.0 / 16.0')).toBeInTheDocument()
+    })
+
+    it('shows nothing when the message carries none', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText(/^Spam score:/)).not.toBeInTheDocument()
+    })
+
+    it('honours the setting that turns it off', async () => {
+      mocks.getMailMessage.mockResolvedValue(scored)
+      mocks.getPreferences.mockResolvedValue({ 'mail.showSpamScore': 'false' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText(/^Spam score:/)).not.toBeInTheDocument()
     })
   })
 
