@@ -12,6 +12,8 @@ import { api } from '../api.js'
 export const PREFERENCE_KEYS = {
   pageSize: 'mail.pageSize',
   showPreview: 'mail.showPreview',
+  notifySound: 'mail.notifySound',
+  notifyDesktop: 'mail.notifyDesktop',
 } as const
 
 export type Preferences = Record<string, string>
@@ -58,4 +60,13 @@ export function isStreaming(preferences: Preferences): boolean {
 
 export function showPreviewOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.showPreview] !== 'false'
+}
+
+/** Off unless explicitly on — the mirror of showPreviewOf, because silence is the safe default. */
+export function notifySoundOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.notifySound] === 'true'
+}
+
+export function notifyDesktopOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.notifyDesktop] === 'true'
 }

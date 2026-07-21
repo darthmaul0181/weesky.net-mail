@@ -202,3 +202,10 @@
 .field-h.is-setting input[type="number"] {
   flex: 0 0 auto;
 }
+
+.settings-note {
+  max-width: 520px;
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

@@ -4,15 +4,27 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import GeneralPage from './GeneralPage'
 
-const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  getPreferences: vi.fn(),
+  setPreference: vi.fn(),
+  playNewMailSound: vi.fn(),
+  desktopPermission: vi.fn(),
+  requestDesktopPermission: vi.fn(),
+}))
 vi.mock('../../../api.js', () => ({ api: mocks }))
+vi.mock('../../../modules/mail/notify/channels', () => ({
+  playNewMailSound: mocks.playNewMailSound,
+  desktopPermission: mocks.desktopPermission,
+  requestDesktopPermission: mocks.requestDesktopPermission,
+}))
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-function renderPage(preferences = { 'mail.pageSize': '30', 'mail.showPreview': 'true' }) {
+function renderPage(preferences: Record<string, string> =
+  { 'mail.pageSize': '30', 'mail.showPreview': 'true' }) {
   mocks.getPreferences.mockResolvedValue(preferences)
   mocks.setPreference.mockResolvedValue(undefined)
   return render(<GeneralPage />, { wrapper })
@@ -112,7 +124,93 @@ describe('GeneralPage', () => {
     await screen.findByLabelText('Messages per page')
 
     const rows = container.querySelectorAll('.field-h')
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(4)
     rows.forEach(row => expect(row).toHaveClass('is-setting'))
+  })
+})
+
+describe('GeneralPage notifications', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.desktopPermission.mockReturnValue('default')
+  })
+
+  it('shows both toggles off by default', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Sound on new mail')).not.toBeChecked()
+    expect(screen.getByLabelText('Desktop notification on new mail')).not.toBeChecked()
+  })
+
+  // Enabling is the interaction that unlocks autoplay, so the confirmation sound doubles as
+  // proof it works and as the engagement the browser remembers.
+  it('plays the sound when the sound toggle is switched on', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Sound on new mail'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifySound', 'true'))
+    expect(mocks.playNewMailSound).toHaveBeenCalled()
+  })
+
+  it('does not play when the sound toggle is switched off', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifySound': 'true' })
+
+    fireEvent.click(await screen.findByLabelText('Sound on new mail'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifySound', 'false'))
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+  })
+
+  it('asks the browser when the desktop toggle is switched on', async () => {
+    mocks.requestDesktopPermission.mockResolvedValue('granted')
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Desktop notification on new mail'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifyDesktop', 'true'))
+  })
+
+  // Storing a true that produces nothing is the lying switch: on, and silent.
+  it('leaves the setting off and explains when the browser refuses', async () => {
+    mocks.requestDesktopPermission.mockResolvedValue('denied')
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Desktop notification on new mail'))
+
+    expect(await screen.findByText(/blocked/i)).toBeInTheDocument()
+    expect(mocks.setPreference).not.toHaveBeenCalledWith('mail.notifyDesktop', 'true')
+    expect(screen.getByLabelText('Desktop notification on new mail')).not.toBeChecked()
+  })
+
+  // Granted yesterday, revoked today in browser settings, preference still true.
+  it('renders the desktop toggle off when the permission was revoked', async () => {
+    mocks.desktopPermission.mockReturnValue('denied')
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifyDesktop': 'true' })
+
+    expect(await screen.findByLabelText('Desktop notification on new mail')).not.toBeChecked()
+    expect(screen.getByText(/blocked/i)).toBeInTheDocument()
+  })
+
+  it('says so where the browser has no notifications at all', async () => {
+    mocks.desktopPermission.mockReturnValue('unsupported')
+    renderPage()
+
+    expect(await screen.findByText(/does not support/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Desktop notification on new mail')).toBeDisabled()
+  })
+
+  it('switching the desktop toggle off needs no permission', async () => {
+    mocks.desktopPermission.mockReturnValue('granted')
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifyDesktop': 'true' })
+
+    fireEvent.click(await screen.findByLabelText('Desktop notification on new mail'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifyDesktop', 'false'))
+    expect(mocks.requestDesktopPermission).not.toHaveBeenCalled()
   })
 })

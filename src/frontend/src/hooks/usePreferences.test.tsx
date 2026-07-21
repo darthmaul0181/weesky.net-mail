@@ -3,8 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  BLOCK_SIZE, PREFERENCE_KEYS, isStreaming, requestSizeOf, showPreviewOf,
-  usePreferences, useSetPreference,
+  BLOCK_SIZE, PREFERENCE_KEYS, isStreaming, notifyDesktopOf, notifySoundOf, requestSizeOf,
+  showPreviewOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -89,5 +89,29 @@ describe('the accessors', () => {
       stored === undefined ? {} : { [PREFERENCE_KEYS.showPreview]: stored }
 
     expect(showPreviewOf(preferences)).toBe(expected)
+  })
+
+  // The mirror of showPreviewOf: a key the backend has not sent yet must leave the app silent,
+  // never guess that the user wanted noise.
+  it.each([
+    ['true', true],
+    ['false', false],
+    [undefined, false],
+  ])('reads notifySound %s as %s', (stored, expected) => {
+    const preferences: Record<string, string> =
+      stored === undefined ? {} : { [PREFERENCE_KEYS.notifySound]: stored }
+
+    expect(notifySoundOf(preferences)).toBe(expected)
+  })
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    [undefined, false],
+  ])('reads notifyDesktop %s as %s', (stored, expected) => {
+    const preferences: Record<string, string> =
+      stored === undefined ? {} : { [PREFERENCE_KEYS.notifyDesktop]: stored }
+
+    expect(notifyDesktopOf(preferences)).toBe(expected)
   })
 })

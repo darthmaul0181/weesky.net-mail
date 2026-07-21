@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, showPreviewOf, usePreferences, useSetPreference,
+  ALL, PREFERENCE_KEYS, notifyDesktopOf, notifySoundOf, showPreviewOf,
+  usePreferences, useSetPreference,
 } from '../../../hooks/usePreferences'
+import {
+  desktopPermission, playNewMailSound, requestDesktopPermission,
+} from '../../mail/notify/channels'
 
 const PAGE_SIZE_OPTIONS = [
   { value: '10', label: '10' },
@@ -27,6 +32,33 @@ export default function GeneralPage() {
   const { data: preferences, isLoading, isError } = usePreferences()
   const setPreference = useSetPreference()
   const { toasts, addToast, removeToast } = useToasts()
+
+  const [permission, setPermission] = useState(desktopPermission)
+  const blocked = permission === 'denied'
+  const unsupported = permission === 'unsupported'
+
+  async function toggleSound(on: boolean) {
+    await save(PREFERENCE_KEYS.notifySound, String(on),
+      on ? 'New mail will play a sound' : 'New mail will be silent')
+    // Played inside the click: it proves the sound works and earns the browser engagement
+    // that lets a later, unattended notification play at all.
+    if (on) playNewMailSound()
+  }
+
+  async function toggleDesktop(on: boolean) {
+    if (!on) {
+      await save(PREFERENCE_KEYS.notifyDesktop, 'false', 'Desktop notifications are off')
+      return
+    }
+
+    // Asked inside the click gesture — Safari requires it, and a denied answer must not be
+    // stored as an enabled setting that produces nothing.
+    const answer = await requestDesktopPermission()
+    setPermission(answer)
+    if (answer === 'granted') {
+      await save(PREFERENCE_KEYS.notifyDesktop, 'true', 'New mail will raise a notification')
+    }
+  }
 
   async function save(key: string, value: string, message: string) {
     try {
@@ -75,6 +107,47 @@ export default function GeneralPage() {
               <span className="toggle-track" />
             </label>
           </div>
+
+          <div className="field-h is-setting">
+            <label htmlFor="notify-sound">Sound on new mail</label>
+            <label className="toggle-switch">
+              <input
+                id="notify-sound"
+                type="checkbox"
+                checked={notifySoundOf(preferences)}
+                disabled={setPreference.isPending}
+                onChange={event => toggleSound(event.target.checked)}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+
+          <div className="field-h is-setting">
+            <label htmlFor="notify-desktop">Desktop notification on new mail</label>
+            <label className="toggle-switch">
+              <input
+                id="notify-desktop"
+                type="checkbox"
+                checked={notifyDesktopOf(preferences) && permission === 'granted'}
+                disabled={setPreference.isPending || unsupported}
+                onChange={event => toggleDesktop(event.target.checked)}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+
+          {blocked && (
+            <p className="settings-note">
+              Notifications are blocked by your browser for this site. Allow them in its site
+              settings, then switch this back on.
+            </p>
+          )}
+          {unsupported && (
+            <p className="settings-note">
+              This browser does not support desktop notifications. On iPhone and iPad they work
+              only once the site is added to the home screen.
+            </p>
+          )}
         </>
       )}
 
