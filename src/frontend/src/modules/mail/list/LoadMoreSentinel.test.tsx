@@ -33,9 +33,11 @@ describe('LoadMoreSentinel', () => {
     const first = vi.fn()
     const second = vi.fn()
     const { rerender } = render(<LoadMoreSentinel onReach={first} />)
+    const observer = FakeIntersectionObserver.instances[0]
 
     rerender(<LoadMoreSentinel onReach={second} />)
     expect(FakeIntersectionObserver.instances).toHaveLength(1)
+    expect(FakeIntersectionObserver.instances[0]).toBe(observer)
 
     FakeIntersectionObserver.instances[0].trigger(true)
     expect(first).not.toHaveBeenCalled()

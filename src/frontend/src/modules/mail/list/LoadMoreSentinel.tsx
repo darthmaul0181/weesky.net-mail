@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 
 interface Props {
   onReach: () => void
@@ -12,8 +12,9 @@ export default function LoadMoreSentinel({ onReach }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const latest = useRef(onReach)
 
-  // Refs can't be written during render (react-hooks/refs); this runs after every commit instead.
-  useEffect(() => { latest.current = onReach })
+  // Refs can't be written during render (react-hooks/refs); a layout effect closes the window
+  // before paint, so a real observer firing between commit and paint reads the latest callback.
+  useLayoutEffect(() => { latest.current = onReach })
 
   useEffect(() => {
     const node = ref.current
