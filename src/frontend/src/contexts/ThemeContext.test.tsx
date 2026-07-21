@@ -63,4 +63,28 @@ describe('ThemeContext', () => {
     expect(screen.getByTestId('theme')).toHaveTextContent('dark')
     expect(screen.getByTestId('palette')).toHaveTextContent('classic')
   })
+
+  it.each(['forest', 'slate', 'plum', 'ink'] as const)('stores and applies %s', id => {
+    localStorage.setItem('appearance_palette', id)
+
+    render(<ThemeProvider><Probe /></ThemeProvider>)
+
+    expect(document.documentElement.getAttribute('data-palette')).toBe(id)
+  })
+
+  it('still honours classic', () => {
+    localStorage.setItem('appearance_palette', 'classic')
+
+    render(<ThemeProvider><Probe /></ThemeProvider>)
+
+    expect(document.documentElement.getAttribute('data-palette')).toBe('classic')
+  })
+
+  it('falls back to night for a value it does not know', () => {
+    localStorage.setItem('appearance_palette', 'chartreuse')
+
+    render(<ThemeProvider><Probe /></ThemeProvider>)
+
+    expect(document.documentElement.getAttribute('data-palette')).toBe('night')
+  })
 })

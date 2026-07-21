@@ -1,7 +1,9 @@
 ﻿import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
-export type Palette = 'night' | 'classic'
+
+export const PALETTE_IDS = ['night', 'classic', 'forest', 'slate', 'plum', 'ink'] as const
+export type Palette = typeof PALETTE_IDS[number]
 
 interface ThemeContextValue {
   theme: ThemePreference
@@ -23,7 +25,8 @@ function readTheme(): ThemePreference {
 }
 
 function readPalette(): Palette {
-  return localStorage.getItem(PALETTE_KEY) === 'classic' ? 'classic' : 'night'
+  const stored = localStorage.getItem(PALETTE_KEY)
+  return PALETTE_IDS.includes(stored as Palette) ? stored as Palette : 'night'
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
