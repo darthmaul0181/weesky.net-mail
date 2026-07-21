@@ -41,17 +41,35 @@ lire ses headers ne coûte aucun aller-retour IMAP supplémentaire.
 
 ### Parseur
 
-Nouveau `Services/AuthenticationResults.cs`, fonction pure statique sur
+Nouveau `Services/MailAuthenticationReader.cs`, fonction pure statique sur
 `HeaderList` → `MailAuthentication?`.
 
-Un message peut porter plusieurs `Authentication-Results` — un par relais traversé. Les
-headers sont ordonnés du plus récent au plus ancien (chaque relais empile le sien en tête),
-donc **le premier résultat rencontré gagne**, méthode par méthode : on parcourt les headers
-dans l'ordre et on retient le premier `spf=` puis le premier `dkim=` trouvés. La comparaison
-des noms de méthode et des valeurs est insensible à la casse ; la valeur retenue est
-normalisée en minuscules.
+**Le parsing est délégué à `MimeKit.Cryptography.AuthenticationResults`**, livré par MailKit
+que le projet référence déjà. Un découpage maison sur `;` a été écrit puis retiré : il se
+fait piéger par un commentaire RFC 5322 contenant un `;` — `dkim=fail (also; a note)` — et
+laissait fuiter une parenthèse dans le verdict. La grammaire CFWS n'est pas quelque chose
+qu'on redécoupe à la main quand une implémentation conforme est déjà dans le sac.
 
-Aucun header `Authentication-Results` → le parseur répond `null`.
+**Seul le premier header `Authentication-Results` est lu, jamais fusionné avec les
+suivants.** Un message en porte parfois plusieurs, un par relais traversé, empilés du plus
+récent au plus ancien : celui du dessus est celui que notre propre serveur de réception a
+écrit, et **tous ceux d'en dessous ont été écrits par quelqu'un d'autre**. N'importe qui peut
+mettre `Authentication-Results: spf=pass` dans un message qu'il envoie. Aller chercher un
+verdict DKIM manquant chez un relais amont — ce que cette spec décrivait d'abord — est un
+vecteur d'usurpation, pas une tolérance. Le corollaire tombe tout seul : `Raw` étant la
+valeur de cet unique header, il justifie toujours les deux verdicts affichés.
+
+Une méthode qui apparaît plusieurs fois dans ce header : **un `pass` l'emporte sur tout le
+reste**, sinon la première occurrence gagne. Un message à deux signatures DKIM dont une liste
+de diffusion a cassé la première est authentifié par la seconde ; c'est aussi la règle
+d'alignement DMARC.
+
+La comparaison des noms de méthode et des valeurs est insensible à la casse ; la valeur
+retenue est normalisée en minuscules.
+
+Aucun header `Authentication-Results` → le parseur répond `null`. Un premier header qui ne
+mentionne ni `spf` ni `dkim`, ou que le parseur refuse, donne deux verdicts `null` et ce
+header en `Raw` : le serveur a bien tourné, ses verdicts nous sont simplement inconnus.
 
 ### DTO
 
