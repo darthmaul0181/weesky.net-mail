@@ -124,6 +124,13 @@ describe('GeneralPage', () => {
     expect(screen.getByText(/tells the sender you opened the message/i)).toBeInTheDocument()
   })
 
+  it('hides the privacy note when the setting is off', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()
+    expect(screen.queryByText(/tells the sender you opened the message/i)).not.toBeInTheDocument()
+  })
+
   it('surfaces a failure to save instead of pretending', async () => {
     renderPage()
     mocks.setPreference.mockRejectedValue(new Error('Refused by the server'))
