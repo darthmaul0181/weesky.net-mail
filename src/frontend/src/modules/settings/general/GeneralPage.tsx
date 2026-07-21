@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, notifyDesktopOf, notifySoundOf, showPreviewOf,
+  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, notifyDesktopOf, notifySoundOf, showPreviewOf,
   usePreferences, useSetPreference,
 } from '../../../hooks/usePreferences'
 import {
@@ -140,6 +140,21 @@ export default function GeneralPage() {
             onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
               on ? 'Previews are shown' : 'Previews are hidden')}
           />
+
+          <ToggleRow
+            id="always-show-images"
+            label="Always show remote images"
+            checked={alwaysShowImagesOf(preferences)}
+            disabled={setPreference.isPending}
+            onChange={on => save(PREFERENCE_KEYS.alwaysShowImages, String(on),
+              on ? 'Remote images will always load' : 'Remote images stay blocked until you ask')}
+          />
+
+          {alwaysShowImagesOf(preferences) && (
+            <p className="settings-note">
+              Loading them tells the sender you opened the message.
+            </p>
+          )}
 
           <ToggleRow
             id="notify-sound"

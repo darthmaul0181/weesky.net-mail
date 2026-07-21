@@ -100,6 +100,30 @@ describe('GeneralPage', () => {
     expect(container.querySelector('.toggle-switch')).toBeTruthy()
   })
 
+  it('shows the images toggle off by default and on when it is stored', async () => {
+    renderPage()
+    expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()
+  })
+
+  it('saves the images toggle and warns about what it costs', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Always show remote images'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.alwaysShowImages', 'true'))
+    expect(await screen.findByText(/remote images will always load/i)).toBeInTheDocument()
+  })
+
+  // The warning the banner used to carry has to survive somewhere, and the moment of choosing
+  // is the one place it is useful.
+  it('carries the privacy note only while it is on', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.alwaysShowImages': 'true' })
+
+    expect(await screen.findByLabelText('Always show remote images')).toBeChecked()
+    expect(screen.getByText(/tells the sender you opened the message/i)).toBeInTheDocument()
+  })
+
   it('surfaces a failure to save instead of pretending', async () => {
     renderPage()
     mocks.setPreference.mockRejectedValue(new Error('Refused by the server'))
@@ -124,7 +148,7 @@ describe('GeneralPage', () => {
     await screen.findByLabelText('Messages per page')
 
     const rows = container.querySelectorAll('.field-h')
-    expect(rows).toHaveLength(4)
+    expect(rows).toHaveLength(5)
     rows.forEach(row => expect(row).toHaveClass('is-setting'))
   })
 })
