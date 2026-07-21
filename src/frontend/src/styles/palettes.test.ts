@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PALETTE_IDS } from '../contexts/ThemeContext'
 import html from '../../index.html?raw'
+import mainSource from '../main.tsx?raw'
 
 const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 const files = Object.keys(modules).map(path => path.replace('./', ''))
@@ -64,5 +65,15 @@ describe('the pre-paint script in index.html', () => {
     expect(list, 'no palette list found in the pre-paint script').not.toBeNull()
     const names = [...list![1].matchAll(/'([^']+)'/g)].map(m => m[1])
     expect(names.sort()).toEqual([...PALETTE_IDS].sort())
+  })
+})
+
+describe('the palette imports in main.tsx', () => {
+  it('reads the file, not an empty stub', () => {
+    expect(mainSource).toContain('createRoot')
+  })
+  it('imports one stylesheet per palette the module knows', () => {
+    const ids = [...mainSource.matchAll(/\.\/styles\/theme-([\w-]+)\.css/g)].map(m => m[1])
+    expect(ids.sort()).toEqual([...PALETTE_IDS].sort())
   })
 })
