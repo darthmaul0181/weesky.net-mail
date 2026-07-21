@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
-import { requestSizeOf, showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
-import { useMessages } from '../queries'
 import { formatListDate } from './formatDate'
 import Pagination from './Pagination'
+import { useMessageList } from './useMessageList'
 
 interface Props {
   folderPath: string | null
@@ -13,36 +12,24 @@ interface Props {
 }
 
 /**
- * Three bands: a heading, the rows, and the pager. Only the middle one scrolls, so both the
- * folder you are in and the way off the page you are on stay on screen — the pager used to sit
- * after the last row, which meant scrolling fifty messages to reach it.
+ * Three bands: a heading, the rows, and the footer. Only the middle one scrolls, so both the
+ * folder you are in and the way off the page you are on stay on screen.
  */
 export default function MessageList({ folderPath, folderName, selectedUid, onSelect }: Props) {
-  const [page, setPage] = useState(0)
-
-  // A page index means nothing in a different folder.
-  useEffect(() => { setPage(0) }, [folderPath])
-
-  // The list waits for the preferences rather than assuming a page size: the backend owns the
-  // defaults, and guessing one here would be a second copy to keep in step.
+  const { messages, isLoading, isError, paging } = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
-  const pageSize = preferences ? requestSizeOf(preferences) : 0
   const showsPreview = preferences ? showPreviewOf(preferences) : true
-
-  const { data, isLoading, isError } = useMessages(folderPath, page, pageSize)
 
   if (!folderPath) return <p className="mail-empty">Select a folder</p>
 
-  const lastPage = data && pageSize > 0 ? Math.max(0, Math.ceil(data.total / pageSize) - 1) : 0
-
   function rows() {
-    if (!preferences || (isLoading && !data)) return <p className="mail-empty">Loading messages…</p>
+    if (isLoading) return <p className="mail-empty">Loading messages…</p>
     if (isError) return <p className="mail-empty">Could not load messages.</p>
-    if (!data || data.messages.length === 0) return <p className="mail-empty">No messages</p>
+    if (messages.length === 0) return <p className="mail-empty">No messages</p>
 
     return (
       <ul className="message-list">
-        {data.messages.map(message => {
+        {messages.map(message => {
           const classes = ['message-row']
           if (!message.seen) classes.push('is-unread')
           if (message.uid === selectedUid) classes.push('is-selected')
@@ -76,9 +63,9 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
 
       <div className="mail-list-scroll">{rows()}</div>
 
-      {lastPage > 0 && (
+      {paging && paging.lastPage > 0 && (
         <div className="mail-list-footer">
-          <Pagination page={page} lastPage={lastPage} onSelect={setPage} />
+          <Pagination page={paging.page} lastPage={paging.lastPage} onSelect={paging.onSelect} />
         </div>
       )}
     </>
