@@ -53,6 +53,18 @@ export interface MailAttachmentInfo {
   isInline: boolean
 }
 
+export interface MailAddressInfo {
+  name: string
+  address: string
+}
+
+/** SPF/DKIM as the receiving server reported them, plus the raw header behind them. */
+export interface MailAuthentication {
+  spf: string | null
+  dkim: string | null
+  raw: string
+}
+
 export interface MailMessageDetail {
   uid: number
   folderPath: string
@@ -60,9 +72,10 @@ export interface MailMessageDetail {
   subject: string
   fromName: string
   fromAddress: string
-  to: string[]
-  cc: string[]
+  to: MailAddressInfo[]
+  cc: MailAddressInfo[]
   date: string
+  authentication: MailAuthentication | null
   /** Already sanitised by the backend. Still only ever rendered in a sandboxed iframe. */
   htmlBody: string
   textBody: string
