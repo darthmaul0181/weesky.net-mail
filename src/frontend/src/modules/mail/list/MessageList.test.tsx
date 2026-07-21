@@ -1,193 +1,195 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 
-const mocks = vi.hoisted(() => ({ getMailMessages: vi.fn(), getPreferences: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(),
+}))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
 }))
+// The list is tested against the shape it consumes, not against the network: what the hook
+// puts on the wire is useMessageList's own test.
+vi.mock('./useMessageList', () => ({ useMessageList: mocks.useMessageList }))
+
+// The DOM lib type has no `instances` static — that's the test double's addition.
+const IntersectionObserver = globalThis.IntersectionObserver as unknown as {
+  instances: { trigger: (isIntersecting?: boolean) => void }[]
+}
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-const page = {
-  folderPath: 'INBOX', uidValidity: 1, total: 2, page: 0, pageSize: 50,
-  messages: [
-    {
-      uid: 2, subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
-      date: '2026-07-18T09:00:00Z', seen: false, flagged: false, answered: false,
-      hasAttachments: true, size: 100, preview: 'Merci pour l’envoi',
-    },
-    {
-      uid: 1, subject: '', fromName: '', fromAddress: 'bob@x.be',
-      date: '2026-07-17T09:00:00Z', seen: true, flagged: false, answered: false,
-      hasAttachments: false, size: 90, preview: '',
-    },
-  ],
+const sample = [
+  {
+    uid: 2, subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
+    date: '2026-07-18T09:00:00Z', seen: false, flagged: false, answered: false,
+    hasAttachments: true, size: 100, preview: 'Merci pour l’envoi',
+  },
+  {
+    uid: 1, subject: '', fromName: '', fromAddress: 'bob@x.be',
+    date: '2026-07-17T09:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 90, preview: '',
+  },
+]
+
+function pagedState(paging = {}, overrides = {}) {
+  return {
+    messages: sample,
+    total: 2,
+    isLoading: false,
+    isError: false,
+    paging: { page: 0, lastPage: 0, onSelect: vi.fn(), ...paging },
+    streaming: null,
+    ...overrides,
+  }
+}
+
+type ListProps = Parameters<typeof MessageList>[0]
+
+function renderList(props: Partial<ListProps> = {}) {
+  return render(
+    <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} {...props} />,
+    { wrapper })
 }
 
 describe('MessageList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // The list waits for these rather than assuming a page size, so every test needs them.
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
   })
 
   it('prompts when no folder is selected', () => {
-    render(<MessageList folderPath={null} selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    renderList({ folderPath: null })
 
     expect(screen.getByText(/select a folder/i)).toBeInTheDocument()
-    expect(mocks.getMailMessages).not.toHaveBeenCalled()
+    // Nothing is asked for: the hook is handed the absence of a folder, and answers nothing.
+    expect(mocks.useMessageList).toHaveBeenCalledWith(null)
   })
 
   it('renders sender, subject and preview', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByText('Alice Martin')).toBeInTheDocument()
+    expect(await screen.findByText('Merci pour l’envoi')).toBeInTheDocument()
+    expect(screen.getByText('Alice Martin')).toBeInTheDocument()
     expect(screen.getByText('Re: facture')).toBeInTheDocument()
-    expect(screen.getByText('Merci pour l’envoi')).toBeInTheDocument()
   })
 
-  it('names the folder above the list', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('names the folder above the list', () => {
+    renderList({ folderPath: 'INBOX.Linux server', folderName: 'Linux server' })
 
-    render(
-      <MessageList folderPath="INBOX.Linux server" folderName="Linux server"
-        selectedUid={null} onSelect={vi.fn()} />,
-      { wrapper })
-
-    expect(await screen.findByRole('heading', { name: 'Linux server' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Linux server' })).toBeInTheDocument()
   })
 
-  it('falls back to the path when the folder name is unknown', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('falls back to the path when the folder name is unknown', () => {
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
   })
 
   // The heading is how the column says what it is showing; a state that drops it leaves the
   // user looking at an unlabelled panel.
-  it('keeps the heading while loading and when the folder is empty', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 0, messages: [] })
-
-    render(
-      <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()} />,
-      { wrapper })
+  it('keeps the heading while loading and when the folder is empty', () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [], total: 0, isLoading: true }))
+    const { rerender } = renderList({ folderName: 'INBOX' })
 
     expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
-    expect(await screen.findByText(/no messages/i)).toBeInTheDocument()
+    expect(screen.getByText(/loading messages/i)).toBeInTheDocument()
+
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
+    rerender(
+      <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText(/no messages/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
   })
 
   // A message with no body used to render no preview element at all, making its row shorter
   // than its neighbours. The element is now always present and CSS reserves its line.
   it('reserves the preview line even when there is nothing to preview', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
-    const { container } = render(
-      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    const { container } = renderList()
 
     await screen.findByText('Alice Martin')
 
-    expect(container.querySelectorAll('.message-row-preview')).toHaveLength(page.messages.length)
+    expect(container.querySelectorAll('.message-row-preview')).toHaveLength(sample.length)
   })
 
-  it('names the attachment marker for assistive technology', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
-
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-    await screen.findByText('Alice Martin')
+  it('names the attachment marker for assistive technology', () => {
+    renderList()
 
     // Only the message that has one — the marker must not be announced on every row.
     expect(screen.getAllByLabelText(/has attachments/i)).toHaveLength(1)
   })
 
-  it('falls back to the address when there is no display name', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('falls back to the address when there is no display name', () => {
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByText('bob@x.be')).toBeInTheDocument()
+    expect(screen.getByText('bob@x.be')).toBeInTheDocument()
   })
 
-  it('labels a message with no subject', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('labels a message with no subject', () => {
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByText('(no subject)')).toBeInTheDocument()
+    expect(screen.getByText('(no subject)')).toBeInTheDocument()
   })
 
-  it('marks unread rows', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('marks unread rows', () => {
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect((await screen.findByText('Alice Martin')).closest('button')).toHaveClass('is-unread')
+    expect(screen.getByText('Alice Martin').closest('button')).toHaveClass('is-unread')
     expect(screen.getByText('bob@x.be').closest('button')).not.toHaveClass('is-unread')
   })
 
-  it('marks the selected row', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('marks the selected row', () => {
+    renderList({ selectedUid: 1 })
 
-    render(<MessageList folderPath="INBOX" selectedUid={1} onSelect={vi.fn()} />, { wrapper })
-
-    expect((await screen.findByText('bob@x.be')).closest('button')).toHaveClass('is-selected')
+    expect(screen.getByText('bob@x.be').closest('button')).toHaveClass('is-selected')
   })
 
-  it('calls onSelect with the uid', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
+  it('calls onSelect with the uid', () => {
     const onSelect = vi.fn()
+    renderList({ onSelect })
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={onSelect} />, { wrapper })
-
-    fireEvent.click(await screen.findByText('Alice Martin'))
+    fireEvent.click(screen.getByText('Alice Martin'))
 
     expect(onSelect).toHaveBeenCalledWith(2)
   })
 
-  it('shows an empty state for an empty folder', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 0, messages: [] })
+  it('shows an empty state for an empty folder', () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByText(/no messages/i)).toBeInTheDocument()
+    expect(screen.getByText(/no messages/i)).toBeInTheDocument()
   })
 
-  it('hides the pager when everything fits on one page', async () => {
-    mocks.getMailMessages.mockResolvedValue(page)
-
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-    await screen.findByText('Alice Martin')
+  it('hides the pager when everything fits on one page', () => {
+    renderList()
 
     expect(screen.queryByRole('button', { name: /next page/i })).not.toBeInTheDocument()
   })
 
-  it('pages forward', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
+  it('pages forward', () => {
+    const onSelect = vi.fn()
+    mocks.useMessageList.mockReturnValue(pagedState({ lastPage: 2, onSelect }))
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
 
-    fireEvent.click(await screen.findByRole('button', { name: /next page/i }))
-
-    await waitFor(() =>
-      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 50, expect.anything()))
+    // Zero-based on the wire: the second page is 1.
+    expect(onSelect).toHaveBeenCalledWith(1)
   })
 
-  it('offers the pages as numbers', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
-
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-    await screen.findByText('Alice Martin')
+  it('offers the pages as numbers', () => {
+    mocks.useMessageList.mockReturnValue(pagedState({ lastPage: 2 }))
+    renderList()
 
     // 120 messages over 50 per page is three pages, numbered from one on screen.
     expect(screen.getByRole('button', { name: 'Page 1' })).toBeInTheDocument()
@@ -196,87 +198,149 @@ describe('MessageList', () => {
     expect(screen.queryByRole('button', { name: 'Page 4' })).not.toBeInTheDocument()
   })
 
-  it('jumps straight to a numbered page', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
+  it('jumps straight to a numbered page', () => {
+    const onSelect = vi.fn()
+    mocks.useMessageList.mockReturnValue(pagedState({ lastPage: 2, onSelect }))
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Page 3' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Page 3' }))
 
     // Zero-based on the wire, one-based on screen.
-    await waitFor(() =>
-      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 2, 50, expect.anything()))
+    expect(onSelect).toHaveBeenCalledWith(2)
   })
 
-  it('marks the page being shown', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
-
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-    await screen.findByText('Alice Martin')
+  it('marks the page being shown', () => {
+    mocks.useMessageList.mockReturnValue(pagedState({ lastPage: 2 }))
+    renderList()
 
     expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Page 2' })).not.toHaveAttribute('aria-current')
   })
 
-  it('resets to the first page when the folder changes', async () => {
-    mocks.getMailMessages.mockResolvedValue({ ...page, total: 120 })
+  it('surfaces a load failure', () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], isError: true }))
+    renderList()
 
-    const { rerender } = render(
-      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    fireEvent.click(await screen.findByRole('button', { name: /next page/i }))
-    await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 50, expect.anything()))
-
-    rerender(<MessageList folderPath="Sent" selectedUid={null} onSelect={vi.fn()} />)
-
-    await waitFor(() =>
-      expect(mocks.getMailMessages).toHaveBeenCalledWith('Sent', 0, 50, expect.anything()))
-  })
-
-  it('surfaces a load failure', async () => {
-    mocks.getMailMessages.mockRejectedValue(new Error('boom'))
-
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByText(/could not load/i)).toBeInTheDocument()
+    expect(screen.getByText(/could not load/i)).toBeInTheDocument()
   })
 })
 
 describe('the preferences it obeys', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.getMailMessages.mockResolvedValue({
-      folderPath: 'INBOX', page: 0, pageSize: 30, total: 1,
-      messages: [{
-        uid: 1, subject: 'Sujet', fromName: 'Alice', fromAddress: 'a@b.c',
-        date: '2026-07-18T09:00:00Z', seen: true, hasAttachments: false, preview: 'Un extrait',
-      }],
-    })
+    mocks.useMessageList.mockReturnValue(pagedState())
   })
 
   it('shows the preview when the preference is on', async () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.showPreview': 'true' })
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
-
-    expect(await screen.findByText('Un extrait')).toBeInTheDocument()
+    expect(await screen.findByText('Merci pour l’envoi')).toBeInTheDocument()
   })
 
   it('hides it when the preference is off', async () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.showPreview': 'false' })
+    const { container } = renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    await screen.findByText('Re: facture')
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.message-row-preview')).toHaveLength(0))
+    expect(screen.queryByText('Merci pour l’envoi')).not.toBeInTheDocument()
+  })
+})
 
-    await screen.findByText('Sujet')
-    expect(screen.queryByText('Un extrait')).not.toBeInTheDocument()
+function streamingState(overrides = {}) {
+  return {
+    messages: Array.from({ length: 100 }, (_, i) => ({
+      uid: i + 1, subject: `Subject ${i + 1}`, fromName: 'A', fromAddress: 'a@b.c',
+      date: '2026-07-21T00:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 0, preview: '',
+    })),
+    total: 3812,
+    isLoading: false,
+    isError: false,
+    paging: null,
+    streaming: {
+      hasMore: true, isLoadingMore: false, loadMoreFailed: false, loadMore: vi.fn(), ...overrides,
+    },
+  }
+}
+
+describe('MessageList streaming', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
   })
 
-  it('asks the server for the stored page size', async () => {
-    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
+  it('shows the counter instead of a pager', () => {
+    mocks.useMessageList.mockReturnValue(streamingState())
+    renderList()
 
-    render(<MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} />, { wrapper })
+    expect(screen.getByText('100 of 3,812')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Pages' })).not.toBeInTheDocument()
+  })
 
-    await waitFor(() =>
-      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 10, expect.anything()))
+  it('places the sentinel 20 rows before the last', () => {
+    mocks.useMessageList.mockReturnValue(streamingState())
+    const { container } = renderList()
+
+    const rows = Array.from(container.querySelectorAll('.message-list > li'))
+    const carrying = rows.findIndex(row => row.querySelector('.message-list-sentinel'))
+    expect(carrying).toBe(80)
+  })
+
+  it('asks for the next block when the sentinel comes into view', () => {
+    const loadMore = vi.fn()
+    mocks.useMessageList.mockReturnValue(streamingState({ loadMore }))
+    renderList()
+
+    IntersectionObserver.instances[0].trigger(true)
+
+    expect(loadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('says a block is on its way', () => {
+    mocks.useMessageList.mockReturnValue(streamingState({ isLoadingMore: true }))
+    renderList()
+
+    expect(screen.getByText('Loading more…')).toBeInTheDocument()
+  })
+
+  // The point of the whole error path: three thousand valid rows must not be erased because
+  // the three-thousand-and-first did not arrive.
+  it('keeps the loaded rows when a block fails, and offers Retry', () => {
+    const loadMore = vi.fn()
+    mocks.useMessageList.mockReturnValue(
+      streamingState({ loadMoreFailed: true, hasMore: true, loadMore }))
+    renderList()
+
+    expect(screen.getByText('Subject 1')).toBeInTheDocument()
+    expect(screen.queryByText('Could not load messages.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(loadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops the sentinel and the counter on an empty folder', () => {
+    mocks.useMessageList.mockReturnValue({
+      messages: [], total: 0, isLoading: false, isError: false, paging: null,
+      streaming: { hasMore: false, isLoadingMore: false, loadMoreFailed: false, loadMore: vi.fn() },
+    })
+    const { container } = renderList()
+
+    expect(screen.getByText('No messages')).toBeInTheDocument()
+    expect(container.querySelector('.message-list-sentinel')).toBeNull()
+    expect(container.querySelector('.mail-list-count')).toBeNull()
+  })
+
+  it('returns to the top when the folder changes', () => {
+    mocks.useMessageList.mockReturnValue(streamingState())
+    const { container, rerender } = renderList()
+
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 900
+    rerender(<MessageList folderPath="Archive" selectedUid={null} onSelect={vi.fn()} />)
+
+    expect(band.scrollTop).toBe(0)
   })
 })

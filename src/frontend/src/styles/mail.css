@@ -50,6 +50,31 @@
   background: var(--surface);
 }
 
+.mail-list-count {
+  display: block;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mail-block-state {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mail-retry {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--action-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .mail-reader {
   flex: 1;
   min-width: 0;
