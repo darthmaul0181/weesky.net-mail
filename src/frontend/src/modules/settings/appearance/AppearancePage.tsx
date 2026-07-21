@@ -28,9 +28,20 @@ function PalettePreview({ value, dark }: { value: Palette; dark: boolean }) {
     >
       <span className="pp-bar" />
       <span className="pp-body">
-        <span className="pp-rail" />
+        <span className="pp-rail">
+          <span className="pp-rail-item is-on" />
+          <span className="pp-rail-item" />
+          <span className="pp-rail-item" />
+        </span>
+        <span className="pp-pane">
+          <span className="pp-folder is-on" />
+          <span className="pp-folder" />
+          <span className="pp-folder" />
+          <span className="pp-folder" />
+        </span>
         <span className="pp-rows">
           <span className="pp-row is-unread" />
+          <span className="pp-row" />
           <span className="pp-row" />
           <span className="pp-row" />
         </span>
@@ -65,15 +76,17 @@ export default function AppearancePage() {
         <div className="palette-grid">
           {PALETTES.map(({ value, label }) => (
             <label key={value} className="palette-card">
-              <input
-                type="radio"
-                name="palette"
-                value={value}
-                checked={palette === value}
-                onChange={() => setPalette(value)}
-              />
               <PalettePreview value={value} dark={isDark} />
-              {label}
+              <span className="palette-name">
+                <input
+                  type="radio"
+                  name="palette"
+                  value={value}
+                  checked={palette === value}
+                  onChange={() => setPalette(value)}
+                />
+                {label}
+              </span>
             </label>
           ))}
         </div>
