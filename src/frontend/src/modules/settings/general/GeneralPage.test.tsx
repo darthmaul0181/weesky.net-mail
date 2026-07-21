@@ -131,9 +131,14 @@ describe('GeneralPage', () => {
     expect(screen.queryByText(/tells the sender you opened the message/i)).not.toBeInTheDocument()
   })
 
-  it('shows the spam score toggle on by default and off when stored off', async () => {
+  it('shows the spam score toggle on by default', async () => {
     renderPage()
     expect(await screen.findByLabelText('Show the spam score in the message reader')).toBeChecked()
+  })
+
+  it('shows the spam score toggle off when stored off', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showSpamScore': 'false' })
+    expect(await screen.findByLabelText('Show the spam score in the message reader')).not.toBeChecked()
   })
 
   it('saves the spam score toggle', async () => {
