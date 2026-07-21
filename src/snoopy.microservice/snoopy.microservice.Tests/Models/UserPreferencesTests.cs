@@ -48,6 +48,26 @@ public sealed class UserPreferencesTests
         Assert.Equal(expected, UserPreferences.IsValid(key, value));
     }
 
+    public static TheoryData<string, string> Defaults()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var definition in UserPreferences.All)
+            data.Add(definition.Key, definition.Default);
+
+        return data;
+    }
+
+    // Asked of every entry, so a key added later is covered the day it is declared. An Allowed
+    // list that has drifted from its own default reads correctly — Effective answers the default
+    // whatever the list says — and refuses the write that would store it, so the client cannot
+    // set a preference back to the value it is already showing.
+    [Theory]
+    [MemberData(nameof(Defaults))]
+    public void Default_IsItselfAValueTheRegistryAccepts(string key, string @default)
+    {
+        Assert.True(UserPreferences.IsValid(key, @default));
+    }
+
     // A key the client invented must not reach the database: the table is a key/value store,
     // so nothing else would stop it accumulating rows nobody reads.
     [Fact]
