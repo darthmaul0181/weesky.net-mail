@@ -26,20 +26,27 @@ Find the vhosts:
 grep -rl account.frontend /etc/apache2/sites-available/
 ```
 
-In **each** of them (production and development), inside the `<VirtualHost>` block:
+Both are `*:443` blocks. Development serves
+`/var/www/admin/mail-dev/account.frontend`, production `/var/www/admin/mail/account.frontend`.
+Add **one line** to the existing `<Directory>`, and one nested block after it — the development
+vhost shown here, production identical with `mail` in place of `mail-dev`:
 
 ```apache
-<Directory /var/www/.../account.frontend>
-    FallbackResource /index.html
-</Directory>
+        <Directory /var/www/admin/mail-dev/account.frontend>
+                Options +FollowSymLinks
+                AllowOverride None
+                Require all granted
 
-# Hashed assets must keep 404ing. An index.html served in place of a missing
-# .js is worse than a 404: the browser reports a syntax error at "<!DOCTYPE",
-# which says nothing about the real cause — a stale index.html asking for a
-# bundle that the last deployment replaced.
-<Directory /var/www/.../account.frontend/assets>
-    FallbackResource disabled
-</Directory>
+                FallbackResource /index.html
+        </Directory>
+
+        # Hashed assets must keep 404ing. An index.html served in place of a
+        # missing .js is worse than a 404: the browser reports a syntax error
+        # at "<!DOCTYPE", which says nothing about the real cause — a stale
+        # index.html asking for a bundle the last deployment replaced.
+        <Directory /var/www/admin/mail-dev/account.frontend/assets>
+                FallbackResource disabled
+        </Directory>
 ```
 
 `FallbackResource` only fires when the requested path does not exist on disk, so real files —
@@ -51,10 +58,10 @@ apachectl configtest && systemctl reload apache2
 
 ## Why the vhost and not a `.htaccess` in the build
 
-A `.htaccess` shipped in `public/` would deploy itself, which is tempting. It costs a directory
-walk with a stat per request for every request, it only works if the vhost sets
-`AllowOverride FileInfo`, and it puts server routing in a file that the deployment wipes and
-rewrites. The vhost is read once at startup.
+A `.htaccess` shipped in `public/` would deploy itself, which is tempting. Both vhosts set
+`AllowOverride None`, so it would be **ignored without a word** — the worst kind of fix. Even
+enabled it would cost a directory walk with a stat per request, and would put server routing in
+a file the deployment wipes and rewrites. The vhost is read once at startup.
 
 ## Verify
 
