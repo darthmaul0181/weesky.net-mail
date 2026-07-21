@@ -131,12 +131,32 @@ In `list/messageStream.ts`, testable without React or network — the pattern al
 - **`nextBlockIndex(lastPage, loadedBlocks, requestSize)`** — the stop rule above, lifted out of
   the hook so its edges can be exercised.
 
-### The sentinel
+### The sentinel, and why it is not at the end
 
-`list/LoadMoreSentinel.tsx`: an empty `<div>` after the last row, watched by an
-`IntersectionObserver` whose root is the scrolling band, calling `loadMore` when it comes into
-view. It is its own file because `jsdom` does not implement `IntersectionObserver` — a stub is
-needed, and one file should depend on it rather than the whole list component.
+`list/LoadMoreSentinel.tsx`: an empty `<div>` watched by an `IntersectionObserver` whose root is
+the scrolling band, calling `loadMore` when it comes into view. It is its own file because `jsdom`
+does not implement `IntersectionObserver` — a stub is needed, and one file should depend on it
+rather than the whole list component.
+
+It sits **`PREFETCH_ROWS = 20` rows before the last one**, not after it. Waiting for the reader to
+reach the end guarantees they see the wait; starting a block early makes it invisible at reading
+speed.
+
+Twenty *rows*, not a pixel margin on the observer. A pixel threshold is not stable under the
+preview setting: a row is ~72px with the preview on and ~48px without, so the same margin would
+fire 20 messages from the end in one case and 30 in the other, for no reason anyone could name.
+
+**The margin must stay well under the block size.** Near 80 of 100, each arriving block would drop
+its new sentinel straight into view, triggering the next, and the whole folder would load itself
+with nobody asking — exactly what block loading exists to prevent. At 20 of 100 a block delivers
+100 rows and consumes 20 of them only after real scrolling.
+
+This does not abolish the wait: 20 rows is ~1,400px, a fraction of a second on a flicked wheel,
+while the request costs a connection, an authentication and a full folder sort. Loading is
+invisible at reading speed and still reachable by a violent scroll — which is why the "Loading
+more…" row stays. It becomes rare, not useless.
+
+`PREFETCH_ROWS` is internal, like `BLOCK_SIZE`: not stored, not shown, not configurable.
 
 ### Files
 
@@ -210,7 +230,8 @@ identified above would only report itself in production, as an empty list.
 inverse, the inactive query issues no request, and the deduplication is applied to what it exposes.
 
 **`MessageList`** — pager in one mode, counter in the other; the "Loading more…" row while a block
-is in flight; and the one that matters: **a failed block leaves the loaded rows on screen** and
+is in flight; **the sentinel sits 20 rows before the last**, since a value with no test drifts on
+the first refactor and nothing signals it; and the one that matters: **a failed block leaves the loaded rows on screen** and
 offers Retry. That requirement is easy to break later with a well-meant simplification that
 surfaces `isError`.
 
