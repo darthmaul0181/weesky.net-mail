@@ -16,8 +16,8 @@ interface Described {
   uid: number | null
 }
 
-/** What a baseline is worth only for the folder it was taken from, on the account it was taken
-    on: carried across either, its uidNext describes messages that do not exist here. */
+/** A baseline is comparable only against the same account and the same inbox folder: carried
+    across either, its uidNext describes messages that do not exist here. */
 interface Baseline {
   accountId: string
   path: string
@@ -55,8 +55,17 @@ export function useMailNotifications(): void {
   // query stays off until a setting turns on. /mail enables it separately.
   const { data: folders } = useFolders(sound || desktop)
   const baseline = useRef<Baseline | null>(null)
+  const mounted = useRef(true)
+
+  useEffect(() => () => { mounted.current = false }, [])
 
   useEffect(() => {
+    // Off, the query is disabled and the tree freezes: kept, the baseline would be hours stale
+    // by the time a setting comes back on, and the whole backlog would be announced at once.
+    if (!sound && !desktop) {
+      baseline.current = null
+      return
+    }
     if (!folders || !preferences) return
 
     const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')?.node
@@ -87,8 +96,9 @@ export function useMailNotifications(): void {
     void describeArrivals(
       inbox.path, requestSizeOf(preferences), decision.sinceUid, decision.count, controller.signal,
     ).then(({ body, uid }) => {
-      // Logged out, or the account changed, while the description was in flight.
-      if (controller.signal.aborted) return
+      // Unmount is the only reason to stay silent: the claim is already banked, so an aborted
+      // fetch still announces, with describeArrivals' count fallback rather than a name.
+      if (!mounted.current) return
 
       if (sound) playNewMailSound()
       if (!desktop) return

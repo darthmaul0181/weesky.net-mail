@@ -34,7 +34,7 @@ export function useAccountId(): string {
 export const POLL_INTERVAL = 60_000
 
 /** `enabled` is what keeps a user who asked for no notification off the poll: the shell passes
-    false, /mail passes nothing, and one enabled observer is enough to run the query. */
+    `sound || desktop`, /mail passes nothing, and one enabled observer runs the query. */
 export function useFolders(enabled = true) {
   const accountId = useAccountId()
   const { data: preferences } = usePreferences()

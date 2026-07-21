@@ -78,6 +78,26 @@ async function renderWithBaseline(
   }
 }
 
+/**
+ * Holds the description fetch open, so an unmount or a dependency change lands while it is in
+ * flight. Without `started()` the hook is torn down before it has even decided: the race the
+ * test means to stage never happens, and the silence it asserts proves nothing.
+ */
+function heldFetch() {
+  let release: (page: unknown) => void = () => {}
+  mocks.getMailMessages.mockImplementation((
+    _folder: string, _page: number, _size: number, { signal }: { signal: AbortSignal },
+  ) => new Promise((resolve, reject) => {
+    release = resolve
+    signal.addEventListener('abort', () => reject(new Error('aborted')))
+  }))
+
+  return {
+    started: () => waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalled()),
+    release: (page: unknown) => act(async () => { release(page) }),
+  }
+}
+
 const soundOn = { 'mail.notifySound': 'true', 'mail.notifyDesktop': 'false' }
 const desktopOn = { 'mail.notifySound': 'false', 'mail.notifyDesktop': 'true' }
 const bothOn = { 'mail.notifySound': 'true', 'mail.notifyDesktop': 'true' }
@@ -270,17 +290,60 @@ describe('useMailNotifications', () => {
   // Logout, or an account switch, mid-fetch: the bubble would arrive after the session it
   // belongs to.
   it('says nothing once the effect that started the fetch is gone', async () => {
-    let release: (page: unknown) => void = () => {}
-    mocks.getMailMessages.mockReturnValue(new Promise(resolve => { release = resolve }))
+    const fetch = heldFetch()
     const { tick, unmount } = await renderWithBaseline(bothOn)
 
     await tick(inbox({ uidNext: 11 }))
+    await fetch.started()
     unmount()
-    await act(async () => { release(pageOf([11, 9])) })
+    await fetch.release(pageOf([11, 9]))
     await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+  })
+
+  // The cleanup runs on any dependency change, not only unmount, and the claim is already
+  // banked: staying silent here would lose the arrival in every tab at once.
+  it('still notifies when a dependency change aborts the fetch, counting instead of naming',
+    async () => {
+      const fetch = heldFetch()
+      const { tick } = await renderWithBaseline(bothOn)
+
+      await tick(inbox({ uidNext: 11 }))
+      await fetch.started()
+      // Same uidNext, so no second decision — only the effect re-running and aborting.
+      await tick(inbox({ uidNext: 11, unread: 3 }))
+
+      await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
+        '1 new message', expect.any(String), expect.any(Function)))
+      expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1)
+    })
+
+  // Off, the poll stops and the unobserved tree is eventually collected; the uidNext that comes
+  // back hours later is a backlog, and announcing it would also claim it for every tab.
+  it('re-baselines in silence when notifications are turned back on', async () => {
+    const { tick } = await renderWithBaseline(bothOn)
+    const setPreferences = (preferences: Record<string, string>) => act(() => {
+      client.setQueryData(['preferences'], { 'mail.pageSize': '30', ...preferences })
+    })
+
+    await setPreferences(bothOff)
+    await act(() => { client.removeQueries({ queryKey: mailKeys.folders('primary') }) })
+    await settle()
+    await setPreferences(bothOn)
+    await tick(inbox({ uidNext: 500, total: 495 }))
+    await settle()
+
+    expect(mocks.claimNotification).not.toHaveBeenCalled()
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+
+    await tick(inbox({ uidNext: 501, total: 496 }))
+
+    await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
+      '1 new message', expect.any(String), expect.any(Function)))
+    expect(mocks.claimNotification).toHaveBeenCalledWith(501)
   })
 })
 
