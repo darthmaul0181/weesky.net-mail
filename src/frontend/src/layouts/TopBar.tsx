@@ -1,4 +1,4 @@
-import logoCircle from '../assets/logo_circle.jpg'
+import logoCircle from '../assets/logo-192.png'
 import wordmark from '../assets/weesky_net.png'
 import AvatarMenu from './AvatarMenu'
 
