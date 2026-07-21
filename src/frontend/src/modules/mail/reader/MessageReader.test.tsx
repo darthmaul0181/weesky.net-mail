@@ -6,13 +6,14 @@ import MessageReader from './MessageReader'
 
 const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
+  getPreferences: vi.fn(),
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn((folder: string, uid: number, part: string) =>
     `/api/Mail/Messages/Attachment?folder=${folder}&uid=${uid}&part=${part}`),
 }))
 
 vi.mock('../../../api.js', () => ({
-  api: { getMailMessage: mocks.getMailMessage },
+  api: { getMailMessage: mocks.getMailMessage, getPreferences: mocks.getPreferences },
   requestBlob: mocks.requestBlob,
   mailAttachmentUrl: mocks.mailAttachmentUrl,
 }))
@@ -40,7 +41,10 @@ const detail = {
 }
 
 describe('MessageReader', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.alwaysShowImages': 'false' })
+  })
 
   it('prompts when nothing is selected', () => {
     render(<MessageReader folderPath="INBOX" uid={null} />, { wrapper })
@@ -131,6 +135,40 @@ describe('MessageReader', () => {
 
     expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
       .toContain('src="https://t.example/p.gif"')
+  })
+
+  const blocked = {
+    ...detail,
+    blockedImageCount: 2,
+    htmlBody: '<img data-blocked-src="https://t.example/p.gif">',
+  }
+
+  // The whole point of the setting: no banner, no button, nothing to click per message.
+  it('shows the images and no banner when the account always shows them', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    mocks.getPreferences.mockResolvedValue({ 'mail.alwaysShowImages': 'true' })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    // Asserted on the absence of the attribute, not on `src="…"`: `data-blocked-src="…"`
+    // contains that substring verbatim, so a positive match alone proves nothing.
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .not.toContain('data-blocked-src'))
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('src="https://t.example/p.gif"')
+    expect(screen.queryByText(/remote images were blocked/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /show images/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps blocking when the account has not asked for it', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByText(/2 remote images were blocked/i)).toBeInTheDocument()
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('data-blocked-src')
   })
 
   it('does not offer the prompt when nothing was blocked', async () => {

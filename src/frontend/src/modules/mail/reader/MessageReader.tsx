@@ -3,6 +3,7 @@ import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
+import { alwaysShowImagesOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
@@ -16,6 +17,7 @@ interface Props {
 export default function MessageReader({ folderPath, uid }: Props) {
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
+  const { data: preferences } = usePreferences()
   const [imagesShown, setImagesShown] = useState(false)
   const [originalColours, setOriginalColours] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -34,9 +36,10 @@ export default function MessageReader({ folderPath, uid }: Props) {
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
   const inverted = isDark && !originalColours
+  const showImages = imagesShown || (!!preferences && alwaysShowImagesOf(preferences))
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
   // rest — the same reason revealBlockedImages runs on this side of it.
-  const revealed = imagesShown ? revealBlockedImages(data.htmlBody) : data.htmlBody
+  const revealed = showImages ? revealBlockedImages(data.htmlBody) : data.htmlBody
   const body = sanitizeBody(inverted ? darkenColours(revealed) : revealed)
 
   async function download(part: string, fileName: string) {
@@ -80,7 +83,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
         </div>
       )}
 
-      {data.blockedImageCount > 0 && !imagesShown && (
+      {data.blockedImageCount > 0 && !showImages && (
         <div className="reader-blocked-images">
           <span>
             {data.blockedImageCount} remote image{data.blockedImageCount > 1 ? 's were' : ' was'} blocked.
