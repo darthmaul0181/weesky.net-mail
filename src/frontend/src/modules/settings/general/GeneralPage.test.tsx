@@ -177,7 +177,7 @@ describe('GeneralPage notifications', () => {
   // Storing a true that produces nothing is the lying switch: on, and silent.
   it('leaves the setting off and explains when the browser refuses', async () => {
     mocks.requestDesktopPermission.mockResolvedValue('denied')
-    renderPage()
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifyDesktop': 'true' })
 
     fireEvent.click(await screen.findByLabelText('Desktop notification on new mail'))
 
@@ -192,6 +192,38 @@ describe('GeneralPage notifications', () => {
     renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifyDesktop': 'true' })
 
     expect(await screen.findByLabelText('Desktop notification on new mail')).not.toBeChecked()
+    expect(screen.getByText(/blocked/i)).toBeInTheDocument()
+  })
+
+  // Browsers reset notification permission for sites left unvisited, so a stored true can
+  // outlive its grant. Anything short of "granted" must read as off.
+  it('renders the desktop toggle off when the permission is merely default', async () => {
+    mocks.desktopPermission.mockReturnValue('default')
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifyDesktop': 'true' })
+
+    expect(await screen.findByLabelText('Desktop notification on new mail')).not.toBeChecked()
+  })
+
+  // Blocked is not a state a click can leave, so the control says so instead of doing nothing.
+  it('disables the desktop toggle while the browser blocks it', async () => {
+    mocks.desktopPermission.mockReturnValue('denied')
+    renderPage()
+
+    expect(await screen.findByLabelText('Desktop notification on new mail')).toBeDisabled()
+  })
+
+  // Revoking or granting happens in browser settings, one tab switch away from this page.
+  it('re-reads the permission when the tab comes back', async () => {
+    mocks.desktopPermission.mockReturnValue('granted')
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.notifyDesktop': 'true' })
+
+    expect(await screen.findByLabelText('Desktop notification on new mail')).toBeChecked()
+
+    mocks.desktopPermission.mockReturnValue('denied')
+    fireEvent(document, new Event('visibilitychange'))
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Desktop notification on new mail')).not.toBeChecked())
     expect(screen.getByText(/blocked/i)).toBeInTheDocument()
   })
 

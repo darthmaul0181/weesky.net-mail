@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
@@ -24,6 +24,34 @@ function pageSizeToast(value: string): string {
     : `The message list now shows ${value} per page`
 }
 
+type ToggleRowProps = {
+  id: string
+  label: string
+  checked: boolean
+  disabled: boolean
+  onChange: (on: boolean) => void
+}
+
+/** The label and the input are siblings under .field-h, so the htmlFor/id pair is the only
+    thing naming the control. */
+function ToggleRow({ id, label, checked, disabled, onChange }: ToggleRowProps) {
+  return (
+    <div className="field-h is-setting">
+      <label htmlFor={id}>{label}</label>
+      <label className="toggle-switch">
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={event => onChange(event.target.checked)}
+        />
+        <span className="toggle-track" />
+      </label>
+    </div>
+  )
+}
+
 /**
  * Settings that shape the app rather than the account. The values come from the backend with
  * its defaults already filled in, so this page never has to know what a default is.
@@ -37,12 +65,20 @@ export default function GeneralPage() {
   const blocked = permission === 'denied'
   const unsupported = permission === 'unsupported'
 
+  // The permission changes in browser settings while this page sits open — exactly the trip
+  // the blocked note sends the user on. Re-read it on the way back.
+  useEffect(() => {
+    const refresh = () => setPermission(desktopPermission())
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [])
+
   async function toggleSound(on: boolean) {
+    // Played inside the click, before any await: WebKit's transient activation is gone by the
+    // time the save resolves, and a failed save must not be confirmed by a sound.
+    if (on) playNewMailSound()
     await save(PREFERENCE_KEYS.notifySound, String(on),
       on ? 'New mail will play a sound' : 'New mail will be silent')
-    // Played inside the click: it proves the sound works and earns the browser engagement
-    // that lets a later, unattended notification play at all.
-    if (on) playNewMailSound()
   }
 
   async function toggleDesktop(on: boolean) {
@@ -92,49 +128,32 @@ export default function GeneralPage() {
             </select>
           </div>
 
-          <div className="field-h is-setting">
-            <label htmlFor="show-preview">Preview in the message list</label>
-            <label className="toggle-switch">
-              <input
-                id="show-preview"
-                type="checkbox"
-                checked={showPreviewOf(preferences)}
-                disabled={setPreference.isPending}
-                onChange={event =>
-                  save(PREFERENCE_KEYS.showPreview, String(event.target.checked),
-                    event.target.checked ? 'Previews are shown' : 'Previews are hidden')}
-              />
-              <span className="toggle-track" />
-            </label>
-          </div>
+          <ToggleRow
+            id="show-preview"
+            label="Preview in the message list"
+            checked={showPreviewOf(preferences)}
+            disabled={setPreference.isPending}
+            onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
+              on ? 'Previews are shown' : 'Previews are hidden')}
+          />
 
-          <div className="field-h is-setting">
-            <label htmlFor="notify-sound">Sound on new mail</label>
-            <label className="toggle-switch">
-              <input
-                id="notify-sound"
-                type="checkbox"
-                checked={notifySoundOf(preferences)}
-                disabled={setPreference.isPending}
-                onChange={event => toggleSound(event.target.checked)}
-              />
-              <span className="toggle-track" />
-            </label>
-          </div>
+          <ToggleRow
+            id="notify-sound"
+            label="Sound on new mail"
+            checked={notifySoundOf(preferences)}
+            disabled={setPreference.isPending}
+            onChange={toggleSound}
+          />
 
-          <div className="field-h is-setting">
-            <label htmlFor="notify-desktop">Desktop notification on new mail</label>
-            <label className="toggle-switch">
-              <input
-                id="notify-desktop"
-                type="checkbox"
-                checked={notifyDesktopOf(preferences) && permission === 'granted'}
-                disabled={setPreference.isPending || unsupported}
-                onChange={event => toggleDesktop(event.target.checked)}
-              />
-              <span className="toggle-track" />
-            </label>
-          </div>
+          {/* Blocked disables it: a denied origin is never re-prompted, so a click would be a
+              no-op. The visibility refresh above is what makes it reachable again. */}
+          <ToggleRow
+            id="notify-desktop"
+            label="Desktop notification on new mail"
+            checked={notifyDesktopOf(preferences) && permission === 'granted'}
+            disabled={setPreference.isPending || blocked || unsupported}
+            onChange={toggleDesktop}
+          />
 
           {blocked && (
             <p className="settings-note">
