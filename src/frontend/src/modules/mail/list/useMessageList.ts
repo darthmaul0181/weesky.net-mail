@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { isStreaming, requestSizeOf, usePreferences } from '../../../hooks/usePreferences'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { useMessageStream, useMessages } from '../queries'
@@ -32,7 +32,14 @@ const NO_BLOCKS: MailFolderPage[] = []
  */
 export function useMessageList(folderPath: string | null): MessageListState {
   const [page, setPage] = useState(0)
-  useEffect(() => { setPage(0) }, [folderPath])
+  const [shownFolder, setShownFolder] = useState(folderPath)
+
+  // Adjusted during render, not in an effect: an effect would let one query fire for the new
+  // folder at the old page index before it corrected it.
+  if (folderPath !== shownFolder) {
+    setShownFolder(folderPath)
+    setPage(0)
+  }
 
   const { data: preferences } = usePreferences()
   const streams = preferences ? isStreaming(preferences) : false

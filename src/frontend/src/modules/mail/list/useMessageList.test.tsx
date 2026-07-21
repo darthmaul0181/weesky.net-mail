@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useMessageList } from './useMessageList'
@@ -82,5 +82,52 @@ describe('useMessageList', () => {
     const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
 
     await waitFor(() => expect(result.current.total).toBe(3812))
+  })
+
+  it('reports isError only when the first block fails', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
+    mocks.getMailMessages.mockRejectedValue(new Error('boom'))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.messages).toEqual([])
+    expect(result.current.streaming?.loadMoreFailed).toBe(false)
+  })
+
+  it('keeps loaded rows and offers retry when a later block fails', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
+    const fullBlock = pageOf(Array.from({ length: 100 }, (_, i) => i + 1), 250)
+    mocks.getMailMessages.mockResolvedValueOnce(fullBlock).mockRejectedValueOnce(new Error('boom'))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(100))
+    expect(result.current.streaming?.hasMore).toBe(true)
+
+    act(() => { result.current.streaming?.loadMore() })
+
+    await waitFor(() => expect(result.current.streaming?.loadMoreFailed).toBe(true))
+    expect(result.current.messages).toHaveLength(100)
+    expect(result.current.isError).toBe(false)
+  })
+
+  it('does not query a new folder at the previous folder\'s page', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
+    mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 25))
+
+    const { result, rerender } = renderHook(
+      ({ folder }: { folder: string }) => useMessageList(folder),
+      { wrapper, initialProps: { folder: 'INBOX' } },
+    )
+
+    await waitFor(() => expect(result.current.paging).not.toBeNull())
+    act(() => { result.current.paging?.onSelect(1) })
+    await waitFor(() => expect(result.current.paging?.page).toBe(1))
+
+    rerender({ folder: 'Archive' })
+
+    await waitFor(() => expect(result.current.paging?.page).toBe(0))
+    expect(mocks.getMailMessages).not.toHaveBeenCalledWith('Archive', 1, 10, expect.anything())
   })
 })
