@@ -489,6 +489,36 @@
 .auth-badge.is-pass { background: var(--success); }
 .auth-badge.is-fail { background: var(--danger); }
 
+/* Block, not flex: a flex row makes "Spam score: " an anonymous item and strips its
+   trailing space — the same trap .reader-recipients fell into. */
+.reader-spam { display: block; }
+
+.spam-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.spam-gauge-track {
+  width: 90px;
+  height: 8px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+/* One custom property drives both the length and the green-to-red mix, so the two can
+   never disagree about how spammy a message looks. */
+.spam-gauge-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--gauge-ratio) * 100%);
+  background: color-mix(in oklab, var(--success), var(--danger) calc(var(--gauge-ratio) * 100%));
+}
+
 .reader-blocked-images {
   display: flex;
   align-items: center;
