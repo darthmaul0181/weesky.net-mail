@@ -15,7 +15,9 @@
   --rail-item-active: #e2674a;
   --rail-item-active-fg: #ffffff;
   --pane-item-hover: #f0ece8;
-  --pane-item-active-bg: #ffffff;
+  /* Same colour as --list-row-selected-bg: the active folder and the selected mail carry one
+     look, the rule classic already follows. White here vanished against the cream column. */
+  --pane-item-active-bg: #fdf3f0;
   --pane-item-active-fg: #182238;
   --accent-unread: #e2674a;
 
@@ -57,7 +59,9 @@
   --rail-item-active: #f0785c;
   --rail-item-active-fg: #1a0f0b;
   --pane-item-hover: #262a31;
-  --pane-item-active-bg: #262a31;
+  /* Same rule as light mode — and distinct from the hover, which this used to duplicate:
+     an active row that matches the hover reads as "the mouse is there", not "you are here". */
+  --pane-item-active-bg: #2a2420;
   --pane-item-active-fg: #f3efeb;
   --accent-unread: #f0785c;
 
