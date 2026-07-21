@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
   getMailMessages: vi.fn(),
   getMailMessage: vi.fn(),
+  useListRefresh: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -17,6 +18,7 @@ vi.mock('../../api.js', () => ({
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn(),
 }))
+vi.mock('./list/useListRefresh', () => ({ useListRefresh: mocks.useListRefresh }))
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
 }))
@@ -91,6 +93,12 @@ describe('MailLayout', () => {
     renderAt('/mail?folder=INBOX&uid=7')
 
     expect(await screen.findByText('kept')).toBeInTheDocument()
+  })
+
+  it('watches the displayed folder for remote changes', async () => {
+    renderAt('/mail')
+
+    await waitFor(() => expect(mocks.useListRefresh).toHaveBeenCalledWith('INBOX'))
   })
 
   // A mailbox whose inbox the chain did not resolve must not be redirected into nowhere.

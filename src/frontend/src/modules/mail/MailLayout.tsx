@@ -6,6 +6,7 @@ import FolderDialogs from './folders/FolderDialogs'
 import { flatten } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
 import MessageList from './list/MessageList'
+import { useListRefresh } from './list/useListRefresh'
 import MessageReader from './reader/MessageReader'
 import { useFolders } from './queries'
 import { roleLabel } from './roleLabel'
@@ -26,6 +27,8 @@ export default function MailLayout() {
   const folder = params.get('folder')
   const uidParam = params.get('uid')
   const uid = uidParam ? Number(uidParam) : null
+
+  useListRefresh(folder)
 
   // The list heading shows the same label as the tree: the role label when the folder has a
   // role, the leaf name otherwise — never the full path, which reads "INBOX.Linux server"
