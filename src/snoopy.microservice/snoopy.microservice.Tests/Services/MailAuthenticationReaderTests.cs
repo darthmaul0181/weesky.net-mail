@@ -96,10 +96,9 @@ public sealed class MailAuthenticationReaderTests
     }
 
     // "smtp.mailfrom=" without a preceding "spf=" is not valid RFC 7601 grammar (a ptype.pname
-    // needs a method before it), so the parse fails outright rather than misreading it as a
-    // verdict; the raw header is still carried since the server did write it.
+    // needs a method before it), so the parse fails outright. The fallback keeps the raw header.
     [Fact]
-    public void Parse_IgnoresPropertiesThatMerelyContainTheMethodName()
+    public void Parse_KeepsAnUnparsableHeaderAndReportsNoVerdicts()
     {
         const string header = "mx.weesky.net; none; smtp.mailfrom=spf@x.be";
 
@@ -111,16 +110,28 @@ public sealed class MailAuthenticationReaderTests
         Assert.Equal(header, result.Raw);
     }
 
-    // The hand-rolled tokenizer this reader replaced split on every ';', so a comment
-    // containing one would truncate the following method. MimeKit's CFWS-aware parser must not.
+    // A method's name appearing inside a property value must not be misread as a verdict.
     [Fact]
-    public void Parse_IgnoresASemicolonInsideAComment()
+    public void Parse_DoesNotMistakeAMethodNameInsideAPropertyForAVerdict()
     {
         var result = MailAuthenticationReader.Parse(
-            Headers("mx.weesky.net; dkim=fail (also; contains a note); spf=pass"));
+            Headers("mx.weesky.net; dkim=pass header.i=@spf.example.com"));
+
+        Assert.Equal("pass", result!.Dkim);
+        Assert.Null(result.Spf);
+    }
+
+    // A naive semicolon-split parser would extract `spf=pass` from the comment, misreading it
+    // as a verdict. MimeKit correctly treats the whole `(note; spf=pass)` as a comment, so the
+    // real `spf=softfail` that follows is the verdict.
+    [Fact]
+    public void Parse_DoesNotMistakeAVerdictLikeTextInsideACommentForAVerdict()
+    {
+        var result = MailAuthenticationReader.Parse(
+            Headers("mx.weesky.net; dkim=fail (note; spf=pass); spf=softfail"));
 
         Assert.Equal("fail", result!.Dkim);
-        Assert.Equal("pass", result.Spf);
+        Assert.Equal("softfail", result.Spf);
     }
 
     // Two DKIM signatures can legitimately disagree (e.g. a mailing list breaks the original
