@@ -13,7 +13,7 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": false,
-    "types": ["vite/client", "vitest/globals"]
+    "types": ["vite/client", "vitest/globals", "node"]
   },
   "include": ["src"]
 }
