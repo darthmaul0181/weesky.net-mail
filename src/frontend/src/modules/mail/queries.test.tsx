@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { mailKeys, useCreateFolder, useFolders, useMessage, useMessages } from './queries'
+import { mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream } from './queries'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -23,6 +23,16 @@ vi.mock('../../api.js', () => ({
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary', email: 'alice@weesky.be' } }),
 }))
+
+function pageOf(uids: number[], total: number) {
+  return {
+    folderPath: 'INBOX', uidValidity: 1, total, page: 0, pageSize: uids.length,
+    messages: uids.map(uid => ({
+      uid, subject: '', fromName: '', fromAddress: '', date: '2026-07-21T00:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
+    })),
+  }
+}
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -117,6 +127,50 @@ describe('useMessage', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.subject).toBe('Hello')
+  })
+})
+
+describe('useMessageStream', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('asks for block 0 first', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 2))
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessageStream('INBOX', 100, true), { wrapper })
+
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100, expect.anything())
+  })
+
+  it('issues no request when it is not the active mode', () => {
+    const { wrapper } = createWrapper()
+
+    renderHook(() => useMessageStream('INBOX', 100, false), { wrapper })
+
+    expect(mocks.getMailMessages).not.toHaveBeenCalled()
+  })
+
+  it('fetches the next block by index', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 500))
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessageStream('INBOX', 2, true), { wrapper })
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true))
+    result.current.fetchNextPage()
+
+    await waitFor(() =>
+      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 2, expect.anything()))
+  })
+
+  it('reports no next block after a short one', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessageStream('INBOX', 2, true), { wrapper })
+
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(result.current.hasNextPage).toBe(false)
   })
 })
 

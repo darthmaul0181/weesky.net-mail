@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import type { MailFolderNode, MailFolderPage, MailMessageDetail, FolderRoleEntry } from './api/mailTypes'
+import { nextBlockIndex } from './list/messageStream'
 
 
 /**
@@ -17,6 +18,10 @@ export const mailKeys = {
     ['mail', accountId, 'messages', folder, page, pageSize] as const,
   message: (accountId: string, folder: string, uid: number) =>
     ['mail', accountId, 'message', folder, uid] as const,
+  // Its own key: what it caches is not a page but a sequence of pages, and mixing the two
+  // shapes under one key is a type error that only shows at runtime.
+  messageStream: (accountId: string, folder: string, requestSize: number) =>
+    ['mail', accountId, 'messageStream', folder, requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
 }
 
@@ -33,15 +38,34 @@ export function useFolders() {
   })
 }
 
-export function useMessages(folderPath: string | null, page: number, pageSize: number) {
+export function useMessages(
+  folderPath: string | null, page: number, pageSize: number, enabled = true,
+) {
   const accountId = useAccountId()
 
   return useQuery<MailFolderPage>({
     queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize),
     queryFn: ({ signal }) => api.getMailMessages(folderPath, page, pageSize, { signal }),
-    enabled: folderPath !== null,
+    enabled: enabled && folderPath !== null,
     // Keeps the current page on screen while the next one loads, instead of flashing empty.
     placeholderData: (previous) => previous,
+  })
+}
+
+export function useMessageStream(folderPath: string | null, requestSize: number, enabled: boolean) {
+  const accountId = useAccountId()
+
+  return useInfiniteQuery({
+    queryKey: mailKeys.messageStream(accountId, folderPath ?? '', requestSize),
+    queryFn: ({ pageParam, signal }) =>
+      api.getMailMessages(folderPath, pageParam, requestSize, { signal }) as Promise<MailFolderPage>,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      nextBlockIndex(lastPage, allPages.length, requestSize),
+    enabled: enabled && folderPath !== null && requestSize > 0,
+    // TanStack refetches *every* loaded block on focus. Forty blocks is forty IMAP
+    // connections and forty full folder sorts, so this stays off.
+    refetchOnWindowFocus: false,
   })
 }
 
