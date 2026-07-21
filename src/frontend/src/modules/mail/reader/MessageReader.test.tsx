@@ -138,22 +138,37 @@ describe('MessageReader', () => {
     })
 
     // Nothing at all rather than a reassuring or an alarming badge: the checks did not run.
+    // Asserted on the badge element itself, not its accessible name: a relabel in AuthBadge
+    // must not silently make this stop testing anything.
     it('says nothing when the message carries no authentication headers', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
 
-      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
       await screen.findByText('Re: facture')
 
-      expect(screen.queryByRole('img', { name: /spf/i })).not.toBeInTheDocument()
+      expect(container.querySelector('.auth-badge')).toBeNull()
     })
 
     it('says nothing about a softfail', async () => {
       mocks.getMailMessage.mockResolvedValue(authenticated('softfail', 'pass'))
 
-      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
       await screen.findByText('Re: facture')
 
-      expect(screen.queryByRole('img', { name: /spf/i })).not.toBeInTheDocument()
+      expect(container.querySelector('.auth-badge')).toBeNull()
+    })
+
+    // The backend's shape for a message whose receiving server ran checks it never reported.
+    it('says nothing when the header parsed but named neither method', async () => {
+      mocks.getMailMessage.mockResolvedValue({
+        ...detail,
+        authentication: { spf: null, dkim: null, raw: 'mx.weesky.net; dmarc=pass' },
+      })
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.auth-badge')).toBeNull()
     })
   })
 

@@ -450,8 +450,10 @@
   gap: 4px;
 }
 
-.reader-from { display: flex; align-items: center; gap: 8px; }
-.reader-recipients { display: flex; align-items: center; flex-wrap: wrap; }
+.reader-from { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+/* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
+   gap would land between the comma and the name it precedes instead of after it. */
+.reader-recipients { display: block; }
 
 .address-label { color: inherit; font: inherit; }
 
@@ -474,6 +476,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
   width: 15px;
   height: 15px;
   border-radius: 50%;
