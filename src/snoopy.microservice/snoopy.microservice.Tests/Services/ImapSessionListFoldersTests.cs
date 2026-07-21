@@ -79,6 +79,9 @@ public sealed class ImapSessionListFoldersTests
         var inbox = Assert.Single(result.Value, n => n.Path == "INBOX");
         Assert.Equal(4u, inbox.UidNext);
         Assert.Equal(42ul, inbox.HighestModSeq);
+
+        Assert.Contains(server.StatusRequests, request =>
+            request.Contains("HIGHESTMODSEQ", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -99,6 +102,12 @@ public sealed class ImapSessionListFoldersTests
         var inbox = Assert.Single(result.Value, n => n.Path == "INBOX");
         Assert.Equal(4u, inbox.UidNext);
         Assert.Null(inbox.HighestModSeq);
+
+        // The null alone proves nothing — the mapping also nulls it. The wire must show the
+        // item was never REQUESTED: that is the protocol rule the capability gate exists for.
+        Assert.NotEmpty(server.StatusRequests);
+        Assert.All(server.StatusRequests, request =>
+            Assert.DoesNotContain("HIGHESTMODSEQ", request, StringComparison.OrdinalIgnoreCase));
     }
 }
 
@@ -117,6 +126,9 @@ internal sealed class FakeImapServer : IDisposable
     public FakeImapServer(bool condStore = false) => _condStore = condStore;
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+    /// <summary>Raw STATUS command lines, so tests can assert what was actually requested.</summary>
+    public List<string> StatusRequests { get; } = new();
 
     private string Caps => _condStore
         ? "IMAP4rev1 NAMESPACE SPECIAL-USE CONDSTORE"
@@ -175,6 +187,7 @@ internal sealed class FakeImapServer : IDisposable
                         break;
 
                     case "STATUS":
+                        StatusRequests.Add(line);
                         var mailbox = ExtractMailboxName(parts.Length > 2 ? parts[2] : string.Empty);
                         var items = _condStore
                             ? "MESSAGES 3 UNSEEN 1 UIDVALIDITY 100 UIDNEXT 4 HIGHESTMODSEQ 42"
