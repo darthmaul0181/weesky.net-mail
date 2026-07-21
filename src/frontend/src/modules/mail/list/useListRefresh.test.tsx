@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/r
 import type { ReactNode } from 'react'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
 import { mailKeys } from '../queries'
+import { dedupeByUid } from './messageStream'
 import { useListRefresh } from './useListRefresh'
 
 const mocks = vi.hoisted(() => ({
@@ -108,8 +109,11 @@ describe('useListRefresh', () => {
 
     const data = client.getQueryData<InfiniteData<MailFolderPage>>(key)!
     expect(data.pages).toHaveLength(3)
-    expect(data.pages[0].messages.map(m => m.uid)).toEqual([31, 30])
+    // Block 0 is merged, not replaced: fresh [31, 30] then the pushed-out survivor 29.
+    expect(data.pages[0].messages.map(m => m.uid)).toEqual([31, 30, 29])
     expect(data.pages[1].messages.map(m => m.uid)).toEqual([28, 27])
+    // The decisive one: nothing lost, nothing duplicated across the whole visible stream.
+    expect(dedupeByUid(data.pages).map(m => m.uid)).toEqual([31, 30, 29, 28, 27, 26, 25])
   })
 
   it('resets the folder outright when uidValidity broke', async () => {
@@ -126,11 +130,18 @@ describe('useListRefresh', () => {
 
   it('swallows a failed block-0 refresh in silence', async () => {
     const { tick } = await renderWithBaseline('all', inbox())
+
+    const key = mailKeys.messageStream('primary', 'INBOX', 100)
+    const seeded: InfiniteData<MailFolderPage> = {
+      pages: [pageOf([30, 29]), pageOf([28, 27])], pageParams: [0, 1],
+    }
+    client.setQueryData<InfiniteData<MailFolderPage>>(key, seeded)
     mocks.getMailMessages.mockRejectedValue(new Error('refused'))
 
     await tick(inbox({ uidNext: 12 }))
     await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalled())
-    // Nothing to assert beyond "no crash": the list keeps whatever it had.
+    // The catch must not corrupt the cache: the list keeps exactly what it had.
+    expect(client.getQueryData<InfiniteData<MailFolderPage>>(key)).toEqual(seeded)
   })
 
   it('re-baselines when the displayed folder changes', async () => {

@@ -91,10 +91,18 @@ query, snapshots the displayed folder, and on change refreshes the list:
 - **Streaming mode: never `invalidateQueries`.** TanStack v5 refetches *every* page of an
   infinite query on invalidation — forty loaded blocks would be forty IMAP connections and forty
   full folder sorts, the exact catastrophe `refetchOnWindowFocus: false` exists to prevent.
-  Instead: fetch block 0 alone via `api.getMailMessages(folder, 0, BLOCK_SIZE)` and replace
-  `pages[0]` in the cache with `setQueryData`. The later blocks stay, now offset by the number
-  of arrivals; `dedupeByUid` swallows the boundary duplicates — the exact case it exists for,
-  and the one the final review made it prove on non-adjacent blocks.
+  Instead: fetch block 0 alone via `api.getMailMessages(folder, 0, BLOCK_SIZE)` and **merge** it
+  with the old block 0 (`dedupeByUid([fresh, old.pages[0]])`, fresh first so arrivals lead and
+  the freshest copy of each uid wins), leaving the later blocks untouched. **Replace was wrong:**
+  arrivals shift older rows *out* of block 0's window, and the frozen later blocks do not hold
+  them — that is a gap, not a duplicate, and `dedupeByUid` cannot restore an absence. (The
+  shipped fixture proved it: pages `[30,29] [28,27] [26,25]`, fresh block 0 `[31,30]` → a replace
+  drops uid 29 entirely.) `dedupeByUid` still swallows the boundary duplicates that *loading* the
+  next block produces — the case it exists for. Accepted costs of the merge: block 0 grows with
+  arrivals across a session (bounded by the session, and `nextBlockIndex` reads only the last
+  page so pagination is untouched); a message deleted elsewhere that sat in old block 0 lingers
+  in the merged tail, exactly as it lingers in every frozen later block until a full reload —
+  snapshot semantics, not a new defect.
 - **`uidValidityBroke`:** the folder was rebuilt server-side; every cached UID is a lie. Drop
   everything for the folder — full invalidation of its messages, stream and open message. This
   is already the documented doctrine on `MailFolderPage.uidValidity` in `mailTypes.ts`.

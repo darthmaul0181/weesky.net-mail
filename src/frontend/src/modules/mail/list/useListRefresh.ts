@@ -6,15 +6,26 @@ import type { MailFolderPage } from '../api/mailTypes'
 import { flatten } from '../folders/folderNodes'
 import { mailKeys, useAccountId, useFolders } from '../queries'
 import { folderChanged, snapshotOf, uidValidityBroke, type FolderSnapshot } from './folderDelta'
+import { dedupeByUid } from './messageStream'
 
-/** Fetches block 0 alone and swaps it in. Never invalidates: that would refetch EVERY loaded
+/** Fetches block 0 alone and merges it in. Never invalidates: that would refetch EVERY loaded
     block — forty blocks would be forty IMAP connections and forty full folder sorts. */
 async function refreshFirstBlock(client: QueryClient, accountId: string, folder: string) {
   const key = mailKeys.messageStream(accountId, folder, BLOCK_SIZE)
   try {
     const fresh: MailFolderPage = await api.getMailMessages(folder, 0, BLOCK_SIZE)
     client.setQueryData<InfiniteData<MailFolderPage>>(key, old =>
-      old ? { ...old, pages: [fresh, ...old.pages.slice(1)] } : old)
+      old
+        ? {
+            ...old,
+            // Merged, not replaced: arrivals push old block-0 rows out of the fresh window,
+            // and the frozen later blocks do not hold them — a replace would drop them.
+            pages: [
+              { ...fresh, messages: dedupeByUid([fresh, old.pages[0]]) },
+              ...old.pages.slice(1),
+            ],
+          }
+        : old)
   } catch {
     // A poll-driven refresh fails in silence; the next tick tries again.
   }
