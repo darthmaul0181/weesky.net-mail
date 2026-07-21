@@ -29,7 +29,7 @@ function wrapper({ children }: { children: ReactNode }) {
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
     path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
+    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
   }
 }
 

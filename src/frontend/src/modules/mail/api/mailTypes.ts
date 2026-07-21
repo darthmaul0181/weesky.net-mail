@@ -12,6 +12,10 @@ export interface MailFolderNode {
   total: number | null
   unread: number | null
   uidValidity: number
+  /** Rises on every arrival — the poll's signal for new mail. Null when not selectable. */
+  uidNext: number | null
+  /** Rises on every flag change (RFC 7162). Null without CONDSTORE or when not selectable. */
+  highestModSeq: number | null
   children: MailFolderNode[]
 }
 
