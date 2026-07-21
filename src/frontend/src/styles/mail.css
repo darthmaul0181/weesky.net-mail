@@ -441,7 +441,50 @@
 }
 
 .reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
-.reader-meta { color: var(--text-muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+.reader-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.reader-from { display: flex; align-items: center; gap: 8px; }
+.reader-recipients { display: flex; align-items: center; flex-wrap: wrap; }
+
+.address-label { color: inherit; font: inherit; }
+
+.address-label.is-sender {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.address-label.is-sender:hover { color: var(--action-primary); }
+
+/* --badge-count-fg is the readable foreground over a saturated badge fill in both modes —
+   white on light, near-black on dark, which is exactly what --success and --danger need. */
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--badge-count-fg);
+}
+
+.auth-badge.is-pass { background: var(--success); }
+.auth-badge.is-fail { background: var(--danger); }
 
 .reader-blocked-images {
   display: flex;

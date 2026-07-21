@@ -33,7 +33,8 @@ function wrapper({ children }: { children: ReactNode }) {
 const detail = {
   uid: 2, folderPath: 'INBOX', uidValidity: 1,
   subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
-  to: ['mick@weesky.be'], cc: [], date: '2026-07-18T09:00:00Z',
+  to: [{ name: 'Mick', address: 'mick@weesky.be' }], cc: [],
+  date: '2026-07-18T09:00:00Z', authentication: null,
   htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0,
   attachments: [
     { part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048, isInline: false },
@@ -65,8 +66,95 @@ describe('MessageReader', () => {
     render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
 
     expect(await screen.findByText('Re: facture')).toBeInTheDocument()
-    expect(screen.getByText(/Alice Martin/)).toBeInTheDocument()
-    expect(screen.getByText(/mick@weesky.be/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alice Martin' })).toBeInTheDocument()
+    expect(screen.getByText('Mick')).toBeInTheDocument()
+  })
+
+  it('keeps the sender address one hover away', async () => {
+    mocks.getMailMessage.mockResolvedValue(detail)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    // getAllByRole, not getByRole: the named recipient carries a bubble of its own.
+    const bubbles = screen.getAllByRole('tooltip').map(bubble => bubble.textContent)
+    expect(bubbles).toContain('"Alice Martin" <alice@x.be>')
+  })
+
+  it('hides To and Cc when the message carries neither', async () => {
+    mocks.getMailMessage.mockResolvedValue({ ...detail, to: [], cc: [] })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    expect(screen.queryByText(/^To:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Cc:/)).not.toBeInTheDocument()
+  })
+
+  it('lists the Cc recipients when there are any', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      cc: [{ name: 'Bob', address: 'bob@x.be' }, { name: '', address: 'eve@x.be' }],
+    })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    expect(screen.getByText('Bob')).toBeInTheDocument()
+    expect(screen.getByText('eve@x.be')).toBeInTheDocument()
+  })
+
+  describe('the authentication badge', () => {
+    const authenticated = (spf: string | null, dkim: string | null) => ({
+      ...detail,
+      authentication: { spf, dkim, raw: 'mx.weesky.net; spf=x; dkim=y' },
+    })
+
+    it('vouches for a message that passed both checks', async () => {
+      mocks.getMailMessage.mockResolvedValue(authenticated('pass', 'pass'))
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      expect(await screen.findByRole('img', { name: /passed spf and dkim/i })).toBeInTheDocument()
+    })
+
+    it('shows the headers behind its claim', async () => {
+      mocks.getMailMessage.mockResolvedValue(authenticated('pass', 'pass'))
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      const bubbles = screen.getAllByRole('tooltip').map(bubble => bubble.textContent)
+      expect(bubbles.some(text => text?.includes('SPF: pass · DKIM: pass'))).toBe(true)
+      expect(bubbles.some(text => text?.includes('mx.weesky.net; spf=x; dkim=y'))).toBe(true)
+    })
+
+    it('warns about a message that failed one', async () => {
+      mocks.getMailMessage.mockResolvedValue(authenticated('fail', 'pass'))
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      expect(await screen.findByRole('img', { name: /failed spf or dkim/i })).toBeInTheDocument()
+    })
+
+    // Nothing at all rather than a reassuring or an alarming badge: the checks did not run.
+    it('says nothing when the message carries no authentication headers', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByRole('img', { name: /spf/i })).not.toBeInTheDocument()
+    })
+
+    it('says nothing about a softfail', async () => {
+      mocks.getMailMessage.mockResolvedValue(authenticated('softfail', 'pass'))
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByRole('img', { name: /spf/i })).not.toBeInTheDocument()
+    })
   })
 
   it('renders the body in a sandboxed iframe with no scripts and no same-origin', async () => {

@@ -5,6 +5,8 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { useMessage } from '../queries'
 import { alwaysShowImagesOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
+import AddressLabel, { AddressList } from './AddressLabel'
+import AuthBadge from './AuthBadge'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
@@ -63,10 +65,17 @@ export default function MessageReader({ folderPath, uid }: Props) {
       <header className="reader-header">
         <h1 className="reader-subject">{data.subject || '(no subject)'}</h1>
         <div className="reader-meta">
-          <span>{data.fromName ? `${data.fromName} <${data.fromAddress}>` : data.fromAddress}</span>
-          <span>{formatReaderDate(data.date)}</span>
-          {data.to.length > 0 && <span>To: {data.to.join(', ')}</span>}
-          {data.cc.length > 0 && <span>Cc: {data.cc.join(', ')}</span>}
+          <div className="reader-from">
+            <AddressLabel sender name={data.fromName} address={data.fromAddress} />
+            <AuthBadge authentication={data.authentication} />
+            <span className="reader-date">({formatReaderDate(data.date)})</span>
+          </div>
+          {data.to.length > 0 && (
+            <div className="reader-recipients">To: <AddressList addresses={data.to} /></div>
+          )}
+          {data.cc.length > 0 && (
+            <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
+          )}
         </div>
       </header>
 
