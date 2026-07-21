@@ -3,7 +3,7 @@ import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
   ALL, PREFERENCE_KEYS, alwaysShowImagesOf, notifyDesktopOf, notifySoundOf, showPreviewOf,
-  usePreferences, useSetPreference,
+  showSpamScoreOf, usePreferences, useSetPreference,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -155,6 +155,15 @@ export default function GeneralPage() {
               Loading them tells the sender you opened the message.
             </p>
           )}
+
+          <ToggleRow
+            id="show-spam-score"
+            label="Show the spam score in the message reader"
+            checked={showSpamScoreOf(preferences)}
+            disabled={setPreference.isPending}
+            onChange={on => save(PREFERENCE_KEYS.showSpamScore, String(on),
+              on ? 'The spam score is shown' : 'The spam score is hidden')}
+          />
 
           <ToggleRow
             id="notify-sound"

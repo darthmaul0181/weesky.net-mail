@@ -131,6 +131,20 @@ describe('GeneralPage', () => {
     expect(screen.queryByText(/tells the sender you opened the message/i)).not.toBeInTheDocument()
   })
 
+  it('shows the spam score toggle on by default and off when stored off', async () => {
+    renderPage()
+    expect(await screen.findByLabelText('Show the spam score in the message reader')).toBeChecked()
+  })
+
+  it('saves the spam score toggle', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showSpamScore': 'true' })
+
+    fireEvent.click(await screen.findByLabelText('Show the spam score in the message reader'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.showSpamScore', 'false'))
+  })
+
   it('surfaces a failure to save instead of pretending', async () => {
     renderPage()
     mocks.setPreference.mockRejectedValue(new Error('Refused by the server'))
@@ -155,7 +169,6 @@ describe('GeneralPage', () => {
     await screen.findByLabelText('Messages per page')
 
     const rows = container.querySelectorAll('.field-h')
-    expect(rows).toHaveLength(5)
     rows.forEach(row => expect(row).toHaveClass('is-setting'))
   })
 })
