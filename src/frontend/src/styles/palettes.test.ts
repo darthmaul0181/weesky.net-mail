@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { PALETTE_IDS } from '../contexts/ThemeContext'
+import html from '../../index.html?raw'
 
 const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 const files = Object.keys(modules).map(path => path.replace('./', ''))
@@ -52,5 +54,15 @@ describe('the palette stylesheets', () => {
       : reference.dark
 
     expect(blocks(file).dark).toEqual(expected)
+  })
+})
+
+describe('the pre-paint script in index.html', () => {
+  it('accepts exactly the palettes the module knows', () => {
+    const list = html.match(/\[([^\]]*)\]\.indexOf\(p\)/)
+
+    expect(list, 'no palette list found in the pre-paint script').not.toBeNull()
+    const names = [...list![1].matchAll(/'([^']+)'/g)].map(m => m[1])
+    expect(names.sort()).toEqual([...PALETTE_IDS].sort())
   })
 })
