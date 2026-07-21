@@ -38,6 +38,14 @@ public sealed class MailFolderNode
     /// </summary>
     public uint UidValidity { get; set; }
 
+    /// <summary>Next UID the folder will assign. Rises on every arrival — the poll's signal
+    /// for new mail. Null when not selectable.</summary>
+    public uint? UidNext { get; set; }
+
+    /// <summary>RFC 7162 modification counter; rises on every flag change, which no message
+    /// count sees. Null when the server lacks CONDSTORE or the folder is not selectable.</summary>
+    public ulong? HighestModSeq { get; set; }
+
     /// <summary>
     /// Role derived from the folder's SPECIAL-USE flags alone, before uniqueness. Internal
     /// plumbing for the resolution chain — never serialised to the client, which only sees

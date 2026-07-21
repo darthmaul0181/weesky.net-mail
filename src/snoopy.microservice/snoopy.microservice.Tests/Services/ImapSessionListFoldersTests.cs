@@ -58,6 +58,48 @@ public sealed class ImapSessionListFoldersTests
         Assert.Equal("inbox", inbox.AttributeRole);
         Assert.Null(inbox.SpecialUse);
     }
+
+    // The poll's change signal. UIDNEXT rises on every arrival; HIGHESTMODSEQ on every flag
+    // change, which no counter sees — but only a CONDSTORE server may be asked for it.
+    [Fact]
+    public async Task ListFoldersAsync_CarriesTheChangeCountersWhenCondStoreIsAdvertised()
+    {
+        using var server = new FakeImapServer(condStore: true);
+        server.Start();
+
+        using var client = new ImapClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await client.ConnectAsync("127.0.0.1", server.Port, SecureSocketOptions.None, cts.Token);
+        await client.AuthenticateAsync("alice", "hunter2", cts.Token);
+        await using var session = new ImapSession(client, Mock.Of<IMailHtmlSanitizer>(), Mock.Of<ILogger>());
+
+        var result = await session.ListFoldersAsync(cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : null);
+        var inbox = Assert.Single(result.Value, n => n.Path == "INBOX");
+        Assert.Equal(4u, inbox.UidNext);
+        Assert.Equal(42ul, inbox.HighestModSeq);
+    }
+
+    [Fact]
+    public async Task ListFoldersAsync_LeavesHighestModSeqNullWithoutCondStore()
+    {
+        using var server = new FakeImapServer();
+        server.Start();
+
+        using var client = new ImapClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await client.ConnectAsync("127.0.0.1", server.Port, SecureSocketOptions.None, cts.Token);
+        await client.AuthenticateAsync("alice", "hunter2", cts.Token);
+        await using var session = new ImapSession(client, Mock.Of<IMailHtmlSanitizer>(), Mock.Of<ILogger>());
+
+        var result = await session.ListFoldersAsync(cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : null);
+        var inbox = Assert.Single(result.Value, n => n.Path == "INBOX");
+        Assert.Equal(4u, inbox.UidNext);
+        Assert.Null(inbox.HighestModSeq);
+    }
 }
 
 /// <summary>
@@ -68,10 +110,17 @@ public sealed class ImapSessionListFoldersTests
 /// </summary>
 internal sealed class FakeImapServer : IDisposable
 {
+    private readonly bool _condStore;
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
 
+    public FakeImapServer(bool condStore = false) => _condStore = condStore;
+
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+    private string Caps => _condStore
+        ? "IMAP4rev1 NAMESPACE SPECIAL-USE CONDSTORE"
+        : "IMAP4rev1 NAMESPACE SPECIAL-USE";
 
     public void Start()
     {
@@ -88,7 +137,7 @@ internal sealed class FakeImapServer : IDisposable
             using var reader = new StreamReader(stream, Encoding.ASCII);
             await using var writer = new StreamWriter(stream, Encoding.ASCII) { NewLine = "\r\n", AutoFlush = true };
 
-            await writer.WriteLineAsync("* OK [CAPABILITY IMAP4rev1 NAMESPACE SPECIAL-USE] Fake IMAP ready");
+            await writer.WriteLineAsync($"* OK [CAPABILITY {Caps}] Fake IMAP ready");
 
             while (true)
             {
@@ -104,11 +153,11 @@ internal sealed class FakeImapServer : IDisposable
                 switch (command)
                 {
                     case "LOGIN":
-                        await writer.WriteLineAsync($"{tag} OK [CAPABILITY IMAP4rev1 NAMESPACE SPECIAL-USE] LOGIN completed");
+                        await writer.WriteLineAsync($"{tag} OK [CAPABILITY {Caps}] LOGIN completed");
                         break;
 
                     case "CAPABILITY":
-                        await writer.WriteLineAsync("* CAPABILITY IMAP4rev1 NAMESPACE SPECIAL-USE");
+                        await writer.WriteLineAsync($"* CAPABILITY {Caps}");
                         await writer.WriteLineAsync($"{tag} OK CAPABILITY completed");
                         break;
 
@@ -127,7 +176,10 @@ internal sealed class FakeImapServer : IDisposable
 
                     case "STATUS":
                         var mailbox = ExtractMailboxName(parts.Length > 2 ? parts[2] : string.Empty);
-                        await writer.WriteLineAsync($"* STATUS {mailbox} (MESSAGES 3 UNSEEN 1 UIDVALIDITY 100)");
+                        var items = _condStore
+                            ? "MESSAGES 3 UNSEEN 1 UIDVALIDITY 100 UIDNEXT 4 HIGHESTMODSEQ 42"
+                            : "MESSAGES 3 UNSEEN 1 UIDVALIDITY 100 UIDNEXT 4";
+                        await writer.WriteLineAsync($"* STATUS {mailbox} ({items})");
                         await writer.WriteLineAsync($"{tag} OK STATUS completed");
                         break;
 

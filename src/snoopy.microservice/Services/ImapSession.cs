@@ -37,9 +37,13 @@ internal sealed class ImapSession : IImapSession
 
             // Asking for a STATUS item the server never advertised is a protocol error, so
             // the capability gates the request itself, not just the reading of the result.
-            var statusItems = StatusItems.Count | StatusItems.Unread | StatusItems.UidValidity;
+            var statusItems = StatusItems.Count | StatusItems.Unread | StatusItems.UidValidity
+                              | StatusItems.UidNext;
             if (_client.Capabilities.HasFlag(ImapCapabilities.ObjectID))
                 statusItems |= StatusItems.MailboxId;
+            var condStore = _client.Capabilities.HasFlag(ImapCapabilities.CondStore);
+            if (condStore)
+                statusItems |= StatusItems.HighestModSeq;
 
             var folders = await _client.GetFoldersAsync(personal, statusItems, subscribedOnly: false, cancellationToken);
 
@@ -72,7 +76,9 @@ internal sealed class ImapSession : IImapSession
                     Subscribed = folder.IsSubscribed,
                     Total = selectable ? folder.Count : null,
                     Unread = selectable ? folder.Unread : null,
-                    UidValidity = folder.UidValidity
+                    UidValidity = folder.UidValidity,
+                    UidNext = selectable ? folder.UidNext?.Id : null,
+                    HighestModSeq = selectable && condStore ? folder.HighestModSeq : null
                 };
 
                 nodes[folder.FullName] = node;
