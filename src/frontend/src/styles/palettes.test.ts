@@ -1,11 +1,7 @@
-/// <reference types="node" />
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 
-const STYLES = join(process.cwd(), 'src/styles')
-
-const files = readdirSync(STYLES).filter(f => /^theme-.+\.css$/.test(f))
+const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+const files = Object.keys(modules).map(path => path.replace('./', ''))
 const idOf = (file: string) => file.slice('theme-'.length, -'.css'.length)
 
 /** The ` {` is what keeps the light selector from also matching the dark one, which starts with it. */
@@ -18,7 +14,7 @@ function tokensIn(css: string, selector: string): string[] {
 }
 
 function blocks(file: string) {
-  const css = readFileSync(join(STYLES, file), 'utf8')
+  const css = modules[`./${file}`]
   const id = idOf(file)
 
   return {
