@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream } from './queries'
+import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream } from './queries'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -92,6 +92,25 @@ describe('useFolders', () => {
     const { result } = renderHook(() => useFolders(), { wrapper })
 
     await waitFor(() => expect(result.current.isError).toBe(true))
+  })
+
+  // The poll: one LIST+STATUS a minute. TanStack pauses it while the tab is unfocused and
+  // the app-wide refetchOnWindowFocus fires the catch-up tick on return.
+  it('polls the folders every minute', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.getMailFolders.mockResolvedValue([])
+      const { wrapper } = createWrapper()
+      renderHook(() => useFolders(), { wrapper })
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(mocks.getMailFolders).toHaveBeenCalledTimes(1)
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(POLL_INTERVAL) })
+      expect(mocks.getMailFolders).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

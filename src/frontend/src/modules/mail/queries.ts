@@ -25,9 +25,12 @@ export const mailKeys = {
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
 }
 
-function useAccountId(): string {
+export function useAccountId(): string {
   return useAuth().activeAccount?.id ?? 'primary'
 }
+
+/** One cheap LIST+STATUS across all folders. Internal, like BLOCK_SIZE: not a setting. */
+export const POLL_INTERVAL = 60_000
 
 export function useFolders() {
   const accountId = useAccountId()
@@ -35,6 +38,7 @@ export function useFolders() {
   return useQuery<MailFolderNode[]>({
     queryKey: mailKeys.folders(accountId),
     queryFn: ({ signal }) => api.getMailFolders({ signal }),
+    refetchInterval: POLL_INTERVAL,
   })
 }
 
