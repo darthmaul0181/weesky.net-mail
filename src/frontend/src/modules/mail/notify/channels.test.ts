@@ -18,14 +18,23 @@ describe('playNewMailSound', () => {
     expect(play).toHaveBeenCalled()
   })
 
-  // Browsers refuse audio from a page nobody has interacted with, which is exactly when a
-  // notification plays. A refusal must not surface: a failed notification must not produce a
-  // second interruption announcing the failure.
-  it('swallows a blocked play', async () => {
-    play.mockRejectedValue(new Error('NotAllowedError'))
+  // play() rejects asynchronously, so a not.toThrow() assertion cannot see anything: the
+  // property worth pinning is that a rejection handler was attached at all.
+  it('attaches a handler so a blocked play cannot surface', () => {
+    const swallow = vi.fn()
+    play.mockReturnValue({ catch: swallow })
+
+    playNewMailSound()
+
+    expect(swallow).toHaveBeenCalled()
+  })
+
+  // Older browsers return undefined rather than a promise; the optional chain is what keeps
+  // that from throwing.
+  it('survives a play() that returns nothing', () => {
+    play.mockReturnValue(undefined)
 
     expect(() => playNewMailSound()).not.toThrow()
-    await Promise.resolve()
   })
 })
 
