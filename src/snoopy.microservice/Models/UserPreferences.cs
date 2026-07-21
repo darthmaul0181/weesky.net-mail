@@ -16,6 +16,8 @@ public static class UserPreferences
 {
     public const string MailPageSize = "mail.pageSize";
     public const string MailShowPreview = "mail.showPreview";
+    public const string MailNotifySound = "mail.notifySound";
+    public const string MailNotifyDesktop = "mail.notifyDesktop";
 
     private static readonly string[] Booleans = ["true", "false"];
 
@@ -23,6 +25,8 @@ public static class UserPreferences
     [
         new(MailPageSize, "30", ["10", "20", "30", "50", "100", "all"]),
         new(MailShowPreview, "true", Booleans),
+        new(MailNotifySound, "false", Booleans),
+        new(MailNotifyDesktop, "false", Booleans),
     ];
 
     public static bool IsValid(string key, string value) =>
