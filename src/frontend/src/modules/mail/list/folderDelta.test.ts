@@ -1,8 +1,35 @@
 import { describe, it, expect } from 'vitest'
+import type { MailFolderNode } from '../api/mailTypes'
 import type { FolderSnapshot } from './folderDelta'
-import { folderChanged, uidValidityBroke } from './folderDelta'
+import { folderChanged, snapshotOf, uidValidityBroke } from './folderDelta'
 
 const base: FolderSnapshot = { uidNext: 10, total: 5, unread: 2, highestModSeq: 40, uidValidity: 100 }
+
+describe('snapshotOf', () => {
+  it('maps each field to its own snapshot slot', () => {
+    const node: MailFolderNode = {
+      path: 'INBOX',
+      name: 'Inbox',
+      specialUse: 'inbox',
+      selectable: true,
+      subscribed: true,
+      total: 11,
+      unread: 22,
+      uidValidity: 33,
+      uidNext: 44,
+      highestModSeq: 55,
+      children: [],
+    }
+
+    expect(snapshotOf(node)).toEqual({
+      uidNext: 44,
+      total: 11,
+      unread: 22,
+      highestModSeq: 55,
+      uidValidity: 33,
+    })
+  })
+})
 
 describe('folderChanged', () => {
   it('sees nothing when nothing moved', () => {
@@ -29,6 +56,11 @@ describe('folderChanged', () => {
   it('does not fire on discovery of a counter', () => {
     expect(folderChanged({ ...base, highestModSeq: null }, base)).toBe(false)
     expect(folderChanged({ ...base, uidNext: null }, base)).toBe(false)
+  })
+
+  // Symmetric case: a server that stopped reporting a counter must not look like a change either.
+  it('does not fire when a counter stops being reported', () => {
+    expect(folderChanged(base, { ...base, highestModSeq: null })).toBe(false)
   })
 
   it('leaves uidValidity to uidValidityBroke', () => {
