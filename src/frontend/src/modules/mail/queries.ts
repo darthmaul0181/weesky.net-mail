@@ -33,7 +33,9 @@ export function useAccountId(): string {
 /** One cheap LIST+STATUS across all folders. Internal, like BLOCK_SIZE: not a setting. */
 export const POLL_INTERVAL = 60_000
 
-export function useFolders() {
+/** `enabled` is what keeps a user who asked for no notification off the poll: the shell passes
+    false, /mail passes nothing, and one enabled observer is enough to run the query. */
+export function useFolders(enabled = true) {
   const accountId = useAccountId()
   const { data: preferences } = usePreferences()
   // Background polling is the cost of a notification, so only those who asked for one pay it:
@@ -45,6 +47,7 @@ export function useFolders() {
   return useQuery<MailFolderNode[]>({
     queryKey: mailKeys.folders(accountId),
     queryFn: ({ signal }) => api.getMailFolders({ signal }),
+    enabled,
     refetchInterval: POLL_INTERVAL,
     refetchIntervalInBackground: notifies,
   })

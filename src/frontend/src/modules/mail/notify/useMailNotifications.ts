@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 import {
-  isStreaming, notifyDesktopOf, notifySoundOf, requestSizeOf, usePreferences,
+  notifyDesktopOf, notifySoundOf, requestSizeOf, usePreferences,
 } from '../../../hooks/usePreferences'
-import type { MailFolderPage } from '../api/mailTypes'
 import { flatten } from '../folders/folderNodes'
-import { mailKeys, useAccountId, useFolders } from '../queries'
+import { snapshotOf, uidValidityBroke, type FolderSnapshot } from '../list/folderDelta'
+import { useAccountId, useFolders } from '../queries'
 import { claimNotification, playNewMailSound, showDesktopNotification } from './channels'
 import { newSince, notifyBody, notifyDecision } from './notifyDecision'
 
@@ -17,13 +16,21 @@ interface Described {
   uid: number | null
 }
 
+/** What a baseline is worth only for the folder it was taken from, on the account it was taken
+    on: carried across either, its uidNext describes messages that do not exist here. */
+interface Baseline {
+  accountId: string
+  path: string
+  snapshot: FolderSnapshot
+}
+
 /** Names the arrivals if it can. The count is already known; this only improves the wording,
     so any failure falls back to counting rather than surfacing. */
 async function describeArrivals(
-  fetchPage: () => Promise<MailFolderPage>, sinceUid: number, count: number,
+  folder: string, size: number, sinceUid: number, count: number, signal: AbortSignal,
 ): Promise<Described> {
   try {
-    const page = await fetchPage()
+    const page = await api.getMailMessages(folder, 0, size, { signal })
     const arrivals = newSince(page.messages, sinceUid)
     return {
       body: notifyBody(arrivals, count),
@@ -40,12 +47,14 @@ async function describeArrivals(
  */
 export function useMailNotifications(): void {
   const accountId = useAccountId()
-  const client = useQueryClient()
   const navigate = useNavigate()
-  const { data: folders } = useFolders()
   const { data: preferences } = usePreferences()
-  const previousUidNext = useRef<number | null>(null)
-  const seenInbox = useRef(false)
+  const sound = preferences ? notifySoundOf(preferences) : false
+  const desktop = preferences ? notifyDesktopOf(preferences) : false
+  // Nobody asked to be told, so nobody pays for the poll: the shell's own use of the folder
+  // query stays off until a setting turns on. /mail enables it separately.
+  const { data: folders } = useFolders(sound || desktop)
+  const baseline = useRef<Baseline | null>(null)
 
   useEffect(() => {
     if (!folders || !preferences) return
@@ -53,14 +62,17 @@ export function useMailNotifications(): void {
     const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')?.node
     if (!inbox) return
 
-    const previous = seenInbox.current ? previousUidNext.current : null
-    seenInbox.current = true
-    previousUidNext.current = inbox.uidNext
+    const snapshot = snapshotOf(inbox)
+    const last = baseline.current
+    baseline.current = { accountId, path: inbox.path, snapshot }
 
-    const decision = notifyDecision(previous, inbox.uidNext, {
-      sound: notifySoundOf(preferences),
-      desktop: notifyDesktopOf(preferences),
-    })
+    // Another account, another folder, or a rebuilt one: the previous uidNext is not comparable
+    // with this one, and a leap across it would announce thousands of arrivals.
+    const comparable = last !== null && last.accountId === accountId && last.path === inbox.path
+      && !uidValidityBroke(last.snapshot, snapshot)
+
+    const decision = notifyDecision(
+      comparable ? last.snapshot.uidNext : null, inbox.uidNext, { sound, desktop })
     if (!decision) return
 
     // Derived rather than read off the node: after a decision this is exactly the new uidNext,
@@ -71,21 +83,15 @@ export function useMailNotifications(): void {
     // tag, the sound would not.
     if (!claimNotification(arrivedAt)) return
 
-    // The inbox's first page is already in hand when the user is looking at it — the list
-    // refresh has just fetched it. The key differs by mode, hence the branch.
-    const size = requestSizeOf(preferences)
-    const cached = isStreaming(preferences)
-      ? client.getQueryData<InfiniteData<MailFolderPage>>(
-          mailKeys.messageStream(accountId, inbox.path, size))?.pages[0]
-      : client.getQueryData<MailFolderPage>(mailKeys.messages(accountId, inbox.path, 0, size))
-
+    const controller = new AbortController()
     void describeArrivals(
-      () => cached ? Promise.resolve(cached) : api.getMailMessages(inbox.path, 0, size),
-      decision.sinceUid,
-      decision.count,
+      inbox.path, requestSizeOf(preferences), decision.sinceUid, decision.count, controller.signal,
     ).then(({ body, uid }) => {
-      if (notifySoundOf(preferences)) playNewMailSound()
-      if (!notifyDesktopOf(preferences)) return
+      // Logged out, or the account changed, while the description was in flight.
+      if (controller.signal.aborted) return
+
+      if (sound) playNewMailSound()
+      if (!desktop) return
 
       showDesktopNotification(body, `weesky-mail-${arrivedAt}`, () => {
         window.focus()
@@ -94,5 +100,7 @@ export function useMailNotifications(): void {
         }
       })
     })
-  }, [folders, preferences, accountId, client, navigate])
+
+    return () => controller.abort()
+  }, [folders, preferences, sound, desktop, accountId, navigate])
 }

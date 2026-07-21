@@ -27,6 +27,15 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
+/**
+ * A macrotask boundary, which drains every pending microtask. The notification is raised at the
+ * end of the describe-fetch's await chain: a silence assertion made before that chain drains
+ * holds against any hook whatsoever, including one that notifies on every tick.
+ */
+async function settle() {
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+}
+
 function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {
   return {
     path: 'INBOX', name: 'INBOX', specialUse: 'inbox', selectable: true, subscribed: true,
@@ -46,22 +55,31 @@ function pageOf(uids: number[]) {
   }
 }
 
-async function renderWithBaseline(preferences: Record<string, string>, first = inbox()) {
+/**
+ * Seeds the folder tree rather than letting the query fetch it: with both settings off the
+ * shell's observer is disabled and no fetch would ever arrive, and the hook is what is under
+ * test here, not the poll.
+ */
+async function renderWithBaseline(
+  preferences: Record<string, string>, first: MailFolderNode[] = [inbox()],
+) {
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', ...preferences })
-  mocks.getMailFolders.mockResolvedValue([first])
+  mocks.getMailFolders.mockResolvedValue(first)
+  client.setQueryData(mailKeys.folders('primary'), first)
 
   const rendered = renderHook(() => useMailNotifications(), { wrapper })
-  await waitFor(() =>
-    expect(client.getQueryData(mailKeys.folders('primary'))).toBeDefined())
+  await waitFor(() => expect(client.getQueryData(['preferences'])).toBeDefined())
+  await settle()
 
   return {
     ...rendered,
-    tick: (next: MailFolderNode) =>
-      act(() => { client.setQueryData(mailKeys.folders('primary'), [next]) }),
+    tick: (...next: MailFolderNode[]) =>
+      act(() => { client.setQueryData(mailKeys.folders('primary'), next) }),
   }
 }
 
 const soundOn = { 'mail.notifySound': 'true', 'mail.notifyDesktop': 'false' }
+const desktopOn = { 'mail.notifySound': 'false', 'mail.notifyDesktop': 'true' }
 const bothOn = { 'mail.notifySound': 'true', 'mail.notifyDesktop': 'true' }
 const bothOff = { 'mail.notifySound': 'false', 'mail.notifyDesktop': 'false' }
 
@@ -70,11 +88,15 @@ describe('useMailNotifications', () => {
     vi.clearAllMocks()
     mocks.claimNotification.mockReturnValue(true)
     mocks.getMailMessages.mockResolvedValue(pageOf([11, 9]))
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    // staleTime keeps the seeded tree from being refetched behind a tick and put back.
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    })
   })
 
   it('says nothing on the baseline observation', async () => {
     await renderWithBaseline(bothOn)
+    await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
@@ -108,6 +130,19 @@ describe('useMailNotifications', () => {
       '2 new messages', expect.any(String), expect.any(Function)))
   })
 
+  // Always fetched, never read from the message cache: the same poll tick drives the list
+  // refresh, whose write lands after this one reads, so the cache holds the pre-arrival page.
+  it('fetches the page rather than reading a cache the arrival has not reached yet', async () => {
+    const { tick } = await renderWithBaseline(bothOn)
+    client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 30), pageOf([9]))
+
+    await tick(inbox({ uidNext: 11 }))
+
+    await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
+      'Sender 11 — Subject 11', expect.any(String), expect.any(Function)))
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 30, expect.anything())
+  })
+
   // A deletion moves total, a read-flip moves unread; neither is new mail.
   it.each([
     ['a deletion elsewhere', inbox({ total: 4 })],
@@ -116,38 +151,84 @@ describe('useMailNotifications', () => {
     const { tick } = await renderWithBaseline(bothOn)
 
     await tick(next)
+    await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+    expect(mocks.getMailMessages).not.toHaveBeenCalled()
   })
 
   it('stays silent with both settings off, and issues no fetch', async () => {
     const { tick } = await renderWithBaseline(bothOff)
 
     await tick(inbox({ uidNext: 11 }))
+    await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
     expect(mocks.getMailMessages).not.toHaveBeenCalled()
   })
 
-  // The second tab must not beep: the bubble dedupes through its tag, the sound cannot.
+  // The second tab must not beep: the bubble dedupes through its tag, the sound cannot. The
+  // claim carries the arrival's uidNext, which is what the other tab compares against.
   it('stays silent when another tab claimed the arrival', async () => {
     mocks.claimNotification.mockReturnValue(false)
     const { tick } = await renderWithBaseline(bothOn)
 
-    await tick(inbox({ uidNext: 11 }))
+    await tick(inbox({ uidNext: 12 }))
+    await settle()
+
+    expect(mocks.claimNotification).toHaveBeenCalledWith(12)
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+    expect(mocks.getMailMessages).not.toHaveBeenCalled()
+  })
+
+  // The folder named INBOX is a decoy: the role sits on another one, and mail landing in the
+  // decoy is somebody else's folder filling up.
+  it('watches the inbox by role, not by name', async () => {
+    const decoy = inbox({ path: 'INBOX', name: 'INBOX', specialUse: null })
+    const real = inbox({ path: 'Courrier', name: 'Courrier', specialUse: 'inbox' })
+    const { tick } = await renderWithBaseline(bothOn, [decoy, real])
+
+    await tick(inbox({ path: 'INBOX', name: 'INBOX', specialUse: null, uidNext: 40 }), real)
+    await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
   })
 
-  it('watches the inbox by role, not by name', async () => {
-    const archive = inbox({ path: 'Archive', name: 'Archive', specialUse: null })
-    const { tick } = await renderWithBaseline(bothOn, archive)
+  // The server rebuilt the folder: uidNext leaps to an unrelated value. Announcing that leap
+  // would also claim it, and the claim would gag every tab until the real uidNext caught up.
+  it('re-baselines in silence when uidValidity breaks', async () => {
+    const { tick } = await renderWithBaseline(bothOn)
 
-    await tick(inbox({ path: 'Archive', name: 'Archive', specialUse: null, uidNext: 11 }))
+    await tick(inbox({ uidValidity: 200, uidNext: 4783 }))
+    await settle()
 
+    expect(mocks.claimNotification).not.toHaveBeenCalled()
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+
+    await tick(inbox({ uidValidity: 200, uidNext: 4784 }))
+
+    await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1))
+    expect(mocks.claimNotification).toHaveBeenCalledWith(4784)
+  })
+
+  // The role moved to another folder: its uidNext has nothing to do with the old one's.
+  it('re-baselines in silence when the inbox moves to another folder', async () => {
+    const { tick } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ path: 'Courrier', name: 'Courrier', uidNext: 4000 }))
+    await settle()
+
+    expect(mocks.claimNotification).not.toHaveBeenCalled()
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+
+    await tick(inbox({ path: 'Courrier', name: 'Courrier', uidNext: 4001 }))
+
+    await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1))
   })
 
   // Clicking must land on the message, not merely raise the window — the notification named
@@ -185,4 +266,50 @@ describe('useMailNotifications', () => {
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
       '1 new message', expect.any(String), expect.any(Function)))
   })
+
+  // Logout, or an account switch, mid-fetch: the bubble would arrive after the session it
+  // belongs to.
+  it('says nothing once the effect that started the fetch is gone', async () => {
+    let release: (page: unknown) => void = () => {}
+    mocks.getMailMessages.mockReturnValue(new Promise(resolve => { release = resolve }))
+    const { tick, unmount } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ uidNext: 11 }))
+    unmount()
+    await act(async () => { release(pageOf([11, 9])) })
+    await settle()
+
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+  })
+})
+
+// The shell mounts this hook on every route, so a user who asked for nothing must not be put on
+// a poll they get no value from.
+describe('useMailNotifications, from the shell', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.claimNotification.mockReturnValue(true)
+    mocks.getMailFolders.mockResolvedValue([inbox()])
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  })
+
+  it('issues no folder request when both settings are off', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', ...bothOff })
+
+    renderHook(() => useMailNotifications(), { wrapper })
+    await settle()
+    await settle()
+
+    expect(mocks.getMailFolders).not.toHaveBeenCalled()
+  })
+
+  it.each([['the sound', soundOn], ['the desktop bubble', desktopOn]])(
+    'polls the folders when %s is on', async (_label, preferences) => {
+      mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', ...preferences })
+
+      renderHook(() => useMailNotifications(), { wrapper })
+
+      await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalledTimes(1))
+    })
 })

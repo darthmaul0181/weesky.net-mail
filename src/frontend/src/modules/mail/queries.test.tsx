@@ -118,6 +118,28 @@ describe('useFolders', () => {
     }
   })
 
+  // The shell mounts this on every route for the notification watcher; a user who asked for no
+  // notification must not be put on a poll that buys them nothing.
+  it('issues no request when the caller does not enable it', async () => {
+    mocks.getMailFolders.mockResolvedValue([])
+    const { wrapper } = createWrapper()
+
+    renderHook(() => useFolders(false), { wrapper })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+
+    expect(mocks.getMailFolders).not.toHaveBeenCalled()
+  })
+
+  // /mail asks for the tree unconditionally, so the shell's disabled observer costs nothing.
+  it('runs when one observer enables it and another does not', async () => {
+    mocks.getMailFolders.mockResolvedValue([])
+    const { wrapper } = createWrapper()
+
+    renderHook(() => { useFolders(false); useFolders() }, { wrapper })
+
+    await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalledTimes(1))
+  })
+
   // A notification is useful only while the tab is elsewhere, so the poll has to survive the
   // loss of focus — but only for those who asked: an untouched tab must keep costing nothing.
   it.each([
