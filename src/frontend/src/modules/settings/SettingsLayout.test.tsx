@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../contexts/AuthContext'
 import { ThemeProvider } from '../../contexts/ThemeContext'
 import { routes } from '../../routes'
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   setIsAdmin: vi.fn(),
   adminGetUsers: vi.fn(),
   adminGetDomains: vi.fn(),
+  getMailFolders: vi.fn(),
+  getPreferences: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -24,6 +27,8 @@ vi.mock('../../api.js', () => ({
     logout: mocks.logout,
     adminGetUsers: mocks.adminGetUsers,
     adminGetDomains: mocks.adminGetDomains,
+    getMailFolders: mocks.getMailFolders,
+    getPreferences: mocks.getPreferences,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -33,10 +38,13 @@ vi.mock('../../api.js', () => ({
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <ThemeProvider>
-      <AuthProvider><RouterProvider router={router} /></AuthProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <AuthProvider><RouterProvider router={router} /></AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   )
   return router
 }
@@ -53,6 +61,9 @@ describe('settings section', () => {
     mocks.getQuota.mockResolvedValue(null)
     mocks.adminGetUsers.mockResolvedValue([])
     mocks.adminGetDomains.mockResolvedValue([])
+    // The shell now watches the inbox app-wide, so every route mounts these two.
+    mocks.getMailFolders.mockResolvedValue([])
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
   })
 
   it('/settings redirects to /settings/account', async () => {

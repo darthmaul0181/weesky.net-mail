@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
+import { notifyDesktopOf, notifySoundOf, usePreferences } from '../../hooks/usePreferences'
 import type { MailFolderNode, MailFolderPage, MailMessageDetail, FolderRoleEntry } from './api/mailTypes'
 import { nextBlockIndex } from './list/messageStream'
 
@@ -34,11 +35,18 @@ export const POLL_INTERVAL = 60_000
 
 export function useFolders() {
   const accountId = useAccountId()
+  const { data: preferences } = usePreferences()
+  // Background polling is the cost of a notification, so only those who asked for one pay it:
+  // an untouched tab keeps costing nothing.
+  const notifies = preferences
+    ? notifySoundOf(preferences) || notifyDesktopOf(preferences)
+    : false
 
   return useQuery<MailFolderNode[]>({
     queryKey: mailKeys.folders(accountId),
     queryFn: ({ signal }) => api.getMailFolders({ signal }),
     refetchInterval: POLL_INTERVAL,
+    refetchIntervalInBackground: notifies,
   })
 }
 

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(),
   getMailMessage: vi.fn(),
   createMailFolder: vi.fn(),
+  getPreferences: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -17,6 +18,7 @@ vi.mock('../../api.js', () => ({
     getMailMessages: mocks.getMailMessages,
     getMailMessage: mocks.getMailMessage,
     createMailFolder: mocks.createMailFolder,
+    getPreferences: mocks.getPreferences,
   },
 }))
 
@@ -73,7 +75,10 @@ describe('mailKeys', () => {
 })
 
 describe('useFolders', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
+  })
 
   it('loads the folder tree', async () => {
     mocks.getMailFolders.mockResolvedValue([{ path: 'INBOX', name: 'INBOX', children: [] }])
@@ -111,6 +116,29 @@ describe('useFolders', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // A notification is useful only while the tab is elsewhere, so the poll has to survive the
+  // loss of focus — but only for those who asked: an untouched tab must keep costing nothing.
+  it.each([
+    [{ 'mail.notifySound': 'false', 'mail.notifyDesktop': 'false' }, false],
+    [{ 'mail.notifySound': 'true', 'mail.notifyDesktop': 'false' }, true],
+    [{ 'mail.notifySound': 'false', 'mail.notifyDesktop': 'true' }, true],
+  ])('polls in the background only when a notification is on', async (preferences, expected) => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', ...preferences })
+    mocks.getMailFolders.mockResolvedValue([])
+    const { wrapper, client } = createWrapper()
+
+    renderHook(() => useFolders(), { wrapper })
+
+    await waitFor(() =>
+      expect(client.getQueryCache().find({ queryKey: mailKeys.folders('primary') })).toBeDefined())
+    // Cast: the cache types its stored options as QueryOptions, which omits the observer-only
+    // fields the query is nonetheless created with.
+    await waitFor(() => expect(
+      (client.getQueryCache().find({ queryKey: mailKeys.folders('primary') })!
+        .options as { refetchIntervalInBackground?: boolean }).refetchIntervalInBackground)
+      .toBe(expected))
   })
 })
 
