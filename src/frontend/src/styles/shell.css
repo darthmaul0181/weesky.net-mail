@@ -154,8 +154,10 @@
   background: var(--pane-item-active-bg);
   color: var(--pane-item-active-fg);
   font-weight: 600;
-  /* Same "you are here" as the folder tree and the selected mail — one language app-wide. */
+  /* Same "you are here" as the folder tree and the selected mail — one language app-wide,
+     square left corners included, or the inset shadow rounds the bar's ends. */
   box-shadow: inset 3px 0 0 var(--accent-unread);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .settings-content {
