@@ -17,7 +17,23 @@ internal static partial class MailHeaderDetailsReader
             SentBy(headers, auth),
             SignedBy(headers, auth),
             UnsubscribeUrl(TopmostValue(headers, "List-Unsubscribe")),
-            TlsReceived(TopmostValue(headers, "Received")));
+            TlsReceived(BoundaryReceived(headers)));
+    }
+
+    // Received is the one header our own server writes twice: the local handoff to the mailbox
+    // sits above the hop that actually crossed the network. Skipping the local dialects still
+    // never reaches sender-written headers — every header ours wrote stays above them.
+    private static string? BoundaryReceived(HeaderList headers)
+    {
+        foreach (var header in headers)
+        {
+            if (!string.Equals(header.Field, "Received", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var value = header.Value.Trim();
+            if (!LocalDelivery().IsMatch(value)) return value;
+        }
+
+        return null;
     }
 
     private static string? TopmostValue(HeaderList headers, string field) => headers.Topmost(field)?.Value.Trim();
@@ -129,6 +145,10 @@ internal static partial class MailHeaderDetailsReader
 
     [GeneratedRegex("<([^>]*)>")]
     private static partial Regex AngleToken();
+
+    // LMTP/LMTPS/LMTPA/LMTPSA and Postfix's "local" all denote a handoff inside our own host.
+    [GeneratedRegex(@"\bwith\s+(LMTP[AS]*|local)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex LocalDelivery();
 
     [GeneratedRegex("(?<![A-Za-z0-9])ESMTPS", RegexOptions.IgnoreCase)]
     private static partial Regex EsmtpsToken();

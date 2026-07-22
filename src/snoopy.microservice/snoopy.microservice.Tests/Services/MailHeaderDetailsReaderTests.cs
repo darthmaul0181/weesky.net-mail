@@ -153,15 +153,61 @@ public sealed class MailHeaderDetailsReaderTests
         Assert.False(result.TlsReceived);
     }
 
-    // The topmost Received is the hop into our own server — the only one we wrote ourselves.
+    // Anything below the hop into our own server could have been forged by the sender, so a
+    // lower ESMTPS claim never upgrades a plain hop.
     [Fact]
-    public void Parse_LetsTheTopmostReceivedWin()
+    public void Parse_LetsTheTopmostNetworkHopWin()
     {
         var result = MailHeaderDetailsReader.Parse(Headers(
             ("Received", "from relay by mx.weesky.net with ESMTP id a"),
             ("Received", "from origin by relay with ESMTPS id b")));
 
         Assert.False(result.TlsReceived);
+    }
+
+    // Dovecot's handoff to the mailbox runs on a local socket and carries no transport security;
+    // reading it instead of the hop below reported "no encryption" on every delivered message.
+    [Fact]
+    public void Parse_SkipsTheLocalDeliveryHopWhenReadingTls()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "from mail.weesky.net\n\tby mail.weesky.net with LMTP\n\tid QMLkIi5tYGrC9QEA"),
+            ("Received", "from o751.wrm1.useinsider.email (o751.wrm1.useinsider.email [149.72.191.208])\n"
+                         + "\t(using TLSv1.3 with cipher TLS_AES_128_GCM_SHA256 (128/128 bits))\n"
+                         + "\tby mail.weesky.net (Postfix) with ESMTPS id 2D4142857C")));
+
+        Assert.True(result.TlsReceived);
+    }
+
+    [Fact]
+    public void Parse_SkipsPostfixLocalDeliveryToo()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "by mail.weesky.net (Postfix) with local id a"),
+            ("Received", "from origin by mail.weesky.net (Postfix) with ESMTPS id b")));
+
+        Assert.True(result.TlsReceived);
+    }
+
+    // Skipping the local hop must land on the network hop, not hunt down the chain for a TLS claim.
+    [Fact]
+    public void Parse_StopsAtThePlainNetworkHopBelowALocalDelivery()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "from mail.weesky.net by mail.weesky.net with LMTP id a"),
+            ("Received", "from relay by mail.weesky.net (Postfix) with ESMTP id b"),
+            ("Received", "from origin by relay with ESMTPS id c")));
+
+        Assert.False(result.TlsReceived);
+    }
+
+    [Fact]
+    public void Parse_ReportsNoTlsWhenEveryHopIsALocalDelivery()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "from mail.weesky.net by mail.weesky.net with LMTP id a")));
+
+        Assert.Null(result.TlsReceived);
     }
 
     // RFC 2369 delimits entries with <> precisely because a URL may legally contain commas.
