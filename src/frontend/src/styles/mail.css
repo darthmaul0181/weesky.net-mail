@@ -444,19 +444,21 @@
 /* Narrow skin: the cluster sits on the bottom-right corner, over the last line present. */
 .message-row-cluster {
   position: absolute;
-  right: 8px;
+  /* Flush with the star above it, which ends at the row's content edge. */
+  right: 12px;
   bottom: 5px;
   display: none;
   align-items: center;
   gap: 2px;
-  padding: 1px 2px;
-  border-radius: var(--radius-sm);
-  /* It exists only to hide the preview line behind it, so it has to be whatever the row is
-     painting — normal, hovered, unread or selected. */
-  background: inherit;
 }
 .message-row:hover .message-row-cluster,
 .message-row:focus-within .message-row-cluster { display: flex; }
+
+/* The cluster is always the last child, so the line before it is the one it would cover — the
+   preview, or the subject when previews are off. Reserving its width there ends that line in an
+   ellipsis instead of running it under the buttons. 26px per button, plus 6px of air. */
+.message-row:not(.is-line):hover > :nth-last-child(2),
+.message-row:not(.is-line):focus-within > :nth-last-child(2) { padding-right: 32px; }
 
 /* Wide skin has no "bottom": the cluster replaces the date, the star stays at the end. */
 .message-row.is-line .message-row-cluster { position: static; padding: 0; background: none; }
