@@ -503,7 +503,8 @@ describe('MessageReader', () => {
 
       expect(screen.getByText('Mailing list:')).toBeInTheDocument()
       expect(screen.getByText('a547955.bnc3.mailjet.com')).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /unsubscribe/i })).toBeInTheDocument()
+      // Named in full: the header carries its own shorter "Unsubscribe" link alongside.
+      expect(screen.getByRole('link', { name: 'Unsubscribe from this mailing list' })).toBeInTheDocument()
       expect(container.querySelector('.reader-recipients')).toBeNull()
       expect(screen.getByRole('button', { name: 'Hide details' })).toHaveAttribute('aria-expanded', 'true')
     })
@@ -532,6 +533,38 @@ describe('MessageReader', () => {
 
       expect(screen.getByRole('button', { name: 'Show details' })).toBeInTheDocument()
       expect(screen.queryByText('Mailing list:')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('the unsubscribe link', () => {
+    it('offers a web unsubscribe without expanding the header', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, unsubscribeUrl: 'https://news.x.be/unsub' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      const link = await screen.findByRole('link', { name: 'Unsubscribe' })
+      expect(link).toHaveAttribute('href', 'https://news.x.be/unsub')
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
+    // Following one would leave the webmail for the OS mail client; the details grid keeps it.
+    it('offers nothing for a mailto-only unsubscribe', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, unsubscribeUrl: 'mailto:unsub@x.be' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByRole('link', { name: 'Unsubscribe' })).not.toBeInTheDocument()
+    })
+
+    it('offers nothing when the message carries no unsubscribe link', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByRole('link', { name: 'Unsubscribe' })).not.toBeInTheDocument()
     })
   })
 })

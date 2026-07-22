@@ -497,6 +497,10 @@
 .details-toggle:hover { color: var(--action-primary); background: var(--surface-sunken); }
 .details-toggle.is-open { transform: rotate(90deg); }
 
+.unsub-link { color: var(--action-primary); text-decoration: none; }
+.unsub-link:hover { text-decoration: underline; }
+.from-sep { color: var(--border); user-select: none; }
+
 .reader-details {
   display: grid;
   grid-template-columns: max-content 1fr;

@@ -40,6 +40,26 @@ Mirror the fields in `mailTypes.ts` (`MailMessageDetail`).
   warning + "No encryption" when false, row hidden when null. No "learn more" link.
 - **Styles** in `mail.css`, role tokens only, no literal colours. UI text in English.
 
+## Amendment — persistent unsubscribe link (approved 2026-07-22)
+
+An `Unsubscribe` link sits at the end of the `.reader-from` line, after the chevron, behind a
+`·` separator — visible without expanding the header. Rendered only for an **http(s)**
+`List-Unsubscribe`; opens with `target="_blank" rel="noopener noreferrer"`.
+
+Placement is next to the sender, not in the actions zone: unsubscribing acts on the sender
+relationship, not on this message. Rejected alternatives: a ghost button above the actions zone
+(gives the actions column a second anchor, so header height would depend on two things instead
+of one, and lends a rare action the weight of the permanent controls) and a chip on its own line
+(spends a header line and collides with the spam gauge).
+
+A `mailto:` unsubscribe shows nothing in the header — there is no tab to open and no composer
+yet, so the click would leave for the OS mail client. It stays available in the details grid,
+which keeps showing both kinds.
+
+`reader/unsubscribeLink.ts` holds the single predicate `isWebUnsubscribe(url)`, asked by both the
+header and the grid — the grid uses it to choose its link attributes, replacing a case-sensitive
+`startsWith('mailto:')` that gave `MAILTO:` a new blank tab.
+
 ## Tests
 
 - Backend (xUnit): `MailHeaderDetailsReader` — each field, fallback chains, topmost-header

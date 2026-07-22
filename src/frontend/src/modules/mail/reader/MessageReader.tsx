@@ -11,6 +11,7 @@ import AuthBadge from './AuthBadge'
 import SpamGauge from './SpamGauge'
 import ReaderActions from './ReaderActions'
 import ReaderDetails from './ReaderDetails'
+import { isWebUnsubscribe } from './unsubscribeLink'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
@@ -43,6 +44,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
   if (isError || !data) return <p className="mail-empty">Could not load this message.</p>
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
+  const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
   const inverted = isDark && !originalColours
   const showImages = imagesShown || (!!preferences && alwaysShowImagesOf(preferences))
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
@@ -85,6 +87,16 @@ export default function MessageReader({ folderPath, uid }: Props) {
               >
                 <ChevronRightIcon size={12} />
               </button>
+              {/* Unsubscribing acts on the sender, not on this message — hence here, not in the
+                  actions zone. */}
+              {unsubscribe && (
+                <>
+                  <span className="from-sep">·</span>
+                  <a className="unsub-link" href={unsubscribe} target="_blank" rel="noopener noreferrer">
+                    Unsubscribe
+                  </a>
+                </>
+              )}
             </div>
             {detailsOpen ? (
               <ReaderDetails message={data} />

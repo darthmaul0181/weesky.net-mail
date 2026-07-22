@@ -84,4 +84,11 @@ describe('ReaderDetails', () => {
     expect(screen.queryByText('Security:')).not.toBeInTheDocument()
     expect(screen.queryByText(/no encryption/i)).not.toBeInTheDocument()
   })
+
+  // The scheme is case-insensitive on the wire; a new tab would open blank on a mailto.
+  it('treats an uppercase mailto as a mailto', () => {
+    render(<ReaderDetails message={{ ...message, unsubscribeUrl: 'MAILTO:unsub@x.be' }} />)
+
+    expect(screen.getByRole('link', { name: /unsubscribe/i })).not.toHaveAttribute('target')
+  })
 })

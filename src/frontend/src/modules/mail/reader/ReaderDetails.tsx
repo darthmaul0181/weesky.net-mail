@@ -2,6 +2,7 @@ import type { MailMessageDetail } from '../api/mailTypes'
 import LockIcon from '../../../icons/LockIcon'
 import { AddressList } from './AddressLabel'
 import { formatReaderDate } from './formatReaderDate'
+import { isWebUnsubscribe } from './unsubscribeLink'
 
 interface Props {
   message: MailMessageDetail
@@ -10,7 +11,7 @@ interface Props {
 /** The grid the header chevron expands into. A row whose datum is absent renders nothing. */
 export default function ReaderDetails({ message }: Props) {
   const named = message.fromName && message.fromName !== message.fromAddress
-  const isMailto = message.unsubscribeUrl?.startsWith('mailto:')
+  const isWeb = isWebUnsubscribe(message.unsubscribeUrl)
 
   return (
     <dl className="reader-details">
@@ -31,7 +32,7 @@ export default function ReaderDetails({ message }: Props) {
         <>
           <dt>Unsubscribe:</dt>
           <dd>
-            <a href={message.unsubscribeUrl} {...(isMailto ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>
+            <a href={message.unsubscribeUrl} {...(isWeb ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
               Unsubscribe from this mailing list
             </a>
           </dd>
