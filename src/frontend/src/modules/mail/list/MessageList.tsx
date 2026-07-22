@@ -55,6 +55,7 @@ export default function MessageList(
   const archiveOff = !roles.archive || folderRole === 'archive'
   const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
   const trashOff = !inTrash && !roles.trash
+  const deleteLabel = inTrash ? 'Delete permanently' : 'Delete'
 
   function toggle(message: MailMessageSummary, flag: 'seen' | 'flagged') {
     if (!folderPath) return
@@ -113,6 +114,7 @@ export default function MessageList(
             const from = message.fromName || message.fromAddress
             const subject = message.subject || '(no subject)'
             const when = formatListDate(message.date)
+            const seenLabel = message.seen ? 'Mark as unread' : 'Mark as read'
             // role=button is children-presentational: nothing inside the row is exposed on its
             // own, so everything the row states visually has to be said in its name.
             const label = `${message.seen ? '' : 'Unread. '}${from}: ${subject}`
@@ -134,7 +136,8 @@ export default function MessageList(
                 <button
                   type="button"
                   className="row-btn"
-                  aria-label={message.seen ? 'Mark as unread' : 'Mark as read'}
+                  aria-label={seenLabel}
+                  title={seenLabel}
                   onClick={event => { event.stopPropagation(); toggle(message, 'seen') }}
                 >
                   {message.seen ? <MailIcon size={16} /> : <MailOpenIcon size={16} />}
@@ -145,7 +148,7 @@ export default function MessageList(
                   className="row-btn"
                   aria-label="Archive"
                   disabled={archiveOff}
-                  title={archiveOff ? archiveReason : undefined}
+                  title={archiveOff ? archiveReason : 'Archive'}
                   onClick={event => { event.stopPropagation(); moveTo(roles.archive, message.uid) }}
                 >
                   <ArchiveIcon size={16} />
@@ -153,9 +156,9 @@ export default function MessageList(
                 <button
                   type="button"
                   className="row-btn"
-                  aria-label={inTrash ? 'Delete permanently' : 'Delete'}
+                  aria-label={deleteLabel}
                   disabled={trashOff}
-                  title={trashOff ? NO_TRASH : undefined}
+                  title={trashOff ? NO_TRASH : deleteLabel}
                   onClick={event => {
                     event.stopPropagation()
                     if (inTrash) setExpunging(message)

@@ -413,6 +413,18 @@ describe('the row controls', () => {
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 
+  it('gives each enabled action button a hover tooltip', () => {
+    renderList()
+
+    const row = rowOf(/bob@x\.be/i)
+    expect(within(row).getByRole('button', { name: 'Mark as unread' }))
+      .toHaveAttribute('title', 'Mark as unread')
+    expect(within(row).getByRole('button', { name: 'Archive' }))
+      .toHaveAttribute('title', 'Archive')
+    expect(within(row).getByRole('button', { name: 'Delete' }))
+      .toHaveAttribute('title', 'Delete')
+  })
+
   it('mutation errors reach onNotify', () => {
     const onNotify = vi.fn()
     renderList({ onNotify })
