@@ -461,7 +461,14 @@
 .message-row:not(.is-line):focus-within > :nth-last-child(2) { padding-right: 32px; }
 
 /* Wide skin has no "bottom": the cluster replaces the date, the star stays at the end. */
-.message-row.is-line .message-row-cluster { position: static; padding: 0; background: none; }
+/* align-self, like the buttons': left in the baseline group its baseline is its button's, 21px
+   down against the text's 17px, so revealing it on hover shoved the whole line down 7px. */
+.message-row.is-line .message-row-cluster { position: static; align-self: center; }
+
+/* The 26px target may not drive the row's height — it is a pointer affordance, not content.
+   A margin box deliberately smaller than any line it sits on gives the text the height back,
+   while align-self keeps the full 26px centred on it. */
+.message-row.is-line .row-btn { margin-block: -6px; }
 .message-row.is-line:hover .message-row-date,
 .message-row.is-line:focus-within .message-row-date { display: none; }
 
