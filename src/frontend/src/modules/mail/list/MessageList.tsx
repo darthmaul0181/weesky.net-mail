@@ -12,6 +12,7 @@ interface Props {
   folderName?: string
   selectedUid: number | null
   onSelect: (uid: number) => void
+  wide?: boolean
 }
 
 const COUNT = new Intl.NumberFormat('en-US')
@@ -20,7 +21,7 @@ const COUNT = new Intl.NumberFormat('en-US')
  * Three bands: a heading, the rows, and the footer. Only the middle one scrolls — the pager
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
  */
-export default function MessageList({ folderPath, folderName, selectedUid, onSelect }: Props) {
+export default function MessageList({ folderPath, folderName, selectedUid, onSelect, wide = false }: Props) {
   const { messages, total, isLoading, isError, paging, streaming } = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
@@ -44,6 +45,7 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
         <ul className="message-list">
           {messages.map((message, index) => {
             const classes = ['message-row']
+            if (wide) classes.push('is-line')
             if (!message.seen) classes.push('is-unread')
             if (message.uid === selectedUid) classes.push('is-selected')
 
@@ -51,17 +53,34 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
               <li key={message.uid}>
                 {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
                 <button type="button" className={classes.join(' ')} onClick={() => onSelect(message.uid)}>
-                  <div className="message-row-top">
-                    {!message.seen && <span className="message-row-unread-dot" />}
-                    <span className="message-row-from">{message.fromName || message.fromAddress}</span>
-                    {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
-                    <span className="message-row-date">{formatListDate(message.date)}</span>
-                  </div>
-                  <div className="message-row-subject">{message.subject || '(no subject)'}</div>
-                  {/* Always rendered when previews are on, even empty: a message with no body
-                      would otherwise make a shorter row than its neighbours and break the rhythm
-                      of the column. The reserved height lives in CSS. */}
-                  {showsPreview && <div className="message-row-preview">{message.preview}</div>}
+                  {wide ? (
+                    <>
+                      {!message.seen && <span className="message-row-unread-dot" />}
+                      <span className="message-row-from">{message.fromName || message.fromAddress}</span>
+                      {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
+                      <span className="message-row-line">
+                        {message.subject || '(no subject)'}
+                        {showsPreview && message.preview && (
+                          <span className="message-row-line-preview"> — {message.preview}</span>
+                        )}
+                      </span>
+                      <span className="message-row-date">{formatListDate(message.date)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="message-row-top">
+                        {!message.seen && <span className="message-row-unread-dot" />}
+                        <span className="message-row-from">{message.fromName || message.fromAddress}</span>
+                        {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
+                        <span className="message-row-date">{formatListDate(message.date)}</span>
+                      </div>
+                      <div className="message-row-subject">{message.subject || '(no subject)'}</div>
+                      {/* Always rendered when previews are on, even empty: a message with no body
+                          would otherwise make a shorter row than its neighbours and break the rhythm
+                          of the column. The reserved height lives in CSS. */}
+                      {showsPreview && <div className="message-row-preview">{message.preview}</div>}
+                    </>
+                  )}
                 </button>
               </li>
             )

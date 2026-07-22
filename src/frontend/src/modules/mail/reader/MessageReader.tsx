@@ -3,6 +3,7 @@ import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
+import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
 import { useMessage } from '../queries'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
@@ -19,9 +20,10 @@ import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitiz
 interface Props {
   folderPath: string | null
   uid: number | null
+  onBack?: () => void
 }
 
-export default function MessageReader({ folderPath, uid }: Props) {
+export default function MessageReader({ folderPath, uid, onBack }: Props) {
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
   const { data: preferences } = usePreferences()
@@ -39,9 +41,35 @@ export default function MessageReader({ folderPath, uid }: Props) {
     setDetailsOpen(false)
   }, [folderPath, uid])
 
+  // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
+  // replaced the list and needs a way back.
+  useEffect(() => {
+    if (!onBack) return
+
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onBack() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onBack])
+
+  const fallback = (message: string) => (
+    <div className="reader-fallback">
+      {onBack && (
+        <button
+          type="button"
+          className="reader-back"
+          aria-label="Back to the message list"
+          onClick={onBack}
+        >
+          <ArrowLeftIcon size={16} />
+        </button>
+      )}
+      <p className="mail-empty">{message}</p>
+    </div>
+  )
+
   if (uid === null) return <p className="mail-empty">Select a message</p>
-  if (isLoading) return <p className="mail-empty">Loading message…</p>
-  if (isError || !data) return <p className="mail-empty">Could not load this message.</p>
+  if (isLoading) return fallback('Loading message…')
+  if (isError || !data) return fallback('Could not load this message.')
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
@@ -72,7 +100,19 @@ export default function MessageReader({ folderPath, uid }: Props) {
     <article>
       <header className="reader-header">
         <div className="reader-stack">
-          <h1 className="reader-subject">{data.subject || '(no subject)'}</h1>
+          <h1 className="reader-subject">
+            {onBack && (
+              <button
+                type="button"
+                className="reader-back"
+                aria-label="Back to the message list"
+                onClick={onBack}
+              >
+                <ArrowLeftIcon size={16} />
+              </button>
+            )}
+            {data.subject || '(no subject)'}
+          </h1>
           <div className="reader-meta">
             <div className="reader-from">
               <AddressLabel sender name={data.fromName} address={data.fromAddress} />

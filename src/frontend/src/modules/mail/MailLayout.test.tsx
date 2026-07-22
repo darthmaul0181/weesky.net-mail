@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
   getMailMessages: vi.fn(),
   getMailMessage: vi.fn(),
+  getPreferences: vi.fn(),
   useListRefresh: vi.fn(),
 }))
 
@@ -40,9 +41,10 @@ function Where() {
   return <span data-testid="search">{useLocation().search}</span>
 }
 
-function renderAt(initial: string, tree: MailFolderNode[] = folders) {
+function renderAt(initial: string, tree: MailFolderNode[] = folders, pane = 'right') {
   mocks.getMailFolders.mockResolvedValue(tree)
   mocks.getMailMessages.mockResolvedValue({ messages: [], total: 0 })
+  mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': pane })
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -108,5 +110,74 @@ describe('MailLayout', () => {
     await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
     expect(screen.getByTestId('search')).toHaveTextContent('')
     expect(screen.getByText(/select a folder/i)).toBeInTheDocument()
+  })
+})
+
+describe('reading pane arrangements', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // The folder tree draws its own <hr> (role separator) between blocks, so the pane splitter is
+  // reached by its accessible name rather than by role alone.
+  it('renders the side-by-side split with a vertical splitter', async () => {
+    const { container } = renderAt('/mail?folder=INBOX')
+
+    const splitter = await screen.findByRole('separator', { name: 'Resize the panes' })
+    expect(splitter).toHaveAttribute('aria-orientation', 'vertical')
+    expect(container.querySelector('.mail-layout.is-right')).not.toBeNull()
+  })
+
+  // The splitter's drag ceiling is measured against its own parent, which must exclude the
+  // 240px folders column — otherwise the right mode's drag ceiling overshoots by that width.
+  it('wraps the right arrangement in its own row, excluding the folders column', async () => {
+    const { container } = renderAt('/mail?folder=INBOX')
+
+    await screen.findByRole('separator', { name: 'Resize the panes' })
+    expect(container.querySelector('.mail-row [role="separator"]')).not.toBeNull()
+  })
+
+  it('renders the stacked split with a horizontal splitter', async () => {
+    const { container } = renderAt('/mail?folder=INBOX', folders, 'bottom')
+
+    const splitter = await screen.findByRole('separator', { name: 'Resize the panes' })
+    expect(splitter).toHaveAttribute('aria-orientation', 'horizontal')
+    expect(container.querySelector('.mail-stack')).not.toBeNull()
+  })
+
+  // No message open: the list has the space and there is nothing to split.
+  it('renders no reader and no splitter in the no-split mode without a message', async () => {
+    const { container } = renderAt('/mail?folder=INBOX', folders, 'none')
+
+    await waitFor(() => expect(container.querySelector('.mail-layout.is-none')).not.toBeNull())
+    expect(screen.queryByRole('separator', { name: 'Resize the panes' })).toBeNull()
+    expect(screen.queryByText(/select a message/i)).toBeNull()
+    expect(container.querySelector('.mail-list.is-hidden')).toBeNull()
+  })
+
+  // The list is hidden, never unmounted: unmounting would lose the scroll position and, in
+  // streaming mode, the loaded blocks.
+  it('hides the list behind the reader in the no-split mode', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 7, folderPath: 'INBOX', uidValidity: 1, subject: 'open me', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '<p>x</p>', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    })
+    const { container } = renderAt('/mail?folder=INBOX&uid=7', folders, 'none')
+
+    await screen.findByText('open me')
+    expect(container.querySelector('.mail-list.is-hidden')).not.toBeNull()
+  })
+
+  it('drops the uid when the back button is used', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 7, folderPath: 'INBOX', uidValidity: 1, subject: 'open me', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '<p>x</p>', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    })
+    renderAt('/mail?folder=INBOX&uid=7', folders, 'none')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to the message list' }))
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
   })
 })

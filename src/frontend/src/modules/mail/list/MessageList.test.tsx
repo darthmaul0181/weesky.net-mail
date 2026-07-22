@@ -53,11 +53,28 @@ function pagedState(paging = {}, overrides = {}) {
 
 type ListProps = Parameters<typeof MessageList>[0]
 
-function renderList(props: Partial<ListProps> = {}) {
+function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record<string, string>) {
+  if (preferencesOverride) {
+    mocks.getPreferences.mockResolvedValue(
+      { 'mail.pageSize': '50', 'mail.showPreview': 'true', ...preferencesOverride })
+  }
   return render(
     <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} {...props} />,
     { wrapper })
 }
+
+const wideSample = [
+  {
+    uid: 3, subject: 'Wide row test', fromName: 'Alice', fromAddress: 'alice@x.be',
+    date: '2026-07-19T09:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 50, preview: 'the preview text',
+  },
+  {
+    uid: 4, subject: 'Another subject', fromName: 'Unseen Sender', fromAddress: 'unseen@x.be',
+    date: '2026-07-19T10:00:00Z', seen: false, flagged: false, answered: false,
+    hasAttachments: false, size: 60, preview: 'another preview',
+  },
+]
 
 describe('MessageList', () => {
   beforeEach(() => {
@@ -222,6 +239,48 @@ describe('MessageList', () => {
     renderList()
 
     expect(screen.getByText(/could not load/i)).toBeInTheDocument()
+  })
+})
+
+describe('wide rows', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
+  })
+
+  // One line per message: sender · subject — preview · date. The stacked markup must not
+  // leak in — a .message-row-top inside a line row would stack the line again.
+  it('renders a single-line row with the preview inline', async () => {
+    renderList({ wide: true })
+
+    const row = await screen.findByRole('button', { name: /alice/i })
+    expect(row).toHaveClass('is-line')
+    expect(row.querySelector('.message-row-line-preview')).toHaveTextContent('the preview text')
+    expect(row.querySelector('.message-row-top')).toBeNull()
+  })
+
+  it('ends the line at the subject when previews are off', async () => {
+    renderList({ wide: true }, { 'mail.showPreview': 'false' })
+
+    const row = await screen.findByRole('button', { name: /alice/i })
+    await vi.waitFor(() => expect(row.querySelector('.message-row-line-preview')).toBeNull())
+  })
+
+  it('keeps the unread dot and classes in wide rows', async () => {
+    renderList({ wide: true })
+
+    const unreadRow = await screen.findByRole('button', { name: /unseen sender/i })
+    expect(unreadRow).toHaveClass('is-unread')
+    expect(unreadRow.querySelector('.message-row-unread-dot')).not.toBeNull()
+  })
+
+  it('keeps stacked rows when wide is off', async () => {
+    renderList()
+
+    const row = await screen.findByRole('button', { name: /alice/i })
+    expect(row).not.toHaveClass('is-line')
+    expect(row.querySelector('.message-row-top')).not.toBeNull()
   })
 })
 

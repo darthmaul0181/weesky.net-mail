@@ -20,6 +20,7 @@ public static class UserPreferences
     public const string MailNotifySound = "mail.notifySound";
     public const string MailNotifyDesktop = "mail.notifyDesktop";
     public const string MailShowSpamScore = "mail.showSpamScore";
+    public const string MailReadingPane = "mail.readingPane";
 
     private static readonly string[] Booleans = ["true", "false"];
 
@@ -31,6 +32,7 @@ public static class UserPreferences
         new(MailNotifySound, "false", Booleans),
         new(MailNotifyDesktop, "false", Booleans),
         new(MailShowSpamScore, "true", Booleans),
+        new(MailReadingPane, "right", ["right", "bottom", "none"]),
     ];
 
     public static bool IsValid(string key, string value) =>

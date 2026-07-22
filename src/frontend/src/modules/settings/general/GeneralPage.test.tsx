@@ -178,6 +178,26 @@ describe('GeneralPage', () => {
   })
 })
 
+describe('reading pane', () => {
+  it('checks the stored position', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.readingPane': 'bottom' })
+
+    expect(await screen.findByLabelText('Bottom')).toBeChecked()
+    expect(screen.getByLabelText('Right')).not.toBeChecked()
+    expect(screen.getByRole('radiogroup', { name: 'Reading pane' })).toBeInTheDocument()
+  })
+
+  it('saves the chosen position', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.readingPane': 'right' })
+
+    fireEvent.click(await screen.findByLabelText('Hidden'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.readingPane', 'none'))
+    expect(await screen.findByText('Messages will open in place of the list')).toBeInTheDocument()
+  })
+})
+
 describe('GeneralPage notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks()

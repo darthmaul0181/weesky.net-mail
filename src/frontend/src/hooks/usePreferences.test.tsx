@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, isStreaming, notifiesOf, notifyDesktopOf, notifySoundOf,
-  requestSizeOf, showPreviewOf, usePreferences, useSetPreference,
+  readingPaneOf, requestSizeOf, showPreviewOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -143,5 +143,20 @@ describe('the accessors', () => {
 
   it('reads notifies as false for an empty map', () => {
     expect(notifiesOf({})).toBe(false)
+  })
+
+  // The backend registry only serves the three values, but this layer must not trust that:
+  // an older API answers nothing for the key, and nothing must mean today's layout.
+  it.each([
+    ['right', 'right'],
+    ['bottom', 'bottom'],
+    ['none', 'none'],
+    ['sideways', 'right'],
+    [undefined, 'right'],
+  ])('reads readingPane %s as %s', (stored, expected) => {
+    const preferences: Record<string, string> =
+      stored === undefined ? {} : { [PREFERENCE_KEYS.readingPane]: stored }
+
+    expect(readingPaneOf(preferences)).toBe(expected)
   })
 })

@@ -15,6 +15,7 @@ public sealed class UserPreferencesTests
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailNotifyDesktop);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailAlwaysShowImages);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowSpamScore);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailReadingPane);
     }
 
     [Theory]
@@ -24,6 +25,7 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailNotifyDesktop, "false")]
     [InlineData(UserPreferences.MailAlwaysShowImages, "false")]
     [InlineData(UserPreferences.MailShowSpamScore, "true")]
+    [InlineData(UserPreferences.MailReadingPane, "right")]
     public void Default_IsTheValueAnAccountWithNoRowsGets(string key, string expected)
     {
         Assert.Equal(expected, UserPreferences.All.Single(p => p.Key == key).Default);
@@ -47,6 +49,11 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailAlwaysShowImages, "yes", false)]
     [InlineData(UserPreferences.MailShowSpamScore, "false", true)]
     [InlineData(UserPreferences.MailShowSpamScore, "yes", false)]
+    [InlineData(UserPreferences.MailReadingPane, "right", true)]
+    [InlineData(UserPreferences.MailReadingPane, "bottom", true)]
+    [InlineData(UserPreferences.MailReadingPane, "none", true)]
+    [InlineData(UserPreferences.MailReadingPane, "left", false)]
+    [InlineData(UserPreferences.MailReadingPane, "Right", false)]  // the value is a symbol, not prose
     public void IsValid_AcceptsOnlyTheOfferedValues(string key, string value, bool expected)
     {
         Assert.Equal(expected, UserPreferences.IsValid(key, value));

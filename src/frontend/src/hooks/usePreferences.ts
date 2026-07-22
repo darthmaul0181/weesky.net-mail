@@ -16,6 +16,7 @@ export const PREFERENCE_KEYS = {
   notifyDesktop: 'mail.notifyDesktop',
   alwaysShowImages: 'mail.alwaysShowImages',
   showSpamScore: 'mail.showSpamScore',
+  readingPane: 'mail.readingPane',
 } as const
 
 export type Preferences = Record<string, string>
@@ -67,6 +68,14 @@ export function showPreviewOf(preferences: Preferences): boolean {
 /** On unless explicitly off — the gauge ships enabled, like the list preview. */
 export function showSpamScoreOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.showSpamScore] !== 'false'
+}
+
+export type ReadingPane = 'right' | 'bottom' | 'none'
+
+/** Falls back to 'right' — today's layout — for an absent key or a value this build ignores. */
+export function readingPaneOf(preferences: Preferences): ReadingPane {
+  const stored = preferences[PREFERENCE_KEYS.readingPane]
+  return stored === 'bottom' || stored === 'none' ? stored : 'right'
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */

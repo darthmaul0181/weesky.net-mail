@@ -36,11 +36,37 @@
 }
 
 .mail-list {
-  width: 380px;
-  flex: none;
-  border-right: 1px solid var(--border);
   background: var(--surface);
 }
+
+/* The inline width is the splitter's; shrink-not-grow (flex: 0 1 auto) lets a size stored on
+   a large screen give way on a small one instead of pushing the reader off the edge. */
+.is-right .mail-list { flex: 0 1 auto; min-width: 240px; }
+.is-right .mail-reader { min-width: 320px; }
+
+.mail-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.mail-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.is-bottom .mail-list { flex: 0 1 auto; min-height: 120px; }
+.is-bottom .mail-reader { min-height: 160px; }
+
+.is-none .mail-list { flex: 1; min-width: 0; }
+
+/* display:none would lose to .mail-list's own flex display without the class on the same
+   element; !important is not needed once it is. */
+.mail-list.is-hidden { display: none; }
 
 .mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 
@@ -382,6 +408,26 @@
   flex: none;
 }
 
+/* ── Wide rows (bottom / no-split modes) ─────────────────── */
+
+/* One line per message; the empty-preview reserve is pointless here — the subject fills the
+   line whether or not a preview follows it. */
+.message-row.is-line { display: flex; align-items: baseline; gap: 8px; }
+
+.message-row.is-line .message-row-from { flex: none; width: 180px; }
+
+.message-row.is-line .message-row-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row.is-line .message-row-line-preview { color: var(--text-muted); font-weight: 400; }
+
+.message-row.is-line.is-unread .message-row-line { font-weight: 700; }
+
 /* ── Pager ───────────────────────────────────────────────── */
 
 .pager {
@@ -465,6 +511,24 @@
 .actions-rule { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
 .reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
+
+/* Sized against the subject line so the arrow reads as part of it, not as a toolbar. */
+.reader-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.reader-back:hover { background: var(--list-row-hover); color: var(--text); }
 .reader-meta {
   color: var(--text-muted);
   font-size: 12px;
@@ -657,3 +721,23 @@
   text-align: center;
   color: var(--text-muted);
 }
+
+/* The back button sits left of the fallback message, not centred above it. */
+.reader-fallback { display: flex; align-items: center; height: 100%; padding: 24px; }
+.reader-fallback .reader-back { margin-right: 12px; }
+.reader-fallback .mail-empty { flex: 1; padding: 0; }
+
+/* ── Pane splitter ───────────────────────────────────────── */
+
+/* The bar carries the panes' separation — the old fixed border-right is gone with it. */
+.pane-splitter {
+  flex: none;
+  background: var(--border);
+  touch-action: none;
+}
+
+.pane-splitter.is-vertical { width: 5px; cursor: col-resize; }
+.pane-splitter.is-horizontal { height: 5px; cursor: row-resize; }
+
+.pane-splitter:hover,
+.pane-splitter:focus-visible { background: var(--accent-unread); outline: none; }

@@ -232,6 +232,59 @@
 }
 .palette-card:hover { border-color: var(--text-muted); }
 .palette-card:has(input:checked) { border-color: var(--action-primary); }
+
+/* ── Reading-pane cards (General) ─────────────────────────── */
+
+.layout-cards { display: flex; gap: 12px; }
+
+.layout-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.layout-card:has(input:checked) { border-color: var(--action-primary); }
+
+.layout-card-name { display: flex; align-items: center; gap: 6px; }
+
+/* The glyph draws the arrangement it stands for: list lines, and a shaded reader pane. */
+.pane-glyph {
+  display: block;
+  width: 56px;
+  height: 38px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.pane-glyph-lines {
+  position: absolute;
+  inset: 5px;
+  background: repeating-linear-gradient(to bottom, var(--text-muted) 0 2px, transparent 2px 8px);
+  opacity: 0.8;
+}
+
+.pane-glyph.is-right .pane-glyph-lines { right: 55%; }
+.pane-glyph.is-bottom .pane-glyph-lines { bottom: 55%; }
+
+.pane-glyph-pane {
+  position: absolute;
+  background: var(--text-muted);
+  opacity: 0.3;
+  border-radius: 2px;
+}
+
+.pane-glyph.is-right .pane-glyph-pane { left: 50%; top: 4px; right: 4px; bottom: 4px; }
+.pane-glyph.is-bottom .pane-glyph-pane { left: 4px; right: 4px; top: 50%; bottom: 4px; }
+
 .palette-name {
   display: flex;
   align-items: center;

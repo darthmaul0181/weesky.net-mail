@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, notifyDesktopOf, notifySoundOf, showPreviewOf,
-  showSpamScoreOf, usePreferences, useSetPreference,
+  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, notifyDesktopOf, notifySoundOf, readingPaneOf,
+  showPreviewOf, showSpamScoreOf, usePreferences, useSetPreference, type ReadingPane,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -22,6 +22,23 @@ function pageSizeToast(value: string): string {
   return value === ALL
     ? 'The message list now shows every message'
     : `The message list now shows ${value} per page`
+}
+
+const READING_PANES: { value: ReadingPane; label: string; toast: string }[] = [
+  { value: 'right', label: 'Right', toast: 'The reader sits beside the message list' },
+  { value: 'bottom', label: 'Bottom', toast: 'The reader sits below the message list' },
+  { value: 'none', label: 'Hidden', toast: 'Messages will open in place of the list' },
+]
+
+/** A miniature of the arrangement — the glyph is the description, like Appearance's
+    palette thumbnails. */
+function PaneGlyph({ variant }: { variant: ReadingPane }) {
+  return (
+    <span className={`pane-glyph is-${variant}`} aria-hidden="true">
+      <span className="pane-glyph-lines" />
+      {variant !== 'none' && <span className="pane-glyph-pane" />}
+    </span>
+  )
 }
 
 type ToggleRowProps = {
@@ -130,6 +147,28 @@ export default function GeneralPage() {
               {PAGE_SIZE_OPTIONS.map(option =>
                 <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
+          </div>
+
+          <div className="field-h is-setting">
+            <span id="reading-pane-label">Reading pane</span>
+            <div className="layout-cards" role="radiogroup" aria-labelledby="reading-pane-label">
+              {READING_PANES.map(({ value, label, toast }) => (
+                <label key={value} className="layout-card">
+                  <PaneGlyph variant={value} />
+                  <span className="layout-card-name">
+                    <input
+                      type="radio"
+                      name="reading-pane"
+                      value={value}
+                      checked={readingPaneOf(preferences) === value}
+                      disabled={setPreference.isPending}
+                      onChange={() => save(PREFERENCE_KEYS.readingPane, value, toast)}
+                    />
+                    {label}
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <ToggleRow

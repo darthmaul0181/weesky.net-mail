@@ -427,6 +427,28 @@ describe('MessageReader', () => {
     expect(await screen.findByText(/could not load this message/i)).toBeInTheDocument()
   })
 
+  // A stale deep link in the no-split mode must not strand the user on an error with no way
+  // back — Escape works, but there is nothing on screen suggesting it.
+  it('offers a back button beside a load failure when a handler is given', async () => {
+    mocks.getMailMessage.mockRejectedValue(new Error('boom'))
+    const onBack = vi.fn()
+
+    render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
+
+    await screen.findByText(/could not load this message/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the message list' }))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('shows the load failure with no back button when there is no handler', async () => {
+    mocks.getMailMessage.mockRejectedValue(new Error('boom'))
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByText(/could not load this message/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to the message list' })).toBeNull()
+  })
+
   describe('the actions zone', () => {
     it('offers no colour toggle in light theme', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
@@ -565,6 +587,38 @@ describe('MessageReader', () => {
       await screen.findByText('Re: facture')
 
       expect(screen.queryByRole('link', { name: 'Unsubscribe' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('back navigation', () => {
+    it('shows a back button only when a handler is given', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Back to the message list' }))
+      expect(onBack).toHaveBeenCalled()
+    })
+
+    it('shows no back button without a handler', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByRole('button', { name: 'Back to the message list' })).toBeNull()
+    })
+
+    it('goes back on Escape', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
+      await screen.findByText('Re: facture')
+      fireEvent.keyDown(window, { key: 'Escape' })
+
+      expect(onBack).toHaveBeenCalled()
     })
   })
 })

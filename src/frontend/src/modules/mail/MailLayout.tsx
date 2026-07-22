@@ -10,6 +10,9 @@ import { useListRefresh } from './list/useListRefresh'
 import MessageReader from './reader/MessageReader'
 import { useFolders } from './queries'
 import { roleLabel } from './roleLabel'
+import { readingPaneOf, usePreferences } from '../../hooks/usePreferences'
+import PaneSplitter from './split/PaneSplitter'
+import { usePaneSize } from './split/usePaneSize'
 
 /**
  * The mail module's three columns. The shell provides a single outlet, so a module builds its
@@ -61,8 +64,29 @@ export default function MailLayout() {
     setParams({ folder, uid: String(nextUid) })
   }
 
+  const { data: preferences } = usePreferences()
+  // Until the preferences answer, today's layout — the list already waits on the same query,
+  // so nothing meaningful can flash in the wrong arrangement.
+  const pane = preferences ? readingPaneOf(preferences) : 'right'
+  const [listWidth, setListWidth] = usePaneSize('mail.split.right', 380, 240)
+  const [listHeight, setListHeight] = usePaneSize('mail.split.bottom', 280, 120)
+
+  function closeMessage() {
+    if (folder) setParams({ folder })
+  }
+
+  const list = (selected: number | null, wide: boolean) => (
+    <MessageList
+      folderPath={folder}
+      folderName={folderName}
+      selectedUid={selected}
+      onSelect={selectMessage}
+      wide={wide}
+    />
+  )
+
   return (
-    <div className="mail-layout">
+    <div className={`mail-layout is-${pane}`}>
       {/* Each column is a band stack: what scrolls is the middle band only, so the folder
           actions and the pager stay put instead of hiding below their own content. */}
       <div className="mail-folders">
@@ -79,18 +103,42 @@ export default function MailLayout() {
         )}
       </div>
 
-      <div className="mail-list">
-        <MessageList
-          folderPath={folder}
-          folderName={folderName}
-          selectedUid={uid}
-          onSelect={selectMessage}
-        />
-      </div>
+      {pane === 'right' && (
+        <div className="mail-row">
+          <div className="mail-list" style={{ width: listWidth }}>{list(uid, false)}</div>
+          {preferences && (
+            <PaneSplitter
+              orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
+              onResize={setListWidth}
+            />
+          )}
+          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} /></div>
+        </div>
+      )}
 
-      <div className="mail-reader">
-        <MessageReader folderPath={folder} uid={uid} />
-      </div>
+      {pane === 'bottom' && (
+        <div className="mail-stack">
+          <div className="mail-list" style={{ height: listHeight }}>{list(uid, true)}</div>
+          <PaneSplitter
+            orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
+            onResize={setListHeight}
+          />
+          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} /></div>
+        </div>
+      )}
+
+      {pane === 'none' && (
+        <>
+          {/* Hidden, never unmounted: the scroll position and the streamed blocks live in this
+              subtree. No selected row either — there is no message "open beside". */}
+          <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
+          {uid !== null && (
+            <div className="mail-reader">
+              <MessageReader folderPath={folder} uid={uid} onBack={closeMessage} />
+            </div>
+          )}
+        </>
+      )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />
     </div>
