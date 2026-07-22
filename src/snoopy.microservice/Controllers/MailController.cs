@@ -476,6 +476,35 @@ public sealed class MailController : ApiBaseController
         return File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
     }
 
+    /// <summary>
+    /// Sets or clears one flag on a batch of messages. A UID that no longer exists is a
+    /// silent no-op: the batch never fails partially.
+    /// </summary>
+    /// <param name="request">folder, UIDs, the flag and the value to write</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">The flags were written</response>
+    /// <response code="400">The folder is missing, or the batch is empty or above 200 UIDs</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPut("Messages/Flags")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult> SetMessageFlags(SetMessageFlagsRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+        if (request.Uids.Count is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Uids must hold between 1 and 200 entries"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _messages.SetFlagsAsync(
+            AuthenticatedUser, password.Value, request.FolderPath, request.Uids, request.Flag, request.Value, cancellationToken);
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
+    }
+
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
     {
         foreach (var node in nodes)

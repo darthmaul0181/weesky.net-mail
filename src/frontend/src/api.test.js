@@ -484,6 +484,18 @@ describe('mail endpoints', () => {
     )
   })
 
+  it('PUTs the batch flags body', async () => {
+    mockFetch(200, { json: {} })
+    const { api } = await import('./api.js')
+
+    await api.setMessageFlags('INBOX/Sub', [1, 2], 'seen', true)
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Messages/Flags'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ folderPath: 'INBOX/Sub', uids: [1, 2], flag: 'seen', value: true }) })
+    )
+  })
+
   it('fetches folder roles', async () => {
     mockFetch(200, { json: [] })
     const { api } = await import('./api.js')

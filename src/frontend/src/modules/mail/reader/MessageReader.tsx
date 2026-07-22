@@ -1,11 +1,12 @@
 ﻿import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
 import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
-import { useMessage } from '../queries'
+import { useAccountId, useMessage, useSetFlags } from '../queries'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
 import AddressLabel, { AddressList } from './AddressLabel'
@@ -17,14 +18,16 @@ import { isWebUnsubscribe } from './unsubscribeLink'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
+import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 interface Props {
   folderPath: string | null
   uid: number | null
   onBack?: () => void
+  onNotify?: (message: string) => void
 }
 
-export default function MessageReader({ folderPath, uid, onBack }: Props) {
+export default function MessageReader({ folderPath, uid, onBack, onNotify }: Props) {
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
   const { data: preferences } = usePreferences()
@@ -32,6 +35,11 @@ export default function MessageReader({ folderPath, uid, onBack }: Props) {
   const [originalColours, setOriginalColours] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+  const setFlags = useSetFlags(onNotify)
+
+  useMarkSeenOnOpen(folderPath, uid, Boolean(data))
 
   // Consent is per message and never carried to the next one. So is the colour choice: a mail
   // that recolours badly says nothing about the next one.
@@ -71,6 +79,13 @@ export default function MessageReader({ folderPath, uid, onBack }: Props) {
   if (uid === null) return <p className="mail-empty">Select a message</p>
   if (isLoading) return fallback('Loading message…')
   if (isError || !data) return fallback('Could not load this message.')
+
+  // Recomputed on every re-render of THIS component — driven by its own useSetFlags settling
+  // or by useMessage refetching, never by the menu opening (that toggles state inside
+  // DropdownMenu). No summary (deep link): read and unstarred, since opening just marked it read.
+  const summary = findCachedSummary(queryClient, accountId, folderPath!, uid!)
+  const seen = summary?.seen ?? true
+  const flagged = summary?.flagged ?? false
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
@@ -156,6 +171,11 @@ export default function MessageReader({ folderPath, uid, onBack }: Props) {
           showColourToggle={isDark && !!data.htmlBody}
           originalColours={originalColours}
           onToggleColours={() => setOriginalColours(v => !v)}
+          seen={seen}
+          flagged={flagged}
+          onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
+          onToggleFlagged={() =>
+            setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
         />
       </header>
 

@@ -223,6 +223,40 @@ internal sealed class ImapSession : IImapSession
         }
     }
 
+    public async Task<Result> SetFlagsAsync(string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            // First ReadWrite open of the project: every read path stays ReadOnly.
+            await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+            var messageFlags = flag == MailFlag.Seen ? MessageFlags.Seen : MessageFlags.Flagged;
+            var ids = uids.Select(uid => new UniqueId(uid)).ToList();
+
+            // A UID that no longer exists is a silent server-side no-op: the batch never fails partially.
+            if (value) await folder.AddFlagsAsync(ids, messageFlags, silent: true, cancellationToken);
+            else await folder.RemoveFlagsAsync(ids, messageFlags, silent: true, cancellationToken);
+
+            return Result.Success();
+        }
+        catch (FolderNotFoundException)
+        {
+            return Result.Failure(FolderNotFound);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set {Flag}={Value} on {Count} messages in {Folder}", flag, value, uids.Count, folderPath);
+            return Result.Failure("Unable to update the messages");
+        }
+    }
+
     public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();

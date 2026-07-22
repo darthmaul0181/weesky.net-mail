@@ -2,18 +2,23 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { settle } from '../../../test-utils'
 import MessageReader from './MessageReader'
 
 const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
   getPreferences: vi.fn(),
+  setMessageFlags: vi.fn(),
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn((folder: string, uid: number, part: string) =>
     `/api/Mail/Messages/Attachment?folder=${folder}&uid=${uid}&part=${part}`),
 }))
 
 vi.mock('../../../api.js', () => ({
-  api: { getMailMessage: mocks.getMailMessage, getPreferences: mocks.getPreferences },
+  api: {
+    getMailMessage: mocks.getMailMessage, getPreferences: mocks.getPreferences,
+    setMessageFlags: mocks.setMessageFlags,
+  },
   requestBlob: mocks.requestBlob,
   mailAttachmentUrl: mocks.mailAttachmentUrl,
 }))
@@ -49,10 +54,32 @@ const blocked = {
   htmlBody: '<img data-blocked-src="https://t.example/p.gif">',
 }
 
+// Seeds the list cache the reader's flag labels read at render time — findCachedSummary's
+// only source of seen/flagged, since MailMessageDetail carries neither.
+function renderWithCachedSummary(
+  summary: { seen: boolean; flagged: boolean }, onNotify?: (message: string) => void,
+) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(['mail', 'primary', 'messages', 'INBOX', 0, 30], {
+    folderPath: 'INBOX', page: 0, pageSize: 30, total: 1,
+    messages: [{
+      uid: 2, subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
+      date: detail.date, answered: false, hasAttachments: true, size: 100, preview: '',
+      ...summary,
+    }],
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <MessageReader folderPath="INBOX" uid={2} onNotify={onNotify} />
+    </QueryClientProvider>,
+  )
+}
+
 describe('MessageReader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.alwaysShowImages': 'false' })
+    mocks.setMessageFlags.mockResolvedValue(undefined)
   })
 
   it('prompts when nothing is selected', () => {
@@ -493,6 +520,89 @@ describe('MessageReader', () => {
 
       expect(screen.queryByText(/colours are adapted to your dark theme/i)).not.toBeInTheDocument()
       theme.isDark = false
+    })
+  })
+
+  describe('the kebab flag menu', () => {
+    it('reads the cached seen/flagged state and marks unread on demand', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderWithCachedSummary({ seen: true, flagged: false })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Mark as unread' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Star' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as unread' }))
+
+      await waitFor(() =>
+        expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'seen', false))
+    })
+
+    // No cached summary at all (a deep link): read and unstarred, since the opening itself
+    // just marked it read.
+    it('falls back to read and unstarred when nothing is cached', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Mark as unread' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Star' })).toBeInTheDocument()
+    })
+
+    // Proves the label actually flips off the optimistic patch, rather than assuming it: the
+    // reader owns the mutation, so its pending→settled transition re-renders it, by which
+    // point the patch — applied synchronously inside onMutate — is already in the cache.
+    it('re-renders the label once the optimistic patch lands', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderWithCachedSummary({ seen: true, flagged: false })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as unread' }))
+      await settle()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Mark as read' })).toBeInTheDocument()
+    })
+
+    it('reads a cached flagged message as Unstar', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderWithCachedSummary({ seen: true, flagged: true })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Unstar' })).toBeInTheDocument()
+    })
+
+    it('stars the message on demand, with the full mutation payload', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderWithCachedSummary({ seen: true, flagged: false })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Star' }))
+
+      await waitFor(() =>
+        expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'flagged', true))
+    })
+
+    // useSetFlags(onNotify), not useSetFlags(): without the argument, onError never reaches
+    // the reader's own onNotify prop and a failed mutation would fail silently.
+    it('reports a failed mutation through onNotify', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.setMessageFlags.mockRejectedValueOnce(new Error('boom'))
+      const onNotify = vi.fn()
+
+      renderWithCachedSummary({ seen: true, flagged: false }, onNotify)
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Star' }))
+
+      await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not update the message'))
     })
   })
 

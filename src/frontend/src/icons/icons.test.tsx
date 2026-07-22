@@ -12,6 +12,8 @@ import SunIcon from './SunIcon'
 import MoonIcon from './MoonIcon'
 import KebabIcon from './KebabIcon'
 import ExternalLinkIcon from './ExternalLinkIcon'
+import StarIcon from './StarIcon'
+import MailOpenIcon from './MailOpenIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -26,6 +28,8 @@ const icons = [
   { name: 'MoonIcon', Icon: MoonIcon, defaultSize: '16' },
   { name: 'KebabIcon', Icon: KebabIcon, defaultSize: '16' },
   { name: 'ExternalLinkIcon', Icon: ExternalLinkIcon, defaultSize: '11' },
+  { name: 'StarIcon', Icon: StarIcon, defaultSize: '16' },
+  { name: 'MailOpenIcon', Icon: MailOpenIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {
@@ -49,5 +53,17 @@ describe('icons', () => {
     const { container } = render(<Icon />)
 
     expect(container.querySelector('svg')).toHaveAttribute('stroke', 'currentColor')
+  })
+
+  it('StarIcon is unfilled by default', () => {
+    const { container } = render(<StarIcon />)
+
+    expect(container.querySelector('svg')).toHaveAttribute('fill', 'none')
+  })
+
+  it('StarIcon fills with currentColor when filled', () => {
+    const { container } = render(<StarIcon filled />)
+
+    expect(container.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
   })
 })

@@ -168,4 +168,53 @@ public sealed class MailMessageRepositoryTests
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.GetAttachmentAsync(null!, "p", "INBOX", 1, "2", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task SetFlagsAsync_DelegatesToTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.SetFlagsAsync("INBOX", It.IsAny<IReadOnlyList<uint>>(), MailFlag.Seen, true, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        var result = await repo.SetFlagsAsync(Alice, "pw", "INBOX", [1u, 2u], MailFlag.Seen, true, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        session.Verify(s => s.SetFlagsAsync("INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 1, 2 })),
+            MailFlag.Seen, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetFlagsAsync_PropagatesAConnectionFailure()
+    {
+        var (repo, factory, _) = CreateSut();
+        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Failure<IImapSession>("down"));
+
+        var result = await repo.SetFlagsAsync(Alice, "pw", "INBOX", [1u], MailFlag.Flagged, false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("down", result.Error);
+    }
+
+    [Fact]
+    public async Task SetFlagsAsync_DisposesTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.SetFlagsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<uint>>(), It.IsAny<MailFlag>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        await repo.SetFlagsAsync(Alice, "pw", "INBOX", [1u], MailFlag.Seen, true, CancellationToken.None);
+
+        session.Verify(s => s.DisposeAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetFlagsAsync_ThrowsWhenUserIsNull()
+    {
+        var (repo, _, _) = CreateSut();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.SetFlagsAsync(null!, "pw", "INBOX", [1u], MailFlag.Seen, true, CancellationToken.None));
+    }
 }

@@ -343,6 +343,7 @@
 
 .message-row {
   display: block;
+  position: relative;
   width: 100%;
   padding: 10px 12px;
   border: none;
@@ -407,6 +408,53 @@
   background: var(--accent-unread);
   flex: none;
 }
+
+/* ── Row controls ────────────────────────────────────────── */
+
+.row-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  /* Both row skins align on the baseline, and this box's is synthesized from its first item —
+     the 16px icon, 21px down — so baseline-aligning it hangs 5px over the text. Centring takes
+     it out of the baseline group, which is what puts the sender line back where it was. */
+  align-self: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.row-btn:hover { color: var(--action-primary); background: var(--surface-sunken); }
+
+.row-star.is-on { color: var(--badge-count-bg); }
+/* Specificity, not decoration: .row-star.is-on ties with .row-btn:hover and would win by order,
+   leaving a starred star as the one button that does not answer the pointer. */
+.row-star.is-on:hover { color: var(--action-primary); }
+
+/* Narrow skin: the cluster sits on the bottom-right corner, over the last line present. */
+.message-row-cluster {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.message-row:hover .message-row-cluster,
+.message-row:focus-within .message-row-cluster { display: flex; }
+
+/* Wide skin has no "bottom": the cluster replaces the date, the star stays at the end. */
+.message-row.is-line .message-row-cluster { position: static; padding: 0; background: none; }
+.message-row.is-line:hover .message-row-date,
+.message-row.is-line:focus-within .message-row-date { display: none; }
 
 /* ── Wide rows (bottom / no-split modes) ─────────────────── */
 

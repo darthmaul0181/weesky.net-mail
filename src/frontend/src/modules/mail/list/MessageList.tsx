@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
+import type { KeyboardEvent } from 'react'
 import { showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
+import type { MailMessageSummary } from '../api/mailTypes'
+import MailIcon from '../../../icons/MailIcon'
+import MailOpenIcon from '../../../icons/MailOpenIcon'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
+import StarIcon from '../../../icons/StarIcon'
+import { useSetFlags } from '../queries'
 import { formatListDate } from './formatDate'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
@@ -13,6 +19,7 @@ interface Props {
   selectedUid: number | null
   onSelect: (uid: number) => void
   wide?: boolean
+  onNotify?: (message: string) => void
 }
 
 const COUNT = new Intl.NumberFormat('en-US')
@@ -21,11 +28,28 @@ const COUNT = new Intl.NumberFormat('en-US')
  * Three bands: a heading, the rows, and the footer. Only the middle one scrolls — the pager
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
  */
-export default function MessageList({ folderPath, folderName, selectedUid, onSelect, wide = false }: Props) {
+export default function MessageList(
+  { folderPath, folderName, selectedUid, onSelect, wide = false, onNotify }: Props) {
   const { messages, total, isLoading, isError, paging, streaming } = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
   const scrollRef = useRef<HTMLDivElement>(null)
+  const setFlags = useSetFlags(onNotify)
+
+  function toggle(message: MailMessageSummary, flag: 'seen' | 'flagged') {
+    if (!folderPath) return
+    const value = flag === 'seen' ? !message.seen : !message.flagged
+    setFlags.mutate({ folderPath, uids: [message.uid], flag, value })
+  }
+
+  // Inner buttons handle their own keys; the row only opens when the row itself has focus.
+  function onRowKey(event: KeyboardEvent<HTMLDivElement>, uid: number) {
+    if (event.target !== event.currentTarget) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onSelect(uid)
+    }
+  }
 
   // The page index resets on its own; the DOM scroll position does not, and would drop the
   // reader into the middle of a folder whose blocks are not loaded.
@@ -49,39 +73,82 @@ export default function MessageList({ folderPath, folderName, selectedUid, onSel
             if (!message.seen) classes.push('is-unread')
             if (message.uid === selectedUid) classes.push('is-selected')
 
+            const from = message.fromName || message.fromAddress
+            const subject = message.subject || '(no subject)'
+            const when = formatListDate(message.date)
+            // role=button is children-presentational: nothing inside the row is exposed on its
+            // own, so everything the row states visually has to be said in its name.
+            const label = `${message.seen ? '' : 'Unread. '}${from}: ${subject}`
+              + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
+
+            const star = (
+              <button
+                type="button"
+                className={`row-btn row-star${message.flagged ? ' is-on' : ''}`}
+                aria-label={message.flagged ? 'Unstar' : 'Star'}
+                onClick={event => { event.stopPropagation(); toggle(message, 'flagged') }}
+              >
+                <StarIcon filled={message.flagged} />
+              </button>
+            )
+
+            const cluster = (
+              <div className="message-row-cluster">
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={message.seen ? 'Mark as unread' : 'Mark as read'}
+                  onClick={event => { event.stopPropagation(); toggle(message, 'seen') }}
+                >
+                  {message.seen ? <MailIcon size={16} /> : <MailOpenIcon size={16} />}
+                </button>
+              </div>
+            )
+
             return (
               <li key={message.uid}>
                 {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
-                <button type="button" className={classes.join(' ')} onClick={() => onSelect(message.uid)}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={label}
+                  className={classes.join(' ')}
+                  onClick={() => onSelect(message.uid)}
+                  onKeyDown={event => onRowKey(event, message.uid)}
+                >
                   {wide ? (
                     <>
                       {!message.seen && <span className="message-row-unread-dot" />}
-                      <span className="message-row-from">{message.fromName || message.fromAddress}</span>
+                      <span className="message-row-from">{from}</span>
                       {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                       <span className="message-row-line">
-                        {message.subject || '(no subject)'}
+                        {subject}
                         {showsPreview && message.preview && (
                           <span className="message-row-line-preview"> — {message.preview}</span>
                         )}
                       </span>
-                      <span className="message-row-date">{formatListDate(message.date)}</span>
+                      <span className="message-row-date">{when}</span>
+                      {cluster}
+                      {star}
                     </>
                   ) : (
                     <>
                       <div className="message-row-top">
                         {!message.seen && <span className="message-row-unread-dot" />}
-                        <span className="message-row-from">{message.fromName || message.fromAddress}</span>
+                        <span className="message-row-from">{from}</span>
                         {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
-                        <span className="message-row-date">{formatListDate(message.date)}</span>
+                        <span className="message-row-date">{when}</span>
+                        {star}
                       </div>
-                      <div className="message-row-subject">{message.subject || '(no subject)'}</div>
+                      <div className="message-row-subject">{subject}</div>
                       {/* Always rendered when previews are on, even empty: a message with no body
                           would otherwise make a shorter row than its neighbours and break the rhythm
                           of the column. The reserved height lives in CSS. */}
                       {showsPreview && <div className="message-row-preview">{message.preview}</div>}
+                      {cluster}
                     </>
                   )}
-                </button>
+                </div>
               </li>
             )
           })}

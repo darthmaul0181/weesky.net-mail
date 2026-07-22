@@ -14,4 +14,7 @@ public interface IMailMessageRepository
 
     /// <summary>One decoded attachment, addressed by MIME part specifier.</summary>
     Task<Result<MailAttachmentContent>> GetAttachmentAsync(User user, string password, string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken);
+
+    /// <summary>Sets or clears a flag on a batch of UIDs.</summary>
+    Task<Result> SetFlagsAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken);
 }

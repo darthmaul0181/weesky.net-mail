@@ -1,16 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 
 const mocks = vi.hoisted(() => ({
-  getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(),
+  getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
+  onError: undefined as ((message: string) => void) | undefined,
 }))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
+}))
+// A plain function, not a vi.fn: the suites clear mocks between tests and the flag hook has
+// to keep answering a mutation afterwards.
+vi.mock('../queries', () => ({
+  useSetFlags: (onError?: (message: string) => void) => {
+    mocks.onError = onError
+    return { mutate: mocks.mutate }
+  },
 }))
 // The list is tested against the shape it consumes, not against the network: what the hook
 // puts on the wire is useMessageList's own test.
@@ -140,10 +149,15 @@ describe('MessageList', () => {
   })
 
   it('names the attachment marker for assistive technology', () => {
-    renderList()
+    const { container } = renderList()
 
     // Only the message that has one — the marker must not be announced on every row.
-    expect(screen.getAllByLabelText(/has attachments/i)).toHaveLength(1)
+    expect(container.querySelectorAll('svg[aria-label="Has attachments"]')).toHaveLength(1)
+    // The row is a role=button, which hides the marker from assistive tech whatever it is named,
+    // so the row's own name is what has to carry it — on that one row.
+    const named = screen.getAllByRole('button')
+      .filter(element => /has attachments/i.test(element.getAttribute('aria-label') || ''))
+    expect(named).toHaveLength(1)
   })
 
   it('falls back to the address when there is no display name', () => {
@@ -161,14 +175,16 @@ describe('MessageList', () => {
   it('marks unread rows', () => {
     renderList()
 
-    expect(screen.getByText('Alice Martin').closest('button')).toHaveClass('is-unread')
-    expect(screen.getByText('bob@x.be').closest('button')).not.toHaveClass('is-unread')
+    // The row is a div[role=button] since it carries buttons of its own — closest('button')
+    // would now walk past it.
+    expect(screen.getByText('Alice Martin').closest('.message-row')).toHaveClass('is-unread')
+    expect(screen.getByText('bob@x.be').closest('.message-row')).not.toHaveClass('is-unread')
   })
 
   it('marks the selected row', () => {
     renderList({ selectedUid: 1 })
 
-    expect(screen.getByText('bob@x.be').closest('button')).toHaveClass('is-selected')
+    expect(screen.getByText('bob@x.be').closest('.message-row')).toHaveClass('is-selected')
   })
 
   it('calls onSelect with the uid', () => {
@@ -239,6 +255,139 @@ describe('MessageList', () => {
     renderList()
 
     expect(screen.getByText(/could not load/i)).toBeInTheDocument()
+  })
+})
+
+describe('the row controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
+
+  it('opens a row from the keyboard', () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.keyDown(rowOf(/alice martin/i), { key: 'Enter' })
+
+    expect(onSelect).toHaveBeenCalledWith(2)
+  })
+
+  it('opens a row on Space, without scrolling the list', () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    // keyDown returns false when a listener called preventDefault; Space would scroll otherwise.
+    const notScrolled = !fireEvent.keyDown(rowOf(/alice martin/i), { key: ' ' })
+
+    expect(onSelect).toHaveBeenCalledWith(2)
+    expect(notScrolled).toBe(true)
+  })
+
+  // fireEvent reaches an unfocusable node just as well; without this the row could leave the tab
+  // order — no keyboard path, and no :focus-within to reveal the cluster — and nothing would say so.
+  it('puts the row in the tab order', () => {
+    renderList()
+
+    expect(rowOf(/alice martin/i)).toHaveAttribute('tabindex', '0')
+  })
+
+  // A role=button with no name of its own takes it from its contents: every row would announce
+  // "…Star, Mark as unread, button". The date is read off the row rather than hard-coded —
+  // formatListDate answers in the runner's locale.
+  it('names the row after the message, not after its controls', () => {
+    renderList()
+
+    const row = rowOf(/alice martin/i)
+    const date = row.querySelector('.message-row-date')!.textContent
+    expect(row).toHaveAttribute(
+      'aria-label', `Unread. Alice Martin: Re: facture, has attachments, ${date}`)
+    expect(row.getAttribute('aria-label')).not.toMatch(/star/i)
+  })
+
+  // role=button is children-presentational, so the dot, the weight and the colour that carry
+  // read state visually reach nobody: the name is the only place left to say it.
+  it('says unread in the name, and says nothing on a read row', () => {
+    renderList()
+
+    expect(rowOf(/alice martin/i).getAttribute('aria-label')).toMatch(/^Unread\. /)
+    expect(rowOf(/bob@x\.be/i).getAttribute('aria-label')).not.toMatch(/unread/i)
+  })
+
+  // An inner button fires Enter itself; without the target guard the row would open behind it.
+  it('does not open the row when a control inside it takes the key', () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.keyDown(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Star' }),
+      { key: 'Enter' })
+
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('the star toggles flagged without opening the message', () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Star' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], flag: 'flagged', value: true })
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('a flagged row offers Unstar', () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...sample[0], flagged: true }] }))
+    renderList()
+
+    const star = screen.getByRole('button', { name: 'Unstar' })
+    expect(star.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
+
+    fireEvent.click(star)
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], flag: 'flagged', value: false })
+  })
+
+  it('the cluster toggles seen without opening the message', () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Mark as read' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], flag: 'seen', value: true })
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('offers the way back on a read row', () => {
+    renderList()
+
+    fireEvent.click(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Mark as unread' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [1], flag: 'seen', value: false })
+  })
+
+  it('carries the controls in wide rows too', () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
+    renderList({ wide: true })
+
+    const row = rowOf(/wide row test/i)
+    expect(within(row).getByRole('button', { name: 'Star' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Mark as unread' })).toBeInTheDocument()
+  })
+
+  it('mutation errors reach onNotify', () => {
+    const onNotify = vi.fn()
+    renderList({ onNotify })
+
+    mocks.onError?.('Could not update the message')
+
+    expect(onNotify).toHaveBeenCalledWith('Could not update the message')
   })
 })
 

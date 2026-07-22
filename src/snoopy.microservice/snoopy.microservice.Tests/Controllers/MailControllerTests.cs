@@ -766,4 +766,83 @@ public sealed class MailControllerTests
         Assert.IsType<NoContentResult>(result);
         _roleStore.Verify(s => s.DeleteAsync("alice@weesky.be", "trash", It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task SetMessageFlags_Returns204AndDelegates()
+    {
+        _messages.Setup(m => m.SetFlagsAsync(It.IsAny<User>(), "hunter2", "INBOX",
+                It.IsAny<IReadOnlyList<uint>>(), MailFlag.Seen, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().SetMessageFlags(
+            new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = [42u], Flag = MailFlag.Seen, Value = true },
+            CancellationToken.None);
+
+        var status = Assert.IsType<StatusCodeResult>(result);
+        Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
+        _messages.Verify(m => m.SetFlagsAsync(It.IsAny<User>(), "hunter2", "INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
+            MailFlag.Seen, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetMessageFlags_Returns400WithoutAFolder()
+    {
+        var result = await CreateController().SetMessageFlags(
+            new SetMessageFlagsRequest { FolderPath = " ", Uids = [1u], Flag = MailFlag.Seen, Value = true },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SetMessageFlags_Returns400OnAnEmptyBatch()
+    {
+        var result = await CreateController().SetMessageFlags(
+            new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = [], Flag = MailFlag.Seen, Value = true },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SetMessageFlags_Returns400Above200Uids()
+    {
+        var uids = Enumerable.Range(1, 201).Select(i => (uint)i).ToList();
+
+        var result = await CreateController().SetMessageFlags(
+            new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = uids, Flag = MailFlag.Flagged, Value = true },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SetMessageFlags_Returns401WhenCredentialsAreUnavailable()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.SetMessageFlags(
+            new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = [1u], Flag = MailFlag.Seen, Value = true },
+            CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SetMessageFlags_Returns502WhenTheServerRefuses()
+    {
+        _messages.Setup(m => m.SetFlagsAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<MailFlag>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("Unable to update the messages"));
+
+        var result = await CreateController().SetMessageFlags(
+            new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = [1u], Flag = MailFlag.Seen, Value = true },
+            CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
 }

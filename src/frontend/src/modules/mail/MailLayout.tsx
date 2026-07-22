@@ -82,6 +82,7 @@ export default function MailLayout() {
       selectedUid={selected}
       onSelect={selectMessage}
       wide={wide}
+      onNotify={addToast}
     />
   )
 
@@ -112,7 +113,7 @@ export default function MailLayout() {
               onResize={setListWidth}
             />
           )}
-          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} /></div>
+          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} onNotify={addToast} /></div>
         </div>
       )}
 
@@ -123,7 +124,7 @@ export default function MailLayout() {
             orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
             onResize={setListHeight}
           />
-          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} /></div>
+          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} onNotify={addToast} /></div>
         </div>
       )}
 
@@ -134,7 +135,7 @@ export default function MailLayout() {
           <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
           {uid !== null && (
             <div className="mail-reader">
-              <MessageReader folderPath={folder} uid={uid} onBack={closeMessage} />
+              <MessageReader folderPath={folder} uid={uid} onBack={closeMessage} onNotify={addToast} />
             </div>
           )}
         </>

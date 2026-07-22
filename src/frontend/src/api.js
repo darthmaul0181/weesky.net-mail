@@ -226,6 +226,9 @@ export const api = {
   getMailMessage: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
 
+  setMessageFlags: (folder, uids, flag, value) =>
+    request('PUT', '/api/Mail/Messages/Flags', { folderPath: folder, uids, flag, value }),
+
   getFolderRoles: (options) =>
     request('GET', '/api/Mail/FolderRoles', undefined, options),
 

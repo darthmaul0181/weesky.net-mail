@@ -58,4 +58,10 @@ public interface IImapSession : IAsyncDisposable
     /// ImapSession.MessageNotFound or ImapSession.AttachmentNotFound.
     /// </summary>
     Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sets or clears a flag on a batch of UIDs. Fails with ImapSession.FolderNotFound
+    /// when the path no longer resolves.
+    /// </summary>
+    Task<Result> SetFlagsAsync(string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken);
 }

@@ -52,4 +52,15 @@ internal sealed class MailMessageRepository : IMailMessageRepository
 
         return await session.GetAttachmentAsync(folderPath, uid, partSpecifier, cancellationToken);
     }
+
+    public async Task<Result> SetFlagsAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+        await using var session = sessionResult.Value;
+
+        return await session.SetFlagsAsync(folderPath, uids, flag, value, cancellationToken);
+    }
 }

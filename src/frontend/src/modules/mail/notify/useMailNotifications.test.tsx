@@ -5,6 +5,7 @@ import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderNode } from '../api/mailTypes'
 import { mailKeys } from '../queries'
 import { useMailNotifications } from './useMailNotifications'
+import { settle } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(),
@@ -31,15 +32,6 @@ function wrapper({ children }: { children: ReactNode }) {
     the same refs, which is a different hook lifecycle, not a slower one. */
 function strictWrapper({ children }: { children: ReactNode }) {
   return <StrictMode>{wrapper({ children })}</StrictMode>
-}
-
-/**
- * A macrotask boundary, which drains every pending microtask. The notification is raised at the
- * end of the describe-fetch's await chain: a silence assertion made before that chain drains
- * holds against any hook whatsoever, including one that notifies on every tick.
- */
-async function settle() {
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
 
 function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {

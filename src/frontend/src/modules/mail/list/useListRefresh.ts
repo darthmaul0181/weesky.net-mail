@@ -68,7 +68,7 @@ export function useListRefresh(folderPath: string | null): void {
     if (isStreaming(preferences)) {
       refreshFirstBlock(client, accountId, folderPath)
     } else {
-      client.invalidateQueries({ queryKey: ['mail', accountId, 'messages', folderPath] })
+      client.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, folderPath) })
     }
   }, [folders, folderPath, preferences, accountId, client])
 }

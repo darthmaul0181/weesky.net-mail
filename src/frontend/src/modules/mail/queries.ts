@@ -1,10 +1,20 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
-import type { MailFolderNode, MailFolderPage, MailMessageDetail, FolderRoleEntry } from './api/mailTypes'
+import type {
+  MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, FolderRoleEntry,
+} from './api/mailTypes'
+import { patchFolderUnread, patchSummaries, type MailFlagName } from './list/flagPatch'
 import { nextBlockIndex } from './list/messageStream'
 
+
+// The prefixes are the keys minus their trailing size arguments: what a mutation or a refresh
+// matches on, since it patches a folder's every cached page whatever size it was fetched at.
+const messagesIn = (accountId: string, folder: string) =>
+  ['mail', accountId, 'messages', folder] as const
+const messageStreamIn = (accountId: string, folder: string) =>
+  ['mail', accountId, 'messageStream', folder] as const
 
 /**
  * Every key is scoped by the active account, so linking a second account later isolates its
@@ -13,16 +23,18 @@ import { nextBlockIndex } from './list/messageStream'
 export const mailKeys = {
   all: (accountId: string) => ['mail', accountId] as const,
   folders: (accountId: string) => ['mail', accountId, 'folders'] as const,
+  messagesIn,
   // pageSize is part of the key: a cached page was computed under one size and means something
   // else under another.
   messages: (accountId: string, folder: string, page: number, pageSize: number) =>
-    ['mail', accountId, 'messages', folder, page, pageSize] as const,
+    [...messagesIn(accountId, folder), page, pageSize] as const,
   message: (accountId: string, folder: string, uid: number) =>
     ['mail', accountId, 'message', folder, uid] as const,
   // Its own key: what it caches is not a page but a sequence of pages, and mixing the two
   // shapes under one key is a type error that only shows at runtime.
+  messageStreamIn,
   messageStream: (accountId: string, folder: string, requestSize: number) =>
-    ['mail', accountId, 'messageStream', folder, requestSize] as const,
+    [...messageStreamIn(accountId, folder), requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
 }
 
@@ -153,3 +165,100 @@ export const useDeleteFolder = () =>
 export const useSetFolderSubscription = () =>
   useFolderMutation<{ path: string; subscribed: boolean }>(
     ({ path, subscribed }) => api.setMailFolderSubscription(path, subscribed))
+
+export interface SetFlagsArgs {
+  folderPath: string
+  uids: number[]
+  flag: MailFlagName
+  value: boolean
+}
+
+type Snapshot = [readonly unknown[], unknown]
+
+/**
+ * Counts each uid's seen transition once across every cache, pages and stream blocks alike:
+ * a uid sitting in two of them is one badge move, not two. `patchSummaries` stays the single
+ * definition of what a transition is.
+ */
+function unreadTally(uids: number[], flag: MailFlagName, value: boolean) {
+  const uncounted = flag === 'seen' ? new Set(uids) : null
+  let delta = 0
+
+  return {
+    get delta() { return delta },
+    count(messages: MailMessageSummary[]) {
+      if (!uncounted?.size) return
+      delta += patchSummaries(messages, [...uncounted], flag, value).unreadDelta
+      for (const message of messages) uncounted.delete(message.uid)
+    },
+  }
+}
+
+/**
+ * Optimistic across three caches — pages, stream blocks, folder unread — with snapshot
+ * rollback. Never invalidates the stream (N blocks = N IMAP connections); the 60s poll
+ * and highestModSeq are the truth mechanism, so there is no onSettled either.
+ */
+export function useSetFlags(onError?: (message: string) => void) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ folderPath, uids, flag, value }: SetFlagsArgs) =>
+      api.setMessageFlags(folderPath, uids, flag, value),
+
+    onMutate: async ({ folderPath, uids, flag, value }: SetFlagsArgs) => {
+      const pagesKey = mailKeys.messagesIn(accountId, folderPath)
+      const streamKey = mailKeys.messageStreamIn(accountId, folderPath)
+      await queryClient.cancelQueries({ queryKey: pagesKey })
+      await queryClient.cancelQueries({ queryKey: streamKey })
+
+      const snapshots: Snapshot[] = []
+      // A cache holding no target retires nothing and counts nothing, so its silence stays
+      // silence: only a cache that actually held the uid can move the badge.
+      const tally = unreadTally(uids, flag, value)
+
+      for (const [key, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
+        if (!page) continue
+        const patch = patchSummaries(page.messages, uids, flag, value)
+        if (patch.found === 0) continue
+        snapshots.push([key, page])
+        queryClient.setQueryData(key, { ...page, messages: patch.messages })
+        tally.count(page.messages)
+      }
+
+      for (const [key, stream] of
+        queryClient.getQueriesData<InfiniteData<MailFolderPage>>({ queryKey: streamKey })) {
+        if (!stream) continue
+        let found = 0
+        // Every block holding the uid is patched; the tally counts it once, whichever block or
+        // cache it turned up in first.
+        const pages = stream.pages.map(page => {
+          const patch = patchSummaries(page.messages, uids, flag, value)
+          found += patch.found
+          tally.count(page.messages)
+          return patch.found ? { ...page, messages: patch.messages } : page
+        })
+        if (found === 0) continue
+        snapshots.push([key, stream])
+        queryClient.setQueryData(key, { ...stream, pages })
+      }
+
+      if (tally.delta !== 0) {
+        const foldersKey = mailKeys.folders(accountId)
+        const tree = queryClient.getQueryData<MailFolderNode[]>(foldersKey)
+        if (tree) {
+          snapshots.push([foldersKey, tree])
+          queryClient.setQueryData(foldersKey, patchFolderUnread(tree, folderPath, tally.delta))
+        }
+      }
+
+      return { snapshots }
+    },
+
+    onError: (_error, _args, context) => {
+      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      onError?.('Could not update the message')
+    },
+  })
+}
