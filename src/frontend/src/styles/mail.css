@@ -429,7 +429,12 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.row-btn:hover { color: var(--action-primary); background: var(--surface-sunken); }
+/* A tint of the icon's own colour, because the row underneath is three different colours:
+   a fixed surface token is a pale patch on a selected row and invisible on a hovered one. */
+.row-btn:hover {
+  color: var(--action-primary);
+  background: color-mix(in oklab, currentColor 14%, transparent);
+}
 
 .row-star.is-on { color: var(--badge-count-bg); }
 /* Specificity, not decoration: .row-star.is-on ties with .row-btn:hover and would win by order,
@@ -446,7 +451,9 @@
   gap: 2px;
   padding: 1px 2px;
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
+  /* It exists only to hide the preview line behind it, so it has to be whatever the row is
+     painting — normal, hovered, unread or selected. */
+  background: inherit;
 }
 .message-row:hover .message-row-cluster,
 .message-row:focus-within .message-row-cluster { display: flex; }
