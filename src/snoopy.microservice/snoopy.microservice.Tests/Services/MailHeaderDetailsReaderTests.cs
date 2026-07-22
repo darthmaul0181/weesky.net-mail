@@ -163,4 +163,90 @@ public sealed class MailHeaderDetailsReaderTests
 
         Assert.False(result.TlsReceived);
     }
+
+    // RFC 2369 delimits entries with <> precisely because a URL may legally contain commas.
+    [Fact]
+    public void Parse_KeepsACommaInsideABracketedUnsubscribeUrl()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("List-Unsubscribe", "<https://x.be/unsub?ids=1,2>")));
+
+        Assert.Equal("https://x.be/unsub?ids=1,2", result.UnsubscribeUrl);
+    }
+
+    [Fact]
+    public void Parse_KeepsAMultiRecipientMailtoIntact()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("List-Unsubscribe", "<mailto:a@x.be,b@x.be>")));
+
+        Assert.Equal("mailto:a@x.be,b@x.be", result.UnsubscribeUrl);
+    }
+
+    [Fact]
+    public void Parse_StillSplitsABracketlessUnsubscribeOnCommas()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("List-Unsubscribe", "mailto:unsub@x.be, https://x.be/unsub")));
+
+        Assert.Equal("https://x.be/unsub", result.UnsubscribeUrl);
+    }
+
+    // The frontend branches on the scheme case-sensitively; the wire scheme is case-insensitive.
+    [Fact]
+    public void Parse_LowercasesTheUnsubscribeScheme()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("List-Unsubscribe", "<MAILTO:Unsub@X.be>")));
+
+        Assert.Equal("mailto:Unsub@X.be", result.UnsubscribeUrl);
+    }
+
+    [Fact]
+    public void Parse_DoesNotMistakeTlsInsideAQueueIdForEncryption()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "from relay by mx.weesky.net with ESMTP id ABTLSQ7")));
+
+        Assert.False(result.TlsReceived);
+    }
+
+    [Fact]
+    public void Parse_ReadsTlsVersionNotes()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "from relay by mx.weesky.net with ESMTP (version=TLS1_2 cipher=ECDHE-RSA-AES256) id a")));
+
+        Assert.True(result.TlsReceived);
+    }
+
+    [Fact]
+    public void Parse_ReadsALowercaseEsmtpsaDialect()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Received", "from relay by mx.weesky.net with esmtpsa id a")));
+
+        Assert.True(result.TlsReceived);
+    }
+
+    // A line claiming "signed by X" must not survive a failed verification — no fallback either.
+    [Fact]
+    public void Parse_HidesSignedByWhenTheSignatureFailed()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Authentication-Results", "mx.weesky.net; dkim=fail header.d=paypal.com"),
+            ("DKIM-Signature", "v=1; a=rsa-sha256; d=paypal.com; s=s1")));
+
+        Assert.Null(result.SignedBy);
+    }
+
+    // A mailing list breaks the original signature while its own verifies: name the passing signer.
+    [Fact]
+    public void Parse_NamesThePassingSignerAmongFailures()
+    {
+        var result = MailHeaderDetailsReader.Parse(Headers(
+            ("Authentication-Results", "mx.weesky.net; dkim=fail header.d=original.example; dkim=pass header.d=list.example")));
+
+        Assert.Equal("list.example", result.SignedBy);
+    }
 }

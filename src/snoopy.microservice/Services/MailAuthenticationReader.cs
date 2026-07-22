@@ -11,16 +11,7 @@ internal static class MailAuthenticationReader
 
     public static MailAuthentication? Parse(HeaderList headers)
     {
-        // Every relay prepends its own copy; anything but the topmost one could have been
-        // forged by the sender before the message ever reached our receiving server.
-        Header? header = null;
-        foreach (var candidate in headers)
-        {
-            if (!string.Equals(candidate.Field, HeaderName, StringComparison.OrdinalIgnoreCase)) continue;
-            header = candidate;
-            break;
-        }
-
+        var header = headers.Topmost(HeaderName);
         if (header is null) return null;
 
         return AuthenticationResults.TryParse(header.RawValue, out var parsed)

@@ -18,7 +18,7 @@ no extra IMAP round-trip) via a new `MailHeaderDetailsReader`, modelled on
 |---|---|---|
 | `MailingList` (string?) | `List-Id` | Shown verbatim, e.g. `<news.example.org>` |
 | `SentBy` (string?) | `smtp.mailfrom=` domain in Authentication-Results → `Return-Path` domain → `Sender` domain | Gmail's "Mailed by" (envelope domain). Nearly always present |
-| `SignedBy` (string?) | `header.d=` in Authentication-Results → `d=` of `DKIM-Signature` | Gmail's "Signed by" |
+| `SignedBy` (string?) | `header.d=` in Authentication-Results → `d=` of `DKIM-Signature` | Gmail's "Signed by". Hidden on an explicit `dkim=fail` (no fallback either); a passing signature outranks a failing one |
 | `UnsubscribeUrl` (string?) | `List-Unsubscribe`: first `https:`/`http:` URL, else `mailto:` | Scheme whitelist only — anything else is dropped |
 | `TlsReceived` (bool?) | Topmost `Received`: `ESMTPS` / `TLS` / cipher mention | `null` when no usable Received → row hidden |
 

@@ -14,7 +14,7 @@ internal static partial class MailSpamScoreReader
 
     private static MailSpamScore? FromRspamd(HeaderList headers)
     {
-        var header = Topmost(headers, "X-Spamd-Result");
+        var header = headers.Topmost("X-Spamd-Result");
         if (header is null) return null;
 
         var match = RspamdScore().Match(header.Value);
@@ -25,7 +25,7 @@ internal static partial class MailSpamScoreReader
 
     private static MailSpamScore? FromSpamAssassin(HeaderList headers)
     {
-        var status = Topmost(headers, "X-Spam-Status");
+        var status = headers.Topmost("X-Spam-Status");
         if (status is not null)
         {
             var score = SpamAssassinScore().Match(status.Value);
@@ -35,7 +35,7 @@ internal static partial class MailSpamScoreReader
         }
 
         // X-Spam-Score alone carries no threshold; 5.0 is SpamAssassin's universal default.
-        var bare = Topmost(headers, "X-Spam-Score");
+        var bare = headers.Topmost("X-Spam-Score");
         return bare is not null
             && double.TryParse(bare.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
             ? new MailSpamScore(value, 5.0, Raw(bare))
@@ -44,7 +44,7 @@ internal static partial class MailSpamScoreReader
 
     private static MailSpamScore? FromExchangeScl(HeaderList headers)
     {
-        var header = Topmost(headers, "X-MS-Exchange-Organization-SCL");
+        var header = headers.Topmost("X-MS-Exchange-Organization-SCL");
         if (header is null
             || !int.TryParse(header.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var scl))
         {
@@ -53,15 +53,6 @@ internal static partial class MailSpamScoreReader
 
         // SCL -1 is Microsoft's trusted-internal marker; 5 and up is classed as spam.
         return new MailSpamScore(Math.Max(0, scl), 5, Raw(header));
-    }
-
-    // Anything below the topmost occurrence could have been forged by the sender.
-    private static Header? Topmost(HeaderList headers, string name)
-    {
-        foreach (var header in headers)
-            if (string.Equals(header.Field, name, StringComparison.OrdinalIgnoreCase)) return header;
-
-        return null;
     }
 
     private static string Raw(Header header) => $"{header.Field}: {header.Value}";
