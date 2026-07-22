@@ -561,9 +561,22 @@
 .details-toggle:hover { color: var(--action-primary); background: var(--surface-sunken); }
 .details-toggle.is-open { transform: rotate(90deg); }
 
-.unsub-link { color: var(--action-primary); text-decoration: none; }
-.unsub-link:hover { text-decoration: underline; }
-.from-sep { color: var(--border); user-select: none; }
+.unsub-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--action-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.unsub-btn:hover { background: var(--surface-sunken); border-color: var(--action-primary); }
 
 .reader-details {
   display: grid;

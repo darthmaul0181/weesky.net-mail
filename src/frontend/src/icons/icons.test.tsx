@@ -11,6 +11,7 @@ import SlidersIcon from './SlidersIcon'
 import SunIcon from './SunIcon'
 import MoonIcon from './MoonIcon'
 import KebabIcon from './KebabIcon'
+import ExternalLinkIcon from './ExternalLinkIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -24,6 +25,7 @@ const icons = [
   { name: 'SunIcon', Icon: SunIcon, defaultSize: '16' },
   { name: 'MoonIcon', Icon: MoonIcon, defaultSize: '16' },
   { name: 'KebabIcon', Icon: KebabIcon, defaultSize: '16' },
+  { name: 'ExternalLinkIcon', Icon: ExternalLinkIcon, defaultSize: '11' },
 ]
 
 describe('icons', () => {

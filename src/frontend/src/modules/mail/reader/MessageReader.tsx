@@ -4,6 +4,7 @@ import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
+import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
 import { useMessage } from '../queries'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
@@ -130,12 +131,10 @@ export default function MessageReader({ folderPath, uid, onBack }: Props) {
               {/* Unsubscribing acts on the sender, not on this message — hence here, not in the
                   actions zone. */}
               {unsubscribe && (
-                <>
-                  <span className="from-sep">·</span>
-                  <a className="unsub-link" href={unsubscribe} target="_blank" rel="noopener noreferrer">
-                    Unsubscribe
-                  </a>
-                </>
+                <a className="unsub-btn" href={unsubscribe} target="_blank" rel="noopener noreferrer">
+                  <ExternalLinkIcon />
+                  Unsubscribe
+                </a>
               )}
             </div>
             {detailsOpen ? (
