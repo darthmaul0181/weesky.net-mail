@@ -425,4 +425,51 @@ describe('MessageReader', () => {
 
     expect(await screen.findByText(/could not load this message/i)).toBeInTheDocument()
   })
+
+  describe('the actions zone', () => {
+    it('offers no colour toggle in light theme', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByRole('button', { name: /original colours/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Message actions' })).toBeInTheDocument()
+    })
+
+    // Recolouring a text-only message means nothing — the same guard the banner had.
+    it('offers no colour toggle for a text-only message, even in dark', async () => {
+      theme.isDark = true
+      mocks.getMailMessage.mockResolvedValue({ ...detail, htmlBody: '', textBody: 'plain only' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('plain only')
+
+      expect(screen.queryByRole('button', { name: /original colours/i })).not.toBeInTheDocument()
+      theme.isDark = false
+    })
+
+    it('swaps the sun for a moon once the sender colours are shown', async () => {
+      theme.isDark = true
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'Original colours' }))
+
+      expect(await screen.findByRole('button', { name: 'Match my theme' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Original colours' })).not.toBeInTheDocument()
+      theme.isDark = false
+    })
+
+    it('no longer shows the colour banner', async () => {
+      theme.isDark = true
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText(/colours are adapted to your dark theme/i)).not.toBeInTheDocument()
+      theme.isDark = false
+    })
+  })
 })

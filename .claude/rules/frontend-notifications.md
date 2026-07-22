@@ -1,0 +1,31 @@
+---
+paths:
+  - "src/frontend/src/modules/mail/notify/**"
+  - "src/frontend/src/modules/settings/general/**"
+  - "src/frontend/src/layouts/AppShell.tsx"
+  - "src/frontend/src/modules/mail/queries.ts"
+---
+
+# New-mail notifications
+
+**New-mail notifications** (`src/modules/mail/notify/`) ring for the inbox from anywhere in the app: `useMailNotifications` is called once, from `AppShell`, not `MailLayout`, so it also fires while the user is sitting in Settings or the other sections. `notifyDecision.ts` is the pure decision and wording, `channels.ts` the two side-effecting channels (the `Audio` element, `Notification`), `useMailNotifications.ts` the polling glue over `useFolders`.
+
+**Only `uidNext` triggers, and the first observation is a baseline, never announced.** A deletion moves `total`, a read-flip moves `unread` — neither is new mail — so `notifyDecision` looks at `uidNext` alone, and the tick with no previous value to compare stores one instead of firing. Skip that and turning the settings back on after they sat off for hours announces the whole backlog as if it just arrived. **A `uidValidity` break re-baselines the same way, in silence.** The server reassigning every UID makes the old `uidNext` meaningless against the new numbering; without that guard a validity break's `uidNext` leap announced thousands of messages in one notification, and because the claim is banked from that decision regardless, it also stored that inflated number in `localStorage` — which then gagged every real notification in every tab, permanently.
+
+**Arrivals are picked by `uid >= previous uidNext`** (`newSince`), never by taking the top rows of the fetched page: the list is sorted by the `Date` header, so a late-delivered message can land mid-list.
+
+**The notification never reads the message list from the query cache — it always re-fetches** (`describeArrivals`). A cache read was tried and was worse than useless: the sibling list refresh that reacts to the same poll tick is asynchronous, so at the moment the notification decides, the cached page is still the one from *before* the arrival. Reading it said "1 new message" instead of naming the sender, and its click handler had no uid to open — precisely when the user had the inbox open to notice.
+
+**Two tabs, two dedupe mechanisms**, because only one has a free answer. The desktop bubble dedupes natively: both tabs raise a `Notification` with the identical tag, and the second replaces rather than stacks. The sound has no such equivalent, hence `claimNotification`'s `localStorage` compare-and-set — not an atomic lock, since two tabs poll on independent clocks and practically never collide, so the worst case is one extra beep, not silence. **The claim is stored as `{ uidValidity, uidNext }`, not a bare number**: a rebuilt or restored mailbox raises `uidValidity` and restarts `uidNext` near 1, and a claim banked at 30000 under the old numbering would otherwise refuse every genuine arrival, in every tab, for good — the deflation mirror of the inflation bug above. A claim from another `uidValidity`, or stored garbage, blocks nothing.
+
+**Clicking a named single-message notification opens that message**; a counted one only raises the window, since there is no one message to open — `describeArrivals` returns a null uid whenever more than one arrived or the fetch failed.
+
+**The permission outranks the preference.** Turning the desktop toggle on asks for permission inside the click gesture (`GeneralPage.toggleDesktop`) — Safari requires the ask to be synchronous with the gesture; an `await` ahead of it and the ask silently does nothing. A denial is never saved as an enabled setting: that would be the lying switch, on and producing nothing. A permission revoked later, between sessions, is caught by re-reading `Notification.permission` on `visibilitychange` and rendering the toggle off with an explanatory note, not by trusting the stored preference.
+
+**Enabling the sound plays it**, synchronously inside the click and before any `await` (`toggleSound`). Browsers block audio from a page nobody has interacted with — exactly the situation a notification fires into — so playing on enable both proves to the user it works and earns the origin the engagement Chrome and Edge track for future autoplay. A rejected `play()` is swallowed (`channels.ts`): a failed notification must not raise a second interruption announcing its own failure.
+
+**`refetchIntervalInBackground` (`queries.ts`, `useFolders`) is conditional on the settings, separately from `enabled`.** An unfocused tab that asked for nothing must keep costing nothing; a notification is only useful while the tab is elsewhere. Both it and the notification hook's own `enabled` read one exported predicate, `notifiesOf` (`hooks/usePreferences.ts`), rather than deriving `sound || desktop` twice. `enabled` gates whether the query runs at all, `refetchIntervalInBackground` gates whether it keeps polling once the tab loses focus — a user with sound or desktop on needs the second, everyone else needs neither.
+
+**`settle()` in `useMailNotifications.test.tsx` is load-bearing in every test that asserts silence, not decoration.** TanStack v5 notifies observers on a macrotask, so `await act(() => setQueryData(...))` returns before the hook has even re-rendered — a silence assertion made there holds against any hook whatsoever, including one that notifies on every tick. That shape of bug shipped once: five tests once asserted silence about a race they never actually created, and a hook rewritten to notify on every single poll tick still passed eleven of the twelve.
+
+The sound is RainLoop's (`src/assets/new-mail.mp3`), MIT-licensed; the notice lives in `THIRD-PARTY.md` at the frontend root and must travel with the file if it is ever replaced. iOS/iPadOS Safari only delivers `Notification`s to a site added to the home screen — `desktopPermission()` still reports `'unsupported'` there, and `GeneralPage` says so in the note under the toggle rather than leaving it silently inert. **Plain HTTP produces the same `'unsupported'`** — `Notification` needs a secure context — so `GeneralPage` splits the two on `window.isSecureContext === false` and points at HTTPS instead of blaming the browser; a strict `=== false` so a runtime that does not report the flag falls back to the unsupported copy.

@@ -11,6 +11,7 @@ import SpamGauge from './SpamGauge'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
+import ReaderActions from './ReaderActions'
 
 interface Props {
   folderPath: string | null
@@ -64,35 +65,29 @@ export default function MessageReader({ folderPath, uid }: Props) {
   return (
     <article>
       <header className="reader-header">
-        <h1 className="reader-subject">{data.subject || '(no subject)'}</h1>
-        <div className="reader-meta">
-          <div className="reader-from">
-            <AddressLabel sender name={data.fromName} address={data.fromAddress} />
-            <AuthBadge authentication={data.authentication} />
-            <span className="reader-date">({formatReaderDate(data.date)})</span>
+        <div className="reader-stack">
+          <h1 className="reader-subject">{data.subject || '(no subject)'}</h1>
+          <div className="reader-meta">
+            <div className="reader-from">
+              <AddressLabel sender name={data.fromName} address={data.fromAddress} />
+              <AuthBadge authentication={data.authentication} />
+              <span className="reader-date">({formatReaderDate(data.date)})</span>
+            </div>
+            {data.to.length > 0 && (
+              <div className="reader-recipients">To: <AddressList addresses={data.to} /></div>
+            )}
+            {data.cc.length > 0 && (
+              <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
+            )}
+            {!!preferences && showSpamScoreOf(preferences) && <SpamGauge spamScore={data.spamScore} />}
           </div>
-          {data.to.length > 0 && (
-            <div className="reader-recipients">To: <AddressList addresses={data.to} /></div>
-          )}
-          {data.cc.length > 0 && (
-            <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
-          )}
-          {!!preferences && showSpamScoreOf(preferences) && <SpamGauge spamScore={data.spamScore} />}
         </div>
+        <ReaderActions
+          showColourToggle={isDark && !!data.htmlBody}
+          originalColours={originalColours}
+          onToggleColours={() => setOriginalColours(v => !v)}
+        />
       </header>
-
-      {isDark && data.htmlBody && (
-        <div className="reader-colour-note">
-          <span>
-            {inverted
-              ? 'Colours are adapted to your dark theme.'
-              : 'Showing the colours the sender chose.'}
-          </span>
-          <button type="button" className="btn" onClick={() => setOriginalColours(v => !v)}>
-            {inverted ? 'Original colours' : 'Match my theme'}
-          </button>
-        </div>
-      )}
 
       {data.blockedImageCount > 0 && !showImages && (
         <div className="reader-blocked-images">

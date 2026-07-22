@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 interface Props {
   content: ReactNode
-  placement?: 'top-right' | 'bottom-left'
+  placement?: 'top-right' | 'bottom-left' | 'bottom-right'
   children: ReactNode
 }
 

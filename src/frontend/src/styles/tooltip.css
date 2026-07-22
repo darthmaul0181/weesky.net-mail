@@ -36,6 +36,13 @@
   max-width: 320px;
 }
 
+.tooltip-bubble.is-bottom-right {
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: 320px;
+}
+
 .tooltip-wrap:hover .tooltip-bubble,
 .tooltip-wrap:focus-within .tooltip-bubble {
   display: block;

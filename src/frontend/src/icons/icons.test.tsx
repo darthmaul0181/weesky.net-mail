@@ -8,6 +8,9 @@ import PaperclipIcon from './PaperclipIcon'
 import RefreshIcon from './RefreshIcon'
 import FolderPlusIcon from './FolderPlusIcon'
 import SlidersIcon from './SlidersIcon'
+import SunIcon from './SunIcon'
+import MoonIcon from './MoonIcon'
+import KebabIcon from './KebabIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -18,6 +21,9 @@ const icons = [
   { name: 'RefreshIcon', Icon: RefreshIcon, defaultSize: '16' },
   { name: 'FolderPlusIcon', Icon: FolderPlusIcon, defaultSize: '16' },
   { name: 'SlidersIcon', Icon: SlidersIcon, defaultSize: '16' },
+  { name: 'SunIcon', Icon: SunIcon, defaultSize: '16' },
+  { name: 'MoonIcon', Icon: MoonIcon, defaultSize: '16' },
+  { name: 'KebabIcon', Icon: KebabIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {
