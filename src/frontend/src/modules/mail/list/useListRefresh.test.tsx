@@ -3,12 +3,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
-import { mailKeys } from '../queries'
+import { mailKeys, useSetFlags } from '../queries'
 import { dedupeByUid } from './messageStream'
+import { settle } from '../../../test-utils'
 import { useListRefresh } from './useListRefresh'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(),
+  setMessageFlags: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
@@ -43,7 +45,12 @@ async function renderWithBaseline(pageSize: string, first: MailFolderNode) {
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': pageSize, 'mail.showPreview': 'true' })
   mocks.getMailFolders.mockResolvedValue([first])
 
-  const rendered = renderHook(() => useListRefresh('INBOX'), { wrapper })
+  // The mutation renders beside the hook because the bug is the pair: the optimistic patch
+  // writes the folder tree, which is exactly what this hook watches.
+  const rendered = renderHook(() => {
+    useListRefresh('INBOX')
+    return useSetFlags()
+  }, { wrapper })
   await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
   await waitFor(() =>
     expect(client.getQueryData(mailKeys.folders('primary'))).toBeDefined())
@@ -157,6 +164,33 @@ describe('useListRefresh', () => {
 
     rerender({ path: 'Archive' })
     // Archive's first observation is a baseline, not a change against INBOX's snapshot.
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Marking a message unread patches the folder's unread count, which this hook watches. Left
+   * alone it refreshes on its own optimistic write: the refetch reads the mailbox before the
+   * IMAP STORE lands and puts the message back to read, undoing what the user just did.
+   */
+  it('stands down while a flag write is in flight', async () => {
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    // Never settles: the window under test is exactly the one where the write is in flight.
+    mocks.setMessageFlags.mockReturnValue(new Promise(() => {}))
+    client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 10), pageOf([1, 2]))
+
+    const rendered = await renderWithBaseline('10', inbox({ unread: 2 }))
+
+    await act(async () => {
+      rendered.result.current.mutate({
+        folderPath: 'INBOX', uids: [1], flag: 'seen', value: false,
+      })
+    })
+
+    // The optimistic patch bumped the tree to unread 3, re-running the effect.
+    expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0].unread).toBe(3)
+    // Load-bearing: the query cache notifies its observers on a macrotask, so an assertion of
+    // silence made before it drains holds against any implementation at all.
+    await settle()
     expect(spy).not.toHaveBeenCalled()
   })
 })

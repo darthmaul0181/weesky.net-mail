@@ -48,6 +48,12 @@ export function useListRefresh(folderPath: string | null): void {
     if (!node) return
 
     const snapshot = snapshotOf(node)
+
+    // A flag write patches this very count optimistically, so answering it would refetch the
+    // folder mid-write: the read reaches the mailbox before the STORE lands and puts the
+    // message back the way it was. Whatever really moved keeps until the next poll.
+    if (client.isMutating({ mutationKey: mailKeys.flags(accountId) }) > 0) return
+
     const last = previous.current
     previous.current = { path: folderPath, snapshot }
     if (!last || last.path !== folderPath) return

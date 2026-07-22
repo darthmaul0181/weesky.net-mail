@@ -36,6 +36,8 @@ export const mailKeys = {
   messageStream: (accountId: string, folder: string, requestSize: number) =>
     [...messageStreamIn(accountId, folder), requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
+  /** Mutation key, not a query key: it is what lets the poll tell our own writes from a change. */
+  flags: (accountId: string) => ['mail', accountId, 'setFlags'] as const,
 }
 
 export function useAccountId(): string {
@@ -204,6 +206,7 @@ export function useSetFlags(onError?: (message: string) => void) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    mutationKey: mailKeys.flags(accountId),
     mutationFn: ({ folderPath, uids, flag, value }: SetFlagsArgs) =>
       api.setMessageFlags(folderPath, uids, flag, value),
 
