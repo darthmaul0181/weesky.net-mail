@@ -479,6 +479,37 @@
    gap would land between the comma and the name it precedes instead of after it. */
 .reader-recipients { display: block; }
 
+.details-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.details-toggle:hover { color: var(--action-primary); background: var(--surface-sunken); }
+.details-toggle.is-open { transform: rotate(90deg); }
+
+.reader-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 5px 14px;
+  margin-top: 4px;
+}
+
+.reader-details dt { text-align: right; }
+.reader-details dd { margin: 0; color: var(--text); overflow-wrap: break-word; min-width: 0; }
+.reader-details a { color: var(--action-primary); }
+.detail-muted { color: var(--text-muted); }
+.reader-security { display: inline-flex; align-items: center; gap: 5px; }
+
 .address-label { color: inherit; font: inherit; }
 
 .address-label.is-sender {

@@ -388,6 +388,7 @@ internal sealed class ImapSession : IImapSession
             var message = await folder.GetMessageAsync(uniqueId, cancellationToken);
             var sanitized = _sanitizer.Sanitize(message.HtmlBody ?? string.Empty);
             var sender = message.From?.Mailboxes?.FirstOrDefault();
+            var headerDetails = MailHeaderDetailsReader.Parse(message.Headers);
 
             var detail = new MailMessageDetail
             {
@@ -404,7 +405,12 @@ internal sealed class ImapSession : IImapSession
                 TextBody = message.TextBody ?? string.Empty,
                 BlockedImageCount = sanitized.BlockedImageCount,
                 Authentication = MailAuthenticationReader.Parse(message.Headers),
-                SpamScore = MailSpamScoreReader.Parse(message.Headers)
+                SpamScore = MailSpamScoreReader.Parse(message.Headers),
+                MailingList = headerDetails.MailingList,
+                SentBy = headerDetails.SentBy,
+                SignedBy = headerDetails.SignedBy,
+                UnsubscribeUrl = headerDetails.UnsubscribeUrl,
+                TlsReceived = headerDetails.TlsReceived
             };
 
             foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())

@@ -84,6 +84,12 @@ export interface MailMessageDetail {
   date: string
   authentication: MailAuthentication | null
   spamScore: MailSpamScore | null
+  /** Expanded-header details — each null when the message carries no such header. */
+  mailingList: string | null
+  sentBy: string | null
+  signedBy: string | null
+  unsubscribeUrl: string | null
+  tlsReceived: boolean | null
   /** Already sanitised by the backend. Still only ever rendered in a sandboxed iframe. */
   htmlBody: string
   textBody: string

@@ -36,6 +36,7 @@ const detail = {
   to: [{ name: 'Mick', address: 'mick@weesky.be' }], cc: [],
   date: '2026-07-18T09:00:00Z', authentication: null,
   spamScore: null,
+  mailingList: null, sentBy: null, signedBy: null, unsubscribeUrl: null, tlsReceived: null,
   htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0,
   attachments: [
     { part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048, isInline: false },
@@ -470,6 +471,67 @@ describe('MessageReader', () => {
 
       expect(screen.queryByText(/colours are adapted to your dark theme/i)).not.toBeInTheDocument()
       theme.isDark = false
+    })
+  })
+
+  describe('the expanded details', () => {
+    const detailed = {
+      ...detail,
+      mailingList: '<news.weesky.net>',
+      sentBy: 'a547955.bnc3.mailjet.com',
+      signedBy: 'weesky.net',
+      unsubscribeUrl: 'https://news.weesky.net/unsub',
+      tlsReceived: true,
+    }
+
+    it('starts collapsed, showing exactly the compact header', async () => {
+      mocks.getMailMessage.mockResolvedValue(detailed)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.getByRole('button', { name: 'Show details' })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByText(/^To:/)).toBeInTheDocument()
+      expect(screen.queryByText('Mailing list:')).not.toBeInTheDocument()
+    })
+
+    it('expands into the details grid, replacing the compact lines', async () => {
+      mocks.getMailMessage.mockResolvedValue(detailed)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+
+      expect(screen.getByText('Mailing list:')).toBeInTheDocument()
+      expect(screen.getByText('a547955.bnc3.mailjet.com')).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /unsubscribe/i })).toBeInTheDocument()
+      expect(container.querySelector('.reader-recipients')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Hide details' })).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('collapses back on a second click', async () => {
+      mocks.getMailMessage.mockResolvedValue(detailed)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Hide details' }))
+
+      expect(screen.queryByText('Mailing list:')).not.toBeInTheDocument()
+      expect(screen.getByText(/^To:/)).toBeInTheDocument()
+    })
+
+    // One-shot per message, like the image consent and the colour choice.
+    it('resets to collapsed when another message is opened', async () => {
+      mocks.getMailMessage.mockResolvedValue(detailed)
+
+      const { rerender } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+
+      mocks.getMailMessage.mockResolvedValue({ ...detailed, uid: 3, subject: 'Autre' })
+      rerender(<MessageReader folderPath="INBOX" uid={3} />)
+      await screen.findByText('Autre')
+
+      expect(screen.getByRole('button', { name: 'Show details' })).toBeInTheDocument()
+      expect(screen.queryByText('Mailing list:')).not.toBeInTheDocument()
     })
   })
 })

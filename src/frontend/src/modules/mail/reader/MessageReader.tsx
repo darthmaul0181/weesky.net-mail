@@ -2,16 +2,18 @@
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
+import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { useMessage } from '../queries'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
 import SpamGauge from './SpamGauge'
+import ReaderActions from './ReaderActions'
+import ReaderDetails from './ReaderDetails'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
-import ReaderActions from './ReaderActions'
 
 interface Props {
   folderPath: string | null
@@ -25,6 +27,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
   const [imagesShown, setImagesShown] = useState(false)
   const [originalColours, setOriginalColours] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   // Consent is per message and never carried to the next one. So is the colour choice: a mail
   // that recolours badly says nothing about the next one.
@@ -32,6 +35,7 @@ export default function MessageReader({ folderPath, uid }: Props) {
     setImagesShown(false)
     setOriginalColours(false)
     setDownloadError(null)
+    setDetailsOpen(false)
   }, [folderPath, uid])
 
   if (uid === null) return <p className="mail-empty">Select a message</p>
@@ -72,12 +76,27 @@ export default function MessageReader({ folderPath, uid }: Props) {
               <AddressLabel sender name={data.fromName} address={data.fromAddress} />
               <AuthBadge authentication={data.authentication} />
               <span className="reader-date">({formatReaderDate(data.date)})</span>
+              <button
+                type="button"
+                className={`details-toggle${detailsOpen ? ' is-open' : ''}`}
+                aria-expanded={detailsOpen}
+                aria-label={detailsOpen ? 'Hide details' : 'Show details'}
+                onClick={() => setDetailsOpen(open => !open)}
+              >
+                <ChevronRightIcon size={12} />
+              </button>
             </div>
-            {data.to.length > 0 && (
-              <div className="reader-recipients">To: <AddressList addresses={data.to} /></div>
-            )}
-            {data.cc.length > 0 && (
-              <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
+            {detailsOpen ? (
+              <ReaderDetails message={data} />
+            ) : (
+              <>
+                {data.to.length > 0 && (
+                  <div className="reader-recipients">To: <AddressList addresses={data.to} /></div>
+                )}
+                {data.cc.length > 0 && (
+                  <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
+                )}
+              </>
             )}
             {!!preferences && showSpamScoreOf(preferences) && <SpamGauge spamScore={data.spamScore} />}
           </div>

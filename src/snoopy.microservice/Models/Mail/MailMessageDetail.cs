@@ -22,6 +22,14 @@ public sealed class MailMessageDetail
     /// <summary>The spam filter's verdict. Null when the message carries no recognised anti-spam header.</summary>
     public MailSpamScore? SpamScore { get; set; }
 
+    /// <summary>Expanded-header details (List-Id, envelope domain, DKIM domain, unsubscribe link, TLS). Each null when absent.</summary>
+    public string? MailingList { get; set; }
+
+    public string? SentBy { get; set; }
+    public string? SignedBy { get; set; }
+    public string? UnsubscribeUrl { get; set; }
+    public bool? TlsReceived { get; set; }
+
     /// <summary>Sanitised HTML body. Empty when the message is text-only.</summary>
     public string HtmlBody { get; set; } = string.Empty;
 
