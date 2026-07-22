@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { flatten, indent, isSystemFolder, parentOf, sortFolders } from './folderNodes'
+import { flatten, indent, isSystemFolder, parentOf, rolePathsOf, sortFolders } from './folderNodes'
 import type { MailFolderNode } from '../api/mailTypes'
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
@@ -105,6 +105,42 @@ describe('sortFolders', () => {
     sortFolders(input)
 
     expect(input.map(n => n.name)).toEqual(['Zeta', 'Alpha'])
+  })
+})
+
+describe('rolePathsOf', () => {
+  it('answers the path of each action role', () => {
+    expect(rolePathsOf([
+      node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+      node({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+      node({ path: 'Spam', name: 'Spam', specialUse: 'junk' }),
+    ])).toEqual({ trash: 'Corbeille', archive: 'Archives', junk: 'Spam' })
+  })
+
+  it('finds a role held by a nested folder', () => {
+    expect(rolePathsOf([
+      node({
+        path: 'INBOX', name: 'INBOX', specialUse: 'inbox',
+        children: [node({ path: 'INBOX.Trash', name: 'Trash', specialUse: 'trash' })],
+      }),
+    ]).trash).toBe('INBOX.Trash')
+  })
+
+  it('answers null for a role no folder holds', () => {
+    expect(rolePathsOf(tree)).toEqual({ trash: 'Corbeille', archive: null, junk: null })
+  })
+
+  it('answers null for every role on an empty tree', () => {
+    expect(rolePathsOf([])).toEqual({ trash: null, archive: null, junk: null })
+  })
+
+  // Two folders claiming one role is a server-side conflict, not a client decision: the first
+  // in tree order wins, deterministically.
+  it('keeps the first folder claiming a role', () => {
+    expect(rolePathsOf([
+      node({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+      node({ path: 'Deleted', name: 'Deleted', specialUse: 'trash' }),
+    ]).trash).toBe('Trash')
   })
 })
 

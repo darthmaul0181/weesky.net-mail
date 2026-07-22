@@ -1,5 +1,12 @@
 import type { MailFolderNode } from '../api/mailTypes'
 
+/** Where the row and reader actions file a message. Null is "no folder holds that role". */
+export interface RolePaths {
+  trash: string | null
+  archive: string | null
+  junk: string | null
+}
+
 /** Flattens the tree so a parent picker or a flat list can show every folder. */
 export function flatten(nodes: MailFolderNode[], depth = 0): Array<{ node: MailFolderNode; depth: number }> {
   return nodes.flatMap(node => [{ node, depth }, ...flatten(node.children, depth + 1)])
@@ -14,6 +21,22 @@ export function parentOf(folder: MailFolderNode): string {
   return folder.path.length > folder.name.length
     ? folder.path.slice(0, folder.path.length - folder.name.length - 1)
     : ''
+}
+
+/**
+ * The target of each role action, anywhere in the tree — a server may nest its trash under the
+ * inbox. Two folders claiming one role is a server-side conflict: the first in tree order wins.
+ */
+export function rolePathsOf(nodes: MailFolderNode[]): RolePaths {
+  const paths: RolePaths = { trash: null, archive: null, junk: null }
+
+  for (const { node } of flatten(nodes)) {
+    const role = node.specialUse
+    if ((role === 'trash' || role === 'archive' || role === 'junk') && paths[role] === null) {
+      paths[role] = node.path
+    }
+  }
+  return paths
 }
 
 /** Nesting shown in a flat <select>, where indentation is the only cue available. */

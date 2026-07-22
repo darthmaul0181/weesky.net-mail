@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { useTheme } from '../../../contexts/ThemeContext'
@@ -6,7 +6,18 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
 import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
-import { useAccountId, useMessage, useSetFlags } from '../queries'
+import ArchiveIcon from '../../../icons/ArchiveIcon'
+import JunkIcon from '../../../icons/JunkIcon'
+import FolderMoveIcon from '../../../icons/FolderMoveIcon'
+import CopyIcon from '../../../icons/CopyIcon'
+import {
+  useAccountId, useDeleteMessages, useFolders, useMessage, useMoveMessages, useSetFlags,
+} from '../queries'
+import { rolePathsOf } from '../folders/folderNodes'
+import type { MenuEntry } from '../../../components/DropdownMenu'
+import type { SpecialUse } from '../api/mailTypes'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import MoveMessagesModal from '../MoveMessagesModal'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { formatReaderDate } from './formatReaderDate'
 import AddressLabel, { AddressList } from './AddressLabel'
@@ -20,24 +31,37 @@ import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
+const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
+const NO_JUNK = 'Assign the junk folder in Settings → Folders'
+
 interface Props {
   folderPath: string | null
   uid: number | null
+  /** The open folder's own role: inside the trash, deleting expunges instead of moving. */
+  folderRole?: SpecialUse | null
   onBack?: () => void
   onNotify?: (message: string) => void
+  onDeparted?: (uid: number) => void
 }
 
-export default function MessageReader({ folderPath, uid, onBack, onNotify }: Props) {
+export default function MessageReader(
+  { folderPath, uid, folderRole, onBack, onNotify, onDeparted }: Props) {
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
   const { data: preferences } = usePreferences()
+  const { data: folders } = useFolders()
   const [imagesShown, setImagesShown] = useState(false)
   const [originalColours, setOriginalColours] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const accountId = useAccountId()
   const queryClient = useQueryClient()
   const setFlags = useSetFlags(onNotify)
+  const moveMessages = useMoveMessages(onNotify)
+  const deleteMessages = useDeleteMessages(onNotify)
+  const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
 
   useMarkSeenOnOpen(folderPath, uid, Boolean(data))
 
@@ -48,17 +72,20 @@ export default function MessageReader({ folderPath, uid, onBack, onNotify }: Pro
     setOriginalColours(false)
     setDownloadError(null)
     setDetailsOpen(false)
+    setPicker(null)
+    setConfirmDelete(false)
   }, [folderPath, uid])
 
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
-  // replaced the list and needs a way back.
+  // replaced the list and needs a way back. An open modal owns Escape, so the reader stays put
+  // rather than backing out from under the picker or the confirm.
   useEffect(() => {
-    if (!onBack) return
+    if (!onBack || picker || confirmDelete) return
 
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onBack() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onBack, picker, confirmDelete])
 
   const fallback = (message: string) => (
     <div className="reader-fallback">
@@ -111,6 +138,47 @@ export default function MessageReader({ folderPath, uid, onBack, onNotify }: Pro
       setDownloadError(error instanceof Error ? error.message : 'Could not download the attachment')
     }
   }
+
+  // Delete outside the trash is a move to it — the trash is the undo, so nothing to confirm.
+  const inTrash = folderRole === 'trash'
+  const deleteLabel = inTrash ? 'Delete permanently' : 'Delete'
+  const deleteDisabled = !inTrash && !roles.trash
+  const archiveOff = !roles.archive || folderRole === 'archive'
+  const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
+  const junkOff = !roles.junk || folderRole === 'junk'
+  const junkReason = folderRole === 'junk' ? 'Already in the junk folder' : NO_JUNK
+
+  function moveTo(target: string | null, copy: boolean) {
+    if (!target) return
+    moveMessages.mutate({ folderPath: folderPath!, uids: [uid!], targetFolderPath: target, copy })
+    if (!copy) onDeparted?.(uid!)  // A copy departs nothing; the row stays.
+  }
+
+  function onDelete() {
+    if (inTrash) setConfirmDelete(true)
+    else moveTo(roles.trash, false)
+  }
+
+  function expunge() {
+    deleteMessages.mutate({ folderPath: folderPath!, uids: [uid!] })
+    setConfirmDelete(false)
+    onDeparted?.(uid!)
+  }
+
+  const actions: MenuEntry[] = [
+    {
+      label: 'Archive', icon: <ArchiveIcon size={16} />,
+      onSelect: () => moveTo(roles.archive, false),
+      disabled: archiveOff, title: archiveOff ? archiveReason : undefined,
+    },
+    {
+      label: 'Report as junk', icon: <JunkIcon size={16} />,
+      onSelect: () => moveTo(roles.junk, false),
+      disabled: junkOff, title: junkOff ? junkReason : undefined,
+    },
+    { label: 'Move to…', icon: <FolderMoveIcon size={16} />, onSelect: () => setPicker({ mode: 'move' }) },
+    { label: 'Copy to…', icon: <CopyIcon size={16} />, onSelect: () => setPicker({ mode: 'copy' }) },
+  ]
 
   return (
     <article>
@@ -176,6 +244,10 @@ export default function MessageReader({ folderPath, uid, onBack, onNotify }: Pro
           onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
           onToggleFlagged={() =>
             setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
+          deleteLabel={deleteLabel}
+          deleteDisabled={deleteDisabled}
+          onDelete={onDelete}
+          actions={actions}
         />
       </header>
 
@@ -227,6 +299,26 @@ export default function MessageReader({ folderPath, uid, onBack, onNotify }: Pro
             </button>
           ))}
         </div>
+      )}
+
+      {picker && (
+        <MoveMessagesModal
+          mode={picker.mode}
+          folders={folders ?? []}
+          currentFolderPath={folderPath!}
+          onPick={target => { moveTo(target, picker.mode === 'copy'); setPicker(null) }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+
+      {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
+      {confirmDelete && (
+        <DeleteConfirmModal
+          entityLabel={data.subject || '(no subject)'}
+          onConfirm={expunge}
+          onClose={() => setConfirmDelete(false)}
+          loading={deleteMessages.isPending}
+        />
       )}
     </article>
   )

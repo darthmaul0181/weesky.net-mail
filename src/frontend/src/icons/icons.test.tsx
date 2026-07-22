@@ -14,6 +14,10 @@ import KebabIcon from './KebabIcon'
 import ExternalLinkIcon from './ExternalLinkIcon'
 import StarIcon from './StarIcon'
 import MailOpenIcon from './MailOpenIcon'
+import ArchiveIcon from './ArchiveIcon'
+import FolderMoveIcon from './FolderMoveIcon'
+import CopyIcon from './CopyIcon'
+import JunkIcon from './JunkIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -30,6 +34,10 @@ const icons = [
   { name: 'ExternalLinkIcon', Icon: ExternalLinkIcon, defaultSize: '11' },
   { name: 'StarIcon', Icon: StarIcon, defaultSize: '16' },
   { name: 'MailOpenIcon', Icon: MailOpenIcon, defaultSize: '16' },
+  { name: 'ArchiveIcon', Icon: ArchiveIcon, defaultSize: '16' },
+  { name: 'FolderMoveIcon', Icon: FolderMoveIcon, defaultSize: '16' },
+  { name: 'CopyIcon', Icon: CopyIcon, defaultSize: '16' },
+  { name: 'JunkIcon', Icon: JunkIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

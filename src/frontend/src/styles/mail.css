@@ -456,9 +456,9 @@
 
 /* The cluster is always the last child, so the line before it is the one it would cover — the
    preview, or the subject when previews are off. Reserving its width there ends that line in an
-   ellipsis instead of running it under the buttons. 26px per button, plus 6px of air. */
+   ellipsis instead of running it under the buttons. 3 × 26 + 2 × 2 gaps, plus 6px of air. */
 .message-row:not(.is-line):hover > :nth-last-child(2),
-.message-row:not(.is-line):focus-within > :nth-last-child(2) { padding-right: 32px; }
+.message-row:not(.is-line):focus-within > :nth-last-child(2) { padding-right: 88px; }
 
 /* Wide skin has no "bottom": the cluster replaces the date, the star stays at the end. */
 /* align-self, like the buttons': left in the baseline group its baseline is its button's, 21px
@@ -571,6 +571,9 @@
 }
 
 .action-btn:hover { color: var(--action-primary); background: var(--surface-sunken); }
+
+/* Muted at rest like any action, danger only on hover — the row-button tint technique. */
+.action-btn.is-danger:hover { color: var(--danger); background: color-mix(in oklab, currentColor 14%, transparent); }
 
 .actions-rule { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
@@ -818,3 +821,84 @@
 
 .pane-splitter:hover,
 .pane-splitter:focus-visible { background: var(--accent-unread); outline: none; }
+
+/* ── Move/Copy folder picker ─────────────────────────────── */
+
+.folder-pick-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.folder-pick-search {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.folder-pick-count { margin: 8px 2px 4px; font-size: 11px; color: var(--text-muted); }
+
+.folder-pick-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.folder-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-bottom: 1px solid var(--list-separator);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-pick-row:last-child { border-bottom: none; }
+.folder-pick-row:hover { background: var(--list-row-hover); }
+.folder-pick-row:disabled { background: none; color: var(--text-muted); cursor: not-allowed; }
+
+.folder-pick-row.is-selected {
+  background: var(--list-row-selected-bg);
+  color: var(--list-row-selected-fg);
+  font-weight: 600;
+}
+
+/* indent() writes spaces, which only survive under pre. */
+.folder-pick-indent { white-space: pre; }
+
+.folder-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.folder-pick-badge {
+  margin-left: auto;
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.folder-pick-empty { padding: 18px 10px; text-align: center; color: var(--text-muted); }
+
+.folder-pick-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}

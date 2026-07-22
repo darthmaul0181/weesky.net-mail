@@ -17,4 +17,10 @@ public interface IMailMessageRepository
 
     /// <summary>Sets or clears a flag on a batch of UIDs.</summary>
     Task<Result> SetFlagsAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken);
+
+    /// <summary>Moves or copies a batch of UIDs into another folder.</summary>
+    Task<Result> MoveOrCopyAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken);
+
+    /// <summary>Permanently deletes a batch of UIDs via UID EXPUNGE.</summary>
+    Task<Result> DeleteAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken);
 }

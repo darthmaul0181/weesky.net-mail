@@ -1,12 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
-import type { MailMessageSummary } from '../api/mailTypes'
+import type { MailMessageSummary, SpecialUse } from '../api/mailTypes'
+import ArchiveIcon from '../../../icons/ArchiveIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import StarIcon from '../../../icons/StarIcon'
-import { useSetFlags } from '../queries'
+import TrashIcon from '../../../icons/TrashIcon'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import { rolePathsOf } from '../folders/folderNodes'
+import { useDeleteMessages, useFolders, useMoveMessages, useSetFlags } from '../queries'
 import { formatListDate } from './formatDate'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
@@ -16,30 +20,60 @@ import { useMessageList } from './useMessageList'
 interface Props {
   folderPath: string | null
   folderName?: string
+  /** The open folder's own role: inside the trash, deleting expunges instead of moving. */
+  folderRole?: SpecialUse | null
   selectedUid: number | null
   onSelect: (uid: number) => void
   wide?: boolean
   onNotify?: (message: string) => void
+  onRows?: (uids: number[]) => void
+  onDeparted?: (uid: number) => void
 }
 
 const COUNT = new Intl.NumberFormat('en-US')
+const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
+const NO_TRASH = 'Assign the trash folder in Settings → Folders'
 
 /**
  * Three bands: a heading, the rows, and the footer. Only the middle one scrolls — the pager
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
  */
 export default function MessageList(
-  { folderPath, folderName, selectedUid, onSelect, wide = false, onNotify }: Props) {
+  { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
+    onRows, onDeparted }: Props) {
   const { messages, total, isLoading, isError, paging, streaming } = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
   const scrollRef = useRef<HTMLDivElement>(null)
   const setFlags = useSetFlags(onNotify)
+  const moveMessages = useMoveMessages(onNotify)
+  const deleteMessages = useDeleteMessages(onNotify)
+  const { data: folders } = useFolders()
+  const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
+  const [expunging, setExpunging] = useState<MailMessageSummary | null>(null)
+  const inTrash = folderRole === 'trash'
+  const archiveOff = !roles.archive || folderRole === 'archive'
+  const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
+  const trashOff = !inTrash && !roles.trash
 
   function toggle(message: MailMessageSummary, flag: 'seen' | 'flagged') {
     if (!folderPath) return
     const value = flag === 'seen' ? !message.seen : !message.flagged
     setFlags.mutate({ folderPath, uids: [message.uid], flag, value })
+  }
+
+  function moveTo(target: string | null, uid: number) {
+    if (!folderPath || !target) return
+    moveMessages.mutate({ folderPath, uids: [uid], targetFolderPath: target, copy: false })
+    onDeparted?.(uid)
+  }
+
+  function expunge() {
+    if (!folderPath || !expunging) return
+    const uid = expunging.uid
+    deleteMessages.mutate({ folderPath, uids: [uid] })
+    setExpunging(null)
+    onDeparted?.(uid)
   }
 
   // Inner buttons handle their own keys; the row only opens when the row itself has focus.
@@ -54,6 +88,9 @@ export default function MessageList(
   // The page index resets on its own; the DOM scroll position does not, and would drop the
   // reader into the middle of a folder whose blocks are not loaded.
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [folderPath])
+
+  // The rows in view, for whoever has to pick the next selection when one of them leaves.
+  useEffect(() => { onRows?.(messages.map(message => message.uid)) }, [messages, onRows])
 
   if (!folderPath) return <p className="mail-empty">Select a folder</p>
 
@@ -101,6 +138,31 @@ export default function MessageList(
                   onClick={event => { event.stopPropagation(); toggle(message, 'seen') }}
                 >
                   {message.seen ? <MailIcon size={16} /> : <MailOpenIcon size={16} />}
+                </button>
+                {/* Disabled with its reason, never withheld: a missing button reads as a bug. */}
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label="Archive"
+                  disabled={archiveOff}
+                  title={archiveOff ? archiveReason : undefined}
+                  onClick={event => { event.stopPropagation(); moveTo(roles.archive, message.uid) }}
+                >
+                  <ArchiveIcon size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={inTrash ? 'Delete permanently' : 'Delete'}
+                  disabled={trashOff}
+                  title={trashOff ? NO_TRASH : undefined}
+                  onClick={event => {
+                    event.stopPropagation()
+                    if (inTrash) setExpunging(message)
+                    else moveTo(roles.trash, message.uid)
+                  }}
+                >
+                  <TrashIcon size={16} />
                 </button>
               </div>
             )
@@ -183,6 +245,16 @@ export default function MessageList(
         <div className="mail-list-footer">
           <span className="mail-list-count">{COUNT.format(messages.length)} of {COUNT.format(total)}</span>
         </div>
+      )}
+
+      {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
+      {expunging && (
+        <DeleteConfirmModal
+          entityLabel={expunging.subject || '(no subject)'}
+          onConfirm={expunge}
+          onClose={() => setExpunging(null)}
+          loading={deleteMessages.isPending}
+        />
       )}
     </>
   )

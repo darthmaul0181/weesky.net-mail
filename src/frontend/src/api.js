@@ -229,6 +229,15 @@ export const api = {
   setMessageFlags: (folder, uids, flag, value) =>
     request('PUT', '/api/Mail/Messages/Flags', { folderPath: folder, uids, flag, value }),
 
+  moveMessages: (folder, uids, targetFolder) =>
+    request('POST', '/api/Mail/Messages/Move', { folderPath: folder, uids, targetFolderPath: targetFolder }),
+
+  copyMessages: (folder, uids, targetFolder) =>
+    request('POST', '/api/Mail/Messages/Copy', { folderPath: folder, uids, targetFolderPath: targetFolder }),
+
+  deleteMessages: (folder, uids) =>
+    request('DELETE', '/api/Mail/Messages', { folderPath: folder, uids }),
+
   getFolderRoles: (options) =>
     request('GET', '/api/Mail/FolderRoles', undefined, options),
 

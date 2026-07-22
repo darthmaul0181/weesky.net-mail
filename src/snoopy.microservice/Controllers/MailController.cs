@@ -505,6 +505,83 @@ public sealed class MailController : ApiBaseController
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
 
+    /// <summary>Moves a batch of messages into another folder.</summary>
+    /// <param name="request">source folder, UIDs and target folder</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">The messages were moved</response>
+    /// <response code="400">A folder is missing, the batch is empty or above 200 UIDs, the target equals the source, or the target cannot hold messages</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("Messages/Move")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public Task<ActionResult> MoveMessages(MoveMessagesRequest request, CancellationToken cancellationToken)
+        => MoveOrCopy(request, copy: false, cancellationToken);
+
+    /// <summary>Copies a batch of messages into another folder.</summary>
+    /// <param name="request">source folder, UIDs and target folder</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">The messages were copied</response>
+    /// <response code="400">A folder is missing, the batch is empty or above 200 UIDs, the target equals the source, or the target cannot hold messages</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("Messages/Copy")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public Task<ActionResult> CopyMessages(MoveMessagesRequest request, CancellationToken cancellationToken)
+        => MoveOrCopy(request, copy: true, cancellationToken);
+
+    private async Task<ActionResult> MoveOrCopy(MoveMessagesRequest request, bool copy, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+        if (request.Uids.Count is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Uids must hold between 1 and 200 entries"));
+        if (string.IsNullOrWhiteSpace(request.TargetFolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A target folder is required"));
+        if (string.Equals(request.FolderPath, request.TargetFolderPath, StringComparison.Ordinal))
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder must differ from the source folder"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _messages.MoveOrCopyAsync(
+            AuthenticatedUser, password.Value, request.FolderPath, request.Uids, request.TargetFolderPath, copy, cancellationToken);
+
+        if (result.IsFailure && result.Error == ImapSession.TargetNotSelectable)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder cannot hold messages"));
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
+    }
+
+    /// <summary>
+    /// Permanently deletes a batch of messages via UID EXPUNGE, bypassing the trash entirely.
+    /// </summary>
+    /// <param name="request">folder and UIDs</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">The messages were deleted</response>
+    /// <response code="400">The folder is missing, or the batch is empty or above 200 UIDs</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server could not be reached, or cannot delete without UIDPLUS</response>
+    [HttpDelete("Messages")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult> DeleteMessages(DeleteMessagesRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+        if (request.Uids.Count is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Uids must hold between 1 and 200 entries"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _messages.DeleteAsync(AuthenticatedUser, password.Value, request.FolderPath, request.Uids, cancellationToken);
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
+    }
+
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
     {
         foreach (var node in nodes)

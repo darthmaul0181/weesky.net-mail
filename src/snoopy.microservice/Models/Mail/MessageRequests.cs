@@ -16,3 +16,21 @@ public sealed class SetMessageFlagsRequest
     /// <summary>True sets the flag, false clears it.</summary>
     public bool Value { get; set; }
 }
+
+public sealed class MoveMessagesRequest
+{
+    public string FolderPath { get; set; } = string.Empty;
+
+    /// <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+    public IReadOnlyList<uint> Uids { get; set; } = [];
+
+    public string TargetFolderPath { get; set; } = string.Empty;
+}
+
+public sealed class DeleteMessagesRequest
+{
+    public string FolderPath { get; set; } = string.Empty;
+
+    /// <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+    public IReadOnlyList<uint> Uids { get; set; } = [];
+}

@@ -217,4 +217,104 @@ public sealed class MailMessageRepositoryTests
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.SetFlagsAsync(null!, "pw", "INBOX", [1u], MailFlag.Seen, true, CancellationToken.None));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MoveOrCopyAsync_DelegatesToTheSession(bool copy)
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.MoveOrCopyAsync("INBOX", It.IsAny<IReadOnlyList<uint>>(), "Archive", copy, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        var result = await repo.MoveOrCopyAsync(Alice, "pw", "INBOX", [1u, 2u], "Archive", copy, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        session.Verify(s => s.MoveOrCopyAsync("INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 1, 2 })),
+            "Archive", copy, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MoveOrCopyAsync_PropagatesAConnectionFailure()
+    {
+        var (repo, factory, _) = CreateSut();
+        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Failure<IImapSession>("down"));
+
+        var result = await repo.MoveOrCopyAsync(Alice, "pw", "INBOX", [1u], "Archive", false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("down", result.Error);
+    }
+
+    [Fact]
+    public async Task MoveOrCopyAsync_DisposesTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.MoveOrCopyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        await repo.MoveOrCopyAsync(Alice, "pw", "INBOX", [1u], "Archive", false, CancellationToken.None);
+
+        session.Verify(s => s.DisposeAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task MoveOrCopyAsync_ThrowsWhenUserIsNull()
+    {
+        var (repo, _, _) = CreateSut();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.MoveOrCopyAsync(null!, "pw", "INBOX", [1u], "Archive", false, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DelegatesToTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.DeleteAsync("INBOX", It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        var result = await repo.DeleteAsync(Alice, "pw", "INBOX", [1u, 2u], CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        session.Verify(s => s.DeleteAsync("INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 1, 2 })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_PropagatesAConnectionFailure()
+    {
+        var (repo, factory, _) = CreateSut();
+        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Failure<IImapSession>("down"));
+
+        var result = await repo.DeleteAsync(Alice, "pw", "INBOX", [1u], CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("down", result.Error);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DisposesTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        await repo.DeleteAsync(Alice, "pw", "INBOX", [1u], CancellationToken.None);
+
+        session.Verify(s => s.DisposeAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ThrowsWhenUserIsNull()
+    {
+        var (repo, _, _) = CreateSut();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.DeleteAsync(null!, "pw", "INBOX", [1u], CancellationToken.None));
+    }
 }

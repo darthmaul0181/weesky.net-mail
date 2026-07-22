@@ -496,6 +496,42 @@ describe('mail endpoints', () => {
     )
   })
 
+  it('POSTs the move body', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.moveMessages('INBOX/Sub', [1, 2], 'INBOX/Archive')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Messages/Move'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ folderPath: 'INBOX/Sub', uids: [1, 2], targetFolderPath: 'INBOX/Archive' }) })
+    )
+  })
+
+  it('POSTs the copy body', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.copyMessages('INBOX/Sub', [1, 2], 'INBOX/Archive')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Messages/Copy'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ folderPath: 'INBOX/Sub', uids: [1, 2], targetFolderPath: 'INBOX/Archive' }) })
+    )
+  })
+
+  it('DELETEs with the folder and uids in the body', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.deleteMessages('INBOX/Sub', [1, 2])
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Messages'),
+      expect.objectContaining({ method: 'DELETE', body: JSON.stringify({ folderPath: 'INBOX/Sub', uids: [1, 2] }) })
+    )
+  })
+
   it('fetches folder roles', async () => {
     mockFetch(200, { json: [] })
     const { api } = await import('./api.js')

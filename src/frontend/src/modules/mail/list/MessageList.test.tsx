@@ -3,10 +3,16 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
+import type { MailFolderNode } from '../api/mailTypes'
+import { settle } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
+  move: vi.fn(), remove: vi.fn(),
+  folders: undefined as unknown[] | undefined,
   onError: undefined as ((message: string) => void) | undefined,
+  moveError: undefined as ((message: string) => void) | undefined,
+  deleteError: undefined as ((message: string) => void) | undefined,
 }))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
@@ -20,6 +26,15 @@ vi.mock('../queries', () => ({
     mocks.onError = onError
     return { mutate: mocks.mutate }
   },
+  useMoveMessages: (onError?: (message: string) => void) => {
+    mocks.moveError = onError
+    return { mutate: mocks.move }
+  },
+  useDeleteMessages: (onError?: (message: string) => void) => {
+    mocks.deleteError = onError
+    return { mutate: mocks.remove, isPending: false }
+  },
+  useFolders: () => ({ data: mocks.folders }),
 }))
 // The list is tested against the shape it consumes, not against the network: what the hook
 // puts on the wire is useMessageList's own test.
@@ -72,6 +87,19 @@ function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record
     { wrapper })
 }
 
+function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
+  return {
+    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+  }
+}
+
+const roleTree: MailFolderNode[] = [
+  folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNode({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+  folderNode({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+]
+
 const wideSample = [
   {
     uid: 3, subject: 'Wide row test', fromName: 'Alice', fromAddress: 'alice@x.be',
@@ -88,6 +116,7 @@ const wideSample = [
 describe('MessageList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.folders = roleTree
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
     mocks.useMessageList.mockReturnValue(pagedState())
   })
@@ -261,6 +290,7 @@ describe('MessageList', () => {
 describe('the row controls', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.folders = roleTree
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
     mocks.useMessageList.mockReturnValue(pagedState())
   })
@@ -379,6 +409,8 @@ describe('the row controls', () => {
     const row = rowOf(/wide row test/i)
     expect(within(row).getByRole('button', { name: 'Star' })).toBeInTheDocument()
     expect(within(row).getByRole('button', { name: 'Mark as unread' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 
   it('mutation errors reach onNotify', () => {
@@ -391,9 +423,168 @@ describe('the row controls', () => {
   })
 })
 
+describe('archive and trash from the row', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
+  // The modal's confirm button is named "Delete" too — the row's own must not answer for it.
+  const modal = () => within(document.querySelector('.modal') as HTMLElement)
+
+  it('archives to the folder holding the role, without opening the message', async () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Archive' }))
+
+    expect(mocks.move).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], targetFolderPath: 'Archives', copy: false })
+    await settle()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  // Outside the trash, deleting is a move: the trash is the safety net, so there is nothing to
+  // confirm and nothing is lost.
+  it('deletes by moving to the trash folder, with no confirmation', async () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete' }))
+
+    expect(mocks.move).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], targetFolderPath: 'Corbeille', copy: false })
+    await settle()
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(screen.queryByText(/confirm deletion/i)).not.toBeInTheDocument()
+  })
+
+  // A missing button reads as a bug; a disabled one carrying its reason is an instruction.
+  it('offers archive disabled with its reason when no folder holds the role', () => {
+    mocks.folders = [folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
+    renderList()
+
+    const archive = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Archive' })
+    expect(archive).toBeDisabled()
+    expect(archive).toHaveAttribute('title', 'Assign the archive folder in Settings → Folders')
+  })
+
+  it('offers delete disabled with its reason when no folder holds the trash role', () => {
+    mocks.folders = [folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
+    renderList()
+
+    const trash = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete' })
+    expect(trash).toBeDisabled()
+    expect(trash).toHaveAttribute('title', 'Assign the trash folder in Settings → Folders')
+  })
+
+  it('disables archive inside the archive folder', () => {
+    renderList({ folderPath: 'Archives', folderRole: 'archive' })
+
+    const archive = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Archive' })
+    expect(archive).toBeDisabled()
+    expect(archive).toHaveAttribute('title', 'Already in the archive folder')
+  })
+
+  // Inside the trash the row's own button expunges, so it matches the reader's wording rather
+  // than the everyday move-to-trash label.
+  it('names the trash row button "Delete permanently"', () => {
+    renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
+
+    expect(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete permanently' }))
+      .toBeInTheDocument()
+    expect(within(rowOf(/alice martin/i)).queryByRole('button', { name: 'Delete' })).toBeNull()
+  })
+
+  it('waits for a confirmation before expunging from the trash', async () => {
+    renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete permanently' }))
+
+    expect(modal().getByText('Re: facture')).toBeInTheDocument()
+    await settle()
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(mocks.move).not.toHaveBeenCalled()
+
+    fireEvent.click(modal().getByRole('button', { name: 'Delete' }))
+    expect(mocks.remove).toHaveBeenCalledWith({ folderPath: 'Corbeille', uids: [2] })
+  })
+
+  it('names a subjectless message in the confirmation', () => {
+    renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
+
+    fireEvent.click(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Delete permanently' }))
+
+    expect(modal().getByText('(no subject)')).toBeInTheDocument()
+  })
+
+  it('expunges nothing when the confirmation is dismissed', async () => {
+    renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete permanently' }))
+    fireEvent.click(modal().getByRole('button', { name: 'Cancel' }))
+
+    await settle()
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(screen.queryByText(/confirm deletion/i)).not.toBeInTheDocument()
+  })
+
+  // The row leaves optimistically, so the selection has to follow in the same gesture.
+  it('reports the departing uid on archive, on trash and on an expunge', async () => {
+    const onDeparted = vi.fn()
+    const { unmount } = renderList({ onDeparted })
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Archive' }))
+    expect(onDeparted).toHaveBeenCalledWith(2)
+
+    fireEvent.click(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Delete' }))
+    expect(onDeparted).toHaveBeenCalledWith(1)
+    unmount()
+
+    onDeparted.mockClear()
+    renderList({ folderPath: 'Corbeille', folderRole: 'trash', onDeparted })
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete permanently' }))
+    await settle()
+    expect(onDeparted).not.toHaveBeenCalled()
+
+    fireEvent.click(modal().getByRole('button', { name: 'Delete' }))
+    expect(onDeparted).toHaveBeenCalledWith(2)
+  })
+
+  it('reports the rows it shows, and again when they change', async () => {
+    const onRows = vi.fn()
+    const { rerender } = renderList({ onRows })
+
+    await settle()
+    expect(onRows).toHaveBeenLastCalledWith([2, 1])
+
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
+    rerender(
+      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} onRows={onRows} />)
+
+    await settle()
+    expect(onRows).toHaveBeenLastCalledWith([3, 4])
+  })
+
+  it('move and delete failures reach onNotify', () => {
+    const onNotify = vi.fn()
+    renderList({ onNotify })
+
+    mocks.moveError?.('Could not move the message')
+    mocks.deleteError?.('Could not delete the message')
+
+    expect(onNotify).toHaveBeenCalledWith('Could not move the message')
+    expect(onNotify).toHaveBeenCalledWith('Could not delete the message')
+  })
+})
+
 describe('wide rows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.folders = roleTree
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
   })
@@ -436,6 +627,7 @@ describe('wide rows', () => {
 describe('the preferences it obeys', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.folders = roleTree
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
@@ -477,6 +669,7 @@ function streamingState(overrides = {}, count = 100) {
 describe('MessageList streaming', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.folders = roleTree
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
   })
 

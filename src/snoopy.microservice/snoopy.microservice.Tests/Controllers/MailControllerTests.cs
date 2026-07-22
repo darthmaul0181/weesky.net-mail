@@ -845,4 +845,352 @@ public sealed class MailControllerTests
         var status = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
     }
+
+    [Fact]
+    public async Task Move_Returns204AndDelegates()
+    {
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+                It.IsAny<IReadOnlyList<uint>>(), "Archive", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [42u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var status = Assert.IsType<StatusCodeResult>(result);
+        Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
+        _messages.Verify(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
+            "Archive", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Move_Returns400WithoutASource()
+    {
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = " ", Uids = [1u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("A folder is required", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Move_Returns400WithoutATarget()
+    {
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = " " },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("A target folder is required", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Move_Returns400OnAnEmptyBatch()
+    {
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Move_Returns400Above200Uids()
+    {
+        var uids = Enumerable.Range(1, 201).Select(i => (uint)i).ToList();
+
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = uids, TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    // Pins the order between the uid-count guard and the target checks: with both
+    // simultaneously violated, the uid-count message must win.
+    [Fact]
+    public async Task Move_Returns400ForUidCountEvenWhenTargetEqualsSource()
+    {
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [], TargetFolderPath = "INBOX" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Move_Returns400WhenTargetEqualsSource()
+    {
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "INBOX" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("The target folder must differ from the source folder", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Move_Returns401WhenCredentialsAreUnavailable()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Move_Returns502WhenTheServerRefuses()
+    {
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("Unable to move the messages"));
+
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
+    [Fact]
+    public async Task Move_Returns400WhenTheTargetIsNotSelectable()
+    {
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(ImapSession.TargetNotSelectable));
+
+        var result = await CreateController().MoveMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Notes" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var envelope = Assert.IsType<ResultEnveloppe>(bad.Value);
+        Assert.Equal("The target folder cannot hold messages", envelope.Message);
+    }
+
+    [Fact]
+    public async Task Copy_Returns204AndDelegates()
+    {
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+                It.IsAny<IReadOnlyList<uint>>(), "Archive", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [42u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var status = Assert.IsType<StatusCodeResult>(result);
+        Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
+        _messages.Verify(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
+            "Archive", true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Copy_Returns400WithoutASource()
+    {
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = " ", Uids = [1u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("A folder is required", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Copy_Returns400WithoutATarget()
+    {
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = " " },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("A target folder is required", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Copy_Returns400OnAnEmptyBatch()
+    {
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Copy_Returns400Above200Uids()
+    {
+        var uids = Enumerable.Range(1, 201).Select(i => (uint)i).ToList();
+
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = uids, TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    // Pins the order between the uid-count guard and the target checks: with both
+    // simultaneously violated, the uid-count message must win.
+    [Fact]
+    public async Task Copy_Returns400ForUidCountEvenWhenTargetEqualsSource()
+    {
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [], TargetFolderPath = "INBOX" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Copy_Returns400WhenTargetEqualsSource()
+    {
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "INBOX" },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("The target folder must differ from the source folder", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Copy_Returns401WhenCredentialsAreUnavailable()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Copy_Returns502WhenTheServerRefuses()
+    {
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("Unable to copy the messages"));
+
+        var result = await CreateController().CopyMessages(
+            new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Archive" },
+            CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_Returns204AndDelegates()
+    {
+        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), "hunter2", "INBOX",
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = "INBOX", Uids = [42u] },
+            CancellationToken.None);
+
+        var status = Assert.IsType<StatusCodeResult>(result);
+        Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
+        _messages.Verify(m => m.DeleteAsync(It.IsAny<User>(), "hunter2", "INBOX",
+            It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Delete_Returns400WithoutASource()
+    {
+        var result = await CreateController().DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = " ", Uids = [1u] },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("A folder is required", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Delete_Returns400OnAnEmptyBatch()
+    {
+        var result = await CreateController().DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = "INBOX", Uids = [] },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Delete_Returns400Above200Uids()
+    {
+        var uids = Enumerable.Range(1, 201).Select(i => (uint)i).ToList();
+
+        var result = await CreateController().DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = "INBOX", Uids = uids },
+            CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Uids must hold between 1 and 200 entries", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task Delete_Returns401WhenCredentialsAreUnavailable()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = "INBOX", Uids = [1u] },
+            CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Delete_Returns502WhenTheServerRefuses()
+    {
+        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("Unable to delete the messages"));
+
+        var result = await CreateController().DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = "INBOX", Uids = [1u] },
+            CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_Returns502WithTheUidplusMessage()
+    {
+        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("The mail server cannot delete single messages (no UIDPLUS)"));
+
+        var result = await CreateController().DeleteMessages(
+            new DeleteMessagesRequest { FolderPath = "INBOX", Uids = [1u] },
+            CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(status.Value);
+        Assert.Equal("The mail server cannot delete single messages (no UIDPLUS)", envelope.Message);
+    }
 }

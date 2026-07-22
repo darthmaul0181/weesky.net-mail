@@ -63,4 +63,26 @@ internal sealed class MailMessageRepository : IMailMessageRepository
 
         return await session.SetFlagsAsync(folderPath, uids, flag, value, cancellationToken);
     }
+
+    public async Task<Result> MoveOrCopyAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+        await using var session = sessionResult.Value;
+
+        return await session.MoveOrCopyAsync(folderPath, uids, targetPath, copy, cancellationToken);
+    }
+
+    public async Task<Result> DeleteAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+        await using var session = sessionResult.Value;
+
+        return await session.DeleteAsync(folderPath, uids, cancellationToken);
+    }
 }

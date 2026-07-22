@@ -4,12 +4,16 @@ export interface MenuItem {
   label: string
   icon?: ReactNode
   onSelect: () => void
+  disabled?: boolean
+  title?: string
 }
+
+export type MenuEntry = MenuItem | 'separator'
 
 interface Props {
   ariaLabel: string
   trigger: ReactNode
-  items: MenuItem[]
+  items: MenuEntry[]
   className?: string
 }
 
@@ -42,13 +46,18 @@ export default function DropdownMenu({ ariaLabel, trigger, items, className }: P
       </button>
       {open && (
         <div className="dropdown-menu" role="menu">
-          {items.map(item => (
-            <button key={item.label} type="button" role="menuitem" className="dropdown-item"
-              onClick={() => { setOpen(false); item.onSelect() }}>
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
+          {items.map((entry, index) =>
+            entry === 'separator' ? (
+              <hr key={index} className="dropdown-rule" />
+            ) : (
+              <button key={entry.label} type="button" role="menuitem" className="dropdown-item"
+                disabled={entry.disabled} title={entry.title}
+                onClick={() => { setOpen(false); entry.onSelect() }}>
+                {entry.icon}
+                {entry.label}
+              </button>
+            )
+          )}
         </div>
       )}
     </div>

@@ -1,11 +1,17 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import {
+  useInfiniteQuery, useMutation, useQuery, useQueryClient,
+  type InfiniteData, type QueryClient,
+} from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, FolderRoleEntry,
 } from './api/mailTypes'
-import { patchFolderUnread, patchSummaries, type MailFlagName } from './list/flagPatch'
+import {
+  patchFolderCounts, patchFolderUnread, patchSummaries, removeSummaries,
+  type FolderCountDeltas, type MailFlagName,
+} from './list/listPatch'
 import { nextBlockIndex } from './list/messageStream'
 
 
@@ -36,8 +42,9 @@ export const mailKeys = {
   messageStream: (accountId: string, folder: string, requestSize: number) =>
     [...messageStreamIn(accountId, folder), requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
-  /** Mutation key, not a query key: it is what lets the poll tell our own writes from a change. */
-  flags: (accountId: string) => ['mail', accountId, 'setFlags'] as const,
+  /** Mutation key, not a query key: it is what lets the poll tell our own writes from a change.
+      Carried by every write — flags, move, copy, delete — since each patches the same counters. */
+  writes: (accountId: string) => ['mail', accountId, 'writes'] as const,
 }
 
 export function useAccountId(): string {
@@ -206,7 +213,7 @@ export function useSetFlags(onError?: (message: string) => void) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationKey: mailKeys.flags(accountId),
+    mutationKey: mailKeys.writes(accountId),
     mutationFn: ({ folderPath, uids, flag, value }: SetFlagsArgs) =>
       api.setMessageFlags(folderPath, uids, flag, value),
 
@@ -262,6 +269,201 @@ export function useSetFlags(onError?: (message: string) => void) {
     onError: (_error, _args, context) => {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
       onError?.('Could not update the message')
+    },
+  })
+}
+
+/** The two list caches of one folder: pages and stream blocks, as prefixes. */
+const listKeysOf = (accountId: string, folderPath: string) =>
+  [mailKeys.messagesIn(accountId, folderPath), mailKeys.messageStreamIn(accountId, folderPath)]
+
+async function cancelListQueries(
+  queryClient: QueryClient, accountId: string, folderPath: string,
+) {
+  for (const queryKey of listKeysOf(accountId, folderPath)) {
+    await queryClient.cancelQueries({ queryKey })
+  }
+}
+
+/**
+ * Counts each uid once across every cache, pages and stream blocks alike: a uid sitting in two
+ * of them is one row leaving the folder, not two.
+ */
+function removalTally(uids: number[]) {
+  const uncounted = new Set(uids)
+  let removed = 0
+  let removedUnread = 0
+
+  return {
+    get removed() { return removed },
+    get removedUnread() { return removedUnread },
+    count(messages: MailMessageSummary[]) {
+      if (!uncounted.size) return
+      for (const message of messages) {
+        if (!uncounted.delete(message.uid)) continue
+        removed += 1
+        if (!message.seen) removedUnread += 1
+      }
+    },
+  }
+}
+
+/** Drops the rows from every cached page and stream block of a folder, snapshotting each. */
+function removeFromFolderCaches(
+  queryClient: QueryClient, accountId: string, folderPath: string, uids: number[],
+) {
+  const [pagesKey, streamKey] = listKeysOf(accountId, folderPath)
+  const snapshots: Snapshot[] = []
+  const tally = removalTally(uids)
+
+  for (const [key, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
+    if (!page) continue
+    const patch = removeSummaries(page.messages, uids)
+    if (patch.removed === 0) continue
+    snapshots.push([key, page])
+    tally.count(page.messages)
+    queryClient.setQueryData(key, { ...page, messages: patch.messages })
+  }
+
+  for (const [key, stream] of
+    queryClient.getQueriesData<InfiniteData<MailFolderPage>>({ queryKey: streamKey })) {
+    if (!stream) continue
+    let removed = 0
+    const pages = stream.pages.map(page => {
+      const patch = removeSummaries(page.messages, uids)
+      removed += patch.removed
+      tally.count(page.messages)
+      return patch.removed ? { ...page, messages: patch.messages } : page
+    })
+    if (removed === 0) continue
+    snapshots.push([key, stream])
+    queryClient.setQueryData(key, { ...stream, pages })
+  }
+
+  return { snapshots, removed: tally.removed, removedUnread: tally.removedUnread }
+}
+
+/**
+ * Snapshots then *removes* the target folder's caches. Removal refetches nothing until the
+ * folder is shown; an invalidate would replay every loaded stream block.
+ */
+function dropFolderCaches(queryClient: QueryClient, accountId: string, folderPath: string) {
+  const snapshots: Snapshot[] = []
+
+  for (const queryKey of listKeysOf(accountId, folderPath)) {
+    for (const [key, data] of queryClient.getQueriesData({ queryKey })) {
+      if (data !== undefined) snapshots.push([key, data])
+    }
+    queryClient.removeQueries({ queryKey })
+  }
+
+  return snapshots
+}
+
+/** One read, one write: two patches of the same tree would snapshot an already-patched one. */
+function patchTreeCounts(
+  queryClient: QueryClient, accountId: string,
+  patches: [folderPath: string, deltas: FolderCountDeltas][],
+): Snapshot[] {
+  const foldersKey = mailKeys.folders(accountId)
+  const tree = queryClient.getQueryData<MailFolderNode[]>(foldersKey)
+  if (!tree) return []
+
+  const patched = patches.reduce(
+    (current, [folderPath, deltas]) => patchFolderCounts(current, folderPath, deltas), tree)
+  if (patched === tree) return []
+
+  queryClient.setQueryData(foldersKey, patched)
+  return [[foldersKey, tree]]
+}
+
+export interface MoveMessagesArgs {
+  folderPath: string
+  uids: number[]
+  targetFolderPath: string
+  copy: boolean
+}
+
+/**
+ * Optimistic across both folders: the source loses its rows, the target loses its caches —
+ * dropped rather than invalidated — and both folders' counters move. Snapshot rollback,
+ * never an invalidate, no onSettled: the 60s poll is the truth mechanism.
+ */
+export function useMoveMessages(onError?: (message: string) => void) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) =>
+      copy
+        ? api.copyMessages(folderPath, uids, targetFolderPath)
+        : api.moveMessages(folderPath, uids, targetFolderPath),
+
+    onMutate: async ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) => {
+      await cancelListQueries(queryClient, accountId, folderPath)
+
+      const snapshots: Snapshot[] = []
+      const patches: [string, FolderCountDeltas][] = []
+      // A copy removes nothing, so how many of the batch were unread is unknowable here without
+      // scanning for it alone; the target badge waits for the poll instead.
+      let added = { total: uids.length, unread: 0 }
+
+      if (!copy) {
+        const source = removeFromFolderCaches(queryClient, accountId, folderPath, uids)
+        snapshots.push(...source.snapshots)
+        patches.push([folderPath, { total: -source.removed, unread: -source.removedUnread }])
+        // Target mirrors what actually left the source, not uids.length, so a cold source
+        // cache can't inflate it past the source's own drop. Consequence: an uncached source
+        // moves neither folder's counters until the next poll.
+        added = { total: source.removed, unread: source.removedUnread }
+      }
+
+      // Mirror the source: cancel any in-flight target fetch before dropping its caches, so a
+      // late resolve can't repopulate what we just removed and race the rollback.
+      await cancelListQueries(queryClient, accountId, targetFolderPath)
+      snapshots.push(...dropFolderCaches(queryClient, accountId, targetFolderPath))
+      patches.push([targetFolderPath, added])
+      snapshots.push(...patchTreeCounts(queryClient, accountId, patches))
+
+      return { snapshots, copy }
+    },
+
+    onError: (_error, _args, context) => {
+      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      onError?.(context?.copy ? 'Could not copy the message' : 'Could not move the message')
+    },
+  })
+}
+
+export interface DeleteMessagesArgs {
+  folderPath: string
+  uids: number[]
+}
+
+/** The source half of a move: the rows are gone and no folder receives them. */
+export function useDeleteMessages(onError?: (message: string) => void) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: ({ folderPath, uids }: DeleteMessagesArgs) =>
+      api.deleteMessages(folderPath, uids),
+
+    onMutate: async ({ folderPath, uids }: DeleteMessagesArgs) => {
+      await cancelListQueries(queryClient, accountId, folderPath)
+
+      const source = removeFromFolderCaches(queryClient, accountId, folderPath, uids)
+      const tree = patchTreeCounts(queryClient, accountId,
+        [[folderPath, { total: -source.removed, unread: -source.removedUnread }]])
+
+      return { snapshots: [...source.snapshots, ...tree] }
+    },
+
+    onError: (_error, _args, context) => {
+      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      onError?.('Could not delete the message')
     },
   })
 }

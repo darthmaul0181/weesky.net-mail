@@ -64,4 +64,18 @@ public interface IImapSession : IAsyncDisposable
     /// when the path no longer resolves.
     /// </summary>
     Task<Result> SetFlagsAsync(string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves or copies a batch of UIDs into another folder. Fails with
+    /// ImapSession.TargetNotSelectable when the target cannot hold messages, or
+    /// ImapSession.FolderNotFound when the source path no longer resolves.
+    /// </summary>
+    Task<Result> MoveOrCopyAsync(string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Permanently deletes a batch of UIDs via UID EXPUNGE. Fails with
+    /// ImapSession.FolderNotFound when the path no longer resolves, or refuses when the server
+    /// lacks UIDPLUS (a bare EXPUNGE would purge beyond the caller's own \Deleted messages).
+    /// </summary>
+    Task<Result> DeleteAsync(string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken);
 }

@@ -3,14 +3,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
-import { mailKeys, useSetFlags } from '../queries'
+import { mailKeys, useMoveMessages, useSetFlags } from '../queries'
 import { dedupeByUid } from './messageStream'
 import { settle } from '../../../test-utils'
 import { useListRefresh } from './useListRefresh'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(),
-  setMessageFlags: vi.fn(),
+  setMessageFlags: vi.fn(), moveMessages: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
@@ -45,11 +45,11 @@ async function renderWithBaseline(pageSize: string, first: MailFolderNode) {
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': pageSize, 'mail.showPreview': 'true' })
   mocks.getMailFolders.mockResolvedValue([first])
 
-  // The mutation renders beside the hook because the bug is the pair: the optimistic patch
+  // The mutations render beside the hook because the bug is the pair: the optimistic patch
   // writes the folder tree, which is exactly what this hook watches.
   const rendered = renderHook(() => {
     useListRefresh('INBOX')
-    return useSetFlags()
+    return { flags: useSetFlags(), move: useMoveMessages() }
   }, { wrapper })
   await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
   await waitFor(() =>
@@ -181,7 +181,7 @@ describe('useListRefresh', () => {
     const rendered = await renderWithBaseline('10', inbox({ unread: 2 }))
 
     await act(async () => {
-      rendered.result.current.mutate({
+      rendered.result.current.flags.mutate({
         folderPath: 'INBOX', uids: [1], flag: 'seen', value: false,
       })
     })
@@ -190,6 +190,26 @@ describe('useListRefresh', () => {
     expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0].unread).toBe(3)
     // Load-bearing: the query cache notifies its observers on a macrotask, so an assertion of
     // silence made before it drains holds against any implementation at all.
+    await settle()
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  /** Same trap, one mutation over: a move patches total and unread just as a flag write does. */
+  it('stands down while a move is in flight', async () => {
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    mocks.moveMessages.mockReturnValue(new Promise(() => {}))
+    client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 10), pageOf([1, 2]))
+
+    const rendered = await renderWithBaseline('10', inbox({ total: 5, unread: 2 }))
+
+    await act(async () => {
+      rendered.result.current.move.mutate({
+        folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false,
+      })
+    })
+
+    // The optimistic patch took the tree to total 4, re-running the effect.
+    expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0].total).toBe(4)
     await settle()
     expect(spy).not.toHaveBeenCalled()
   })

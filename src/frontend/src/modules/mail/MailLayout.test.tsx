@@ -1,16 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import type { MailFolderNode } from './api/mailTypes'
+import { settle } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
   getMailMessages: vi.fn(),
   getMailMessage: vi.fn(),
   getPreferences: vi.fn(),
+  moveMessages: vi.fn(),
+  deleteMessages: vi.fn(),
   useListRefresh: vi.fn(),
 }))
 
@@ -34,6 +37,8 @@ function node(partial: Partial<MailFolderNode>): MailFolderNode {
 
 const folders = [
   node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  node({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+  node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
   node({ path: 'Projects', name: 'Projects' }),
 ]
 
@@ -41,9 +46,13 @@ function Where() {
   return <span data-testid="search">{useLocation().search}</span>
 }
 
-function renderAt(initial: string, tree: MailFolderNode[] = folders, pane = 'right') {
+function renderAt(
+  initial: string, tree: MailFolderNode[] = folders, pane = 'right', messages: object[] = [],
+) {
   mocks.getMailFolders.mockResolvedValue(tree)
-  mocks.getMailMessages.mockResolvedValue({ messages: [], total: 0 })
+  mocks.getMailMessages.mockResolvedValue({
+    folderPath: 'INBOX', uidValidity: 1, total: messages.length, page: 0, pageSize: 30, messages,
+  })
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': pane })
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -110,6 +119,57 @@ describe('MailLayout', () => {
     await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
     expect(screen.getByTestId('search')).toHaveTextContent('')
     expect(screen.getByText(/select a folder/i)).toBeInTheDocument()
+  })
+})
+
+// The row leaves the folder optimistically, so the selection cannot wait for a refetch.
+describe('a message departing the folder', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const summaries = [
+    { uid: 7, subject: 'first', fromName: 'A', fromAddress: 'a@b.c', date: '2026-07-18T09:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
+    { uid: 8, subject: 'second', fromName: 'B', fromAddress: 'b@b.c', date: '2026-07-18T10:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
+  ]
+
+  // The detail lands after the list: a reader opening on a not-yet-cached summary marks it
+  // seen, and that mutation cancels the list fetch in flight — the rows would never arrive.
+  function openFolder(rows: typeof summaries, uid: number) {
+    mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+      uid, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    }), 20)))
+    return renderAt(`/mail?folder=INBOX&uid=${uid}`, folders, 'right', rows)
+  }
+
+  it('selects the next row when the open message is archived', async () => {
+    openFolder(summaries, 7)
+
+    const row = await screen.findByRole('button', { name: /first/i })
+    fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=8'))
+  })
+
+  it('closes the reader when the last remaining message departs', async () => {
+    openFolder([summaries[0]], 7)
+
+    const row = await screen.findByRole('button', { name: /first/i })
+    fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+  })
+
+  it('leaves the selection alone when another row departs', async () => {
+    openFolder(summaries, 8)
+
+    const row = await screen.findByRole('button', { name: /first/i })
+    fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
+
+    await settle()
+    expect(screen.getByTestId('search')).toHaveTextContent('uid=8')
   })
 })
 

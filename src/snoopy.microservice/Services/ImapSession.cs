@@ -257,6 +257,85 @@ internal sealed class ImapSession : IImapSession
         }
     }
 
+    public const string TargetNotSelectable = "target_not_selectable";
+
+    public async Task<Result> MoveOrCopyAsync(string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            IMailFolder target;
+            try { target = await _client.GetFolderAsync(targetPath, cancellationToken); }
+            catch (FolderNotFoundException) { return Result.Failure(TargetNotSelectable); }
+
+            // A \NoSelect container cannot hold messages; refusing here beats a server error the
+            // client cannot word. Checked by the session because the controller has no tree.
+            if ((target.Attributes & (FolderAttributes.NoSelect | FolderAttributes.NonExistent)) != 0)
+                return Result.Failure(TargetNotSelectable);
+
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+            var ids = uids.Select(uid => new UniqueId(uid)).ToList();
+            // MailKit uses MOVE when advertised and falls back to COPY + \Deleted + EXPUNGE itself.
+            if (copy) await folder.CopyToAsync(ids, target, cancellationToken);
+            else await folder.MoveToAsync(ids, target, cancellationToken);
+
+            return Result.Success();
+        }
+        catch (FolderNotFoundException)
+        {
+            return Result.Failure(FolderNotFound);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to {Verb} {Count} messages from {Folder} to {Target}",
+                copy ? "copy" : "move", uids.Count, folderPath, targetPath);
+            return Result.Failure(copy ? "Unable to copy the messages" : "Unable to move the messages");
+        }
+    }
+
+    public async Task<Result> DeleteAsync(string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        // A bare EXPUNGE purges every \Deleted message in the folder, including ones another
+        // client marked and has not purged. UID EXPUNGE (UIDPLUS) limits it to ours — without
+        // it, refusing beats widening the purge. Capabilities are read after authentication.
+        if (!_client.Capabilities.HasFlag(ImapCapabilities.UidPlus))
+            return Result.Failure("The mail server cannot delete single messages (no UIDPLUS)");
+
+        try
+        {
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+            var ids = uids.Select(uid => new UniqueId(uid)).ToList();
+            await folder.AddFlagsAsync(ids, MessageFlags.Deleted, silent: true, cancellationToken);
+            await folder.ExpungeAsync(ids, cancellationToken);
+
+            return Result.Success();
+        }
+        catch (FolderNotFoundException)
+        {
+            return Result.Failure(FolderNotFound);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to expunge {Count} messages from {Folder}", uids.Count, folderPath);
+            return Result.Failure("Unable to delete the messages");
+        }
+    }
+
     public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();

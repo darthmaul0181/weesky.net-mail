@@ -159,6 +159,8 @@
 }
 .dropdown-item:hover { background: var(--surface-sunken); }
 
+.dropdown-rule { height: 1px; border: 0; background: var(--border); margin: 4px 6px; }
+
 .settings-layout { display: flex; height: 100%; }
 
 .context-pane {

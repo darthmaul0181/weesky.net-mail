@@ -405,6 +405,35 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server could not be reached</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.MoveMessages(weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest,System.Threading.CancellationToken)">
+            <summary>Moves a batch of messages into another folder.</summary>
+            <param name="request">source folder, UIDs and target folder</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The messages were moved</response>
+            <response code="400">A folder is missing, the batch is empty or above 200 UIDs, the target equals the source, or the target cannot hold messages</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.CopyMessages(weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest,System.Threading.CancellationToken)">
+            <summary>Copies a batch of messages into another folder.</summary>
+            <param name="request">source folder, UIDs and target folder</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The messages were copied</response>
+            <response code="400">A folder is missing, the batch is empty or above 200 UIDs, the target equals the source, or the target cannot hold messages</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.DeleteMessages(weesky.Snoopy.Microservice.Models.Mail.DeleteMessagesRequest,System.Threading.CancellationToken)">
+            <summary>
+            Permanently deletes a batch of messages via UID EXPUNGE, bypassing the trash entirely.
+            </summary>
+            <param name="request">folder and UIDs</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The messages were deleted</response>
+            <response code="400">The folder is missing, or the batch is empty or above 200 UIDs</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached, or cannot delete without UIDPLUS</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.PreferencesController">
              <summary>
              The caller's webmail preferences, stored in the separate preferences database.
@@ -914,6 +943,12 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest.Value">
             <summary>True sets the flag, false clears it.</summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest.Uids">
+            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.DeleteMessagesRequest.Uids">
+            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml">
             <summary>A message body made safe to render, plus what was withheld.</summary>
         </member>
@@ -1229,6 +1264,12 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.SetFlagsAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},weesky.Snoopy.Microservice.Models.Mail.MailFlag,System.Boolean,System.Threading.CancellationToken)">
             <summary>Sets or clears a flag on a batch of UIDs.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.MoveOrCopyAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Moves or copies a batch of UIDs into another folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.DeleteAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.Threading.CancellationToken)">
+            <summary>Permanently deletes a batch of UIDs via UID EXPUNGE.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
             High-level Sieve management API used by controllers. Each method opens its own
@@ -1535,6 +1576,20 @@
             <summary>
             Sets or clears a flag on a batch of UIDs. Fails with ImapSession.FolderNotFound
             when the path no longer resolves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.MoveOrCopyAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Moves or copies a batch of UIDs into another folder. Fails with
+            ImapSession.TargetNotSelectable when the target cannot hold messages, or
+            ImapSession.FolderNotFound when the source path no longer resolves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.DeleteAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.Threading.CancellationToken)">
+            <summary>
+            Permanently deletes a batch of UIDs via UID EXPUNGE. Fails with
+            ImapSession.FolderNotFound when the path no longer resolves, or refuses when the server
+            lacks UIDPLUS (a bare EXPUNGE would purge beyond the caller's own \Deleted messages).
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">

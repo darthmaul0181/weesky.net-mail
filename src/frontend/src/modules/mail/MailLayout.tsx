@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react'
+﻿import { useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
@@ -6,6 +6,7 @@ import FolderDialogs from './folders/FolderDialogs'
 import { flatten } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
 import MessageList from './list/MessageList'
+import { nextUidOf } from './list/nextUid'
 import { useListRefresh } from './list/useListRefresh'
 import MessageReader from './reader/MessageReader'
 import { useFolders } from './queries'
@@ -75,14 +76,37 @@ export default function MailLayout() {
     if (folder) setParams({ folder })
   }
 
+  // A ref, not state: which rows are on screen only matters at the moment one of them leaves,
+  // and re-rendering the whole module on every list refresh would be a needless cost.
+  const rowsRef = useRef<number[]>([])
+  const keepRows = useCallback((uids: number[]) => { rowsRef.current = uids }, [])
+
+  // The row is gone from the cache the instant the action fires, so the selection follows now
+  // rather than after a refetch: the next message, or the reader closes.
+  const departed = useCallback((departing: number) => {
+    setParams(previous => {
+      if (Number(previous.get('uid')) !== departing) return previous
+      const path = previous.get('folder')
+      if (!path) return previous
+
+      const next = nextUidOf(rowsRef.current, departing)
+      const params: Record<string, string> = { folder: path }
+      if (next !== null) params.uid = String(next)
+      return params
+    })
+  }, [setParams])
+
   const list = (selected: number | null, wide: boolean) => (
     <MessageList
       folderPath={folder}
       folderName={folderName}
+      folderRole={folderNode?.specialUse ?? null}
       selectedUid={selected}
       onSelect={selectMessage}
       wide={wide}
       onNotify={addToast}
+      onRows={keepRows}
+      onDeparted={departed}
     />
   )
 
@@ -113,7 +137,10 @@ export default function MailLayout() {
               onResize={setListWidth}
             />
           )}
-          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} onNotify={addToast} /></div>
+          <div className="mail-reader">
+            <MessageReader folderPath={folder} uid={uid} folderRole={folderNode?.specialUse ?? null}
+              onDeparted={departed} onNotify={addToast} />
+          </div>
         </div>
       )}
 
@@ -124,7 +151,10 @@ export default function MailLayout() {
             orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
             onResize={setListHeight}
           />
-          <div className="mail-reader"><MessageReader folderPath={folder} uid={uid} onNotify={addToast} /></div>
+          <div className="mail-reader">
+            <MessageReader folderPath={folder} uid={uid} folderRole={folderNode?.specialUse ?? null}
+              onDeparted={departed} onNotify={addToast} />
+          </div>
         </div>
       )}
 
@@ -135,7 +165,8 @@ export default function MailLayout() {
           <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
           {uid !== null && (
             <div className="mail-reader">
-              <MessageReader folderPath={folder} uid={uid} onBack={closeMessage} onNotify={addToast} />
+              <MessageReader folderPath={folder} uid={uid} folderRole={folderNode?.specialUse ?? null}
+                onBack={closeMessage} onDeparted={departed} onNotify={addToast} />
             </div>
           )}
         </>

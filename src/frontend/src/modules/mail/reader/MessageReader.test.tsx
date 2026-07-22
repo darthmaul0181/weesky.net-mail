@@ -1,14 +1,19 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { settle } from '../../../test-utils'
+import type { MailFolderNode } from '../api/mailTypes'
 import MessageReader from './MessageReader'
 
 const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
   getPreferences: vi.fn(),
   setMessageFlags: vi.fn(),
+  getMailFolders: vi.fn(),
+  moveMessages: vi.fn(),
+  copyMessages: vi.fn(),
+  deleteMessages: vi.fn(),
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn((folder: string, uid: number, part: string) =>
     `/api/Mail/Messages/Attachment?folder=${folder}&uid=${uid}&part=${part}`),
@@ -17,7 +22,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../api.js', () => ({
   api: {
     getMailMessage: mocks.getMailMessage, getPreferences: mocks.getPreferences,
-    setMessageFlags: mocks.setMessageFlags,
+    setMessageFlags: mocks.setMessageFlags, getMailFolders: mocks.getMailFolders,
+    moveMessages: mocks.moveMessages, copyMessages: mocks.copyMessages,
+    deleteMessages: mocks.deleteMessages,
   },
   requestBlob: mocks.requestBlob,
   mailAttachmentUrl: mocks.mailAttachmentUrl,
@@ -30,9 +37,32 @@ vi.mock('../../../contexts/AuthContext', () => ({
 const theme = vi.hoisted(() => ({ isDark: false }))
 vi.mock('../../../contexts/ThemeContext', () => ({ useTheme: () => theme }))
 
+function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
+  return {
+    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+  }
+}
+
+const roleTree: MailFolderNode[] = [
+  folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNode({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+  folderNode({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+  folderNode({ path: 'Spam', name: 'Spam', specialUse: 'junk' }),
+]
+const noJunkTree = roleTree.filter(node => node.specialUse !== 'junk')
+const noTrashTree = roleTree.filter(node => node.specialUse !== 'trash')
+
+// Folders are seeded fresh (staleTime Infinity), so roles resolve synchronously instead of
+// racing the message load — the reader reads them off the same cache the app does.
+function makeClient(tree: MailFolderNode[] = roleTree) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(['mail', 'primary', 'folders'], tree)
+  return client
+}
+
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return <QueryClientProvider client={makeClient()}>{children}</QueryClientProvider>
 }
 
 const detail = {
@@ -59,7 +89,7 @@ const blocked = {
 function renderWithCachedSummary(
   summary: { seen: boolean; flagged: boolean }, onNotify?: (message: string) => void,
 ) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = makeClient()
   client.setQueryData(['mail', 'primary', 'messages', 'INBOX', 0, 30], {
     folderPath: 'INBOX', page: 0, pageSize: 30, total: 1,
     messages: [{
@@ -80,6 +110,10 @@ describe('MessageReader', () => {
     vi.clearAllMocks()
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.alwaysShowImages': 'false' })
     mocks.setMessageFlags.mockResolvedValue(undefined)
+    mocks.getMailFolders.mockResolvedValue(roleTree)
+    mocks.moveMessages.mockResolvedValue(undefined)
+    mocks.copyMessages.mockResolvedValue(undefined)
+    mocks.deleteMessages.mockResolvedValue(undefined)
   })
 
   it('prompts when nothing is selected', () => {
@@ -729,6 +763,201 @@ describe('MessageReader', () => {
       fireEvent.keyDown(window, { key: 'Escape' })
 
       expect(onBack).toHaveBeenCalled()
+    })
+
+    // An Escape dispatched below both listeners reaches the picker's document handler and then
+    // the reader's window handler. The picker closing is fine; backing the message out under it
+    // is the double-fire this gate exists to stop.
+    it('does not back out on Escape while the folder picker is open', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Move to…' }))
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      await settle()
+      expect(onBack).not.toHaveBeenCalled()
+    })
+
+    // DeleteConfirmModal has no Escape handler of its own, so an unguarded reader would exit
+    // the message out from under the open confirm.
+    it('does not back out on Escape while the confirm-delete modal is open', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(
+        <MessageReader folderPath="Corbeille" uid={2} folderRole="trash" onBack={onBack} />,
+        { wrapper })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      await settle()
+      expect(onBack).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('the message actions', () => {
+    type ReaderProps = Parameters<typeof MessageReader>[0]
+
+    function renderReader(props: Partial<ReaderProps> = {}, tree: MailFolderNode[] = roleTree) {
+      render(
+        <QueryClientProvider client={makeClient(tree)}>
+          <MessageReader folderPath="INBOX" uid={2} {...props} />
+        </QueryClientProvider>,
+      )
+    }
+
+    // The modal's confirm button is named "Delete"; the header's own is "Delete permanently".
+    const modal = () => within(document.querySelector('.modal') as HTMLElement)
+    const openKebab = () => fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+    it('deletes outside the trash by moving to the trash folder, and departs', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ onDeparted })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() =>
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Corbeille'))
+      expect(onDeparted).toHaveBeenCalledWith(2)
+      await settle()
+      expect(screen.queryByText(/confirm deletion/i)).not.toBeInTheDocument()
+    })
+
+    it('disables delete with its reason when no folder holds the trash role', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({}, noTrashTree)
+      await screen.findByText('Re: facture')
+
+      const button = screen.getByRole('button', { name: 'Delete' })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('title', 'Assign the trash folder in Settings → Folders')
+    })
+
+    it('confirms before a permanent expunge inside the trash, then departs', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ folderPath: 'Corbeille', folderRole: 'trash', onDeparted })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+      expect(modal().getByText('Re: facture')).toBeInTheDocument()
+      await settle()
+      expect(mocks.deleteMessages).not.toHaveBeenCalled()
+      expect(onDeparted).not.toHaveBeenCalled()
+
+      fireEvent.click(modal().getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() =>
+        expect(mocks.deleteMessages).toHaveBeenCalledWith('Corbeille', [2]))
+      expect(onDeparted).toHaveBeenCalledWith(2)
+    })
+
+    it('expunges nothing when the confirmation is dismissed', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ folderPath: 'Corbeille', folderRole: 'trash' })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+      fireEvent.click(modal().getByRole('button', { name: 'Cancel' }))
+
+      await settle()
+      expect(mocks.deleteMessages).not.toHaveBeenCalled()
+      expect(screen.queryByText(/confirm deletion/i)).not.toBeInTheDocument()
+    })
+
+    it('archives to the folder holding the role, and departs', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ onDeparted })
+      await screen.findByText('Re: facture')
+
+      openKebab()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Archive' }))
+
+      await waitFor(() =>
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives'))
+      expect(onDeparted).toHaveBeenCalledWith(2)
+    })
+
+    it('offers "Report as junk" disabled with its reason when no folder holds the junk role', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({}, noJunkTree)
+      await screen.findByText('Re: facture')
+
+      openKebab()
+      const junk = screen.getByRole('menuitem', { name: 'Report as junk' })
+      expect(junk).toBeDisabled()
+      expect(junk).toHaveAttribute('title', 'Assign the junk folder in Settings → Folders')
+    })
+
+    it('reports as junk by moving to the folder holding the role', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ onDeparted })
+      await screen.findByText('Re: facture')
+
+      openKebab()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Report as junk' }))
+
+      await waitFor(() =>
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Spam'))
+      expect(onDeparted).toHaveBeenCalledWith(2)
+    })
+
+    it('moves through the picker to the chosen folder, and departs', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ onDeparted })
+      await screen.findByText('Re: facture')
+
+      openKebab()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Move to…' }))
+      fireEvent.click(screen.getByText('Archives'))
+      fireEvent.click(screen.getByRole('button', { name: 'Move' }))
+
+      await waitFor(() =>
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives'))
+      expect(onDeparted).toHaveBeenCalledWith(2)
+    })
+
+    // A copy leaves the source untouched, so nothing departs.
+    it('copies through the picker without departing', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(detail)
+      renderReader({ onDeparted })
+      await screen.findByText('Re: facture')
+
+      openKebab()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Copy to…' }))
+      fireEvent.click(screen.getByText('Archives'))
+      fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+      await waitFor(() =>
+        expect(mocks.copyMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives'))
+      await settle()
+      expect(onDeparted).not.toHaveBeenCalled()
+      expect(mocks.moveMessages).not.toHaveBeenCalled()
+    })
+
+    it('reports a failed move through onNotify', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.moveMessages.mockRejectedValueOnce(new Error('boom'))
+      const onNotify = vi.fn()
+      renderReader({ onNotify })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not move the message'))
     })
   })
 })

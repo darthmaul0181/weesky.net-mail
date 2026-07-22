@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import DropdownMenu, { type MenuItem } from './DropdownMenu'
+import DropdownMenu, { type MenuItem, type MenuEntry } from './DropdownMenu'
 
 function items(overrides?: Partial<MenuItem>[]): MenuItem[] {
   return [
@@ -98,5 +98,47 @@ describe('DropdownMenu', () => {
 
     fireEvent.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('renders a separator between groups', () => {
+    const entries: MenuEntry[] = [
+      { label: 'Mark as read', onSelect: vi.fn() },
+      'separator',
+      { label: 'Archive', onSelect: vi.fn() },
+    ]
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={entries} />)
+
+    fireEvent.click(screen.getByLabelText('Message actions'))
+
+    const menu = screen.getByRole('menu')
+    const order = Array.from(menu.children).map(el => (el.tagName === 'HR' ? 'separator' : el.textContent))
+    expect(order).toEqual(['Mark as read', 'separator', 'Archive'])
+  })
+
+  it('shows a disabled item as a disabled button with its title', () => {
+    const entries: MenuEntry[] = [
+      { label: 'Move', onSelect: vi.fn(), disabled: true, title: 'No archive folder configured' },
+    ]
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={entries} />)
+
+    fireEvent.click(screen.getByLabelText('Message actions'))
+
+    const button = screen.getByRole('menuitem', { name: 'Move' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('title', 'No archive folder configured')
+  })
+
+  it('does not fire onSelect or close the menu when a disabled item is clicked', () => {
+    const onSelect = vi.fn()
+    const entries: MenuEntry[] = [
+      { label: 'Move', onSelect, disabled: true, title: 'No archive folder configured' },
+    ]
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={entries} />)
+
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move' }))
+
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(screen.getByRole('menu')).toBeInTheDocument()
   })
 })
