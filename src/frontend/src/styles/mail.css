@@ -493,6 +493,9 @@
 }
 
 .message-row-date { color: var(--text-muted); font-size: 11px; flex: none; }
+/* A hair up in the narrow skin, so the small date reads level with the sender text rather than
+   hanging on the shared baseline. The wide skin swaps the date out on hover, so it stays put. */
+.message-row:not(.is-line) .message-row-date { position: relative; top: -1px; }
 
 .message-row-subject,
 .message-row-preview {
@@ -534,8 +537,9 @@
   pointer-events: none;
 }
 
-/* The narrow skin is a block stack: the box floats over a reserved left gutter. */
-.message-row:not(.is-line) { padding-left: 34px; }
+/* The narrow skin is a block stack: the box floats over a reserved left gutter. Its vertical
+   padding is 2px tighter than the base on each side, for a denser row; the wide skin keeps 10px. */
+.message-row:not(.is-line) { padding-top: 8px; padding-bottom: 8px; padding-left: 34px; }
 /* Vertically centred over the reserved gutter, so it stays centred whether or not the preview
    line is shown — the row's height changes with it. */
 .message-row:not(.is-line) .message-row-check {
@@ -590,7 +594,7 @@
   position: absolute;
   /* Flush with the star above it, which ends at the row's content edge. */
   right: 12px;
-  bottom: 5px;
+  bottom: 4px;
   display: none;
   align-items: center;
   gap: 2px;
