@@ -1,9 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import KebabIcon from '../../../icons/KebabIcon'
+import MailIcon from '../../../icons/MailIcon'
+import MailOpenIcon from '../../../icons/MailOpenIcon'
+import FolderMoveIcon from '../../../icons/FolderMoveIcon'
+import CopyIcon from '../../../icons/CopyIcon'
 
 export interface ToolbarAction {
   onRun: () => void
@@ -51,19 +55,20 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
     return { disabled, title: tip ?? label, onClick: action.onRun }
   }
 
-  function kebabItem(label: string, action: ToolbarAction) {
+  // Icons before each label, matching the reader header's kebab so the two menus read as one system.
+  function kebabItem(label: string, icon: ReactNode, action: ToolbarAction) {
     const { disabled, tip } = selectionState(action)
-    return { label, onSelect: action.onRun, disabled, title: tip }
+    return { label, icon, onSelect: action.onRun, disabled, title: tip }
   }
 
   const kebab: MenuEntry[] = [
-    kebabItem('Mark as read', props.markRead),
-    kebabItem('Mark as unread', props.markUnread),
+    kebabItem('Mark as read', <MailOpenIcon size={16} />, props.markRead),
+    kebabItem('Mark as unread', <MailIcon size={16} />, props.markUnread),
     'separator',
-    kebabItem('Move to…', props.move),
-    kebabItem('Copy to…', props.copy),
+    kebabItem('Move to…', <FolderMoveIcon size={16} />, props.move),
+    kebabItem('Copy to…', <CopyIcon size={16} />, props.copy),
     'separator',
-    { label: 'Empty folder', onSelect: props.emptyFolder.onRun,
+    { label: 'Empty folder', icon: <TrashIcon size={16} />, onSelect: props.emptyFolder.onRun,
       disabled: !!props.emptyFolder.disabledReason, title: props.emptyFolder.disabledReason },
   ]
 

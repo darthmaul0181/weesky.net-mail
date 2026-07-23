@@ -236,7 +236,7 @@ export default function MessageList(
                 aria-label={message.flagged ? 'Unstar' : 'Star'}
                 onClick={event => { event.stopPropagation(); toggle(message, 'flagged') }}
               >
-                <StarIcon filled={message.flagged} />
+                <StarIcon filled={message.flagged} size={18} />
               </button>
             )
 
@@ -249,7 +249,7 @@ export default function MessageList(
                   title={seenLabel}
                   onClick={event => { event.stopPropagation(); toggle(message, 'seen') }}
                 >
-                  {message.seen ? <MailIcon size={16} /> : <MailOpenIcon size={16} />}
+                  {message.seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />}
                 </button>
                 {/* Disabled with its reason, never withheld: a missing button reads as a bug. */}
                 <button
@@ -260,7 +260,7 @@ export default function MessageList(
                   title={archiveOff ? archiveReason : 'Archive'}
                   onClick={event => { event.stopPropagation(); moveTo(roles.archive, message.uid) }}
                 >
-                  <ArchiveIcon size={16} />
+                  <ArchiveIcon size={18} />
                 </button>
                 <button
                   type="button"
@@ -274,7 +274,7 @@ export default function MessageList(
                     else moveTo(roles.trash, message.uid)
                   }}
                 >
-                  <TrashIcon size={16} />
+                  <TrashIcon size={18} />
                 </button>
               </div>
             )

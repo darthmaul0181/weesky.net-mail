@@ -86,6 +86,14 @@ describe('SelectionToolbar', () => {
     expect(move.onRun).toHaveBeenCalledOnce()
   })
 
+  it('shows an icon before each kebab item, like the reader header', () => {
+    render(<SelectionToolbar {...props({ count: 2 })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    for (const name of ['Mark as read', 'Mark as unread', 'Move to…', 'Copy to…', 'Empty folder']) {
+      expect(screen.getByRole('menuitem', { name }).querySelector('svg')).toBeInTheDocument()
+    }
+  })
+
   it('orders the kebab: mark read/unread, then move/copy, then empty', () => {
     render(<SelectionToolbar {...props({ count: 2 })} />)
     fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
