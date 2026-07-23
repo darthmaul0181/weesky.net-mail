@@ -499,15 +499,17 @@
 
 .message-row-subject,
 .message-row-preview {
-  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* One pixel tighter to the sender than the subject-to-preview gap that follows it (2px below). */
+.message-row-subject { margin-top: 1px; }
 
 /* min-height, not a hard height: the line is reserved even when a message has no body, so
    every row is the same height whether or not there is anything to preview. */
 .message-row-preview {
+  margin-top: 2px;
   color: var(--text-muted);
   font-size: 12px;
   min-height: 1.35em;
