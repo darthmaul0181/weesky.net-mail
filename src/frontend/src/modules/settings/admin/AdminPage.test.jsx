@@ -351,11 +351,11 @@ describe('AccountsTab', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Account updated'))
   })
 
-  it('cancel closes the delete modal without deleting', async () => {
+  it('✕ closes the delete modal without deleting', async () => {
     render(<AccountsTab addToast={vi.fn()} />)
     await screen.findByText('alice@weesky.be')
     await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
     expect(api.adminDeleteUser).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })
@@ -482,11 +482,11 @@ describe('DomainsTab', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Has users', 'error'))
   })
 
-  it('cancel closes delete modal without deleting', async () => {
+  it('✕ closes delete modal without deleting', async () => {
     render(<DomainsTab addToast={vi.fn()} />)
     await screen.findByText('WSY')
     await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
     expect(api.adminDeleteDomain).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })

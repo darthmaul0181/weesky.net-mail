@@ -9,11 +9,17 @@ describe('DeleteConfirmModal', () => {
     expect(screen.getByText('alice@weesky.be')).toBeInTheDocument()
   })
 
-  it('calls onClose when Cancel is clicked', async () => {
+  it('calls onClose when ✕ is clicked — the only way out, no Cancel button', async () => {
     const onClose = vi.fn()
     render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={onClose} loading={false} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '✕' }))
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('renders the message override instead of the default line', () => {
+    render(<DeleteConfirmModal message="Custom warning" onConfirm={vi.fn()} onClose={vi.fn()} loading={false} />)
+    expect(screen.getByText('Custom warning')).toBeInTheDocument()
   })
 
   it('calls onConfirm when Delete is clicked', async () => {
@@ -23,8 +29,8 @@ describe('DeleteConfirmModal', () => {
     expect(onConfirm).toHaveBeenCalledOnce()
   })
 
-  it('disables both buttons while loading', () => {
-    render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={vi.fn()} loading={true} />)
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  it('disables the confirm button while loading', () => {
+    const { container } = render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={vi.fn()} loading={true} />)
+    expect(container.querySelector('.btn-primary')).toBeDisabled()
   })
 })

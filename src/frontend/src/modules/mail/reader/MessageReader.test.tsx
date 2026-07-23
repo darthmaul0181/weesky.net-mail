@@ -867,7 +867,7 @@ describe('MessageReader', () => {
       await screen.findByText('Re: facture')
 
       fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
-      fireEvent.click(modal().getByRole('button', { name: 'Cancel' }))
+      fireEvent.click(modal().getByRole('button', { name: '✕' }))
 
       await settle()
       expect(mocks.deleteMessages).not.toHaveBeenCalled()

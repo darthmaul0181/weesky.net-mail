@@ -411,10 +411,18 @@ export default function MessageList(
         />
       )}
 
-      {/* Permanent purge, from trash or junk: same modal, named for the folder. */}
+      {/* Permanent purge, from trash or junk: a fuller warning worded for the folder, since this
+          cannot be undone. Closing is the ✕ alone, like every delete confirm. */}
       {confirmingEmpty && (
         <DeleteConfirmModal
           entityLabel={folderName || folderPath}
+          message={
+            <>
+              This action will permanently delete all emails from the {folderName || folderPath} folder.
+              <br />
+              This action cannot be interrupted or undone.
+            </>
+          }
           onConfirm={confirmEmpty}
           onClose={() => setConfirmingEmpty(false)}
           loading={emptyFolder.isPending}

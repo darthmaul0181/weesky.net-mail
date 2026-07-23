@@ -1080,7 +1080,6 @@ export default function RulesPage() {
           onConfirm={handleDeleteRule}
           onClose={() => setRuleToDelete(null)}
           loading={deleting}
-          cancelClassName="btn btn-ghost"
         />
       )}
 
@@ -1090,7 +1089,6 @@ export default function RulesPage() {
           onConfirm={handleDeleteAll}
           onClose={() => setConfirmDeleteAll(false)}
           loading={deleting}
-          cancelClassName="btn btn-ghost"
         />
       )}
 

@@ -543,7 +543,7 @@ describe('archive and trash from the row', () => {
     renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
 
     fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete permanently' }))
-    fireEvent.click(modal().getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(modal().getByRole('button', { name: '✕' }))
 
     await settle()
     expect(mocks.remove).not.toHaveBeenCalled()
@@ -897,6 +897,10 @@ describe('multi-select', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Empty trash now' }))
       await settle()
       expect(mocks.empty).not.toHaveBeenCalled()          // confirm first
+      // Fuller, folder-worded warning; the ✕ is the only way out, no Cancel button.
+      expect(screen.getByText(/permanently delete all emails from the Trash folder/i)).toBeInTheDocument()
+      expect(screen.getByText(/cannot be interrupted or undone/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
       expect(mocks.empty).toHaveBeenCalledWith({ folderPath: 'Trash' })
     })
