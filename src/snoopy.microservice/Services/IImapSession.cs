@@ -86,4 +86,12 @@ public interface IImapSession : IAsyncDisposable
     /// ImapSession.TargetNotSelectable when the target cannot hold messages.
     /// </summary>
     Task<Result> EmptyAsync(string folderPath, string? targetPath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One page of search results, newest first. Single folder uses server SORT when
+    /// advertised; all-folders (or no SORT) merges per-folder SEARCH matches by internal
+    /// date in memory. HasAttachment is refined on BODYSTRUCTURE before paging, so Total
+    /// and the page windows stay honest.
+    /// </summary>
+    Task<Result<MailSearchPage>> SearchAsync(string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken);
 }

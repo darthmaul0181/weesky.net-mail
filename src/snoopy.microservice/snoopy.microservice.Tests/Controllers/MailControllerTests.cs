@@ -1276,4 +1276,91 @@ public sealed class MailControllerTests
 
         Assert.Equal(StatusCodes.Status502BadGateway, Assert.IsType<ObjectResult>(result).StatusCode);
     }
+
+    // ── Search ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SearchMessages_requires_a_folder()
+    {
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "", Quick = "x" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SearchMessages_refuses_a_negative_page()
+    {
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "INBOX", Quick = "x", Page = -1 }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(201)]
+    public async Task SearchMessages_bounds_the_page_size(int pageSize)
+    {
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "INBOX", Quick = "x", PageSize = pageSize }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SearchMessages_requires_at_least_one_criterion()
+    {
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "INBOX" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SearchMessages_answers_401_without_credentials()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+            .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.SearchMessages(
+            new SearchMessagesRequest { FolderPath = "INBOX", Quick = "x" }, CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SearchMessages_returns_the_page()
+    {
+        _messages.Setup(m => m.SearchAsync(
+                It.IsAny<User>(), "hunter2", "INBOX", true,
+                It.Is<MailSearchCriteria>(c => c.Quick == "hello"), 2, 25, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new MailSearchPage { Total = 2 }));
+
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "INBOX", AllFolders = true, Quick = "hello", Page = 2, PageSize = 25 },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var page = Assert.IsType<MailSearchPage>(ok.Value);
+        Assert.Equal(2, page.Total);
+        _messages.Verify(m => m.SearchAsync(
+            It.IsAny<User>(), "hunter2", "INBOX", true,
+            It.Is<MailSearchCriteria>(c => c.Quick == "hello"), 2, 25, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SearchMessages_maps_server_failure_to_502()
+    {
+        _messages.Setup(m => m.SearchAsync(
+                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<MailSearchCriteria>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<MailSearchPage>("boom"));
+
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "INBOX", Quick = "x" }, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status502BadGateway, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+    }
 }

@@ -9,7 +9,12 @@ import { DRAG_MIME, serializeDrag } from './dragMessages'
 
 const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
-  move: vi.fn(), remove: vi.fn(), empty: vi.fn(),
+  move: vi.fn(), remove: vi.fn(), empty: vi.fn(), searchMessages: vi.fn(),
+  // A default impl that survives clearAllMocks (which clears calls, not implementations), so the
+  // non-searching suites never read a stale result: they never look at it, but it stays benign.
+  useSearchMessages: vi.fn(
+    (): { data: unknown; isLoading: boolean; isError: boolean } =>
+      ({ data: undefined, isLoading: false, isError: false })),
   folders: undefined as unknown[] | undefined,
   onError: undefined as ((message: string) => void) | undefined,
   moveError: undefined as ((message: string) => void) | undefined,
@@ -37,6 +42,7 @@ vi.mock('../queries', () => ({
   },
   useEmptyFolder: () => ({ mutate: mocks.empty, isPending: false }),
   useFolders: () => ({ data: mocks.folders }),
+  useSearchMessages: mocks.useSearchMessages,
 }))
 // The list is tested against the shape it consumes, not against the network: what the hook
 // puts on the wire is useMessageList's own test.
@@ -85,7 +91,8 @@ function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record
       { 'mail.pageSize': '50', 'mail.showPreview': 'true', ...preferencesOverride })
   }
   return render(
-    <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} {...props} />,
+    <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
+      search={null} onSearchChange={() => {}} {...props} />,
     { wrapper })
 }
 
@@ -168,7 +175,8 @@ describe('MessageList', () => {
 
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
     rerender(
-      <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()} />)
+      <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()}
+        search={null} onSearchChange={() => {}} />)
 
     expect(screen.getByText(/no messages/i)).toBeInTheDocument()
     expect(bar().getByText('INBOX')).toBeInTheDocument()
@@ -582,7 +590,8 @@ describe('archive and trash from the row', () => {
 
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
     rerender(
-      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} onRows={onRows} />)
+      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} onRows={onRows}
+        search={null} onSearchChange={() => {}} />)
 
     await settle()
     expect(onRows).toHaveBeenLastCalledWith([3, 4])
@@ -783,7 +792,8 @@ describe('MessageList streaming', () => {
 
     const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
     band.scrollTop = 900
-    rerender(<MessageList folderPath="Archive" selectedUid={null} onSelect={vi.fn()} />)
+    rerender(<MessageList folderPath="Archive" selectedUid={null} onSelect={vi.fn()}
+      search={null} onSearchChange={() => {}} />)
 
     expect(band.scrollTop).toBe(0)
   })
@@ -880,7 +890,7 @@ describe('multi-select', () => {
     expect(screen.getByText('2 selected')).toBeInTheDocument()
     rerender(
       <MessageList folderPath="Archives" folderName="Archive" folderRole="archive"
-        selectedUid={null} onSelect={vi.fn()} />)
+        selectedUid={null} onSelect={vi.fn()} search={null} onSearchChange={() => {}} />)
     await settle()
     expect(screen.queryByText('2 selected')).not.toBeInTheDocument()
   })
@@ -1002,5 +1012,164 @@ describe('MessageList as a drag source', () => {
 
     fireEvent.dragEnd(rowOf(/alice martin/i), { dataTransfer: dragDT() })
     expect(rowOf(/alice martin/i)).not.toHaveClass('is-dragging')
+  })
+})
+
+describe('MessageList searching', () => {
+  const criteria = { folderPath: 'INBOX', allFolders: false, quick: 'x' }
+
+  const results = [
+    {
+      uid: 10, subject: 'First hit', fromName: 'Carol', fromAddress: 'carol@x.be',
+      date: '2026-07-20T09:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 10, preview: '', folderPath: 'INBOX', uidValidity: 1,
+    },
+    {
+      uid: 11, subject: 'Second hit', fromName: 'Dave', fromAddress: 'dave@x.be',
+      date: '2026-07-19T09:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 10, preview: '', folderPath: 'INBOX', uidValidity: 1,
+    },
+  ]
+
+  const page = (data: unknown) => ({ data, isLoading: false, isError: false })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+    mocks.useSearchMessages.mockReturnValue(page(undefined))
+  })
+
+  const bar = () => within(document.querySelector('.selection-toolbar') as HTMLElement)
+
+  it('the magnifier unfolds the bar and a query calls onSearchChange', () => {
+    const onSearchChange = vi.fn()
+    renderList({ onSearchChange })
+
+    fireEvent.click(bar().getByRole('button', { name: 'Search' }))
+    const input = screen.getByPlaceholderText('Search in INBOX')
+    fireEvent.change(input, { target: { value: 'x' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onSearchChange).toHaveBeenCalledWith({ folderPath: 'INBOX', allFolders: false, quick: 'x' })
+  })
+
+  // The results replace the list, the banner counts them, and the empty-folder banner is gone —
+  // even in the trash, where it would otherwise offer to purge under the search.
+  it('renders the results and the banner in place of the list', () => {
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    renderList({ search: criteria, folderPath: 'Corbeille', folderName: 'Trash', folderRole: 'trash' })
+
+    expect(screen.getByText('First hit')).toBeInTheDocument()
+    expect(screen.getByText('Second hit')).toBeInTheDocument()
+    // The underlying folder list (from useMessageList) is not shown.
+    expect(screen.queryByText('Re: facture')).not.toBeInTheDocument()
+    expect(screen.getByText('2 results for “x”')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /empty .* now/i })).not.toBeInTheDocument()
+  })
+
+  it('the banner Clear calls onSearchChange(null)', () => {
+    const onSearchChange = vi.fn()
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    renderList({ search: criteria, onSearchChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(onSearchChange).toHaveBeenCalledWith(null)
+  })
+
+  it('collapsing the bar with the magnifier clears the search', () => {
+    const onSearchChange = vi.fn()
+    renderList({ onSearchChange })
+
+    fireEvent.click(bar().getByRole('button', { name: 'Search' }))  // open
+    fireEvent.click(bar().getByRole('button', { name: 'Search' }))  // close
+
+    expect(onSearchChange).toHaveBeenCalledWith(null)
+  })
+
+  // All-folders results neutralize selection and row actions: a row lives in another folder, so
+  // its uid means nothing here except to open it there.
+  it('neutralizes selection and opens cross-folder results via onOpenResult', async () => {
+    const onOpenResult = vi.fn()
+    const onRows = vi.fn()
+    const cross = [{ ...results[0], uid: 20, subject: 'From archive', folderPath: 'Archive' }]
+    mocks.useSearchMessages.mockReturnValue(page({ total: 1, page: 0, pageSize: 50, results: cross }))
+    renderList({ search: { folderPath: 'INBOX', allFolders: true, quick: 'x' }, onOpenResult, onRows })
+
+    await settle()
+    // No per-row checkbox, no star, the master is disabled, the row is not draggable.
+    expect(screen.queryByRole('checkbox', { name: /select message from/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Star' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select all' })).toBeDisabled()
+    expect(screen.getByText('From archive').closest('.message-row')).toHaveAttribute('draggable', 'false')
+    // The reader is told nothing is navigable in these rows.
+    expect(onRows).toHaveBeenLastCalledWith([])
+
+    fireEvent.click(screen.getByText('From archive'))
+    expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
+  })
+
+  it('in a current-folder search the rows select and carry checkboxes', () => {
+    const onSelect = vi.fn()
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    renderList({ search: criteria, onSelect })
+
+    expect(screen.getAllByRole('checkbox', { name: /select message from/i })).toHaveLength(2)
+    fireEvent.click(screen.getByText('First hit'))
+    expect(onSelect).toHaveBeenCalledWith(10)
+  })
+
+  it('says "Searching…" while in flight and "No results." when empty', () => {
+    mocks.useSearchMessages.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    const { rerender } = renderList({ search: criteria })
+    // The banner also reads "Searching…" when the count is unknown; this asserts the list body.
+    expect(screen.getByText('Searching…', { selector: '.mail-empty' })).toBeInTheDocument()
+
+    mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
+    rerender(
+      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
+        search={criteria} onSearchChange={vi.fn()} />)
+    expect(screen.getByText('No results.')).toBeInTheDocument()
+  })
+
+  it('pages the results and requests the chosen page', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '100', 'mail.showPreview': 'true' })
+    mocks.useSearchMessages.mockReturnValue(page({ total: 300, page: 0, pageSize: 100, results }))
+    renderList({ search: criteria })
+
+    // 300 over 100 per page is three pages, once the page size resolves from preferences.
+    expect(await screen.findByRole('button', { name: 'Page 3' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 2' }))
+    // Zero-based on the wire: the second page is 1, and it re-queries at that page.
+    expect(mocks.useSearchMessages).toHaveBeenCalledWith(criteria, 1, 100)
+  })
+
+  // Empty folder acts on the whole real folder; under a search it must be neutralized, or hits in a
+  // normal folder would let it move the entire folder to trash with no confirmation.
+  it('neutralizes the kebab Empty folder while searching', () => {
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    renderList({ search: criteria })  // INBOX: non-empty, non-trash
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const entry = screen.getByRole('menuitem', { name: 'Empty folder' })
+    expect(entry).toBeDisabled()
+    expect(entry).toHaveAttribute('title', 'Clear the search first')
+
+    fireEvent.click(entry)
+    expect(mocks.empty).not.toHaveBeenCalled()
+  })
+
+  // A search with no hits must not read the search total as the folder being empty.
+  it('does not show a false "already empty" when a search returns no hits', () => {
+    mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
+    renderList({ search: criteria })
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const entry = screen.getByRole('menuitem', { name: 'Empty folder' })
+    expect(entry).toHaveAttribute('title', 'Clear the search first')
+    expect(entry).not.toHaveAttribute('title', 'This folder is already empty')
   })
 })

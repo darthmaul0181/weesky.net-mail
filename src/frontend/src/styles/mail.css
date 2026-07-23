@@ -412,6 +412,50 @@
 }
 .selection-btn:hover:not(:disabled) { color: var(--icon-hover-accent); }
 .selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.selection-btn.is-active {
+  color: var(--badge-count-bg);
+  background: color-mix(in oklab, var(--badge-count-bg) 14%, transparent);
+}
+
+/* Quick-search band, folded open by the toolbar's magnifier. */
+.search-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--list-separator);
+}
+
+.search-bar-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.search-bar-advanced {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.search-bar-advanced:hover {
+  background: var(--pane-item-hover);
+  color: var(--text);
+}
 
 .message-list { list-style: none; }
 
@@ -1065,6 +1109,24 @@
   margin-top: 16px;
 }
 
+/* ── Advanced search modal ───────────────────────────────── */
+
+/* Two columns like the admin dialogs: fields left, date and checkboxes right. */
+.advanced-search-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+  padding: 4px 0 12px;
+}
+
+.advanced-search-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+
 /* ── Empty folder banner ─────────────────────────────────── */
 
 /* Pinned strip between toolbar and scroll area; stays put while rows scroll. */
@@ -1094,4 +1156,36 @@
 
 .empty-folder-banner-link:hover {
   color: var(--danger);
+}
+
+/* ── Search results banner ───────────────────────────────── */
+
+.search-results-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: color-mix(in oklab, var(--badge-count-bg) 12%, transparent);
+  border-bottom: 1px solid var(--list-separator);
+}
+
+.search-results-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-results-banner-clear {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--badge-count-bg);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
 }

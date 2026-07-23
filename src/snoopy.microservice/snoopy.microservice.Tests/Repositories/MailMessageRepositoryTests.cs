@@ -366,4 +366,57 @@ public sealed class MailMessageRepositoryTests
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.EmptyAsync(null!, "pw", "INBOX", null, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task SearchAsync_DelegatesToTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
+        var page = new MailSearchPage { Total = 1 };
+        session.Setup(s => s.SearchAsync("INBOX", false, criteria, 0, 50, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(page));
+
+        var result = await repo.SearchAsync(Alice, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(page, result.Value);
+        session.Verify(s => s.SearchAsync("INBOX", false, criteria, 0, 50, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SearchAsync_PropagatesAConnectionFailure()
+    {
+        var (repo, factory, _) = CreateSut();
+        var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
+        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Failure<IImapSession>("nope"));
+
+        var result = await repo.SearchAsync(Alice, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("nope", result.Error);
+    }
+
+    [Fact]
+    public async Task SearchAsync_DisposesTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
+        session.Setup(s => s.SearchAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<MailSearchCriteria>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(new MailSearchPage()));
+
+        await repo.SearchAsync(Alice, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None);
+
+        session.Verify(s => s.DisposeAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task SearchAsync_ThrowsWhenUserIsNull()
+    {
+        var (repo, _, _) = CreateSut();
+        var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.SearchAsync(null!, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None));
+    }
 }

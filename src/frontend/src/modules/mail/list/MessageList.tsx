@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, KeyboardEvent } from 'react'
-import { showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
-import type { MailMessageSummary, SpecialUse } from '../api/mailTypes'
+import { requestSizeOf, showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
+import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
@@ -10,9 +10,14 @@ import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import { rolePathsOf } from '../folders/folderNodes'
-import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSetFlags } from '../queries'
+import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSearchMessages, useSetFlags } from '../queries'
 import MoveMessagesModal from '../MoveMessagesModal'
+import AdvancedSearchModal from './AdvancedSearchModal'
 import EmptyFolderBanner from './EmptyFolderBanner'
+import SearchBar from './SearchBar'
+import SearchResultsBanner from './SearchResultsBanner'
+import { criteriaFromForm, labelOf } from './searchCriteria'
+import type { AdvancedForm, SearchCriteria } from './searchCriteria'
 import { DRAG_MIME, dragUids, serializeDrag } from './dragMessages'
 import { buildDragPill } from './dragImage'
 import { formatListDate } from './formatDate'
@@ -35,6 +40,11 @@ interface Props {
   onRows?: (uids: number[]) => void
   /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
   onDeparted?: (uid: number, batch?: number[]) => void
+  /** The active search, lifted to the layout; null is the ordinary folder view. */
+  search: SearchCriteria | null
+  onSearchChange: (criteria: SearchCriteria | null) => void
+  /** A cross-folder hit opens in the folder it names, not the one on screen. */
+  onOpenResult?: (uid: number, folderPath: string) => void
 }
 
 const COUNT = new Intl.NumberFormat('en-US')
@@ -48,10 +58,44 @@ const NO_TRASH = 'Assign the trash folder in Settings → Folders'
  */
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
-    onRows, onDeparted }: Props) {
-  const { messages, total, isLoading, isError, paging, streaming } = useMessageList(folderPath)
+    onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
+  const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [advanced, setAdvanced] = useState<{ subject: string } | null>(null)
+  const [searchPage, setSearchPage] = useState(0)
+
+  // Render-time resets, the useMessageList pattern: no effect-lag page or stale-bar frame.
+  const [shownSearch, setShownSearch] = useState(search)
+  if (search !== shownSearch) { setShownSearch(search); setSearchPage(0) }
+  const [shownFolder, setShownFolder] = useState(folderPath)
+  if (folderPath !== shownFolder) { setShownFolder(folderPath); setSearchOpen(false); setAdvanced(null) }
+
+  const searchSize = preferences ? requestSizeOf(preferences) : 0
+  const searchQuery = useSearchMessages(search, searchPage, searchSize)
+  const searching = search !== null
+  const crossFolder = searching && search.allFolders
+
+  // One shape for the render, whichever source fills it — rows/pager/footer never learn which.
+  const view = searching
+    ? {
+        messages: (searchQuery.data?.results ?? []) as MailMessageSummary[],
+        total: searchQuery.data?.total ?? 0,
+        isLoading: searchQuery.isLoading,
+        isError: searchQuery.isError,
+        paging: {
+          page: searchPage,
+          lastPage: searchSize > 0
+            ? Math.max(0, Math.ceil((searchQuery.data?.total ?? 0) / searchSize) - 1)
+            : 0,
+          onSelect: setSearchPage,
+        },
+        streaming: null,
+      }
+    : list
+  const { messages, total, isLoading, isError, paging, streaming } = view
   const scrollRef = useRef<HTMLDivElement>(null)
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
@@ -79,7 +123,7 @@ export default function MessageList(
   // The hook keeps no row list; the effective selection is what it holds intersected with what
   // is on screen, so a departed row stops counting on its own. resetKey clears on folder change
   // and paged-page change, never while streaming more blocks into the same folder.
-  const resetKey = `${folderPath}::${paging ? paging.page : 'stream'}`
+  const resetKey = `${folderPath}::${searching ? `search:${searchPage}` : (paging ? paging.page : 'stream')}`
   const selection = useSelection(resetKey)
   const loadedUids = messages.map(message => message.uid)
   const selectedUids = loadedUids.filter(uid => selection.has(uid))
@@ -156,7 +200,7 @@ export default function MessageList(
   // A drag carries the checked selection when the grabbed row belongs to it, that row alone
   // otherwise. The pill lives off-screen just long enough for the browser to snapshot it.
   function onRowDragStart(event: DragEvent<HTMLDivElement>, uid: number) {
-    if (!folderPath) return
+    if (crossFolder || !folderPath) return
     const uids = dragUids(selectedUids, uid)
     event.dataTransfer.setData(DRAG_MIME, serializeDrag({ sourcePath: folderPath, uids }))
     event.dataTransfer.effectAllowed = 'move'
@@ -191,12 +235,38 @@ export default function MessageList(
   }
 
   // Inner buttons handle their own keys; the row only opens when the row itself has focus.
-  function onRowKey(event: KeyboardEvent<HTMLDivElement>, uid: number) {
+  function onRowKey(event: KeyboardEvent<HTMLDivElement>, message: MailMessageSummary) {
     if (event.target !== event.currentTarget) return
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      onSelect(uid)
+      openRow(message)
     }
+  }
+
+  // A cross-folder hit belongs to another folder: it opens there. Otherwise it is the open folder.
+  function openRow(message: MailMessageSummary) {
+    if (crossFolder) onOpenResult?.(message.uid, (message as MailSearchResult).folderPath)
+    else onSelect(message.uid)
+  }
+
+  function toggleSearch() {
+    if (searchOpen) closeSearch()
+    else setSearchOpen(true)
+  }
+
+  function closeSearch() {
+    setSearchOpen(false)
+    setAdvanced(null)
+    onSearchChange(null)
+  }
+
+  function quickSearch(text: string) {
+    if (folderPath) onSearchChange({ folderPath, allFolders: false, quick: text })
+  }
+
+  function advancedSearch(form: AdvancedForm) {
+    setAdvanced(null)
+    if (folderPath) onSearchChange(criteriaFromForm(folderPath, form))
   }
 
   // The page index resets on its own; the DOM scroll position does not, and would drop the
@@ -204,14 +274,17 @@ export default function MessageList(
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [folderPath])
 
   // The rows in view, for whoever has to pick the next selection when one of them leaves.
-  useEffect(() => { onRows?.(messages.map(message => message.uid)) }, [messages, onRows])
+  // Cross-folder results carry no navigable uid for this folder, so the reader is handed none.
+  useEffect(() => {
+    onRows?.(crossFolder ? [] : messages.map(message => message.uid))
+  }, [messages, crossFolder, onRows])
 
   if (!folderPath) return <p className="mail-empty">Select a folder</p>
 
   function rows() {
-    if (isLoading) return <p className="mail-empty">Loading messages…</p>
+    if (isLoading) return <p className="mail-empty">{searching ? 'Searching…' : 'Loading messages…'}</p>
     if (isError) return <p className="mail-empty">Could not load messages.</p>
-    if (messages.length === 0) return <p className="mail-empty">No messages</p>
+    if (messages.length === 0) return <p className="mail-empty">{searching ? 'No results.' : 'No messages'}</p>
 
     const sentinelRow = streaming?.hasMore ? sentinelIndexOf(messages.length) : -1
 
@@ -234,7 +307,9 @@ export default function MessageList(
             const label = `${message.seen ? '' : 'Unread. '}${from}: ${subject}`
               + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
 
-            const check = (
+            // Cross-folder results neutralize row selection and actions: the row lives in another
+            // folder, so a checkbox, star or cluster acting on this one would act on the wrong mailbox.
+            const check = crossFolder ? null : (
               <input
                 type="checkbox"
                 className="message-row-check"
@@ -249,7 +324,7 @@ export default function MessageList(
               />
             )
 
-            const star = (
+            const star = crossFolder ? null : (
               <button
                 type="button"
                 className={`row-btn row-star${message.flagged ? ' is-on' : ''}`}
@@ -260,7 +335,7 @@ export default function MessageList(
               </button>
             )
 
-            const cluster = (
+            const cluster = crossFolder ? null : (
               <div className="message-row-cluster">
                 <button
                   type="button"
@@ -307,9 +382,9 @@ export default function MessageList(
                   tabIndex={0}
                   aria-label={label}
                   className={classes.join(' ')}
-                  draggable
-                  onClick={() => onSelect(message.uid)}
-                  onKeyDown={event => onRowKey(event, message.uid)}
+                  draggable={!crossFolder}
+                  onClick={() => openRow(message)}
+                  onKeyDown={event => onRowKey(event, message)}
                   onDragStart={event => onRowDragStart(event, message.uid)}
                   onDragEnd={() => setDraggingUids(null)}
                 >
@@ -384,10 +459,34 @@ export default function MessageList(
         copy={{ onRun: () => setPicker({ mode: 'copy' }) }}
         markRead={{ onRun: () => bulkMark(true) }}
         markUnread={{ onRun: () => bulkMark(false) }}
-        emptyFolder={{ onRun: requestEmpty, disabledReason: emptyReason }}
+        emptyFolder={{ onRun: requestEmpty,
+          // Emptying acts on the whole real folder, so it is off under a search: its reason would
+          // otherwise read off the search total, and the non-purge branch fires with no confirm.
+          disabledReason: searching ? 'Clear the search first' : emptyReason }}
+        searchOpen={searchOpen}
+        onToggleSearch={toggleSearch}
+        selectionDisabled={crossFolder}
       />
 
-      <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />
+      {searchOpen && folderPath && (
+        <SearchBar
+          folderTitle={folderName || folderPath}
+          onSearch={quickSearch}
+          onOpenAdvanced={text => setAdvanced({ subject: text })}
+          onClose={closeSearch}
+        />
+      )}
+
+      {searching && (
+        <SearchResultsBanner
+          total={searchQuery.data?.total ?? null}
+          label={labelOf(search)}
+          onClear={closeSearch}
+        />
+      )}
+
+      {/* The empty-folder offer belongs to the folder itself, not to a search laid over it. */}
+      {!searching && <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />}
 
       <div className="mail-list-scroll" ref={scrollRef}>{rows()}</div>
 
@@ -449,6 +548,15 @@ export default function MessageList(
           onConfirm={confirmEmpty}
           onClose={() => setConfirmingEmpty(false)}
           loading={emptyFolder.isPending}
+        />
+      )}
+
+      {advanced && folderPath && (
+        <AdvancedSearchModal
+          folderTitle={folderName || folderPath}
+          initialSubject={advanced.subject}
+          onSearch={advancedSearch}
+          onClose={() => setAdvanced(null)}
         />
       )}
     </div>

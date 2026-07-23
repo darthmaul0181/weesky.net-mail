@@ -1,5 +1,6 @@
-﻿import { useCallback, useEffect, useRef } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import type { SearchCriteria } from './list/searchCriteria'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
 import FolderDialogs from './folders/FolderDialogs'
@@ -34,6 +35,22 @@ export default function MailLayout() {
   const uidParam = params.get('uid')
   const uid = uidParam ? Number(uidParam) : null
 
+  const [search, setSearch] = useState<SearchCriteria | null>(null)
+  // The folder a cross-folder result was opened from; null when the reader shows the URL folder.
+  const [resultFolder, setResultFolder] = useState<string | null>(null)
+
+  // A search belongs to the folder it was typed in: navigating away drops it (render-time reset,
+  // the useMessageList pattern, not an effect).
+  const [searchFolder, setSearchFolder] = useState(folder)
+  if (folder !== searchFolder) {
+    setSearchFolder(folder)
+    setSearch(null)
+    setResultFolder(null)
+  }
+  // The reader closed (departed past the last row, Back): a stale cross-folder origin must not
+  // survive to relabel the next open.
+  if (uid === null && resultFolder !== null) setResultFolder(null)
+
   useListRefresh(folder)
 
   // The list heading shows the same label as the tree: the role label when the folder has a
@@ -64,8 +81,30 @@ export default function MailLayout() {
 
   function selectMessage(nextUid: number) {
     if (!folder) return
+    setResultFolder(null)
     setParams({ folder, uid: String(nextUid) })
   }
+
+  const changeSearch = useCallback((criteria: SearchCriteria | null) => {
+    setSearch(criteria)
+    if (criteria !== null) return
+    // Clearing while a cross-folder result is open: its uid means nothing in the URL folder.
+    setResultFolder(current => {
+      if (current !== null) setParams(previous => {
+        const path = previous.get('folder')
+        return path ? { folder: path } : previous
+      })
+      return null
+    })
+  }, [setParams])
+
+  // A hit from another folder opens where it lives: the URL folder stays put, the reader reads
+  // from resultFolder instead.
+  const openResult = useCallback((nextUid: number, fromFolder: string) => {
+    if (!folder) return
+    setResultFolder(fromFolder === folder ? null : fromFolder)
+    setParams({ folder, uid: String(nextUid) })
+  }, [folder, setParams])
 
   const { data: preferences } = usePreferences()
   // Until the preferences answer, today's layout — the list already waits on the same query,
@@ -119,8 +158,17 @@ export default function MailLayout() {
       onNotify={addToast}
       onRows={keepRows}
       onDeparted={departed}
+      search={search}
+      onSearchChange={changeSearch}
+      onOpenResult={openResult}
     />
   )
+
+  // The reader follows the open cross-folder result, if any, back to the URL folder otherwise.
+  const readerFolder = resultFolder ?? folder
+  const readerNode = folders && readerFolder
+    ? flatten(folders).find(entry => entry.node.path === readerFolder)?.node
+    : undefined
 
   return (
     <div className={`mail-layout is-${pane}`}>
@@ -153,7 +201,7 @@ export default function MailLayout() {
             />
           )}
           <div className="mail-reader">
-            <MessageReader folderPath={folder} uid={uid} folderRole={folderNode?.specialUse ?? null}
+            <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
               onDeparted={departed} onNotify={addToast} />
           </div>
         </div>
@@ -167,7 +215,7 @@ export default function MailLayout() {
             onResize={setListHeight}
           />
           <div className="mail-reader">
-            <MessageReader folderPath={folder} uid={uid} folderRole={folderNode?.specialUse ?? null}
+            <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
               onDeparted={departed} onNotify={addToast} />
           </div>
         </div>
@@ -180,7 +228,7 @@ export default function MailLayout() {
           <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
           {uid !== null && (
             <div className="mail-reader">
-              <MessageReader folderPath={folder} uid={uid} folderRole={folderNode?.specialUse ?? null}
+              <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
                 onBack={closeMessage} onDeparted={departed} onNotify={addToast} />
             </div>
           )}

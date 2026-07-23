@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import type { MailFolderNode, MailFolderPage, MailMessageSummary } from './api/mailTypes'
+import type {
+  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
+} from './api/mailTypes'
 import { mailKeys, useSetFlags } from './queries'
 import { settle } from '../../test-utils'
 
@@ -32,9 +34,19 @@ const node = (path: string, unread: number | null, children: MailFolderNode[] = 
   total: 10, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children,
 })
 
+const searchCriteria = { folderPath: '', allFolders: true, quick: 'x' }
+const searchKey = mailKeys.search('primary', searchCriteria, 0, 50)
+
+const searchRow = (uid: number, folderPath: string, over: Partial<MailSearchResult> = {}): MailSearchResult =>
+  ({ ...summary(uid, over), folderPath, uidValidity: 1 })
+
+const searchPageOf = (results: MailSearchResult[]): MailSearchPage =>
+  ({ total: results.length, page: 0, pageSize: 50, results })
+
 const pagesKey = mailKeys.messages('primary', 'INBOX', 0, 50)
 const streamKey = mailKeys.messageStream('primary', 'INBOX', 100)
 const foldersKey = mailKeys.folders('primary')
+const searchIn = () => client.getQueryData<MailSearchPage>(searchKey)
 
 const pageIn = () => client.getQueryData<MailFolderPage>(pagesKey)
 const streamIn = () => client.getQueryData<InfiniteData<MailFolderPage>>(streamKey)
@@ -197,6 +209,44 @@ describe('useSetFlags', () => {
 
     expect(streamIn()!.pages[0].messages[0].seen).toBe(true)
     expect(treeIn()![0].unread).toBe(4)
+  })
+
+  it('patches the cached search results of the mutated folder', async () => {
+    seed([summary(1)], [summary(1)])
+    // Same uid, two folders: only the INBOX row must move, the Archive row is another message.
+    client.setQueryData(searchKey,
+      searchPageOf([searchRow(1, 'INBOX'), searchRow(1, 'Archive')]))
+    mocks.setMessageFlags.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => useSetFlags(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1], flag: 'seen', value: true })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(searchIn()!.results[0].seen).toBe(true)
+    expect(searchIn()!.results[1].seen).toBe(false)
+  })
+
+  it('rolls the search cache back when the request fails', async () => {
+    seed([summary(1)], [summary(1)])
+    const seededSearch = searchPageOf([searchRow(1, 'INBOX')])
+    client.setQueryData(searchKey, seededSearch)
+    const pending = deferred<void>()
+    mocks.setMessageFlags.mockReturnValue(pending.promise)
+
+    const { result } = renderHook(() => useSetFlags(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1], flag: 'seen', value: true })
+    })
+
+    // Patched first, so the restoration below is a real round trip and not a no-op.
+    expect(searchIn()!.results[0].seen).toBe(true)
+
+    await act(async () => { pending.reject(new Error('boom')) })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    expect(searchIn()).toStrictEqual(seededSearch)
   })
 
   it('never invalidates the stream key', async () => {

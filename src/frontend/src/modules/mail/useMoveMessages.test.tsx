@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import type { MailFolderNode, MailFolderPage, MailMessageSummary } from './api/mailTypes'
-import { mailKeys, useDeleteMessages, useMoveMessages } from './queries'
+import type {
+  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
+} from './api/mailTypes'
+import { mailKeys, useDeleteMessages, useMoveMessages, useSearchMessages } from './queries'
 import { settle } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({
-  moveMessages: vi.fn(), copyMessages: vi.fn(), deleteMessages: vi.fn(),
+  moveMessages: vi.fn(), copyMessages: vi.fn(), deleteMessages: vi.fn(), searchMessages: vi.fn(),
 }))
 vi.mock('../../api.js', () => ({ api: mocks }))
 vi.mock('../../contexts/AuthContext', () => ({
@@ -38,6 +40,17 @@ const node = (path: string, total: number, unread: number): MailFolderNode => ({
   path, name: path, specialUse: null, selectable: true, subscribed: true,
   total, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children: [],
 })
+
+const searchCriteria = { folderPath: '', allFolders: true, quick: 'x' }
+const searchKey = mailKeys.search('primary', searchCriteria, 0, 50)
+
+const searchRow = (uid: number, folderPath: string, over: Partial<MailSearchResult> = {}): MailSearchResult =>
+  ({ ...summary(uid, over), folderPath, uidValidity: 1 })
+
+const searchPageOf = (results: MailSearchResult[], total: number): MailSearchPage =>
+  ({ total, page: 0, pageSize: 50, results })
+
+const searchIn = () => client.getQueryData<MailSearchPage>(searchKey)
 
 const sourcePagesKey = mailKeys.messages('primary', 'INBOX', 0, 50)
 const sourceStreamKey = mailKeys.messageStream('primary', 'INBOX', 100)
@@ -241,6 +254,64 @@ describe('useMoveMessages', () => {
     expect(onError).toHaveBeenCalledWith('Could not copy the message')
   })
 
+  it('drops the row from cached search results and rolls back on error', async () => {
+    seed()
+    // A search page holding the moved INBOX row and a same-uid Archive row that must survive.
+    const seededSearch = searchPageOf([searchRow(1, 'INBOX'), searchRow(1, 'Archive')], 2)
+    client.setQueryData(searchKey, seededSearch)
+    const pending = deferred<void>()
+    mocks.moveMessages.mockReturnValue(pending.promise)
+
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({
+        folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false,
+      })
+    })
+
+    // Row of the mutated folder gone, total decremented, the other folder's row kept.
+    expect(uidsOf(searchIn()!.results)).toEqual([1])
+    expect(searchIn()!.results[0].folderPath).toBe('Archive')
+    expect(searchIn()!.total).toBe(1)
+
+    await act(async () => { pending.reject(new Error('boom')) })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    // Snapshot restored: the row and the total are back.
+    expect(searchIn()).toStrictEqual(seededSearch)
+  })
+
+  it('cancels an in-flight search fetch so a late resolve cannot resurrect the moved row', async () => {
+    seed()
+    client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    const searchFetch = deferred<MailSearchPage>()
+    mocks.searchMessages.mockReturnValue(searchFetch.promise)
+    mocks.moveMessages.mockResolvedValue(undefined)
+
+    // A search view is loading over the already-cached page: its fetch is in flight.
+    renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalled())
+
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({
+        folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false,
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    // Removal applied and the mutation succeeded, so onError never fires — no rollback path.
+    expect(uidsOf(searchIn()!.results)).toEqual([3])
+
+    // The pre-removal server list resolves late; the cancelled fetch must not overwrite the cache.
+    await act(async () => {
+      searchFetch.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    })
+    await settle()
+
+    expect(uidsOf(searchIn()!.results)).toEqual([3])
+  })
+
   it('never invalidates a stream key', async () => {
     seed()
     mocks.moveMessages.mockResolvedValue(undefined)
@@ -305,5 +376,31 @@ describe('useDeleteMessages', () => {
     expect(sourceStream()).toStrictEqual(seeded.stream)
     expect(client.getQueryData<MailFolderNode[]>(foldersKey)).toStrictEqual(seeded.tree)
     expect(onError).toHaveBeenCalledWith('Could not delete the message')
+  })
+
+  it('cancels an in-flight search fetch so a late resolve cannot resurrect the deleted row', async () => {
+    seed()
+    client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    const searchFetch = deferred<MailSearchPage>()
+    mocks.searchMessages.mockReturnValue(searchFetch.promise)
+    mocks.deleteMessages.mockResolvedValue(undefined)
+
+    renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalled())
+
+    const { result } = renderHook(() => useDeleteMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1] })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(uidsOf(searchIn()!.results)).toEqual([3])
+
+    await act(async () => {
+      searchFetch.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    })
+    await settle()
+
+    expect(uidsOf(searchIn()!.results)).toEqual([3])
   })
 })

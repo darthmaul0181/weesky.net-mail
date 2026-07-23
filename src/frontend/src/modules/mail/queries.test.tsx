@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream } from './queries'
+import { settle } from '../../test-utils'
+import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useSearchMessages } from './queries'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
   createMailFolder: vi.fn(),
   getPreferences: vi.fn(),
+  searchMessages: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -19,6 +21,7 @@ vi.mock('../../api.js', () => ({
     getMailMessage: mocks.getMailMessage,
     createMailFolder: mocks.createMailFolder,
     getPreferences: mocks.getPreferences,
+    searchMessages: mocks.searchMessages,
   },
 }))
 
@@ -64,6 +67,14 @@ describe('mailKeys', () => {
 
   it('gives different accounts different keys', () => {
     expect(mailKeys.folders('primary')).not.toEqual(mailKeys.folders('linked-1'))
+  })
+
+  // Criteria live in the key: two different searches are two cache entries, never one
+  // overwriting the other.
+  it('gives different criteria different search keys', () => {
+    const a = mailKeys.search('primary', { folderPath: 'INBOX', allFolders: false, quick: 'x' }, 0, 50)
+    const b = mailKeys.search('primary', { folderPath: 'INBOX', allFolders: false, quick: 'y' }, 0, 50)
+    expect(a).not.toEqual(b)
   })
 
   // A page fetched at 30 per page is not the same page at 100: without the size in the key,
@@ -209,6 +220,33 @@ describe('useMessage', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.subject).toBe('Hello')
+  })
+})
+
+describe('useSearchMessages', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('fetches when criteria are set', async () => {
+    mocks.searchMessages.mockResolvedValue({ total: 1, page: 0, pageSize: 50, results: [] })
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(
+      () => useSearchMessages({ folderPath: 'INBOX', allFolders: false, quick: 'x' }, 0, 50),
+      { wrapper },
+    )
+
+    await waitFor(() => expect(result.current.data?.total).toBe(1))
+    expect(mocks.searchMessages).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', allFolders: false, quick: 'x' }, 0, 50, expect.anything())
+  })
+
+  it('stays idle with null criteria', async () => {
+    const { wrapper } = createWrapper()
+
+    renderHook(() => useSearchMessages(null, 0, 50), { wrapper })
+    await settle()
+
+    expect(mocks.searchMessages).not.toHaveBeenCalled()
   })
 })
 

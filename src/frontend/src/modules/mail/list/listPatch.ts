@@ -1,4 +1,4 @@
-import type { MailFolderNode, MailMessageSummary } from '../api/mailTypes'
+import type { MailFolderNode, MailMessageSummary, MailSearchResult } from '../api/mailTypes'
 
 export type MailFlagName = 'seen' | 'flagged'
 
@@ -51,6 +51,58 @@ export function removeSummaries(messages: MailMessageSummary[], uids: number[]):
   })
 
   return { messages: removed === 0 ? messages : kept, removed, removedUnread }
+}
+
+export interface SearchResultsPatch {
+  results: MailSearchResult[]
+  unreadDelta: number
+  found: number
+}
+
+/** patchSummaries scoped to one folder: a same uid under another folder is another message. */
+export function patchSearchResults(
+  results: MailSearchResult[], folderPath: string, uids: number[], flag: MailFlagName, value: boolean,
+): SearchResultsPatch {
+  const targets = new Set(uids)
+  let unreadDelta = 0
+  let found = 0
+
+  const patched = results.map(row => {
+    if (row.folderPath !== folderPath || !targets.has(row.uid)) return row
+    found += 1
+    if (flag === 'seen') {
+      if (row.seen === value) return row
+      unreadDelta += value ? -1 : 1
+      return { ...row, seen: value }
+    }
+    if (row.flagged === value) return row
+    return { ...row, flagged: value }
+  })
+
+  return { results: patched, unreadDelta, found }
+}
+
+export interface RemovedSearchResults {
+  results: MailSearchResult[]
+  removed: number
+  removedUnread: number
+}
+
+export function removeSearchResults(
+  results: MailSearchResult[], folderPath: string, uids: number[],
+): RemovedSearchResults {
+  const targets = new Set(uids)
+  let removed = 0
+  let removedUnread = 0
+
+  const kept = results.filter(row => {
+    if (row.folderPath !== folderPath || !targets.has(row.uid)) return true
+    removed += 1
+    if (!row.seen) removedUnread += 1
+    return false
+  })
+
+  return { results: removed === 0 ? results : kept, removed, removedUnread }
 }
 
 export interface FolderCountDeltas {

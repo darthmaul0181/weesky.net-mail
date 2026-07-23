@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import type { MailFolderNode, MailMessageSummary } from '../api/mailTypes'
-import { patchFolderCounts, patchFolderUnread, patchSummaries, removeSummaries } from './listPatch'
+import type { MailFolderNode, MailMessageSummary, MailSearchResult } from '../api/mailTypes'
+import {
+  patchFolderCounts, patchFolderUnread, patchSearchResults, patchSummaries,
+  removeSearchResults, removeSummaries,
+} from './listPatch'
 
 const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
   uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', date: '2026-07-22T10:00:00Z',
   seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
   ...over,
 })
+
+const result = (uid: number, folderPath: string, seen = true): MailSearchResult =>
+  ({ ...summary(uid, { seen }), folderPath, uidValidity: 1 })
 
 const node = (
   path: string, unread: number | null, children: MailFolderNode[] = [], total: number | null = 10,
@@ -134,5 +140,47 @@ describe('patchFolderCounts', () => {
     const tree = [node('INBOX', 5), node('Archive', 2)]
     const patched = patchFolderCounts(tree, 'INBOX', { total: -1, unread: -1 })
     expect(patched[1]).toBe(tree[1])
+  })
+})
+
+describe('patchSearchResults', () => {
+  it('patches only the rows of the mutated folder', () => {
+    const rows = [result(1, 'INBOX', false), result(1, 'Archive', false)]
+    const patch = patchSearchResults(rows, 'INBOX', [1], 'seen', true)
+    expect(patch.found).toBe(1)
+    expect(patch.unreadDelta).toBe(-1)
+    expect(patch.results[0].seen).toBe(true)
+    expect(patch.results[1].seen).toBe(false)
+  })
+
+  it('moves the flag without touching the unread delta', () => {
+    const rows = [result(1, 'INBOX')]
+    const patch = patchSearchResults(rows, 'INBOX', [1], 'flagged', true)
+    expect(patch.unreadDelta).toBe(0)
+    expect(patch.results[0].flagged).toBe(true)
+  })
+
+  it('reports zero found when no row of that folder holds the uid', () => {
+    const rows = [result(1, 'Archive', false)]
+    const patch = patchSearchResults(rows, 'INBOX', [1], 'seen', true)
+    expect(patch.found).toBe(0)
+    expect(patch.results[0].seen).toBe(false)
+  })
+})
+
+describe('removeSearchResults', () => {
+  it('removes only the rows of the mutated folder and counts unread', () => {
+    const rows = [result(1, 'INBOX', false), result(1, 'Archive'), result(2, 'INBOX')]
+    const removal = removeSearchResults(rows, 'INBOX', [1, 2])
+    expect(removal.removed).toBe(2)
+    expect(removal.removedUnread).toBe(1)
+    expect(removal.results).toEqual([rows[1]])
+  })
+
+  it('returns the same array reference when nothing matched', () => {
+    const rows = [result(1, 'Archive'), result(2, 'Archive')]
+    const removal = removeSearchResults(rows, 'INBOX', [1, 2])
+    expect(removal.removed).toBe(0)
+    expect(removal.results).toBe(rows)
   })
 })

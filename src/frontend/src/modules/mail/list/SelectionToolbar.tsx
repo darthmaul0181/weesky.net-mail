@@ -8,6 +8,7 @@ import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
+import SearchIcon from '../../../icons/SearchIcon'
 
 export interface ToolbarAction {
   onRun: () => void
@@ -29,6 +30,10 @@ export interface SelectionToolbarProps {
   markRead: ToolbarAction
   markUnread: ToolbarAction
   emptyFolder: ToolbarAction
+  searchOpen: boolean
+  onToggleSearch: () => void
+  /** All-folders results: rows carry no checkbox, so the master must not promise one. */
+  selectionDisabled?: boolean
 }
 
 const CAP = 'Select 200 or fewer'
@@ -81,6 +86,7 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         aria-label="Select all"
         checked={allSelected}
         onChange={onToggleAll}
+        disabled={props.selectionDisabled}
       />
       <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
       <div className="selection-actions">
@@ -92,6 +98,15 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         </button>
         <button type="button" className="selection-btn is-danger" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
           <TrashIcon size={20} />
+        </button>
+        <button
+          type="button"
+          className={`selection-btn${props.searchOpen ? ' is-active' : ''}`}
+          aria-label="Search"
+          title="Search"
+          onClick={props.onToggleSearch}
+        >
+          <SearchIcon size={20} />
         </button>
         <DropdownMenu ariaLabel="More actions" className="selection-btn" trigger={<KebabIcon />} items={kebab} />
       </div>

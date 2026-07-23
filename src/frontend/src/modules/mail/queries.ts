@@ -6,11 +6,14 @@ import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
-  MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, FolderRoleEntry,
+  MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, MailSearchPage,
+  FolderRoleEntry,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
+import type { SearchCriteria } from './list/searchCriteria'
 import {
-  patchFolderCounts, patchFolderUnread, patchSummaries, removeSummaries,
+  patchFolderCounts, patchFolderUnread, patchSearchResults, patchSummaries,
+  removeSearchResults, removeSummaries,
   type FolderCountDeltas, type MailFlagName,
 } from './list/listPatch'
 import { nextBlockIndex } from './list/messageStream'
@@ -22,6 +25,7 @@ const messagesIn = (accountId: string, folder: string) =>
   ['mail', accountId, 'messages', folder] as const
 const messageStreamIn = (accountId: string, folder: string) =>
   ['mail', accountId, 'messageStream', folder] as const
+const searchIn = (accountId: string) => ['mail', accountId, 'search'] as const
 
 /**
  * Every key is scoped by the active account, so linking a second account later isolates its
@@ -43,6 +47,11 @@ export const mailKeys = {
   messageStream: (accountId: string, folder: string, requestSize: number) =>
     [...messageStreamIn(accountId, folder), requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
+  /** Prefix for every cached search — what the idle key falls back to when no search is active. */
+  searchIn,
+  // Criteria in the key: two different searches are two caches, never one overwriting the other.
+  search: (accountId: string, criteria: SearchCriteria, page: number, pageSize: number) =>
+    [...searchIn(accountId), criteria, page, pageSize] as const,
   /** Mutation key, not a query key: it is what lets the poll tell our own writes from a change.
       Carried by every write — flags, move, copy, delete — since each patches the same counters. */
   writes: (accountId: string) => ['mail', accountId, 'writes'] as const,
@@ -111,6 +120,24 @@ export function useMessage(folderPath: string | null, uid: number | null) {
     queryKey: mailKeys.message(accountId, folderPath ?? '', uid ?? 0),
     queryFn: ({ signal }) => api.getMailMessage(folderPath, uid, { signal }),
     enabled: folderPath !== null && uid !== null,
+  })
+}
+
+/**
+ * A search is a snapshot: no window-focus replay (an all-folders sweep is N IMAP SEARCHes),
+ * no poll, no writes key. placeholderData keeps the previous page while the next loads.
+ */
+export function useSearchMessages(criteria: SearchCriteria | null, page: number, pageSize: number) {
+  const accountId = useAccountId()
+
+  return useQuery<MailSearchPage>({
+    queryKey: criteria
+      ? mailKeys.search(accountId, criteria, page, pageSize)
+      : [...mailKeys.searchIn(accountId), 'idle'],
+    queryFn: ({ signal }) => api.searchMessages(criteria, page, pageSize, { signal }),
+    enabled: criteria !== null && pageSize > 0,
+    refetchOnWindowFocus: false,
+    placeholderData: (previous) => previous,
   })
 }
 
@@ -255,6 +282,19 @@ export function useSetFlags(onError?: (message: string) => void) {
         queryClient.setQueryData(key, { ...stream, pages })
       }
 
+      // Search caches are summaries too: the same patch, scoped to the mutated folder, with the
+      // same snapshot rollback. They stay a snapshot otherwise — the poll never touches them.
+      const searchKey = mailKeys.searchIn(accountId)
+      await queryClient.cancelQueries({ queryKey: searchKey })
+      for (const [key, page] of queryClient.getQueriesData<MailSearchPage>({ queryKey: searchKey })) {
+        if (!page) continue
+        const patch = patchSearchResults(page.results, folderPath, uids, flag, value)
+        if (patch.found === 0) continue
+        snapshots.push([key, page])
+        queryClient.setQueryData(key, { ...page, results: patch.results })
+        tally.count(page.results.filter(row => row.folderPath === folderPath))
+      }
+
       if (tally.delta !== 0) {
         const foldersKey = mailKeys.folders(accountId)
         const tree = queryClient.getQueryData<MailFolderNode[]>(foldersKey)
@@ -339,6 +379,20 @@ function removeFromFolderCaches(
     if (removed === 0) continue
     snapshots.push([key, stream])
     queryClient.setQueryData(key, { ...stream, pages })
+  }
+
+  // Search caches are summaries too: drop the mutated folder's rows and decrement that page's
+  // total, snapshotting each. Same-folder rows only — a shared uid elsewhere is another message.
+  for (const [key, page] of
+    queryClient.getQueriesData<MailSearchPage>({ queryKey: mailKeys.searchIn(accountId) })) {
+    if (!page) continue
+    const removal = removeSearchResults(page.results, folderPath, uids)
+    if (removal.removed === 0) continue
+    snapshots.push([key, page])
+    tally.count(page.results.filter(row => row.folderPath === folderPath))
+    queryClient.setQueryData(key, {
+      ...page, results: removal.results, total: Math.max(0, page.total - removal.removed),
+    })
   }
 
   return { snapshots, removed: tally.removed, removedUnread: tally.removedUnread }
@@ -432,6 +486,9 @@ export function useMoveMessages(onError?: (message: string) => void) {
 
     onMutate: async ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
+      // removeFromFolderCaches writes the search cache too: cancel any in-flight search fetch so
+      // a late resolve can't repopulate the removed row on a success path that never rolls back.
+      await queryClient.cancelQueries({ queryKey: mailKeys.searchIn(accountId) })
 
       const snapshots: Snapshot[] = []
       const patches: [string, FolderCountDeltas][] = []
@@ -483,6 +540,9 @@ export function useDeleteMessages(onError?: (message: string) => void) {
 
     onMutate: async ({ folderPath, uids }: DeleteMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
+      // removeFromFolderCaches writes the search cache too: cancel any in-flight search fetch so
+      // a late resolve can't repopulate the removed row on a success path that never rolls back.
+      await queryClient.cancelQueries({ queryKey: mailKeys.searchIn(accountId) })
 
       const source = removeFromFolderCaches(queryClient, accountId, folderPath, uids)
       const tree = patchTreeCounts(queryClient, accountId,

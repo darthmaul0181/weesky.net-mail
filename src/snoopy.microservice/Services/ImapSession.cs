@@ -402,6 +402,130 @@ internal sealed class ImapSession : IImapSession
         }
     }
 
+    public async Task<Result<MailSearchPage>> SearchAsync(
+        string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            var query = MailSearchQueryBuilder.Build(criteria, DateTime.UtcNow.Date);
+            var result = new MailSearchPage { Page = page, PageSize = pageSize };
+
+            // Every match as (folder, uid), already newest-first once this list is final.
+            List<(IMailFolder Folder, UniqueId Uid)> matches;
+
+            if (!allFolders && _client.Capabilities.HasFlag(ImapCapabilities.Sort))
+            {
+                // Single folder with SORT: the server hands the order, no dates needed.
+                var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+                await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+                var sorted = await folder.SortAsync(query, [OrderBy.ReverseDate], cancellationToken);
+                var uids = criteria.HasAttachment
+                    ? await WithAttachmentsAsync(folder, sorted, cancellationToken)
+                    : sorted;
+                matches = uids.Select(uid => (folder, uid)).ToList();
+            }
+            else
+            {
+                // All folders — or a server without SORT: SEARCH each, fetch internal dates and
+                // merge-sort in memory by arrival (InternalDate) — a reliable cross-folder order key,
+                // unlike the single-folder SORT DATE path above, which orders by the sent Date header.
+                var dated = new List<(IMailFolder Folder, UniqueId Uid, DateTimeOffset Date)>();
+
+                foreach (var folder in await SearchableFoldersAsync(folderPath, allFolders, cancellationToken))
+                {
+                    await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+                    var found = await folder.SearchAsync(query, cancellationToken);
+                    if (found.Count == 0) continue;
+
+                    var uids = criteria.HasAttachment
+                        ? await WithAttachmentsAsync(folder, found, cancellationToken)
+                        : found;
+                    if (uids.Count == 0) continue;
+
+                    var dates = await folder.FetchAsync(
+                        uids, MessageSummaryItems.UniqueId | MessageSummaryItems.InternalDate, cancellationToken);
+                    dated.AddRange(dates.Select(item =>
+                        (folder, item.UniqueId, item.InternalDate ?? DateTimeOffset.MinValue)));
+                }
+
+                dated.Sort((a, b) => b.Date.CompareTo(a.Date));
+                matches = dated.Select(entry => (entry.Folder, entry.Uid)).ToList();
+            }
+
+            result.Total = matches.Count;
+
+            var wanted = PageOf(matches, page, pageSize);
+            if (wanted.Count == 0) return Result.Success(result);
+
+            // One summary fetch per folder present in the page. Each folder is re-opened:
+            // IMAP selects one mailbox at a time, so the loop above left only the last one open.
+            var byKey = new Dictionary<(string, uint), MailSearchResult>();
+            foreach (var group in wanted.GroupBy(m => m.Folder))
+            {
+                await group.Key.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+                var items = await group.Key.FetchAsync(
+                    group.Select(m => m.Uid).ToList(), SummaryItems, cancellationToken);
+                foreach (var item in items)
+                {
+                    byKey[(group.Key.FullName, item.UniqueId.Id)] = FillSummary(new MailSearchResult
+                    {
+                        FolderPath = group.Key.FullName,
+                        UidValidity = group.Key.UidValidity,
+                    }, item);
+                }
+            }
+
+            // Back into merged order; a uid expunged between search and fetch just drops out.
+            foreach (var match in wanted)
+            {
+                if (byKey.TryGetValue((match.Folder.FullName, match.Uid.Id), out var row))
+                    result.Results.Add(row);
+            }
+
+            return Result.Success(result);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to search messages from {Folder} (allFolders: {AllFolders})", folderPath, allFolders);
+            return Result.Failure<MailSearchPage>("Unable to search the messages");
+        }
+    }
+
+    /// <summary>The folders one search sweeps: the named one, or every selectable folder.</summary>
+    private async Task<IReadOnlyList<IMailFolder>> SearchableFoldersAsync(
+        string folderPath, bool allFolders, CancellationToken cancellationToken)
+    {
+        if (!allFolders) return [await _client.GetFolderAsync(folderPath, cancellationToken)];
+
+        var folders = await _client.GetFoldersAsync(_client.PersonalNamespaces[0], cancellationToken: cancellationToken);
+        return folders
+            .Where(f => (f.Attributes & (FolderAttributes.NonExistent | FolderAttributes.NoSelect)) == 0)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Keeps only the matches whose BODYSTRUCTURE shows an attachment — the same predicate
+    /// that fills HasAttachments. Runs before paging: filtering after would falsify Total.
+    /// </summary>
+    private static async Task<IList<UniqueId>> WithAttachmentsAsync(
+        IMailFolder folder, IList<UniqueId> uids, CancellationToken cancellationToken)
+    {
+        if (uids.Count == 0) return uids;
+
+        var items = await folder.FetchAsync(
+            uids, MessageSummaryItems.UniqueId | MessageSummaryItems.BodyStructure, cancellationToken);
+        var keep = items.Where(i => i.Attachments?.Any() ?? false).Select(i => i.UniqueId).ToHashSet();
+        return uids.Where(keep.Contains).ToList();
+    }
+
     public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -516,30 +640,31 @@ internal sealed class ImapSession : IImapSession
         MessageSummaryItems.Size | MessageSummaryItems.BodyStructure | MessageSummaryItems.InternalDate |
         MessageSummaryItems.PreviewText;
 
-    private static MailMessageSummary ToSummary(IMessageSummary item)
+    private static MailMessageSummary ToSummary(IMessageSummary item) => FillSummary(new MailMessageSummary(), item);
+
+    /// <summary>One mapping for list rows and search hits — the eleven fields cannot drift apart.</summary>
+    private static T FillSummary<T>(T summary, IMessageSummary item) where T : MailMessageSummary
     {
         var sender = item.Envelope?.From?.Mailboxes?.FirstOrDefault();
 
-        return new MailMessageSummary
-        {
-            Uid = item.UniqueId.Id,
-            Subject = item.Envelope?.Subject ?? string.Empty,
-            FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty,
-            FromAddress = sender?.Address ?? string.Empty,
-            // Arrival date, not the Date header. The page window is a range of sequence
-            // numbers, so the list is ordered by arrival; showing the header date would
-            // print a date that contradicts the row's own position — a message written in
-            // May but delivered in June sits among the June messages, and saying "May"
-            // there reads as a sorting bug. The header date is still shown in the reader,
-            // where it answers a different question: when the sender wrote it.
-            Date = item.InternalDate ?? item.Envelope?.Date ?? DateTimeOffset.MinValue,
-            Seen = item.Flags?.HasFlag(MessageFlags.Seen) ?? false,
-            Flagged = item.Flags?.HasFlag(MessageFlags.Flagged) ?? false,
-            Answered = item.Flags?.HasFlag(MessageFlags.Answered) ?? false,
-            HasAttachments = item.Attachments?.Any() ?? false,
-            Size = item.Size ?? 0,
-            Preview = item.PreviewText ?? string.Empty
-        };
+        summary.Uid = item.UniqueId.Id;
+        summary.Subject = item.Envelope?.Subject ?? string.Empty;
+        summary.FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty;
+        summary.FromAddress = sender?.Address ?? string.Empty;
+        // Arrival date, not the Date header. The page window is a range of sequence
+        // numbers, so the list is ordered by arrival; showing the header date would
+        // print a date that contradicts the row's own position — a message written in
+        // May but delivered in June sits among the June messages, and saying "May"
+        // there reads as a sorting bug. The header date is still shown in the reader,
+        // where it answers a different question: when the sender wrote it.
+        summary.Date = item.InternalDate ?? item.Envelope?.Date ?? DateTimeOffset.MinValue;
+        summary.Seen = item.Flags?.HasFlag(MessageFlags.Seen) ?? false;
+        summary.Flagged = item.Flags?.HasFlag(MessageFlags.Flagged) ?? false;
+        summary.Answered = item.Flags?.HasFlag(MessageFlags.Answered) ?? false;
+        summary.HasAttachments = item.Attachments?.Any() ?? false;
+        summary.Size = item.Size ?? 0;
+        summary.Preview = item.PreviewText ?? string.Empty;
+        return summary;
     }
 
     public static List<MailAddressInfo> ToAddressInfos(InternetAddressList? addresses) =>

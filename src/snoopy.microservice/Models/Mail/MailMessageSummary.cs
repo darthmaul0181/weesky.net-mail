@@ -1,7 +1,7 @@
 namespace weesky.Snoopy.Microservice.Models.Mail;
 
 /// <summary>One row of the message list. Envelope-level only — no body is fetched.</summary>
-public sealed class MailMessageSummary
+public class MailMessageSummary
 {
     /// <summary>IMAP UID. Valid only for the UidValidity of its page.</summary>
     public uint Uid { get; set; }

@@ -95,4 +95,15 @@ internal sealed class MailMessageRepository : IMailMessageRepository
         await using var session = sessionResult.Value;
         return await session.EmptyAsync(folderPath, targetPath, cancellationToken);
     }
+
+    public async Task<Result<MailSearchPage>> SearchAsync(User user, string password, string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure<MailSearchPage>(sessionResult.Error);
+        await using var session = sessionResult.Value;
+
+        return await session.SearchAsync(folderPath, allFolders, criteria, page, pageSize, cancellationToken);
+    }
 }

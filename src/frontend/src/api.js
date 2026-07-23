@@ -241,6 +241,9 @@ export const api = {
   emptyFolder: (folder, targetFolder) =>
     request('POST', '/api/Mail/Folders/Empty', { folderPath: folder, targetFolderPath: targetFolder ?? null }),
 
+  searchMessages: (criteria, page, pageSize, options) =>
+    request('POST', '/api/Mail/Messages/Search', { ...criteria, page, pageSize }, options),
+
   getFolderRoles: (options) =>
     request('GET', '/api/Mail/FolderRoles', undefined, options),
 

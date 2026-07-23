@@ -26,4 +26,7 @@ public interface IMailMessageRepository
 
     /// <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
     Task<Result> EmptyAsync(User user, string password, string folderPath, string? targetPath, CancellationToken cancellationToken);
+
+    /// <summary>One page of search results across one folder or the whole mailbox.</summary>
+    Task<Result<MailSearchPage>> SearchAsync(User user, string password, string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken);
 }

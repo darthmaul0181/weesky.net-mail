@@ -614,6 +614,45 @@ public sealed class MailController : ApiBaseController
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
 
+    /// <summary>
+    /// One page of search results, newest first. Criteria combine with AND; Quick is the
+    /// fast bar and means subject OR sender. AllFolders sweeps every selectable folder in
+    /// one session. Paths travel in the body, never in a route segment.
+    /// </summary>
+    /// <param name="request">criteria, scope and paging</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The page of results</response>
+    /// <response code="400">The folder is missing, no criterion is filled, or the paging arguments are out of range</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("Messages/Search")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<MailSearchPage>> SearchMessages(SearchMessagesRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+        if (request.Page < 0) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Page must not be negative"));
+        if (request.PageSize is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Page size must be between 1 and 200"));
+
+        var criteria = new MailSearchCriteria(
+            request.Quick, request.From, request.To, request.Subject, request.Text,
+            request.SinceDays, request.Unread, request.Flagged, request.HasAttachment);
+        if (!MailSearchQueryBuilder.HasAnyCriterion(criteria))
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one search criterion is required"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _messages.SearchAsync(
+            AuthenticatedUser, password.Value, request.FolderPath, request.AllFolders,
+            criteria, request.Page, request.PageSize, cancellationToken);
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
     {
         foreach (var node in nodes)

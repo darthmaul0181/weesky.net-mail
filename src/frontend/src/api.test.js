@@ -520,6 +520,20 @@ describe('mail endpoints', () => {
     )
   })
 
+  it('posts search criteria with paging', async () => {
+    mockFetch(200, { json: { total: 0, page: 0, pageSize: 50, results: [] } })
+    const { api } = await import('./api.js')
+
+    await api.searchMessages({ folderPath: 'INBOX', allFolders: false, quick: 'hello' }, 0, 50)
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toBe('https://api.mail.weesky.net/api/Mail/Messages/Search')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body)).toEqual({
+      folderPath: 'INBOX', allFolders: false, quick: 'hello', page: 0, pageSize: 50,
+    })
+  })
+
   it('DELETEs with the folder and uids in the body', async () => {
     mockFetch(204)
     const { api } = await import('./api.js')

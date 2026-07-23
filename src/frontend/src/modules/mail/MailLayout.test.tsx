@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
   moveMessages: vi.fn(),
   deleteMessages: vi.fn(),
+  searchMessages: vi.fn(),
   useListRefresh: vi.fn(),
 }))
 
@@ -311,5 +312,108 @@ describe('reading pane arrangements', () => {
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
     expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
+  })
+})
+
+// The search criteria live in the layout, so the reader can open a hit from another folder while
+// the URL folder stays put; leaving the folder or clearing a cross-folder result winds it back.
+describe('searching from the layout', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const result = (partial: object) => ({
+    uid: 20, folderPath: 'INBOX', uidValidity: 1, subject: 'found', fromName: 'Z', fromAddress: 'z@b.c',
+    date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 1, preview: '', ...partial,
+  })
+
+  function searchYields(results: object[]) {
+    mocks.searchMessages.mockResolvedValue({ total: results.length, page: 0, pageSize: 30, results })
+  }
+
+  // A hit from another folder resolves slowly like the departing suite: an instant detail marks the
+  // row seen and cancels the search fetch in flight.
+  function readerYields(uid: number, folderPath: string) {
+    mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+      uid, folderPath, uidValidity: 1, subject: 'opened', fromName: '', fromAddress: 'z@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    }), 250)))
+  }
+
+  async function runAdvancedAllFolders() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Search' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced search' }))
+    const modal = document.querySelector('.modal') as HTMLElement
+    fireEvent.change(within(modal).getByLabelText('Subject'), { target: { value: 'e' } })
+    fireEvent.change(within(modal).getByLabelText('Scope'), { target: { value: 'all' } })
+    fireEvent.click(within(modal).getByRole('button', { name: 'Search' }))
+  }
+
+  // 1) Loupe → « x » → Entrée : la recherche part avec le dossier ouvert et ses résultats s'affichent.
+  it('runs a quick search scoped to the open folder and shows its results', async () => {
+    searchYields([result({ subject: 'found' })])
+    renderAt('/mail?folder=INBOX')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Search' }))
+    const input = screen.getByPlaceholderText('Search in INBOX')
+    fireEvent.change(input, { target: { value: 'x' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(await screen.findByText('found')).toBeInTheDocument()
+    expect(mocks.searchMessages).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', allFolders: false, quick: 'x' }, 0, 30, expect.anything())
+  })
+
+  // 2) Résultat d'un autre dossier ouvert : le lecteur lit dans 'Archives', l'URL garde folder=INBOX.
+  it('opens a cross-folder result in its own folder, keeping folder=INBOX in the URL', async () => {
+    searchYields([result({ folderPath: 'Archives', subject: 'elsewhere' })])
+    readerYields(20, 'Archives')
+    renderAt('/mail?folder=INBOX')
+
+    await runAdvancedAllFolders()
+    fireEvent.click(await screen.findByRole('button', { name: /elsewhere/i }))
+
+    await waitFor(() =>
+      expect(mocks.getMailMessage).toHaveBeenCalledWith('Archives', 20, expect.anything()))
+    expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
+    expect(screen.getByTestId('search')).toHaveTextContent('uid=20')
+  })
+
+  // 3) Clear avec un résultat d'un autre dossier ouvert : le lecteur se ferme, retour au dossier.
+  it('closes the reader and returns to the folder when a cross-folder result is cleared', async () => {
+    searchYields([result({ folderPath: 'Archives', subject: 'elsewhere' })])
+    readerYields(20, 'Archives')
+    renderAt('/mail?folder=INBOX')
+
+    await runAdvancedAllFolders()
+    fireEvent.click(await screen.findByRole('button', { name: /elsewhere/i }))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
+  })
+
+  // 4) Changer de dossier dans l'arbre pendant une recherche : la liste redevient le dossier,
+  //    la recherche n'est pas rappelée et sa bannière disparaît.
+  it('drops the search when the folder changes in the tree', async () => {
+    searchYields([result({ subject: 'found' })])
+    renderAt('/mail?folder=INBOX')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Search' }))
+    const input = screen.getByPlaceholderText('Search in INBOX')
+    fireEvent.change(input, { target: { value: 'x' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await screen.findByText('found')
+    mocks.searchMessages.mockClear()
+
+    const tree = document.querySelector('nav[aria-label="Folders"]') as HTMLElement
+    fireEvent.click(within(tree).getByRole('button', { name: 'Projects' }))
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects'))
+    await settle()
+    expect(mocks.searchMessages).not.toHaveBeenCalled()
+    expect(document.querySelector('.search-results-banner')).toBeNull()
   })
 })

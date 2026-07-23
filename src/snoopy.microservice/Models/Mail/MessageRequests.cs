@@ -47,3 +47,25 @@ public sealed class EmptyFolderRequest
     /// <summary>Null or blank = purge. Set = move all messages into this folder.</summary>
     public string? TargetFolderPath { get; set; }
 }
+
+/// <summary>
+/// Search criteria plus paging. FolderPath is required even when AllFolders is set — it
+/// names the folder the user searched from. Quick is the fast bar (subject OR sender).
+/// </summary>
+public sealed class SearchMessagesRequest
+{
+    public string FolderPath { get; set; } = string.Empty;
+    public bool AllFolders { get; set; }
+    public string? Quick { get; set; }
+    public string? From { get; set; }
+    public string? To { get; set; }
+    public string? Subject { get; set; }
+    public string? Text { get; set; }
+    /// <summary>Compiled server-side to SINCE (today - N): the client never sends a literal date.</summary>
+    public int? SinceDays { get; set; }
+    public bool Unread { get; set; }
+    public bool Flagged { get; set; }
+    public bool HasAttachment { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; } = 50;
+}

@@ -8,7 +8,8 @@ function props(over: Partial<SelectionToolbarProps> = {}): SelectionToolbarProps
     title: 'Inbox', count: 0, allSelected: false, indeterminate: false, onToggleAll: vi.fn(),
     overCap: false, deleteLabel: 'Delete',
     archive: { ...noop }, junk: { ...noop }, del: { ...noop }, move: { ...noop }, copy: { ...noop },
-    markRead: { ...noop }, markUnread: { ...noop }, emptyFolder: { ...noop }, ...over,
+    markRead: { ...noop }, markUnread: { ...noop }, emptyFolder: { ...noop },
+    searchOpen: false, onToggleSearch: vi.fn(), ...over,
   }
 }
 
@@ -122,5 +123,22 @@ describe('SelectionToolbar', () => {
     render(<SelectionToolbar {...props({ count: 2, overCap: true, copy })} />)
     fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
     expect(screen.getByRole('menuitem', { name: 'Copy to…' })).toHaveAttribute('title', 'Select 200 or fewer')
+  })
+
+  it('toggles the search bar from the magnifier', () => {
+    const onToggleSearch = vi.fn()
+    render(<SelectionToolbar {...props({ searchOpen: false, onToggleSearch })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    expect(onToggleSearch).toHaveBeenCalled()
+  })
+
+  it('marks the magnifier active while the bar is open', () => {
+    render(<SelectionToolbar {...props({ searchOpen: true })} />)
+    expect(screen.getByRole('button', { name: 'Search' }).className).toContain('is-active')
+  })
+
+  it('disables the master checkbox when selection is disabled', () => {
+    render(<SelectionToolbar {...props({ selectionDisabled: true })} />)
+    expect(screen.getByRole('checkbox', { name: 'Select all' })).toBeDisabled()
   })
 })

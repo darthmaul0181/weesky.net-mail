@@ -43,6 +43,20 @@ export interface MailFolderPage {
   messages: MailMessageSummary[]
 }
 
+/** One search hit: a summary plus where it lives — in all-folders scope each row names its folder. */
+export interface MailSearchResult extends MailMessageSummary {
+  folderPath: string
+  /** That folder's UID validity at search time — the result is a snapshot. */
+  uidValidity: number
+}
+
+export interface MailSearchPage {
+  total: number
+  page: number
+  pageSize: number
+  results: MailSearchResult[]
+}
+
 export interface MailAttachmentInfo {
   /** MIME part specifier — the download handle. */
   part: string

@@ -443,6 +443,19 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server could not be reached</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SearchMessages(weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest,System.Threading.CancellationToken)">
+            <summary>
+            One page of search results, newest first. Criteria combine with AND; Quick is the
+            fast bar and means subject OR sender. AllFolders sweeps every selectable folder in
+            one session. Paths travel in the body, never in a route segment.
+            </summary>
+            <param name="request">criteria, scope and paging</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The page of results</response>
+            <response code="400">The folder is missing, no criterion is filled, or the paging arguments are out of range</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.PreferencesController">
              <summary>
              The caller's webmail preferences, stored in the separate preferences database.
@@ -934,6 +947,36 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.IsImapConfigured">
             <summary>True when enough is configured to attempt an IMAP connection.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria">
+            <summary>
+            What the user is searching for. Quick is the fast-bar text (subject OR sender);
+            the rest are the advanced form's fields, combined with AND.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria.#ctor(System.String,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Boolean,System.Boolean,System.Boolean)">
+            <summary>
+            What the user is searching for. Quick is the fast-bar text (subject OR sender);
+            the rest are the advanced form's fields, combined with AND.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSearchPage">
+            <summary>One page of search results, newest first across every searched folder.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailSearchPage.Total">
+            <summary>Total matches, all pages combined.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailSearchPage.Page">
+            <summary>Zero-based page index.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSearchResult">
+            <summary>
+            One search hit: a summary plus where it lives. In all-folders scope each row must name
+            its folder; in single-folder scope they are uniform but the shape stays one.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailSearchResult.UidValidity">
+            <summary>UID validity of that folder at search time — the result is a snapshot.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSpamScore">
             <summary>The spam filter's own verdict: score, the threshold it judges against, and the header it came from.</summary>
         </member>
@@ -967,6 +1010,15 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest.TargetFolderPath">
             <summary>Null or blank = purge. Set = move all messages into this folder.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest">
+            <summary>
+            Search criteria plus paging. FolderPath is required even when AllFolders is set — it
+            names the folder the user searched from. Quick is the fast bar (subject OR sender).
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest.SinceDays">
+            <summary>Compiled server-side to SINCE (today - N): the client never sends a literal date.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml">
             <summary>A message body made safe to render, plus what was withheld.</summary>
@@ -1291,6 +1343,9 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.EmptyAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.Threading.CancellationToken)">
             <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.SearchAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Boolean,weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>One page of search results across one folder or the whole mailbox.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
@@ -1622,6 +1677,14 @@
             ImapSession.TargetNotSelectable when the target cannot hold messages.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SearchAsync(System.String,System.Boolean,weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One page of search results, newest first. Single folder uses server SORT when
+            advertised; all-folders (or no SORT) merges per-folder SEARCH matches by internal
+            date in memory. HasAttachment is refined on BODYSTRUCTURE before paging, so Total
+            and the page windows stay honest.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
              <summary>
              Carries the user's mail password between requests, encrypted into a cookie.
@@ -1700,6 +1763,18 @@
             Shared by <see cref="M:weesky.Snoopy.Microservice.Services.ImapSession.MoveOrCopyAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)"/> and <see cref="M:weesky.Snoopy.Microservice.Services.ImapSession.EmptyAsync(System.String,System.String,System.Threading.CancellationToken)"/> so the two never
             drift apart on what "selectable" means.
             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SearchableFoldersAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>The folders one search sweeps: the named one, or every selectable folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.WithAttachmentsAsync(MailKit.IMailFolder,System.Collections.Generic.IList{MailKit.UniqueId},System.Threading.CancellationToken)">
+            <summary>
+            Keeps only the matches whose BODYSTRUCTURE shows an attachment — the same predicate
+            that fills HasAttachments. Runs before paging: filtering after would falsify Total.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.FillSummary``1(``0,MailKit.IMessageSummary)">
+            <summary>One mapping for list rows and search hits — the eleven fields cannot drift apart.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.ImapSession.MessageNotFound">
             <summary>
@@ -1842,6 +1917,13 @@
             ○ Match the string "TLS".<br/>
             </code>
             </remarks>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailSearchQueryBuilder">
+            <summary>
+            Compiles search criteria into a MailKit <see cref="T:MailKit.Search.SearchQuery"/>. Pure: the date is
+            injected so tests never race midnight. HasAttachment is deliberately not compiled —
+            no standard IMAP criterion exists, it is post-filtered on BODYSTRUCTURE by the session.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailSpamScoreReader">
             <summary>Reads the spam score out of the topmost header of each known anti-spam engine.</summary>
