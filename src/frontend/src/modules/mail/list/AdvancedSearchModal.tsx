@@ -66,8 +66,8 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
             <input id="adv-subject" type="text" value={subject} onChange={e => setSubject(e.target.value)} />
           </div>
           <div className="field-h">
-            <label htmlFor="adv-text">Body</label>
-            <input id="adv-text" type="text" value={text} onChange={e => setText(e.target.value)} />
+            <label htmlFor="adv-body">Body</label>
+            <input id="adv-body" type="text" value={text} onChange={e => setText(e.target.value)} />
           </div>
           <div className="field-h">
             <label htmlFor="adv-date">Date</label>
