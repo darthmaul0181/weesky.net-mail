@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import FolderTree from './FolderTree'
 import type { MailFolderNode } from '../api/mailTypes'
+import { DRAG_MIME, serializeDrag } from '../list/dragMessages'
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
@@ -249,5 +250,88 @@ describe('FolderTree', () => {
     render(<FolderTree folders={withHiddenChild} selectedPath={null} onSelect={vi.fn()} />)
 
     expect(screen.queryByText('Gone')).not.toBeInTheDocument()
+  })
+})
+
+describe('FolderTree as a drop target', () => {
+  const dropTree: MailFolderNode[] = [
+    node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    node({ path: 'Archive', name: 'Archive', specialUse: 'archive' }),
+    node({ path: 'Parent', name: 'Parent', selectable: false }),
+  ]
+
+  const dt = (over: Partial<DataTransfer> = {}) => ({
+    types: [DRAG_MIME],
+    dropEffect: 'none',
+    getData: () => serializeDrag({ sourcePath: 'INBOX', uids: [1, 2] }),
+    ...over,
+  }) as unknown as DataTransfer
+
+  const lineOf = (name: string) =>
+    screen.getByRole('button', { name }).closest('.folder-line') as HTMLElement
+
+  function renderTree(onDropMessages = vi.fn()) {
+    render(
+      <FolderTree
+        folders={dropTree} selectedPath="INBOX" onSelect={vi.fn()} onDropMessages={onDropMessages} />)
+    return onDropMessages
+  }
+
+  it('marks an eligible folder ready while a message is over it', () => {
+    renderTree()
+
+    fireEvent.dragOver(lineOf('Archive'), { dataTransfer: dt() })
+
+    expect(lineOf('Archive')).toHaveClass('drop-ready')
+  })
+
+  it('leaves the source folder inert — nothing to gain dropping mail where it already is', () => {
+    renderTree()
+
+    fireEvent.dragOver(lineOf('Inbox'), { dataTransfer: dt() })
+
+    expect(lineOf('Inbox')).not.toHaveClass('drop-ready')
+  })
+
+  it('leaves a non-selectable container inert', () => {
+    renderTree()
+
+    fireEvent.dragOver(lineOf('Parent'), { dataTransfer: dt() })
+
+    expect(lineOf('Parent')).not.toHaveClass('drop-ready')
+  })
+
+  it('ignores a drag that is not ours', () => {
+    renderTree()
+
+    fireEvent.dragOver(lineOf('Archive'), { dataTransfer: dt({ types: ['text/plain'] }) })
+
+    expect(lineOf('Archive')).not.toHaveClass('drop-ready')
+  })
+
+  it('clears the ready state when the message leaves', () => {
+    renderTree()
+    fireEvent.dragOver(lineOf('Archive'), { dataTransfer: dt() })
+
+    fireEvent.dragLeave(lineOf('Archive'))
+
+    expect(lineOf('Archive')).not.toHaveClass('drop-ready')
+  })
+
+  it('hands the parsed payload to onDropMessages on drop', () => {
+    const onDrop = renderTree()
+
+    fireEvent.drop(lineOf('Archive'), { dataTransfer: dt() })
+
+    expect(onDrop).toHaveBeenCalledWith('Archive', { sourcePath: 'INBOX', uids: [1, 2] })
+    expect(lineOf('Archive')).not.toHaveClass('drop-ready')
+  })
+
+  it('drops nothing on an ineligible folder', () => {
+    const onDrop = renderTree()
+
+    fireEvent.drop(lineOf('Inbox'), { dataTransfer: dt() })
+
+    expect(onDrop).not.toHaveBeenCalled()
   })
 })

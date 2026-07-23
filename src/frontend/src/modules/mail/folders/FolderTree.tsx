@@ -1,12 +1,16 @@
 import { useState } from 'react'
+import type { DragEvent } from 'react'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
+import { DRAG_MIME, canDropInto, parseDrag, type DragPayload } from '../list/dragMessages'
 
 interface Props {
   folders: MailFolderNode[]
   selectedPath: string | null
   onSelect: (path: string) => void
+  /** Drop dragged messages into a folder. Absent where the tree is not a drop target. */
+  onDropMessages?: (targetPath: string, payload: DragPayload) => void
 }
 
 /** The well-known folders, in the order a reader reaches for them. */
@@ -64,12 +68,15 @@ function FolderRow({
   folder,
   selectedPath,
   onSelect,
+  onDropMessages,
 }: {
   folder: MailFolderNode
   selectedPath: string | null
   onSelect: (path: string) => void
+  onDropMessages?: (targetPath: string, payload: DragPayload) => void
 }) {
   const [open, setOpen] = useState(folder.specialUse === 'inbox')
+  const [dropReady, setDropReady] = useState(false)
   const visibleChildren = sortChildren(folder.children.filter(isVisible))
   const isActive = folder.path === selectedPath
   const label = folder.specialUse ? roleLabel(folder.specialUse) : folder.name
@@ -77,9 +84,33 @@ function FolderRow({
   // count on trash or junk never reaches the screen, so it must not reach assistive tech either.
   const showsBadge = Boolean(folder.unread) && showsUnreadCount(folder)
 
+  // The source folder rides in the payload, but the browser withholds it until drop, so the
+  // eligibility check during a hover reads the open folder instead — which is that same source.
+  const droppable = Boolean(onDropMessages) && canDropInto(folder, selectedPath)
+
+  function onDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!droppable || !event.dataTransfer.types.includes(DRAG_MIME)) return
+    event.preventDefault()  // The default is "no drop"; preventing it opens the folder up.
+    event.dataTransfer.dropEffect = 'move'
+    setDropReady(true)
+  }
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    setDropReady(false)
+    if (!droppable) return
+    event.preventDefault()
+    const payload = parseDrag(event.dataTransfer.getData(DRAG_MIME))
+    if (payload) onDropMessages!(folder.path, payload)
+  }
+
   return (
     <>
-      <div className="folder-line">
+      <div
+        className={dropReady ? 'folder-line drop-ready' : 'folder-line'}
+        onDragOver={onDragOver}
+        onDragLeave={() => setDropReady(false)}
+        onDrop={onDrop}
+      >
         {visibleChildren.length > 0 ? (
           <button
             type="button"
@@ -121,7 +152,8 @@ function FolderRow({
       {open && visibleChildren.length > 0 && (
         <div className="folder-children">
           {visibleChildren.map(child => (
-            <FolderRow key={child.path} folder={child} selectedPath={selectedPath} onSelect={onSelect} />
+            <FolderRow key={child.path} folder={child} selectedPath={selectedPath}
+              onSelect={onSelect} onDropMessages={onDropMessages} />
           ))}
         </div>
       )}
@@ -131,20 +163,22 @@ function FolderRow({
 
 /** Unsubscribed folders are hidden — that is what the subscription state is for, except for
  *  the inbox, which is always shown (see isVisible). */
-export default function FolderTree({ folders, selectedPath, onSelect }: Props) {
+export default function FolderTree({ folders, selectedPath, onSelect, onDropMessages }: Props) {
   const { system, others } = splitByRole(folders.filter(isVisible))
 
   return (
     <nav aria-label="Folders">
       {system.map(folder => (
-        <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} onSelect={onSelect} />
+        <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath}
+          onSelect={onSelect} onDropMessages={onDropMessages} />
       ))}
 
       {/* Only between two populated blocks: a rule under nothing reads as a fault. */}
       {system.length > 0 && others.length > 0 && <hr className="folder-separator" />}
 
       {others.map(folder => (
-        <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} onSelect={onSelect} />
+        <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath}
+          onSelect={onSelect} onDropMessages={onDropMessages} />
       ))}
     </nav>
   )

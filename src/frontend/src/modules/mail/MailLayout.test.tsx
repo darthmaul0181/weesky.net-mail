@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import type { MailFolderNode } from './api/mailTypes'
 import { settle } from '../../test-utils'
+import { DRAG_MIME, serializeDrag } from './list/dragMessages'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -191,6 +192,56 @@ describe('a message departing the folder', () => {
       expect(search).not.toContain('uid=7')
       expect(search).not.toContain('uid=8')
     })
+  })
+})
+
+describe('dropping a dragged message onto a folder', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const summaries = [
+    { uid: 7, subject: 'first', fromName: 'A', fromAddress: 'a@b.c', date: '2026-07-18T09:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
+    { uid: 8, subject: 'second', fromName: 'B', fromAddress: 'b@b.c', date: '2026-07-18T10:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
+  ]
+
+  // Scoped to the tree: the message rows carry their own "Archive" action buttons too.
+  const dropOn = (roleName: string, uids: number[]) => {
+    const tree = document.querySelector('nav[aria-label="Folders"]') as HTMLElement
+    const line = within(tree).getByRole('button', { name: roleName }).closest('.folder-line') as HTMLElement
+    fireEvent.drop(line, {
+      dataTransfer: {
+        types: [DRAG_MIME], dropEffect: 'none',
+        getData: () => serializeDrag({ sourcePath: 'INBOX', uids }),
+      },
+    })
+  }
+
+  it('moves the dropped messages through the API', async () => {
+    mocks.moveMessages.mockResolvedValue(undefined)
+    renderAt('/mail?folder=INBOX', folders, 'right', summaries)
+
+    await screen.findByRole('button', { name: /first/i })
+    dropOn('Archive', [7])
+
+    await waitFor(() => expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [7], 'Archives'))
+  })
+
+  it('advances the reader when the open message is one of them', async () => {
+    mocks.moveMessages.mockResolvedValue(undefined)
+    // Detail slower than the list: an immediate resolve marks the open row seen and cancels the
+    // list fetch in flight, so the rows would never arrive — the same delay the departing suite uses.
+    mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+      uid: 7, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    }), 250)))
+    renderAt('/mail?folder=INBOX&uid=7', folders, 'right', summaries)
+
+    await screen.findByRole('button', { name: /first/i })
+    dropOn('Archive', [7])
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=8'))
   })
 })
 

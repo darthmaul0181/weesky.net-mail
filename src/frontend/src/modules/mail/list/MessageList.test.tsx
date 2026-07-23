@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
 import { settle } from '../../../test-utils'
+import { DRAG_MIME, serializeDrag } from './dragMessages'
 
 const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
@@ -923,5 +924,83 @@ describe('multi-select', () => {
       fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
       expect(screen.getByRole('menuitem', { name: 'Empty folder' })).toBeDisabled()
     })
+  })
+})
+
+describe('MessageList as a drag source', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
+  const checkOf = (label: string) => screen.getByRole('checkbox', { name: label })
+
+  function dragDT() {
+    const store: Record<string, string> = {}
+    return {
+      setData: vi.fn((type: string, value: string) => { store[type] = value }),
+      getData: (type: string) => store[type] ?? '',
+      setDragImage: vi.fn(),
+      effectAllowed: 'uninitialized',
+      types: [] as string[],
+    }
+  }
+
+  it('makes each row draggable', () => {
+    renderList()
+    expect(rowOf(/alice martin/i)).toHaveAttribute('draggable', 'true')
+  })
+
+  it('carries the source folder and the dragged uid alone when nothing is checked', () => {
+    renderList()
+    const dataTransfer = dragDT()
+
+    fireEvent.dragStart(rowOf(/alice martin/i), { dataTransfer })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [2] }))
+    expect(dataTransfer.effectAllowed).toBe('move')
+    expect(dataTransfer.setDragImage).toHaveBeenCalled()
+  })
+
+  it('carries the whole selection when the dragged row is part of it', () => {
+    renderList()
+    fireEvent.click(checkOf('Select message from Alice Martin'))
+    fireEvent.click(checkOf('Select message from bob@x.be'))
+    const dataTransfer = dragDT()
+
+    fireEvent.dragStart(rowOf(/alice martin/i), { dataTransfer })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [2, 1] }))
+  })
+
+  it('drags an unchecked row alone without disturbing the selection', () => {
+    renderList()
+    fireEvent.click(checkOf('Select message from Alice Martin'))
+    const dataTransfer = dragDT()
+
+    fireEvent.dragStart(rowOf(/bob@x\.be/i), { dataTransfer })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [1] }))
+    // The checkbox made for Alice is still checked.
+    expect(checkOf('Select message from Alice Martin')).toBeChecked()
+  })
+
+  it('marks the dragged rows while the drag lasts and clears them after', () => {
+    renderList()
+    fireEvent.click(checkOf('Select message from Alice Martin'))
+    fireEvent.click(checkOf('Select message from bob@x.be'))
+
+    fireEvent.dragStart(rowOf(/alice martin/i), { dataTransfer: dragDT() })
+    expect(rowOf(/alice martin/i)).toHaveClass('is-dragging')
+    expect(rowOf(/bob@x\.be/i)).toHaveClass('is-dragging')
+
+    fireEvent.dragEnd(rowOf(/alice martin/i), { dataTransfer: dragDT() })
+    expect(rowOf(/alice martin/i)).not.toHaveClass('is-dragging')
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { DragEvent, KeyboardEvent } from 'react'
 import { showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, SpecialUse } from '../api/mailTypes'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
@@ -13,6 +13,8 @@ import { rolePathsOf } from '../folders/folderNodes'
 import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSetFlags } from '../queries'
 import MoveMessagesModal from '../MoveMessagesModal'
 import EmptyFolderBanner from './EmptyFolderBanner'
+import { DRAG_MIME, dragUids, serializeDrag } from './dragMessages'
+import { buildDragPill } from './dragImage'
 import { formatListDate } from './formatDate'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
@@ -61,6 +63,7 @@ export default function MessageList(
   const [confirmingBulk, setConfirmingBulk] = useState(false)
   const [confirmingEmpty, setConfirmingEmpty] = useState(false)
   const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
+  const [draggingUids, setDraggingUids] = useState<number[] | null>(null)
   const inTrash = folderRole === 'trash'
   const archiveOff = !roles.archive || folderRole === 'archive'
   const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
@@ -150,6 +153,22 @@ export default function MessageList(
     onDeparted?.(uid)
   }
 
+  // A drag carries the checked selection when the grabbed row belongs to it, that row alone
+  // otherwise. The pill lives off-screen just long enough for the browser to snapshot it.
+  function onRowDragStart(event: DragEvent<HTMLDivElement>, uid: number) {
+    if (!folderPath) return
+    const uids = dragUids(selectedUids, uid)
+    event.dataTransfer.setData(DRAG_MIME, serializeDrag({ sourcePath: folderPath, uids }))
+    event.dataTransfer.effectAllowed = 'move'
+    const pill = buildDragPill(uids.length)
+    pill.style.position = 'absolute'
+    pill.style.top = '-9999px'
+    document.body.appendChild(pill)
+    event.dataTransfer.setDragImage(pill, 12, 12)
+    setTimeout(() => pill.remove(), 0)
+    setDraggingUids(uids)
+  }
+
   function expunge() {
     if (!folderPath || !expunging) return
     const uid = expunging.uid
@@ -204,6 +223,7 @@ export default function MessageList(
             if (wide) classes.push('is-line')
             if (!message.seen) classes.push('is-unread')
             if (message.uid === selectedUid) classes.push('is-selected')
+            if (draggingUids?.includes(message.uid)) classes.push('is-dragging')
 
             const from = message.fromName || message.fromAddress
             const subject = message.subject || '(no subject)'
@@ -287,8 +307,11 @@ export default function MessageList(
                   tabIndex={0}
                   aria-label={label}
                   className={classes.join(' ')}
+                  draggable
                   onClick={() => onSelect(message.uid)}
                   onKeyDown={event => onRowKey(event, message.uid)}
+                  onDragStart={event => onRowDragStart(event, message.uid)}
+                  onDragEnd={() => setDraggingUids(null)}
                 >
                   {wide ? (
                     <>

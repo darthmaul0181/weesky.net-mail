@@ -9,7 +9,8 @@ import MessageList from './list/MessageList'
 import { nextUidOf } from './list/nextUid'
 import { useListRefresh } from './list/useListRefresh'
 import MessageReader from './reader/MessageReader'
-import { useFolders } from './queries'
+import type { DragPayload } from './list/dragMessages'
+import { useFolders, useMoveMessages } from './queries'
 import { roleLabel } from './roleLabel'
 import { readingPaneOf, usePreferences } from '../../hooks/usePreferences'
 import PaneSplitter from './split/PaneSplitter'
@@ -27,6 +28,7 @@ export default function MailLayout() {
   const [params, setParams] = useSearchParams()
   const { data: folders, isLoading, isError } = useFolders()
   const { toasts, addToast, removeToast } = useToasts()
+  const moveMessages = useMoveMessages(addToast)
 
   const folder = params.get('folder')
   const uidParam = params.get('uid')
@@ -97,6 +99,15 @@ export default function MailLayout() {
     })
   }, [setParams])
 
+  // A drop reuses the same optimistic move the toolbar fires; the payload already names its source
+  // folder. If the open message is in the batch, the reader advances past it like any bulk action.
+  const dropMessages = useCallback((targetFolderPath: string, payload: DragPayload) => {
+    moveMessages.mutate({
+      folderPath: payload.sourcePath, uids: payload.uids, targetFolderPath, copy: false,
+    })
+    if (uid !== null && payload.uids.includes(uid)) departed(uid, payload.uids)
+  }, [moveMessages, uid, departed])
+
   const list = (selected: number | null, wide: boolean) => (
     <MessageList
       folderPath={folder}
@@ -119,7 +130,10 @@ export default function MailLayout() {
         <div className="mail-folders-scroll">
           {isLoading && <p className="mail-empty">Loading folders…</p>}
           {isError && <p className="mail-empty">Could not load folders.</p>}
-          {folders && <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder} />}
+          {folders && (
+            <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder}
+              onDropMessages={dropMessages} />
+          )}
         </div>
 
         {folders && (
