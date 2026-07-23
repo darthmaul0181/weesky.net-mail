@@ -344,6 +344,81 @@ public sealed class ImapSessionTests
         Assert.Equal((-1, -1), ImapSession.ComputePageWindow(total, page, pageSize));
     }
 
+    // ── Merge-path ordering / attachment filter (all-folders, no-SORT) ──
+
+    private static ImapSession.SearchHit Hit(uint uid, DateTimeOffset sortKey, bool hasAttachment = false)
+        => new(new UniqueId(uid), null!, sortKey, hasAttachment);
+
+    [Fact]
+    public void OrderHits_SortsNewestSentDateFirst()
+    {
+        var d = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var hits = new[] { Hit(1, d.AddDays(1)), Hit(2, d.AddDays(3)), Hit(3, d.AddDays(2)) };
+
+        var ordered = ImapSession.OrderHits(hits, attachmentsOnly: false);
+
+        Assert.Equal([2u, 3u, 1u], ordered.Select(h => h.Uid.Id));
+    }
+
+    [Fact]
+    public void OrderHits_SortsByTheKeyRegardlessOfInputOrder()
+    {
+        var older = new DateTimeOffset(2020, 6, 15, 0, 0, 0, TimeSpan.Zero);
+        var recent = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var hits = new[] { Hit(1, older), Hit(2, recent) };
+
+        var ordered = ImapSession.OrderHits(hits, attachmentsOnly: false);
+
+        Assert.Equal([2u, 1u], ordered.Select(h => h.Uid.Id));
+    }
+
+    [Fact]
+    public void SortKeyOf_UsesTheSentDateWhenPresent()
+    {
+        var sent = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var arrival = new DateTimeOffset(2026, 2, 2, 0, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(sent, ImapSession.SortKeyOf(sent, arrival));
+    }
+
+    // The robustness path #3 exists for: a malformed message with no Envelope.Date must fall
+    // back to its arrival date rather than sort as MinValue or crash.
+    [Fact]
+    public void SortKeyOf_FallsBackToInternalDateWhenSentDateIsNull()
+    {
+        var arrival = new DateTimeOffset(2026, 2, 2, 0, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(arrival, ImapSession.SortKeyOf(null, arrival));
+    }
+
+    [Fact]
+    public void SortKeyOf_ReturnsMinValueWhenBothAreNull()
+    {
+        Assert.Equal(DateTimeOffset.MinValue, ImapSession.SortKeyOf(null, null));
+    }
+
+    [Fact]
+    public void OrderHits_WhenAttachmentsOnlyDropsHitsWithout()
+    {
+        var d = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var hits = new[] { Hit(1, d.AddDays(1), hasAttachment: true), Hit(2, d.AddDays(2), hasAttachment: false) };
+
+        var ordered = ImapSession.OrderHits(hits, attachmentsOnly: true);
+
+        Assert.Equal([1u], ordered.Select(h => h.Uid.Id));
+    }
+
+    [Fact]
+    public void OrderHits_WhenNotAttachmentsOnlyKeepsEveryHit()
+    {
+        var d = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var hits = new[] { Hit(1, d.AddDays(1), hasAttachment: true), Hit(2, d.AddDays(2), hasAttachment: false) };
+
+        var ordered = ImapSession.OrderHits(hits, attachmentsOnly: false);
+
+        Assert.Equal([2u, 1u], ordered.Select(h => h.Uid.Id));
+    }
+
     // ── Address info conversion ──────────────────────────────────────
 
     [Fact]

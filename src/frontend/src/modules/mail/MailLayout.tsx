@@ -89,14 +89,12 @@ export default function MailLayout() {
     setSearch(criteria)
     if (criteria !== null) return
     // Clearing while a cross-folder result is open: its uid means nothing in the URL folder.
-    setResultFolder(current => {
-      if (current !== null) setParams(previous => {
-        const path = previous.get('folder')
-        return path ? { folder: path } : previous
-      })
-      return null
+    if (resultFolder !== null) setParams(previous => {
+      const path = previous.get('folder')
+      return path ? { folder: path } : previous
     })
-  }, [setParams])
+    setResultFolder(null)
+  }, [resultFolder, setParams])
 
   // A hit from another folder opens where it lives: the URL folder stays put, the reader reads
   // from resultFolder instead.

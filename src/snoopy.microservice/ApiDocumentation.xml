@@ -1773,6 +1773,24 @@
             that fills HasAttachments. Runs before paging: filtering after would falsify Total.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ImapSession.SearchHit">
+            <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SearchHit.#ctor(MailKit.UniqueId,MailKit.IMailFolder,System.DateTimeOffset,System.Boolean)">
+            <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SortKeyOf(System.Nullable{System.DateTimeOffset},System.Nullable{System.DateTimeOffset})">
+            <summary>
+            The merge sort key: the sent date, falling back to arrival then MinValue so a malformed
+            message missing its Envelope.Date still orders sanely and never yields null.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.OrderHits(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Services.ImapSession.SearchHit},System.Boolean)">
+            <summary>
+            Orders merge-path hits by sent date, newest first, optionally keeping only those carrying an
+            attachment. Pure so the refine-before-Total ordering is unit-tested apart from any IMAP call.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.FillSummary``1(``0,MailKit.IMessageSummary)">
             <summary>One mapping for list rows and search hits — the eleven fields cannot drift apart.</summary>
         </member>

@@ -520,6 +520,13 @@ export function useMoveMessages(onError?: (message: string) => void) {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
       onError?.(context?.copy ? 'Could not copy the message' : 'Could not move the message')
     },
+
+    // A removal shrank the active search page and left sibling pages a stale total, and no poll
+    // touches search — so reconcile the mounted search against the server, which re-windows it.
+    // A copy leaves the source intact: nothing to reconcile.
+    onSettled: (_data, _error, { copy }) => {
+      if (!copy) queryClient.invalidateQueries({ queryKey: mailKeys.searchIn(accountId) })
+    },
   })
 }
 
@@ -555,6 +562,10 @@ export function useDeleteMessages(onError?: (message: string) => void) {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
       onError?.('Could not delete the message')
     },
+
+    // The removal re-windows the active search page; reconcile it against the server (see move).
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: mailKeys.searchIn(accountId) }),
   })
 }
 

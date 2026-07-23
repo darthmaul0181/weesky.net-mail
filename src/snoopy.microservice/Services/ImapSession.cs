@@ -429,11 +429,15 @@ internal sealed class ImapSession : IImapSession
             }
             else
             {
-                // All folders — or a server without SORT: SEARCH each, fetch internal dates and
-                // merge-sort in memory by arrival (InternalDate) — a reliable cross-folder order key,
-                // unlike the single-folder SORT DATE path above, which orders by the sent Date header.
-                var dated = new List<(IMailFolder Folder, UniqueId Uid, DateTimeOffset Date)>();
+                // All folders — or a server without SORT: SEARCH each, then one FETCH per folder for
+                // the sent date (Envelope.Date, arrival as fallback) and — only when attachments are
+                // asked for — BODYSTRUCTURE. Ordering by sent date keeps this scope in step with the
+                // single-folder SORT DATE path, which the arrival-date key used to silently contradict.
+                var fetchItems = MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope
+                                 | MessageSummaryItems.InternalDate;
+                if (criteria.HasAttachment) fetchItems |= MessageSummaryItems.BodyStructure;
 
+                var hits = new List<SearchHit>();
                 foreach (var folder in await SearchableFoldersAsync(folderPath, allFolders, cancellationToken))
                 {
                     await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
@@ -441,19 +445,16 @@ internal sealed class ImapSession : IImapSession
                     var found = await folder.SearchAsync(query, cancellationToken);
                     if (found.Count == 0) continue;
 
-                    var uids = criteria.HasAttachment
-                        ? await WithAttachmentsAsync(folder, found, cancellationToken)
-                        : found;
-                    if (uids.Count == 0) continue;
-
-                    var dates = await folder.FetchAsync(
-                        uids, MessageSummaryItems.UniqueId | MessageSummaryItems.InternalDate, cancellationToken);
-                    dated.AddRange(dates.Select(item =>
-                        (folder, item.UniqueId, item.InternalDate ?? DateTimeOffset.MinValue)));
+                    var items = await folder.FetchAsync(found, fetchItems, cancellationToken);
+                    hits.AddRange(items.Select(item => new SearchHit(
+                        item.UniqueId, folder,
+                        SortKeyOf(item.Envelope?.Date, item.InternalDate),
+                        item.Attachments?.Any() ?? false)));
                 }
 
-                dated.Sort((a, b) => b.Date.CompareTo(a.Date));
-                matches = dated.Select(entry => (entry.Folder, entry.Uid)).ToList();
+                // Filter (attachments) and sort BEFORE Total/pagination — filtering after would falsify Total.
+                matches = OrderHits(hits, criteria.HasAttachment)
+                    .Select(hit => (hit.Folder, hit.Uid)).ToList();
             }
 
             result.Total = matches.Count;
@@ -524,6 +525,26 @@ internal sealed class ImapSession : IImapSession
             uids, MessageSummaryItems.UniqueId | MessageSummaryItems.BodyStructure, cancellationToken);
         var keep = items.Where(i => i.Attachments?.Any() ?? false).Select(i => i.UniqueId).ToHashSet();
         return uids.Where(keep.Contains).ToList();
+    }
+
+    /// <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
+    internal sealed record SearchHit(UniqueId Uid, IMailFolder Folder, DateTimeOffset SortKey, bool HasAttachment);
+
+    /// <summary>
+    /// The merge sort key: the sent date, falling back to arrival then MinValue so a malformed
+    /// message missing its Envelope.Date still orders sanely and never yields null.
+    /// </summary>
+    internal static DateTimeOffset SortKeyOf(DateTimeOffset? sentDate, DateTimeOffset? internalDate)
+        => sentDate ?? internalDate ?? DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// Orders merge-path hits by sent date, newest first, optionally keeping only those carrying an
+    /// attachment. Pure so the refine-before-Total ordering is unit-tested apart from any IMAP call.
+    /// </summary>
+    internal static List<SearchHit> OrderHits(IEnumerable<SearchHit> hits, bool attachmentsOnly)
+    {
+        var kept = attachmentsOnly ? hits.Where(hit => hit.HasAttachment) : hits;
+        return kept.OrderByDescending(hit => hit.SortKey).ToList();
     }
 
     public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken)

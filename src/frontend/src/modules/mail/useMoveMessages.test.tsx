@@ -284,8 +284,11 @@ describe('useMoveMessages', () => {
   it('cancels an in-flight search fetch so a late resolve cannot resurrect the moved row', async () => {
     seed()
     client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
-    const searchFetch = deferred<MailSearchPage>()
-    mocks.searchMessages.mockReturnValue(searchFetch.promise)
+    const staleFetch = deferred<MailSearchPage>()
+    // The mount fetch is in flight; the reconcile refetch after settle returns the re-windowed page.
+    mocks.searchMessages
+      .mockReturnValueOnce(staleFetch.promise)
+      .mockResolvedValue(searchPageOf([searchRow(3, 'INBOX')], 1))
     mocks.moveMessages.mockResolvedValue(undefined)
 
     // A search view is loading over the already-cached page: its fetch is in flight.
@@ -299,17 +302,63 @@ describe('useMoveMessages', () => {
       })
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await settle()
 
-    // Removal applied and the mutation succeeded, so onError never fires — no rollback path.
+    // Optimistic removal then reconcile refetch both agree the row is gone.
     expect(uidsOf(searchIn()!.results)).toEqual([3])
 
     // The pre-removal server list resolves late; the cancelled fetch must not overwrite the cache.
     await act(async () => {
-      searchFetch.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+      staleFetch.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
     })
     await settle()
 
     expect(uidsOf(searchIn()!.results)).toEqual([3])
+  })
+
+  it('reconciles the active search on settle after a move', async () => {
+    seed()
+    client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    mocks.searchMessages.mockResolvedValue(searchPageOf([searchRow(3, 'INBOX')], 1))
+    mocks.moveMessages.mockResolvedValue(undefined)
+
+    // Mount the search view; its initial fetch is the baseline the reconcile adds to.
+    renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledTimes(1))
+
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({
+        folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false,
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await settle()
+
+    // The removal re-windows the page: the mounted search refetched against the server.
+    expect(mocks.searchMessages).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not reconcile the search on a copy', async () => {
+    seed()
+    client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX')], 1))
+    mocks.searchMessages.mockResolvedValue(searchPageOf([searchRow(1, 'INBOX')], 1))
+    mocks.copyMessages.mockResolvedValue(undefined)
+
+    renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledTimes(1))
+
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({
+        folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: true,
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await settle()
+
+    // A copy leaves the source row in place: nothing to re-window, no reconcile refetch.
+    expect(mocks.searchMessages).toHaveBeenCalledTimes(1)
   })
 
   it('never invalidates a stream key', async () => {
@@ -326,7 +375,9 @@ describe('useMoveMessages', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     await settle()
 
-    expect(spy).not.toHaveBeenCalled()
+    // The removal reconcile invalidates search, never a stream key.
+    const keys = spy.mock.calls.map(([filters]) => JSON.stringify(filters?.queryKey ?? []))
+    expect(keys.some(key => key.includes('messageStream'))).toBe(false)
   })
 })
 
@@ -381,8 +432,10 @@ describe('useDeleteMessages', () => {
   it('cancels an in-flight search fetch so a late resolve cannot resurrect the deleted row', async () => {
     seed()
     client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
-    const searchFetch = deferred<MailSearchPage>()
-    mocks.searchMessages.mockReturnValue(searchFetch.promise)
+    const staleFetch = deferred<MailSearchPage>()
+    mocks.searchMessages
+      .mockReturnValueOnce(staleFetch.promise)
+      .mockResolvedValue(searchPageOf([searchRow(3, 'INBOX')], 1))
     mocks.deleteMessages.mockResolvedValue(undefined)
 
     renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
@@ -393,14 +446,35 @@ describe('useDeleteMessages', () => {
       result.current.mutate({ folderPath: 'INBOX', uids: [1] })
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await settle()
 
     expect(uidsOf(searchIn()!.results)).toEqual([3])
 
     await act(async () => {
-      searchFetch.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+      staleFetch.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
     })
     await settle()
 
     expect(uidsOf(searchIn()!.results)).toEqual([3])
+  })
+
+  it('reconciles the active search on settle after a delete', async () => {
+    seed()
+    client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    mocks.searchMessages.mockResolvedValue(searchPageOf([searchRow(3, 'INBOX')], 1))
+    mocks.deleteMessages.mockResolvedValue(undefined)
+
+    renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledTimes(1))
+
+    const { result } = renderHook(() => useDeleteMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1] })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await settle()
+
+    // The removal re-windows the page: the mounted search refetched against the server.
+    expect(mocks.searchMessages).toHaveBeenCalledTimes(2)
   })
 })

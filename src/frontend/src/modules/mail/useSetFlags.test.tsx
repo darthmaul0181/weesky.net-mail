@@ -5,10 +5,10 @@ import type { ReactNode } from 'react'
 import type {
   MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
 } from './api/mailTypes'
-import { mailKeys, useSetFlags } from './queries'
+import { mailKeys, useSearchMessages, useSetFlags } from './queries'
 import { settle } from '../../test-utils'
 
-const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn() }))
+const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn(), searchMessages: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
@@ -247,6 +247,27 @@ describe('useSetFlags', () => {
     await waitFor(() => expect(result.current.isError).toBe(true))
 
     expect(searchIn()).toStrictEqual(seededSearch)
+  })
+
+  it('does not reconcile the search on a flag toggle', async () => {
+    seed([summary(1)], [summary(1)])
+    client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX')]))
+    mocks.searchMessages.mockResolvedValue(searchPageOf([searchRow(1, 'INBOX')]))
+    mocks.setMessageFlags.mockResolvedValue(undefined)
+
+    // Mount a search view; its initial fetch is the only search call a flag toggle may leave.
+    renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledTimes(1))
+
+    const { result } = renderHook(() => useSetFlags(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1], flag: 'seen', value: true })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await settle()
+
+    // The row stays put, so patchSearchResults suffices: no invalidate, no reconcile refetch.
+    expect(mocks.searchMessages).toHaveBeenCalledTimes(1)
   })
 
   it('never invalidates the stream key', async () => {
