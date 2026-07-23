@@ -345,6 +345,35 @@ function removeFromFolderCaches(
 }
 
 /**
+ * Empties a folder's cached pages and blocks in place — messages cleared, total zeroed —
+ * snapshotting each. Unlike dropFolderCaches this keeps the queries, so the open source folder
+ * shows empty at once; removing them would refetch the rows the server has not expunged yet.
+ */
+function blankFolderCaches(
+  queryClient: QueryClient, accountId: string, folderPath: string,
+): Snapshot[] {
+  const [pagesKey, streamKey] = listKeysOf(accountId, folderPath)
+  const snapshots: Snapshot[] = []
+
+  for (const [key, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
+    if (!page) continue
+    snapshots.push([key, page])
+    queryClient.setQueryData(key, { ...page, messages: [], total: 0 })
+  }
+
+  for (const [key, stream] of
+    queryClient.getQueriesData<InfiniteData<MailFolderPage>>({ queryKey: streamKey })) {
+    if (!stream) continue
+    snapshots.push([key, stream])
+    queryClient.setQueryData(key, {
+      ...stream, pages: stream.pages.map(page => ({ ...page, messages: [], total: 0 })),
+    })
+  }
+
+  return snapshots
+}
+
+/**
  * Snapshots then *removes* the target folder's caches. Removal refetches nothing until the
  * folder is shown; an invalidate would replay every loaded stream block.
  */
@@ -476,9 +505,9 @@ export interface EmptyFolderArgs {
 }
 
 /**
- * Empties a whole folder. The source's caches are dropped and its counts zeroed; a move also
- * adds the source's own total/unread (read from the tree node) to the target. Optimistic with
- * snapshot rollback, never an invalidate — the 60s poll reconciles.
+ * Empties a whole folder. The open source's caches are emptied in place and its counts zeroed;
+ * a move also adds the source's own total/unread (read from the tree node) to the target.
+ * Optimistic with snapshot rollback, never an invalidate — the 60s poll reconciles.
  */
 export function useEmptyFolder(onError?: (message: string) => void) {
   const accountId = useAccountId()
@@ -492,7 +521,9 @@ export function useEmptyFolder(onError?: (message: string) => void) {
     onMutate: async ({ folderPath, targetFolderPath }: EmptyFolderArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
 
-      const snapshots: Snapshot[] = dropFolderCaches(queryClient, accountId, folderPath)
+      // Empty in place, not removeQueries: the source is the folder on screen, and removing its
+      // query refetches the rows the server has not expunged yet, racing them back until the poll.
+      const snapshots: Snapshot[] = blankFolderCaches(queryClient, accountId, folderPath)
 
       // The source folder's own counts drive both the zeroing and, on a move, the target's gain.
       const tree = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))

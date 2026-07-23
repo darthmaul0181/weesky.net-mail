@@ -463,7 +463,14 @@
 
 /* The narrow skin is a block stack: the box floats over a reserved left gutter. */
 .message-row:not(.is-line) { padding-left: 34px; }
-.message-row:not(.is-line) .message-row-check { position: absolute; left: 12px; top: 12px; }
+/* Vertically centred over the reserved gutter, so it stays centred whether or not the preview
+   line is shown — the row's height changes with it. */
+.message-row:not(.is-line) .message-row-check {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
 
 /* The wide skin is a baseline flex row: the box is a real leftmost slot, centred like the row-btns. */
 .message-row.is-line .message-row-check { align-self: center; }

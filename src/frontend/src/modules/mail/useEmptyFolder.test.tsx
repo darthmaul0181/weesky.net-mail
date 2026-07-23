@@ -34,14 +34,19 @@ function wrapperFor(client: QueryClient) {
 beforeEach(() => { vi.clearAllMocks(); mocks.emptyFolder.mockResolvedValue(undefined) })
 
 describe('useEmptyFolder', () => {
-  it('purges: drops the source caches and zeroes its counts', async () => {
+  it('purges: empties the source caches in place and zeroes its counts', async () => {
     const client = seededClient()
     const { result } = renderHook(() => useEmptyFolder(), { wrapper: wrapperFor(client) })
 
     await act(async () => { result.current.mutate({ folderPath: 'Trash' }); await settle() })
 
     expect(mocks.emptyFolder).toHaveBeenCalledWith('Trash', null)
-    expect(client.getQueryData(mailKeys.messages(ACC, 'Trash', 0, 50))).toBeUndefined()
+    // Emptied in place, not removed: the folder on screen shows empty at once, instead of
+    // refetching the rows the server has not expunged yet and racing them back till the poll.
+    const source = client.getQueryData(mailKeys.messages(ACC, 'Trash', 0, 50)) as { messages: unknown[]; total: number } | undefined
+    expect(source).toBeDefined()
+    expect(source!.messages).toEqual([])
+    expect(source!.total).toBe(0)
     const tree = client.getQueryData(mailKeys.folders(ACC)) as { path: string; total: number; unread: number }[]
     const trash = tree.find(n => n.path === 'Trash')!
     expect(trash.total).toBe(0)
