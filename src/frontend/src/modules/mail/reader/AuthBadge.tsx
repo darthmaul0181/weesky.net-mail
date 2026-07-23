@@ -16,7 +16,7 @@ export default function AuthBadge({ authentication }: { authentication: MailAuth
   return (
     <Tooltip content={detail} placement="bottom-left">
       <span className={`auth-badge is-${verdict}`} tabIndex={0} role="img" aria-label={label}>
-        {verdict === 'pass' ? <ShieldCheckIcon /> : <ShieldAlertIcon />}
+        {verdict === 'pass' ? <ShieldCheckIcon size={20} /> : <ShieldAlertIcon size={20} />}
       </span>
     </Tooltip>
   )
