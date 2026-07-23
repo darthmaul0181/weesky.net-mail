@@ -823,6 +823,18 @@
   font-size: 13px;
 }
 
+/* Pinned right, and a filled-accent fill so it stands out from the sunken banner instead of
+   reading as plain text. --action-primary-fg is the readable foreground over the accent. */
+.reader-blocked-images .btn {
+  margin-left: auto;
+  flex: none;
+  padding: 6px 14px;
+  font-size: 13px;
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+}
+.reader-blocked-images .btn:hover { background: var(--action-primary-hover); }
+
 /* The article carries the column layout so the body can claim the leftover height. Without
    this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
    leaving the bottom of the panel empty while the message scrolls in a short window. */
