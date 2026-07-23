@@ -45,9 +45,10 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
     return { disabled, tip }
   }
 
-  function actionProps(action: ToolbarAction) {
+  // The tooltip names the action; a disabled reason (or the cap) takes over when it applies.
+  function actionProps(action: ToolbarAction, label: string) {
     const { disabled, tip } = selectionState(action)
-    return { disabled, title: tip, onClick: action.onRun }
+    return { disabled, title: tip ?? label, onClick: action.onRun }
   }
 
   function kebabItem(label: string, action: ToolbarAction) {
@@ -78,13 +79,13 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
       />
       <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
       <div className="selection-actions">
-        <button type="button" className="selection-btn" aria-label="Archive" {...actionProps(props.archive)}>
+        <button type="button" className="selection-btn" aria-label="Archive" {...actionProps(props.archive, 'Archive')}>
           <ArchiveIcon size={20} />
         </button>
-        <button type="button" className="selection-btn" aria-label="Report as junk" {...actionProps(props.junk)}>
+        <button type="button" className="selection-btn" aria-label="Report as junk" {...actionProps(props.junk, 'Report as junk')}>
           <JunkIcon size={20} />
         </button>
-        <button type="button" className="selection-btn" aria-label={deleteLabel} {...actionProps(props.del)}>
+        <button type="button" className="selection-btn" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
           <TrashIcon size={20} />
         </button>
         <DropdownMenu ariaLabel="More actions" className="selection-btn" trigger={<KebabIcon />} items={kebab} />

@@ -35,6 +35,13 @@ describe('SelectionToolbar', () => {
     expect(archive.onRun).toHaveBeenCalledOnce()
   })
 
+  it('labels each direct action with a tooltip when enabled', () => {
+    render(<SelectionToolbar {...props({ count: 2, deleteLabel: 'Delete permanently' })} />)
+    expect(screen.getByRole('button', { name: 'Archive' })).toHaveAttribute('title', 'Archive')
+    expect(screen.getByRole('button', { name: 'Report as junk' })).toHaveAttribute('title', 'Report as junk')
+    expect(screen.getByRole('button', { name: 'Delete permanently' })).toHaveAttribute('title', 'Delete permanently')
+  })
+
   it('disables selection actions over the 200 cap with a tooltip', () => {
     render(<SelectionToolbar {...props({ count: 201, overCap: true })} />)
     const btn = screen.getByRole('button', { name: 'Archive' })
