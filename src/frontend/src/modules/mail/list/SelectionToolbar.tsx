@@ -3,7 +3,6 @@ import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import TrashIcon from '../../../icons/TrashIcon'
-import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import KebabIcon from '../../../icons/KebabIcon'
 
 export interface ToolbarAction {
@@ -59,6 +58,8 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   const kebab: MenuEntry[] = [
     kebabItem('Mark as read', props.markRead),
     kebabItem('Mark as unread', props.markUnread),
+    'separator',
+    kebabItem('Move to…', props.move),
     kebabItem('Copy to…', props.copy),
     'separator',
     { label: 'Empty folder', onSelect: props.emptyFolder.onRun,
@@ -77,19 +78,16 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
       />
       <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
       <div className="selection-actions">
-        <button type="button" className="row-btn" aria-label="Archive" {...actionProps(props.archive)}>
-          <ArchiveIcon size={16} />
+        <button type="button" className="selection-btn" aria-label="Archive" {...actionProps(props.archive)}>
+          <ArchiveIcon size={20} />
         </button>
-        <button type="button" className="row-btn" aria-label="Report as junk" {...actionProps(props.junk)}>
-          <JunkIcon size={16} />
+        <button type="button" className="selection-btn" aria-label="Report as junk" {...actionProps(props.junk)}>
+          <JunkIcon size={20} />
         </button>
-        <button type="button" className="row-btn" aria-label={deleteLabel} {...actionProps(props.del)}>
-          <TrashIcon size={16} />
+        <button type="button" className="selection-btn" aria-label={deleteLabel} {...actionProps(props.del)}>
+          <TrashIcon size={20} />
         </button>
-        <button type="button" className="row-btn" aria-label="Move to…" {...actionProps(props.move)}>
-          <FolderMoveIcon size={16} />
-        </button>
-        <DropdownMenu ariaLabel="More actions" className="row-btn" trigger={<KebabIcon />} items={kebab} />
+        <DropdownMenu ariaLabel="More actions" className="selection-btn" trigger={<KebabIcon />} items={kebab} />
       </div>
     </div>
   )

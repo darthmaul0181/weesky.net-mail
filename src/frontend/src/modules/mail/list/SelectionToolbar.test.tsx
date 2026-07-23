@@ -68,6 +68,25 @@ describe('SelectionToolbar', () => {
     expect(screen.getByRole('menuitem', { name: 'Copy to…' })).toBeDisabled()
   })
 
+  it('puts Move to… in the kebab, not the direct actions', () => {
+    const move = { onRun: vi.fn() }
+    render(<SelectionToolbar {...props({ count: 2, move })} />)
+    expect(screen.queryByRole('button', { name: 'Move to…' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const item = screen.getByRole('menuitem', { name: 'Move to…' })
+    expect(item).toBeEnabled()
+    fireEvent.click(item)
+    expect(move.onRun).toHaveBeenCalledOnce()
+  })
+
+  it('orders the kebab: mark read/unread, then move/copy, then empty', () => {
+    render(<SelectionToolbar {...props({ count: 2 })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual([
+      'Mark as read', 'Mark as unread', 'Move to…', 'Copy to…', 'Empty folder',
+    ])
+  })
+
   it('sets the checkbox DOM indeterminate property', () => {
     render(<SelectionToolbar {...props({ count: 5, indeterminate: true })} />)
     const master = screen.getByRole('checkbox', { name: 'Select all' }) as HTMLInputElement

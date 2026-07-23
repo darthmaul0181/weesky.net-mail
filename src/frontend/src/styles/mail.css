@@ -343,15 +343,14 @@
   white-space: nowrap;
 }
 
-/* Same band as .message-list-heading — replaces it once MessageList wires selection in.
-   Vertical padding is trimmed against the heading's (10px) to net the same overall height,
-   since a 26px row-btn is taller than the heading's plain text line. */
+/* A deliberately tall band (~64px), so the bulk actions sit on comfortable, finger-sized targets
+   right above the rows they act on. Height verified in a real browser — jsdom does no layout. */
 .selection-toolbar {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 12px;
+  padding: 14px 12px;
   border-bottom: 1px solid var(--list-separator);
   background: var(--surface);
 }
@@ -372,8 +371,30 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
+
+/* Larger than the row controls (.row-btn) to suit the taller band; same hover tint. Greyed
+   explicitly when a selection action is unavailable, since a bare disabled icon reads as live. */
+.selection-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.selection-btn:hover:not(:disabled) {
+  color: var(--action-primary);
+  background: color-mix(in oklab, currentColor 14%, transparent);
+}
+.selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .message-list { list-style: none; }
 
