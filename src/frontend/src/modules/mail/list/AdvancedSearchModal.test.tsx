@@ -18,13 +18,14 @@ describe('AdvancedSearchModal', () => {
   it('submits the assembled form', () => {
     const { onSearch } = setup()
     fireEvent.change(screen.getByLabelText('From'), { target: { value: 'alice' } })
-    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'invoice' } })
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '14' } })
     fireEvent.click(screen.getByLabelText('Unread'))
-    fireEvent.change(screen.getByLabelText('Scope'), { target: { value: 'all' } })
+    fireEvent.change(screen.getByLabelText('Search in'), { target: { value: 'all' } })
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     expect(onSearch).toHaveBeenCalledWith({
-      from: 'alice', to: '', subject: '', text: '',
-      sinceDays: 30, unread: true, flagged: false, hasAttachment: false, allFolders: true,
+      from: 'alice', to: '', subject: '', text: 'invoice',
+      sinceDays: 14, unread: true, flagged: false, hasAttachment: false, allFolders: true,
     })
   })
 

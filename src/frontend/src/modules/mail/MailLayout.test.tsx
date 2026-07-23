@@ -345,7 +345,7 @@ describe('searching from the layout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced search' }))
     const modal = document.querySelector('.modal') as HTMLElement
     fireEvent.change(within(modal).getByLabelText('Subject'), { target: { value: 'e' } })
-    fireEvent.change(within(modal).getByLabelText('Scope'), { target: { value: 'all' } })
+    fireEvent.change(within(modal).getByLabelText('Search in'), { target: { value: 'all' } })
     fireEvent.click(within(modal).getByRole('button', { name: 'Search' }))
   }
 

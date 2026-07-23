@@ -1111,20 +1111,31 @@
 
 /* ── Advanced search modal ───────────────────────────────── */
 
-/* Two columns like the admin dialogs: fields left, date and checkboxes right. */
-.advanced-search-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 24px;
-  padding: 4px 0 12px;
-}
-
-.advanced-search-check {
+/* One criterion per row (From/To/Subject/Body/Date/Search-in as .field-h), then a
+   single checkbox row below with extra top spacing. */
+.advanced-search-checks {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.advanced-search-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   color: var(--text);
+  cursor: pointer;
+}
+
+/* Same box as the mail-list row checkbox (.message-row-check). */
+.advanced-search-checks input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--action-primary);
+  cursor: pointer;
 }
 
 /* ── Empty folder banner ─────────────────────────────────── */

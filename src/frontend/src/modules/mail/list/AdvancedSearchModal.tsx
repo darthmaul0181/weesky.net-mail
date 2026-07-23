@@ -46,63 +46,65 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '560px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">Advanced search</span>
           <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
         </div>
 
         <form onSubmit={submit}>
-          <div className="advanced-search-grid">
-            <div className="field-h">
-              <label htmlFor="adv-from">From</label>
-              <input id="adv-from" type="text" value={from} autoFocus onChange={e => setFrom(e.target.value)} />
-            </div>
-            <div className="field-h">
-              <label htmlFor="adv-date">Date</label>
-              <select id="adv-date" value={date} onChange={e => setDate(e.target.value)}>
-                <option value="">All time</option>
-                <option value="7">Last 7 days</option>
-                <option value="30">Last 30 days</option>
-                <option value="180">Last 6 months</option>
-                <option value="year">This year</option>
-              </select>
-            </div>
-            <div className="field-h">
-              <label htmlFor="adv-to">To</label>
-              <input id="adv-to" type="text" value={to} onChange={e => setTo(e.target.value)} />
-            </div>
-            <label className="advanced-search-check">
+          <div className="field-h">
+            <label htmlFor="adv-from">From</label>
+            <input id="adv-from" type="text" value={from} autoFocus onChange={e => setFrom(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="adv-to">To</label>
+            <input id="adv-to" type="text" value={to} onChange={e => setTo(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="adv-subject">Subject</label>
+            <input id="adv-subject" type="text" value={subject} onChange={e => setSubject(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="adv-text">Body</label>
+            <input id="adv-text" type="text" value={text} onChange={e => setText(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="adv-date">Date</label>
+            <select id="adv-date" value={date} onChange={e => setDate(e.target.value)}>
+              <option value="">All time</option>
+              <option value="7">Last 7 days</option>
+              <option value="14">Last two weeks</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 3 months</option>
+              <option value="180">Last 6 months</option>
+              <option value="year">This year</option>
+            </select>
+          </div>
+          <div className="field-h">
+            <label htmlFor="adv-scope">Search in</label>
+            <select id="adv-scope" value={scope} onChange={e => setScope(e.target.value as 'this' | 'all')}>
+              <option value="this">This folder ({folderTitle})</option>
+              <option value="all">All folders</option>
+            </select>
+          </div>
+
+          <div className="advanced-search-checks">
+            <label>
               <input type="checkbox" checked={unread} onChange={e => setUnread(e.target.checked)} />
               Unread
             </label>
-            <div className="field-h">
-              <label htmlFor="adv-subject">Subject</label>
-              <input id="adv-subject" type="text" value={subject} onChange={e => setSubject(e.target.value)} />
-            </div>
-            <label className="advanced-search-check">
+            <label>
               <input type="checkbox" checked={flagged} onChange={e => setFlagged(e.target.checked)} />
               Starred
             </label>
-            <div className="field-h">
-              <label htmlFor="adv-text">Text</label>
-              <input id="adv-text" type="text" value={text} onChange={e => setText(e.target.value)} />
-            </div>
-            <label className="advanced-search-check">
+            <label>
               <input type="checkbox" checked={hasAttachment} onChange={e => setHasAttachment(e.target.checked)} />
               Has attachment
             </label>
-            <div className="field-h">
-              <label htmlFor="adv-scope">Scope</label>
-              <select id="adv-scope" value={scope} onChange={e => setScope(e.target.value as 'this' | 'all')}>
-                <option value="this">This folder ({folderTitle})</option>
-                <option value="all">All folders</option>
-              </select>
-            </div>
           </div>
 
           <div className="folder-pick-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={empty}>
               <SearchIcon size={15} /> Search
             </button>
