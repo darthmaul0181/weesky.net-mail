@@ -135,12 +135,15 @@ describe('a message departing the folder', () => {
 
   // The detail lands after the list: a reader opening on a not-yet-cached summary marks it
   // seen, and that mutation cancels the list fetch in flight — the rows would never arrive.
+  // The gap is generous on purpose: it stands in for "detail slower than list", and a thin
+  // margin turned flaky once the heading band grew from an <h2> to the selection toolbar, whose
+  // extra synchronous render pushed the list commit past a 20ms detail.
   function openFolder(rows: typeof summaries, uid: number) {
     mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
       uid, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
       to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
       blockedImageCount: 0, attachments: [],
-    }), 20)))
+    }), 250)))
     return renderAt(`/mail?folder=INBOX&uid=${uid}`, folders, 'right', rows)
   }
 
@@ -170,6 +173,24 @@ describe('a message departing the folder', () => {
 
     await settle()
     expect(screen.getByTestId('search')).toHaveTextContent('uid=8')
+  })
+
+  // A bulk action departs the whole selection: the reader must skip every member it removed, not
+  // step onto a sibling the same action dropped from the cache. Open 7, Select all → [7, 8],
+  // Archive: both are gone, so the reader closes rather than landing on the ghost uid=8.
+  it('advances past the whole departing batch, never onto a member the action removed', async () => {
+    openFolder(summaries, 7)
+
+    await screen.findByRole('button', { name: /first/i })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    const toolbar = document.querySelector('.selection-toolbar') as HTMLElement
+    fireEvent.click(within(toolbar).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() => {
+      const search = screen.getByTestId('search').textContent || ''
+      expect(search).not.toContain('uid=7')
+      expect(search).not.toContain('uid=8')
+    })
   })
 })
 

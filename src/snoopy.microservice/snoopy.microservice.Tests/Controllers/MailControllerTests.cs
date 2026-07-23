@@ -1193,4 +1193,87 @@ public sealed class MailControllerTests
         var envelope = Assert.IsType<ResultEnveloppe>(status.Value);
         Assert.Equal("The mail server cannot delete single messages (no UIDPLUS)", envelope.Message);
     }
+
+    [Fact]
+    public async Task EmptyFolder_Returns204AndDelegatesPurgeWhenNoTarget()
+    {
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Trash", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().EmptyFolder(
+            new EmptyFolderRequest { FolderPath = "Trash", TargetFolderPath = null }, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Trash", null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EmptyFolder_DelegatesMoveWhenTargetGiven()
+    {
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Projects", "Trash", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().EmptyFolder(
+            new EmptyFolderRequest { FolderPath = "Projects", TargetFolderPath = "Trash" }, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Projects", "Trash", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EmptyFolder_Returns400ForABlankSourceWithoutReachingTheRepository()
+    {
+        var result = await CreateController().EmptyFolder(
+            new EmptyFolderRequest { FolderPath = " ", TargetFolderPath = null }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EmptyFolder_Returns400WhenTargetEqualsSource()
+    {
+        var result = await CreateController().EmptyFolder(
+            new EmptyFolderRequest { FolderPath = "Projects", TargetFolderPath = "Projects" }, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("The target folder must differ from the source folder", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
+    }
+
+    [Fact]
+    public async Task EmptyFolder_Returns401WhenCredentialsAreUnavailable()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+            .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.EmptyFolder(
+            new EmptyFolderRequest { FolderPath = "Trash", TargetFolderPath = null }, CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task EmptyFolder_Returns400WhenTargetIsNotSelectable()
+    {
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(ImapSession.TargetNotSelectable));
+
+        var result = await CreateController().EmptyFolder(
+            new EmptyFolderRequest { FolderPath = "Projects", TargetFolderPath = "NoSelect" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task EmptyFolder_Returns502WhenTheServerRefuses()
+    {
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("Unable to empty the folder"));
+
+        var result = await CreateController().EmptyFolder(
+            new EmptyFolderRequest { FolderPath = "Trash", TargetFolderPath = null }, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status502BadGateway, Assert.IsType<ObjectResult>(result).StatusCode);
+    }
 }

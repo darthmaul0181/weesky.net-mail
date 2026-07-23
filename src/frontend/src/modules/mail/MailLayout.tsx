@@ -83,13 +83,14 @@ export default function MailLayout() {
 
   // The row is gone from the cache the instant the action fires, so the selection follows now
   // rather than after a refetch: the next message, or the reader closes.
-  const departed = useCallback((departing: number) => {
+  const departed = useCallback((open: number, batch: number[] = [open]) => {
     setParams(previous => {
-      if (Number(previous.get('uid')) !== departing) return previous
+      if (Number(previous.get('uid')) !== open) return previous
       const path = previous.get('folder')
       if (!path) return previous
 
-      const next = nextUidOf(rowsRef.current, departing)
+      // A bulk action removes the whole batch: skip every member, not just the open row.
+      const next = nextUidOf(rowsRef.current, open, batch)
       const params: Record<string, string> = { folder: path }
       if (next !== null) params.uid = String(next)
       return params

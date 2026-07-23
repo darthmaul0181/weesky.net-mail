@@ -434,6 +434,15 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server could not be reached, or cannot delete without UIDPLUS</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.EmptyFolder(weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest,System.Threading.CancellationToken)">
+            <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
+            <param name="request">source folder and optional target (blank = purge)</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The folder was emptied</response>
+            <response code="400">The source is missing, the target equals the source, or the target cannot hold messages</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.PreferencesController">
              <summary>
              The caller's webmail preferences, stored in the separate preferences database.
@@ -949,6 +958,16 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.DeleteMessagesRequest.Uids">
             <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest">
+            <summary>
+            Empties an entire folder. Unbounded by the 200-UID cap — it operates on 1:* server-side.
+            A null/blank <see cref="P:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest.TargetFolderPath"/> means purge (permanent expunge of everything);
+            a target means move every message there (used to move a normal folder's contents to trash).
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest.TargetFolderPath">
+            <summary>Null or blank = purge. Set = move all messages into this folder.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml">
             <summary>A message body made safe to render, plus what was withheld.</summary>
         </member>
@@ -1269,6 +1288,9 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.DeleteAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.Threading.CancellationToken)">
             <summary>Permanently deletes a batch of UIDs via UID EXPUNGE.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.EmptyAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
@@ -1592,6 +1614,14 @@
             lacks UIDPLUS (a bare EXPUNGE would purge beyond the caller's own \Deleted messages).
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.EmptyAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Empties a whole folder. A null/blank <paramref name="targetPath"/> purges it
+            (mark 1:* \Deleted + EXPUNGE, no UIDPLUS needed — the whole folder is expunged, not a
+            subset). A target moves every message there, failing with
+            ImapSession.TargetNotSelectable when the target cannot hold messages.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
              <summary>
              Carries the user's mail password between requests, encrypted into a cookie.
@@ -1662,6 +1692,14 @@
              Options are read through IOptionsMonitor, not IOptions, so a correction in
              appsettings.json takes effect without restarting the service and dropping live sessions.
              </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveTargetOrFailAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Resolves a move/empty target, failing with <see cref="F:weesky.Snoopy.Microservice.Services.ImapSession.TargetNotSelectable"/> when it
+            does not exist or is a \NoSelect container — a folder that cannot hold messages.
+            Shared by <see cref="M:weesky.Snoopy.Microservice.Services.ImapSession.MoveOrCopyAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)"/> and <see cref="M:weesky.Snoopy.Microservice.Services.ImapSession.EmptyAsync(System.String,System.String,System.Threading.CancellationToken)"/> so the two never
+            drift apart on what "selectable" means.
+            </summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.ImapSession.MessageNotFound">
             <summary>

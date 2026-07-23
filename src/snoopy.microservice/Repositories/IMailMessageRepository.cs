@@ -23,4 +23,7 @@ public interface IMailMessageRepository
 
     /// <summary>Permanently deletes a batch of UIDs via UID EXPUNGE.</summary>
     Task<Result> DeleteAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken);
+
+    /// <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
+    Task<Result> EmptyAsync(User user, string password, string folderPath, string? targetPath, CancellationToken cancellationToken);
 }

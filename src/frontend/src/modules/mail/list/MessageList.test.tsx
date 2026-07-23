@@ -8,7 +8,7 @@ import { settle } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
-  move: vi.fn(), remove: vi.fn(),
+  move: vi.fn(), remove: vi.fn(), empty: vi.fn(),
   folders: undefined as unknown[] | undefined,
   onError: undefined as ((message: string) => void) | undefined,
   moveError: undefined as ((message: string) => void) | undefined,
@@ -34,6 +34,7 @@ vi.mock('../queries', () => ({
     mocks.deleteError = onError
     return { mutate: mocks.remove, isPending: false }
   },
+  useEmptyFolder: () => ({ mutate: mocks.empty, isPending: false }),
   useFolders: () => ({ data: mocks.folders }),
 }))
 // The list is tested against the shape it consumes, not against the network: what the hook
@@ -137,16 +138,20 @@ describe('MessageList', () => {
     expect(screen.getByText('Re: facture')).toBeInTheDocument()
   })
 
+  // The heading band is now the SelectionToolbar; the folder name shows as its title until a
+  // selection is on. A row can carry the same text, so the title is read off the toolbar.
   it('names the folder above the list', () => {
     renderList({ folderPath: 'INBOX.Linux server', folderName: 'Linux server' })
 
-    expect(screen.getByRole('heading', { name: 'Linux server' })).toBeInTheDocument()
+    expect(within(document.querySelector('.selection-toolbar') as HTMLElement)
+      .getByText('Linux server')).toBeInTheDocument()
   })
 
   it('falls back to the path when the folder name is unknown', () => {
     renderList()
 
-    expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+    expect(within(document.querySelector('.selection-toolbar') as HTMLElement)
+      .getByText('INBOX')).toBeInTheDocument()
   })
 
   // The heading is how the column says what it is showing; a state that drops it leaves the
@@ -154,9 +159,10 @@ describe('MessageList', () => {
   it('keeps the heading while loading and when the folder is empty', () => {
     mocks.useMessageList.mockReturnValue(
       pagedState({}, { messages: [], total: 0, isLoading: true }))
+    const bar = () => within(document.querySelector('.selection-toolbar') as HTMLElement)
     const { rerender } = renderList({ folderName: 'INBOX' })
 
-    expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+    expect(bar().getByText('INBOX')).toBeInTheDocument()
     expect(screen.getByText(/loading messages/i)).toBeInTheDocument()
 
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
@@ -164,7 +170,7 @@ describe('MessageList', () => {
       <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()} />)
 
     expect(screen.getByText(/no messages/i)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'INBOX' })).toBeInTheDocument()
+    expect(bar().getByText('INBOX')).toBeInTheDocument()
   })
 
   // A message with no body used to render no preview element at all, making its row shorter
@@ -779,5 +785,139 @@ describe('MessageList streaming', () => {
     rerender(<MessageList folderPath="Archive" selectedUid={null} onSelect={vi.fn()} />)
 
     expect(band.scrollTop).toBe(0)
+  })
+})
+
+describe('multi-select', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  // The row buttons carry the same names as the toolbar's (Archive, Delete permanently…), so a
+  // toolbar action is always read off the toolbar band, never with a bare screen query.
+  const bar = () => within(document.querySelector('.selection-toolbar') as HTMLElement)
+
+  function renderWithRoles(
+    role?: 'trash', props: Partial<ListProps> = {}, stateOverrides?: Record<string, unknown>) {
+    const base = role === 'trash'
+      ? { folderPath: 'Trash', folderName: 'Trash', folderRole: 'trash' as const }
+      : { folderPath: 'INBOX', folderName: 'Inbox', folderRole: 'inbox' as const }
+    if (stateOverrides) mocks.useMessageList.mockReturnValue(pagedState({}, stateOverrides))
+    return renderList({ ...base, ...props })
+  }
+
+  it('checking rows shows the count and enables the direct actions', () => {
+    renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: /select message from alice/i }))
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(bar().getByRole('button', { name: 'Archive' })).toBeEnabled()
+  })
+
+  it('a shift-click selects the range', () => {
+    renderWithRoles()
+    const boxes = screen.getAllByRole('checkbox', { name: /select message from/i })
+    fireEvent.click(boxes[0])
+    fireEvent.click(boxes[1], { shiftKey: true })
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+  })
+
+  it('the master checkbox selects and clears all loaded rows', () => {
+    renderWithRoles()
+    const master = screen.getByRole('checkbox', { name: 'Select all' })
+    fireEvent.click(master)
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    fireEvent.click(master)
+    expect(screen.getByText('Inbox')).toBeInTheDocument()  // title back, selection cleared
+  })
+
+  it('bulk archive moves the whole selection and clears it', async () => {
+    renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    fireEvent.click(bar().getByRole('button', { name: 'Archive' }))
+    expect(mocks.move).toHaveBeenCalledWith(expect.objectContaining({
+      folderPath: 'INBOX', uids: [2, 1], targetFolderPath: 'Archives', copy: false,
+    }))
+    await settle()
+    expect(screen.getByText('Inbox')).toBeInTheDocument()  // selection cleared
+  })
+
+  it('bulk delete inside the trash asks for confirmation, then expunges the batch', async () => {
+    renderWithRoles('trash')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    fireEvent.click(bar().getByRole('button', { name: 'Delete permanently' }))
+    await settle()
+    expect(mocks.remove).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))  // confirm modal
+    expect(mocks.remove).toHaveBeenCalledWith(
+      expect.objectContaining({ folderPath: 'Trash', uids: [2, 1] }))
+  })
+
+  it('advances the reader when the open message is in the acted batch', () => {
+    const onDeparted = vi.fn()
+    renderWithRoles(undefined, { selectedUid: 2, onDeparted })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    fireEvent.click(bar().getByRole('button', { name: 'Archive' }))
+    // The whole batch travels, so the layout can skip every departing row, not just the open one.
+    expect(onDeparted).toHaveBeenCalledWith(2, [2, 1])
+  })
+
+  it('does not advance the reader when the open message is untouched', async () => {
+    const onDeparted = vi.fn()
+    renderWithRoles(undefined, { selectedUid: 999, onDeparted })
+    fireEvent.click(screen.getByRole('checkbox', { name: /select message from alice/i }))
+    fireEvent.click(bar().getByRole('button', { name: 'Archive' }))
+    await settle()
+    expect(onDeparted).not.toHaveBeenCalled()
+  })
+
+  it('clears the selection when the folder changes', async () => {
+    const { rerender } = renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    rerender(
+      <MessageList folderPath="Archives" folderName="Archive" folderRole="archive"
+        selectedUid={null} onSelect={vi.fn()} />)
+    await settle()
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument()
+  })
+
+  it('Escape clears an active selection', () => {
+    renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    fireEvent.keyDown(screen.getByRole('checkbox', { name: 'Select all' }), { key: 'Escape' })
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
+  })
+
+  describe('empty folder', () => {
+    it('shows the trash banner and purges after confirmation', async () => {
+      renderWithRoles('trash')
+      fireEvent.click(screen.getByRole('button', { name: 'Empty trash now' }))
+      await settle()
+      expect(mocks.empty).not.toHaveBeenCalled()          // confirm first
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+      expect(mocks.empty).toHaveBeenCalledWith({ folderPath: 'Trash' })
+    })
+
+    it('no banner outside trash/junk', async () => {
+      renderWithRoles() // INBOX
+      await settle()
+      expect(screen.queryByRole('button', { name: /empty .* now/i })).not.toBeInTheDocument()
+    })
+
+    it('kebab Empty folder on a normal folder moves everything to trash, no confirm', async () => {
+      renderWithRoles() // INBOX
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Empty folder' }))
+      expect(mocks.empty).toHaveBeenCalledWith({ folderPath: 'INBOX', targetFolderPath: expect.any(String) })
+    })
+
+    it('disables Empty folder when the folder is empty', () => {
+      renderWithRoles(undefined, {}, { total: 0, messages: [] })
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Empty folder' })).toBeDisabled()
+    })
   })
 })

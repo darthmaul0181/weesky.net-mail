@@ -78,4 +78,12 @@ public interface IImapSession : IAsyncDisposable
     /// lacks UIDPLUS (a bare EXPUNGE would purge beyond the caller's own \Deleted messages).
     /// </summary>
     Task<Result> DeleteAsync(string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Empties a whole folder. A null/blank <paramref name="targetPath"/> purges it
+    /// (mark 1:* \Deleted + EXPUNGE, no UIDPLUS needed — the whole folder is expunged, not a
+    /// subset). A target moves every message there, failing with
+    /// ImapSession.TargetNotSelectable when the target cannot hold messages.
+    /// </summary>
+    Task<Result> EmptyAsync(string folderPath, string? targetPath, CancellationToken cancellationToken);
 }

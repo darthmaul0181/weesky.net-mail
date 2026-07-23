@@ -317,4 +317,53 @@ public sealed class MailMessageRepositoryTests
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.DeleteAsync(null!, "pw", "INBOX", [1u], CancellationToken.None));
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Trash")]
+    public async Task EmptyAsync_DelegatesToTheSession(string? target)
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.EmptyAsync("INBOX", target, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        var result = await repo.EmptyAsync(Alice, "pw", "INBOX", target, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        session.Verify(s => s.EmptyAsync("INBOX", target, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EmptyAsync_PropagatesAConnectionFailure()
+    {
+        var (repo, factory, _) = CreateSut();
+        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Failure<IImapSession>("down"));
+
+        var result = await repo.EmptyAsync(Alice, "pw", "INBOX", null, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("down", result.Error);
+    }
+
+    [Fact]
+    public async Task EmptyAsync_DisposesTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.EmptyAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success());
+
+        await repo.EmptyAsync(Alice, "pw", "INBOX", "Trash", CancellationToken.None);
+
+        session.Verify(s => s.DisposeAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task EmptyAsync_ThrowsWhenUserIsNull()
+    {
+        var (repo, _, _) = CreateSut();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.EmptyAsync(null!, "pw", "INBOX", null, CancellationToken.None));
+    }
 }

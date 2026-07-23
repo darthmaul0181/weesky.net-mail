@@ -265,14 +265,9 @@ internal sealed class ImapSession : IImapSession
 
         try
         {
-            IMailFolder target;
-            try { target = await _client.GetFolderAsync(targetPath, cancellationToken); }
-            catch (FolderNotFoundException) { return Result.Failure(TargetNotSelectable); }
-
-            // A \NoSelect container cannot hold messages; refusing here beats a server error the
-            // client cannot word. Checked by the session because the controller has no tree.
-            if ((target.Attributes & (FolderAttributes.NoSelect | FolderAttributes.NonExistent)) != 0)
-                return Result.Failure(TargetNotSelectable);
+            var targetResult = await ResolveTargetOrFailAsync(targetPath, cancellationToken);
+            if (targetResult.IsFailure) return Result.Failure(targetResult.Error);
+            var target = targetResult.Value;
 
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
@@ -298,6 +293,26 @@ internal sealed class ImapSession : IImapSession
                 copy ? "copy" : "move", uids.Count, folderPath, targetPath);
             return Result.Failure(copy ? "Unable to copy the messages" : "Unable to move the messages");
         }
+    }
+
+    /// <summary>
+    /// Resolves a move/empty target, failing with <see cref="TargetNotSelectable"/> when it
+    /// does not exist or is a \NoSelect container — a folder that cannot hold messages.
+    /// Shared by <see cref="MoveOrCopyAsync"/> and <see cref="EmptyAsync"/> so the two never
+    /// drift apart on what "selectable" means.
+    /// </summary>
+    private async Task<Result<IMailFolder>> ResolveTargetOrFailAsync(string targetPath, CancellationToken cancellationToken)
+    {
+        IMailFolder target;
+        try { target = await _client.GetFolderAsync(targetPath, cancellationToken); }
+        catch (FolderNotFoundException) { return Result.Failure<IMailFolder>(TargetNotSelectable); }
+
+        // A \NoSelect container cannot hold messages; refusing here beats a server error the
+        // client cannot word. Checked by the session because the controller has no tree.
+        if ((target.Attributes & (FolderAttributes.NoSelect | FolderAttributes.NonExistent)) != 0)
+            return Result.Failure<IMailFolder>(TargetNotSelectable);
+
+        return Result.Success(target);
     }
 
     public async Task<Result> DeleteAsync(string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken)
@@ -333,6 +348,57 @@ internal sealed class ImapSession : IImapSession
         {
             _logger.LogError(ex, "Failed to expunge {Count} messages from {Folder}", uids.Count, folderPath);
             return Result.Failure("Unable to delete the messages");
+        }
+    }
+
+    public async Task<Result> EmptyAsync(string folderPath, string? targetPath, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        var move = !string.IsNullOrWhiteSpace(targetPath);
+
+        try
+        {
+            IMailFolder? target = null;
+            if (move)
+            {
+                var targetResult = await ResolveTargetOrFailAsync(targetPath!, cancellationToken);
+                if (targetResult.IsFailure) return Result.Failure(targetResult.Error);
+                target = targetResult.Value;
+            }
+
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+            var uids = await folder.SearchAsync(SearchQuery.All, cancellationToken);
+            if (uids.Count == 0) return Result.Success();
+
+            if (move)
+            {
+                await folder.MoveToAsync(uids, target!, cancellationToken);
+            }
+            else
+            {
+                // Bare EXPUNGE purges every \Deleted message; emptying purges the whole folder,
+                // so no UID EXPUNGE (UIDPLUS) is needed — unlike DeleteAsync which targets a subset.
+                await folder.AddFlagsAsync(uids, MessageFlags.Deleted, silent: true, cancellationToken);
+                await folder.ExpungeAsync(cancellationToken);
+            }
+
+            return Result.Success();
+        }
+        catch (FolderNotFoundException)
+        {
+            return Result.Failure(FolderNotFound);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to empty {Folder} (move: {Move})", folderPath, move);
+            return Result.Failure("Unable to empty the folder");
         }
     }
 

@@ -10,11 +10,15 @@ import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import { rolePathsOf } from '../folders/folderNodes'
-import { useDeleteMessages, useFolders, useMoveMessages, useSetFlags } from '../queries'
+import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSetFlags } from '../queries'
+import MoveMessagesModal from '../MoveMessagesModal'
+import EmptyFolderBanner from './EmptyFolderBanner'
 import { formatListDate } from './formatDate'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
 import Pagination from './Pagination'
+import SelectionToolbar from './SelectionToolbar'
+import { useSelection } from './useSelection'
 import { useMessageList } from './useMessageList'
 
 interface Props {
@@ -27,11 +31,13 @@ interface Props {
   wide?: boolean
   onNotify?: (message: string) => void
   onRows?: (uids: number[]) => void
-  onDeparted?: (uid: number) => void
+  /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
+  onDeparted?: (uid: number, batch?: number[]) => void
 }
 
 const COUNT = new Intl.NumberFormat('en-US')
 const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
+const NO_JUNK = 'Assign the junk folder in Settings → Folders'
 const NO_TRASH = 'Assign the trash folder in Settings → Folders'
 
 /**
@@ -48,14 +54,89 @@ export default function MessageList(
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
+  const emptyFolder = useEmptyFolder(onNotify)
   const { data: folders } = useFolders()
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
   const [expunging, setExpunging] = useState<MailMessageSummary | null>(null)
+  const [confirmingBulk, setConfirmingBulk] = useState(false)
+  const [confirmingEmpty, setConfirmingEmpty] = useState(false)
+  const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
   const inTrash = folderRole === 'trash'
   const archiveOff = !roles.archive || folderRole === 'archive'
   const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
+  const junkOff = !roles.junk || folderRole === 'junk'
+  const junkReason = folderRole === 'junk' ? 'Already in the junk folder' : NO_JUNK
   const trashOff = !inTrash && !roles.trash
   const deleteLabel = inTrash ? 'Delete permanently' : 'Delete'
+  const purges = folderRole === 'trash' || folderRole === 'junk'
+  const emptyReason = total === 0
+    ? 'This folder is already empty'
+    : (!purges && !roles.trash ? NO_TRASH : undefined)
+
+  // The hook keeps no row list; the effective selection is what it holds intersected with what
+  // is on screen, so a departed row stops counting on its own. resetKey clears on folder change
+  // and paged-page change, never while streaming more blocks into the same folder.
+  const resetKey = `${folderPath}::${paging ? paging.page : 'stream'}`
+  const selection = useSelection(resetKey)
+  const loadedUids = messages.map(message => message.uid)
+  const selectedUids = loadedUids.filter(uid => selection.has(uid))
+  const count = selectedUids.length
+  const allSelected = count > 0 && count === messages.length
+  const indeterminate = count > 0 && !allSelected
+  const overCap = count > 200
+
+  // Fires the batch, advances the reader when the open row is in it, then drops the selection.
+  // The whole batch is handed on so the reader can skip every departing row, not just the open one.
+  function runBulk(uids: number[], fire: () => void) {
+    fire()
+    if (selectedUid !== null && uids.includes(selectedUid)) onDeparted?.(selectedUid, uids)
+    selection.clear()
+  }
+
+  function bulkMove(target: string | null, copy: boolean) {
+    if (!folderPath || !target || !count) return
+    const path = folderPath
+    const uids = selectedUids
+    if (copy) {  // A copy departs nothing; the rows stay, so only the selection is dropped.
+      moveMessages.mutate({ folderPath: path, uids, targetFolderPath: target, copy: true })
+      selection.clear()
+    } else {
+      runBulk(uids, () => moveMessages.mutate({ folderPath: path, uids, targetFolderPath: target, copy: false }))
+    }
+  }
+
+  function bulkDelete() {
+    if (!folderPath || !count) return
+    if (inTrash) { setConfirmingBulk(true); return }
+    bulkMove(roles.trash, false)
+  }
+
+  function expungeBulk() {
+    if (!folderPath || !count) return
+    const path = folderPath
+    const uids = selectedUids
+    runBulk(uids, () => deleteMessages.mutate({ folderPath: path, uids }))
+    setConfirmingBulk(false)
+  }
+
+  function bulkMark(value: boolean) {
+    if (!folderPath || !count) return  // Marking read keeps the rows, so the reader never advances.
+    setFlags.mutate({ folderPath, uids: selectedUids, flag: 'seen', value })
+    selection.clear()
+  }
+
+  function pickTarget(target: string) {
+    if (!picker) return
+    bulkMove(target, picker.mode === 'copy')
+    setPicker(null)
+  }
+
+  function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape' && count > 0) {
+      event.stopPropagation()
+      selection.clear()
+    }
+  }
 
   function toggle(message: MailMessageSummary, flag: 'seen' | 'flagged') {
     if (!folderPath) return
@@ -75,6 +156,19 @@ export default function MessageList(
     deleteMessages.mutate({ folderPath, uids: [uid] })
     setExpunging(null)
     onDeparted?.(uid)
+  }
+
+  // Trash/junk purge permanently, so they confirm first; elsewhere it's a move to trash, undoable.
+  function requestEmpty() {
+    if (!folderPath) return
+    if (purges) setConfirmingEmpty(true)
+    else emptyFolder.mutate({ folderPath, targetFolderPath: roles.trash })
+  }
+
+  function confirmEmpty() {
+    if (!folderPath) return
+    emptyFolder.mutate({ folderPath })
+    setConfirmingEmpty(false)
   }
 
   // Inner buttons handle their own keys; the row only opens when the row itself has focus.
@@ -104,7 +198,7 @@ export default function MessageList(
 
     return (
       <>
-        <ul className="message-list">
+        <ul className={`message-list${count > 0 ? ' has-selection' : ''}`}>
           {messages.map((message, index) => {
             const classes = ['message-row']
             if (wide) classes.push('is-line')
@@ -119,6 +213,21 @@ export default function MessageList(
             // own, so everything the row states visually has to be said in its name.
             const label = `${message.seen ? '' : 'Unread. '}${from}: ${subject}`
               + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
+
+            const check = (
+              <input
+                type="checkbox"
+                className="message-row-check"
+                aria-label={`Select message from ${from}`}
+                checked={selection.has(message.uid)}
+                onClick={event => {
+                  event.stopPropagation()
+                  if (event.shiftKey) selection.toggleRange(loadedUids, index)
+                  else selection.toggle(message.uid, index)
+                }}
+                onChange={() => {}}
+              />
+            )
 
             const star = (
               <button
@@ -183,6 +292,7 @@ export default function MessageList(
                 >
                   {wide ? (
                     <>
+                      {check}
                       {!message.seen && <span className="message-row-unread-dot" />}
                       <span className="message-row-from">{from}</span>
                       {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
@@ -198,6 +308,7 @@ export default function MessageList(
                     </>
                   ) : (
                     <>
+                      {check}
                       <div className="message-row-top">
                         {!message.seen && <span className="message-row-unread-dot" />}
                         <span className="message-row-from">{from}</span>
@@ -231,9 +342,29 @@ export default function MessageList(
   }
 
   return (
-    <>
-      {/* Outside the scrolling band, so the column keeps saying which folder it shows. */}
-      <h2 className="message-list-heading">{folderName || folderPath}</h2>
+    // display:contents band wrapper: it owns no box, so the three bands still stack under
+    // .mail-list, but its keydown catches Escape from the toolbar as well as the rows.
+    <div className="message-list-root" onKeyDown={onListKeyDown}>
+      {/* Replaces the old heading band: the toolbar names the folder until a selection is on. */}
+      <SelectionToolbar
+        title={folderName || folderPath}
+        count={count}
+        allSelected={allSelected}
+        indeterminate={indeterminate}
+        onToggleAll={() => allSelected ? selection.clear() : selection.selectAll(loadedUids)}
+        overCap={overCap}
+        deleteLabel={deleteLabel}
+        archive={{ onRun: () => bulkMove(roles.archive, false), disabledReason: archiveOff ? archiveReason : undefined }}
+        junk={{ onRun: () => bulkMove(roles.junk, false), disabledReason: junkOff ? junkReason : undefined }}
+        del={{ onRun: bulkDelete, disabledReason: trashOff ? NO_TRASH : undefined }}
+        move={{ onRun: () => setPicker({ mode: 'move' }) }}
+        copy={{ onRun: () => setPicker({ mode: 'copy' }) }}
+        markRead={{ onRun: () => bulkMark(true) }}
+        markUnread={{ onRun: () => bulkMark(false) }}
+        emptyFolder={{ onRun: requestEmpty, disabledReason: emptyReason }}
+      />
+
+      <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />
 
       <div className="mail-list-scroll" ref={scrollRef}>{rows()}</div>
 
@@ -259,6 +390,36 @@ export default function MessageList(
           loading={deleteMessages.isPending}
         />
       )}
-    </>
+
+      {picker && (
+        <MoveMessagesModal
+          mode={picker.mode}
+          folders={folders ?? []}
+          currentFolderPath={folderPath}
+          onPick={pickTarget}
+          onClose={() => setPicker(null)}
+        />
+      )}
+
+      {/* Bulk in-trash expunge: the same modal as a single row, named for the whole batch. */}
+      {confirmingBulk && (
+        <DeleteConfirmModal
+          entityLabel={`${count} message${count === 1 ? '' : 's'}`}
+          onConfirm={expungeBulk}
+          onClose={() => setConfirmingBulk(false)}
+          loading={deleteMessages.isPending}
+        />
+      )}
+
+      {/* Permanent purge, from trash or junk: same modal, named for the folder. */}
+      {confirmingEmpty && (
+        <DeleteConfirmModal
+          entityLabel={folderName || folderPath}
+          onConfirm={confirmEmpty}
+          onClose={() => setConfirmingEmpty(false)}
+          loading={emptyFolder.isPending}
+        />
+      )}
+    </div>
   )
 }

@@ -8,6 +8,7 @@ import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, FolderRoleEntry,
 } from './api/mailTypes'
+import { flatten } from './folders/folderNodes'
 import {
   patchFolderCounts, patchFolderUnread, patchSummaries, removeSummaries,
   type FolderCountDeltas, type MailFlagName,
@@ -464,6 +465,58 @@ export function useDeleteMessages(onError?: (message: string) => void) {
     onError: (_error, _args, context) => {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
       onError?.('Could not delete the message')
+    },
+  })
+}
+
+export interface EmptyFolderArgs {
+  folderPath: string
+  /** Blank/absent = purge; set = move every message into this folder. */
+  targetFolderPath?: string | null
+}
+
+/**
+ * Empties a whole folder. The source's caches are dropped and its counts zeroed; a move also
+ * adds the source's own total/unread (read from the tree node) to the target. Optimistic with
+ * snapshot rollback, never an invalidate — the 60s poll reconciles.
+ */
+export function useEmptyFolder(onError?: (message: string) => void) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: ({ folderPath, targetFolderPath }: EmptyFolderArgs) =>
+      api.emptyFolder(folderPath, targetFolderPath ?? null),
+
+    onMutate: async ({ folderPath, targetFolderPath }: EmptyFolderArgs) => {
+      await cancelListQueries(queryClient, accountId, folderPath)
+
+      const snapshots: Snapshot[] = dropFolderCaches(queryClient, accountId, folderPath)
+
+      // The source folder's own counts drive both the zeroing and, on a move, the target's gain.
+      const tree = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
+      const node = tree ? flatten(tree).find(entry => entry.node.path === folderPath)?.node : undefined
+      const source = { total: node?.total ?? 0, unread: node?.unread ?? 0 }
+
+      const patches: [string, FolderCountDeltas][] = [
+        [folderPath, { total: -source.total, unread: -source.unread }],
+      ]
+
+      const move = !!targetFolderPath
+      if (move) {
+        await cancelListQueries(queryClient, accountId, targetFolderPath!)
+        snapshots.push(...dropFolderCaches(queryClient, accountId, targetFolderPath!))
+        patches.push([targetFolderPath!, { total: source.total, unread: source.unread }])
+      }
+
+      snapshots.push(...patchTreeCounts(queryClient, accountId, patches))
+      return { snapshots }
+    },
+
+    onError: (_error, _args, context) => {
+      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      onError?.('Could not empty the folder')
     },
   })
 }

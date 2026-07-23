@@ -582,6 +582,38 @@ public sealed class MailController : ApiBaseController
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
 
+    /// <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
+    /// <param name="request">source folder and optional target (blank = purge)</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">The folder was emptied</response>
+    /// <response code="400">The source is missing, the target equals the source, or the target cannot hold messages</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("Folders/Empty")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult> EmptyFolder(EmptyFolderRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FolderPath))
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+        if (!string.IsNullOrWhiteSpace(request.TargetFolderPath)
+            && string.Equals(request.FolderPath, request.TargetFolderPath, StringComparison.Ordinal))
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder must differ from the source folder"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _messages.EmptyAsync(
+            AuthenticatedUser, password.Value, request.FolderPath, request.TargetFolderPath, cancellationToken);
+
+        if (result.IsFailure && result.Error == ImapSession.TargetNotSelectable)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder cannot hold messages"));
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
+    }
+
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
     {
         foreach (var node in nodes)

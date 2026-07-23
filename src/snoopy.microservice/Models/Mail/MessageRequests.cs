@@ -34,3 +34,16 @@ public sealed class DeleteMessagesRequest
     /// <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
     public IReadOnlyList<uint> Uids { get; set; } = [];
 }
+
+/// <summary>
+/// Empties an entire folder. Unbounded by the 200-UID cap — it operates on 1:* server-side.
+/// A null/blank <see cref="TargetFolderPath"/> means purge (permanent expunge of everything);
+/// a target means move every message there (used to move a normal folder's contents to trash).
+/// </summary>
+public sealed class EmptyFolderRequest
+{
+    public string FolderPath { get; set; } = string.Empty;
+
+    /// <summary>Null or blank = purge. Set = move all messages into this folder.</summary>
+    public string? TargetFolderPath { get; set; }
+}

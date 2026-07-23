@@ -85,4 +85,14 @@ internal sealed class MailMessageRepository : IMailMessageRepository
 
         return await session.DeleteAsync(folderPath, uids, cancellationToken);
     }
+
+    public async Task<Result> EmptyAsync(User user, string password, string folderPath, string? targetPath, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+        await using var session = sessionResult.Value;
+        return await session.EmptyAsync(folderPath, targetPath, cancellationToken);
+    }
 }

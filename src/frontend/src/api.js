@@ -238,6 +238,9 @@ export const api = {
   deleteMessages: (folder, uids) =>
     request('DELETE', '/api/Mail/Messages', { folderPath: folder, uids }),
 
+  emptyFolder: (folder, targetFolder) =>
+    request('POST', '/api/Mail/Folders/Empty', { folderPath: folder, targetFolderPath: targetFolder ?? null }),
+
   getFolderRoles: (options) =>
     request('GET', '/api/Mail/FolderRoles', undefined, options),
 

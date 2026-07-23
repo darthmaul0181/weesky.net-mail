@@ -326,6 +326,10 @@
 
 /* ── Message list ────────────────────────────────────────── */
 
+/* Owns no box (display:contents), so its three children stay direct bands of .mail-list while
+   one element still catches Escape from the toolbar as well as the rows. */
+.message-list-root { display: contents; }
+
 /* Its own band above the scrolling one, so it never moves. */
 .message-list-heading {
   flex: none;
@@ -337,6 +341,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Same band as .message-list-heading — replaces it once MessageList wires selection in.
+   Vertical padding is trimmed against the heading's (10px) to net the same overall height,
+   since a 26px row-btn is taller than the heading's plain text line. */
+.selection-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+}
+
+.selection-master { flex: none; }
+
+.selection-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.selection-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .message-list { list-style: none; }
@@ -407,6 +443,37 @@
   border-radius: 50%;
   background: var(--accent-unread);
   flex: none;
+}
+
+/* ── Row selection checkbox ──────────────────────────────── */
+
+/* Leftmost in both skins. The column is reserved permanently (a padding gutter in the narrow
+   skin, a flex slot in the wide one) so revealing the box never shoves the sender or subject.
+   Hidden and inert at rest; shown on hover/focus of the row, and pinned once a selection is on. */
+.message-row-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--action-primary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The narrow skin is a block stack: the box floats over a reserved left gutter. */
+.message-row:not(.is-line) { padding-left: 34px; }
+.message-row:not(.is-line) .message-row-check { position: absolute; left: 12px; top: 12px; }
+
+/* The wide skin is a baseline flex row: the box is a real leftmost slot, centred like the row-btns. */
+.message-row.is-line .message-row-check { align-self: center; }
+
+.message-row:hover .message-row-check,
+.message-row:focus-within .message-row-check,
+.message-list.has-selection .message-row-check,
+.message-row-check:checked {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ── Row controls ────────────────────────────────────────── */
@@ -901,4 +968,35 @@
   gap: 8px;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+/* ── Empty folder banner ─────────────────────────────────── */
+
+/* Pinned strip between toolbar and scroll area; stays put while rows scroll. */
+.empty-folder-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.empty-folder-banner-text { flex: 1; }
+
+.empty-folder-banner-link {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--action-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.empty-folder-banner-link:hover {
+  color: var(--danger);
 }
