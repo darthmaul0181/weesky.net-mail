@@ -390,10 +390,7 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.selection-btn:hover:not(:disabled) {
-  color: var(--action-primary);
-  background: color-mix(in oklab, currentColor 14%, transparent);
-}
+.selection-btn:hover:not(:disabled) { color: var(--icon-hover-accent); }
 .selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .message-list { list-style: none; }
@@ -524,17 +521,14 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-/* A tint of the icon's own colour, because the row underneath is three different colours:
-   a fixed surface token is a pale patch on a selected row and invisible on a hovered one. */
-.row-btn:hover {
-  color: var(--action-primary);
-  background: color-mix(in oklab, currentColor 14%, transparent);
-}
+/* Hover only recolours the icon — no background, and the tint is --icon-hover-accent (the palette's
+   vivid dark-mode accent, identical in both themes). */
+.row-btn:hover { color: var(--icon-hover-accent); }
 
 .row-star.is-on { color: var(--badge-count-bg); }
 /* Specificity, not decoration: .row-star.is-on ties with .row-btn:hover and would win by order,
    leaving a starred star as the one button that does not answer the pointer. */
-.row-star.is-on:hover { color: var(--action-primary); }
+.row-star.is-on:hover { color: var(--icon-hover-accent); }
 
 /* Narrow skin: the cluster sits on the bottom-right corner, over the last line present. */
 .message-row-cluster {
@@ -665,10 +659,17 @@
   cursor: pointer;
 }
 
-.action-btn:hover { color: var(--action-primary); background: var(--surface-sunken); }
+.action-btn:hover { color: var(--icon-hover-accent); }
 
-/* Muted at rest like any action, danger only on hover — the row-button tint technique. */
-.action-btn.is-danger:hover { color: var(--danger); background: color-mix(in oklab, currentColor 14%, transparent); }
+/* Muted at rest, danger only on hover — icon-only recolour, no background. Shared by the reader
+   header, the list rows and the selection band so every Delete reddens the same way; the band keeps
+   its own :not(:disabled) guard like its other buttons. --icon-hover-danger is fixed to the
+   dark-mode red, identical in both themes. */
+.action-btn.is-danger:hover,
+.row-btn.is-danger:hover,
+.selection-btn.is-danger:hover:not(:disabled) {
+  color: var(--icon-hover-danger);
+}
 
 .actions-rule { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
@@ -693,7 +694,7 @@
 .reader-back:hover { background: var(--list-row-hover); color: var(--text); }
 .reader-meta {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -768,24 +769,17 @@
 
 .address-label.is-sender:hover { color: var(--action-primary); }
 
-/* --badge-count-fg is the readable foreground over a saturated badge fill in both modes —
-   white on light, near-black on dark, which is exactly what --success and --danger need. */
+/* A line shield inheriting the verdict colour — the icon carries its own size, so the badge is
+   just a colour-setting container. --success reads green, --danger red, in both modes. */
 .auth-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--badge-count-fg);
 }
 
-.auth-badge.is-pass { background: var(--success); }
-.auth-badge.is-fail { background: var(--danger); }
+.auth-badge.is-pass { color: var(--success); }
+.auth-badge.is-fail { color: var(--danger); }
 
 /* Block, not flex: a flex row makes "Spam score: " an anonymous item and strips its
    trailing space — the same trap .reader-recipients fell into. */

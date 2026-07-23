@@ -35,6 +35,10 @@
   --action-primary: #182238;
   --action-primary-hover: #26334f;
   --action-primary-fg: #ffffff;
+  /* Action-icon hover tint, pinned to the dark-mode accent/danger so it is the same vivid hue in
+     both themes. Declared in the base block only, never overridden in the dark block. */
+  --icon-hover-accent: #f0785c;
+  --icon-hover-danger: #f87171;
   --danger: #dc2626;
   --danger-hover: #b91c1c;
   --success: #16a34a;

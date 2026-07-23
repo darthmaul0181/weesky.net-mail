@@ -264,7 +264,7 @@ export default function MessageList(
                 </button>
                 <button
                   type="button"
-                  className="row-btn"
+                  className="row-btn is-danger"
                   aria-label={deleteLabel}
                   disabled={trashOff}
                   title={trashOff ? NO_TRASH : deleteLabel}

@@ -10,6 +10,7 @@
   --list-separator:#e6e6e9; --badge-count-bg:#2563eb; --badge-count-fg:#ffffff;
   --reader-header-border:#e6e6e9; --quote-text:#7d7d85; --attachment-chip-bg:#efeff1;
   --action-primary:#131315; --action-primary-hover:#2b2b30; --action-primary-fg:#ffffff;
+  --icon-hover-accent:#5b8cf7; --icon-hover-danger:#f87171;
   --danger:#dc2626; --danger-hover:#b91c1c; --success:#16a34a;
 }
 [data-palette='ink'][data-theme='dark'] {

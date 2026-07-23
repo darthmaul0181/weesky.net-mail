@@ -10,6 +10,7 @@
   --list-separator:#ebe2eb; --badge-count-bg:#a87a12; --badge-count-fg:#ffffff;
   --reader-header-border:#ebe2eb; --quote-text:#837783; --attachment-chip-bg:#f1ebf1;
   --action-primary:#3a2140; --action-primary-hover:#4d2e54; --action-primary-fg:#ffffff;
+  --icon-hover-accent:#d9b04a; --icon-hover-danger:#f87171;
   --danger:#dc2626; --danger-hover:#b91c1c; --success:#16a34a;
 }
 /* Deliberate: --action-primary shifts hue between modes (aubergine in light,

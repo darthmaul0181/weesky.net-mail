@@ -10,6 +10,7 @@
   --list-separator:#e6ebe0; --badge-count-bg:#b8791a; --badge-count-fg:#ffffff;
   --reader-header-border:#e6ebe0; --quote-text:#7c8676; --attachment-chip-bg:#eef1ea;
   --action-primary:#1e3a2b; --action-primary-hover:#2b4d3a; --action-primary-fg:#ffffff;
+  --icon-hover-accent:#e0a63f; --icon-hover-danger:#f87171;
   --danger:#c02626; --danger-hover:#9c1c1c; --success:#15803d;
 }
 /* Deliberate: --action-primary shifts hue between modes (evergreen in light,

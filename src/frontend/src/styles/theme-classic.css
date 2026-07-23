@@ -33,6 +33,8 @@
   --action-primary: #3450a3;
   --action-primary-hover: #2a4090;
   --action-primary-fg: #ffffff;
+  --icon-hover-accent: #84aad8;
+  --icon-hover-danger: #dc2626;
   --danger: #dc2626;
   --danger-hover: #b91c1c;
   --success: #16a34a;

@@ -47,7 +47,7 @@ export default function ReaderActions({
               aria-label={originalColours ? 'Match my theme' : 'Original colours'}
               onClick={onToggleColours}
             >
-              {originalColours ? <MoonIcon /> : <SunIcon />}
+              {originalColours ? <MoonIcon size={18} /> : <SunIcon size={18} />}
             </button>
           </Tooltip>
           <span className="actions-rule" />
@@ -61,21 +61,21 @@ export default function ReaderActions({
         title={deleteDisabled ? NO_TRASH : undefined}
         onClick={onDelete}
       >
-        <TrashIcon size={16} />
+        <TrashIcon size={18} />
       </button>
       <DropdownMenu
         ariaLabel="Message actions"
         className="action-btn"
-        trigger={<KebabIcon />}
+        trigger={<KebabIcon size={18} />}
         items={[
           {
             label: seen ? 'Mark as unread' : 'Mark as read',
-            icon: seen ? <MailIcon size={16} /> : <MailOpenIcon size={16} />,
+            icon: seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />,
             onSelect: onToggleSeen,
           },
           {
             label: flagged ? 'Unstar' : 'Star',
-            icon: <StarIcon filled={flagged} />,
+            icon: <StarIcon filled={flagged} size={18} />,
             onSelect: onToggleFlagged,
           },
           // A separator under nothing reads as a rendering fault, so it comes only with a group.

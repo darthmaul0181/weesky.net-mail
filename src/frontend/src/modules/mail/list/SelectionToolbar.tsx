@@ -62,13 +62,13 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   }
 
   const kebab: MenuEntry[] = [
-    kebabItem('Mark as read', <MailOpenIcon size={16} />, props.markRead),
-    kebabItem('Mark as unread', <MailIcon size={16} />, props.markUnread),
+    kebabItem('Mark as read', <MailOpenIcon size={18} />, props.markRead),
+    kebabItem('Mark as unread', <MailIcon size={18} />, props.markUnread),
     'separator',
-    kebabItem('Move to…', <FolderMoveIcon size={16} />, props.move),
-    kebabItem('Copy to…', <CopyIcon size={16} />, props.copy),
+    kebabItem('Move to…', <FolderMoveIcon size={18} />, props.move),
+    kebabItem('Copy to…', <CopyIcon size={18} />, props.copy),
     'separator',
-    { label: 'Empty folder', icon: <TrashIcon size={16} />, onSelect: props.emptyFolder.onRun,
+    { label: 'Empty folder', icon: <TrashIcon size={18} />, onSelect: props.emptyFolder.onRun,
       disabled: !!props.emptyFolder.disabledReason, title: props.emptyFolder.disabledReason },
   ]
 
@@ -90,7 +90,7 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         <button type="button" className="selection-btn" aria-label="Report as junk" {...actionProps(props.junk, 'Report as junk')}>
           <JunkIcon size={20} />
         </button>
-        <button type="button" className="selection-btn" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
+        <button type="button" className="selection-btn is-danger" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
           <TrashIcon size={20} />
         </button>
         <DropdownMenu ariaLabel="More actions" className="selection-btn" trigger={<KebabIcon />} items={kebab} />

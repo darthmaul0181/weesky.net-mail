@@ -1,6 +1,8 @@
 import Tooltip from '../../../components/Tooltip'
 import type { MailAuthentication } from '../api/mailTypes'
 import { authVerdict } from './authVerdict'
+import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
+import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 
 export default function AuthBadge({ authentication }: { authentication: MailAuthentication | null }) {
   const verdict = authVerdict(authentication)
@@ -14,7 +16,7 @@ export default function AuthBadge({ authentication }: { authentication: MailAuth
   return (
     <Tooltip content={detail} placement="bottom-left">
       <span className={`auth-badge is-${verdict}`} tabIndex={0} role="img" aria-label={label}>
-        {verdict === 'pass' ? '✓' : '!'}
+        {verdict === 'pass' ? <ShieldCheckIcon /> : <ShieldAlertIcon />}
       </span>
     </Tooltip>
   )

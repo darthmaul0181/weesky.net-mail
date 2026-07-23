@@ -18,6 +18,8 @@ import ArchiveIcon from './ArchiveIcon'
 import FolderMoveIcon from './FolderMoveIcon'
 import CopyIcon from './CopyIcon'
 import JunkIcon from './JunkIcon'
+import ShieldCheckIcon from './ShieldCheckIcon'
+import ShieldAlertIcon from './ShieldAlertIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -38,6 +40,8 @@ const icons = [
   { name: 'FolderMoveIcon', Icon: FolderMoveIcon, defaultSize: '16' },
   { name: 'CopyIcon', Icon: CopyIcon, defaultSize: '16' },
   { name: 'JunkIcon', Icon: JunkIcon, defaultSize: '16' },
+  { name: 'ShieldCheckIcon', Icon: ShieldCheckIcon, defaultSize: '16' },
+  { name: 'ShieldAlertIcon', Icon: ShieldAlertIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

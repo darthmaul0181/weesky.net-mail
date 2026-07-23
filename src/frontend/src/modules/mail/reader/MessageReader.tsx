@@ -167,17 +167,17 @@ export default function MessageReader(
 
   const actions: MenuEntry[] = [
     {
-      label: 'Archive', icon: <ArchiveIcon size={16} />,
+      label: 'Archive', icon: <ArchiveIcon size={18} />,
       onSelect: () => moveTo(roles.archive, false),
       disabled: archiveOff, title: archiveOff ? archiveReason : undefined,
     },
     {
-      label: 'Report as junk', icon: <JunkIcon size={16} />,
+      label: 'Report as junk', icon: <JunkIcon size={18} />,
       onSelect: () => moveTo(roles.junk, false),
       disabled: junkOff, title: junkOff ? junkReason : undefined,
     },
-    { label: 'Move to…', icon: <FolderMoveIcon size={16} />, onSelect: () => setPicker({ mode: 'move' }) },
-    { label: 'Copy to…', icon: <CopyIcon size={16} />, onSelect: () => setPicker({ mode: 'copy' }) },
+    { label: 'Move to…', icon: <FolderMoveIcon size={18} />, onSelect: () => setPicker({ mode: 'move' }) },
+    { label: 'Copy to…', icon: <CopyIcon size={18} />, onSelect: () => setPicker({ mode: 'copy' }) },
   ]
 
   return (
