@@ -20,33 +20,12 @@ export function toRows(identities: SendingIdentity[]): IdentityRow[] {
    server snapshot the invalidation has not refreshed yet — a whole-set PUT built on a stale
    snapshot silently reverts the action before it. */
 
-/**
- * `StringComparer.OrdinalIgnoreCase`'s fold, which is neither `toUpperCase` nor `toLowerCase`:
- * it folds *upward*, so `_` (U+005F) sorts after the letters rather than before them, and it
- * folds *simply*, so the code points JS would expand — `ß` to `SS`, the ﬁ/ﬀ ligatures — are
- * left alone instead. Keeping the original whenever upper-casing lengthens a code point is
- * exactly that distinction. The pairs this gets right are pinned on both sides of the wire:
- * `OrdinalIgnoreCase_OrdersTheWayTheFrontendSortDoes` in IdentityResolverTests.
- */
-function foldOrdinal(value: string): string {
-  let folded = ''
-  for (const char of value) {
-    const upper = char.toUpperCase()
-    folded += upper.length > char.length ? char : upper
-  }
-  return folded
-}
-
-/** Mirrors `IdentityResolver`'s own ordering — default first, then label, case-insensitively —
-    so the optimistic list sits where the refetch will put it and no row jumps when it lands. */
+/** Tiles are ordered alphabetically by display name, case-insensitively — the same `localeCompare`
+    the folder list and the rest of the site sort names with. Order is purely by name: the default
+    is marked with a star on its tile, not by floating to the top. */
 export function sortIdentities(identities: SendingIdentity[]): SendingIdentity[] {
-  return [...identities].sort((a, b) => {
-    if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
-    // `<` on the folded strings is a UTF-16 code-unit compare, which is what ordinal means.
-    const left = foldOrdinal(a.displayName)
-    const right = foldOrdinal(b.displayName)
-    return left < right ? -1 : left > right ? 1 : 0
-  })
+  return [...identities].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }))
 }
 
 /**

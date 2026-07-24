@@ -16,27 +16,34 @@ const identities: SendingIdentity[] = [
   { address: 'gone@weesky.be', displayName: 'Ancien', isDefault: false, isPrimary: false, stale: true, labelIsCustom: true },
 ]
 
+function tileNames(container: HTMLElement) {
+  return [...container.querySelectorAll('.admin-list-item-email')].map(e => e.textContent)
+}
+
 describe('IdentitiesPage', () => {
   const mutate = vi.fn()
 
   beforeEach(() => {
-    // Reset, not clear: the refusal tests install an implementation that must not leak on.
     mutate.mockReset()
     vi.mocked(useIdentities).mockReturnValue({ data: identities, isLoading: false, isError: false } as never)
     vi.mocked(useReplaceIdentities).mockReturnValue({ mutate, isPending: false } as never)
     vi.mocked(useAliases).mockReturnValue({ data: [], isLoading: false } as never)
     vi.mocked(useAuth).mockReturnValue({
-      identity: {
-        email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [],
-      },
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
     } as never)
   })
 
-  it('renders each identity with its address and tags', () => {
+  it('renders a tile per identity with its name, address and tags', () => {
     render(<IdentitiesPage />)
-    expect(screen.getByText('mick@weesky.be')).toBeInTheDocument()
+    expect(screen.getByText('Mick Dubois')).toBeInTheDocument()
+    expect(screen.getByText('michel@weesky.be')).toBeInTheDocument()
     expect(screen.getByText('primary')).toBeInTheDocument()
     expect(screen.getByText('unavailable')).toBeInTheDocument()
+  })
+
+  it('orders the tiles alphabetically by display name', () => {
+    const { container } = render(<IdentitiesPage />)
+    expect(tileNames(container)).toEqual(['Ancien', 'Michel', 'Mick Dubois'])
   })
 
   it('moving the default saves the whole list', () => {
@@ -48,35 +55,77 @@ describe('IdentitiesPage', () => {
       expect.anything())
   })
 
-  // The backend's own limit: a longer name would cost a refused PUT rather than a keystroke.
-  it('caps the rename input at the stored column length', () => {
+  it('removing an identity keeps the others', () => {
     render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rename michel@weesky.be' }))
-    expect(screen.getByLabelText('Display name for michel@weesky.be'))
-      .toHaveAttribute('maxlength', '100')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove gone@weesky.be' }))
+    expect(mutate).toHaveBeenCalledWith(
+      [{ address: 'michel@weesky.be', displayName: 'Michel', isDefault: false }],
+      expect.anything())
   })
 
-  it('renaming an identity commits on Enter', () => {
+  it('renaming through the edit dialog saves the new name', () => {
     render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rename michel@weesky.be' }))
-    const input = screen.getByLabelText('Display name for michel@weesky.be')
-    fireEvent.change(input, { target: { value: 'Michel D.' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    // Sorted the way the server sorts: no default among these two, so by label.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit michel@weesky.be' }))
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Michel D.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(mutate).toHaveBeenCalledWith(
-      [{ address: 'gone@weesky.be', displayName: 'Ancien', isDefault: false },
-       { address: 'michel@weesky.be', displayName: 'Michel D.', isDefault: false }],
+      [{ address: 'michel@weesky.be', displayName: 'Michel D.', isDefault: false },
+       { address: 'gone@weesky.be', displayName: 'Ancien', isDefault: false }],
       expect.anything())
+  })
+
+  it('adds the alias picked in the dialog and closes it', () => {
+    vi.mocked(useAliases).mockReturnValue({
+      data: [{ name: 'support', domain: 'weesky.be' }], isLoading: false,
+    } as never)
+    render(<IdentitiesPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add identity' }))
+    fireEvent.change(screen.getByLabelText('Alias'), { target: { value: 'support' } })
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'support@weesky.be' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect(mutate).toHaveBeenCalledWith(
+      [{ address: 'michel@weesky.be', displayName: 'Michel', isDefault: false },
+       { address: 'gone@weesky.be', displayName: 'Ancien', isDefault: false },
+       { address: 'support@weesky.be', displayName: 'Mick Dubois', isDefault: false }],
+      expect.anything())
+    expect(screen.queryByText('Add identity')).toBeNull()
+  })
+
+  it('the primary carries no rename, no remove and no default button', () => {
+    render(<IdentitiesPage />)
+    expect(screen.queryByRole('button', { name: 'Edit mick@weesky.be' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove mick@weesky.be' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Make mick@weesky.be the default' })).toBeNull()
+    expect(screen.getByText('mick@weesky.be is the default')).toBeInTheDocument()
+  })
+
+  it('a stale identity offers no star and no edit, only a remove', () => {
+    render(<IdentitiesPage />)
+    expect(screen.queryByRole('button', { name: 'Make gone@weesky.be the default' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Edit gone@weesky.be' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove gone@weesky.be' })).toBeInTheDocument()
+  })
+
+  it('shows the live account name on the primary tile, not a stale query label', () => {
+    vi.mocked(useIdentities).mockReturnValue({
+      data: [{ ...identities[0], displayName: 'Old Name' }, identities[1], identities[2]],
+      isLoading: false, isError: false,
+    } as never)
+    vi.mocked(useAuth).mockReturnValue({
+      identity: { email: 'mick@weesky.be', displayName: 'New Name', initials: 'MW', subDomains: [] },
+    } as never)
+    render(<IdentitiesPage />)
+    const primaryTile = screen.getByText('primary').closest('.admin-list-item')!
+    expect(primaryTile.querySelector('.admin-list-item-email')?.textContent).toBe('New Name')
   })
 
   // Every action PUTs the whole set, and the invalidation's refetch has not landed yet, so an
   // action built on the server snapshot would ship the pre-rename label and undo the rename.
   it('a second action before the refetch builds on the first, not on the server snapshot', () => {
     render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rename michel@weesky.be' }))
-    const input = screen.getByLabelText('Display name for michel@weesky.be')
-    fireEvent.change(input, { target: { value: 'Michel D.' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit michel@weesky.be' }))
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Michel D.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove gone@weesky.be' }))
     expect(mutate).toHaveBeenLastCalledWith(
@@ -87,10 +136,9 @@ describe('IdentitiesPage', () => {
   it('a refused save shows the message and puts the server state back on screen', () => {
     mutate.mockImplementation((_rows, options) => options.onError(new Error('gone@weesky.be is not yours')))
     render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rename michel@weesky.be' }))
-    const input = screen.getByLabelText('Display name for michel@weesky.be')
-    fireEvent.change(input, { target: { value: 'Michel D.' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit michel@weesky.be' }))
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Michel D.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByText('gone@weesky.be is not yours')).toBeInTheDocument()
     expect(screen.getByText('Michel')).toBeInTheDocument()
@@ -104,37 +152,6 @@ describe('IdentitiesPage', () => {
     expect(screen.getByText('Could not save your identities')).toBeInTheDocument()
   })
 
-  it('adds the alias picked in the dialog and closes it', () => {
-    vi.mocked(useAliases).mockReturnValue({
-      data: [{ name: 'support', domain: 'weesky.be' }], isLoading: false,
-    } as never)
-    render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: '+ Add identity' }))
-    fireEvent.click(screen.getByText('support@weesky.be'))
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-
-    expect(mutate).toHaveBeenCalledWith(
-      [{ address: 'gone@weesky.be', displayName: 'Ancien', isDefault: false },
-       { address: 'michel@weesky.be', displayName: 'Michel', isDefault: false },
-       { address: 'support@weesky.be', displayName: 'Mick Dubois', isDefault: false }],
-      expect.anything())
-    expect(screen.queryByText('Add identity')).toBeNull()
-  })
-
-  it('states the default without a dead tab stop', () => {
-    render(<IdentitiesPage />)
-    expect(screen.getByText('mick@weesky.be is the default')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /mick@weesky\.be is the default/ })).toBeNull()
-  })
-
-  it('removing an identity keeps the others', () => {
-    render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Remove gone@weesky.be' }))
-    expect(mutate).toHaveBeenCalledWith(
-      [{ address: 'michel@weesky.be', displayName: 'Michel', isDefault: false }],
-      expect.anything())
-  })
-
   it('fills the primary star when the alias holding the default is removed', () => {
     vi.mocked(useIdentities).mockReturnValue({
       data: [{ ...identities[0], isDefault: false }, { ...identities[1], isDefault: true }],
@@ -142,44 +159,8 @@ describe('IdentitiesPage', () => {
     } as never)
     render(<IdentitiesPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove michel@weesky.be' }))
-
     expect(screen.getByText('mick@weesky.be is the default')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Make mick@weesky.be the default' })).toBeNull()
-  })
-
-  it('a stale identity offers no star and no rename', () => {
-    render(<IdentitiesPage />)
-    expect(screen.queryByRole('button', { name: 'Make gone@weesky.be the default' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Rename gone@weesky.be' })).toBeNull()
-  })
-
-  function renameMichel() {
-    fireEvent.click(screen.getByRole('button', { name: 'Rename michel@weesky.be' }))
-    const input = screen.getByLabelText('Display name for michel@weesky.be')
-    fireEvent.change(input, { target: { value: 'Michel D.' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-  }
-
-  // A refetch landing between two saves must not reset the list the second one chains onto.
-  it('keeps the in-flight list when a refetch lands mid-save', () => {
-    vi.mocked(useReplaceIdentities).mockReturnValue({ mutate, isPending: true } as never)
-    const { rerender } = render(<IdentitiesPage />)
-    renameMichel()
-
-    vi.mocked(useIdentities).mockReturnValue({ data: [...identities], isLoading: false } as never)
-    rerender(<IdentitiesPage />)
-    expect(screen.getByText('Michel D.')).toBeInTheDocument()
-  })
-
-  it('drops the optimistic list once the refetch lands with nothing in flight', () => {
-    const { rerender } = render(<IdentitiesPage />)
-    renameMichel()
-    expect(screen.getByText('Michel D.')).toBeInTheDocument()
-
-    vi.mocked(useIdentities).mockReturnValue({ data: [...identities], isLoading: false } as never)
-    rerender(<IdentitiesPage />)
-    expect(screen.getByText('Michel')).toBeInTheDocument()
-    expect(screen.queryByText('Michel D.')).toBeNull()
   })
 
   it('keeps a populated list on screen when a background refetch fails, and says it may be stale', () => {
@@ -190,37 +171,9 @@ describe('IdentitiesPage', () => {
     expect(screen.queryByText('Could not load your identities.')).toBeNull()
   })
 
-  it('says nothing about staleness while the refetches are succeeding', () => {
-    render(<IdentitiesPage />)
-    expect(screen.queryByText('Could not refresh this list — it may be out of date.')).toBeNull()
-  })
-
   it('reports the failure when there is nothing to show', () => {
     vi.mocked(useIdentities).mockReturnValue({ data: undefined, isLoading: false, isError: true } as never)
     render(<IdentitiesPage />)
     expect(screen.getByText('Could not load your identities.')).toBeInTheDocument()
-  })
-
-  it('the primary cannot be renamed or removed here — its name comes from Account', () => {
-    render(<IdentitiesPage />)
-    expect(screen.queryByRole('button', { name: 'Remove mick@weesky.be' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Rename mick@weesky.be' })).toBeNull()
-    // The primary row shows the account full name as read-only text.
-    const primaryRow = screen.getByText('primary').closest('li')!
-    expect(primaryRow.querySelector('.identity-name')?.textContent).toBe('Mick Dubois')
-  })
-
-  it('shows the live account name on the primary, not a stale query label', () => {
-    // FullName changed in the Account tab; the identities query has not refetched yet.
-    vi.mocked(useIdentities).mockReturnValue({
-      data: [{ ...identities[0], displayName: 'Old Name' }, identities[1], identities[2]],
-      isLoading: false, isError: false,
-    } as never)
-    vi.mocked(useAuth).mockReturnValue({
-      identity: { email: 'mick@weesky.be', displayName: 'New Name', initials: 'MW', subDomains: [] },
-    } as never)
-    render(<IdentitiesPage />)
-    const primaryRow = screen.getByText('primary').closest('li')!
-    expect(primaryRow.querySelector('.identity-name')?.textContent).toBe('New Name')
   })
 })

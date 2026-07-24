@@ -158,10 +158,9 @@ public sealed class IdentityResolverTests
     }
 
     /// <summary>
-    /// <c>Resolve</c> orders by <see cref="StringComparer.OrdinalIgnoreCase"/>, which folds
-    /// upward and simply. The frontend's <c>sortIdentities</c> reimplements exactly that so the
-    /// optimistic list does not reshuffle when the refetch lands; these are the pairs where a
-    /// naive <c>toLowerCase</c> or <c>toUpperCase</c> would disagree with it.
+    /// <c>Resolve</c> orders the sending list (the compose picker's order) by
+    /// <see cref="StringComparer.OrdinalIgnoreCase"/>, which folds upward and simply. These are the
+    /// pairs where a naive <c>toLowerCase</c> or <c>toUpperCase</c> would disagree with it.
     /// </summary>
     [Theory]
     // Folding upward puts '_' (U+005F) after the letters, where lower-casing would put it first.
@@ -172,7 +171,7 @@ public sealed class IdentityResolverTests
     [InlineData("fix", "ﬁx", -1)]
     [InlineData("İ", "i", 1)]
     [InlineData("anne", "Anne", 0)]
-    public void OrdinalIgnoreCase_OrdersTheWayTheFrontendSortDoes(string left, string right, int expected)
+    public void OrdinalIgnoreCase_FoldsTheTrickyPairsAsResolveOrders(string left, string right, int expected)
         => Assert.Equal(expected, Math.Sign(StringComparer.OrdinalIgnoreCase.Compare(left, right)));
 
     // ── Validate ─────────────────────────────────────────────────────────────

@@ -60,29 +60,23 @@ describe('applyDefault', () => {
 })
 
 describe('sortIdentities', () => {
-  // Mirrors OrderByDescending(IsDefault).ThenBy(DisplayName, OrdinalIgnoreCase).
-  it('puts the default first, then orders by label whatever the case', () => {
+  it('orders alphabetically by display name, whatever the case', () => {
     const rows = [
       identity({ address: 'z@x.be', displayName: 'zoe' }),
       identity({ address: 'a@x.be', displayName: 'Ancien' }),
-      identity({ address: 'd@x.be', displayName: 'Marc', isDefault: true }),
+      identity({ address: 'd@x.be', displayName: 'Marc' }),
       identity({ address: 'b@x.be', displayName: 'bob' }),
     ]
-    expect(sortIdentities(rows).map(i => i.displayName)).toEqual(['Marc', 'Ancien', 'bob', 'zoe'])
+    expect(sortIdentities(rows).map(i => i.displayName)).toEqual(['Ancien', 'bob', 'Marc', 'zoe'])
   })
 
-  // The mirror of OrdinalIgnoreCase_OrdersTheWayTheFrontendSortDoes: same pairs, same order,
-  // asserted there against the real comparer. A naive toLowerCase puts '_perso' first, and a
-  // naive toUpperCase makes 'ß'/'ss' and 'ﬁx'/'fix' compare equal.
-  it.each([
-    ['_perso', 'Anne'],
-    ['ß', 'ss'],
-    ['ﬁx', 'fix'],
-    ['İ', 'i'],
-  ])('folds %s after %s, the way OrdinalIgnoreCase does', (later, earlier) => {
-    const rows = [identity({ address: 'l@x.be', displayName: later }),
-      identity({ address: 'e@x.be', displayName: earlier })]
-    expect(sortIdentities(rows).map(i => i.displayName)).toEqual([earlier, later])
+  // The star marks the default on its tile; the order stays purely by name.
+  it('does not float the default to the top', () => {
+    const rows = [
+      identity({ address: 'z@x.be', displayName: 'Zed', isDefault: true }),
+      identity({ address: 'a@x.be', displayName: 'Amy' }),
+    ]
+    expect(sortIdentities(rows).map(i => i.displayName)).toEqual(['Amy', 'Zed'])
   })
 
   it('treats labels differing only in case as equal', () => {
