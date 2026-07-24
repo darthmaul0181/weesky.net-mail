@@ -9,6 +9,7 @@ import MailOpenIcon from '../../../icons/MailOpenIcon'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
 import SearchIcon from '../../../icons/SearchIcon'
+import StarIcon from '../../../icons/StarIcon'
 
 export interface ToolbarAction {
   onRun: () => void
@@ -32,6 +33,11 @@ export interface SelectionToolbarProps {
   emptyFolder: ToolbarAction
   searchOpen: boolean
   onToggleSearch: () => void
+  /** The folder's starred filter, which is a search on this folder carrying `flagged`. */
+  starred: boolean
+  onToggleStarred: () => void
+  /** Switching it on needs a folder to search; switching it off never does. */
+  starredDisabled?: boolean
   /** All-folders results: rows carry no checkbox, so the master must not promise one. */
   selectionDisabled?: boolean
 }
@@ -88,7 +94,21 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         onChange={onToggleAll}
         disabled={props.selectionDisabled}
       />
-      <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
+      <span className="selection-heading">
+        <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
+        {/* Beside the name rather than in the actions: it filters the view, it acts on nothing. */}
+        <button
+          type="button"
+          className={`selection-btn selection-star${props.starred ? ' is-active' : ''}`}
+          aria-label={props.starred ? 'Show all messages' : 'Show starred only'}
+          title={props.starred ? 'Show all messages' : 'Show starred only'}
+          aria-pressed={props.starred}
+          disabled={props.starredDisabled}
+          onClick={props.onToggleStarred}
+        >
+          <StarIcon size={18} filled={props.starred} />
+        </button>
+      </span>
       <div className="selection-actions">
         <button type="button" className="selection-btn" aria-label="Archive" {...actionProps(props.archive, 'Archive')}>
           <ArchiveIcon size={20} />

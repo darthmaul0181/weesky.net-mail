@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { criteriaFromForm, daysSinceYearStart, isEmptyCriteria, labelOf } from './searchCriteria'
-import type { AdvancedForm } from './searchCriteria'
+import {
+  criteriaFromForm, daysSinceYearStart, isEmptyCriteria, isStarredOnly, labelOf,
+} from './searchCriteria'
+import type { AdvancedForm, SearchCriteria } from './searchCriteria'
 
 const blankForm: AdvancedForm = {
   from: '', to: '', subject: '', text: '',
@@ -65,5 +67,37 @@ describe('daysSinceYearStart', () => {
         - Date.UTC(now.getFullYear(), 0, 1)) / 86_400_000,
     ) + 1
     expect(daysSinceYearStart(now)).toBe(calendarDayOfYear)
+  })
+})
+
+/** The star toggle in the list heading writes exactly this shape, and the results banner keys
+    off it: the lit star is the whole indication, so no banner replaces the folder name. */
+describe('isStarredOnly', () => {
+  const starred: SearchCriteria = { folderPath: 'INBOX', allFolders: false, flagged: true }
+
+  it('holds for the toggle on its own', () => {
+    expect(isStarredOnly(starred)).toBe(true)
+  })
+
+  it('fails as soon as another criterion joins', () => {
+    expect(isStarredOnly({ ...starred, quick: 'invoice' })).toBe(false)
+    expect(isStarredOnly({ ...starred, unread: true })).toBe(false)
+    expect(isStarredOnly({ ...starred, hasAttachment: true })).toBe(false)
+    expect(isStarredOnly({ ...starred, sinceDays: 7 })).toBe(false)
+    expect(isStarredOnly({ ...starred, from: 'alice@example.org' })).toBe(false)
+  })
+
+  // Across every folder there is no folder name to keep, and the count is worth showing.
+  it('fails for an all-folders search', () => {
+    expect(isStarredOnly({ ...starred, allFolders: true })).toBe(false)
+  })
+
+  it('fails when nothing is starred at all', () => {
+    expect(isStarredOnly({ folderPath: 'INBOX', allFolders: false, unread: true })).toBe(false)
+  })
+
+  // Whitespace is not a criterion: the form trims, but a hand-built object may not.
+  it('ignores blank text fields', () => {
+    expect(isStarredOnly({ ...starred, subject: '   ' })).toBe(true)
   })
 })

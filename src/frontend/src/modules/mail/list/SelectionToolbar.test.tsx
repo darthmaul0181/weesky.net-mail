@@ -9,7 +9,8 @@ function props(over: Partial<SelectionToolbarProps> = {}): SelectionToolbarProps
     overCap: false, deleteLabel: 'Delete',
     archive: { ...noop }, junk: { ...noop }, del: { ...noop }, move: { ...noop }, copy: { ...noop },
     markRead: { ...noop }, markUnread: { ...noop }, emptyFolder: { ...noop },
-    searchOpen: false, onToggleSearch: vi.fn(), ...over,
+    searchOpen: false, onToggleSearch: vi.fn(),
+    starred: false, onToggleStarred: vi.fn(), ...over,
   }
 }
 
@@ -135,6 +136,34 @@ describe('SelectionToolbar', () => {
   it('marks the magnifier active while the bar is open', () => {
     render(<SelectionToolbar {...props({ searchOpen: true })} />)
     expect(screen.getByRole('button', { name: 'Search' }).className).toContain('is-active')
+  })
+
+  // A one-click filter beside the folder name, so it never goes through the kebab. Its label
+  // names the action to come, like the reader's colour toggle.
+  it('offers the starred filter beside the folder name', () => {
+    const onToggleStarred = vi.fn()
+    render(<SelectionToolbar {...props({ onToggleStarred })} />)
+
+    const star = screen.getByRole('button', { name: 'Show starred only' })
+    expect(star).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(star)
+
+    expect(onToggleStarred).toHaveBeenCalledOnce()
+  })
+
+  it('shows the filter as on, offering the way back', () => {
+    render(<SelectionToolbar {...props({ starred: true })} />)
+
+    const star = screen.getByRole('button', { name: 'Show all messages' })
+    expect(star).toHaveAttribute('aria-pressed', 'true')
+    expect(star.className).toContain('is-active')
+  })
+
+  // Turning it on needs a folder to search; turning it off never does.
+  it('disables the filter only when it is off and there is no folder', () => {
+    render(<SelectionToolbar {...props({ starredDisabled: true })} />)
+
+    expect(screen.getByRole('button', { name: 'Show starred only' })).toBeDisabled()
   })
 
   it('disables the master checkbox when selection is disabled', () => {

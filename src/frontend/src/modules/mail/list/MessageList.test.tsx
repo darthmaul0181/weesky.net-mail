@@ -1173,3 +1173,77 @@ describe('MessageList searching', () => {
     expect(entry).not.toHaveAttribute('title', 'This folder is already empty')
   })
 })
+
+/** The one-click filter in the heading. It is a search on this folder carrying `flagged`, so
+    the rows keep their checkbox, their own star and their drag — a same-folder search is not
+    neutralised the way an all-folders one is. */
+describe('MessageList starred filter', () => {
+  const starred = { folderPath: 'INBOX', allFolders: false, flagged: true }
+  const page = (data: unknown) => ({ data, isLoading: false, isError: false })
+  const results = [{
+    uid: 10, subject: 'First hit', fromName: 'Carol', fromAddress: 'carol@x.be',
+    date: '2026-07-20T09:00:00Z', seen: true, flagged: true, answered: false,
+    hasAttachments: false, size: 10, preview: '', folderPath: 'INBOX', uidValidity: 1,
+  }, {
+    uid: 11, subject: 'Second hit', fromName: 'Dave', fromAddress: 'dave@x.be',
+    date: '2026-07-19T09:00:00Z', seen: true, flagged: true, answered: false,
+    hasAttachments: false, size: 10, preview: '', folderPath: 'INBOX', uidValidity: 1,
+  }]
+
+  it('starts a starred search on this folder', () => {
+    const onSearchChange = vi.fn()
+    renderList({ onSearchChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show starred only' }))
+
+    expect(onSearchChange).toHaveBeenCalledWith(starred)
+  })
+
+  it('clears the search when the filter was all there was', () => {
+    const onSearchChange = vi.fn()
+    mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
+    renderList({ search: starred, onSearchChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all messages' }))
+
+    expect(onSearchChange).toHaveBeenCalledWith(null)
+  })
+
+  // Switching the star off must not throw away the rest of an advanced search.
+  it('drops only the flag from a richer search', () => {
+    const onSearchChange = vi.fn()
+    mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
+    renderList({ search: { ...starred, quick: 'invoice' }, onSearchChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all messages' }))
+
+    expect(onSearchChange).toHaveBeenCalledWith({ folderPath: 'INBOX', allFolders: false, quick: 'invoice' })
+  })
+
+  it('adds the flag to a search already running', () => {
+    const onSearchChange = vi.fn()
+    mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
+    renderList({ search: { folderPath: 'INBOX', allFolders: false, quick: 'invoice' }, onSearchChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show starred only' }))
+
+    expect(onSearchChange).toHaveBeenCalledWith({ folderPath: 'INBOX', allFolders: false, quick: 'invoice', flagged: true })
+  })
+
+  // The lit star already says what is going on, so the heading keeps the folder name.
+  it('keeps the folder name and shows no banner while the filter stands alone', () => {
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    renderList({ search: starred, folderName: 'Inbox' })
+
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/results?/)).not.toBeInTheDocument()
+  })
+
+  it('brings the banner back as soon as another criterion joins', () => {
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    renderList({ search: { ...starred, quick: 'x' }, folderName: 'Inbox' })
+
+    expect(screen.getByText('2 results for “x”')).toBeInTheDocument()
+  })
+})

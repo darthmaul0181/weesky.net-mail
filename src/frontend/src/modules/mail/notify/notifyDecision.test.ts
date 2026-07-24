@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { MailMessageSummary } from '../api/mailTypes'
-import { newSince, notifyBody, notifyDecision } from './notifyDecision'
+import { allArrivalsRead, newSince, notifyBody, notifyDecision } from './notifyDecision'
 
 const both = { sound: true, desktop: true }
 
@@ -100,5 +100,30 @@ describe('notifyBody', () => {
 
   it('counts when the fetch found fewer messages than arrived', () => {
     expect(notifyBody([message(11, 'Alice Dupont', 'Lunch?')], 2)).toBe('2 new messages')
+  })
+})
+
+/** Moving a message into the inbox appends it with a fresh uid, so uidNext advances just as it
+    does for delivery. The read flags are the only thing that separates the two. */
+describe('allArrivalsRead', () => {
+  const read = (uid: number): MailMessageSummary => ({ ...message(uid), seen: true })
+
+  it('holds when the whole batch arrived already read', () => {
+    expect(allArrivalsRead([read(10)], 1)).toBe(true)
+    expect(allArrivalsRead([read(11), read(10)], 2)).toBe(true)
+  })
+
+  it('fails as soon as one arrival is unread', () => {
+    expect(allArrivalsRead([read(11), message(10)], 2)).toBe(false)
+  })
+
+  // A partial page says nothing about the arrivals it did not carry, so it may not buy silence.
+  it('fails when the page held fewer arrivals than arrived', () => {
+    expect(allArrivalsRead([read(10)], 3)).toBe(false)
+  })
+
+  // The fetch failing leaves no flags to judge: announcing beats swallowing real mail.
+  it('fails when the fetch found nothing', () => {
+    expect(allArrivalsRead([], 1)).toBe(false)
   })
 })

@@ -31,12 +31,11 @@
 
 .mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
 
-/* One band: the create shortcut, then the account block that takes the rest. */
+/* The account block, and nothing else: folder creation lives on the settings page. */
 .mail-folders-footer {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
   padding: 7px 9px;
   border-top: 1px solid var(--border);
 }
@@ -381,8 +380,17 @@
 
 .selection-master { flex: none; }
 
-.selection-title {
+/* The name and its filter travel together, so the star sits against the name rather than
+   drifting to the actions on the far side. */
+.selection-heading {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.selection-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

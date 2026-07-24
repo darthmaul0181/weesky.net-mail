@@ -3,10 +3,9 @@ import { useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import type { SearchCriteria } from './list/searchCriteria'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
-import FolderDialogs from './folders/FolderDialogs'
 import { flatten } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
-import PaperPlaneIcon from '../../icons/PaperPlaneIcon'
+import RocketIcon from '../../icons/RocketIcon'
 import IdentityMenu from '../../layouts/IdentityMenu'
 import MessageList from './list/MessageList'
 import { nextUidOf } from './list/nextUid'
@@ -190,7 +189,7 @@ export default function MailLayout() {
       <div className="mail-folders">
         <div className="mail-folders-compose">
           <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
-            <PaperPlaneIcon size={15} /> New message
+            <RocketIcon size={15} /> New message
           </button>
         </div>
         <div className="mail-folders-scroll">
@@ -202,9 +201,8 @@ export default function MailLayout() {
           )}
         </div>
 
-        {/* The account block shows even while the tree loads; creating needs the tree first. */}
+        {/* Shows even while the tree loads: the account block does not depend on it. */}
         <div className="mail-folders-footer">
-          {folders && <FolderDialogs folders={folders} selectedPath={folder} onNotify={addToast} />}
           <IdentityMenu />
         </div>
       </div>

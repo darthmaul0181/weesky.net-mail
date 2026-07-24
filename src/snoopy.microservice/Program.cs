@@ -40,6 +40,9 @@ builder.Host.UseSerilog((ctx, cfg) =>
     cfg
         .MinimumLevel.Information()
         .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+        // EF Core logs every executed statement at Information, which buried the log under SQL.
+        // Warning keeps command failures, which it logs at Error under this same category.
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
         .Enrich.FromLogContext()
         .WriteTo.Logger(l => l
             .Filter.ByIncludingOnly(Matching.FromSource(requestLoggerSource))

@@ -16,7 +16,7 @@ import AdvancedSearchModal from './AdvancedSearchModal'
 import EmptyFolderBanner from './EmptyFolderBanner'
 import SearchBar from './SearchBar'
 import SearchResultsBanner from './SearchResultsBanner'
-import { criteriaFromForm, labelOf } from './searchCriteria'
+import { criteriaFromForm, isEmptyCriteria, isStarredOnly, labelOf } from './searchCriteria'
 import type { AdvancedForm, SearchCriteria } from './searchCriteria'
 import { DRAG_MIME, dragUids, serializeDrag } from './dragMessages'
 import { buildDragPill } from './dragImage'
@@ -77,6 +77,7 @@ export default function MessageList(
   const searchQuery = useSearchMessages(search, searchPage, searchSize)
   const searching = search !== null
   const crossFolder = searching && search.allFolders
+  const starred = searching && search.flagged === true
 
   // One shape for the render, whichever source fills it — rows/pager/footer never learn which.
   const view = searching
@@ -262,6 +263,19 @@ export default function MessageList(
 
   function quickSearch(text: string) {
     if (folderPath) onSearchChange({ folderPath, allFolders: false, quick: text })
+  }
+
+  /** The star writes the same `flagged` criterion the advanced form's checkbox does, on the
+      search already running when there is one — so the two are one state, not two filters. */
+  function toggleStarred() {
+    if (search?.flagged) {
+      const rest: SearchCriteria = { ...search }
+      delete rest.flagged
+      onSearchChange(isEmptyCriteria(rest) ? null : rest)
+      return
+    }
+    if (search) { onSearchChange({ ...search, flagged: true }); return }
+    if (folderPath) onSearchChange({ folderPath, allFolders: false, flagged: true })
   }
 
   function advancedSearch(form: AdvancedForm) {
@@ -465,6 +479,9 @@ export default function MessageList(
           disabledReason: searching ? 'Clear the search first' : emptyReason }}
         searchOpen={searchOpen}
         onToggleSearch={toggleSearch}
+        starred={starred}
+        onToggleStarred={toggleStarred}
+        starredDisabled={!starred && !folderPath}
         selectionDisabled={crossFolder}
       />
 
@@ -477,7 +494,9 @@ export default function MessageList(
         />
       )}
 
-      {searching && (
+      {/* The lit star is the whole indication when it stands alone, so the heading keeps the
+          folder name; any other criterion hands it back to the banner. */}
+      {searching && !isStarredOnly(search) && (
         <SearchResultsBanner
           total={searchQuery.data?.total ?? null}
           label={labelOf(search)}

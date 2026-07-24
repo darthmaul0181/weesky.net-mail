@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSendMessage } from '../queries'
-import PaperPlaneIcon from '../../../icons/PaperPlaneIcon'
+import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
 import RecipientsField, { isValidAddress } from './RecipientsField'
@@ -104,7 +104,7 @@ export default function ComposeView({ onNotify }: Props) {
       <div className="compose-header">
         <span className="modal-title">New message</span>
         <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
-          <PaperPlaneIcon size={15} /> {send.isPending ? 'Sending…' : 'Send'}
+          <RocketIcon size={15} /> {send.isPending ? 'Sending…' : 'Send'}
         </button>
         <button className="modal-close" aria-label="Close" onClick={close}>✕</button>
       </div>

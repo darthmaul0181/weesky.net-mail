@@ -8,12 +8,14 @@ import { flatten } from '../folders/folderNodes'
 import { snapshotOf, uidValidityBroke, type FolderSnapshot } from '../list/folderDelta'
 import { useAccountId, useFolders } from '../queries'
 import { claimNotification, playNewMailSound, showDesktopNotification } from './channels'
-import { newSince, notifyBody, notifyDecision } from './notifyDecision'
+import { allArrivalsRead, newSince, notifyBody, notifyDecision } from './notifyDecision'
 
 interface Described {
   body: string
   /** The message to open on click, when exactly one arrived and was found. */
   uid: number | null
+  /** Every arrival was already read: a message moved into the inbox, not new mail. */
+  silent: boolean
 }
 
 /** A baseline is comparable only against the same account and the same inbox folder: carried
@@ -24,8 +26,9 @@ interface Baseline {
   snapshot: FolderSnapshot
 }
 
-/** Names the arrivals if it can. The count is already known; this only improves the wording,
-    so any failure falls back to counting rather than surfacing. */
+/** Names the arrivals if it can, and reports a batch that turned out to be already read. The
+    count is already known; a failure falls back to counting, and announces rather than guessing
+    at flags it could not read. */
 async function describeArrivals(
   folder: string, size: number, sinceUid: number, count: number, signal: AbortSignal,
 ): Promise<Described> {
@@ -35,9 +38,10 @@ async function describeArrivals(
     return {
       body: notifyBody(arrivals, count),
       uid: count === 1 && arrivals.length === 1 ? arrivals[0].uid : null,
+      silent: allArrivalsRead(arrivals, count),
     }
   } catch {
-    return { body: notifyBody([], count), uid: null }
+    return { body: notifyBody([], count), uid: null, silent: false }
   }
 }
 
@@ -100,10 +104,11 @@ export function useMailNotifications(): void {
     const controller = new AbortController()
     void describeArrivals(
       inbox.path, requestSizeOf(preferences), decision.sinceUid, decision.count, controller.signal,
-    ).then(({ body, uid }) => {
-      // Unmount is the only reason to stay silent: the claim is already banked, so an aborted
-      // fetch still announces, with describeArrivals' count fallback rather than a name.
-      if (!mounted.current) return
+    ).then(({ body, uid, silent }) => {
+      // Two reasons to hold back: the hook is gone, or the batch turned out to be mail moved in
+      // rather than delivered. An aborted fetch still announces, with the count fallback.
+      // The claim is banked either way, which is what keeps the other tab quiet too.
+      if (!mounted.current || silent) return
 
       if (sound) playNewMailSound()
       if (!desktop) return

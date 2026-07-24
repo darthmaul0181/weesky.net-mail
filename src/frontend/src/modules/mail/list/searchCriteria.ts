@@ -36,6 +36,19 @@ export function isEmptyCriteria(criteria: SearchCriteria): boolean {
     && !criteria.unread && !criteria.flagged && !criteria.hasAttachment
 }
 
+/**
+ * What the list heading's star toggle writes on its own: this folder, starred, nothing else.
+ * The lit star is the whole indication, so the heading keeps the folder name instead of handing
+ * it to the results banner — until another criterion joins, or the search spans every folder,
+ * where there is no folder name to keep and the count is worth showing.
+ */
+export function isStarredOnly(criteria: SearchCriteria): boolean {
+  return criteria.flagged === true
+    && !criteria.allFolders
+    && TEXT_FIELDS.every(field => !criteria[field]?.trim())
+    && !criteria.sinceDays && !criteria.unread && !criteria.hasAttachment
+}
+
 /** The text the results banner quotes — TEXT_FIELDS order, so the fast bar wins. */
 export function labelOf(criteria: SearchCriteria): string | null {
   for (const field of TEXT_FIELDS) {

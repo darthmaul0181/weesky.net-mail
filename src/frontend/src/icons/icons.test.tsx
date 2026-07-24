@@ -20,6 +20,8 @@ import CopyIcon from './CopyIcon'
 import JunkIcon from './JunkIcon'
 import ShieldCheckIcon from './ShieldCheckIcon'
 import ShieldAlertIcon from './ShieldAlertIcon'
+import RocketIcon from './RocketIcon'
+import SignOutIcon from './SignOutIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -42,6 +44,8 @@ const icons = [
   { name: 'JunkIcon', Icon: JunkIcon, defaultSize: '16' },
   { name: 'ShieldCheckIcon', Icon: ShieldCheckIcon, defaultSize: '16' },
   { name: 'ShieldAlertIcon', Icon: ShieldAlertIcon, defaultSize: '16' },
+  { name: 'RocketIcon', Icon: RocketIcon, defaultSize: '15' },
+  { name: 'SignOutIcon', Icon: SignOutIcon, defaultSize: '15' },
 ]
 
 describe('icons', () => {

@@ -42,13 +42,13 @@ function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {
   }
 }
 
-function pageOf(uids: number[]) {
+function pageOf(uids: number[], overrides: { seen?: boolean } = {}) {
   return {
     folderPath: 'INBOX', uidValidity: 100, total: 5, page: 0, pageSize: uids.length,
     messages: uids.map(uid => ({
       uid, subject: `Subject ${uid}`, fromName: `Sender ${uid}`, fromAddress: 'a@b.c',
       date: '2026-07-21T00:00:00Z', seen: false, flagged: false, answered: false,
-      hasAttachments: false, size: 0, preview: '',
+      hasAttachments: false, size: 0, preview: '', ...overrides,
     })),
   }
 }
@@ -110,6 +110,32 @@ describe('useMailNotifications', () => {
     client = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     })
+  })
+
+  // Moving a message into the inbox appends it with a fresh uid, so uidNext advances exactly as
+  // it does for real delivery. An already-read one is not new mail and must not ring.
+  it('stays silent when every arrival is already read', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([10], { seen: true }))
+    const { tick } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ uidNext: 11, total: 6 }))
+    await settle()
+
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+  })
+
+  // Silence is only safe when the page held every arrival: read messages among a partial page
+  // say nothing about the ones it did not carry.
+  it('still rings when the read arrivals are only part of the batch', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([10], { seen: true }))
+    const { tick } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ uidNext: 13, total: 8 }))
+    await settle()
+
+    expect(mocks.playNewMailSound).toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).toHaveBeenCalled()
   })
 
   it('says nothing on the baseline observation', async () => {

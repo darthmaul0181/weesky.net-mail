@@ -33,6 +33,16 @@ export function newSince(messages: MailMessageSummary[], sinceUid: number): Mail
   return messages.filter(message => message.uid >= sinceUid)
 }
 
+/**
+ * A message moved into the inbox is appended with a fresh uid, so uidNext advances exactly as it
+ * does for real delivery — only the flags tell the two apart, and an already-read arrival is not
+ * new mail. Silence a batch only when the fetched page carried it whole: read messages among a
+ * partial page say nothing about the arrivals it did not hold.
+ */
+export function allArrivalsRead(arrivals: MailMessageSummary[], count: number): boolean {
+  return arrivals.length === count && arrivals.every(message => message.seen)
+}
+
 export function notifyBody(messages: MailMessageSummary[], count: number): string {
   if (count === 1 && messages.length === 1) {
     const [message] = messages
