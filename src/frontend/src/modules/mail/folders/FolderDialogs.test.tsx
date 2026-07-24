@@ -30,23 +30,22 @@ function renderDialogs(onNotify = vi.fn()) {
   return onNotify
 }
 
-describe('the folder column actions', () => {
+describe('the folder column create shortcut', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  // Icons with no visible text: the accessible name is the only name they have.
-  it('names both icon actions', () => {
+  // An icon with no visible text: the accessible name is the only name it has.
+  it('names the icon action', () => {
     renderDialogs()
 
     expect(screen.getByRole('button', { name: 'New folder' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Manage folders' })).toBeInTheDocument()
   })
 
-  // Creating is a quick action; managing needs width a 240px column does not have.
-  it('sends Manage folders to the folders settings page', () => {
+  // Managing moved out with the old footer: it needs width a 240px column does not have, and
+  // now lives only on the settings page the rail's gear leads to.
+  it('no longer offers a manage-folders link', () => {
     renderDialogs()
 
-    expect(screen.getByRole('link', { name: 'Manage folders' }))
-      .toHaveAttribute('href', '/settings/folders')
+    expect(screen.queryByRole('link', { name: 'Manage folders' })).not.toBeInTheDocument()
   })
 
   it('opens nothing until New folder is clicked', () => {

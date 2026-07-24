@@ -1,10 +1,10 @@
 /* Palette "night" — Nuit & corail (default). */
 [data-palette='night'] {
-  --bg: #f1ece6;
+  --bg: #f6f3ef;
   --folders-bg: #e7eaf1;
   --folders-item-hover: #d9dfec;
-  --surface: #faf7f2;
-  --surface-raised: #faf7f2;
+  --surface: #fdfbf8;
+  --surface-raised: #fdfbf8;
   --surface-sunken: #f4f1ee;
   --border: #e5e0da;
   --text: #1c1a18;

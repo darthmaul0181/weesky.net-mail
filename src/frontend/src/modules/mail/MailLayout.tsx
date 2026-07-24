@@ -7,6 +7,7 @@ import FolderDialogs from './folders/FolderDialogs'
 import { flatten } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
 import PaperPlaneIcon from '../../icons/PaperPlaneIcon'
+import IdentityMenu from '../../layouts/IdentityMenu'
 import MessageList from './list/MessageList'
 import { nextUidOf } from './list/nextUid'
 import { useListRefresh } from './list/useListRefresh'
@@ -201,11 +202,11 @@ export default function MailLayout() {
           )}
         </div>
 
-        {folders && (
-          <div className="mail-folders-footer">
-            <FolderDialogs folders={folders} selectedPath={folder} onNotify={addToast} />
-          </div>
-        )}
+        {/* The account block shows even while the tree loads; creating needs the tree first. */}
+        <div className="mail-folders-footer">
+          {folders && <FolderDialogs folders={folders} selectedPath={folder} onNotify={addToast} />}
+          <IdentityMenu />
+        </div>
       </div>
 
       {/* Composing takes the whole list+reader side; the folder tree stays where it was. */}

@@ -8,11 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "deploy": "tar --exclude=node_modules -cf - -C D:/development/repos/weesky.net-mail/src/frontend . | ssh root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/account.frontend\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src",
-    "ship": "npm run build && npm run deploy"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",

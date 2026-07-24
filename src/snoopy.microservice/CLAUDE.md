@@ -15,7 +15,7 @@ dotnet test --no-build          # Run tests without recompiling (safe only when 
 
 Tests live in the `snoopy.microservice.Tests` sub-project (xUnit 2.9.3, Moq 4.20.72, EF Core InMemory). Repository tests use a per-test in-memory database via `TestDbContext`. Controller tests use `Moq` and `ControllerTestHelpers.CreateAuthenticatedContext`.
 
-Release procedure lives in the `ship-microservice` skill (`.claude/skills/ship-microservice/SKILL.md` at the repo root) — invoked by the user saying "ship the microservice", "déploie le backend", or `/ship-microservice`. A separate `ship-frontend` skill will handle the frontend release.
+**Pushing deploys — there is no manual release step.** `.github/workflows/deploy.yml` runs on every push: it detects that `src/snoopy.microservice/**` changed, runs the backend CI, and deploys over SSH only if CI passed. The target environment follows the branch — `prod` on `master`, `dev` on anything else. The former `ship-microservice` skill and its manual procedure are gone.
 
 ## Architecture
 

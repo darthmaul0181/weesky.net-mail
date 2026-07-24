@@ -1,6 +1,6 @@
 /* Palette "ink" — Ink. */
 [data-palette='ink'] {
-  --bg:#ededf0; --folders-bg:#e9ebf0; --folders-item-hover:#dbdee7; --surface:#f9f9fb; --surface-raised:#f9f9fb; --surface-sunken:#efeff1;
+  --bg:#f2f2f4; --folders-bg:#e9ebf0; --folders-item-hover:#dbdee7; --surface:#fcfcfd; --surface-raised:#fcfcfd; --surface-sunken:#efeff1;
   --border:#dcdcdf; --text:#131315; --text-muted:#67676e;
   --topbar-bg:#131315; --topbar-fg:#ffffff; --rail-bg:#131315; --rail-fg:#a9a9b0;
   --rail-item:#26262a; --rail-item-active:#2563eb; --rail-item-active-fg:#ffffff;

@@ -1,6 +1,6 @@
 /* Palette "slate" — Slate & teal. */
 [data-palette='slate'] {
-  --bg:#e9edef; --folders-bg:#e0e8ea; --folders-item-hover:#d1dde0; --surface:#f8fafb; --surface-raised:#f8fafb; --surface-sunken:#eceff1;
+  --bg:#eff2f3; --folders-bg:#e0e8ea; --folders-item-hover:#d1dde0; --surface:#fbfcfd; --surface-raised:#fbfcfd; --surface-sunken:#eceff1;
   --border:#d9dee1; --text:#171b1e; --text-muted:#626d73;
   --topbar-bg:#2b3a41; --topbar-fg:#ffffff; --rail-bg:#2b3a41; --rail-fg:#b3c3c9;
   --rail-item:#3a4d55; --rail-item-active:#0f7d78; --rail-item-active-fg:#ffffff;

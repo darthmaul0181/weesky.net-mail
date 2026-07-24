@@ -21,7 +21,7 @@ describe('AppearancePage', () => {
 
   it('changes the palette', () => {
     render(<ThemeProvider><AppearancePage /></ThemeProvider>)
-    fireEvent.click(screen.getByLabelText('Classic'))
+    fireEvent.click(screen.getByLabelText('Sea breeze'))
     expect(document.documentElement.getAttribute('data-palette')).toBe('classic')
     expect(localStorage.getItem('appearance_palette')).toBe('classic')
   })
@@ -29,7 +29,7 @@ describe('AppearancePage', () => {
   it('offers every palette the app knows, in order', () => {
     render(<ThemeProvider><AppearancePage /></ThemeProvider>)
 
-    const radios = screen.getAllByRole('radio', { name: /Night|Classic|Forest|Slate|Plum|Ink/ })
+    const radios = screen.getAllByRole('radio', { name: /Night|Sea breeze|Forest|Slate|Plum|Ink/ })
     expect(radios.map(r => (r as HTMLInputElement).value))
       .toEqual(['night', 'classic', 'forest', 'slate', 'plum', 'ink'])
     expect(new Set(radios.map(r => (r as HTMLInputElement).value)))

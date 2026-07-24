@@ -8,7 +8,7 @@ const THEMES: { value: ThemePreference; label: string }[] = [
 
 const PALETTES: { value: Palette; label: string }[] = [
   { value: 'night', label: 'Night & coral (default)' },
-  { value: 'classic', label: 'Classic' },
+  { value: 'classic', label: 'Sea breeze' },
   { value: 'forest', label: 'Forest & amber' },
   { value: 'slate', label: 'Slate & teal' },
   { value: 'plum', label: 'Plum & gold' },

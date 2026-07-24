@@ -1,6 +1,6 @@
 /* Palette "plum" — Plum & gold. */
 [data-palette='plum'] {
-  --bg:#efe9ef; --folders-bg:#ede2ed; --folders-item-hover:#e0d1e0; --surface:#fbf8fb; --surface-raised:#fbf8fb; --surface-sunken:#f1ebf1;
+  --bg:#f4f0f4; --folders-bg:#ede2ed; --folders-item-hover:#e0d1e0; --surface:#fdfcfd; --surface-raised:#fdfcfd; --surface-sunken:#f1ebf1;
   --border:#e3d9e3; --text:#1f1a1f; --text-muted:#6d626d;
   --topbar-bg:#3a2140; --topbar-fg:#ffffff; --rail-bg:#3a2140; --rail-fg:#c9b6cd;
   --rail-item:#4d2e54; --rail-item-active:#c9962b; --rail-item-active-fg:#1c1405;

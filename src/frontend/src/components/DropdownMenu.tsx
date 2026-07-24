@@ -17,7 +17,7 @@ interface Props {
   className?: string
 }
 
-/** Click-toggled dropdown on the AvatarMenu pattern: outside mousedown and Escape close it. */
+/** Click-toggled dropdown on the IdentityMenu pattern: outside mousedown and Escape close it. */
 export default function DropdownMenu({ ariaLabel, trigger, items, className }: Props) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)

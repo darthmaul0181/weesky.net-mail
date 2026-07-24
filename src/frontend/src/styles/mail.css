@@ -31,11 +31,13 @@
 
 .mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
 
+/* One band: the create shortcut, then the account block that takes the rest. */
 .mail-folders-footer {
   flex: none;
   display: flex;
-  gap: 4px;
-  padding: 8px 10px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
   border-top: 1px solid var(--border);
 }
 
@@ -207,8 +209,6 @@
 .folder-toggle-spacer { width: 14px; flex: none; }
 
 /* ── Folder management ───────────────────────────────────── */
-
-.folder-actions { display: flex; gap: 4px; }
 
 /* Icon-sized hit target, used both in the column footer and in the manage rows. */
 .folder-action {

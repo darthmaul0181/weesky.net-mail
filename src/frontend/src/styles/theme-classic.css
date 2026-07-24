@@ -1,10 +1,11 @@
-/* Palette "classic" — Continuité (the current weesky admin look). */
+/* Palette "classic" — shown as "Sea breeze". The id stays `classic`: stored preferences, the
+   pre-paint script in index.html and this file name all key off it. */
 [data-palette='classic'] {
-  --bg: #e4e9f0;
+  --bg: #eaeef3;
   --folders-bg: #e6ecf6;
   --folders-item-hover: #dce5f4;
-  --surface: #f7fafd;
-  --surface-raised: #f7fafd;
+  --surface: #fbfdfe;
+  --surface-raised: #fbfdfe;
   --surface-sunken: #edf1f7;
   --border: #dde1e7;
   --text: #1a1d23;

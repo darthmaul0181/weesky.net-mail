@@ -85,55 +85,90 @@
 .topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
 .topbar-wordmark { height: 16px; }
 
-.avatar-menu-root { position: relative; }
-
-.topbar-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--topbar-fg);
-  font-weight: 600;
-  font-size: 12px;
+/* ── Account block, at the foot of the folder column ──────────────────────── */
+/* It sits at the bottom of the screen, so its menu opens upward — inside the column, which is
+   overflow:hidden, the way .dropdown-menu opens downward inside the list. */
+.identity-root {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
-.avatar-menu {
+.identity-pill {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.identity-text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.identity-name,
+.identity-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-name { font-size: 12px; font-weight: 650; color: var(--text); }
+.identity-email { font-size: 11px; color: var(--text-muted); }
+
+.identity-toggle {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+.identity-toggle:hover { background: var(--folders-item-hover); }
+/* The chevron points at the motion to come: up to open, down to close again. */
+.identity-toggle svg { transform: rotate(-90deg); transition: transform 0.15s; }
+.identity-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
+
+.identity-menu {
   position: absolute;
-  top: 38px;
+  left: 0;
   right: 0;
-  min-width: 240px;
-  background: var(--surface);
-  color: var(--text);
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  z-index: 50;
+  overflow: hidden;
 }
 
-.avatar-menu-identity { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-.avatar-menu-name { font-weight: 600; }
-.avatar-menu-email { color: var(--text-muted); font-size: 12px; }
+.identity-account { padding: 7px 12px; font-size: 12.5px; color: var(--text); }
+.identity-account.is-active {
+  font-weight: 650;
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+}
 
-.avatar-menu-accounts { padding: 6px 0; border-bottom: 1px solid var(--border); }
-.avatar-menu-account { padding: 7px 14px; font-size: 13px; }
-.avatar-menu-account.is-active { font-weight: 600; }
-
-.avatar-menu-actions { display: flex; flex-direction: column; padding: 6px 0; }
-.avatar-menu-actions a,
-.avatar-menu-actions button {
-  text-align: left;
-  padding: 8px 14px;
-  background: none;
+.identity-signout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
   border: none;
+  border-top: 1px solid var(--border);
+  background: none;
   color: var(--text);
   font: inherit;
+  font-size: 12.5px;
+  text-align: left;
   cursor: pointer;
-  text-decoration: none;
 }
-.avatar-menu-actions a:hover,
-.avatar-menu-actions button:hover { background: var(--pane-item-hover); }
+.identity-signout:hover { background: var(--pane-item-hover); }
 
 .dropdown-root { position: relative; }
 

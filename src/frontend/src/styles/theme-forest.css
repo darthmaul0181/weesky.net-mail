@@ -1,6 +1,6 @@
 /* Palette "forest" — Forest & amber. */
 [data-palette='forest'] {
-  --bg:#ebeee5; --folders-bg:#e6ede2; --folders-item-hover:#d8e2d2; --surface:#f9fbf6; --surface-raised:#f9fbf6; --surface-sunken:#eef1ea;
+  --bg:#f1f3ec; --folders-bg:#e6ede2; --folders-item-hover:#d8e2d2; --surface:#fcfdfa; --surface-raised:#fcfdfa; --surface-sunken:#eef1ea;
   --border:#dde2d6; --text:#1a1f1a; --text-muted:#66705f;
   --topbar-bg:#1e3a2b; --topbar-fg:#ffffff; --rail-bg:#1e3a2b; --rail-fg:#b8ccbe;
   --rail-item:#2b4d3a; --rail-item-active:#d99a2b; --rail-item-active-fg:#1a1205;
