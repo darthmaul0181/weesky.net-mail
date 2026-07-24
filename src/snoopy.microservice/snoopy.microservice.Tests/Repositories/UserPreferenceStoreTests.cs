@@ -7,6 +7,9 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 
 public sealed class UserPreferenceStoreTests
 {
+    private static readonly Guid Alice = Guid.NewGuid();
+    private static readonly Guid Bob = Guid.NewGuid();
+
     // A database per test: the in-memory provider shares a store by name, so a shared one
     // would let one test see another's rows.
     private static UserPreferenceStore CreateStore(string dbName) =>
@@ -15,7 +18,7 @@ public sealed class UserPreferenceStoreTests
     [Fact]
     public async Task GetAsync_ReturnsNothingForAnAccountThatNeverSetOne()
     {
-        Assert.Empty(await CreateStore(Guid.NewGuid().ToString()).GetAsync("alice@weesky.be", CancellationToken.None));
+        Assert.Empty(await CreateStore(Guid.NewGuid().ToString()).GetAsync(Alice, CancellationToken.None));
     }
 
     [Fact]
@@ -24,9 +27,9 @@ public sealed class UserPreferenceStoreTests
         var db = Guid.NewGuid().ToString();
         var sut = CreateStore(db);
 
-        await sut.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "50", CancellationToken.None);
+        await sut.SetAsync(Alice, UserPreferences.MailPageSize, "50", CancellationToken.None);
 
-        var stored = await sut.GetAsync("alice@weesky.be", CancellationToken.None);
+        var stored = await sut.GetAsync(Alice, CancellationToken.None);
         Assert.Equal("50", Assert.Single(stored).PreferenceValue);
     }
 
@@ -38,10 +41,10 @@ public sealed class UserPreferenceStoreTests
         var db = Guid.NewGuid().ToString();
         var sut = CreateStore(db);
 
-        await sut.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "50", CancellationToken.None);
-        await sut.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "20", CancellationToken.None);
+        await sut.SetAsync(Alice, UserPreferences.MailPageSize, "50", CancellationToken.None);
+        await sut.SetAsync(Alice, UserPreferences.MailPageSize, "20", CancellationToken.None);
 
-        var stored = await sut.GetAsync("alice@weesky.be", CancellationToken.None);
+        var stored = await sut.GetAsync(Alice, CancellationToken.None);
         Assert.Equal("20", Assert.Single(stored).PreferenceValue);
     }
 
@@ -51,10 +54,10 @@ public sealed class UserPreferenceStoreTests
         var db = Guid.NewGuid().ToString();
         var sut = CreateStore(db);
 
-        await sut.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "50", CancellationToken.None);
-        await sut.SetAsync("bob@weesky.be", UserPreferences.MailPageSize, "10", CancellationToken.None);
+        await sut.SetAsync(Alice, UserPreferences.MailPageSize, "50", CancellationToken.None);
+        await sut.SetAsync(Bob, UserPreferences.MailPageSize, "10", CancellationToken.None);
 
-        var alice = await sut.GetAsync("alice@weesky.be", CancellationToken.None);
+        var alice = await sut.GetAsync(Alice, CancellationToken.None);
         Assert.Equal("50", Assert.Single(alice).PreferenceValue);
     }
 
@@ -63,9 +66,9 @@ public sealed class UserPreferenceStoreTests
     {
         var db = Guid.NewGuid().ToString();
 
-        await CreateStore(db).SetAsync("alice@weesky.be", UserPreferences.MailShowPreview, "false", CancellationToken.None);
+        await CreateStore(db).SetAsync(Alice, UserPreferences.MailShowPreview, "false", CancellationToken.None);
 
-        var stored = await CreateStore(db).GetAsync("alice@weesky.be", CancellationToken.None);
+        var stored = await CreateStore(db).GetAsync(Alice, CancellationToken.None);
         Assert.NotEqual(default, Assert.Single(stored).UpdatedAt);
     }
 }

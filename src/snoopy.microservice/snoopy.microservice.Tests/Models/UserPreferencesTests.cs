@@ -120,5 +120,5 @@ public sealed class UserPreferencesTests
     }
 
     private static UserPreference Row(string key, string value) =>
-        new() { AccountId = "alice@weesky.be", PreferenceKey = key, PreferenceValue = value };
+        new() { UserId = Guid.NewGuid(), PreferenceKey = key, PreferenceValue = value };
 }

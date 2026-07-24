@@ -33,8 +33,7 @@ public sealed class PreferencesController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<IReadOnlyDictionary<string, string>>> GetPreferences(CancellationToken cancellationToken)
     {
-        var stored = await _store.GetAsync(
-            FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+        var stored = await _store.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
 
         return Ok(UserPreferences.Effective(stored));
     }
@@ -57,8 +56,7 @@ public sealed class PreferencesController : ApiBaseController
             return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
                 $"'{request.Value}' is not a value '{request.Key}' accepts"));
 
-        await _store.SetAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email),
-            request.Key!, request.Value!, cancellationToken);
+        await _store.SetAsync(AuthenticatedUser.WebmailUid, request.Key!, request.Value!, cancellationToken);
 
         return StatusCode(StatusCodes.Status204NoContent);
     }

@@ -67,8 +67,7 @@ public sealed class MailController : ApiBaseController
         if (tree.IsFailure)
             return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
 
-        var overrides = await _roleStore.GetAsync(
-            FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+        var overrides = await _roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var roleByPath = FolderRoleResolver.Resolve(tree.Value, overrides).RoleByPath;
 
         if (roleByPath.TryGetValue(path, out var role))
@@ -112,7 +111,7 @@ public sealed class MailController : ApiBaseController
         // The tree's SpecialUse is the resolution chain's output, not raw discovery: a
         // user override reassigns the role, and the displaced folder shows under its own
         // name (spec § 4.1).
-        var overrides = await _roleStore.GetAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+        var overrides = await _roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var resolution = FolderRoleResolver.Resolve(result.Value, overrides);
         StampRoles(result.Value, resolution.RoleByPath);
 
@@ -269,7 +268,7 @@ public sealed class MailController : ApiBaseController
         if (tree.IsFailure)
             return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
 
-        var overrides = await _roleStore.GetAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), cancellationToken);
+        var overrides = await _roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var resolution = FolderRoleResolver.Resolve(tree.Value, overrides);
 
         return Ok(resolution.Roles);
@@ -316,8 +315,8 @@ public sealed class MailController : ApiBaseController
         if (!status.Value.Selectable)
             return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("This folder cannot hold messages"));
 
-        var accountId = FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email);
-        var overrides = await _roleStore.GetAsync(accountId, cancellationToken);
+        var userId = AuthenticatedUser.WebmailUid;
+        var overrides = await _roleStore.GetAsync(userId, cancellationToken);
 
         // Guard against the resolver's output, not the raw rows. A stored row whose folder
         // no longer resolves holds nothing — the resolver reports it stale and the Settings
@@ -335,7 +334,7 @@ public sealed class MailController : ApiBaseController
 
         await _roleStore.UpsertAsync(new FolderRoleOverride
         {
-            AccountId = accountId,
+            UserId = userId,
             Role = request.Role!,
             FolderPath = request.FolderPath,
             UidValidity = status.Value.UidValidity,
@@ -359,7 +358,7 @@ public sealed class MailController : ApiBaseController
     {
         if (!FolderRoles.IsValid(role)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Unknown folder role"));
 
-        await _roleStore.DeleteAsync(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), role!, cancellationToken);
+        await _roleStore.DeleteAsync(AuthenticatedUser.WebmailUid, role!, cancellationToken);
         return NoContent();
     }
 
@@ -683,8 +682,7 @@ public sealed class MailController : ApiBaseController
 
         await using var content = file.OpenReadStream();
         var result = await _staged.SaveAsync(
-            FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email),
-            file.FileName, file.ContentType, content, cancellationToken);
+            AuthenticatedUser.WebmailUid.ToString(), file.FileName, file.ContentType, content, cancellationToken);
 
         return FromResult(result);
     }
@@ -701,7 +699,7 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult DeleteAttachment(Guid id)
     {
-        _staged.Delete(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), id);
+        _staged.Delete(AuthenticatedUser.WebmailUid.ToString(), id);
         return NoContent();
     }
 

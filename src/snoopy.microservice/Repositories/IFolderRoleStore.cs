@@ -9,12 +9,12 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// </summary>
 public interface IFolderRoleStore
 {
-    Task<IReadOnlyList<FolderRoleOverride>> GetAsync(string accountId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FolderRoleOverride>> GetAsync(Guid userId, CancellationToken cancellationToken);
 
     Task UpsertAsync(FolderRoleOverride @override, CancellationToken cancellationToken);
 
     /// <summary>Idempotent: clearing an absent override is not an error.</summary>
-    Task DeleteAsync(string accountId, string role, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid userId, string role, CancellationToken cancellationToken);
 
     /// <summary>
     /// After a successful IMAP rename. The exact row gets the new path and the freshly
@@ -22,9 +22,9 @@ public interface IFolderRoleStore
     /// identity. The separator comes from the live session — '.' on the home server,
     /// '/' elsewhere — never from a constant.
     /// </summary>
-    Task ApplyRenameAsync(string accountId, string oldPath, string newPath, char separator,
+    Task ApplyRenameAsync(Guid userId, string oldPath, string newPath, char separator,
         ulong newUidValidity, string? newMailboxId, CancellationToken cancellationToken);
 
     /// <summary>After a successful IMAP delete: purge the folder's row and its subtree's.</summary>
-    Task RemoveSubtreeAsync(string accountId, string path, char separator, CancellationToken cancellationToken);
+    Task RemoveSubtreeAsync(Guid userId, string path, char separator, CancellationToken cancellationToken);
 }

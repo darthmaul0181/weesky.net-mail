@@ -14,55 +14,72 @@ public sealed class SendingIdentityStoreTests
         new() { Address = address, DisplayName = name, IsDefault = isDefault };
 
     [Fact]
-    public async Task Replace_WritesTheRowsUnderTheAccount()
+    public async Task Replace_WritesTheRowsUnderTheUser()
     {
-        var store = CreateStore(nameof(Replace_WritesTheRowsUnderTheAccount));
+        var db = nameof(Replace_WritesTheRowsUnderTheUser);
+        var user = Guid.NewGuid();
+        var store = CreateStore(db);
 
-        await store.ReplaceAsync("alice@weesky.be",
+        await store.ReplaceAsync(user,
             [Row("michel@weesky.be", "Michel", isDefault: true)], CancellationToken.None);
 
-        var rows = await store.GetAsync("alice@weesky.be", CancellationToken.None);
+        var rows = await CreateStore(db).GetAsync(user, CancellationToken.None);
         var row = Assert.Single(rows);
-        Assert.Equal("alice@weesky.be", row.AccountId);
+        Assert.Equal(user, row.UserId);
         Assert.Equal("michel@weesky.be", row.Address);
         Assert.Equal("Michel", row.DisplayName);
         Assert.True(row.IsDefault);
     }
 
     [Fact]
+    public async Task Replace_ThenGet_RoundTripsByUserId()
+    {
+        var db = nameof(Replace_ThenGet_RoundTripsByUserId);
+        var user = Guid.NewGuid();
+        await CreateStore(db).ReplaceAsync(user, [Row("a@weesky.be")], CancellationToken.None);
+
+        var rows = await CreateStore(db).GetAsync(user, CancellationToken.None);
+        Assert.Equal("a@weesky.be", Assert.Single(rows).Address);
+    }
+
+    [Fact]
     public async Task Replace_RemovesRowsAbsentFromTheNewSet()
     {
-        var store = CreateStore(nameof(Replace_RemovesRowsAbsentFromTheNewSet));
-        await store.ReplaceAsync("alice@weesky.be",
-            [Row("a@weesky.be"), Row("b@weesky.be")], CancellationToken.None);
+        var db = nameof(Replace_RemovesRowsAbsentFromTheNewSet);
+        var user = Guid.NewGuid();
+        var store = CreateStore(db);
+        await store.ReplaceAsync(user, [Row("a@weesky.be"), Row("b@weesky.be")], CancellationToken.None);
 
-        await store.ReplaceAsync("alice@weesky.be", [Row("b@weesky.be", "B two")], CancellationToken.None);
+        await CreateStore(db).ReplaceAsync(user, [Row("b@weesky.be", "B two")], CancellationToken.None);
 
-        var rows = await store.GetAsync("alice@weesky.be", CancellationToken.None);
+        var rows = await CreateStore(db).GetAsync(user, CancellationToken.None);
         var row = Assert.Single(rows);
         Assert.Equal("b@weesky.be", row.Address);
         Assert.Equal("B two", row.DisplayName);
     }
 
     [Fact]
-    public async Task Replace_WithAnEmptySetClearsTheAccount()
+    public async Task Replace_WithAnEmptySetClearsTheUser()
     {
-        var store = CreateStore(nameof(Replace_WithAnEmptySetClearsTheAccount));
-        await store.ReplaceAsync("alice@weesky.be", [Row("a@weesky.be")], CancellationToken.None);
+        var db = nameof(Replace_WithAnEmptySetClearsTheUser);
+        var user = Guid.NewGuid();
+        await CreateStore(db).ReplaceAsync(user, [Row("a@weesky.be")], CancellationToken.None);
 
-        await store.ReplaceAsync("alice@weesky.be", [], CancellationToken.None);
+        await CreateStore(db).ReplaceAsync(user, [], CancellationToken.None);
 
-        Assert.Empty(await store.GetAsync("alice@weesky.be", CancellationToken.None));
+        Assert.Empty(await CreateStore(db).GetAsync(user, CancellationToken.None));
     }
 
     [Fact]
-    public async Task Replace_LeavesOtherAccountsAlone()
+    public async Task Replace_LeavesOtherUsersAlone()
     {
-        var store = CreateStore(nameof(Replace_LeavesOtherAccountsAlone));
-        await store.ReplaceAsync("bob@weesky.be", [Row("bob-alias@weesky.be")], CancellationToken.None);
+        var db = nameof(Replace_LeavesOtherUsersAlone);
+        var bob = Guid.NewGuid();
+        var alice = Guid.NewGuid();
+        await CreateStore(db).ReplaceAsync(bob, [Row("bob-alias@weesky.be")], CancellationToken.None);
 
-        await store.ReplaceAsync("alice@weesky.be", [Row("a@weesky.be")], CancellationToken.None);
+        await CreateStore(db).ReplaceAsync(alice, [Row("a@weesky.be")], CancellationToken.None);
 
-        Assert.Single(await store.GetAsync("bob@weesky.be", CancellationToken.None));
+        Assert.Single(await CreateStore(db).GetAsync(bob, CancellationToken.None));
     }
 }

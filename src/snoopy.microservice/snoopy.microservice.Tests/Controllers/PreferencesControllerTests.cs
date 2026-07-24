@@ -12,16 +12,18 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 
 public sealed class PreferencesControllerTests
 {
+    private static readonly Guid WebmailUid = Guid.NewGuid();
+
     private readonly Mock<IUserPreferenceStore> _store = new();
 
     private PreferencesController CreateController()
     {
-        _store.Setup(s => s.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(new List<UserPreference>());
 
         return new PreferencesController(_store.Object)
         {
-            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be")
+            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
     }
 
@@ -42,10 +44,10 @@ public sealed class PreferencesControllerTests
     public async Task Get_LetsAStoredRowWin()
     {
         var controller = CreateController();
-        _store.Setup(s => s.GetAsync("alice@weesky.be", It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.GetAsync(WebmailUid, It.IsAny<CancellationToken>()))
               .ReturnsAsync([new UserPreference
               {
-                  AccountId = "alice@weesky.be",
+                  UserId = WebmailUid,
                   PreferenceKey = UserPreferences.MailPageSize,
                   PreferenceValue = "50"
               }]);
@@ -58,13 +60,13 @@ public sealed class PreferencesControllerTests
     }
 
     [Fact]
-    public async Task Set_Returns204AndStoresUnderTheCanonicalAccount()
+    public async Task Set_Returns204AndStoresUnderTheWebmailUid()
     {
         var result = await CreateController().SetPreference(
             new SetPreferenceRequest { Key = UserPreferences.MailPageSize, Value = "50" }, CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
-        _store.Verify(s => s.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "50",
+        _store.Verify(s => s.SetAsync(WebmailUid, UserPreferences.MailPageSize, "50",
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -75,7 +77,7 @@ public sealed class PreferencesControllerTests
             new SetPreferenceRequest { Key = UserPreferences.MailPageSize, Value = "all" }, CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
-        _store.Verify(s => s.SetAsync("alice@weesky.be", UserPreferences.MailPageSize, "all",
+        _store.Verify(s => s.SetAsync(WebmailUid, UserPreferences.MailPageSize, "all",
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -92,7 +94,7 @@ public sealed class PreferencesControllerTests
             new SetPreferenceRequest { Key = key, Value = value }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
-        _store.Verify(s => s.SetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+        _store.Verify(s => s.SetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 

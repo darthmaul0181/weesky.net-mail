@@ -55,7 +55,7 @@ internal sealed class MailSender : IMailSender
     {
         if (user == null) throw new ArgumentNullException(nameof(user));
 
-        var accountId = FolderRoleStore.CanonicalAccountId(user.Email);
+        var userId = user.WebmailUid;
 
         var fromAddress = IdentityResolver.Canonical(user.Email);
         if (!string.IsNullOrWhiteSpace(request.FromAddress))
@@ -75,7 +75,7 @@ internal sealed class MailSender : IMailSender
         var attachments = new List<StagedAttachment>();
         foreach (var id in request.AttachmentIds)
         {
-            var attachment = _staged.Open(accountId, id);
+            var attachment = _staged.Open(userId.ToString(), id);
             if (attachment.IsFailure) return Result.Failure<SendMessageResult>(IMailSender.UnknownAttachment);
             attachments.Add(attachment.Value);
         }
@@ -83,7 +83,7 @@ internal sealed class MailSender : IMailSender
         MimeMessage message;
         try
         {
-            message = await BuildMessageAsync(user, request, attachments, accountId, fromAddress, cancellationToken);
+            message = await BuildMessageAsync(user, request, attachments, userId, fromAddress, cancellationToken);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -100,23 +100,23 @@ internal sealed class MailSender : IMailSender
             if (sent.IsFailure) return Result.Failure<SendMessageResult>(sent.Error);
         }
 
-        var appended = await AppendToSentAsync(user, password, accountId, message, cancellationToken);
+        var appended = await AppendToSentAsync(user, password, userId, message, cancellationToken);
 
-        foreach (var id in request.AttachmentIds) _staged.Delete(accountId, id);
+        foreach (var id in request.AttachmentIds) _staged.Delete(userId.ToString(), id);
 
         return Result.Success(new SendMessageResult(appended));
     }
 
     private async Task<MimeMessage> BuildMessageAsync(
         User user, SendMessageRequest request, IReadOnlyList<StagedAttachment> attachments,
-        string accountId, string fromAddress, CancellationToken cancellationToken)
+        Guid userId, string fromAddress, CancellationToken cancellationToken)
     {
         // FullName lives in the database, not in the JWT claims.
         var dbUser = await _users.FindByEmailAsync(user.Email);
         var body = _sanitizer.Prepare(request.HtmlBody);
 
         var message = new MimeMessage();
-        var stored = await LoadIdentitiesAsync(accountId, cancellationToken);
+        var stored = await LoadIdentitiesAsync(userId, cancellationToken);
         var label = IdentityResolver.LabelFor(stored, fromAddress, dbUser?.FullName);
         // LabelFor falls back to the address itself; on the wire that would be a redundant "a@x <a@x>".
         message.From.Add(new MailboxAddress(label == fromAddress ? string.Empty : label, fromAddress));
@@ -144,11 +144,11 @@ internal sealed class MailSender : IMailSender
     /// own label rather than failing a send that would otherwise have gone out.
     /// </summary>
     private async Task<IReadOnlyList<SendingIdentity>> LoadIdentitiesAsync(
-        string accountId, CancellationToken cancellationToken)
+        Guid userId, CancellationToken cancellationToken)
     {
         try
         {
-            return await _identities.GetAsync(accountId, cancellationToken);
+            return await _identities.GetAsync(userId, cancellationToken);
         }
         // Only the caller giving up propagates: a preferences layer surfacing its own timeout as
         // an OperationCanceledException is an outage like any other, and must degrade.
@@ -158,7 +158,7 @@ internal sealed class MailSender : IMailSender
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Sending identities unavailable for {AccountId}: using the account label", accountId);
+            _logger.LogWarning(ex, "Sending identities unavailable for {UserId}: using the account label", userId);
             return [];
         }
     }
@@ -170,14 +170,14 @@ internal sealed class MailSender : IMailSender
 
     /// <summary>Best-effort by design: the mail is already gone, so every failure degrades to false.</summary>
     private async Task<bool> AppendToSentAsync(
-        User user, string password, string accountId, MimeMessage message, CancellationToken cancellationToken)
+        User user, string password, Guid userId, MimeMessage message, CancellationToken cancellationToken)
     {
         try
         {
             var tree = await _folders.GetTreeAsync(user, password, cancellationToken);
             if (tree.IsFailure) { _logger.LogWarning("No Sent copy: folder tree unavailable"); return false; }
 
-            var overrides = await _roles.GetAsync(accountId, cancellationToken);
+            var overrides = await _roles.GetAsync(userId, cancellationToken);
             var sent = FolderRoleResolver.Resolve(tree.Value, overrides).Roles
                 .FirstOrDefault(r => r.Role == "sent" && r.FolderPath != null);
             if (sent == null) { _logger.LogWarning("No Sent copy: no folder holds the sent role"); return false; }
@@ -190,7 +190,7 @@ internal sealed class MailSender : IMailSender
         {
             // The mail is already sent; a raw throw here (e.g. preferences DB down) must never
             // fail the request, or the user resends and duplicates it.
-            _logger.LogError(ex, "No Sent copy: filing the sent message threw for {AccountId}", accountId);
+            _logger.LogError(ex, "No Sent copy: filing the sent message threw for {UserId}", userId);
             return false;
         }
     }

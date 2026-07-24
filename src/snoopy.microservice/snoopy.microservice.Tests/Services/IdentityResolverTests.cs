@@ -8,7 +8,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 public sealed class IdentityResolverTests
 {
     private static SendingIdentity Row(string address, string name, bool isDefault = false) =>
-        new() { AccountId = "mick@weesky.be", Address = address, DisplayName = name, IsDefault = isDefault };
+        new() { Address = address, DisplayName = name, IsDefault = isDefault };
 
     private static IdentityEntry Entry(string address, string name = "Someone", bool isDefault = false) =>
         new() { Address = address, DisplayName = name, IsDefault = isDefault };

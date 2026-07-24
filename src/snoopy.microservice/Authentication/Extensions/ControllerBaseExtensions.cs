@@ -20,6 +20,8 @@ public static class ControllerBaseExtensions
             if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(domain))
             {
                 user = new User($"{name}@{domain}");
+                if (Guid.TryParse(claims.FirstOrDefault(c => c.Type == WebmailClaimTypes.Uid)?.Value, out var uid))
+                    user.WebmailUid = uid;
             }
         }
 

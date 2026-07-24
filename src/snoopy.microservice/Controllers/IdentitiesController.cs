@@ -56,16 +56,14 @@ public sealed class IdentitiesController(
             aliasAddresses, stored.Select(r => r.Address).ToList());
         if (validated.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(validated.Error));
 
-        await store.ReplaceAsync(
-            FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), validated.Value, cancellationToken);
+        await store.ReplaceAsync(AuthenticatedUser.WebmailUid, validated.Value, cancellationToken);
         return NoContent();
     }
 
     private async Task<(IReadOnlyList<Data.Preferences.SendingIdentity> Stored, List<string> AliasAddresses, string? FullName)>
         LoadSourcesAsync(CancellationToken cancellationToken)
     {
-        var accountId = FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email);
-        var stored = await store.GetAsync(accountId, cancellationToken);
+        var stored = await store.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var aliasList = await aliases.GetAliasesAsync(AuthenticatedUser);
         var dbUser = await users.FindByEmailAsync(AuthenticatedUser.Email);
         return (stored, aliasList.ToAddresses(), dbUser?.FullName);

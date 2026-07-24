@@ -8,8 +8,8 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// </summary>
 public interface IUserPreferenceStore
 {
-    Task<IReadOnlyList<UserPreference>> GetAsync(string accountId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UserPreference>> GetAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>Sets or corrects one preference. The pair (account, key) is the row.</summary>
-    Task SetAsync(string accountId, string key, string value, CancellationToken cancellationToken);
+    Task SetAsync(Guid userId, string key, string value, CancellationToken cancellationToken);
 }

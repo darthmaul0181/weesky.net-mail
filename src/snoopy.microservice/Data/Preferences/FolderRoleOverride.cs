@@ -10,8 +10,8 @@ namespace weesky.Snoopy.Microservice.Data.Preferences;
 [Table("folder_role_overrides")]
 public sealed class FolderRoleOverride
 {
-    [Column("account_id")]
-    public string AccountId { get; set; } = string.Empty;
+    [Column("user_id")]
+    public Guid UserId { get; set; }
 
     /// <summary>Stable enum value ("trash", never a localised word). See FolderRoles.All.</summary>
     [Column("role")]

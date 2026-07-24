@@ -19,9 +19,11 @@ public sealed class FolderRoleResolverTests
             Selectable = selectable,
         };
 
+    private static readonly Guid Alice = Guid.NewGuid();
+
     private static FolderRoleOverride Override(string role, string path,
         ulong uidValidity = 1, string? mailboxId = null) =>
-        new() { AccountId = "alice@weesky.be", Role = role, FolderPath = path, UidValidity = uidValidity, MailboxId = mailboxId };
+        new() { UserId = Alice, Role = role, FolderPath = path, UidValidity = uidValidity, MailboxId = mailboxId };
 
     private static FolderRoleEntry Entry(FolderRoleResolution resolution, string role) =>
         resolution.Roles.Single(e => e.Role == role);

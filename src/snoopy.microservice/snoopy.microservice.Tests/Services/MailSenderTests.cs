@@ -23,7 +23,8 @@ public sealed class MailSenderTests
     private readonly Mock<IMailFolderRepository> _folders = new();
     private readonly Mock<IFolderRoleStore> _roles = new();
     private readonly Mock<IMailMessageRepository> _messages = new();
-    private readonly User _user = new("mick@weesky.be");
+    private static readonly Guid WebmailUid = Guid.NewGuid();
+    private readonly User _user = new("mick@weesky.be") { WebmailUid = WebmailUid };
 
     private MailSender CreateSender()
     {
@@ -40,14 +41,14 @@ public sealed class MailSenderTests
         var sent = new MailFolderNode { Name = "Sent", Path = "Sent", AttributeRole = "sent", Selectable = true };
         _folders.Setup(f => f.GetTreeAsync(_user, "pw", It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success<IReadOnlyList<MailFolderNode>>([sent]));
-        _roles.Setup(r => r.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _roles.Setup(r => r.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<FolderRoleOverride>());
         _messages.Setup(m => m.AppendAsync(_user, "pw", "Sent", It.IsAny<MimeMessage>(), true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
         _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>()))
             .ReturnsAsync([new Alias { Name = "michel", Domain = "weesky.be" }]);
-        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         // Every setup above is the happy path; a test that wants another one overrides it on the
@@ -81,6 +82,7 @@ public sealed class MailSenderTests
         Assert.Contains("hi", sent.HtmlBody);
         Assert.Equal("hi", sent.TextBody.Trim());
         _messages.Verify(m => m.AppendAsync(_user, "pw", "Sent", It.IsAny<MimeMessage>(), true, It.IsAny<CancellationToken>()), Times.Once);
+        _identities.Verify(i => i.GetAsync(WebmailUid, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -168,7 +170,7 @@ public sealed class MailSenderTests
     public async Task SendAsync_ReportsAThrowingRoleLookupWithoutFailingTheSend()
     {
         var sender = CreateSender();
-        _roles.Setup(r => r.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _roles.Setup(r => r.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("preferences database is down"));
 
         var result = await sender.SendAsync(_user, "pw", Request(), CancellationToken.None);
@@ -242,7 +244,7 @@ public sealed class MailSenderTests
     public async Task SendAsync_FromAlias_UsesTheAliasWithItsStoredLabel()
     {
         var sender = CreateSender();
-        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new SendingIdentity { Address = "michel@weesky.be", DisplayName = "Michel Dubois" }]);
         MimeMessage? sent = null;
         _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
@@ -293,7 +295,7 @@ public sealed class MailSenderTests
     {
         var sender = CreateSender();
         // The row survives in the identity table but the alias was deleted: the alias list decides.
-        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new SendingIdentity { Address = "gone@weesky.be", DisplayName = "Ancien" }]);
 
         var result = await sender.SendAsync(_user, "pw",
@@ -309,7 +311,7 @@ public sealed class MailSenderTests
     public async Task SendAsync_AThrowingIdentityStore_StillSendsWithTheFullNameLabel()
     {
         var sender = CreateSender();
-        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("preferences database is down"));
         MimeMessage? sent = null;
         _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
@@ -331,7 +333,7 @@ public sealed class MailSenderTests
         var sender = CreateSender();
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
-        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -346,7 +348,7 @@ public sealed class MailSenderTests
     {
         var sender = CreateSender();
         // The caller never cancelled: a preferences-layer timeout is an outage, so the send degrades.
-        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
         MimeMessage? sent = null;
         _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))

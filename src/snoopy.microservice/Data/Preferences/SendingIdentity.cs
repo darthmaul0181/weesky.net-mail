@@ -9,8 +9,8 @@ namespace weesky.Snoopy.Microservice.Data.Preferences;
 [Table("sending_identities")]
 public sealed class SendingIdentity
 {
-    [Column("account_id")]
-    public string AccountId { get; set; } = string.Empty;
+    [Column("user_id")]
+    public Guid UserId { get; set; }
 
     [Column("address")]
     public string Address { get; set; } = string.Empty;

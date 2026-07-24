@@ -17,9 +17,11 @@ public class PreferencesDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.AccountId, o.Role });
-        modelBuilder.Entity<UserPreference>().HasKey(p => new { p.AccountId, p.PreferenceKey });
-        modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.AccountId, i.Address });
+        modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.Role });
+        modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
+        modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.Address });
+        modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
+        modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
@@ -27,4 +29,6 @@ public class PreferencesDbContext : DbContext
     public DbSet<UserPreference> UserPreferences { get; set; }
 
     public DbSet<SendingIdentity> SendingIdentities { get; set; }
+
+    public DbSet<WebmailUser> Users { get; set; }
 }

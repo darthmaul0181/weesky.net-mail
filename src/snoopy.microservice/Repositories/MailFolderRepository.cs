@@ -80,8 +80,7 @@ internal sealed class MailFolderRepository : IMailFolderRepository
             }
 
             await _roleStore.ApplyRenameAsync(
-                FolderRoleStore.CanonicalAccountId(user.Email),
-                oldPath, newPath, session.DirectorySeparator,
+                user.WebmailUid, oldPath, newPath, session.DirectorySeparator,
                 status.Value.UidValidity, status.Value.MailboxId, cancellationToken);
         }
         catch (Exception ex)
@@ -104,7 +103,7 @@ internal sealed class MailFolderRepository : IMailFolderRepository
         try
         {
             await _roleStore.RemoveSubtreeAsync(
-                FolderRoleStore.CanonicalAccountId(user.Email), path, session.DirectorySeparator, cancellationToken);
+                user.WebmailUid, path, session.DirectorySeparator, cancellationToken);
         }
         catch (Exception ex)
         {

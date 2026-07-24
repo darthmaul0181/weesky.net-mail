@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using System.IdentityModel.Tokens.Jwt;
+using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Models;
@@ -12,9 +15,19 @@ public sealed class UserAuthenticatorTests
 {
     private readonly Mock<IUsersRepository> _usersRepo = new();
     private readonly Mock<ITokenManager> _tokenManager = new();
+    private readonly Mock<IWebmailUserStore> _webmailUsers = new();
 
     private UserAuthenticator CreateSut() =>
-        new(_usersRepo.Object, _tokenManager.Object, Mock.Of<ILogger<UserAuthenticator>>());
+        new(_usersRepo.Object, _tokenManager.Object, _webmailUsers.Object, Mock.Of<ILogger<UserAuthenticator>>());
+
+    private static TokenManager RealTokenManager() => new(Options.Create(new TokenConstants
+    {
+        Issuer = "test-issuer",
+        Audience = "test-audience",
+        ExpiryInMinutes = 30,
+        Key = "test-signing-key-long-enough-for-hmac256",
+        AuthCookieName = "BearerAuth"
+    }));
 
     [Fact]
     public async Task Authenticate_WithUnknownUser_ReturnsFailure()
@@ -86,5 +99,24 @@ public sealed class UserAuthenticatorTests
         await CreateSut().AuthenticateAsync("john@example.com", "wrong");
 
         _tokenManager.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Authenticate_StampsTheGuidFromRegisterLogin()
+    {
+        var uid = Guid.NewGuid();
+        _webmailUsers.Setup(s => s.RegisterLoginAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(uid);
+        _usersRepo.Setup(r => r.FindByEmailAsync("mick@weesky.be")).ReturnsAsync(new User("mick@weesky.be"));
+        _usersRepo.Setup(r => r.IsValidPasswordAsync(It.IsAny<User>(), "pw")).ReturnsAsync(true);
+
+        var sut = new UserAuthenticator(_usersRepo.Object, RealTokenManager(), _webmailUsers.Object,
+            Mock.Of<ILogger<UserAuthenticator>>());
+        var result = await sut.AuthenticateAsync("mick@weesky.be", "pw");
+
+        Assert.True(result.IsSuccess);
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Value.Token);
+        Assert.Equal(uid.ToString(), jwt.Claims.First(c => c.Type == WebmailClaimTypes.Uid).Value);
+        _webmailUsers.Verify(s => s.RegisterLoginAsync("mick@weesky.be", It.IsAny<CancellationToken>()), Times.Once);
     }
 }

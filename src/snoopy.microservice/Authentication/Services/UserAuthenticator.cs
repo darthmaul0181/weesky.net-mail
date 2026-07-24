@@ -9,12 +9,14 @@ public sealed class UserAuthenticator : IUserAuthenticator
 {
     private readonly IUsersRepository _usersRepository;
     private readonly ITokenManager _tokenManager;
+    private readonly IWebmailUserStore _webmailUsers;
     private readonly ILogger<UserAuthenticator> _logger;
 
-    public UserAuthenticator(IUsersRepository usersRepository, ITokenManager tokenManager, ILogger<UserAuthenticator> logger)
+    public UserAuthenticator(IUsersRepository usersRepository, ITokenManager tokenManager, IWebmailUserStore webmailUsers, ILogger<UserAuthenticator> logger)
     {
         _usersRepository = usersRepository;
         _tokenManager = tokenManager;
+        _webmailUsers = webmailUsers;
         _logger = logger;
     }
 
@@ -34,6 +36,7 @@ public sealed class UserAuthenticator : IUserAuthenticator
         }
 
         _logger.LogInformation("Audit: login email={Email} outcome=success", email);
+        user.WebmailUid = await _webmailUsers.RegisterLoginAsync(user.Email, CancellationToken.None);
         return Result.Success(_tokenManager.Generate(user));
     }
 }

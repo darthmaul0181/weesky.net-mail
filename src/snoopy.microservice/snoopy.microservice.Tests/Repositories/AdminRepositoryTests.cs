@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
@@ -9,6 +11,9 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 public sealed class AdminRepositoryTests
 {
     private static TestDbContext CreateContext() => new(Guid.NewGuid().ToString());
+
+    private static AdminRepository CreateRepository(TestDbContext ctx, IWebmailUserStore? webmailUsers = null) =>
+        new(ctx, webmailUsers ?? new Mock<IWebmailUserStore>().Object, NullLogger<AdminRepository>.Instance);
 
     private static MailDomain AddDomain(TestDbContext ctx, string id = "WSY", string name = "weesky.be")
     {
@@ -44,7 +49,7 @@ public sealed class AdminRepositoryTests
     public async Task IsAdmin_WhenDomainNotFound_ReturnsFalse()
     {
         using var ctx = CreateContext();
-        Assert.False(await new AdminRepository(ctx).IsAdminAsync("alice", "unknown.com"));
+        Assert.False(await CreateRepository(ctx).IsAdminAsync("alice", "unknown.com"));
     }
 
     [Fact]
@@ -52,7 +57,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        Assert.False(await new AdminRepository(ctx).IsAdminAsync("nobody", "weesky.be"));
+        Assert.False(await CreateRepository(ctx).IsAdminAsync("nobody", "weesky.be"));
     }
 
     [Fact]
@@ -61,7 +66,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY", admin: ActiveState.N);
-        Assert.False(await new AdminRepository(ctx).IsAdminAsync("alice", "weesky.be"));
+        Assert.False(await CreateRepository(ctx).IsAdminAsync("alice", "weesky.be"));
     }
 
     [Fact]
@@ -70,7 +75,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
-        Assert.True(await new AdminRepository(ctx).IsAdminAsync("alice", "weesky.be"));
+        Assert.True(await CreateRepository(ctx).IsAdminAsync("alice", "weesky.be"));
     }
 
     [Fact]
@@ -79,7 +84,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
-        Assert.True(await new AdminRepository(ctx).IsAdminAsync("ALICE", "weesky.be"));
+        Assert.True(await CreateRepository(ctx).IsAdminAsync("ALICE", "weesky.be"));
     }
 
     // ── GetAllUsers ───────────────────────────────────────
@@ -89,7 +94,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        Assert.Empty(await new AdminRepository(ctx).GetAllUsersAsync());
+        Assert.Empty(await CreateRepository(ctx).GetAllUsersAsync());
     }
 
     [Fact]
@@ -99,7 +104,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx, "WSY", "weesky.be");
         AddUser(ctx, "alice", "WSY");
         AddUser(ctx, "bob", "WSY");
-        var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
+        var users = (await CreateRepository(ctx).GetAllUsersAsync()).ToList();
         Assert.Equal(2, users.Count);
         Assert.All(users, u => Assert.Equal("weesky.be", u.DomainName));
     }
@@ -111,7 +116,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx);
         AddUser(ctx, "active", "WSY", active: ActiveState.Y);
         AddUser(ctx, "inactive", "WSY", active: ActiveState.N);
-        var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
+        var users = (await CreateRepository(ctx).GetAllUsersAsync()).ToList();
         Assert.True(users.First(u => u.UserName == "active").Active);
         Assert.False(users.First(u => u.UserName == "inactive").Active);
     }
@@ -123,7 +128,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx);
         AddUser(ctx, "superuser", "WSY", admin: ActiveState.Y);
         AddUser(ctx, "regular", "WSY", admin: ActiveState.N);
-        var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
+        var users = (await CreateRepository(ctx).GetAllUsersAsync()).ToList();
         Assert.True(users.First(u => u.UserName == "superuser").Admin);
         Assert.False(users.First(u => u.UserName == "regular").Admin);
     }
@@ -138,7 +143,7 @@ public sealed class AdminRepositoryTests
         ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = ts });
         ctx.SaveChanges();
 
-        var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
+        var users = (await CreateRepository(ctx).GetAllUsersAsync()).ToList();
         var alice = users.Single(u => u.UserName == "alice");
         Assert.Single(alice.LastLogins);
         Assert.Equal("imap", alice.LastLogins[0].Service);
@@ -151,7 +156,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY");
-        var users = (await new AdminRepository(ctx).GetAllUsersAsync()).ToList();
+        var users = (await CreateRepository(ctx).GetAllUsersAsync()).ToList();
         Assert.Empty(users.Single().LastLogins);
     }
 
@@ -167,7 +172,7 @@ public sealed class AdminRepositoryTests
         ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = newer });
         ctx.SaveChanges();
 
-        var logins = (await new AdminRepository(ctx).GetAllUsersAsync()).Single().LastLogins;
+        var logins = (await CreateRepository(ctx).GetAllUsersAsync()).Single().LastLogins;
         Assert.Equal("imap", logins[0].Service);
         Assert.Equal("lmtp", logins[1].Service);
     }
@@ -178,7 +183,7 @@ public sealed class AdminRepositoryTests
     public async Task GetUserById_WhenNotFound_ReturnsNull()
     {
         using var ctx = CreateContext();
-        Assert.Null(await new AdminRepository(ctx).GetUserByIdAsync(999));
+        Assert.Null(await CreateRepository(ctx).GetUserByIdAsync(999));
     }
 
     [Fact]
@@ -188,7 +193,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx, "WSY", "weesky.be");
         var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y, quotaMb: 2048, fullName: "Alice Smith");
 
-        var info = await new AdminRepository(ctx).GetUserByIdAsync(user.Id);
+        var info = await CreateRepository(ctx).GetUserByIdAsync(user.Id);
 
         Assert.NotNull(info);
         Assert.Equal(user.Id, info.Id);
@@ -205,7 +210,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateUser_WhenUsernameBlank_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "   ", DomainId = "WSY", Password = "password123" });
         Assert.True(result.IsFailure);
     }
@@ -215,7 +220,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = null });
         Assert.True(result.IsFailure);
     }
@@ -225,7 +230,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "" });
         Assert.True(result.IsFailure);
     }
@@ -235,7 +240,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "short77" });
         Assert.True(result.IsFailure);
         Assert.Equal("Password must contain at least 8 characters", result.Error);
@@ -245,7 +250,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateUser_WhenDomainNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "ZZZ", Password = "password123" });
         Assert.True(result.IsFailure);
     }
@@ -256,7 +261,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY");
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "password123" });
         Assert.True(result.IsFailure);
     }
@@ -267,7 +272,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY");
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "ALICE", DomainId = "WSY", Password = "password123" });
         Assert.True(result.IsFailure);
     }
@@ -277,7 +282,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx, "WSY", "weesky.be");
-        var result = await new AdminRepository(ctx).CreateUserAsync(new AdminUserRequest
+        var result = await CreateRepository(ctx).CreateUserAsync(new AdminUserRequest
         {
             UserName = "alice",
             DomainId = "WSY",
@@ -300,7 +305,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "ALICE", DomainId = "WSY", Password = "password123" });
         Assert.Equal("alice", result.Value.UserName);
     }
@@ -310,7 +315,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        await new AdminRepository(ctx).CreateUserAsync(
+        await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "mysecret" });
         Assert.Equal("mysecret", ctx.Users.First(u => u.Name == "alice").Password);
     }
@@ -320,7 +325,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        var result = await new AdminRepository(ctx).CreateUserAsync(
+        var result = await CreateRepository(ctx).CreateUserAsync(
             new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "password123", Admin = true });
         Assert.True(result.Value.Admin);
         Assert.Equal(ActiveState.Y, ctx.Users.First(u => u.Name == "alice").Admin);
@@ -332,7 +337,7 @@ public sealed class AdminRepositoryTests
     public async Task UpdateUser_WhenUserNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        var result = await new AdminRepository(ctx).UpdateUserAsync(999,
+        var result = await CreateRepository(ctx).UpdateUserAsync(999,
             new AdminUserRequest { UserName = "x", QuotaMb = 1024 });
         Assert.True(result.IsFailure);
     }
@@ -343,7 +348,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY", fullName: "Old Name");
-        var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", FullName = "New Name", QuotaMb = 1024 });
         Assert.True(result.IsSuccess);
         Assert.Equal("New Name", result.Value.FullName);
@@ -355,7 +360,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY", quotaMb: 1024);
-        var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", QuotaMb = 4096 });
         Assert.Equal(4096, result.Value.QuotaMb);
     }
@@ -367,7 +372,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY");
         var originalPw = ctx.Users.First(u => u.Id == user.Id).Password;
-        await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", Password = null, QuotaMb = 1024 });
         Assert.Equal(originalPw, ctx.Users.First(u => u.Id == user.Id).Password);
     }
@@ -379,7 +384,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY");
         var originalPw = ctx.Users.First(u => u.Id == user.Id).Password;
-        await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", Password = "", QuotaMb = 1024 });
         Assert.Equal(originalPw, ctx.Users.First(u => u.Id == user.Id).Password);
     }
@@ -391,7 +396,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY");
         var originalPw = ctx.Users.First(u => u.Id == user.Id).Password;
-        var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", Password = "short77", QuotaMb = 1024 });
         Assert.True(result.IsFailure);
         Assert.Equal("Password must contain at least 8 characters", result.Error);
@@ -404,7 +409,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY");
-        await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", Password = "newpass123", QuotaMb = 1024 });
         Assert.Equal("newpass123", ctx.Users.First(u => u.Id == user.Id).Password);
     }
@@ -415,7 +420,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY", active: ActiveState.Y);
-        var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", QuotaMb = 1024, Active = false });
         Assert.False(result.Value.Active);
     }
@@ -426,7 +431,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.N);
-        var result = await new AdminRepository(ctx).UpdateUserAsync(user.Id,
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", QuotaMb = 1024, Admin = true });
         Assert.True(result.Value.Admin);
     }
@@ -437,7 +442,7 @@ public sealed class AdminRepositoryTests
     public async Task DeleteUser_WhenNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).DeleteUserAsync(999)).IsFailure);
+        Assert.True((await CreateRepository(ctx).DeleteUserAsync(999)).IsFailure);
     }
 
     [Fact]
@@ -446,7 +451,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY");
-        Assert.True((await new AdminRepository(ctx).DeleteUserAsync(user.Id)).IsSuccess);
+        Assert.True((await CreateRepository(ctx).DeleteUserAsync(user.Id)).IsSuccess);
     }
 
     [Fact]
@@ -455,7 +460,36 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         var user = AddUser(ctx, "alice", "WSY");
-        await new AdminRepository(ctx).DeleteUserAsync(user.Id);
+        await CreateRepository(ctx).DeleteUserAsync(user.Id);
+        Assert.False(ctx.Users.Any(u => u.Id == user.Id));
+    }
+
+    [Fact]
+    public async Task DeleteUser_AlsoDeletesTheWebmailRow()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx, id: "WSY", name: "weesky.be");
+        var user = AddUser(ctx, "Alice", "WSY");
+        var webmail = new Mock<IWebmailUserStore>();
+
+        await CreateRepository(ctx, webmail.Object).DeleteUserAsync(user.Id);
+
+        webmail.Verify(s => s.DeleteByEmailAsync("alice@weesky.be", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteUser_WhenWebmailDeleteThrows_StillSucceeds()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx, id: "WSY", name: "weesky.be");
+        var user = AddUser(ctx, "alice", "WSY");
+        var webmail = new Mock<IWebmailUserStore>();
+        webmail.Setup(s => s.DeleteByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var result = await CreateRepository(ctx, webmail.Object).DeleteUserAsync(user.Id);
+
+        Assert.True(result.IsSuccess);
         Assert.False(ctx.Users.Any(u => u.Id == user.Id));
     }
 
@@ -465,7 +499,7 @@ public sealed class AdminRepositoryTests
     public async Task GetAllDomains_WithNoDomains_ReturnsEmpty()
     {
         using var ctx = CreateContext();
-        Assert.Empty(await new AdminRepository(ctx).GetAllDomainsAsync());
+        Assert.Empty(await CreateRepository(ctx).GetAllDomainsAsync());
     }
 
     [Fact]
@@ -474,7 +508,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx, "WSY", "weesky.be");
         AddDomain(ctx, "TST", "test.com");
-        var domains = (await new AdminRepository(ctx).GetAllDomainsAsync()).ToList();
+        var domains = (await CreateRepository(ctx).GetAllDomainsAsync()).ToList();
         Assert.Equal(2, domains.Count);
         Assert.Contains(domains, d => d.Id == "WSY" && d.Name == "weesky.be");
         Assert.Contains(domains, d => d.Id == "TST" && d.Name == "test.com");
@@ -486,7 +520,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateDomain_WhenIdEmpty_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+        Assert.True((await CreateRepository(ctx).CreateDomainAsync(
             new AdminDomainRequest { Id = "", Name = "test.com" })).IsFailure);
     }
 
@@ -494,7 +528,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateDomain_WhenIdTooLong_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+        Assert.True((await CreateRepository(ctx).CreateDomainAsync(
             new AdminDomainRequest { Id = "ABCD", Name = "test.com" })).IsFailure);
     }
 
@@ -502,7 +536,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateDomain_WhenNameEmpty_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+        Assert.True((await CreateRepository(ctx).CreateDomainAsync(
             new AdminDomainRequest { Id = "TST", Name = "" })).IsFailure);
     }
 
@@ -511,7 +545,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx, "WSY", "weesky.be");
-        Assert.True((await new AdminRepository(ctx).CreateDomainAsync(
+        Assert.True((await CreateRepository(ctx).CreateDomainAsync(
             new AdminDomainRequest { Id = "WSY", Name = "other.com" })).IsFailure);
     }
 
@@ -519,7 +553,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateDomain_WithValidRequest_ReturnsSuccess()
     {
         using var ctx = CreateContext();
-        var result = await new AdminRepository(ctx).CreateDomainAsync(
+        var result = await CreateRepository(ctx).CreateDomainAsync(
             new AdminDomainRequest { Id = "TST", Name = "test.com" });
         Assert.True(result.IsSuccess);
         Assert.Equal("test.com", result.Value.Name);
@@ -529,7 +563,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateDomain_NormalisesIdToUppercase()
     {
         using var ctx = CreateContext();
-        var result = await new AdminRepository(ctx).CreateDomainAsync(
+        var result = await CreateRepository(ctx).CreateDomainAsync(
             new AdminDomainRequest { Id = "tst", Name = "test.com" });
         Assert.Equal("TST", result.Value.Id);
     }
@@ -538,7 +572,7 @@ public sealed class AdminRepositoryTests
     public async Task CreateDomain_PersistsDomainToDatabase()
     {
         using var ctx = CreateContext();
-        await new AdminRepository(ctx).CreateDomainAsync(new AdminDomainRequest { Id = "TST", Name = "test.com" });
+        await CreateRepository(ctx).CreateDomainAsync(new AdminDomainRequest { Id = "TST", Name = "test.com" });
         Assert.True(ctx.Domains.Any(d => d.Id == "TST"));
     }
 
@@ -548,7 +582,7 @@ public sealed class AdminRepositoryTests
     public async Task UpdateDomain_WhenNameEmpty_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).UpdateDomainAsync("WSY",
+        Assert.True((await CreateRepository(ctx).UpdateDomainAsync("WSY",
             new AdminDomainRequest { Name = "" })).IsFailure);
     }
 
@@ -556,7 +590,7 @@ public sealed class AdminRepositoryTests
     public async Task UpdateDomain_WhenDomainNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).UpdateDomainAsync("ZZZ",
+        Assert.True((await CreateRepository(ctx).UpdateDomainAsync("ZZZ",
             new AdminDomainRequest { Name = "new.com" })).IsFailure);
     }
 
@@ -565,7 +599,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx, "WSY", "weesky.be");
-        var result = await new AdminRepository(ctx).UpdateDomainAsync("WSY",
+        var result = await CreateRepository(ctx).UpdateDomainAsync("WSY",
             new AdminDomainRequest { Name = "new.weesky.be" });
         Assert.True(result.IsSuccess);
         Assert.Equal("new.weesky.be", result.Value.Name);
@@ -576,7 +610,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx, "WSY", "weesky.be");
-        await new AdminRepository(ctx).UpdateDomainAsync("WSY", new AdminDomainRequest { Name = "updated.be" });
+        await CreateRepository(ctx).UpdateDomainAsync("WSY", new AdminDomainRequest { Name = "updated.be" });
         Assert.Equal("updated.be", ctx.Domains.First(d => d.Id == "WSY").Name);
     }
 
@@ -586,7 +620,7 @@ public sealed class AdminRepositoryTests
     public async Task DeleteDomain_WhenNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).DeleteDomainAsync("ZZZ")).IsFailure);
+        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("ZZZ")).IsFailure);
     }
 
     [Fact]
@@ -595,7 +629,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY");
-        Assert.True((await new AdminRepository(ctx).DeleteDomainAsync("WSY")).IsFailure);
+        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY")).IsFailure);
     }
 
     [Fact]
@@ -603,7 +637,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        Assert.True((await new AdminRepository(ctx).DeleteDomainAsync("WSY")).IsSuccess);
+        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY")).IsSuccess);
     }
 
     [Fact]
@@ -611,7 +645,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        await new AdminRepository(ctx).DeleteDomainAsync("WSY");
+        await CreateRepository(ctx).DeleteDomainAsync("WSY");
         Assert.False(ctx.Domains.Any(d => d.Id == "WSY"));
     }
 
@@ -627,7 +661,7 @@ public sealed class AdminRepositoryTests
     public async Task GetAllVirtualDomains_WithNoDomains_ReturnsEmpty()
     {
         using var ctx = CreateContext();
-        Assert.Empty(await new AdminRepository(ctx).GetAllVirtualDomainsAsync());
+        Assert.Empty(await CreateRepository(ctx).GetAllVirtualDomainsAsync());
     }
 
     [Fact]
@@ -636,7 +670,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx, "WSY", "weesky.be");
         AddUser(ctx, "alice", "WSY");
-        Assert.Empty(await new AdminRepository(ctx).GetAllVirtualDomainsAsync());
+        Assert.Empty(await CreateRepository(ctx).GetAllVirtualDomainsAsync());
     }
 
     [Fact]
@@ -646,7 +680,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx, "WSY", "weesky.be");
         var alice = AddUser(ctx, "alice", "WSY");
         AddOwnership(ctx, "WSY", alice.Id);
-        var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
+        var result = (await CreateRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
         Assert.Single(result);
         Assert.Equal("WSY", result[0].DomainId);
         Assert.Contains(result[0].Owners, o => o.OwnerId == alice.Id);
@@ -657,7 +691,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx, "EXT", "extra.com");
-        var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
+        var result = (await CreateRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
         Assert.Single(result);
         Assert.Equal("EXT", result[0].DomainId);
         Assert.Equal("extra.com", result[0].DomainName);
@@ -672,7 +706,7 @@ public sealed class AdminRepositoryTests
         var user = AddUser(ctx, "alice", "WSY");
         AddDomain(ctx, "EXT", "extra.com");
         AddOwnership(ctx, "EXT", user.Id);
-        var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
+        var result = (await CreateRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
         Assert.Single(result);
         Assert.Equal("EXT", result[0].DomainId);
         Assert.Single(result[0].Owners);
@@ -690,7 +724,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx, "EXT", "extra.com");
         AddOwnership(ctx, "EXT", alice.Id);
         AddOwnership(ctx, "EXT", bob.Id);
-        var result = (await new AdminRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
+        var result = (await CreateRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
         Assert.Single(result);
         Assert.Equal(2, result[0].Owners.Count);
         Assert.Contains(result[0].Owners, o => o.OwnerEmail == "alice@weesky.be");
@@ -703,7 +737,7 @@ public sealed class AdminRepositoryTests
     public async Task AddVirtualDomainOwner_WhenDomainNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("ZZZ", 1)).IsFailure);
+        Assert.True((await CreateRepository(ctx).AddVirtualDomainOwnerAsync("ZZZ", 1)).IsFailure);
     }
 
     [Fact]
@@ -711,7 +745,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx, "EXT", "extra.com");
-        Assert.True((await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", 999)).IsFailure);
+        Assert.True((await CreateRepository(ctx).AddVirtualDomainOwnerAsync("EXT", 999)).IsFailure);
     }
 
     [Fact]
@@ -721,7 +755,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx, "WSY", "weesky.be");
         var user = AddUser(ctx, "alice", "WSY");
         AddDomain(ctx, "EXT", "extra.com");
-        var result = await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", user.Id);
+        var result = await CreateRepository(ctx).AddVirtualDomainOwnerAsync("EXT", user.Id);
         Assert.True(result.IsSuccess);
         Assert.Equal("EXT", result.Value.DomainId);
         Assert.Single(result.Value.Owners);
@@ -739,7 +773,7 @@ public sealed class AdminRepositoryTests
         var bob = AddUser(ctx, "bob", "WSY");
         AddDomain(ctx, "EXT", "extra.com");
         AddOwnership(ctx, "EXT", alice.Id);
-        var result = await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", bob.Id);
+        var result = await CreateRepository(ctx).AddVirtualDomainOwnerAsync("EXT", bob.Id);
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.Value.Owners.Count);
         Assert.Equal(2, ctx.DomainsOwnerships.Count());
@@ -753,7 +787,7 @@ public sealed class AdminRepositoryTests
         var alice = AddUser(ctx, "alice", "WSY");
         AddDomain(ctx, "EXT", "extra.com");
         AddOwnership(ctx, "EXT", alice.Id);
-        var result = await new AdminRepository(ctx).AddVirtualDomainOwnerAsync("EXT", alice.Id);
+        var result = await CreateRepository(ctx).AddVirtualDomainOwnerAsync("EXT", alice.Id);
         Assert.True(result.IsSuccess);
         Assert.Single(ctx.DomainsOwnerships);
     }
@@ -764,7 +798,7 @@ public sealed class AdminRepositoryTests
     public async Task RemoveVirtualDomainOwner_WhenNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await new AdminRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", 1)).IsFailure);
+        Assert.True((await CreateRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", 1)).IsFailure);
     }
 
     [Fact]
@@ -775,7 +809,7 @@ public sealed class AdminRepositoryTests
         var user = AddUser(ctx, "alice", "WSY");
         AddDomain(ctx, "EXT", "extra.com");
         AddOwnership(ctx, "EXT", user.Id);
-        var result = await new AdminRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", user.Id);
+        var result = await CreateRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", user.Id);
         Assert.True(result.IsSuccess);
         Assert.Empty(ctx.DomainsOwnerships);
     }
@@ -790,7 +824,7 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx, "EXT", "extra.com");
         AddOwnership(ctx, "EXT", alice.Id);
         AddOwnership(ctx, "EXT", bob.Id);
-        var result = await new AdminRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", alice.Id);
+        var result = await CreateRepository(ctx).RemoveVirtualDomainOwnerAsync("EXT", alice.Id);
         Assert.True(result.IsSuccess);
         Assert.Single(ctx.DomainsOwnerships);
         Assert.Equal(bob.Id, ctx.DomainsOwnerships.Single().UserId);

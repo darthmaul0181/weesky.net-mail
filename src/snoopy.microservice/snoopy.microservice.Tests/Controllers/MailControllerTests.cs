@@ -15,6 +15,8 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 
 public sealed class MailControllerTests
 {
+    private static readonly Guid WebmailUid = Guid.NewGuid();
+
     private readonly Mock<IMailFolderRepository> _folders = new();
     private readonly Mock<IMailMessageRepository> _messages = new();
     private readonly Mock<IMailCredentialStore> _credentials = new();
@@ -25,13 +27,13 @@ public sealed class MailControllerTests
     private MailController CreateController()
     {
         _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success("hunter2"));
-        _roleStore.Setup(s => s.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _roleStore.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
         return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
                                   _staged.Object, _sender.Object)
         {
-            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be")
+            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
     }
 
@@ -536,7 +538,7 @@ public sealed class MailControllerTests
         var controller = CreateController();
         SetupOverrides(new FolderRoleOverride
         {
-            AccountId = "alice@weesky.be", Role = "trash", FolderPath = "Bin", UidValidity = 42
+            UserId = WebmailUid, Role = "trash", FolderPath = "Bin", UidValidity = 42
         });
 
         var result = await controller.RenameFolder(
@@ -580,7 +582,7 @@ public sealed class MailControllerTests
         new() { Path = path, Name = path, AttributeRole = attributeRole, UidValidity = uidValidity };
 
     private void SetupOverrides(params FolderRoleOverride[] rows)
-        => _roleStore.Setup(s => s.GetAsync("alice@weesky.be", It.IsAny<CancellationToken>()))
+        => _roleStore.Setup(s => s.GetAsync(WebmailUid, It.IsAny<CancellationToken>()))
                      .ReturnsAsync(rows.ToList());
 
     private void SetupStatus(string path, uint uidValidity = 1, string? mailboxId = null, bool selectable = true)
@@ -599,7 +601,7 @@ public sealed class MailControllerTests
         var controller = CreateController();
         SetupTree(RoleNode("Deleted Items", attributeRole: "trash"), RoleNode("Corbeille"));
         SetupOverrides(new FolderRoleOverride
-        { AccountId = "alice@weesky.be", Role = "trash", FolderPath = "Corbeille", UidValidity = 1 });
+        { UserId = WebmailUid, Role = "trash", FolderPath = "Corbeille", UidValidity = 1 });
 
         var result = await controller.GetFolders(CancellationToken.None);
 
@@ -687,7 +689,7 @@ public sealed class MailControllerTests
         SetupStatus("X");
         SetupTree(RoleNode("X"));
         SetupOverrides(new FolderRoleOverride
-        { AccountId = "alice@weesky.be", Role = "junk", FolderPath = "X", UidValidity = 1 });
+        { UserId = WebmailUid, Role = "junk", FolderPath = "X", UidValidity = 1 });
 
         var result = await controller.SetFolderRole(
             new SetFolderRoleRequest { Role = "trash", FolderPath = "X" }, CancellationToken.None);
@@ -711,7 +713,7 @@ public sealed class MailControllerTests
         // so the stored trash row is stale and Corbeille is free again.
         SetupTree(RoleNode("Corbeille", uidValidity: 42));
         SetupOverrides(new FolderRoleOverride
-        { AccountId = "alice@weesky.be", Role = "trash", FolderPath = "Corbeille", UidValidity = 1 });
+        { UserId = WebmailUid, Role = "trash", FolderPath = "Corbeille", UidValidity = 1 });
 
         var result = await controller.SetFolderRole(
             new SetFolderRoleRequest { Role = "junk", FolderPath = "Corbeille" }, CancellationToken.None);
@@ -739,7 +741,7 @@ public sealed class MailControllerTests
     // uid_validity and mailbox_id come from the live folder, captured server-side — the
     // client never supplies them.
     [Fact]
-    public async Task SetFolderRole_StoresTheLiveIdentityUnderTheCanonicalAccount()
+    public async Task SetFolderRole_StoresTheLiveIdentityUnderTheWebmailUid()
     {
         SetupStatus("Corbeille", uidValidity: 77, mailboxId: "M1");
         SetupTree(RoleNode("Corbeille", uidValidity: 77));
@@ -749,7 +751,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<NoContentResult>(result);
         _roleStore.Verify(s => s.UpsertAsync(It.Is<FolderRoleOverride>(o =>
-            o.AccountId == "alice@weesky.be" && o.Role == "trash" && o.FolderPath == "Corbeille"
+            o.UserId == WebmailUid && o.Role == "trash" && o.FolderPath == "Corbeille"
             && o.UidValidity == 77UL && o.MailboxId == "M1"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -767,7 +769,7 @@ public sealed class MailControllerTests
         var result = await CreateController().ClearFolderRole("trash", CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        _roleStore.Verify(s => s.DeleteAsync("alice@weesky.be", "trash", It.IsAny<CancellationToken>()), Times.Once);
+        _roleStore.Verify(s => s.DeleteAsync(WebmailUid, "trash", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1382,7 +1384,7 @@ public sealed class MailControllerTests
     {
         var info = new StagedAttachmentInfo(Guid.NewGuid(), "a.txt", 4, "text/plain");
         _staged.Setup(s => s.SaveAsync(
-                FolderRoleStore.CanonicalAccountId("alice@weesky.be"), "a.txt", "text/plain",
+                WebmailUid.ToString(), "a.txt", "text/plain",
                 It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(info));
 
@@ -1418,7 +1420,7 @@ public sealed class MailControllerTests
         var result = CreateController().DeleteAttachment(id);
 
         Assert.IsType<NoContentResult>(result);
-        _staged.Verify(s => s.Delete(FolderRoleStore.CanonicalAccountId("alice@weesky.be"), id), Times.Once);
+        _staged.Verify(s => s.Delete(WebmailUid.ToString(), id), Times.Once);
     }
 
     // ── Send ────────────────────────────────────────────────────────────

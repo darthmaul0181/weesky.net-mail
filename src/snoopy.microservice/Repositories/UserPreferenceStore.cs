@@ -12,22 +12,22 @@ internal sealed class UserPreferenceStore : IUserPreferenceStore
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
-    public async Task<IReadOnlyList<UserPreference>> GetAsync(string accountId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UserPreference>> GetAsync(Guid userId, CancellationToken cancellationToken)
         => await _context.UserPreferences.AsNoTracking()
-            .Where(p => p.AccountId == accountId)
+            .Where(p => p.UserId == userId)
             .OrderBy(p => p.PreferenceKey)
             .ToListAsync(cancellationToken);
 
-    public async Task SetAsync(string accountId, string key, string value, CancellationToken cancellationToken)
+    public async Task SetAsync(Guid userId, string key, string value, CancellationToken cancellationToken)
     {
         var existing = await _context.UserPreferences
-            .FirstOrDefaultAsync(p => p.AccountId == accountId && p.PreferenceKey == key, cancellationToken);
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.PreferenceKey == key, cancellationToken);
 
         if (existing is null)
         {
             _context.UserPreferences.Add(new UserPreference
             {
-                AccountId = accountId,
+                UserId = userId,
                 PreferenceKey = key,
                 PreferenceValue = value,
                 UpdatedAt = DateTime.UtcNow

@@ -13,6 +13,8 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 
 public sealed class IdentitiesControllerTests
 {
+    private static readonly Guid WebmailUid = Guid.NewGuid();
+
     private readonly Mock<ISendingIdentityStore> _store = new();
     private readonly Mock<IAliasesRepository> _aliases = new();
     private readonly Mock<IUsersRepository> _users = new();
@@ -20,7 +22,7 @@ public sealed class IdentitiesControllerTests
     private IdentitiesController CreateController(
         IReadOnlyList<SendingIdentity>? stored = null, IEnumerable<Alias>? aliases = null, string? fullName = "Mick Dubois")
     {
-        _store.Setup(s => s.GetAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.GetAsync(WebmailUid, It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored ?? []);
         _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>()))
             .ReturnsAsync(aliases ?? []);
@@ -29,12 +31,12 @@ public sealed class IdentitiesControllerTests
 
         return new IdentitiesController(_store.Object, _aliases.Object, _users.Object)
         {
-            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("mick", "weesky.be"),
+            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("mick", "weesky.be", WebmailUid),
         };
     }
 
     private static SendingIdentity Row(string address, string name, bool isDefault = false) =>
-        new() { AccountId = "mick@weesky.be", Address = address, DisplayName = name, IsDefault = isDefault };
+        new() { UserId = WebmailUid, Address = address, DisplayName = name, IsDefault = isDefault };
 
     [Fact]
     public async Task List_MergesStoredRowsWithThePrimaryAndFlagsStale()
@@ -57,8 +59,8 @@ public sealed class IdentitiesControllerTests
     {
         var controller = CreateController(aliases: [new Alias { Name = "michel", Domain = "weesky.be" }]);
         IReadOnlyList<SendingIdentity>? written = null;
-        _store.Setup(s => s.ReplaceAsync("mick@weesky.be", It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, IReadOnlyList<SendingIdentity>, CancellationToken>((_, rows, _) => written = rows)
+        _store.Setup(s => s.ReplaceAsync(WebmailUid, It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, IReadOnlyList<SendingIdentity>, CancellationToken>((_, rows, _) => written = rows)
             .Returns(Task.CompletedTask);
 
         var request = new ReplaceIdentitiesRequest
@@ -84,7 +86,7 @@ public sealed class IdentitiesControllerTests
 
         var bad = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("intruder@evil.com", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
-        _store.Verify(s => s.ReplaceAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<SendingIdentity>>(),
+        _store.Verify(s => s.ReplaceAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<SendingIdentity>>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -92,7 +94,7 @@ public sealed class IdentitiesControllerTests
     public async Task Replace_AStoredStaleAddressSurvivesValidation()
     {
         var controller = CreateController(stored: [Row("gone@weesky.be", "Ancien")]);
-        _store.Setup(s => s.ReplaceAsync("mick@weesky.be", It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.ReplaceAsync(WebmailUid, It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var request = new ReplaceIdentitiesRequest
@@ -107,13 +109,13 @@ public sealed class IdentitiesControllerTests
     public async Task Replace_NullListClearsEverything()
     {
         var controller = CreateController();
-        _store.Setup(s => s.ReplaceAsync("mick@weesky.be", It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.ReplaceAsync(WebmailUid, It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await controller.Replace(new ReplaceIdentitiesRequest { Identities = null! }, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        _store.Verify(s => s.ReplaceAsync("mick@weesky.be",
+        _store.Verify(s => s.ReplaceAsync(WebmailUid,
             It.Is<IReadOnlyList<SendingIdentity>>(rows => rows.Count == 0), It.IsAny<CancellationToken>()));
     }
 }

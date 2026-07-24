@@ -40,4 +40,7 @@ public sealed class User
     /// The full name of the user.
     /// </summary>
     public string FullName { get; set; }
+
+    /// <summary>The snoopy_webmail surrogate key. Stamped into the JWT at login, read every request.</summary>
+    public Guid WebmailUid { get; set; }
 }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Models;
@@ -72,5 +73,16 @@ public sealed class TokenManagerTests
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
         Assert.Contains("test-audience", jwt.Audiences);
+    }
+
+    [Fact]
+    public void Generate_StampsTheWebmailUidClaim()
+    {
+        var uid = Guid.NewGuid();
+        var user = new User("mick@weesky.be") { WebmailUid = uid };
+        var token = CreateSut().Generate(user);
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token.Token);
+        Assert.Equal(uid.ToString(), jwt.Claims.First(c => c.Type == WebmailClaimTypes.Uid).Value);
     }
 }

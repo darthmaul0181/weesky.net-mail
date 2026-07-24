@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 
@@ -10,10 +11,14 @@ internal sealed class AdminRepository : IAdminRepository
     private const int MinPasswordLength = 8;
 
     private readonly ApplicationDbContext _context;
+    private readonly IWebmailUserStore _webmailUsers;
+    private readonly ILogger<AdminRepository> _logger;
 
-    public AdminRepository(ApplicationDbContext context)
+    public AdminRepository(ApplicationDbContext context, IWebmailUserStore webmailUsers, ILogger<AdminRepository> logger)
     {
         _context = context;
+        _webmailUsers = webmailUsers;
+        _logger = logger;
     }
 
     public async Task<bool> IsAdminAsync(string username, string domainName)
@@ -133,8 +138,26 @@ internal sealed class AdminRepository : IAdminRepository
         if (user == null)
             return Result.Failure($"User with id {id} not found");
 
+        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
+
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
+
+        if (domain is not null)
+        {
+            var email = $"{user.Name}@{domain.Name}".Trim().ToLowerInvariant();
+            try
+            {
+                await _webmailUsers.DeleteByEmailAsync(email, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // Best-effort: the dovecot account is already gone; a webmail-DB failure must not
+                // fail the deletion. Orphan preference rows are recoverable; a failed request is not.
+                _logger.LogWarning(ex, "Webmail user row for {Email} could not be deleted after account removal", email);
+            }
+        }
+
         return Result.Success();
     }
 

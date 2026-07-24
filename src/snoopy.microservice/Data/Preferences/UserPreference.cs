@@ -13,8 +13,8 @@ namespace weesky.Snoopy.Microservice.Data.Preferences;
 [Table("user_preferences")]
 public sealed class UserPreference
 {
-    [Column("account_id")]
-    public string AccountId { get; set; } = string.Empty;
+    [Column("user_id")]
+    public Guid UserId { get; set; }
 
     /// <summary>Dotted and stable, e.g. "mail.pageSize" — never localised, never renamed lightly.</summary>
     [Column("preference_key")]

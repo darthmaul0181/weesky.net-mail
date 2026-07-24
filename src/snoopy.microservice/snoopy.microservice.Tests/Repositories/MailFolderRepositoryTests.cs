@@ -11,7 +11,8 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 
 public sealed class MailFolderRepositoryTests
 {
-    private static readonly User Alice = new("alice@weesky.be");
+    private static readonly Guid AliceUid = Guid.NewGuid();
+    private static readonly User Alice = new("alice@weesky.be") { WebmailUid = AliceUid };
 
     private static (MailFolderRepository repo, Mock<IImapConnectionFactory> factory,
                     Mock<IImapSession> session, Mock<IFolderRoleStore> store) CreateSut()
@@ -176,20 +177,8 @@ public sealed class MailFolderRepositoryTests
         var result = await repo.RenameFolderAsync(Alice, "hunter2", "Projects", "", "Work", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        store.Verify(s => s.ApplyRenameAsync("alice@weesky.be", "Projects", "Work", '.', 42UL, "M-new",
+        store.Verify(s => s.ApplyRenameAsync(AliceUid, "Projects", "Work", '.', 42UL, "M-new",
             It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Rename_LowercasesTheAccountId()
-    {
-        var (repo, _, session, store) = CreateSut();
-        SetupRename(session, "Work");
-
-        await repo.RenameFolderAsync(new User("Alice@WEESKY.be"), "hunter2", "Projects", "", "Work", CancellationToken.None);
-
-        store.Verify(s => s.ApplyRenameAsync("alice@weesky.be", It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<char>(), It.IsAny<ulong>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // IMAP is the source of truth: a failed bookkeeping write degrades to discovery via
@@ -199,7 +188,7 @@ public sealed class MailFolderRepositoryTests
     {
         var (repo, _, session, store) = CreateSut();
         SetupRename(session, "Work");
-        store.Setup(s => s.ApplyRenameAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+        store.Setup(s => s.ApplyRenameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<char>(), It.IsAny<ulong>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
              .ThrowsAsync(new InvalidOperationException("db down"));
 
@@ -220,7 +209,7 @@ public sealed class MailFolderRepositoryTests
         var result = await repo.RenameFolderAsync(Alice, "hunter2", "Projects", "", "Work", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        store.Verify(s => s.ApplyRenameAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+        store.Verify(s => s.ApplyRenameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<char>(), It.IsAny<ulong>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -289,7 +278,7 @@ public sealed class MailFolderRepositoryTests
         var result = await repo.DeleteFolderAsync(Alice, "hunter2", "Projects", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        store.Verify(s => s.RemoveSubtreeAsync("alice@weesky.be", "Projects", separator,
+        store.Verify(s => s.RemoveSubtreeAsync(AliceUid, "Projects", separator,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

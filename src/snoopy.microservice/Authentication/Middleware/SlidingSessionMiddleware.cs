@@ -56,7 +56,10 @@ public sealed class SlidingSessionMiddleware
         var password = credentials.Retrieve(context.Request);
         if (password.IsFailure) return;
 
-        var token = tokens.Generate(new User($"{name}@{domain}"));
+        var renewed = new User($"{name}@{domain}");
+        if (Guid.TryParse(context.User.FindFirst(WebmailClaimTypes.Uid)?.Value, out var uid))
+            renewed.WebmailUid = uid;
+        var token = tokens.Generate(renewed);
         if (string.IsNullOrEmpty(token.Token)) return;
 
         context.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, token.Token, new CookieOptions

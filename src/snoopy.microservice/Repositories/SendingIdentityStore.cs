@@ -5,23 +5,23 @@ namespace weesky.Snoopy.Microservice.Repositories;
 
 internal sealed class SendingIdentityStore(PreferencesDbContext context) : ISendingIdentityStore
 {
-    public async Task<IReadOnlyList<SendingIdentity>> GetAsync(string accountId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SendingIdentity>> GetAsync(Guid userId, CancellationToken cancellationToken)
         => await context.SendingIdentities.AsNoTracking()
-            .Where(i => i.AccountId == accountId)
+            .Where(i => i.UserId == userId)
             .OrderBy(i => i.Address)
             .ToListAsync(cancellationToken);
 
-    public async Task ReplaceAsync(string accountId, IReadOnlyList<SendingIdentity> identities, CancellationToken cancellationToken)
+    public async Task ReplaceAsync(Guid userId, IReadOnlyList<SendingIdentity> identities, CancellationToken cancellationToken)
     {
         var existing = await context.SendingIdentities
-            .Where(i => i.AccountId == accountId)
+            .Where(i => i.UserId == userId)
             .ToListAsync(cancellationToken);
         context.SendingIdentities.RemoveRange(existing);
 
         var now = DateTime.UtcNow;
         foreach (var identity in identities)
         {
-            identity.AccountId = accountId;
+            identity.UserId = userId;
             identity.UpdatedAt = now;
             context.SendingIdentities.Add(identity);
         }
