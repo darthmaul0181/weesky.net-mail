@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { EditorHandle } from './SquireEditor'
+import type { ActiveFormats, EditorHandle } from './SquireEditor'
 
 const SWATCHES = [
   '#000000', '#444444', '#666666', '#999999', '#cccccc', '#ffffff',
@@ -17,9 +17,9 @@ function Popover({ open, children }: { open: boolean; children: ReactNode }) {
   return <div className="compose-popover">{children}</div>
 }
 
-interface Props { editor: EditorHandle | null }
+interface Props { editor: EditorHandle | null; active?: ActiveFormats }
 
-export default function EditorToolbar({ editor }: Props) {
+export default function EditorToolbar({ editor, active }: Props) {
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
   const container = useRef<HTMLDivElement>(null)
@@ -44,8 +44,9 @@ export default function EditorToolbar({ editor }: Props) {
     )
   }
 
-  const btn = (label: string, glyph: ReactNode, onClick: () => void) => (
-    <button type="button" className="compose-tool" aria-label={label} title={label} onClick={onClick}>
+  const btn = (label: string, glyph: ReactNode, onClick: () => void, on = false) => (
+    <button type="button" className={`compose-tool${on ? ' is-active' : ''}`} aria-pressed={on}
+      aria-label={label} title={label} onClick={onClick}>
       {glyph}
     </button>
   )
@@ -55,10 +56,10 @@ export default function EditorToolbar({ editor }: Props) {
       {btn('Undo', '↶', () => editor?.command('undo'))}
       {btn('Redo', '↷', () => editor?.command('redo'))}
       <span className="compose-toolbar-rule" />
-      {btn('Bold', <b>B</b>, () => editor?.command('bold'))}
-      {btn('Italic', <i>I</i>, () => editor?.command('italic'))}
-      {btn('Underline', <u>U</u>, () => editor?.command('underline'))}
-      {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'))}
+      {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
+      {btn('Italic', <i>I</i>, () => editor?.command('italic'), active?.italic)}
+      {btn('Underline', <u>U</u>, () => editor?.command('underline'), active?.underline)}
+      {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
       <span className="compose-toolbar-rule" />
       <span className="compose-popover-anchor">
         {btn('Text colour', 'A', () => setOpenPopover(p => p === 'text' ? null : 'text'))}
@@ -88,8 +89,8 @@ export default function EditorToolbar({ editor }: Props) {
         </select>
       </span>
       <span className="compose-toolbar-rule" />
-      {btn('Bulleted list', '•', () => editor?.command('unorderedList'))}
-      {btn('Numbered list', '1.', () => editor?.command('orderedList'))}
+      {btn('Bulleted list', '•', () => editor?.command('unorderedList'), active?.unorderedList)}
+      {btn('Numbered list', '1.', () => editor?.command('orderedList'), active?.orderedList)}
       {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
       {btn('Increase quote', '❯❯', () => editor?.command('increaseQuote'))}
       {btn('Decrease quote', '❮❮', () => editor?.command('decreaseQuote'))}

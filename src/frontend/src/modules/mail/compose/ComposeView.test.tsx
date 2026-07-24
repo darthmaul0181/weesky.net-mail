@@ -87,12 +87,11 @@ beforeEach(() => {
 })
 
 describe('ComposeView', () => {
-  it('shows the identity as a read-only From, focuses To and refuses to send with no recipient', () => {
+  it('shows the identity as plain-text From, focuses To and refuses to send with no recipient', () => {
     renderCompose()
 
-    const from = screen.getByLabelText('From')
-    expect(from).toHaveValue('Mick Weesky <mick@weesky.be>')
-    expect(from).toHaveAttribute('readonly')
+    expect(screen.getByText('Mick Weesky (mick@weesky.be)')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'From' })).toBeNull()
     expect(screen.getByLabelText('To')).toHaveFocus()
     expect(screen.getByLabelText('Subject')).toBeInTheDocument()
     expect(sendButton()).toBeDisabled()

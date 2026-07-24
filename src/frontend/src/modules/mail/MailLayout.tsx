@@ -6,6 +6,7 @@ import { useToasts } from '../../hooks/useToasts.js'
 import FolderDialogs from './folders/FolderDialogs'
 import { flatten } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
+import PaperPlaneIcon from '../../icons/PaperPlaneIcon'
 import MessageList from './list/MessageList'
 import { nextUidOf } from './list/nextUid'
 import { useListRefresh } from './list/useListRefresh'
@@ -172,7 +173,6 @@ export default function MailLayout() {
       search={search}
       onSearchChange={changeSearch}
       onOpenResult={openResult}
-      onCompose={openCompose}
     />
   )
 
@@ -187,6 +187,11 @@ export default function MailLayout() {
       {/* Each column is a band stack: what scrolls is the middle band only, so the folder
           actions and the pager stay put instead of hiding below their own content. */}
       <div className="mail-folders">
+        <div className="mail-folders-compose">
+          <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
+            <PaperPlaneIcon size={15} /> New message
+          </button>
+        </div>
         <div className="mail-folders-scroll">
           {isLoading && <p className="mail-empty">Loading folders…</p>}
           {isError && <p className="mail-empty">Could not load folders.</p>}

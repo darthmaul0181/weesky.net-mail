@@ -23,7 +23,19 @@ export interface EditorHandle {
   makeLink: (url: string) => void
 }
 
-interface Props { onChange: () => void }
+/** Which inline/list formats are on at the caret, so the toolbar can light its buttons. */
+export interface ActiveFormats {
+  bold: boolean; italic: boolean; underline: boolean; strikethrough: boolean
+  unorderedList: boolean; orderedList: boolean
+}
+
+interface Props { onChange: () => void; onFormatChange?: (active: ActiveFormats) => void }
+
+const activeFormats = (squire: Squire): ActiveFormats => ({
+  bold: squire.hasFormat('b'), italic: squire.hasFormat('i'),
+  underline: squire.hasFormat('u'), strikethrough: squire.hasFormat('s'),
+  unorderedList: squire.hasFormat('ul'), orderedList: squire.hasFormat('ol'),
+})
 
 // Format toggles pair the apply call with its remove and the tag hasFormat checks.
 const toggles: Partial<Record<EditorCommand, [keyof Squire, keyof Squire, string]>> = {
@@ -54,19 +66,22 @@ const sanitizeToDOMFragment = (html: string): DocumentFragment => {
 }
 
 /**
- * Thin React shell over Squire. The canvas is always light — same rule as the reader
- * iframe: the compose shows what the recipient will see, whatever the app theme.
+ * Thin React shell over Squire. The canvas follows the app theme (see .compose-editor); the
+ * toolbar's active state rides Squire's pathChange event.
  */
-const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor({ onChange }, ref) {
+const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor({ onChange, onFormatChange }, ref) {
   const root = useRef<HTMLDivElement>(null)
   const editor = useRef<Squire | null>(null)
 
   useEffect(() => {
     const squire = new Squire(root.current!, { blockTag: 'DIV', sanitizeToDOMFragment })
     squire.addEventListener('input', onChange)
+    const report = () => onFormatChange?.(activeFormats(squire))
+    squire.addEventListener('pathChange', report)
+    report()
     editor.current = squire
     return () => { squire.destroy(); editor.current = null }
-    // Mount once: onChange identity is the caller's concern, rebinding would rebuild the editor.
+    // Mount once: onChange/onFormatChange identity is the caller's concern, rebinding would rebuild the editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

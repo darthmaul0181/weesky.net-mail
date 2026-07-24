@@ -9,7 +9,7 @@ function props(over: Partial<SelectionToolbarProps> = {}): SelectionToolbarProps
     overCap: false, deleteLabel: 'Delete',
     archive: { ...noop }, junk: { ...noop }, del: { ...noop }, move: { ...noop }, copy: { ...noop },
     markRead: { ...noop }, markUnread: { ...noop }, emptyFolder: { ...noop },
-    searchOpen: false, onToggleSearch: vi.fn(), onCompose: vi.fn(), ...over,
+    searchOpen: false, onToggleSearch: vi.fn(), ...over,
   }
 }
 
@@ -135,22 +135,6 @@ describe('SelectionToolbar', () => {
   it('marks the magnifier active while the bar is open', () => {
     render(<SelectionToolbar {...props({ searchOpen: true })} />)
     expect(screen.getByRole('button', { name: 'Search' }).className).toContain('is-active')
-  })
-
-  // The entry point to the composer, first in the actions and never bound to a selection.
-  it('opens the composer from the pencil, whatever is selected', () => {
-    const onCompose = vi.fn()
-    render(<SelectionToolbar {...props({ count: 0, onCompose })} />)
-    const pencil = screen.getByRole('button', { name: 'New message' })
-    expect(pencil).toBeEnabled()
-    fireEvent.click(pencil)
-    expect(onCompose).toHaveBeenCalledOnce()
-  })
-
-  it('puts the pencil first in the actions', () => {
-    render(<SelectionToolbar {...props()} />)
-    const actions = document.querySelector('.selection-actions') as HTMLElement
-    expect(actions.firstElementChild).toHaveAttribute('aria-label', 'New message')
   })
 
   it('disables the master checkbox when selection is disabled', () => {

@@ -17,7 +17,7 @@ const instance = {
   italic: vi.fn(), removeItalic: vi.fn(),
   underline: vi.fn(), removeUnderline: vi.fn(),
   strikethrough: vi.fn(), removeStrikethrough: vi.fn(),
-  hasFormat: vi.fn(() => false),
+  hasFormat: vi.fn<(tag: string) => boolean>(() => false),
   makeUnorderedList: vi.fn(), makeOrderedList: vi.fn(), removeList: vi.fn(),
   increaseQuoteLevel: vi.fn(), decreaseQuoteLevel: vi.fn(),
   makeLink: vi.fn(), removeLink: vi.fn(),
@@ -55,6 +55,21 @@ describe('SquireEditor', () => {
     ref.current!.command('bold')
     expect(instance.removeBold).toHaveBeenCalled()
     expect(instance.bold).not.toHaveBeenCalled()
+  })
+
+  it('reports active formats on pathChange so the toolbar can light its buttons', () => {
+    const onFormatChange = vi.fn()
+    const ref = createRef<EditorHandle>()
+    render(<SquireEditor ref={ref} onChange={() => {}} onFormatChange={onFormatChange} />)
+
+    // Reported once at mount (nothing on yet).
+    expect(onFormatChange).toHaveBeenLastCalledWith(expect.objectContaining({ bold: false, italic: false }))
+
+    instance.hasFormat.mockImplementation((tag: string) => tag === 'b')
+    const pathChange = instance.addEventListener.mock.calls.find(call => call[0] === 'pathChange')!
+    ;(pathChange[1] as () => void)()
+
+    expect(onFormatChange).toHaveBeenLastCalledWith(expect.objectContaining({ bold: true, italic: false }))
   })
 
   it('relays the non-toggle commands', () => {

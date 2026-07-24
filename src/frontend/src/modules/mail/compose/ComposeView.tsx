@@ -2,11 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSendMessage } from '../queries'
+import PaperPlaneIcon from '../../../icons/PaperPlaneIcon'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
 import RecipientsField, { isValidAddress } from './RecipientsField'
-import SquireEditor, { type EditorHandle } from './SquireEditor'
+import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
 import { useStagedAttachments } from './useStagedAttachments'
+
+const NO_FORMATS: ActiveFormats = {
+  bold: false, italic: false, underline: false, strikethrough: false,
+  unorderedList: false, orderedList: false,
+}
 
 interface Props { onNotify: (message: string, kind?: string) => void }
 
@@ -23,6 +29,7 @@ export default function ComposeView({ onNotify }: Props) {
   // State, not a ref: the toolbar sits above the editor, so a ref would still read null on the
   // render that mounts it and the buttons would do nothing until something else re-rendered.
   const [editor, setEditor] = useState<EditorHandle | null>(null)
+  const [active, setActive] = useState<ActiveFormats>(NO_FORMATS)
 
   const [to, setTo] = useState<string[]>([])
   const [cc, setCc] = useState<string[]>([])
@@ -96,14 +103,18 @@ export default function ComposeView({ onNotify }: Props) {
     <div className="compose-view" data-testid="compose-view">
       <div className="compose-header">
         <span className="modal-title">New message</span>
+        <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
+          <PaperPlaneIcon size={15} /> {send.isPending ? 'Sending…' : 'Send'}
+        </button>
         <button className="modal-close" aria-label="Close" onClick={close}>✕</button>
       </div>
 
       <div className="compose-fields">
-        <div className="field-h">
-          <label htmlFor="compose-from">From</label>
-          <input id="compose-from" type="text" readOnly
-            value={identity ? `${identity.displayName} <${identity.email}>` : ''} />
+        <div className="compose-from">
+          <span className="compose-from-label">From</span>
+          <span className="compose-from-value">
+            {identity ? `${identity.displayName} (${identity.email})` : ''}
+          </span>
         </div>
         <div className="compose-to-row">
           <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo} autoFocus />
@@ -120,17 +131,10 @@ export default function ComposeView({ onNotify }: Props) {
         </div>
       </div>
 
-      <EditorToolbar editor={editor} />
-      <SquireEditor ref={setEditor} onChange={touchBody} />
+      <EditorToolbar editor={editor} active={active} />
+      <SquireEditor ref={setEditor} onChange={touchBody} onFormatChange={setActive} />
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={attachments.remove} />
-
-      <div className="compose-actions">
-        <button type="button" className="btn btn-primary" disabled={!canSend} onClick={submit}>
-          {send.isPending ? 'Sending…' : 'Send'}
-        </button>
-        <button type="button" className="btn btn-ghost" onClick={close}>Discard</button>
-      </div>
 
       {blocker.state === 'blocked' && (
         <div className="modal-overlay">

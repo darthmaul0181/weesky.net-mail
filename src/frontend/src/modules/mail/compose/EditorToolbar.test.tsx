@@ -19,6 +19,15 @@ describe('EditorToolbar', () => {
     expect(editor.command).toHaveBeenCalledWith('bold')
   })
 
+  it('lights the buttons whose format is active at the caret', () => {
+    render(<EditorToolbar editor={fakeEditor()} active={{
+      bold: true, italic: false, underline: false, strikethrough: false,
+      unorderedList: false, orderedList: false,
+    }} />)
+    expect(screen.getByRole('button', { name: 'Bold' }).className).toContain('is-active')
+    expect(screen.getByRole('button', { name: 'Italic' }).className).not.toContain('is-active')
+  })
+
   it('applies a text colour from the swatch grid', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} />)

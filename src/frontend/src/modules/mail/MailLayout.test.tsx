@@ -231,7 +231,7 @@ describe('compose mode', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('')
   })
 
-  it('opens the composer from the toolbar pencil', async () => {
+  it('opens the composer from the New message button in the folder column', async () => {
     renderAt('/mail?folder=INBOX')
 
     fireEvent.click(await screen.findByRole('button', { name: 'New message' }))
