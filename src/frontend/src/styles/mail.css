@@ -1217,6 +1217,18 @@
   outline: none;
 }
 
+/* The global reset zeroes blockquote/list indent, so give the editor visible feedback for the
+   quote and list buttons. Editor-only: the sent HTML carries no inline style, so the recipient
+   keeps their own rendering. */
+.compose-editor blockquote {
+  margin: 0 0 0 4px;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--quote-text);
+}
+.compose-editor ul,
+.compose-editor ol { padding-left: 24px; }
+
 .compose-toolbar {
   display: flex;
   align-items: center;
