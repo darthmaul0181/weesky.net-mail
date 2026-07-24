@@ -51,14 +51,17 @@ export default function IdentitiesPage() {
     })
   }
 
-  const tiles = shown ? sortIdentities(shown) : []
+  // The primary is pinned first; every other identity is ordered alphabetically by display name.
+  const tiles = shown
+    ? [...shown.filter(i => i.isPrimary), ...sortIdentities(shown.filter(i => !i.isPrimary))]
+    : []
 
   return (
     <div className="settings-page">
       <h1>Identities</h1>
       <p className="identities-hint">
-        The addresses you can write from, each with its own name. Removing an identity never touches
-        the alias itself; your primary name comes from the Account tab.
+        The addresses you can send an email from, each with its own name. Removing an identity never
+        touches the alias itself; your primary name comes from the Account tab.
       </p>
 
       {isLoading && <p>Loading…</p>}
@@ -66,15 +69,15 @@ export default function IdentitiesPage() {
           is already on screen and still perfectly usable. */}
       {!isLoading && !shown && <p>Could not load your identities.</p>}
       {!isLoading && shown && (
-        <>
+        <div className="identity-panel">
           <div className="admin-list-header">
-            <span className="admin-list-title">
-              {shown.length} {shown.length === 1 ? 'identity' : 'identities'}
-            </span>
             <button className="btn btn-primary" style={{ width: 'auto' }} aria-label="Add identity"
               onClick={() => setAdding(true)}>
               <PersonPlusIcon /> Add
             </button>
+            <span className="admin-list-title">
+              {shown.length} {shown.length === 1 ? 'identity' : 'identities'}
+            </span>
           </div>
           {/* Usable but possibly out of date — the page edits this list, and a save built on stale
               rows comes back refused. */}
@@ -82,12 +85,9 @@ export default function IdentitiesPage() {
           <div className="admin-list identity-list">
             {tiles.map(i => (
               <div key={i.address} className={`admin-list-item${i.stale ? ' is-stale' : ''}`}>
-                <span className="admin-list-item-email">{i.displayName}</span>
-                <span className="admin-list-item-name">{i.address}</span>
-                {i.isPrimary && <span className="identity-tag">primary</span>}
-                {i.stale && <span className="identity-tag">unavailable</span>}
-                <div className="admin-list-item-actions">
-                  {/* A stale row cannot hold the default, so it carries no star. */}
+                {/* The star sits first, before the name. A stale row keeps the empty slot so the
+                    names stay aligned; it cannot hold the default. */}
+                <span className="identity-star-slot">
                   {!i.stale && i.isDefault && (
                     <span className="admin-icon-btn is-default" title="Default identity">
                       <StarIcon size={16} filled />
@@ -103,6 +103,12 @@ export default function IdentitiesPage() {
                       <StarIcon size={16} />
                     </button>
                   )}
+                </span>
+                <span className="admin-list-item-email">{i.displayName}</span>
+                <span className="admin-list-item-name">{i.address}</span>
+                {i.isPrimary && <span className="identity-tag">primary</span>}
+                {i.stale && <span className="identity-tag">unavailable</span>}
+                <div className="admin-list-item-actions">
                   {/* The primary's name comes from the Account tab, so it is not editable here. */}
                   {!i.stale && !i.isPrimary && (
                     <button
@@ -125,7 +131,7 @@ export default function IdentitiesPage() {
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {adding && shown && (

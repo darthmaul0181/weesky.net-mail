@@ -240,8 +240,8 @@ describe('ComposeView', () => {
     renderCompose()
 
     fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
-    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick (mick@weesky.be)')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
+    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick Weesky (mick@weesky.be)')
 
     addRecipient('To', 'a@b.c')
     fireEvent.click(sendButton())
@@ -257,14 +257,14 @@ describe('ComposeView', () => {
     renderCompose()
 
     fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
 
     vi.mocked(useIdentities).mockReturnValue(
       { data: [{ ...identityList[0], stale: true }, identityList[1]] } as never)
     // Any state change; the refetched list lands on the next render.
     fireEvent.click(screen.getByRole('button', { name: 'Cc' }))
 
-    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick (mick@weesky.be)')
+    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick Weesky (mick@weesky.be)')
     expect(screen.getByText('unavailable')).toBeInTheDocument()
   })
 
@@ -276,7 +276,7 @@ describe('ComposeView', () => {
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(await discardModal()).toBeInTheDocument()
@@ -287,7 +287,7 @@ describe('ComposeView', () => {
     const { router } = renderCompose()
 
     fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))

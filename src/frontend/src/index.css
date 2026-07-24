@@ -537,11 +537,20 @@ body {
 
 /* ── Identities page ─────────────────────────────────────── */
 
-.identities-hint { color: var(--text-muted); font-size: 13px; max-width: 560px; margin-bottom: 16px; }
+.identities-hint { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
 
-/* Identity tiles reuse the Administration list; the name sizes to content (capped) so it sits
-   next to the address rather than in a wide fixed column. */
+/* The identities area is deliberately narrow — about half the settings width. */
+.identity-panel { max-width: 50%; }
+.identity-panel .admin-list-header { justify-content: flex-start; gap: 14px; }
+
+/* Identity tiles reuse the Administration list; the star leads on the left, the name and address
+   size to content so the badge sits right after the address, and the actions are pushed to the end. */
+.identity-star-slot {
+  width: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+}
 .identity-list .admin-list-item-email { width: auto; max-width: 40ch; }
+.identity-list .admin-list-item-name { flex: none; }
+.identity-list .admin-list-item-actions { margin-left: auto; }
 
 .identity-tag {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;

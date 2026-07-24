@@ -2,6 +2,8 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 export interface MenuItem {
   label: string
+  /** Rich rendering for the row; `label` stays the key and the accessible-name fallback. */
+  node?: ReactNode
   icon?: ReactNode
   onSelect: () => void
   disabled?: boolean
@@ -54,7 +56,7 @@ export default function DropdownMenu({ ariaLabel, trigger, items, className }: P
                 disabled={entry.disabled} title={entry.title}
                 onClick={() => { setOpen(false); entry.onSelect() }}>
                 {entry.icon}
-                {entry.label}
+                {entry.node ?? entry.label}
               </button>
             )
           )}

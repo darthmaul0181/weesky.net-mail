@@ -41,9 +41,9 @@ describe('IdentitiesPage', () => {
     expect(screen.getByText('unavailable')).toBeInTheDocument()
   })
 
-  it('orders the tiles alphabetically by display name', () => {
+  it('pins the primary first, then orders the rest alphabetically by display name', () => {
     const { container } = render(<IdentitiesPage />)
-    expect(tileNames(container)).toEqual(['Ancien', 'Michel', 'Mick Dubois'])
+    expect(tileNames(container)).toEqual(['Mick Dubois', 'Ancien', 'Michel'])
   })
 
   it('moving the default saves the whole list', () => {
