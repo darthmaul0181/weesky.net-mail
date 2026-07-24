@@ -429,6 +429,11 @@
   background: color-mix(in oklab, var(--badge-count-bg) 14%, transparent);
 }
 
+/* The starred filter wears .row-star's look, not .is-active's: the filled star already says it
+   is on, and the same state should not read one way in the heading and another in the rows.
+   No hover rule needed here — .selection-btn:hover:not(:disabled) already outranks this. */
+.selection-star.is-on { color: var(--badge-count-bg); }
+
 /* Quick-search band, folded open by the toolbar's magnifier. */
 .search-bar {
   flex: none;

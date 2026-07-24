@@ -156,7 +156,7 @@ describe('SelectionToolbar', () => {
 
     const star = screen.getByRole('button', { name: 'Show all messages' })
     expect(star).toHaveAttribute('aria-pressed', 'true')
-    expect(star.className).toContain('is-active')
+    expect(star.className).toContain('is-on')
   })
 
   // Turning it on needs a folder to search; turning it off never does.

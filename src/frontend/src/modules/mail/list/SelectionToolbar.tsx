@@ -99,7 +99,7 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         {/* Beside the name rather than in the actions: it filters the view, it acts on nothing. */}
         <button
           type="button"
-          className={`selection-btn selection-star${props.starred ? ' is-active' : ''}`}
+          className={`selection-btn selection-star${props.starred ? ' is-on' : ''}`}
           aria-label={props.starred ? 'Show all messages' : 'Show starred only'}
           title={props.starred ? 'Show all messages' : 'Show starred only'}
           aria-pressed={props.starred}
