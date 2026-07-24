@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MimeKit;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -23,21 +24,30 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Authorize]
 public sealed class MailController : ApiBaseController
 {
+    /// <summary>MimeKit accepts a bare local part by default, so "not-an-address" would parse.</summary>
+    private static readonly ParserOptions RecipientParserOptions = CreateRecipientParserOptions();
+
     private readonly IMailFolderRepository _folders;
     private readonly IMailMessageRepository _messages;
     private readonly IMailCredentialStore _credentials;
     private readonly IFolderRoleStore _roleStore;
+    private readonly IStagedAttachmentStore _staged;
+    private readonly IMailSender _sender;
 
     public MailController(
         IMailFolderRepository folders,
         IMailMessageRepository messages,
         IMailCredentialStore credentials,
-        IFolderRoleStore roleStore)
+        IFolderRoleStore roleStore,
+        IStagedAttachmentStore staged,
+        IMailSender sender)
     {
         _folders = folders;
         _messages = messages;
         _credentials = credentials;
         _roleStore = roleStore;
+        _staged = staged;
+        _sender = sender;
     }
 
     /// <summary>
@@ -651,6 +661,103 @@ public sealed class MailController : ApiBaseController
             criteria, request.Page, request.PageSize, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Stages one outgoing attachment. Files upload as they are added — the Gmail/Rainloop
+    /// model — and Send references the returned ids. No IMAP involved, so no credentials
+    /// cookie is read. Kestrel's body cap is disabled: the store enforces the configured
+    /// limit itself while streaming.
+    /// </summary>
+    /// <param name="file">the uploaded file</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">Id and metadata of the staged file</response>
+    /// <response code="400">No file, file over the limit, or account staging cap reached</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpPost("Attachments")]
+    [DisableRequestSizeLimit]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<StagedAttachmentInfo>> UploadAttachment(IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A file is required"));
+
+        await using var content = file.OpenReadStream();
+        var result = await _staged.SaveAsync(
+            FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email),
+            file.FileName, file.ContentType, content, cancellationToken);
+
+        return FromResult(result);
+    }
+
+    /// <summary>
+    /// Removes one staged attachment. Always 204: the namespace is sealed per account, so an
+    /// unknown or foreign id resolves to nothing — and deleting nothing is idempotent success.
+    /// </summary>
+    /// <param name="id">staged attachment id</param>
+    /// <response code="204">Gone, or never was</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpDelete("Attachments/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public ActionResult DeleteAttachment(Guid id)
+    {
+        _staged.Delete(FolderRoleStore.CanonicalAccountId(AuthenticatedUser.Email), id);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Sends a composed message: sanitised multipart/alternative body, staged attachments,
+    /// then a \Seen copy APPENDed to the sent role. The SMTP envelope is derived from the
+    /// recipients and MailKit strips the Bcc header at transmission, so only the addressees
+    /// see it went out; the filed Sent copy keeps the header so the sender can see who was
+    /// blind-copied. A failed copy never fails the send — the response says which happened.
+    /// </summary>
+    /// <param name="request">recipients, subject, HTML body and staged attachment ids</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">Sent; appendedToSent tells whether the copy was filed</response>
+    /// <response code="400">No recipient, an invalid address, or a staged id no longer available</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">The mail server refused the submission</response>
+    [HttpPost("Send")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<SendMessageResult>> SendMessage(SendMessageRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+
+        // An explicit "to": null in the body overrides the record's [] default; normalise every
+        // recipient list so a null never NREs downstream.
+        request = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [] };
+        if (request.To.Count == 0) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one recipient is required"));
+
+        foreach (var address in request.To.Concat(request.Cc).Concat(request.Bcc))
+        {
+            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientParserOptions, address, out _))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
+        }
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _sender.SendAsync(AuthenticatedUser, password.Value, request, cancellationToken);
+
+        if (result.IsFailure && result.Error == IMailSender.UnknownAttachment)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                "An attachment is no longer available; remove it and attach it again"));
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    private static ParserOptions CreateRecipientParserOptions()
+    {
+        var options = ParserOptions.Default.Clone();
+        options.AllowAddressesWithoutDomain = false;
+        return options;
     }
 
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)

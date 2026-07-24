@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using MimeKit;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 
@@ -29,4 +30,7 @@ public interface IMailMessageRepository
 
     /// <summary>One page of search results across one folder or the whole mailbox.</summary>
     Task<Result<MailSearchPage>> SearchAsync(User user, string password, string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>Appends a message to a folder, optionally marked read.</summary>
+    Task<Result> AppendAsync(User user, string password, string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken);
 }

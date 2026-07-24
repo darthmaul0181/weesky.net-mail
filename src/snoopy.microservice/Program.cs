@@ -102,6 +102,14 @@ builder.Services.AddOptions<MailOptions>().Bind(builder.Configuration.GetSection
 builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
 builder.Services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
 builder.Services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
+builder.Services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
+builder.Services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
+builder.Services.AddSingleton(TimeProvider.System);
+// Singleton is load-bearing: staged metadata and per-account reserved bytes live in this
+// instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.
+builder.Services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
+builder.Services.AddHostedService<StagedAttachmentSweeper>();
+builder.Services.AddScoped<IMailSender, MailSender>();
 builder.Services.AddSingleton<IRuleProvider, WeeskyRuleProvider>();
 builder.Services.AddSingleton<IRuleProvider, RainloopRuleProvider>();
 builder.Services.AddSingleton<IRuleProviderRegistry, RuleProviderRegistry>();

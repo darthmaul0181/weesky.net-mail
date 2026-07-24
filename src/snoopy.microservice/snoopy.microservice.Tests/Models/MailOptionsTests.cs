@@ -49,4 +49,24 @@ public sealed class MailOptionsTests
         Assert.False(new MailOptions { ImapHost = "" }.IsImapConfigured);
         Assert.True(new MailOptions { ImapHost = "mail.weesky.net" }.IsImapConfigured);
     }
+
+    [Fact]
+    public void IsSmtpConfigured_FalseWhenHostMissing()
+    {
+        Assert.False(new MailOptions().IsSmtpConfigured);
+    }
+
+    [Fact]
+    public void IsSmtpConfigured_TrueWhenHostSet()
+    {
+        Assert.True(new MailOptions { SmtpHost = "mail.example.org" }.IsSmtpConfigured);
+    }
+
+    [Fact]
+    public void Defaults_MatchTheSpec()
+    {
+        var options = new MailOptions();
+        Assert.Equal(25, options.MaxMessageSizeMb);
+        Assert.Equal(12, options.StagedAttachmentTtlHours);
+    }
 }

@@ -19,6 +19,8 @@ public sealed class MailControllerTests
     private readonly Mock<IMailMessageRepository> _messages = new();
     private readonly Mock<IMailCredentialStore> _credentials = new();
     private readonly Mock<IFolderRoleStore> _roleStore = new();
+    private readonly Mock<IStagedAttachmentStore> _staged = new();
+    private readonly Mock<IMailSender> _sender = new();
 
     private MailController CreateController()
     {
@@ -26,7 +28,8 @@ public sealed class MailControllerTests
         _roleStore.Setup(s => s.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
-        return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object)
+        return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
+                                  _staged.Object, _sender.Object)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be")
         };
@@ -1362,5 +1365,154 @@ public sealed class MailControllerTests
             new SearchMessagesRequest { FolderPath = "INBOX", Quick = "x" }, CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status502BadGateway, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+    }
+
+    // ── Attachment staging ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task UploadAttachment_RefusesAMissingFile()
+    {
+        var result = await CreateController().UploadAttachment(null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UploadAttachment_StoresUnderTheCallersAccount()
+    {
+        var info = new StagedAttachmentInfo(Guid.NewGuid(), "a.txt", 4, "text/plain");
+        _staged.Setup(s => s.SaveAsync(
+                FolderRoleStore.CanonicalAccountId("alice@weesky.be"), "a.txt", "text/plain",
+                It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(info));
+
+        var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.txt")
+        { Headers = new HeaderDictionary(), ContentType = "text/plain" };
+
+        var result = await CreateController().UploadAttachment(file, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(info, ok.Value);
+    }
+
+    [Fact]
+    public async Task UploadAttachment_AnswersBadRequestWhenTheStoreRefuses()
+    {
+        _staged.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<StagedAttachmentInfo>("The attachment exceeds the 25 MB limit"));
+
+        var file = new FormFile(new MemoryStream([1]), 0, 1, "file", "big.bin")
+        { Headers = new HeaderDictionary(), ContentType = "application/octet-stream" };
+
+        var result = await CreateController().UploadAttachment(file, CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result); // FromResult path: StatusCode(400, enveloppe)
+    }
+
+    [Fact]
+    public void DeleteAttachment_IsIdempotentAndScoped()
+    {
+        var id = Guid.NewGuid();
+
+        var result = CreateController().DeleteAttachment(id);
+
+        Assert.IsType<NoContentResult>(result);
+        _staged.Verify(s => s.Delete(FolderRoleStore.CanonicalAccountId("alice@weesky.be"), id), Times.Once);
+    }
+
+    // ── Send ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SendMessage_RefusesWithoutARecipient()
+    {
+        var result = await CreateController().SendMessage(new SendMessageRequest(), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SendMessage_NamesTheInvalidAddress()
+    {
+        var request = new SendMessageRequest { To = ["ok@example.com"], Cc = ["not-an-address"] };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("not-an-address", ((ResultEnveloppe)bad.Value!).Message);
+    }
+
+    [Fact]
+    public async Task SendMessage_TreatsANullRecipientListAsNoRecipient()
+    {
+        var request = new SendMessageRequest { To = null! };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SendMessage_RejectsANullRecipientElement()
+    {
+        var request = new SendMessageRequest { To = ["a@example.com", null!] };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SendMessage_AnswersUnauthorizedWithoutCredentials()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.SendMessage(
+            new SendMessageRequest { To = ["a@example.com"] }, CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SendMessage_MapsUnknownAttachmentToBadRequest()
+    {
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<SendMessageResult>(IMailSender.UnknownAttachment));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["a@example.com"] }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SendMessage_MapsAServerRefusalTo502()
+    {
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<SendMessageResult>("The mail server refused the message"));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["a@example.com"] }, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
+    [Fact]
+    public async Task SendMessage_AnswersTheSendersResult()
+    {
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new SendMessageResult(false)));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["a@example.com"] }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(((SendMessageResult)ok.Value!).AppendedToSent);
     }
 }

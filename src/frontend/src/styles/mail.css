@@ -1200,3 +1200,129 @@
   font-size: 12.5px;
   cursor: pointer;
 }
+
+/* ── Compose: editor ─────────────────────────────────────────────────────── */
+/* The canvas is deliberately light in every theme — like the reader iframe, it shows
+   what the recipient will see. The one sanctioned hard-coded colour pair. */
+.compose-editor {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #ffffff;
+  color: #111111;
+  color-scheme: light;
+  padding: 12px 16px;
+  outline: none;
+}
+
+.compose-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.compose-tool {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compose-tool:hover { background: var(--surface-sunken); }
+
+.compose-toolbar-rule {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.compose-select select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.compose-popover-anchor { position: relative; }
+
+.compose-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+}
+
+.compose-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 20px);
+  gap: 4px;
+}
+
+.compose-swatches button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.compose-link-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Compose: recipients ─────────────────────────────────────────────────── */
+.recipients-box {
+  flex: 1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); padding: 4px 6px; min-height: 32px;
+}
+.recipients-box input { flex: 1; min-width: 140px; border: none; background: none; color: var(--text); outline: none; }
+.recipient-token, .compose-attachment {
+  display: inline-flex; align-items: center;
+  background: var(--surface-sunken); font-size: 12px;
+}
+.recipient-token { gap: 4px; border-radius: 999px; padding: 2px 8px; }
+.compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; }
+.recipient-token.is-invalid { color: var(--danger); border: 1px solid var(--danger); }
+.recipient-token button, .compose-attachment button { background: none; border: none; cursor: pointer; color: inherit; padding: 0; }
+
+.compose-link-form input { width: 220px; }
+
+/* ── Compose: view ───────────────────────────────────────────────────────── */
+.mail-compose { flex: 1; min-width: 0; display: flex; }
+.compose-view {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); min-width: 0;
+}
+.compose-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.compose-fields { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; }
+.compose-to-row { display: flex; align-items: flex-start; gap: 8px; }
+.compose-to-row .recipients-field { flex: 1; }
+.compose-cc-links { display: flex; gap: 8px; padding-top: 6px; }
+.compose-link-btn { background: none; border: none; color: var(--action-primary); cursor: pointer; padding: 0; font-size: 13px; }
+.compose-actions { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+/* ── Compose: attachments ────────────────────────────────────────────────── */
+.compose-attachments { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border); }
+.compose-attachment.is-error { border: 1px solid var(--danger); }
+.compose-attachment-error { color: var(--danger); }
+.compose-attachment progress { width: 80px; }

@@ -6,6 +6,7 @@ import TrashIcon from '../../../icons/TrashIcon'
 import KebabIcon from '../../../icons/KebabIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
+import PencilIcon from '../../../icons/PencilIcon.jsx'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
 import SearchIcon from '../../../icons/SearchIcon'
@@ -32,6 +33,8 @@ export interface SelectionToolbarProps {
   emptyFolder: ToolbarAction
   searchOpen: boolean
   onToggleSearch: () => void
+  /** Entry point to the composer; bound to no selection, so it is never greyed. */
+  onCompose: () => void
   /** All-folders results: rows carry no checkbox, so the master must not promise one. */
   selectionDisabled?: boolean
 }
@@ -90,6 +93,9 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
       />
       <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
       <div className="selection-actions">
+        <button type="button" className="selection-btn" aria-label="New message" title="New message" onClick={props.onCompose}>
+          <PencilIcon size={20} />
+        </button>
         <button type="button" className="selection-btn" aria-label="Archive" {...actionProps(props.archive, 'Archive')}>
           <ArchiveIcon size={20} />
         </button>

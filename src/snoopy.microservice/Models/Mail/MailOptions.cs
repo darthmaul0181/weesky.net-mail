@@ -23,14 +23,21 @@ public sealed class MailOptions
     /// </summary>
     public SecureSocketOptions ImapSecurity { get; set; } = SecureSocketOptions.StartTls;
 
-    /// <summary>Submission host name. Consumed when composing lands.</summary>
+    /// <summary>Submission host name.</summary>
     public string SmtpHost { get; set; } = string.Empty;
 
-    /// <summary>Submission port. Consumed when composing lands.</summary>
+    /// <summary>Submission port.</summary>
     public int SmtpPort { get; set; } = 587;
 
-    /// <summary>Submission transport security. Consumed when composing lands.</summary>
+    /// <summary>Submission transport security.</summary>
     public SecureSocketOptions SmtpSecurity { get; set; } = SecureSocketOptions.StartTls;
+
+    /// <summary>Maximum outgoing message size — sum of raw attachment bytes, in megabytes.
+    /// Base64 adds ~35%: keep this below Postfix's message_size_limit accordingly.</summary>
+    public int MaxMessageSizeMb { get; set; } = 25;
+
+    /// <summary>How long a staged attachment survives without being sent, in hours.</summary>
+    public int StagedAttachmentTtlHours { get; set; } = 12;
 
     /// <summary>Connect and command timeout, in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 30;
@@ -43,4 +50,7 @@ public sealed class MailOptions
 
     /// <summary>True when enough is configured to attempt an IMAP connection.</summary>
     public bool IsImapConfigured => !string.IsNullOrWhiteSpace(ImapHost);
+
+    /// <summary>True when enough is configured to attempt an SMTP connection.</summary>
+    public bool IsSmtpConfigured => !string.IsNullOrWhiteSpace(SmtpHost);
 }

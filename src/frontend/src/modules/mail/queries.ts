@@ -569,6 +569,40 @@ export function useDeleteMessages(onError?: (message: string) => void) {
   })
 }
 
+export interface SendMessageArgs {
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  htmlBody: string
+  attachmentIds: string[]
+}
+
+export interface SendMessageResult { appendedToSent: boolean }
+
+/**
+ * Sends a composed message. On success invalidates the folder tree (the Sent copy changes its
+ * counts) plus the Sent folder's own message queries, found in the cached tree by specialUse.
+ */
+export function useSendMessage() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: (args: SendMessageArgs) => api.sendMessage(args) as Promise<SendMessageResult>,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      const folders = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
+      const sent = folders ? flatten(folders).find(entry => entry.node.specialUse === 'sent') : undefined
+      if (sent) {
+        queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, sent.node.path) })
+        queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.node.path) })
+      }
+    },
+  })
+}
+
 export interface EmptyFolderArgs {
   folderPath: string
   /** Blank/absent = purge; set = move every message into this folder. */

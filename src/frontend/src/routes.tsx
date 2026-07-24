@@ -26,6 +26,8 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/mail" replace /> },
           { path: 'mail', element: <Suspense fallback={null}><MailLayout /></Suspense> },
+          // The composer lives inside the mail module: same layout, list and reader replaced.
+          { path: 'mail/compose', element: <Suspense fallback={null}><MailLayout /></Suspense> },
           { path: 'calendar', element: <ComingSoon module="Calendar" /> },
           { path: 'contacts', element: <ComingSoon module="Contacts" /> },
           {

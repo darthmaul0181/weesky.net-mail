@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { settle } from '../../test-utils'
-import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useSearchMessages } from './queries'
+import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useSearchMessages, useSendMessage } from './queries'
+import type { MailFolderNode } from './api/mailTypes'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   createMailFolder: vi.fn(),
   getPreferences: vi.fn(),
   searchMessages: vi.fn(),
+  sendMessage: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -22,6 +24,7 @@ vi.mock('../../api.js', () => ({
     createMailFolder: mocks.createMailFolder,
     getPreferences: mocks.getPreferences,
     searchMessages: mocks.searchMessages,
+    sendMessage: mocks.sendMessage,
   },
 }))
 
@@ -337,5 +340,62 @@ describe('folder mutations', () => {
     await expect(result.current.mutateAsync({ parentPath: '', name: 'x' })).rejects.toThrow('nope')
 
     expect(invalidate).not.toHaveBeenCalled()
+  })
+})
+
+describe('useSendMessage', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const sendArgs = {
+    to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
+  }
+
+  it('calls api.sendMessage with the composed args', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper })
+    await result.current.mutateAsync(sendArgs)
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith(sendArgs)
+  })
+
+  it('invalidates the folders and the sent folder lists when the tree has a sent node', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    const { client, wrapper } = createWrapper()
+    const tree: MailFolderNode[] = [
+      {
+        path: 'Sent', name: 'Sent', specialUse: 'sent', selectable: true, subscribed: true,
+        total: 1, unread: 0, uidValidity: 1, uidNext: 2, highestModSeq: null, children: [],
+      },
+    ]
+    client.setQueryData(mailKeys.folders('primary'), tree)
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper })
+    await result.current.mutateAsync(sendArgs)
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.messagesIn('primary', 'Sent') })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.messageStreamIn('primary', 'Sent') })
+  })
+
+  it('does not invalidate any sent-folder key when the tree holds no sent node', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: false })
+    const { client, wrapper } = createWrapper()
+    const tree: MailFolderNode[] = [
+      {
+        path: 'INBOX', name: 'INBOX', specialUse: 'inbox', selectable: true, subscribed: true,
+        total: 1, unread: 0, uidValidity: 1, uidNext: 2, highestModSeq: null, children: [],
+      },
+    ]
+    client.setQueryData(mailKeys.folders('primary'), tree)
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper })
+    await result.current.mutateAsync(sendArgs)
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
+    expect(invalidate).toHaveBeenCalledTimes(1)
   })
 })

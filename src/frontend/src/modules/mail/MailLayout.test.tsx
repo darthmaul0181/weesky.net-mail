@@ -29,6 +29,11 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccount: { id: 'primary' } }),
 }))
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ isDark: false }) }))
+// The composer owns a router blocker, which needs a data router; this file's harness is a plain
+// MemoryRouter, so what is under test here is the layout's compose mode, not the composer.
+vi.mock('./compose/ComposeView', () => ({
+  default: () => <div data-testid="compose-view">compose</div>,
+}))
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
@@ -45,7 +50,13 @@ const folders = [
 ]
 
 function Where() {
-  return <span data-testid="search">{useLocation().search}</span>
+  const location = useLocation()
+  return (
+    <>
+      <span data-testid="search">{location.search}</span>
+      <span data-testid="path">{location.pathname}</span>
+    </>
+  )
 }
 
 function renderAt(
@@ -193,6 +204,55 @@ describe('a message departing the folder', () => {
       expect(search).not.toContain('uid=7')
       expect(search).not.toContain('uid=8')
     })
+  })
+})
+
+// The composer lives inside the mail module: the rail and the folder tree stay, only the
+// list/reader side is replaced.
+describe('compose mode', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('replaces the list and the reader with the composer, keeping the folder tree', async () => {
+    const { container } = renderAt('/mail/compose')
+
+    expect(await screen.findByTestId('compose-view')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('nav[aria-label="Folders"]')).not.toBeNull())
+    expect(container.querySelector('.mail-list')).toBeNull()
+    expect(screen.queryByText(/select a message/i)).toBeNull()
+  })
+
+  // No folder in the URL on /mail/compose: the inbox redirect must not fire there, or it would
+  // navigate — the very thing the composer's blocker is there to question.
+  it('does not redirect to the inbox while composing', async () => {
+    renderAt('/mail/compose')
+
+    await screen.findByTestId('compose-view')
+    await settle()
+    expect(screen.getByTestId('search')).toHaveTextContent('')
+  })
+
+  it('opens the composer from the toolbar pencil', async () => {
+    renderAt('/mail?folder=INBOX')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New message' }))
+
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
+    expect(screen.getByTestId('compose-view')).toBeInTheDocument()
+  })
+
+  // Clicking a folder is a navigation out of /mail/compose; the composer's blocker owns the
+  // "discard?" question, so the layout only has to leave.
+  it('leaves the composer for the folder clicked in the tree', async () => {
+    renderAt('/mail/compose')
+
+    await screen.findByTestId('compose-view')
+    await waitFor(() => expect(document.querySelector('nav[aria-label="Folders"]')).not.toBeNull())
+    const tree = document.querySelector('nav[aria-label="Folders"]') as HTMLElement
+    fireEvent.click(within(tree).getByRole('button', { name: 'Projects' }))
+
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/))
+    expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects')
+    expect(screen.queryByTestId('compose-view')).toBeNull()
   })
 })
 

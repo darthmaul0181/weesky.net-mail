@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using MimeKit;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
@@ -94,4 +95,7 @@ public interface IImapSession : IAsyncDisposable
     /// and the page windows stay honest.
     /// </summary>
     Task<Result<MailSearchPage>> SearchAsync(string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>Appends a message to a folder — the Sent copy after a send.</summary>
+    Task<Result> AppendAsync(string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken);
 }

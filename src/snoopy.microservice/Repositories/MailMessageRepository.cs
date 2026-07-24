@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using MimeKit;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
@@ -105,5 +106,16 @@ internal sealed class MailMessageRepository : IMailMessageRepository
         await using var session = sessionResult.Value;
 
         return await session.SearchAsync(folderPath, allFolders, criteria, page, pageSize, cancellationToken);
+    }
+
+    public async Task<Result> AppendAsync(User user, string password, string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
+        await using var session = sessionResult.Value;
+
+        return await session.AppendAsync(folderPath, message, seen, cancellationToken);
     }
 }

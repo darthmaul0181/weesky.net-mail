@@ -644,6 +644,110 @@ describe('requestBlob', () => {
   })
 })
 
+describe('sendMessage', () => {
+  it('posts the payload', async () => {
+    mockFetch(200, { json: { appendedToSent: true } })
+    const { api } = await import('./api.js')
+
+    await api.sendMessage({ to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [] })
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Mail/Send')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body).to[0]).toBe('a@b.c')
+  })
+})
+
+describe('deleteAttachment', () => {
+  it('targets the id', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.deleteAttachment('11111111-2222-3333-4444-555555555555')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Mail/Attachments/11111111-2222-3333-4444-555555555555'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+})
+
+describe('uploadAttachment', () => {
+  let sent
+  class FakeXhr {
+    upload = {}
+    open(method, url) { this.method = method; this.url = url }
+    send(form) { sent = { xhr: this, form } }
+    abort() {}
+  }
+  beforeEach(() => { sent = undefined; vi.stubGlobal('XMLHttpRequest', FakeXhr) })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('resolves with the parsed body on 200', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), {})
+    sent.xhr.status = 200
+    sent.xhr.responseText = '{"id":"i","fileName":"a.txt","size":1,"contentType":"text/plain"}'
+    sent.xhr.onload()
+    await expect(done).resolves.toEqual({ id: 'i', fileName: 'a.txt', size: 1, contentType: 'text/plain' })
+    expect(sent.xhr.withCredentials).toBe(true)
+    expect(sent.xhr.url).toContain('/api/Mail/Attachments')
+  })
+
+  it('rejects with the enveloppe message and reports progress', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const onProgress = vi.fn()
+    const done = uploadAttachment(new File(['x'], 'a.txt'), { onProgress })
+    sent.xhr.upload.onprogress({ lengthComputable: true, loaded: 1, total: 2 })
+    sent.xhr.status = 400
+    sent.xhr.responseText = '{"message":"The attachment exceeds the 25 MB limit"}'
+    sent.xhr.onload()
+    await expect(done).rejects.toThrow('The attachment exceeds the 25 MB limit')
+    expect(onProgress).toHaveBeenCalledWith(0.5)
+  })
+
+  it('rejects with the code from the error envelope on a 401', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), {})
+    sent.xhr.status = 401
+    sent.xhr.responseText = '{"message":"credentials_unavailable"}'
+    sent.xhr.onload()
+    await expect(done).rejects.toMatchObject({ status: 401, code: 'credentials_unavailable' })
+  })
+
+  it('aborts the xhr and rejects when the signal fires mid-flight', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const controller = new AbortController()
+    const done = uploadAttachment(new File(['x'], 'a.txt'), { signal: controller.signal })
+    const abortSpy = vi.spyOn(sent.xhr, 'abort')
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener')
+    controller.abort()
+    await expect(done).rejects.toThrow('Aborted')
+    expect(abortSpy).toHaveBeenCalledOnce()
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('detaches the abort listener once the request settles', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const controller = new AbortController()
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), { signal: controller.signal })
+    sent.xhr.status = 200
+    sent.xhr.responseText = '{"id":"i"}'
+    sent.xhr.onload()
+    await done
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('rejects immediately when the signal is already aborted', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const controller = new AbortController()
+    controller.abort()
+    await expect(uploadAttachment(new File(['x'], 'a.txt'), { signal: controller.signal })).rejects.toThrow('Aborted')
+    expect(sent).toBeUndefined()
+  })
+})
+
 describe('preferences', () => {
   it('reads every preference in one call', async () => {
     mockFetch(200, { json: { 'mail.pageSize': '30' } })

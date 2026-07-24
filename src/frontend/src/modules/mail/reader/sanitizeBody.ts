@@ -1,4 +1,5 @@
 ﻿import DOMPurify from 'dompurify'
+import { FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
 
 /**
  * Client-side pass over a body the backend already sanitised.
@@ -19,8 +20,8 @@ export function sanitizeBody(html: string): string {
     // unknown data attribute otherwise, and the "show images" action would have nothing left
     // to restore.
     ADD_ATTR: ['data-blocked-src', 'target'],
-    FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form', 'base', 'link'],
-    FORBID_ATTR: ['srcset', 'formaction', 'ping'],
+    FORBID_TAGS,
+    FORBID_ATTR,
   })
 }
 

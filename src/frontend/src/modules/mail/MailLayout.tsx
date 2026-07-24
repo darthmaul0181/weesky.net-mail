@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+﻿import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import type { SearchCriteria } from './list/searchCriteria'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
@@ -17,6 +17,9 @@ import { readingPaneOf, usePreferences } from '../../hooks/usePreferences'
 import PaneSplitter from './split/PaneSplitter'
 import { usePaneSize } from './split/usePaneSize'
 
+// Lazy: pulls in squire-rte, which every /mail visitor would otherwise download unread.
+const ComposeView = lazy(() => import('./compose/ComposeView'))
+
 /**
  * The mail module's three columns. The shell provides a single outlet, so a module builds its
  * own columns inside it — the same way the settings section does.
@@ -27,6 +30,8 @@ import { usePaneSize } from './split/usePaneSize'
  */
 export default function MailLayout() {
   const [params, setParams] = useSearchParams()
+  const composing = useMatch('/mail/compose') != null
+  const navigate = useNavigate()
   const { data: folders, isLoading, isError } = useFolders()
   const { toasts, addToast, removeToast } = useToasts()
   const moveMessages = useMoveMessages(addToast)
@@ -67,17 +72,25 @@ export default function MailLayout() {
   // The inbox comes from the resolution chain's role rather than the name "INBOX", so a server
   // that names it otherwise still lands right. No uid: which message to read stays the user's
   // call. Replaces the entry, or Back would bounce off the redirect instead of leaving mail.
+  // Never while composing: the composer names no folder, and the redirect would be a navigation
+  // the leave guard then has to question.
   useEffect(() => {
-    if (folder || !folders) return
+    if (composing || folder || !folders) return
 
     const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')
     if (inbox) setParams({ folder: inbox.node.path }, { replace: true })
-  }, [folder, folders, setParams])
+  }, [composing, folder, folders, setParams])
 
   function selectFolder(path: string) {
-    // Drops uid: a message id means nothing in another folder.
-    setParams({ folder: path })
+    // While composing this is a navigation out of /mail/compose; the ComposeView blocker owns
+    // the "discard?" question. Otherwise it drops uid: a message id means nothing elsewhere.
+    if (composing) navigate(`/mail?folder=${encodeURIComponent(path)}`)
+    else setParams({ folder: path })
   }
+
+  const openCompose = useCallback(() => {
+    navigate('/mail/compose', { state: { from: folder } })
+  }, [navigate, folder])
 
   function selectMessage(nextUid: number) {
     if (!folder) return
@@ -159,6 +172,7 @@ export default function MailLayout() {
       search={search}
       onSearchChange={changeSearch}
       onOpenResult={openResult}
+      onCompose={openCompose}
     />
   )
 
@@ -189,46 +203,55 @@ export default function MailLayout() {
         )}
       </div>
 
-      {pane === 'right' && (
-        <div className="mail-row">
-          <div className="mail-list" style={{ width: listWidth }}>{list(uid, false)}</div>
-          {preferences && (
-            <PaneSplitter
-              orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
-              onResize={setListWidth}
-            />
-          )}
-          <div className="mail-reader">
-            <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-              onDeparted={departed} onNotify={addToast} />
-          </div>
+      {/* Composing takes the whole list+reader side; the folder tree stays where it was. */}
+      {composing ? (
+        <div className="mail-compose">
+          <Suspense fallback={null}><ComposeView onNotify={addToast} /></Suspense>
         </div>
-      )}
-
-      {pane === 'bottom' && (
-        <div className="mail-stack">
-          <div className="mail-list" style={{ height: listHeight }}>{list(uid, true)}</div>
-          <PaneSplitter
-            orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
-            onResize={setListHeight}
-          />
-          <div className="mail-reader">
-            <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-              onDeparted={departed} onNotify={addToast} />
-          </div>
-        </div>
-      )}
-
-      {pane === 'none' && (
+      ) : (
         <>
-          {/* Hidden, never unmounted: the scroll position and the streamed blocks live in this
-              subtree. No selected row either — there is no message "open beside". */}
-          <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
-          {uid !== null && (
-            <div className="mail-reader">
-              <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                onBack={closeMessage} onDeparted={departed} onNotify={addToast} />
+          {pane === 'right' && (
+            <div className="mail-row">
+              <div className="mail-list" style={{ width: listWidth }}>{list(uid, false)}</div>
+              {preferences && (
+                <PaneSplitter
+                  orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
+                  onResize={setListWidth}
+                />
+              )}
+              <div className="mail-reader">
+                <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
+                  onDeparted={departed} onNotify={addToast} />
+              </div>
             </div>
+          )}
+
+          {pane === 'bottom' && (
+            <div className="mail-stack">
+              <div className="mail-list" style={{ height: listHeight }}>{list(uid, true)}</div>
+              <PaneSplitter
+                orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
+                onResize={setListHeight}
+              />
+              <div className="mail-reader">
+                <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
+                  onDeparted={departed} onNotify={addToast} />
+              </div>
+            </div>
+          )}
+
+          {pane === 'none' && (
+            <>
+              {/* Hidden, never unmounted: the scroll position and the streamed blocks live in this
+                  subtree. No selected row either — there is no message "open beside". */}
+              <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
+              {uid !== null && (
+                <div className="mail-reader">
+                  <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
+                    onBack={closeMessage} onDeparted={departed} onNotify={addToast} />
+                </div>
+              )}
+            </>
           )}
         </>
       )}

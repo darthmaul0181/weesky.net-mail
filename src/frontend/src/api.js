@@ -41,13 +41,10 @@ export class ApiError extends Error {
   }
 }
 
-async function readError(res) {
-  // Defensive: some callers stub a response with no body reader at all.
-  if (typeof res.text !== 'function') return { message: res.statusText ?? '', code: null }
-
-  const text = await res.text().catch(() => '')
-  if (!text) return { message: res.statusText ?? '', code: null }
-
+// Shared by readError (fetch) and uploadAttachment (XHR) — same envelope shape, different
+// transport for the raw text.
+function parseErrorEnvelope(text, fallbackMessage) {
+  if (!text) return { message: fallbackMessage ?? '', code: null }
   try {
     const parsed = JSON.parse(text)
     const message = parsed?.message ?? parsed?.Message ?? text
@@ -55,6 +52,14 @@ async function readError(res) {
   } catch {
     return { message: text, code: null }
   }
+}
+
+async function readError(res) {
+  // Defensive: some callers stub a response with no body reader at all.
+  if (typeof res.text !== 'function') return { message: res.statusText ?? '', code: null }
+
+  const text = await res.text().catch(() => '')
+  return parseErrorEnvelope(text, res.statusText ?? '')
 }
 
 async function request(method, path, body, options = {}) {
@@ -253,6 +258,12 @@ export const api = {
   clearFolderRole: (role) =>
     request('DELETE', `/api/Mail/FolderRoles?role=${encodeURIComponent(role)}`),
 
+  sendMessage: (payload) =>
+    request('POST', '/api/Mail/Send', payload),
+
+  deleteAttachment: (id) =>
+    request('DELETE', `/api/Mail/Attachments/${id}`),
+
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second
   // copy here to drift from.
@@ -267,4 +278,51 @@ export const api = {
 /** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */
 export function mailAttachmentUrl(folder, uid, part) {
   return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}`
+}
+
+/**
+ * Uploads one outgoing attachment. XMLHttpRequest, not fetch: only XHR exposes upload
+ * progress, and a 25 MB file without a bar reads as a hang.
+ */
+export function uploadAttachment(file, { onProgress, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${BASE}/api/Mail/Attachments`)
+    xhr.withCredentials = true
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total)
+    }
+
+    const onAbort = () => { detachAbort(); xhr.abort(); reject(new ApiError('Aborted', 0, null)) }
+    const detachAbort = () => signal?.removeEventListener('abort', onAbort)
+
+    xhr.onload = () => {
+      detachAbort()
+      if (xhr.status === 401) {
+        const { code } = parseErrorEnvelope(xhr.responseText, xhr.statusText)
+        clearSession()
+        unauthorizedHandler?.()
+        reject(new ApiError('Unauthorized', 401, code))
+        return
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText))
+        return
+      }
+      const { message, code } = parseErrorEnvelope(xhr.responseText, xhr.statusText)
+      reject(new ApiError(message || xhr.statusText, xhr.status, code))
+    }
+    xhr.onerror = () => { detachAbort(); reject(new ApiError('Network error', 0, null)) }
+
+    // fetch rejects synchronously for a pre-aborted signal; XHR needs the same check up front.
+    if (signal?.aborted) {
+      reject(new ApiError('Aborted', 0, null))
+      return
+    }
+
+    signal?.addEventListener('abort', onAbort)
+    const form = new FormData()
+    form.append('file', file)
+    xhr.send(form)
+  })
 }

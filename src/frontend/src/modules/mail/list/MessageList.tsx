@@ -45,7 +45,11 @@ interface Props {
   onSearchChange: (criteria: SearchCriteria | null) => void
   /** A cross-folder hit opens in the folder it names, not the one on screen. */
   onOpenResult?: (uid: number, folderPath: string) => void
+  /** Opens the composer; the toolbar's pencil is its entry point. */
+  onCompose?: () => void
 }
+
+const NO_COMPOSE = () => {}
 
 const COUNT = new Intl.NumberFormat('en-US')
 const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
@@ -58,7 +62,7 @@ const NO_TRASH = 'Assign the trash folder in Settings → Folders'
  */
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
-    onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
+    onRows, onDeparted, search = null, onSearchChange, onOpenResult, onCompose }: Props) {
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
@@ -465,6 +469,7 @@ export default function MessageList(
           disabledReason: searching ? 'Clear the search first' : emptyReason }}
         searchOpen={searchOpen}
         onToggleSearch={toggleSearch}
+        onCompose={onCompose ?? NO_COMPOSE}
         selectionDisabled={crossFolder}
       />
 

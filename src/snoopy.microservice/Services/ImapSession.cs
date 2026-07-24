@@ -402,6 +402,31 @@ internal sealed class ImapSession : IImapSession
         }
     }
 
+    public async Task<Result> AppendAsync(string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.AppendAsync(message, seen ? MessageFlags.Seen : MessageFlags.None, cancellationToken);
+            return Result.Success();
+        }
+        catch (FolderNotFoundException)
+        {
+            return Result.Failure(FolderNotFound);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to append a message to {Folder}", folderPath);
+            return Result.Failure("Unable to file the message");
+        }
+    }
+
     public async Task<Result<MailSearchPage>> SearchAsync(
         string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken)
     {
