@@ -44,11 +44,10 @@ internal static class IdentityResolver
         var primary = Canonical(primaryAddress);
         var owned = CanonicalSet(aliasAddresses);
 
-        var primaryRow = stored.FirstOrDefault(r => Canonical(r.Address) == primary);
         var list = new List<SendingIdentityInfo>
         {
-            new(primary, LabelFor(stored, primary, fullName), IsDefault: false,
-                IsPrimary: true, Stale: false, LabelIsCustom: primaryRow != null),
+            new(primary, LabelFor(stored, primary, fullName, primary), IsDefault: false,
+                IsPrimary: true, Stale: false, LabelIsCustom: false),
         };
 
         foreach (var row in stored)
@@ -70,12 +69,20 @@ internal static class IdentityResolver
             .ToList();
     }
 
-    /// <summary>Label precedence: the stored row, then the account's FullName, then the address.</summary>
-    internal static string LabelFor(IReadOnlyList<SendingIdentity> stored, string address, string? fullName)
+    /// <summary>
+    /// The label for a send-from address. The primary always shows the account FullName — editable
+    /// only from the Account tab, never overridden by a stored row; an alias shows its stored row,
+    /// then the FullName, then the address.
+    /// </summary>
+    internal static string LabelFor(
+        IReadOnlyList<SendingIdentity> stored, string address, string? fullName, string primaryAddress)
     {
         var canonical = Canonical(address);
-        var row = stored.FirstOrDefault(r => Canonical(r.Address) == canonical);
-        if (row != null) return row.DisplayName;
+        if (canonical != Canonical(primaryAddress))
+        {
+            var row = stored.FirstOrDefault(r => Canonical(r.Address) == canonical);
+            if (row != null) return row.DisplayName;
+        }
         return string.IsNullOrWhiteSpace(fullName) ? canonical : fullName;
     }
 

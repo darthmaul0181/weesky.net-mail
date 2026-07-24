@@ -117,7 +117,7 @@ internal sealed class MailSender : IMailSender
 
         var message = new MimeMessage();
         var stored = await LoadIdentitiesAsync(userId, cancellationToken);
-        var label = IdentityResolver.LabelFor(stored, fromAddress, dbUser?.FullName);
+        var label = IdentityResolver.LabelFor(stored, fromAddress, dbUser?.FullName, user.Email);
         // LabelFor falls back to the address itself; on the wire that would be a redundant "a@x <a@x>".
         message.From.Add(new MailboxAddress(label == fromAddress ? string.Empty : label, fromAddress));
         AddAddresses(message.To, request.To);

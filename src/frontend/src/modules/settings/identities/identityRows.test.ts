@@ -20,9 +20,11 @@ describe('toRows', () => {
     ])
   })
 
-  it('keeps a primary carrying a label override', () => {
+  it('never sends the primary, even if a labelIsCustom flag lingers on it', () => {
     const overridden = { ...primary, displayName: 'Le Boss', labelIsCustom: true }
-    expect(toRows([overridden])).toEqual([{ address: 'mick@x.be', displayName: 'Le Boss', isDefault: true }])
+    expect(toRows([overridden, alias])).toEqual([
+      { address: 'michel@x.be', displayName: 'Michel', isDefault: false },
+    ])
   })
 })
 
@@ -101,28 +103,6 @@ describe('applyLabel', () => {
     expect(toRows(applyLabel([primary, alias], 'michel@x.be', ' Michel D. '))).toEqual([
       { address: 'michel@x.be', displayName: 'Michel D.', isDefault: false },
     ])
-  })
-
-  it('overriding the primary label adds its row', () => {
-    expect(toRows(applyLabel([primary, alias], 'mick@x.be', 'Le Boss'))).toEqual([
-      { address: 'mick@x.be', displayName: 'Le Boss', isDefault: true },
-      { address: 'michel@x.be', displayName: 'Michel', isDefault: false },
-    ])
-  })
-
-  // Clearing the primary's label removes its row, falling back to FullName — a PUT never
-  // carries an empty label, which validation would refuse.
-  it('clearing the primary label drops its row', () => {
-    const overridden = { ...primary, displayName: 'Le Boss', labelIsCustom: true }
-    expect(toRows(applyLabel([overridden, alias], 'mick@x.be', '  '))).toEqual([
-      { address: 'michel@x.be', displayName: 'Michel', isDefault: false },
-    ])
-  })
-
-  it('clearing the primary label shows the account name the server falls back to', () => {
-    const overridden = { ...primary, displayName: 'Le Boss', labelIsCustom: true }
-    expect(applyLabel([overridden], 'mick@x.be', '  ', 'Mick Dubois')[0])
-      .toMatchObject({ displayName: 'Mick Dubois', labelIsCustom: false })
   })
 
   it('clearing an alias label keeps the old one', () => {

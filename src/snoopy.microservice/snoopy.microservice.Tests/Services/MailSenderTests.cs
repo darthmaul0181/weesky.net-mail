@@ -362,6 +362,27 @@ public sealed class MailSenderTests
     }
 
     [Fact]
+    public async Task SendAsync_AsThePrimaryWithAStoredPrimaryRow_UsesTheAccountFullName()
+    {
+        var sender = CreateSender();
+        // A stored row for the primary must never override the label — the FullName is the only source.
+        _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new SendingIdentity { Address = "mick@weesky.be", DisplayName = "Le Boss" }]);
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var result = await sender.SendAsync(_user, "pw",
+            Request() with { FromAddress = "mick@weesky.be" }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var from = Assert.IsType<MailboxAddress>(sent!.From[0]);
+        Assert.Equal("mick@weesky.be", from.Address);
+        Assert.Equal("Mick", from.Name);
+    }
+
+    [Fact]
     public async Task SendAsync_NoFromAddress_KeepsThePrimaryBehaviour()
     {
         var sender = CreateSender();

@@ -6,12 +6,12 @@ export interface IdentityRow { address: string; displayName: string; isDefault: 
     inputs cap here so an over-long name costs a keystroke rather than a PUT and a rollback. */
 export const MAX_DISPLAY_NAME_LENGTH = 100
 
-/** The PUT payload from the displayed list. The primary appears only when its label is
-    overridden: absence of its row is what lets the label keep following FullName, and absence
-    of any marked row is what "the primary is the default" looks like on the wire. */
+/** The PUT payload from the displayed list. The primary is never sent — its label always follows
+    the account FullName (set from the Account tab), and absence of any marked row is what "the
+    primary is the default" looks like on the wire. */
 export function toRows(identities: SendingIdentity[]): IdentityRow[] {
   return identities
-    .filter(i => !i.isPrimary || i.labelIsCustom)
+    .filter(i => !i.isPrimary)
     .map(i => ({ address: i.address, displayName: i.displayName, isDefault: i.isDefault }))
 }
 
@@ -63,24 +63,14 @@ export function applyDefault(identities: SendingIdentity[], address: string): Se
   return markDefault(identities, target && !target.isPrimary ? address : null)
 }
 
-/**
- * `fallbackName` is `deriveIdentity`'s `labelFallback` — FullName, else the canonical address —
- * which the primary's label reverts to once its override is cleared. The server resolves it
- * either way; passing it keeps the row on screen honest instead of leaving the dropped override
- * showing until the refetch lands.
- */
+/** Renames an alias. The primary is not renamable here — its name is the account FullName — so
+    there is no clear-to-fallback branch; an empty label is a no-op that keeps the old one. */
 export function applyLabel(
-  identities: SendingIdentity[], address: string, label: string, fallbackName = '',
+  identities: SendingIdentity[], address: string, label: string,
 ): SendingIdentity[] {
   const trimmed = label.trim()
   const target = identities.find(i => i.address === address)
-  if (!target) return identities
-  if (trimmed === '') {
-    if (!target.isPrimary) return identities // an alias label cannot be empty; keep the old one
-    return identities.map(i => i.address === address
-      ? { ...i, labelIsCustom: false, displayName: fallbackName || i.displayName }
-      : i)
-  }
+  if (!target || trimmed === '') return identities // a label cannot be empty; keep the old one
   return identities.map(i =>
     i.address === address ? { ...i, displayName: trimmed, labelIsCustom: true } : i)
 }

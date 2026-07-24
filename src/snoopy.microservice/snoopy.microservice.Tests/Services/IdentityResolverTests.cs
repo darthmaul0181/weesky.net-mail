@@ -74,14 +74,14 @@ public sealed class IdentityResolverTests
     }
 
     [Fact]
-    public void Resolve_APrimaryRowOverridesTheFullName()
+    public void Resolve_APrimaryRowNeverOverridesTheFullName()
     {
         var list = IdentityResolver.Resolve(
             [Row("mick@weesky.be", "Le Boss")], "mick@weesky.be", "Mick Dubois", []);
 
         var identity = Assert.Single(list);
-        Assert.Equal("Le Boss", identity.DisplayName);
-        Assert.True(identity.LabelIsCustom);
+        Assert.Equal("Mick Dubois", identity.DisplayName);
+        Assert.False(identity.LabelIsCustom);
     }
 
     [Fact]
@@ -118,11 +118,11 @@ public sealed class IdentityResolverTests
     public void Resolve_ComparesAddressesCanonically()
     {
         var list = IdentityResolver.Resolve(
-            [Row("MICK@weesky.be", "Custom")], " Mick@Weesky.BE ", "Mick", []);
+            [Row("ALIAS@weesky.be", "Custom")], " Mick@Weesky.BE ", "Mick", ["alias@weesky.be"]);
 
-        var identity = Assert.Single(list);
-        Assert.Equal("mick@weesky.be", identity.Address);
-        Assert.Equal("Custom", identity.DisplayName);
+        var alias = Assert.Single(list, i => i.Address == "alias@weesky.be");
+        Assert.Equal("Custom", alias.DisplayName);
+        Assert.False(alias.Stale);
     }
 
     // ── LabelFor ─────────────────────────────────────────────────────────────
@@ -131,29 +131,30 @@ public sealed class IdentityResolverTests
     public void LabelFor_PrefersTheRowThenTheFullNameThenTheAddress()
     {
         var stored = new[] { Row("michel@weesky.be", "Michel D.") };
-        Assert.Equal("Michel D.", IdentityResolver.LabelFor(stored, "michel@weesky.be", "Mick"));
-        Assert.Equal("Mick", IdentityResolver.LabelFor(stored, "other@weesky.be", "Mick"));
-        Assert.Equal("other@weesky.be", IdentityResolver.LabelFor(stored, "other@weesky.be", null));
+        const string primary = "mick@weesky.be";
+        Assert.Equal("Michel D.", IdentityResolver.LabelFor(stored, "michel@weesky.be", "Mick", primary));
+        Assert.Equal("Mick", IdentityResolver.LabelFor(stored, "other@weesky.be", "Mick", primary));
+        Assert.Equal("other@weesky.be", IdentityResolver.LabelFor(stored, "other@weesky.be", null, primary));
     }
 
     /// <summary>
-    /// The frontend mirrors this one branch: <c>identityRows.applyLabel</c> is handed
-    /// <c>accountIdentity.deriveIdentity</c>'s <c>labelFallback</c> — full name, else the
-    /// canonical (trimmed, lower-cased) address, never the stored casing — as its
-    /// <c>fallbackName</c>, so clearing the primary's override shows, before the refetch lands,
-    /// what this resolver will send back. If the precedence below changes, change
-    /// <c>src/frontend/src/lib/accountIdentity.ts</c> with it — the mirror is a duplicated rule,
-    /// not a derived one.
+    /// The primary's label is always the account FullName (else the canonical, trimmed lower-cased
+    /// address) — a stored row for the primary is ignored, since the name is owned by the Account
+    /// tab. The frontend mirrors this: the primary row shows <c>deriveIdentity</c>'s display name
+    /// and offers no rename. If this precedence changes, change <c>IdentitiesPage.tsx</c> with it.
     /// </summary>
     [Fact]
-    public void LabelFor_LabelsAnUnstoredPrimaryTheWayTheFrontendPredicts()
+    public void LabelFor_ThePrimaryIsAlwaysTheFullNameNotAStoredRow()
     {
-        Assert.Equal("Mick Dubois", IdentityResolver.LabelFor([], "mick@weesky.be", "Mick Dubois"));
-        Assert.Equal("mick@weesky.be", IdentityResolver.LabelFor([], "mick@weesky.be", null));
-        Assert.Equal("mick@weesky.be", IdentityResolver.LabelFor([], "mick@weesky.be", "   "));
-        // Stored userName casing must not leak through the fallback: the frontend's optimistic
-        // row falls back to the canonical address too, never the casing it has on hand.
-        Assert.Equal("mick@weesky.be", IdentityResolver.LabelFor([], "Mick@Weesky.be", "   "));
+        const string primary = "mick@weesky.be";
+        Assert.Equal("Mick Dubois", IdentityResolver.LabelFor([], primary, "Mick Dubois", primary));
+        Assert.Equal("mick@weesky.be", IdentityResolver.LabelFor([], primary, null, primary));
+        Assert.Equal("mick@weesky.be", IdentityResolver.LabelFor([], primary, "   ", primary));
+        // A stored primary row does not override the FullName.
+        Assert.Equal("Mick Dubois",
+            IdentityResolver.LabelFor([Row(primary, "Le Boss")], primary, "Mick Dubois", primary));
+        // Stored userName casing must not leak: the canonical address is the fallback.
+        Assert.Equal("mick@weesky.be", IdentityResolver.LabelFor([], "Mick@Weesky.be", "   ", "Mick@Weesky.be"));
     }
 
     /// <summary>

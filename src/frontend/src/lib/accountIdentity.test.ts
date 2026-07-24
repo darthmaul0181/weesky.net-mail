@@ -25,16 +25,9 @@ describe('deriveIdentity', () => {
     expect(deriveIdentity({ ...account, fullName: '   ' }).displayName).toBe('mick@weesky.be')
   })
 
-  it('displayName keeps the stored casing, labelFallback canonicalises it', () => {
-    // Mirrors LabelFor_LabelsAnUnstoredPrimaryTheWayTheFrontendPredicts's casing arm: a whitespace
-    // fullName and an uppercase stored userName must not leave the two sides disagreeing.
+  it('displayName falls back to the email with its stored casing when there is no name', () => {
     const uppercase = { ...account, userName: 'Mick', fullName: '   ' }
     expect(deriveIdentity(uppercase).displayName).toBe('Mick@weesky.be')
-    expect(deriveIdentity(uppercase).labelFallback).toBe('mick@weesky.be')
-  })
-
-  it('labelFallback keeps a real name untouched, same as displayName', () => {
-    expect(deriveIdentity(account).labelFallback).toBe('Mick D.')
   })
 
   it('initials are first letters of user and domain, uppercased', () => {

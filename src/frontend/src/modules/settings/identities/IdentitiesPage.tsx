@@ -38,7 +38,12 @@ export default function IdentitiesPage() {
     if (!replace.isPending) setEdited(null)
   }
 
-  const shown = edited ?? identities
+  const base = edited ?? identities
+  // The primary's name is the live account FullName (owned by the Account tab), never the
+  // possibly-stale label the identities query resolved when it last fetched.
+  const shown = base && identity
+    ? base.map(i => (i.isPrimary ? { ...i, displayName: identity.displayName } : i))
+    : base
 
   function save(next: SendingIdentity[]) {
     // Sorted like the server sorts, so the list does not reshuffle when the refetch lands.
@@ -54,7 +59,7 @@ export default function IdentitiesPage() {
 
   function commitLabel(address: string) {
     setEditing(null)
-    if (shown) save(applyLabel(shown, address, draft, identity?.labelFallback ?? ''))
+    if (shown) save(applyLabel(shown, address, draft))
   }
 
   return (
@@ -113,7 +118,9 @@ export default function IdentitiesPage() {
                 <span className="identity-address">{i.address}</span>
                 {i.isPrimary && <span className="identity-tag">primary</span>}
                 {i.stale && <span className="identity-tag">unavailable</span>}
-                {!i.stale && (
+                {/* The primary's display name is the account FullName, editable only from the
+                    Account tab — so it carries no rename here. */}
+                {!i.stale && !i.isPrimary && (
                   <button
                     type="button" className="identity-action" aria-label={`Rename ${i.address}`}
                     onClick={() => { setEditing(i.address); setDraft(i.displayName) }}

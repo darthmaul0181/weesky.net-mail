@@ -8,8 +8,6 @@ import type { SendingIdentity } from '../../mail/api/mailTypes'
 vi.mock('../../mail/queries', () => ({
   useIdentities: vi.fn(), useReplaceIdentities: vi.fn(), useAliases: vi.fn(),
 }))
-// Full AccountIdentity shape, not a hand-picked subset — a mock missing a field the component
-// reads (labelFallback) would evaluate it as undefined and hide exactly the bug this guards.
 vi.mock('../../../contexts/AuthContext', () => ({ useAuth: vi.fn() }))
 
 const identities: SendingIdentity[] = [
@@ -29,8 +27,7 @@ describe('IdentitiesPage', () => {
     vi.mocked(useAliases).mockReturnValue({ data: [], isLoading: false } as never)
     vi.mocked(useAuth).mockReturnValue({
       identity: {
-        email: 'mick@weesky.be', displayName: 'Mick Dubois', labelFallback: 'Mick Dubois',
-        initials: 'MW', subDomains: [],
+        email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [],
       },
     } as never)
   })
@@ -204,28 +201,26 @@ describe('IdentitiesPage', () => {
     expect(screen.getByText('Could not load your identities.')).toBeInTheDocument()
   })
 
-  it('the primary has no remove button', () => {
+  it('the primary cannot be renamed or removed here — its name comes from Account', () => {
     render(<IdentitiesPage />)
     expect(screen.queryByRole('button', { name: 'Remove mick@weesky.be' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Rename mick@weesky.be' })).toBeNull()
+    // The primary row shows the account full name as read-only text.
+    const primaryRow = screen.getByText('primary').closest('li')!
+    expect(primaryRow.querySelector('.identity-name')?.textContent).toBe('Mick Dubois')
   })
 
-  // The repro: an uppercase stored userName with a whitespace-only fullName. LabelFor's own
-  // fallback is the canonical address, never the stored casing — clearing the primary's label
-  // must land on the same string the refetch would bring back, not on displayName's casing.
-  it('clearing the primary label falls back to the canonical address, not the stored casing', () => {
+  it('shows the live account name on the primary, not a stale query label', () => {
+    // FullName changed in the Account tab; the identities query has not refetched yet.
+    vi.mocked(useIdentities).mockReturnValue({
+      data: [{ ...identities[0], displayName: 'Old Name' }, identities[1], identities[2]],
+      isLoading: false, isError: false,
+    } as never)
     vi.mocked(useAuth).mockReturnValue({
-      identity: {
-        email: 'Mick@weesky.be', displayName: 'Mick@weesky.be', labelFallback: 'mick@weesky.be',
-        initials: 'MW', subDomains: [],
-      },
+      identity: { email: 'mick@weesky.be', displayName: 'New Name', initials: 'MW', subDomains: [] },
     } as never)
     render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rename mick@weesky.be' }))
-    const input = screen.getByLabelText('Display name for mick@weesky.be')
-    fireEvent.change(input, { target: { value: '' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
     const primaryRow = screen.getByText('primary').closest('li')!
-    expect(primaryRow.querySelector('.identity-name')?.textContent).toBe('mick@weesky.be')
+    expect(primaryRow.querySelector('.identity-name')?.textContent).toBe('New Name')
   })
 })
