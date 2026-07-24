@@ -1,6 +1,6 @@
 /* Palette "forest" — Forest & amber. */
 [data-palette='forest'] {
-  --bg:#f6f7f3; --folders-bg:#e6ede2; --surface:#ffffff; --surface-raised:#ffffff; --surface-sunken:#eef1ea;
+  --bg:#ebeee5; --folders-bg:#e6ede2; --folders-item-hover:#d8e2d2; --surface:#f9fbf6; --surface-raised:#f9fbf6; --surface-sunken:#eef1ea;
   --border:#dde2d6; --text:#1a1f1a; --text-muted:#66705f;
   --topbar-bg:#1e3a2b; --topbar-fg:#ffffff; --rail-bg:#1e3a2b; --rail-fg:#b8ccbe;
   --rail-item:#2b4d3a; --rail-item-active:#d99a2b; --rail-item-active-fg:#1a1205;
@@ -17,7 +17,7 @@
    amber in dark) — evergreen would dissolve into a dark background. The ROLE
    is stable, the hue is not. Do not "fix" this. */
 [data-palette='forest'][data-theme='dark'] {
-  --bg:#141a16; --folders-bg:#141a16; --surface:#1c231e; --surface-raised:#212a23; --surface-sunken:#171d19;
+  --bg:#141a16; --folders-bg:#141a16; --folders-item-hover:#212a23; --surface:#1c231e; --surface-raised:#212a23; --surface-sunken:#171d19;
   --border:#2b352d; --text:#e4e9e3; --text-muted:#929c8f;
   --topbar-bg:#0f1712; --topbar-fg:#e4e9e3; --rail-bg:#0f1712; --rail-fg:#a3b8a8;
   --rail-item:#1c2a20; --rail-item-active:#e0a63f; --rail-item-active-fg:#191204;

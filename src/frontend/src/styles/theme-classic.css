@@ -1,22 +1,25 @@
 /* Palette "classic" — Continuité (the current weesky admin look). */
 [data-palette='classic'] {
-  --bg: #f0f2f5;
+  --bg: #e4e9f0;
   --folders-bg: #e6ecf6;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --surface-sunken: #f7f8fa;
+  --folders-item-hover: #dce5f4;
+  --surface: #f7fafd;
+  --surface-raised: #f7fafd;
+  --surface-sunken: #edf1f7;
   --border: #dde1e7;
   --text: #1a1d23;
   --text-muted: #6b7280;
   --topbar-bg: #3450a3;
   --topbar-fg: #ffffff;
-  --rail-bg: #e4e9f2;
-  --rail-fg: #4b5563;
-  --rail-item: #d3dae7;
-  --rail-item-active: #3450a3;
-  --rail-item-active-fg: #ffffff;
+  /* The rail carries the topbar's blue, as in every other palette — a light rail left it
+     indistinguishable from the tinted folder column. */
+  --rail-bg: #3450a3;
+  --rail-fg: #c4cfe8;
+  --rail-item: #4a63b0;
+  --rail-item-active: #ffffff;
+  --rail-item-active-fg: #25397a;
   --pane-item-hover: #e7eaf0;
-  --pane-item-active-bg: #dbe3f5;
+  --pane-item-active-bg: #c6d6f0;
   --pane-item-active-fg: #25397a;
   --accent-unread: #3450a3;
 
@@ -47,6 +50,7 @@
      are not overridden there, so they fall back to the light values above. */
   --bg: #1e2229;
   --folders-bg: #1e2229;
+  --folders-item-hover: #2f3849;
   --surface: #272d38;
   --border: #3b4253;
   --text: #dce1e9;

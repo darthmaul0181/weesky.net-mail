@@ -129,7 +129,7 @@
   cursor: pointer;
 }
 
-.folder-row:hover { background: var(--pane-item-hover); }
+.folder-row:hover { background: var(--folders-item-hover); }
 
 .folder-row.is-system { font-weight: 600; }
 

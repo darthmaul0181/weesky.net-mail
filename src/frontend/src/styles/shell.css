@@ -17,10 +17,15 @@
   flex: none;
 }
 
+/* The topbar and the rail share one colour, so they read as a single dark L. The content sits in
+   it as a rounded panel: the inset gap below shows that L, which is what softens the L's inner
+   corner. To go back to a plain flush corner, drop the background here and the radius/margin on
+   .app-content, keeping only `border-top-left-radius`. */
 .app-shell-body {
   display: flex;
   flex: 1;
   min-height: 0;
+  background: var(--rail-bg);
 }
 
 .app-rail {
@@ -59,6 +64,8 @@
   overflow: auto;
   background: var(--bg);
   color: var(--text);
+  border-radius: var(--radius-lg);
+  margin: 0 7px 7px 0;
 }
 
 .coming-soon {

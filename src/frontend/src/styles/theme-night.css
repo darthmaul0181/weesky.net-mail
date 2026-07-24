@@ -1,9 +1,10 @@
 /* Palette "night" — Nuit & corail (default). */
 [data-palette='night'] {
-  --bg: #faf8f6;
+  --bg: #f1ece6;
   --folders-bg: #e7eaf1;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
+  --folders-item-hover: #d9dfec;
+  --surface: #faf7f2;
+  --surface-raised: #faf7f2;
   --surface-sunken: #f4f1ee;
   --border: #e5e0da;
   --text: #1c1a18;
@@ -51,6 +52,7 @@
 [data-palette='night'][data-theme='dark'] {
   --bg: #17191d;
   --folders-bg: #17191d;
+  --folders-item-hover: #262a31;
   --surface: #212429;
   --surface-raised: #262a31;
   --surface-sunken: #1c1f24;
