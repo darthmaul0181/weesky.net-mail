@@ -1,6 +1,7 @@
 /* Palette "classic" — Continuité (the current weesky admin look). */
 [data-palette='classic'] {
   --bg: #f0f2f5;
+  --folders-bg: #e6ecf6;
   --surface: #ffffff;
   --surface-raised: #ffffff;
   --surface-sunken: #f7f8fa;
@@ -45,6 +46,7 @@
      index.css's former [data-theme="dark"] block. --danger and --success
      are not overridden there, so they fall back to the light values above. */
   --bg: #1e2229;
+  --folders-bg: #1e2229;
   --surface: #272d38;
   --border: #3b4253;
   --text: #dce1e9;

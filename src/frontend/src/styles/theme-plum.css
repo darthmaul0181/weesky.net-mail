@@ -1,6 +1,6 @@
 /* Palette "plum" — Plum & gold. */
 [data-palette='plum'] {
-  --bg:#f8f5f8; --surface:#ffffff; --surface-raised:#ffffff; --surface-sunken:#f1ebf1;
+  --bg:#f8f5f8; --folders-bg:#ede2ed; --surface:#ffffff; --surface-raised:#ffffff; --surface-sunken:#f1ebf1;
   --border:#e3d9e3; --text:#1f1a1f; --text-muted:#6d626d;
   --topbar-bg:#3a2140; --topbar-fg:#ffffff; --rail-bg:#3a2140; --rail-fg:#c9b6cd;
   --rail-item:#4d2e54; --rail-item-active:#c9962b; --rail-item-active-fg:#1c1405;
@@ -17,7 +17,7 @@
    gold in dark) — aubergine would dissolve into a dark background. The ROLE
    is stable, the hue is not. Do not "fix" this. */
 [data-palette='plum'][data-theme='dark'] {
-  --bg:#17141a; --surface:#201c24; --surface-raised:#26212b; --surface-sunken:#1a171e;
+  --bg:#17141a; --folders-bg:#17141a; --surface:#201c24; --surface-raised:#26212b; --surface-sunken:#1a171e;
   --border:#322b38; --text:#e8e3ea; --text-muted:#988f9c;
   --topbar-bg:#150e18; --topbar-fg:#e8e3ea; --rail-bg:#150e18; --rail-fg:#b9a6bf;
   --rail-item:#291d2e; --rail-item-active:#d9b04a; --rail-item-active-fg:#1c1405;

@@ -23,6 +23,7 @@
   width: 240px;
   flex: none;
   border-right: 1px solid var(--border);
+  background: var(--folders-bg);
 }
 
 .mail-folders-compose { flex: none; padding: 10px 10px 4px; }

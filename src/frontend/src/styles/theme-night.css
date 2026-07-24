@@ -1,6 +1,7 @@
 /* Palette "night" — Nuit & corail (default). */
 [data-palette='night'] {
   --bg: #faf8f6;
+  --folders-bg: #e7eaf1;
   --surface: #ffffff;
   --surface-raised: #ffffff;
   --surface-sunken: #f4f1ee;
@@ -49,6 +50,7 @@
    is stable, the hue is not. Do not "fix" this. */
 [data-palette='night'][data-theme='dark'] {
   --bg: #17191d;
+  --folders-bg: #17191d;
   --surface: #212429;
   --surface-raised: #262a31;
   --surface-sunken: #1c1f24;

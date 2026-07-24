@@ -32,7 +32,7 @@ describe('the palette stylesheets', () => {
   // Vitest mocks CSS imports to '' unless vite.config's test.css.include matches; that empties
   // every token list and makes each parity check pass vacuously.
   it('reads the stylesheets, not empty mocks', () => {
-    expect(reference.light).toHaveLength(35)
+    expect(reference.light).toHaveLength(36)
   })
   it('ships every palette the picker offers', () => {
     expect(files.map(idOf).sort()).toEqual(['classic', 'forest', 'ink', 'night', 'plum', 'slate'])
