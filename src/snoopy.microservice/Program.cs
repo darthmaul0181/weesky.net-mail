@@ -124,6 +124,7 @@ builder.Services.AddScoped<IMailFolderRepository, MailFolderRepository>();
 builder.Services.AddScoped<IMailMessageRepository, MailMessageRepository>();
 builder.Services.AddScoped<IFolderRoleStore, FolderRoleStore>();
 builder.Services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
+builder.Services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();

@@ -1363,6 +1363,13 @@
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .compose-from-value { font-size: 14px; color: var(--text); }
+.compose-from-select {
+  background: none; border: none; padding: 2px 6px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  font: inherit; color: var(--text); border-radius: 6px;
+}
+.compose-from-select:hover { background: var(--pane-item-hover); }
+.compose-from-select svg { transform: rotate(90deg); }
 
 /* ── Compose: attachments ────────────────────────────────────────────────── */
 .compose-attachments { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border); }

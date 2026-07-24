@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ComposeView from './ComposeView'
+import { useIdentities } from '../queries'
 import type { EditorHandle } from './SquireEditor'
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +19,10 @@ vi.mock('../../../api.js', () => ({
   api: { sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment },
   uploadAttachment: mocks.uploadAttachment,
 }))
+vi.mock('../queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../queries')>()
+  return { ...actual, useIdentities: vi.fn() }
+})
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
     activeAccount: { id: 'primary' },
@@ -78,12 +83,19 @@ async function discardModal() {
   return title.closest('.modal') as HTMLElement
 }
 
+const identityList = [
+  { address: 'mick@weesky.be', displayName: 'Mick', isDefault: false, isPrimary: true, stale: false, labelIsCustom: false },
+  { address: 'michel@weesky.be', displayName: 'Michel', isDefault: true, isPrimary: false, stale: false, labelIsCustom: true },
+]
+
 beforeEach(() => {
   vi.clearAllMocks()
   editorState.html = ''
   editorState.commands = []
   mocks.uploadAttachment.mockResolvedValue({ id: 'att-1', size: 3 })
   mocks.deleteAttachment.mockResolvedValue(undefined)
+  // Default: identities still loading — every pre-existing test keeps the 2c1 plain From.
+  vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
 
 describe('ComposeView', () => {
@@ -198,6 +210,88 @@ describe('ComposeView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bold' }))
 
     expect(editorState.commands).toContain('bold')
+  })
+
+  it('keeps the 2c1 plain From while identities are still loading', () => {
+    renderCompose()
+
+    expect(screen.getByText('Mick Weesky (mick@weesky.be)')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'From identity' })).toBeNull()
+  })
+
+  it('preselects the default identity and sends its address', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    renderCompose()
+
+    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Michel (michel@weesky.be)')
+    addRecipient('To', 'a@b.c')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ fromAddress: 'michel@weesky.be' })))
+  })
+
+  // ComposeView is the only owner of the resolution now, so the address on the trigger and the
+  // one in the payload have to stay the same thing after a pick, not just at the default.
+  it('sends the identity picked in the menu, not the default it replaced', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    renderCompose()
+
+    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick (mick@weesky.be)')
+
+    addRecipient('To', 'a@b.c')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ fromAddress: 'mick@weesky.be' })))
+  })
+
+  // A poll can mark the pick stale under an open composer. The payload still carries it — the
+  // send is refused by name — so the From line has to keep saying which address that is.
+  it('keeps naming a chosen identity that goes stale under the composer', () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    renderCompose()
+
+    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+
+    vi.mocked(useIdentities).mockReturnValue(
+      { data: [{ ...identityList[0], stale: true }, identityList[1]] } as never)
+    // Any state change; the refetched list lands on the next render.
+    fireEvent.click(screen.getByRole('button', { name: 'Cc' }))
+
+    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick (mick@weesky.be)')
+    expect(screen.getByText('unavailable')).toBeInTheDocument()
+  })
+
+  // The guard exists for content the user would lose: a From choice is part of the message once
+  // there is one, and nothing to discard when there is not.
+  it('changing the identity still dirties a composer that has content', async () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    renderCompose()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+  })
+
+  it('changing the identity leaves an otherwise-empty composer clean', async () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    const { router } = renderCompose()
+
+    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick <mick@weesky.be>' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Discard this message?')).toBeNull()
   })
 })
 

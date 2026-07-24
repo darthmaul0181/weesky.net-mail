@@ -14,6 +14,8 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 public sealed class MailSenderTests
 {
     private readonly Mock<IUsersRepository> _users = new();
+    private readonly Mock<IAliasesRepository> _aliases = new();
+    private readonly Mock<ISendingIdentityStore> _identities = new();
     private readonly Mock<IOutgoingMailSanitizer> _sanitizer = new();
     private readonly Mock<IStagedAttachmentStore> _staged = new();
     private readonly Mock<ISmtpConnectionFactory> _smtpFactory = new();
@@ -43,10 +45,16 @@ public sealed class MailSenderTests
         _messages.Setup(m => m.AppendAsync(_user, "pw", "Sent", It.IsAny<MimeMessage>(), true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
+        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>()))
+            .ReturnsAsync([new Alias { Name = "michel", Domain = "weesky.be" }]);
+        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         // Every setup above is the happy path; a test that wants another one overrides it on the
         // shared mocks *after* CreateSender(), since a later Setup replaces an earlier one.
-        return new MailSender(_users.Object, _sanitizer.Object, _staged.Object, _smtpFactory.Object,
-            _folders.Object, _roles.Object, _messages.Object, NullLogger<MailSender>.Instance);
+        return new MailSender(_users.Object, _aliases.Object, _identities.Object, _sanitizer.Object,
+            _staged.Object, _smtpFactory.Object, _folders.Object, _roles.Object, _messages.Object,
+            NullLogger<MailSender>.Instance);
     }
 
     private static SendMessageRequest Request() => new()
@@ -228,5 +236,139 @@ public sealed class MailSenderTests
             _staged.Verify(s => s.Delete(It.IsAny<string>(), id), Times.Once);
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task SendAsync_FromAlias_UsesTheAliasWithItsStoredLabel()
+    {
+        var sender = CreateSender();
+        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new SendingIdentity { Address = "michel@weesky.be", DisplayName = "Michel Dubois" }]);
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var result = await sender.SendAsync(_user, "pw",
+            Request() with { FromAddress = " Michel@Weesky.BE " }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var from = Assert.IsType<MailboxAddress>(sent!.From[0]);
+        Assert.Equal("michel@weesky.be", from.Address);
+        Assert.Equal("Michel Dubois", from.Name);
+    }
+
+    [Fact]
+    public async Task SendAsync_FromAliasWithoutARow_FallsBackToTheFullName()
+    {
+        var sender = CreateSender();
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var result = await sender.SendAsync(_user, "pw",
+            Request() with { FromAddress = "michel@weesky.be" }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Mick", Assert.IsType<MailboxAddress>(sent!.From[0]).Name);
+    }
+
+    [Fact]
+    public async Task SendAsync_ForeignFrom_FailsBeforeAnySmtpConnection()
+    {
+        var sender = CreateSender();
+
+        var result = await sender.SendAsync(_user, "pw",
+            Request() with { FromAddress = "intruder@evil.com" }, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(IMailSender.ForbiddenFrom, result.Error);
+        _smtpFactory.Verify(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_FromAStaleIdentity_IsRefused()
+    {
+        var sender = CreateSender();
+        // The row survives in the identity table but the alias was deleted: the alias list decides.
+        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new SendingIdentity { Address = "gone@weesky.be", DisplayName = "Ancien" }]);
+
+        var result = await sender.SendAsync(_user, "pw",
+            Request() with { FromAddress = "gone@weesky.be" }, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(IMailSender.ForbiddenFrom, result.Error);
+        _smtpFactory.Verify(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_AThrowingIdentityStore_StillSendsWithTheFullNameLabel()
+    {
+        var sender = CreateSender();
+        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("preferences database is down"));
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var result = await sender.SendAsync(_user, "pw",
+            Request() with { FromAddress = "michel@weesky.be" }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var from = Assert.IsType<MailboxAddress>(sent!.From[0]);
+        Assert.Equal("michel@weesky.be", from.Address);
+        Assert.Equal("Mick", from.Name);
+    }
+
+    [Fact]
+    public async Task SendAsync_TheCallerCancelling_PropagatesInsteadOfDegrading()
+    {
+        var sender = CreateSender();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => sender.SendAsync(_user, "pw", Request(), cancelled.Token));
+
+        _smtpFactory.Verify(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_AnIdentityStoreTimingOutAsCancelled_StillSends()
+    {
+        var sender = CreateSender();
+        // The caller never cancelled: a preferences-layer timeout is an outage, so the send degrades.
+        _identities.Setup(i => i.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var result = await sender.SendAsync(_user, "pw", Request(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Mick", ((MailboxAddress)sent!.From[0]).Name);
+    }
+
+    [Fact]
+    public async Task SendAsync_NoFromAddress_KeepsThePrimaryBehaviour()
+    {
+        var sender = CreateSender();
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        Assert.True((await sender.SendAsync(_user, "pw", Request(), CancellationToken.None)).IsSuccess);
+        Assert.Equal("mick@weesky.be", Assert.IsType<MailboxAddress>(sent!.From[0]).Address);
     }
 }

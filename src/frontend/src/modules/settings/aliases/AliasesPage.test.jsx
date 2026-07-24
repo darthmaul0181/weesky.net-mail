@@ -2,7 +2,9 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { api } from '../../../api.js'
+import { mailKeys } from '../../mail/queries'
 import AliasesPage from './AliasesPage.jsx'
 
 vi.mock('../../../api.js', () => ({
@@ -12,6 +14,11 @@ vi.mock('../../../api.js', () => ({
     createAlias: vi.fn(),
     deleteAlias: vi.fn(),
   },
+}))
+// The page reads the active account through useAccountId, which is the real hook here — only
+// its auth source is stubbed, so the cache keys under test are the ones the app really uses.
+vi.mock('../../../contexts/AuthContext', () => ({
+  useAuth: () => ({ activeAccount: { id: 'primary' } }),
 }))
 
 const ACCOUNT = {
@@ -26,11 +33,14 @@ const ALIASES = [
   { name: 'alias2', domain: 'weesky.be' },
 ]
 
+let queryClient
+
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
   api.getAccount.mockResolvedValue(ACCOUNT)
   api.getAliases.mockResolvedValue(ALIASES)
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 })
 
 // ── AliasesPage ───────────────────────────────────────────────
@@ -38,9 +48,11 @@ beforeEach(() => {
 describe('AliasesPage', () => {
   function renderPage() {
     return render(
-      <MemoryRouter>
-        <AliasesPage />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AliasesPage />
+        </MemoryRouter>
+      </QueryClientProvider>
     )
   }
 
@@ -127,6 +139,32 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('Alias exists')).toBeInTheDocument()
   })
 
+  // Both caches hold a 5-minute staleTime, so without these the identity picker misses a
+  // fresh alias and the composer's From menu keeps offering a deleted one.
+  it('invalidates the alias and identity caches after a create', async () => {
+    api.createAlias.mockResolvedValue(null)
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'new')
+    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.aliases('primary') }))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('primary') })
+  })
+
+  it('invalidates the alias and identity caches after a delete', async () => {
+    api.deleteAlias.mockResolvedValue(null)
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.aliases('primary') }))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('primary') })
+  })
+
   it('persists the alphabetical toggle locally when toggled', async () => {
     renderPage()
     const toggle = await screen.findByRole('checkbox', { name: /alphabetical/i })
@@ -163,13 +201,23 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('alias1')).toBeInTheDocument()
   })
 
-  it('reloads aliases when delete fails', async () => {
+  it('reports the reason and reloads aliases when delete fails', async () => {
     api.deleteAlias.mockRejectedValue(new Error('Not found'))
     renderPage()
     await screen.findByText('alias1')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
     await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    expect(await screen.findByText('Not found')).toBeInTheDocument()
     await waitFor(() => expect(api.getAliases).toHaveBeenCalledTimes(2))
+  })
+
+  it('uses fallback error message when alias deletion error has no message', async () => {
+    api.deleteAlias.mockRejectedValue(new Error())
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    expect(await screen.findByText('Failed to delete alias.')).toBeInTheDocument()
   })
 
   it('fires alpha nav letter click (scrollToLetter)', async () => {

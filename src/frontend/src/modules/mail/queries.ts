@@ -1,13 +1,13 @@
 import {
   useInfiniteQuery, useMutation, useQuery, useQueryClient,
-  type InfiniteData, type QueryClient,
+  type InfiniteData, type Query, type QueryClient, type QueryKey,
 } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, MailSearchPage,
-  FolderRoleEntry,
+  FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -47,6 +47,8 @@ export const mailKeys = {
   messageStream: (accountId: string, folder: string, requestSize: number) =>
     [...messageStreamIn(accountId, folder), requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
+  identities: (accountId: string) => ['mail', accountId, 'identities'] as const,
+  aliases: (accountId: string) => ['mail', accountId, 'aliases'] as const,
   /** Prefix for every cached search — what the idle key falls back to when no search is active. */
   searchIn,
   // Criteria in the key: two different searches are two caches, never one overwriting the other.
@@ -150,6 +152,41 @@ export function useFolderRoles() {
   })
 }
 
+/** The curated From list. Long staleTime: it changes only from Settings, which invalidates it. */
+export function useIdentities() {
+  const accountId = useAccountId()
+
+  return useQuery({
+    queryKey: mailKeys.identities(accountId),
+    queryFn: () => api.getIdentities() as Promise<IdentityListResponse>,
+    select: (data): SendingIdentity[] => data.identities,
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useReplaceIdentities() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (identities: { address: string; displayName: string; isDefault: boolean }[]) =>
+      api.putIdentities(identities) as Promise<void>,
+    // Settled, not success: after a refused PUT the page must fall back to the server's state.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: mailKeys.identities(accountId) }),
+  })
+}
+
+export function useAliases(enabled = true) {
+  const accountId = useAccountId()
+
+  return useQuery({
+    queryKey: mailKeys.aliases(accountId),
+    queryFn: () => api.getAliases() as Promise<AliasInfo[]>,
+    enabled,
+    staleTime: 5 * 60_000,
+  })
+}
+
 /**
  * Role mutations invalidate the roles AND the folder tree: the tree's labels are the chain's
  * output, so changing a role changes what the tree displays.
@@ -213,6 +250,18 @@ export interface SetFlagsArgs {
 type Snapshot = [readonly unknown[], unknown]
 
 /**
+ * Cancels only the caches an optimistic patch can actually rewrite. Cancelling a *first* load is
+ * destructive: TanStack reverts it to pending with no data, no observer ever retries, and the
+ * list reads "No messages" for good — which is what a deep link hit whenever the message detail
+ * came back before the folder listing, marking it seen while that listing was still in flight.
+ */
+function cancelLoaded(queryClient: QueryClient, queryKey: QueryKey) {
+  return queryClient.cancelQueries({
+    queryKey, predicate: (query: Query) => query.state.data !== undefined,
+  })
+}
+
+/**
  * Counts each uid's seen transition once across every cache, pages and stream blocks alike:
  * a uid sitting in two of them is one badge move, not two. `patchSummaries` stays the single
  * definition of what a transition is.
@@ -248,8 +297,8 @@ export function useSetFlags(onError?: (message: string) => void) {
     onMutate: async ({ folderPath, uids, flag, value }: SetFlagsArgs) => {
       const pagesKey = mailKeys.messagesIn(accountId, folderPath)
       const streamKey = mailKeys.messageStreamIn(accountId, folderPath)
-      await queryClient.cancelQueries({ queryKey: pagesKey })
-      await queryClient.cancelQueries({ queryKey: streamKey })
+      await cancelLoaded(queryClient, pagesKey)
+      await cancelLoaded(queryClient, streamKey)
 
       const snapshots: Snapshot[] = []
       // A cache holding no target retires nothing and counts nothing, so its silence stays
@@ -285,7 +334,7 @@ export function useSetFlags(onError?: (message: string) => void) {
       // Search caches are summaries too: the same patch, scoped to the mutated folder, with the
       // same snapshot rollback. They stay a snapshot otherwise — the poll never touches them.
       const searchKey = mailKeys.searchIn(accountId)
-      await queryClient.cancelQueries({ queryKey: searchKey })
+      await cancelLoaded(queryClient, searchKey)
       for (const [key, page] of queryClient.getQueriesData<MailSearchPage>({ queryKey: searchKey })) {
         if (!page) continue
         const patch = patchSearchResults(page.results, folderPath, uids, flag, value)
@@ -322,7 +371,7 @@ async function cancelListQueries(
   queryClient: QueryClient, accountId: string, folderPath: string,
 ) {
   for (const queryKey of listKeysOf(accountId, folderPath)) {
-    await queryClient.cancelQueries({ queryKey })
+    await cancelLoaded(queryClient, queryKey)
   }
 }
 
@@ -486,9 +535,10 @@ export function useMoveMessages(onError?: (message: string) => void) {
 
     onMutate: async ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
-      // removeFromFolderCaches writes the search cache too: cancel any in-flight search fetch so
-      // a late resolve can't repopulate the removed row on a success path that never rolls back.
-      await queryClient.cancelQueries({ queryKey: mailKeys.searchIn(accountId) })
+      // removeFromFolderCaches writes the search cache too: cancel an in-flight *refetch* of a
+      // loaded search, so a late resolve can't repopulate the removed row on a success path that
+      // never rolls back. A first load is left to land (cancelLoaded); onSettled reconciles it.
+      await cancelLoaded(queryClient, mailKeys.searchIn(accountId))
 
       const snapshots: Snapshot[] = []
       const patches: [string, FolderCountDeltas][] = []
@@ -506,8 +556,9 @@ export function useMoveMessages(onError?: (message: string) => void) {
         added = { total: source.removed, unread: source.removedUnread }
       }
 
-      // Mirror the source: cancel any in-flight target fetch before dropping its caches, so a
-      // late resolve can't repopulate what we just removed and race the rollback.
+      // Mirror the source: cancel an in-flight refetch of a loaded target cache before dropping
+      // it, so a late resolve can't repopulate what we just removed and race the rollback. A
+      // first load survives cancelLoaded; removeQueries below destroys it outright anyway.
       await cancelListQueries(queryClient, accountId, targetFolderPath)
       snapshots.push(...dropFolderCaches(queryClient, accountId, targetFolderPath))
       patches.push([targetFolderPath, added])
@@ -547,9 +598,10 @@ export function useDeleteMessages(onError?: (message: string) => void) {
 
     onMutate: async ({ folderPath, uids }: DeleteMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
-      // removeFromFolderCaches writes the search cache too: cancel any in-flight search fetch so
-      // a late resolve can't repopulate the removed row on a success path that never rolls back.
-      await queryClient.cancelQueries({ queryKey: mailKeys.searchIn(accountId) })
+      // removeFromFolderCaches writes the search cache too: cancel an in-flight *refetch* of a
+      // loaded search, so a late resolve can't repopulate the removed row on a success path that
+      // never rolls back. A first load is left to land (cancelLoaded); onSettled reconciles it.
+      await cancelLoaded(queryClient, mailKeys.searchIn(accountId))
 
       const source = removeFromFolderCaches(queryClient, accountId, folderPath, uids)
       const tree = patchTreeCounts(queryClient, accountId,
@@ -576,6 +628,8 @@ export interface SendMessageArgs {
   subject: string
   htmlBody: string
   attachmentIds: string[]
+  /** Omitted picks the account's own address server-side; the display label is always server-resolved. */
+  fromAddress?: string
 }
 
 export interface SendMessageResult { appendedToSent: boolean }

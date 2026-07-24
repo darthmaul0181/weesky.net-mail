@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
+import { mailKeys, useAccountId } from '../../mail/queries'
 import { useToasts } from '../../../hooks/useToasts.js'
 import Toasts from '../../../components/Toasts.jsx'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
@@ -7,6 +9,15 @@ import TrashIcon from '../../../icons/TrashIcon.jsx'
 
 export default function AliasesPage() {
   const { toasts, addToast, removeToast } = useToasts()
+  const queryClient = useQueryClient()
+  const accountId = useAccountId()
+
+  // The alias list is the authority the identity picker and the composer's From menu are drawn
+  // from, and both cache for five minutes: a CRUD here has to drop them or they lie until then.
+  const invalidateAliasCaches = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: mailKeys.aliases(accountId) })
+    queryClient.invalidateQueries({ queryKey: mailKeys.identities(accountId) })
+  }, [queryClient, accountId])
 
   const [domains, setDomains] = useState([])
   const [selectedDomain, setSelectedDomain] = useState('')
@@ -86,8 +97,10 @@ export default function AliasesPage() {
     try {
       await api.deleteAlias(name, domain)
       setAliases(prev => prev.filter(a => !(a.name === name && a.domain === domain)))
+      invalidateAliasCaches()
       addToast(`${key} deleted`)
-    } catch {
+    } catch (err) {
+      addToast(err.message || 'Failed to delete alias.', 'error')
       fetchAliases()
     } finally {
       setDeletingKey(null)
@@ -99,6 +112,7 @@ export default function AliasesPage() {
     try {
       await api.createAlias(search, selectedDomain)
       const key = `${search}@${selectedDomain}`
+      invalidateAliasCaches()
       addToast(`${key} added`)
       setSearch('')
       await fetchAliases()

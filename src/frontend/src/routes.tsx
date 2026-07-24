@@ -13,6 +13,7 @@ import GeneralPage from './modules/settings/general/GeneralPage'
 
 const MailLayout = lazy(() => import('./modules/mail/MailLayout'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.jsx'))
+const IdentitiesPage = lazy(() => import('./modules/settings/identities/IdentitiesPage'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
 
@@ -43,6 +44,7 @@ export const routes: RouteObject[] = [
               // The folders page grew out of the old system-folders one; keep its URL working.
               { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
               { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
+              { path: 'identities', element: <Suspense fallback={null}><IdentitiesPage /></Suspense> },
               { path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> },
               {
                 element: <RequireAdmin />,

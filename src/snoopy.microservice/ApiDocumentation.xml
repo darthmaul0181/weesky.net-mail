@@ -213,6 +213,37 @@
             <response code="401">Wrong credentials</response>
             <response code="429">Too many authentication attempts</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
+            <summary>
+            Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
+            no credentials cookie: both verbs are database reads, so this lives outside MailController.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.#ctor(weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Repositories.IAliasesRepository,weesky.Snoopy.Microservice.Repositories.IUsersRepository)">
+            <summary>
+            Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
+            no credentials cookie: both verbs are database reads, so this lives outside MailController.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.List(System.Threading.CancellationToken)">
+            <summary>
+            The resolved list: the primary address always (FullName label unless overridden), then
+            every stored row; a row whose alias vanished comes back stale, never silently dropped.
+            </summary>
+            <response code="200">The identities, default first</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.Replace(weesky.Snoopy.Microservice.Models.Mail.ReplaceIdentitiesRequest,System.Threading.CancellationToken)">
+            <summary>
+            Replaces the whole set. Addresses must belong to the caller (primary, a live alias, or an
+            already-stored row — the last keeps stale identities alive across saves).
+            </summary>
+            <param name="request">the full identity list</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">A foreign, duplicate or unparsable address, a bad label, or two defaults</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.LoginController.Login(weesky.Snoopy.Microservice.Models.Credentials)">
             <summary>
             Login with user credentials and cookie generation.
@@ -248,9 +279,6 @@
              "credentials_unavailable" so the client can sign in again, while anything the mail
              server refuses is 502.
              </summary>
-        </member>
-        <member name="F:weesky.Snoopy.Microservice.Controllers.MailController.RecipientParserOptions">
-            <summary>MimeKit accepts a bare local part by default, so "not-an-address" would parse.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RefuseIfSystemFolderAsync(System.String,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
             <summary>
@@ -488,11 +516,13 @@
             recipients and MailKit strips the Bcc header at transmission, so only the addressees
             see it went out; the filed Sent copy keeps the header so the sender can see who was
             blind-copied. A failed copy never fails the send — the response says which happened.
+            An optional fromAddress sends as one of the account's own addresses (primary or a live
+            alias); the display label is resolved server-side, never taken from the request.
             </summary>
-            <param name="request">recipients, subject, HTML body and staged attachment ids</param>
+            <param name="request">recipients, subject, HTML body, staged attachment ids and an optional fromAddress</param>
             <param name="cancellationToken">cancellation token</param>
             <response code="200">Sent; appendedToSent tells whether the copy was filed</response>
-            <response code="400">No recipient, an invalid address, or a staged id no longer available</response>
+            <response code="400">No recipient, an invalid address, a fromAddress the account does not own, or a staged id no longer available</response>
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server refused the submission</response>
         </member>
@@ -596,6 +626,12 @@
             docs/superpowers/mail-2a5-database-prerequisite.md.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity">
+            <summary>
+            One curated sending identity. Addresses are stored canonical (trimmed, lower-case): the
+            table collates in binary, so a casing difference would split one identity into two.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.UserPreference">
              <summary>
              One preference an account has set. Key/value rather than a column per option: this project
@@ -662,6 +698,12 @@
             <summary>
             The domain
             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AliasExtensions.ToAddress(weesky.Snoopy.Microservice.Models.Alias)">
+            <summary>The one place an alias becomes an email address; identities and sending both read it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AliasExtensions.ToAddresses(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Models.Alias})">
+            <summary>The account's alias addresses, in the shape the identity rules consume.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.CompatibilityCheckRequest">
             <summary>
@@ -774,6 +816,15 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideInfo.Reason">
             <summary>One of <see cref="T:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons"/>.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.IdentityEntry">
+            <summary>One identity as the client submits it. Defaults absorb explicit JSON nulls.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.IdentityListResponse">
+            <summary>The resolved sending identities, primary always included.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.IdentityListResponse.#ctor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo})">
+            <summary>The resolved sending identities, primary always included.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAddressInfo">
             <summary>One recipient. Name is empty when the message carried no display name.</summary>
@@ -1076,6 +1127,9 @@
         <member name="M:weesky.Snoopy.Microservice.Models.Mail.OutgoingBody.#ctor(System.String,System.String)">
             <summary>A composed body ready to send: sanitised HTML and its plain-text alternative.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.ReplaceIdentitiesRequest">
+            <summary>The full replacement set — PUT semantics, so order and default are atomic.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml">
             <summary>A message body made safe to render, plus what was withheld.</summary>
         </member>
@@ -1086,11 +1140,28 @@
             message was opened, which is why they are withheld until the user asks.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo">
+            <summary>
+            One resolved sending identity. LabelIsCustom tells the client whether the label comes from a
+            stored row (true) or from the account's live FullName — that flag decides whether the primary
+            belongs in a PUT payload.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo.#ctor(System.String,System.String,System.Boolean,System.Boolean,System.Boolean,System.Boolean)">
+            <summary>
+            One resolved sending identity. LabelIsCustom tells the client whether the label comes from a
+            stored row (true) or from the account's live FullName — that flag decides whether the primary
+            belongs in a PUT payload.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest">
             <summary>
-            A composed message. 2c2 will add threading (inReplyTo/references) and an identity
-            choice — absent today, no dead fields in waiting.
+            A composed message. Threading (inReplyTo/references) comes with 2c2b — absent today,
+            no dead fields in waiting.
             </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest.FromAddress">
+            <summary>Identity to send as. Null/empty means the primary address — the 2c1 behaviour.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendMessageResult">
             <summary>The mail is gone either way; false only means the Sent copy could not be filed.</summary>
@@ -1430,6 +1501,9 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.AppendAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Boolean,System.Threading.CancellationToken)">
             <summary>Appends a message to a folder, optionally marked read.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore.ReplaceAsync(System.String,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.Threading.CancellationToken)">
+            <summary>Replaces the account's whole set in one transaction — the PUT semantics.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
             High-level Sieve management API used by controllers. Each method opens its own
@@ -1673,6 +1747,31 @@
         <member name="M:weesky.Snoopy.Microservice.Services.HeaderListExtensions.Topmost(MimeKit.HeaderList,System.String)">
             <summary>The topmost occurrence — everything below it could have been forged by the sender.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IdentityResolver">
+            <summary>
+            The one place the identity list is derived from its three sources — stored rows, the primary
+            address, the live alias list. GET /api/Identities and MailSender both call it, so the rule
+            cannot drift between display and send.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.CanonicalSet(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Canonicalises an alias list once, for callers that test many addresses against it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.Owns(System.Collections.Generic.IEnumerable{System.String},System.String,System.String)">
+            <summary>
+            Whether the account may send as this address: its primary, or one of its live aliases.
+            The stored identity rows are deliberately not consulted — a stale row owns nothing.
+            Canonicalises the alias list itself; the name differs from <see cref="M:weesky.Snoopy.Microservice.Services.IdentityResolver.OwnsCanonical(System.Collections.Generic.IReadOnlySet{System.String},System.String,System.String)"/> so no
+            call site can skip that by handing over a set.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.OwnsCanonical(System.Collections.Generic.IReadOnlySet{System.String},System.String,System.String)">
+            <summary>The same rule over an already-canonical set; accounts carry 100+ aliases, so a
+            caller testing many addresses builds the set once with <see cref="M:weesky.Snoopy.Microservice.Services.IdentityResolver.CanonicalSet(System.Collections.Generic.IEnumerable{System.String})"/>.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.LabelFor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.String,System.String)">
+            <summary>Label precedence: the stored row, then the account's FullName, then the address.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IImapConnectionFactory">
             <summary>Opens an authenticated IMAP session for one user, for one request.</summary>
         </member>
@@ -1808,6 +1907,9 @@
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.IMailSender.UnknownAttachment">
             <summary>Returned as the failure when a staged attachment id no longer resolves.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.IMailSender.ForbiddenFrom">
+            <summary>Returned when the requested From is neither the primary address nor a live alias.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.IMailSender.SendAsync(weesky.Snoopy.Microservice.Models.User,System.String,weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest,System.Threading.CancellationToken)">
             <summary>Builds, submits over SMTP, files the Sent copy and purges the staged files.</summary>
@@ -2068,9 +2170,16 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailSender">
             <summary>
-            The send pipeline. Order is load-bearing: staged ids resolve first (a desync fails the
-            whole request, never a partial send), SMTP failure keeps the staged files for a retry,
-            and once SMTP accepted, nothing after it may fail the operation — the mail is gone.
+            The send pipeline. Order is load-bearing: the From is validated before anything reaches the
+            wire, staged ids resolve next (a desync fails the whole request, never a partial send),
+            SMTP failure keeps the staged files for a retry, and once SMTP accepted, nothing after it
+            may fail the operation — the mail is gone.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.LoadIdentitiesAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            The preferences database only carries display labels, so an outage degrades to the account's
+            own label rather than failing a send that would otherwise have gone out.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.MailSender.AppendToSentAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Threading.CancellationToken)">
@@ -2167,6 +2276,13 @@
             "(code)" prefix and unquoting the trailing quoted string if present.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.RecipientAddressParser">
+            <summary>
+            The address-parsing policy every literal address field on the API shares — recipients,
+            fromAddress, and the identities payload — so the three cannot silently drift apart.
+            MimeKit accepts a bare local part by default, so "not-an-address" would parse.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SieveScriptListEntry">
             <summary>
             One entry in the LISTSCRIPTS response from a ManageSieve server.
@@ -2182,6 +2298,12 @@
             Opens one SMTP connection per request, the same model as ImapConnectionFactory: the
             user's own password from the credentials cookie, options through IOptionsMonitor so a
             correction in appsettings.json applies without a restart.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SmtpSession.DescribeFailure(System.Exception,MimeKit.MimeMessage)">
+            <summary>
+            A sender rejection names the address: with alias identities the likely cause is Postfix's
+            smtpd_sender_login_maps not allowing that From, and the user must see it is a server rule.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SpecialUseAssignment">

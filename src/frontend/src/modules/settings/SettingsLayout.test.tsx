@@ -88,6 +88,7 @@ describe('settings section', () => {
     expect(nav.getByText('Appearance')).toBeInTheDocument()
     expect(nav.getByText('Folders list')).toBeInTheDocument()
     expect(nav.getByText('Aliases')).toBeInTheDocument()
+    expect(nav.getByText('Identities')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
     await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(false))
     expect(nav.queryByText('Administration')).not.toBeInTheDocument()

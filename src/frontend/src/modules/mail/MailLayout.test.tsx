@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   moveMessages: vi.fn(),
   deleteMessages: vi.fn(),
   searchMessages: vi.fn(),
+  setMessageFlags: vi.fn(),
   useListRefresh: vi.fn(),
 }))
 
@@ -135,6 +136,37 @@ describe('MailLayout', () => {
   })
 })
 
+// A deep link races the listing against the detail, and the detail can win: the reader marks a
+// not-yet-cached message seen, and that mutation used to cancel the list fetch in flight —
+// which TanStack reverts to pending with no data and never retries. See cancelLoaded.
+describe('a message detail arriving before the folder listing', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const unread = {
+    uid: 7, subject: 'first', fromName: 'A', fromAddress: 'a@b.c', date: '2026-07-18T09:00:00Z',
+    seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
+  }
+
+  it('still lands the rows', async () => {
+    mocks.setMessageFlags.mockResolvedValue(undefined)
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 7, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    })
+    renderAt('/mail?folder=INBOX&uid=7', folders, 'right', [unread])
+    mocks.getMailMessages.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+      folderPath: 'INBOX', uidValidity: 1, total: 1, page: 0, pageSize: 30, messages: [unread],
+    }), 60)))
+
+    const row = await screen.findByRole('button', { name: /first/i })
+    // The race is only armed if the mark-seen mutation actually fired against the pending list.
+    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [7], 'seen', true)
+    // And the row the listing brought back unread is reconciled to what the STORE already did.
+    expect(await within(row).findByRole('button', { name: 'Mark as unread' })).toBeInTheDocument()
+  })
+})
+
 // The row leaves the folder optimistically, so the selection cannot wait for a refetch.
 describe('a message departing the folder', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -146,17 +178,12 @@ describe('a message departing the folder', () => {
       seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
   ]
 
-  // The detail lands after the list: a reader opening on a not-yet-cached summary marks it
-  // seen, and that mutation cancels the list fetch in flight — the rows would never arrive.
-  // The gap is generous on purpose: it stands in for "detail slower than list", and a thin
-  // margin turned flaky once the heading band grew from an <h2> to the selection toolbar, whose
-  // extra synchronous render pushed the list commit past a 20ms detail.
   function openFolder(rows: typeof summaries, uid: number) {
-    mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+    mocks.getMailMessage.mockResolvedValue({
       uid, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
       to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
       blockedImageCount: 0, attachments: [],
-    }), 250)))
+    })
     return renderAt(`/mail?folder=INBOX&uid=${uid}`, folders, 'right', rows)
   }
 
@@ -290,13 +317,11 @@ describe('dropping a dragged message onto a folder', () => {
 
   it('advances the reader when the open message is one of them', async () => {
     mocks.moveMessages.mockResolvedValue(undefined)
-    // Detail slower than the list: an immediate resolve marks the open row seen and cancels the
-    // list fetch in flight, so the rows would never arrive — the same delay the departing suite uses.
-    mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+    mocks.getMailMessage.mockResolvedValue({
       uid: 7, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
       to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
       blockedImageCount: 0, attachments: [],
-    }), 250)))
+    })
     renderAt('/mail?folder=INBOX&uid=7', folders, 'right', summaries)
 
     await screen.findByRole('button', { name: /first/i })
@@ -390,14 +415,12 @@ describe('searching from the layout', () => {
     mocks.searchMessages.mockResolvedValue({ total: results.length, page: 0, pageSize: 30, results })
   }
 
-  // A hit from another folder resolves slowly like the departing suite: an instant detail marks the
-  // row seen and cancels the search fetch in flight.
   function readerYields(uid: number, folderPath: string) {
-    mocks.getMailMessage.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({
+    mocks.getMailMessage.mockResolvedValue({
       uid, folderPath, uidValidity: 1, subject: 'opened', fromName: '', fromAddress: 'z@b.c',
       to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
       blockedImageCount: 0, attachments: [],
-    }), 250)))
+    })
   }
 
   async function runAdvancedAllFolders() {

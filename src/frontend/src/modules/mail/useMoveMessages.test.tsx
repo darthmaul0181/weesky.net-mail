@@ -316,6 +316,38 @@ describe('useMoveMessages', () => {
     expect(uidsOf(searchIn()!.results)).toEqual([3])
   })
 
+  // A search that has never loaded holds no row to protect: cancelLoaded leaves its first fetch
+  // alone and the settle-invalidate reconciles it. Which of the two pages wins is that
+  // invalidate's business — pinned above; what is pinned here is that neither leaves it blank.
+  it('lands the results of a search still on its first fetch when the move fires', async () => {
+    seed()
+    const firstLoad = deferred<MailSearchPage>()
+    mocks.searchMessages
+      .mockReturnValueOnce(firstLoad.promise)
+      .mockResolvedValue(searchPageOf([searchRow(3, 'INBOX')], 1))
+    mocks.moveMessages.mockResolvedValue(undefined)
+
+    // Cold search cache: this is the very first fetch, not a refetch over a cached page.
+    const search = renderHook(() => useSearchMessages(searchCriteria, 0, 50), { wrapper })
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledTimes(1))
+
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({
+        folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false,
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await act(async () => {
+      firstLoad.resolve(searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))
+    })
+    await settle()
+
+    // Populated either way today — the reconcile covers this path too. The point is that no
+    // future change to either half may leave the pane pending with no data.
+    expect(search.result.current.data?.results.length).toBeGreaterThan(0)
+  })
+
   it('reconciles the active search on settle after a move', async () => {
     seed()
     client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX'), searchRow(3, 'INBOX')], 2))

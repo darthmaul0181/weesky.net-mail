@@ -131,3 +131,18 @@ export interface FolderRoleEntry {
   /** The user's stored choice no longer matches a live folder — kept and signalled. */
   staleOverride: FolderRoleStaleOverride | null
 }
+
+/** One entry of the curated From list: a stored row merged with what the account actually owns. */
+export interface SendingIdentity {
+  address: string
+  displayName: string
+  isDefault: boolean
+  isPrimary: boolean
+  /** The alias behind it is gone — kept and flagged, never silently deleted, never offered in From. */
+  stale: boolean
+  labelIsCustom: boolean
+}
+
+export interface IdentityListResponse { identities: SendingIdentity[] }
+
+export interface AliasInfo { name: string; domain: string }

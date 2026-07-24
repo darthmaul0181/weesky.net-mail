@@ -130,6 +130,25 @@ describe('api methods', () => {
     )
   })
 
+  it('getIdentities calls GET /api/Identities', async () => {
+    const { api } = await import('./api.js')
+    await api.getIdentities()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Identities'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('putIdentities PUTs the whole list under an identities key', async () => {
+    const { api } = await import('./api.js')
+    const rows = [{ address: 'a@x.be', displayName: 'A', isDefault: true }]
+    await api.putIdentities(rows)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Identities'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ identities: rows }) })
+    )
+  })
+
   it('changePassword calls PATCH /api/Account/ChangeSecret', async () => {
     const { api } = await import('./api.js')
     await api.changePassword('old', 'new')

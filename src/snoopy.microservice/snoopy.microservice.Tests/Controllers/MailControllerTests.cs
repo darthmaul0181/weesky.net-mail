@@ -1443,6 +1443,49 @@ public sealed class MailControllerTests
     }
 
     [Fact]
+    public async Task SendMessage_RefusesAnInvalidFromAddress()
+    {
+        var request = new SendMessageRequest { To = ["ok@example.com"], FromAddress = "not-an-address" };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("not-an-address", ((ResultEnveloppe)bad.Value!).Message);
+    }
+
+    [Fact]
+    public async Task SendMessage_NamesTheForbiddenFrom()
+    {
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), "hunter2", It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<SendMessageResult>(IMailSender.ForbiddenFrom));
+        var request = new SendMessageRequest { To = ["ok@example.com"], FromAddress = "other@weesky.be" };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("other@weesky.be", ((ResultEnveloppe)bad.Value!).Message);
+    }
+
+    [Fact]
+    public async Task SendMessage_PassesADecoratedFromAddressDownAsTheBareAddress()
+    {
+        SendMessageRequest? captured = null;
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, string, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SendMessageResult(true)));
+        var request = new SendMessageRequest
+        {
+            To = ["ok@example.com"], FromAddress = "\"Michel D\" <michel@weesky.be>"
+        };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("michel@weesky.be", captured!.FromAddress);
+    }
+
+    [Fact]
     public async Task SendMessage_TreatsANullRecipientListAsNoRecipient()
     {
         var request = new SendMessageRequest { To = null! };

@@ -12,6 +12,11 @@ export interface Account {
 export interface AccountIdentity {
   email: string
   displayName: string
+  /** What `IdentityResolver.LabelFor` would send back for the primary with no stored row: the
+      full name, else the *canonical* address — trimmed, lower-cased — never the stored casing
+      `email` carries. Only a caller predicting that resolved label should read this instead of
+      `displayName`; an account-display surface wants the address exactly as stored. */
+  labelFallback: string
   initials: string
   subDomains: AccountDomain[]
 }
@@ -25,9 +30,12 @@ export function deriveIdentity(account: Account): AccountIdentity {
   const initials =
     (account.userName?.[0] ?? '').toUpperCase() +
     (domainName?.[0] ?? account.mailbox?.[0] ?? '').toUpperCase()
+  // Whitespace is not a name, the way `IdentityResolver.LabelFor` reads it.
+  const hasName = !!account.fullName?.trim()
   return {
     email,
-    displayName: account.fullName || email,
+    displayName: hasName ? account.fullName! : email,
+    labelFallback: hasName ? account.fullName! : email.trim().toLowerCase(),
     initials,
     subDomains: primaryDomain ? list.filter(d => d.id !== account.mailbox) : list,
   }

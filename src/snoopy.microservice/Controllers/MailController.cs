@@ -24,9 +24,6 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Authorize]
 public sealed class MailController : ApiBaseController
 {
-    /// <summary>MimeKit accepts a bare local part by default, so "not-an-address" would parse.</summary>
-    private static readonly ParserOptions RecipientParserOptions = CreateRecipientParserOptions();
-
     private readonly IMailFolderRepository _folders;
     private readonly IMailMessageRepository _messages;
     private readonly IMailCredentialStore _credentials;
@@ -714,11 +711,13 @@ public sealed class MailController : ApiBaseController
     /// recipients and MailKit strips the Bcc header at transmission, so only the addressees
     /// see it went out; the filed Sent copy keeps the header so the sender can see who was
     /// blind-copied. A failed copy never fails the send — the response says which happened.
+    /// An optional fromAddress sends as one of the account's own addresses (primary or a live
+    /// alias); the display label is resolved server-side, never taken from the request.
     /// </summary>
-    /// <param name="request">recipients, subject, HTML body and staged attachment ids</param>
+    /// <param name="request">recipients, subject, HTML body, staged attachment ids and an optional fromAddress</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">Sent; appendedToSent tells whether the copy was filed</response>
-    /// <response code="400">No recipient, an invalid address, or a staged id no longer available</response>
+    /// <response code="400">No recipient, an invalid address, a fromAddress the account does not own, or a staged id no longer available</response>
     /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
     /// <response code="502">The mail server refused the submission</response>
     [HttpPost("Send")]
@@ -737,8 +736,18 @@ public sealed class MailController : ApiBaseController
 
         foreach (var address in request.To.Concat(request.Cc).Concat(request.Bcc))
         {
-            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientParserOptions, address, out _))
+            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
                 return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.FromAddress))
+        {
+            // Parse once and keep the bare address: a decorated "Name <a@b.c>" would never match an
+            // alias downstream and would be refused as foreign instead of accepted.
+            if (!MailboxAddress.TryParse(RecipientAddressParser.Options, request.FromAddress, out var from))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                    $"\"{request.FromAddress}\" is not a valid email address"));
+            request = request with { FromAddress = from.Address };
         }
 
         var password = _credentials.Retrieve(Request);
@@ -750,14 +759,11 @@ public sealed class MailController : ApiBaseController
             return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
                 "An attachment is no longer available; remove it and attach it again"));
 
-        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
-    }
+        if (result.IsFailure && result.Error == IMailSender.ForbiddenFrom)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                $"Sending from \"{request.FromAddress}\" is not allowed on this account"));
 
-    private static ParserOptions CreateRecipientParserOptions()
-    {
-        var options = ParserOptions.Default.Clone();
-        options.AllowAddressesWithoutDomain = false;
-        return options;
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
 
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)

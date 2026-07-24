@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
 import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
-import { mailKeys } from '../queries'
+import { mailKeys, useSetFlags } from '../queries'
 import { settle } from '../../../test-utils'
 import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
@@ -48,6 +48,18 @@ interface HostProps { folderPath: string | null; uid: number | null; detailLoade
 function Host({ folderPath, uid, detailLoaded }: HostProps) {
   useMarkSeenOnOpen(folderPath, uid, detailLoaded)
   return <span>open</span>
+}
+
+/** The reader's Mark as unread, the one write the reconcile has to give way to. */
+function Toggle() {
+  const { mutate } = useSetFlags()
+  const unread = () => mutate({ folderPath: 'INBOX', uids: [42], flag: 'seen', value: false })
+  return <button type="button" onClick={unread}>mark unread</button>
+}
+
+async function markUnread() {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'mark unread' })) })
+  await settle()
 }
 
 async function renderHost(props: HostProps) {
@@ -160,6 +172,95 @@ describe('useMarkSeenOnOpen', () => {
     await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
 
     expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [42], 'seen', true)
+  })
+
+  // A deep link races the listing against the detail. When the detail wins, the STORE goes out
+  // against no cache at all, and the listing then lands carrying the server's pre-STORE flags —
+  // the row would read unread until the next poll tick.
+  describe('a listing landing after the STORE', () => {
+    it('marks again when it still says unread', async () => {
+      await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+
+      await act(async () => { seedPage([summary(42), summary(43)]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
+      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', true)
+      expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
+      // The row that was never ours is left exactly as the server sent it.
+      expect(findCachedSummary(client, 'primary', 'INBOX', 43)?.seen).toBe(false)
+    })
+
+    it('marks again when it lands as a stream block', async () => {
+      await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
+
+      await act(async () => { seedStream([summary(1)], [summary(42)]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
+      expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
+    })
+
+    it('leaves a listing that already says read alone', async () => {
+      await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
+
+      await act(async () => { seedPage([summary(42, { seen: true })]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+    })
+
+    // The listing is a snapshot of a folder this message may not even be in — a cross-folder
+    // search result opens the reader on another folder entirely. One look, then it stops.
+    it('reconciles once and stops watching the cache', async () => {
+      await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
+
+      await act(async () => { seedPage([summary(1)]) })
+      await settle()
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+
+      // The uid turning up in a later refetch is not a second opening.
+      await act(async () => { seedPage([summary(1), summary(42)]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+    })
+
+    // Marking it unread inside that window is an explicit decision about the same message; the
+    // reconcile must not undo it when the pre-STORE listing arrives and agrees with the user.
+    it('gives way to a Mark as unread issued while the listing was in flight', async () => {
+      render(<><Host folderPath="INBOX" uid={42} detailLoaded /><Toggle /></>, { wrapper })
+      await settle()
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+
+      await markUnread()
+      await act(async () => { seedPage([summary(42)]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', false)
+      expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(false)
+    })
+
+    // The same write, one opening earlier: mutations sit in the cache for gcTime, so a guard that
+    // only asks whether one exists would leave this row unread until the next poll tick.
+    it('ignores a Mark as unread issued before it armed', async () => {
+      render(<Toggle />, { wrapper })
+      await markUnread()
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+      // The clock has to move between the two, as it does between two openings.
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+
+      await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
+
+      await act(async () => { seedPage([summary(42)]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(3)
+      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', true)
+      expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
+    })
   })
 
   it('re-arms when the uid changes', async () => {

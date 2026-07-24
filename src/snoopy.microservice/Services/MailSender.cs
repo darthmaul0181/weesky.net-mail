@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using MimeKit;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
@@ -7,13 +8,16 @@ using weesky.Snoopy.Microservice.Repositories;
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
-/// The send pipeline. Order is load-bearing: staged ids resolve first (a desync fails the
-/// whole request, never a partial send), SMTP failure keeps the staged files for a retry,
-/// and once SMTP accepted, nothing after it may fail the operation — the mail is gone.
+/// The send pipeline. Order is load-bearing: the From is validated before anything reaches the
+/// wire, staged ids resolve next (a desync fails the whole request, never a partial send),
+/// SMTP failure keeps the staged files for a retry, and once SMTP accepted, nothing after it
+/// may fail the operation — the mail is gone.
 /// </summary>
 internal sealed class MailSender : IMailSender
 {
     private readonly IUsersRepository _users;
+    private readonly IAliasesRepository _aliases;
+    private readonly ISendingIdentityStore _identities;
     private readonly IOutgoingMailSanitizer _sanitizer;
     private readonly IStagedAttachmentStore _staged;
     private readonly ISmtpConnectionFactory _smtpFactory;
@@ -24,6 +28,8 @@ internal sealed class MailSender : IMailSender
 
     public MailSender(
         IUsersRepository users,
+        IAliasesRepository aliases,
+        ISendingIdentityStore identities,
         IOutgoingMailSanitizer sanitizer,
         IStagedAttachmentStore staged,
         ISmtpConnectionFactory smtpFactory,
@@ -33,6 +39,8 @@ internal sealed class MailSender : IMailSender
         ILogger<MailSender> logger)
     {
         _users = users;
+        _aliases = aliases;
+        _identities = identities;
         _sanitizer = sanitizer;
         _staged = staged;
         _smtpFactory = smtpFactory;
@@ -49,6 +57,21 @@ internal sealed class MailSender : IMailSender
 
         var accountId = FolderRoleStore.CanonicalAccountId(user.Email);
 
+        var fromAddress = IdentityResolver.Canonical(user.Email);
+        if (!string.IsNullOrWhiteSpace(request.FromAddress))
+        {
+            var requested = IdentityResolver.Canonical(request.FromAddress);
+            // The primary is owned by definition, so the common case skips the alias round trip;
+            // beyond it, the alias list — not the identity table — says what the user really owns.
+            if (requested != fromAddress)
+            {
+                var owned = await _aliases.GetAliasesAsync(user);
+                if (!IdentityResolver.Owns(owned.ToAddresses(), user.Email, requested))
+                    return Result.Failure<SendMessageResult>(IMailSender.ForbiddenFrom);
+            }
+            fromAddress = requested;
+        }
+
         var attachments = new List<StagedAttachment>();
         foreach (var id in request.AttachmentIds)
         {
@@ -60,7 +83,7 @@ internal sealed class MailSender : IMailSender
         MimeMessage message;
         try
         {
-            message = await BuildMessageAsync(user, request, attachments, cancellationToken);
+            message = await BuildMessageAsync(user, request, attachments, accountId, fromAddress, cancellationToken);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -85,14 +108,18 @@ internal sealed class MailSender : IMailSender
     }
 
     private async Task<MimeMessage> BuildMessageAsync(
-        User user, SendMessageRequest request, IReadOnlyList<StagedAttachment> attachments, CancellationToken cancellationToken)
+        User user, SendMessageRequest request, IReadOnlyList<StagedAttachment> attachments,
+        string accountId, string fromAddress, CancellationToken cancellationToken)
     {
         // FullName lives in the database, not in the JWT claims.
         var dbUser = await _users.FindByEmailAsync(user.Email);
         var body = _sanitizer.Prepare(request.HtmlBody);
 
         var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(dbUser?.FullName ?? string.Empty, user.Email));
+        var stored = await LoadIdentitiesAsync(accountId, cancellationToken);
+        var label = IdentityResolver.LabelFor(stored, fromAddress, dbUser?.FullName);
+        // LabelFor falls back to the address itself; on the wire that would be a redundant "a@x <a@x>".
+        message.From.Add(new MailboxAddress(label == fromAddress ? string.Empty : label, fromAddress));
         AddAddresses(message.To, request.To);
         AddAddresses(message.Cc, request.Cc);
         AddAddresses(message.Bcc, request.Bcc);
@@ -110,6 +137,30 @@ internal sealed class MailSender : IMailSender
 
         message.Body = builder.ToMessageBody();
         return message;
+    }
+
+    /// <summary>
+    /// The preferences database only carries display labels, so an outage degrades to the account's
+    /// own label rather than failing a send that would otherwise have gone out.
+    /// </summary>
+    private async Task<IReadOnlyList<SendingIdentity>> LoadIdentitiesAsync(
+        string accountId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _identities.GetAsync(accountId, cancellationToken);
+        }
+        // Only the caller giving up propagates: a preferences layer surfacing its own timeout as
+        // an OperationCanceledException is an outage like any other, and must degrade.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Sending identities unavailable for {AccountId}: using the account label", accountId);
+            return [];
+        }
     }
 
     private static void AddAddresses(InternetAddressList list, IReadOnlyList<string> addresses)

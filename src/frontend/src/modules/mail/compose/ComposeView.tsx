@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
-import { useSendMessage } from '../queries'
+import { useIdentities, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
+import IdentitySelect from './IdentitySelect'
 import RecipientsField, { isValidAddress } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
 import { useStagedAttachments } from './useStagedAttachments'
@@ -26,6 +27,7 @@ export default function ComposeView({ onNotify }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   const send = useSendMessage()
+  const { data: identityList } = useIdentities()
   // State, not a ref: the toolbar sits above the editor, so a ref would still read null on the
   // render that mounts it and the buttons would do nothing until something else re-rendered.
   const [editor, setEditor] = useState<EditorHandle | null>(null)
@@ -38,11 +40,20 @@ export default function ComposeView({ onNotify }: Props) {
   const [showBcc, setShowBcc] = useState(false)
   const [subject, setSubject] = useState('')
   const [bodyTouched, setBodyTouched] = useState(false)
+  const [fromAddress, setFromAddress] = useState<string | null>(null)
   const attachments = useStagedAttachments()
+
+  const usableIdentities = (identityList ?? []).filter(i => !i.stale)
+  const effectiveFrom = fromAddress
+    ?? usableIdentities.find(i => i.isDefault)?.address
+    ?? usableIdentities[0]?.address ?? null
 
   // The blocker predicate and the unload handler run inside a navigation, which can fire in the
   // same click that dirtied the form — before any passive effect flushes. So the dirtying
   // callbacks set the ref up front; the effect only carries it back to false when the form clears.
+  // `dirty` means "the form is non-empty", which is the whole reason a From choice never dirties
+  // on its own: with content it is already dirty through it, without content there is nothing to
+  // lose. When 2c3's drafts make it "changed since load", a From-only edit must count again.
   const dirty = to.length > 0 || cc.length > 0 || bcc.length > 0
     || subject !== '' || bodyTouched || attachments.items.length > 0
   const dirtyRef = useRef(dirty)
@@ -82,7 +93,10 @@ export default function ComposeView({ onNotify }: Props) {
 
   function submit() {
     send.mutate(
-      { to, cc, bcc, subject, htmlBody: editor?.getHTML() ?? '', attachmentIds: attachments.ids },
+      {
+        to, cc, bcc, subject, htmlBody: editor?.getHTML() ?? '', attachmentIds: attachments.ids,
+        fromAddress: effectiveFrom ?? undefined,
+      },
       {
         onSuccess: (result) => {
           onNotify(result.appendedToSent ? 'Message sent' : 'Message sent — no Sent copy could be filed')
@@ -112,9 +126,15 @@ export default function ComposeView({ onNotify }: Props) {
       <div className="compose-fields">
         <div className="compose-from">
           <span className="compose-from-label">From</span>
-          <span className="compose-from-value">
-            {identity ? `${identity.displayName} (${identity.email})` : ''}
-          </span>
+          {effectiveFrom ? (
+            // The whole list, not the usable one: the select keeps stale rows out of the menu
+            // itself, and needs them to name a choice that went stale under the composer.
+            <IdentitySelect identities={identityList ?? []} value={effectiveFrom} onChange={setFromAddress} />
+          ) : (
+            <span className="compose-from-value">
+              {identity ? `${identity.displayName} (${identity.email})` : ''}
+            </span>
+          )}
         </div>
         <div className="compose-to-row">
           <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo} autoFocus />

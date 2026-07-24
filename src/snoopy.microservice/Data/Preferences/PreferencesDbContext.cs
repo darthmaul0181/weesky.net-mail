@@ -19,9 +19,12 @@ public class PreferencesDbContext : DbContext
     {
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.AccountId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.AccountId, p.PreferenceKey });
+        modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.AccountId, i.Address });
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
 
     public DbSet<UserPreference> UserPreferences { get; set; }
+
+    public DbSet<SendingIdentity> SendingIdentities { get; set; }
 }

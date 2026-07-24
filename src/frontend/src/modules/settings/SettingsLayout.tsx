@@ -16,6 +16,7 @@ export default function SettingsLayout() {
         <NavLink to="/settings/appearance" className={paneClass}>Appearance</NavLink>
         <NavLink to="/settings/folders" className={paneClass}>Folders list</NavLink>
         <NavLink to="/settings/aliases" className={paneClass}>Aliases</NavLink>
+        <NavLink to="/settings/identities" className={paneClass}>Identities</NavLink>
         <NavLink to="/settings/rules" className={paneClass}>Rules</NavLink>
         {isAdmin && <NavLink to="/settings/admin" className={paneClass}>Administration</NavLink>}
       </nav>

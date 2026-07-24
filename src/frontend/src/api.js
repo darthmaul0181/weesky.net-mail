@@ -135,6 +135,13 @@ export const api = {
   getAliases: () =>
     request('GET', '/api/Aliases'),
 
+  getIdentities: () =>
+    request('GET', '/api/Identities'),
+
+  // Replaces the whole set: the payload is the list, not a delta.
+  putIdentities: (identities) =>
+    request('PUT', '/api/Identities', { identities }),
+
   createAlias: (name, domain) =>
     request('POST', '/api/Aliases', { name, domain }),
 
