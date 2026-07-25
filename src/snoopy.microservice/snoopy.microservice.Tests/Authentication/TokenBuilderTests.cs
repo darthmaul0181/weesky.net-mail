@@ -1,5 +1,5 @@
 using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using Xunit;
@@ -11,27 +11,27 @@ public sealed class TokenBuilderTests
     private const string TestKey = "test-signing-key-long-enough-for-hmac256-hashing";
 
     [Fact]
-    public void Build_WithAllProperties_ReturnsJwtSecurityToken()
+    public void Build_WithAllProperties_ReturnsAReadableSignedToken()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddClaim(ClaimTypes.Upn, "john")
             .AddIssuer("issuer")
             .AddAudience("audience")
             .AddExpiry(30)
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
         Assert.NotNull(token);
-        Assert.IsType<JwtSecurityToken>(token);
+        Assert.Equal(3, token.EncodedToken.Split('.').Length);
     }
 
     [Fact]
     public void AddClaim_StringTypeAndValue_AddsClaimToToken()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddClaim("mytype", "myvalue")
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
         Assert.Contains(token.Claims, c => c.Type == "mytype" && c.Value == "myvalue");
     }
@@ -39,10 +39,10 @@ public sealed class TokenBuilderTests
     [Fact]
     public void AddClaim_ClaimObject_AddsClaimToToken()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddClaim(new Claim("mytype", "myvalue"))
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
         Assert.Contains(token.Claims, c => c.Type == "mytype" && c.Value == "myvalue");
     }
@@ -50,10 +50,10 @@ public sealed class TokenBuilderTests
     [Fact]
     public void AddClaims_Array_AddsAllClaimsToToken()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddClaims(new Claim("type1", "val1"), new Claim("type2", "val2"))
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
         Assert.Contains(token.Claims, c => c.Type == "type1" && c.Value == "val1");
         Assert.Contains(token.Claims, c => c.Type == "type2" && c.Value == "val2");
@@ -62,10 +62,10 @@ public sealed class TokenBuilderTests
     [Fact]
     public void AddIssuer_SetsIssuerOnToken()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddIssuer("my-issuer")
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
         Assert.Equal("my-issuer", token.Issuer);
     }
@@ -73,10 +73,10 @@ public sealed class TokenBuilderTests
     [Fact]
     public void AddExpiry_SetsExpiration()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddExpiry(30)
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
         var minutesToExpiry = (token.ValidTo - DateTime.UtcNow).TotalMinutes;
         Assert.InRange(minutesToExpiry, 29.9, 30.1);
@@ -85,11 +85,11 @@ public sealed class TokenBuilderTests
     [Fact]
     public void AddKey_UsesHmacSha256Algorithm()
     {
-        var token = new TokenBuilder()
+        var token = new JsonWebToken(new TokenBuilder()
             .AddKey(TestKey)
-            .Build();
+            .Build());
 
-        Assert.Equal(SecurityAlgorithms.HmacSha256, token.SignatureAlgorithm);
+        Assert.Equal(SecurityAlgorithms.HmacSha256, token.Alg);
     }
 
     [Fact]

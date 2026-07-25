@@ -4,17 +4,18 @@
 **Périmètre :** `src/snoopy.microservice/` — ≈11 000 lignes hors tests, 67 fichiers de tests
 **Branche :** `webmail`
 
-> **Statut au 2026-07-25 :** les priorités **1 à 9** de la §6 ont été traitées. Build sans
-> avertissement, **1125 tests au vert** (1104 au départ, +21 nouveaux).
+> **Statut au 2026-07-26 :** les priorités **1 à 9** de la §6 ont été traitées, puis les constats
+> **2.7, 3.3, 3.4, 4.4, 4.7 et 4.9** dans une seconde passe. Build sans avertissement,
+> **1138 tests au vert** (1104 au départ, +34 nouveaux).
 
 Chaque constat porte son état, et le détail des corrections est en §6 :
 
 | | Signification | Constats |
 |---|---|---|
-| ✅ | corrigé | 1.1, 1.2, 1.3, 1.5, 1.12, 2.1, 2.3, 3.1, 3.2, 4.1, 5.1, 5.3 |
-| 🟡 | partiellement corrigé | 4.2, 4.3, 4.5, 4.6 |
+| ✅ | corrigé | 1.1, 1.2, 1.3, 1.5, 1.12, 2.1, 2.3, 3.1, 3.2, 3.3, 3.4, 4.1, 4.4, 4.7, 4.8, 4.9, 5.1, 5.3 |
+| 🟡 | partiellement corrigé | 2.7, 4.2, 4.3, 4.5, 4.6 |
 | ⚠️ | écarté, constat révisé | 2.4 |
-| ⬜ | ouvert | 1.4, 1.6 à 1.11, 2.2, 2.5 à 2.8, 3.3 à 3.7, 4.4, 4.7 à 4.11, 5.2 |
+| ⬜ | ouvert | 1.4, 1.6 à 1.11, 2.2, 2.5, 2.6, 2.8, 3.5 à 3.7, 4.10, 4.11, 5.2 |
 
 ---
 
@@ -234,9 +235,9 @@ même utilisateur). Une seule jointure suffirait.
 `AuthorizationExtension` → `FindByEmailAsync` = Domains puis Users. Plus 2 autres pour
 `AdminRequirementHandler.IsAdminAsync` sur chaque appel admin, non caché.
 
-### ⬜ 2.7 — `GetAttachmentAsync` charge la pièce entière en mémoire
+### 🟡 2.7 — `GetAttachmentAsync` charge la pièce entière en mémoire
 
-> Toujours ouvert. Un garde-fou a été ajouté au passage : `MimePart.Content` peut être null et n'était pas testé (cf. 4.1).
+> **Partiellement corrigé** — le `ToArray()` disparaît : le `MemoryStream` décodé est rendu tel quel et `MailAttachmentContent.Content` devient un `Stream`, ce qui supprime une copie complète sur le LOH par téléchargement tout en gardant un flux *seekable*, donc un `Content-Length` et la progression côté navigateur. Le vrai streaming socket→réponse reste hors de portée : `GetBodyPartAsync` matérialise déjà la pièce, MailKit n'expose pas d'autre chemin.
 
 `Services/ImapSession.cs:917` : `MemoryStream` + `ToArray()` avant de la renvoyer. Sur une pièce de
 25 Mo × N utilisateurs, c'est autant sur le LOH. Le streaming direct vers la réponse serait
@@ -283,7 +284,9 @@ Un `IAsyncActionFilter` (ou un helper `TryGetMailPassword(out …)` sur `ApiBase
 `BadRequestEnveloppe(msg)` / `BadGateway(msg)` sur la classe de base rendraient les actions bien plus
 lisibles.
 
-### ⬜ 3.3 — `ImapSession` : le triplet `catch` répété 12 fois
+### ✅ 3.3 — `ImapSession` : le triplet `catch` répété 12 fois
+
+> **Corrigé** — un `ExecuteAsync` partagé porte le contrat d'échec ; les 17 méthodes le délèguent (−129 lignes). Les sentinelles restent **par opération** : chaque méthode conserve exactement l'ensemble qu'elle traduisait déjà, pour que ce soit un refactor et non un changement de comportement. Ces chemins n'ont pas de couverture — `ImapSession` prend un client MailKit concret — donc le contrat lui-même est épinglé par 9 tests dédiés.
 
 ```csharp
 catch (FolderNotFoundException) { return Result.Failure(FolderNotFound); }
@@ -293,7 +296,9 @@ catch (Exception ex) { _logger.LogError(ex, "…"); return Result.Failure("…")
 
 Encapsulable dans un `ExecuteAsync(Func<Task<Result<T>>>, string errorMessage, …)`.
 
-### ⬜ 3.4 — `ImapConnectionFactory` et `SmtpConnectionFactory` sont le même fichier à 90 %
+### ✅ 3.4 — `ImapConnectionFactory` et `SmtpConnectionFactory` sont le même fichier à 90 %
+
+> **Corrigé** — `MailConnectionFactory<TClient, TSession>` porte la structure commune ; chaque fabrique ne déclare plus que son endpoint, son client et sa session. Le `ValidateCertificate` dupliqué à l'identique n'existe plus qu'en un exemplaire.
 
 Même structure, même `ValidateCertificate` (dupliqué à l'identique), même gestion d'ownership, mêmes
 messages. Une classe de base générique ou un helper partagé pour `ValidateCertificate` élimine le
@@ -359,7 +364,9 @@ faire en une passe.
 - `AddExpiry` utilise `DateTime.UtcNow` alors que `TimeProvider.System` est déjà enregistré dans le
   conteneur (donc non testable au temps).
 
-### ⬜ 4.4 — `System.IdentityModel.Tokens.Jwt` / `JwtSecurityTokenHandler` est l'API legacy
+### ✅ 4.4 — `System.IdentityModel.Tokens.Jwt` / `JwtSecurityTokenHandler` est l'API legacy
+
+> **Corrigé** — `TokenBuilder` écrit via `JsonWebTokenHandler`, `Build()` rend directement le jeton sérialisé et `JwtSecurityTokenExtensions` disparaît. Le paquet `System.IdentityModel.Tokens.Jwt` est remplacé par `Microsoft.IdentityModel.JsonWebTokens` : plus qu'une seule pile JWT, celle avec laquelle le middleware validait déjà. Effet de bord bienvenu : le jeton porte enfin `iat` et `nbf`.
 
 Microsoft recommande `Microsoft.IdentityModel.JsonWebTokens` / `JsonWebTokenHandler` (plus rapide,
 moins allouant, et déjà utilisé en interne par `AddJwtBearer` en .NET 8+). Le projet mélange donc
@@ -381,19 +388,25 @@ est son propre test.
 `ApiBaseController` n'est pas `abstract` et `AuthenticatedUser` est `public` alors qu'il devrait être
 `protected`. `ApplicationDbContext` / `PreferencesDbContext` ne sont ni `sealed` ni `internal`.
 
-### ⬜ 4.7 — `Program.cs` (283 lignes)
+### ✅ 4.7 — `Program.cs` (283 lignes)
+
+> **Corrigé** — 283 → 61 lignes. La configuration part dans `Configuration/` : logging, bases, options, services mail, providers de règles, repositories, sécurité, documentation d'API.
 
 Mélange logging, deux DbContexts, ~30 enregistrements DI, CORS, rate limiting, Swagger, Data
 Protection et le pipeline. Des extensions `AddMailServices()`, `AddPreferencesDatabase()`,
 `AddSecurityHeaders()` le ramèneraient à une cinquantaine de lignes lisibles. Le `CLAUDE.md`
 encourage explicitement les méthodes d'extension.
 
-### ⬜ 4.8 — `.LogTo(Console.WriteLine, LogLevel.Warning)` sur les deux DbContexts
+### ✅ 4.8 — `.LogTo(Console.WriteLine, LogLevel.Warning)` sur les deux DbContexts
+
+> **Corrigé** — les `.LogTo(Console.WriteLine, …)` ont disparu avec le découpage : les avertissements EF repassent par `ILogger`, donc par Serilog et ses fichiers.
 
 `Program.cs` — court-circuite Serilog : ces avertissements EF n'atterrissent dans aucun fichier de
 log. Contradiction directe avec la règle « ALWAYS use ILogger with structured logging ».
 
-### ⬜ 4.9 — Mapping d'erreur incohérent entre contrôleurs
+### ✅ 4.9 — Mapping d'erreur incohérent entre contrôleurs
+
+> **Corrigé** — `SieveErrors` porte les sentinelles partagées (non configuré, injoignable, credentials refusés, connexion non sécurisée) et le contrôleur les mappe en 502 ; tout le reste reste un 400. Au passage les messages du serveur ne sont plus renvoyés au client : ils vont au log.
 
 `MailController` applique rigoureusement la règle 401 / 404 / 502 ; `RulesController` renvoie **400**
 pour une panne d'infrastructure (`Get`, `GetRaw` : `BadRequest(result.Error)` alors que l'erreur est
@@ -457,7 +470,7 @@ Voir 1.3. C'est le bug le plus visible pour un utilisateur final.
 | 7 | N+1 virtual domains / `StringComparison` en LINQ | 2.3 / 2.4 | ⚠️ N+1 fait, `StringComparison` **non fait** |
 | 8 | Guard credentials + helpers d'enveloppe | 3.2 | ✅ fait |
 | 9 | Réactiver les diagnostics nullable | 4.1 | ✅ fait |
-| 10 | Primary constructors partout, `Program.cs` en extensions | 4.2 / 4.7 | ouvert |
+| 10 | Primary constructors partout, `Program.cs` en extensions | 4.2 / 4.7 | ⚠️ `Program.cs` fait, primary constructors partiels |
 
 ### Détail des corrections
 
@@ -504,6 +517,24 @@ Voir 1.3. C'est le bug le plus visible pour un utilisateur final.
   dans `ImapSession.GetAttachmentAsync` et `QuotePreparer.StagePartAsync`, `MessagePart.Message`
   dans `QuotePreparer.StageAttachmentAsync`. Le constructeur sans paramètre de `User` est supprimé —
   il était la seule façon d'obtenir un `User` sans `Name` ni `Domain`.
+
+### Seconde passe — 2.7, 3.3, 3.4, 4.4, 4.7, 4.9
+
+- **4.9** — `SieveErrors` porte quatre sentinelles partagées entre le client ManageSieve et le
+  contrôleur, sur le modèle de `ImapSession.MessageNotFound` : une panne du service devient 502, une
+  requête réellement invalide reste 400. Les messages du serveur ne repartent plus vers le client.
+- **2.7** — partiel, voir l'annotation du constat : une copie complète en moins par téléchargement,
+  mais MailKit matérialise la pièce avant qu'on puisse la lire.
+- **3.3** — `ExecuteAsync` porte le contrat d'échec commun ; `ImapSession` passe de 1130 à 995 lignes.
+  Les sentinelles restent par opération pour que ce soit un refactor pur. Ces chemins n'ayant aucune
+  couverture, le contrat est épinglé par 9 tests dédiés — c'est là que tout le risque se concentre.
+- **3.4** — `MailConnectionFactory<TClient, TSession>` : les deux fabriques ne déclarent plus que ce
+  qui les distingue.
+- **4.7** — `Program.cs` passe de 283 à 61 lignes, la configuration part dans `Configuration/`.
+  **4.8** tombe avec : les `.LogTo(Console.WriteLine, …)` disparaissent, donc les avertissements EF
+  repassent par Serilog.
+- **4.4** — une seule pile JWT désormais : `JsonWebTokenHandler` pour écrire comme pour valider, et
+  `System.IdentityModel.Tokens.Jwt` est retiré du `csproj`.
 
 ### Non fait volontairement
 

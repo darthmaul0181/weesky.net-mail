@@ -46,8 +46,36 @@
             The Json Web Token used to authenticate the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Services.TokenBuilder">
+             <summary>
+             Builds the signed JWT the API authenticates with.
+            
+             On <see cref="T:Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler"/>, not the legacy <c>JwtSecurityTokenHandler</c>: the bearer
+             middleware already validates with the former, so writing with the latter left two JWT stacks in
+             one service. Claim types go out verbatim — neither handler rewrites them here — so the Upn/Dns
+             claims the token carries are the ones validation looks for.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.TokenBuilder.Build">
+            <summary>The serialized token. This handler emits "iat" and "nbf" alongside "exp".</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Authentication.WebmailClaimTypes">
             <summary>Custom JWT claim types. Upn/Dns come from System.Security.Claims; this one is ours.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApiDocumentationConfiguration.AddApiDocumentation(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>
+            The XML comments file is generated in every configuration (see the csproj) because Swagger
+            reads it at startup, not at build time.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApplicationServicesConfiguration.AddMailServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>Everything that talks to the mail server: IMAP, SMTP, ManageSieve, doveadm.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApplicationServicesConfiguration.AddRuleProviders(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>The Sieve rule formats this server can read and write.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApplicationServicesConfiguration.AddRepositories(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>Database-backed stores, one scope per request alongside their DbContext.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Configuration.AttachmentSizeLimitFilter">
              <summary>
@@ -80,6 +108,32 @@
         <member name="F:weesky.Snoopy.Microservice.Configuration.AttachmentSizeLimitFilter.EnvelopeOverheadBytes">
             <summary>Multipart headers and boundaries ride along with the file's own bytes.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.DatabaseConfiguration.AddSnoopyDatabases(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+             <summary>
+             The two databases this service talks to, plus the health check over the first one.
+            
+             They are separate on purpose: the dovecot schema belongs to Dovecot and can be rebuilt by
+             mail-server provisioning, which would take our preferences with it. Preferences creation is
+             manual — no EF migrations here; see docs/superpowers/mail-2a5-database-prerequisite.md — and
+             the service refuses to start without its connection string rather than run with folder roles
+             silently inert.
+             </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.RequestLoggerSource">
+            <summary>Serilog writes to this assembly's own request-logging category.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.UseSnoopyLogging(Microsoft.Extensions.Hosting.IHostBuilder)">
+            <summary>
+            Two daily files at Information — HTTP requests apart from the rest, so neither buries the
+            other. Two categories are turned down and must stay down: Microsoft.AspNetCore, and
+            EF Core's Database.Command, which logs every executed statement at Information and buried
+            the log under SQL. Warning still surfaces command failures, which EF logs at Error under
+            that same category.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.UseSnoopyRequestLogging(Microsoft.AspNetCore.Builder.IApplicationBuilder)">
+            <summary>The health probe runs constantly; at Information it is the whole HTTP log.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Configuration.MvcFormatterConfiguration">
             <summary>
             Output-formatter policy. Lives here rather than inline in Program.cs so it can be tested:
@@ -90,6 +144,30 @@
             <summary>
             Drops <see cref="T:Microsoft.AspNetCore.Mvc.Formatters.StringOutputFormatter"/>: MVC writes a bare string as
             <c>text/plain</c>, which the client's <c>res.json()</c> cannot parse.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddSnoopyAuthentication(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>JWT bearer (cookie-backed), the admin policy, and the per-request session pieces.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddFrontendCors(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>
+            The frontend is the only origin allowed, and it must send cookies — both the JWT and the
+            credentials one — so credentials are on and the origin list can never be a wildcard.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddCredentialKeyRing(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.AspNetCore.Hosting.IWebHostEnvironment)">
+            <summary>
+            The Data Protection key ring encrypts the IMAP credentials cookie, so it must survive
+            restarts: losing it makes every live credentials cookie undecryptable and signs every user
+            out. systemd's StateDirectory= provides a directory outside the deployment path — which the
+            release chmod/chown walk recursively — and owned by the service user.
+            </summary>
+            <returns>The key ring path, for the startup log line.</returns>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.UseSecurityHeaders(Microsoft.AspNetCore.Builder.IApplicationBuilder)">
+            <summary>
+            This is an API: nothing it returns is meant to be rendered, framed or referred from. The
+            Swagger UI is the one page that is, so it gets the only policy that allows its own assets.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetAccountInfo">
@@ -715,6 +793,13 @@
             <response code="400">Unknown key, or a value the key does not accept</response>
             <response code="401">Not authenticated</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.SieveFailure(System.String)">
+            <summary>
+            A ManageSieve outage is the service's fault, not the caller's: 502, the same split
+            MailController applies to IMAP. Anything else — an unknown provider, a rule the format
+            cannot express — really is a bad request.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
             Returns the authenticated user's Sieve configuration: structured rules when a
@@ -1014,7 +1099,18 @@
             <summary>One recipient. Name is empty when the message carried no display name.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent">
-            <summary>A decoded attachment, ready to stream to the client.</summary>
+            <summary>
+            A decoded attachment, ready to stream to the client. The caller owns <see cref="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent.Content"/> and
+            must dispose it — <c>FileStreamResult</c> does exactly that once the response is written.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent.Content">
+            <summary>
+            The decoded bytes, seekable so the response still carries a Content-Length and the browser
+            can show download progress. A stream rather than a <c>byte[]</c>: the array forced a second
+            full copy of a part that can reach the configured message size, on the large object heap,
+            for every concurrent download.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo">
             <summary>An attachment as listed on a message, without its content.</summary>
@@ -2289,15 +2385,34 @@
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ImapConnectionFactory">
+            <summary>
+            The IMAP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/> — where to connect and
+            what to wrap the connection in. Everything else (timeout, certificate policy, the guard on
+            unconfigured options, the ownership hand-off) lives in the base.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapConnectionFactory.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions},weesky.Snoopy.Microservice.Services.IMailHtmlSanitizer,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.ImapConnectionFactory})">
+            <summary>
+            The IMAP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/> — where to connect and
+            what to wrap the connection in. Everything else (timeout, certificate policy, the guard on
+            unconfigured options, the ownership hand-off) lives in the base.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ExecuteAsync``1(System.Threading.CancellationToken,System.Func{System.Threading.Tasks.Task{CSharpFunctionalExtensions.Result{``0}}},System.String,System.Action{System.Exception},System.Func{System.Exception,System.String})">
              <summary>
-             Opens one IMAP connection per request — no pooling, the Rainloop model. Modelled on
-             ManageSieveClient.OpenSessionAsync: guard on unconfigured options, a generic message to
-             the client with the detail logged, and ownership of the client transferred to the
-             session on success so the finally block is a no-op on the happy path.
+             The failure contract every operation on this session shares, and the reason none of them
+             spells it out any more: a cancellation the caller asked for propagates untouched, a known
+             IMAP condition becomes the sentinel both layers agree on, and anything else is logged in
+             full while the client gets one opaque sentence — the server's own words never reach it.
             
-             Options are read through IOptionsMonitor, not IOptions, so a correction in
-             appsettings.json takes effect without restarting the service and dropping live sessions.
+             <c>sentinel</c> maps an exception to a shared sentinel, or null when it is not one this
+             operation recognises. Deliberately per-operation rather than global: the set each method
+             already translated is the set it keeps, so this stays a refactor and not a change of
+             behaviour. Unifying them is worth doing, but only once these paths have coverage.
              </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ExecuteAsync(System.Threading.CancellationToken,System.Func{System.Threading.Tasks.Task{CSharpFunctionalExtensions.Result}},System.String,System.Action{System.Exception},System.Func{System.Exception,System.String})">
+            <inheritdoc cref="M:weesky.Snoopy.Microservice.Services.ImapSession.ExecuteAsync``1(System.Threading.CancellationToken,System.Func{System.Threading.Tasks.Task{CSharpFunctionalExtensions.Result{``0}}},System.String,System.Action{System.Exception},System.Func{System.Exception,System.String})"/>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveTargetOrFailAsync(System.String,System.Threading.CancellationToken)">
             <summary>
@@ -2456,6 +2571,51 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailAuthenticationReader">
             <summary>Reads the SPF and DKIM verdicts out of the topmost Authentication-Results header (RFC 7601).</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailEndpoint">
+            <summary>
+            Where and how to reach one of the mail services, read from <see cref="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions"/>.
+            <c>Protocol</c> names it in log messages ("IMAP"), and <c>ConfigurationKey</c> is the setting
+            whose absence means "not configured", so the log line points at what to fill in.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailEndpoint.#ctor(System.String,System.String,System.String,System.Int32,MailKit.Security.SecureSocketOptions,System.Boolean)">
+            <summary>
+            Where and how to reach one of the mail services, read from <see cref="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions"/>.
+            <c>Protocol</c> names it in log messages ("IMAP"), and <c>ConfigurationKey</c> is the setting
+            whose absence means "not configured", so the log line points at what to fill in.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2">
+             <summary>
+             Opens one connection per request — no pooling, the Rainloop model: guard on unconfigured
+             options, a generic message to the client with the detail logged, and ownership of the client
+             transferred to the session on success so the finally block is a no-op on the happy path.
+            
+             Shared by the IMAP and SMTP factories, which were the same file twice down to a byte-identical
+             certificate callback — including the rule that matters most here, that an authentication
+             failure must never echo the server's message back to the caller.
+            
+             Options are read through IOptionsMonitor, not IOptions, so a correction in appsettings.json
+             takes effect without restarting the service and dropping live sessions.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions},Microsoft.Extensions.Logging.ILogger)">
+             <summary>
+             Opens one connection per request — no pooling, the Rainloop model: guard on unconfigured
+             options, a generic message to the client with the detail logged, and ownership of the client
+             transferred to the session on success so the finally block is a no-op on the happy path.
+            
+             Shared by the IMAP and SMTP factories, which were the same file twice down to a byte-identical
+             certificate callback — including the rule that matters most here, that an authentication
+             failure must never echo the server's message back to the caller.
+            
+             Options are read through IOptionsMonitor, not IOptions, so a correction in appsettings.json
+             takes effect without restarting the service and dropping live sessions.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2.CreateSession(`0)">
+            <summary>Wraps the connected client. The session owns it from here, disposal included.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">
             <summary>Cookie name. Distinct from the JWT cookie so both can be cleared independently.</summary>
@@ -2632,6 +2792,13 @@
             authorization identity).
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ManageSieveClient.FailUnreachable(System.String,System.String)">
+            <summary>
+            A handshake step the server refused. The server's own wording goes to the log, never to the
+            client: it can disclose service state, and the caller only needs to know the rules service
+            is unavailable.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ManageSieveClient.ReadLineAsync(System.IO.Stream,System.Threading.CancellationToken)">
             <summary>
             Unbuffered line read used only during the handshake. Once the session is
@@ -2729,6 +2896,19 @@
              is not reusable by anybody else and must not outlive the request that carried the credentials.
              </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SieveErrors">
+             <summary>
+             The failures the rules stack reports about the service itself rather than about the request.
+            
+             Shared constants, the same discipline <c>ImapSession.MessageNotFound</c> follows: the layer
+             that produces an error and the layer that picks a status code cannot drift apart on the exact
+             wording. Without them every ManageSieve outage — unconfigured, unreachable, refused credentials
+             — surfaced as 400, telling the client it had sent something wrong.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SieveErrors.IsServiceFailure(System.String)">
+            <summary>True when the failure is the service's and not the caller's — a 502, not a 400.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SieveScriptListEntry">
             <summary>
             One entry in the LISTSCRIPTS response from a ManageSieve server.
@@ -2741,9 +2921,14 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SmtpConnectionFactory">
             <summary>
-            Opens one SMTP connection per request, the same model as ImapConnectionFactory: the
-            user's own password from the credentials cookie, options through IOptionsMonitor so a
-            correction in appsettings.json applies without a restart.
+            The SMTP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/>. Submission uses the
+            account's own credentials, the same ones the IMAP side reads from the credentials cookie.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SmtpConnectionFactory.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions},Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.SmtpConnectionFactory})">
+            <summary>
+            The SMTP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/>. Submission uses the
+            account's own credentials, the same ones the IMAP side reads from the credentials cookie.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.SmtpSession.DescribeFailure(System.Exception,MimeKit.MimeMessage)">

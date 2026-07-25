@@ -1,201 +1,26 @@
-﻿using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi;
-using Microsoft.AspNetCore.Authorization;
-using Serilog;
-using Serilog.Events;
-using Serilog.Filters;
-using weesky.Snoopy.Microservice.Authentication.Authorization;
-using weesky.Snoopy.Microservice.Configuration;
-using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Middleware;
-using weesky.Snoopy.Microservice.Authentication.Models;
-using weesky.Snoopy.Microservice.Authentication.Services;
-using Microsoft.AspNetCore.DataProtection;
-using weesky.Snoopy.Microservice.Data;
-using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Models;
-using weesky.Snoopy.Microservice.Models.Mail;
-using weesky.Snoopy.Microservice.Repositories;
-using weesky.Snoopy.Microservice.HealthChecks;
-using weesky.Snoopy.Microservice.RuleProviders;
-using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
-using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var logDirectory = OperatingSystem.IsWindows()
-    ? Path.Combine(AppContext.BaseDirectory, "logs")
-    : "/var/log/snoopy.microservice";
-Directory.CreateDirectory(logDirectory);
+builder.Host.UseSnoopyLogging();
 
-const string requestLoggerSource = "Serilog.AspNetCore.RequestLoggingMiddleware";
+builder.Services
+    .AddSnoopyOptions(builder.Configuration)
+    .AddSnoopyDatabases(builder.Configuration)
+    .AddMailServices()
+    .AddRuleProviders()
+    .AddRepositories()
+    .AddSnoopyAuthentication()
+    .AddFrontendCors(builder.Configuration)
+    .AddLoginRateLimiter()
+    .AddApiDocumentation()
+    .AddProblemDetails();
 
-builder.Host.UseSerilog((ctx, cfg) =>
-{
-    var logPrefix = ctx.HostingEnvironment.IsProduction()
-        ? ""
-        : $"{ctx.HostingEnvironment.EnvironmentName.ToLowerInvariant()}-";
-    cfg
-        .MinimumLevel.Information()
-        .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-        // EF Core logs every executed statement at Information, which buried the log under SQL.
-        // Warning keeps command failures, which it logs at Error under this same category.
-        .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
-        .Enrich.FromLogContext()
-        .WriteTo.Logger(l => l
-            .Filter.ByIncludingOnly(Matching.FromSource(requestLoggerSource))
-            .WriteTo.File(
-                Path.Combine(logDirectory, $"log-{logPrefix}http-.log"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 31,
-                shared: true))
-        .WriteTo.Logger(l => l
-            .Filter.ByExcluding(Matching.FromSource(requestLoggerSource))
-            .WriteTo.File(
-                Path.Combine(logDirectory, $"log-{logPrefix}.log"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 31,
-                shared: true));
-});
-
-// Add services to the container.
-
-var connectionString = new MySqlConnector.MySqlConnectionStringBuilder(
-    builder.Configuration.GetConnectionString("MailUserAccountsDatabase")
-        ?? throw new InvalidOperationException("Connection string 'MailUserAccountsDatabase' is missing"))
-{
-    ConvertZeroDateTime = true
-}.ToString();
-
-// Detect the server version once at startup: ServerVersion.AutoDetect opens a database
-// connection, so it must not run on every DbContext instantiation.
-var serverVersion = ServerVersion.AutoDetect(connectionString);
-
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-{
-    options.UseMySql(connectionString, serverVersion, mySqlOptions => mySqlOptions.EnableStringComparisonTranslations())
-    .LogTo(Console.WriteLine, LogLevel.Warning);
-});
-
-// User preferences (folder roles) live in their own database: the dovecot schema belongs to
-// Dovecot and can be rebuilt by mail-server provisioning, which would take our data with it.
-// Creation is manual — no EF migrations here. See docs/superpowers/mail-2a5-database-prerequisite.md.
-var preferencesConnectionString = builder.Configuration.GetConnectionString("WebmailPreferencesDatabase");
-if (string.IsNullOrEmpty(preferencesConnectionString))
-{
-    throw new InvalidOperationException(
-        "Connection string 'WebmailPreferencesDatabase' is missing. " +
-        "Apply docs/superpowers/mail-2a5-database-prerequisite.md, then configure the connection string. " +
-        "Refusing to start rather than running with folder roles silently inert.");
-}
-
-var preferencesServerVersion = ServerVersion.AutoDetect(preferencesConnectionString);
-builder.Services.AddDbContext<PreferencesDbContext>(options =>
-{
-    options.UseMySql(preferencesConnectionString, preferencesServerVersion)
-        .LogTo(Console.WriteLine, LogLevel.Warning);
-});
-
-builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
-builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
-builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSection("Sieve"));
-builder.Services.AddOptions<MailOptions>().Bind(builder.Configuration.GetSection("Mail"));
-builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
-builder.Services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
-// Scoped, so the whole request shares one authenticated IMAP connection and the container
-// closes it when the request ends. See ScopedImapSessionProvider.
-builder.Services.AddScoped<IImapSessionProvider, ScopedImapSessionProvider>();
-builder.Services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
-builder.Services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
-builder.Services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
-builder.Services.AddSingleton<IQuotePreparer, QuotePreparer>();
 builder.Services.AddSingleton(TimeProvider.System);
-// Singleton is load-bearing: staged metadata and per-account reserved bytes live in this
-// instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.
-builder.Services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
-builder.Services.AddHostedService<StagedAttachmentSweeper>();
 builder.Services.AddScoped<AttachmentSizeLimitFilter>();
 
-// Kept in step with the per-request cap the filter applies. Left at its 128 MB default it
-// becomes the real ceiling whenever MaxMessageSizeMb is raised past it, and the error a caller
-// gets then no longer matches the configured limit.
-builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
-{
-    var maxMessageSizeMb = builder.Configuration.GetSection("Mail").Get<MailOptions>()?.MaxMessageSizeMb
-        ?? new MailOptions().MaxMessageSizeMb;
-    options.MultipartBodyLengthLimit = (long)maxMessageSizeMb * 1024 * 1024 + 1024 * 1024;
-});
-builder.Services.AddScoped<IOutgoingMessageFactory, OutgoingMessageFactory>();
-builder.Services.AddScoped<IMailSender, MailSender>();
-builder.Services.AddScoped<IDraftSaver, DraftSaver>();
-builder.Services.AddSingleton<IRuleProvider, WeeskyRuleProvider>();
-builder.Services.AddSingleton<IRuleProvider, RainloopRuleProvider>();
-builder.Services.AddSingleton<IRuleProviderRegistry, RuleProviderRegistry>();
-builder.Services.AddScoped<ISieveRepository, SieveRepository>();
-builder.Services.AddScoped<IUsersRepository, UsersRepository>();
-builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
-builder.Services.AddScoped<IAdminRepository, AdminRepository>();
-builder.Services.AddScoped<IMailFolderRepository, MailFolderRepository>();
-builder.Services.AddScoped<IMailMessageRepository, MailMessageRepository>();
-builder.Services.AddScoped<IFolderRoleStore, FolderRoleStore>();
-builder.Services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
-builder.Services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
-builder.Services.AddScoped<IWebmailUserStore, WebmailUserStore>();
-builder.Services.AddMemoryCache();
-builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
-builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
-builder.Services.AddScoped<ITokenManager, TokenManager>();
-builder.Services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(5);
-});
-
-builder.Services.AddJwtBearerAuthentication(true);
-
-builder.Services.AddScoped<IAuthorizationHandler, AdminRequirementHandler>();
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy(AdminRequirement.PolicyName, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new AdminRequirement()));
-});
-
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? Array.Empty<string>();
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("Frontend", policy =>
-    {
-        policy
-            .WithOrigins(allowedOrigins)
-            .WithMethods("GET", "POST", "PATCH", "DELETE", "PUT")
-            .WithHeaders("Authorization", "Content-Type")
-            .AllowCredentials()
-            .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
-    });
-});
-
-builder.Services.AddProblemDetails();
-
-builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseHealthCheck>("database");
-
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    options.AddPolicy("login", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                Window = TimeSpan.FromMinutes(1),
-                PermitLimit = 5,
-                QueueLimit = 0
-            }));
-});
+var keyRingPath = builder.Services.AddCredentialKeyRing(builder.Environment);
 
 builder.Services.AddControllers(MvcFormatterConfiguration.ConfigureFormatters).AddJsonOptions(o =>
 {
@@ -203,82 +28,21 @@ builder.Services.AddControllers(MvcFormatterConfiguration.ConfigureFormatters).A
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
-builder.Services.AddEndpointsApiExplorer();
-
-
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Version = "v1",
-        Title = "weesky.mail.snoopy",
-        Description = "weesky.net mail account management",
-        Contact = new OpenApiContact
-        {
-            Name = "administrator",
-            Email = "root@weesky.net"
-        }
-    });
-
-    var filePath = Path.Combine(AppContext.BaseDirectory, "ApiDocumentation.xml");
-    options.IncludeXmlComments(filePath);
-});
-
-// Data Protection key ring. It encrypts the IMAP credentials cookie, so it must survive
-// restarts: losing it makes every live credentials cookie undecryptable and forces every user
-// to sign in again. systemd's StateDirectory= provides a directory outside the deployment path
-// (which the release chmod/chown walk recursively) and owned by the service user.
-var stateDirectory = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
-
-if (string.IsNullOrEmpty(stateDirectory) && !builder.Environment.IsDevelopment())
-{
-    throw new InvalidOperationException(
-        "STATE_DIRECTORY is not set. Add 'StateDirectory=snoopy.microservice' to the systemd unit. " +
-        "Refusing to start rather than falling back to a key ring under the deployment directory.");
-}
-
-var keyRingPath = string.IsNullOrEmpty(stateDirectory)
-    ? Path.Combine(builder.Environment.ContentRootPath, "keys")   // development only
-    : Path.Combine(stateDirectory, "keys");
-
-Directory.CreateDirectory(keyRingPath);
-
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
-    .SetApplicationName($"snoopy.microservice.{builder.Environment.EnvironmentName}");
-
 var app = builder.Build();
 
 app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
 
-app.UseSerilogRequestLogging(options =>
-{
-    options.GetLevel = (ctx, _, _) =>
-        ctx.Request.Path == "/health" ? LogEventLevel.Verbose : LogEventLevel.Information;
-});
-
+app.UseSnoopyRequestLogging();
 app.UseExceptionHandler();
+app.UseSecurityHeaders();
 
-app.Use(async (context, next) =>
-{
-    var headers = context.Response.Headers;
-    headers["X-Content-Type-Options"] = "nosniff";
-    headers["X-Frame-Options"] = "DENY";
-    headers["Referrer-Policy"] = "no-referrer";
-    headers["Content-Security-Policy"] = context.Request.Path.StartsWithSegments("/swagger")
-        ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
-        : "default-src 'none'; frame-ancestors 'none'";
-    await next();
-});
-
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseCors("Frontend");
+app.UseCors(SecurityConfiguration.CorsPolicy);
 app.UseRateLimiter();
 app.UseAuthentication();
 

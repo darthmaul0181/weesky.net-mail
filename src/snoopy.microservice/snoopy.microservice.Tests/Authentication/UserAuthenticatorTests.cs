@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
@@ -115,7 +115,7 @@ public sealed class UserAuthenticatorTests
         var result = await sut.AuthenticateAsync("mick@weesky.be", "pw");
 
         Assert.True(result.IsSuccess);
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Value.Token);
+        var jwt = new JsonWebToken(result.Value.Token);
         Assert.Equal(uid.ToString(), jwt.Claims.First(c => c.Type == WebmailClaimTypes.Uid).Value);
         _webmailUsers.Verify(s => s.RegisterLoginAsync("mick@weesky.be", It.IsAny<CancellationToken>()), Times.Once);
     }

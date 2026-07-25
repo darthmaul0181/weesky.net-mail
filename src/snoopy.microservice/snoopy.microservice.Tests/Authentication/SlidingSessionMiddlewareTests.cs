@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;

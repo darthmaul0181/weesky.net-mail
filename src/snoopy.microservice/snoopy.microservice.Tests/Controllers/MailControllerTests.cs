@@ -423,17 +423,20 @@ public sealed class MailControllerTests
         _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, "2", It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailAttachmentContent
                  {
-                     Content = new byte[] { 1, 2, 3 },
+                     Content = new MemoryStream([1, 2, 3]),
                      FileName = "report.pdf",
                      ContentType = "application/pdf"
                  }));
 
         var result = await CreateController().GetAttachment("INBOX", 42, "2", CancellationToken.None);
 
-        var file = Assert.IsType<FileContentResult>(result);
+        var file = Assert.IsType<FileStreamResult>(result);
         Assert.Equal("application/pdf", file.ContentType);
         Assert.Equal("report.pdf", file.FileDownloadName);
-        Assert.Equal(new byte[] { 1, 2, 3 }, file.FileContents);
+
+        using var read = new MemoryStream();
+        file.FileStream.CopyTo(read);
+        Assert.Equal(new byte[] { 1, 2, 3 }, read.ToArray());
     }
 
     [Theory]

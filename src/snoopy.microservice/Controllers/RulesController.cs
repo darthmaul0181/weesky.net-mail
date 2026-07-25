@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -22,6 +23,19 @@ public sealed class RulesController : ApiBaseController
     }
 
     /// <summary>
+    /// A ManageSieve outage is the service's fault, not the caller's: 502, the same split
+    /// MailController applies to IMAP. Anything else — an unknown provider, a rule the format
+    /// cannot express — really is a bad request.
+    /// </summary>
+    private ActionResult SieveFailure(string error) =>
+        SieveErrors.IsServiceFailure(error) ? BadGatewayEnveloppe(error) : BadRequestEnveloppe(error);
+
+    private static int SieveErrorStatus(Result result) =>
+        result.IsFailure && SieveErrors.IsServiceFailure(result.Error)
+            ? StatusCodes.Status502BadGateway
+            : StatusCodes.Status400BadRequest;
+
+    /// <summary>
     /// Returns the authenticated user's Sieve configuration: structured rules when a
     /// registered provider can decode the script, or the raw script when none matches.
     /// </summary>
@@ -34,7 +48,7 @@ public sealed class RulesController : ApiBaseController
     {
         Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
         if (result.IsSuccess) return Ok(result.Value);
-        return BadRequestEnveloppe(result.Error);
+        return SieveFailure(result.Error);
     }
 
     /// <summary>
@@ -55,7 +69,7 @@ public sealed class RulesController : ApiBaseController
 
         Result result = await _sieveRepository.SaveRulesAsync(
             AuthenticatedUser, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
-        return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+        return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
     /// <summary>
@@ -69,7 +83,7 @@ public sealed class RulesController : ApiBaseController
     public async Task<ActionResult<ResultEnveloppe>> DeleteAll(CancellationToken cancellationToken)
     {
         Result result = await _sieveRepository.DeleteAllRulesAsync(AuthenticatedUser, cancellationToken);
-        return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+        return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
     /// <summary>
@@ -84,7 +98,7 @@ public sealed class RulesController : ApiBaseController
     {
         Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
         if (result.IsFailure)
-            return BadRequestEnveloppe(result.Error);
+            return SieveFailure(result.Error);
 
         return Ok(new SieveRawScript
         {
@@ -110,7 +124,7 @@ public sealed class RulesController : ApiBaseController
 
         Result result = await _sieveRepository.SaveRawScriptAsync(
             AuthenticatedUser, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
-        return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+        return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
     /// <summary>

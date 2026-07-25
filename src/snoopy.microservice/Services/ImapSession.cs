@@ -27,11 +27,81 @@ internal sealed class ImapSession : IImapSession
 
     public char DirectorySeparator { get; }
 
-    public async Task<Result<IReadOnlyList<MailFolderNode>>> ListFoldersAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The failure contract every operation on this session shares, and the reason none of them
+    /// spells it out any more: a cancellation the caller asked for propagates untouched, a known
+    /// IMAP condition becomes the sentinel both layers agree on, and anything else is logged in
+    /// full while the client gets one opaque sentence — the server's own words never reach it.
+    ///
+    /// <c>sentinel</c> maps an exception to a shared sentinel, or null when it is not one this
+    /// operation recognises. Deliberately per-operation rather than global: the set each method
+    /// already translated is the set it keeps, so this stays a refactor and not a change of
+    /// behaviour. Unifying them is worth doing, but only once these paths have coverage.
+    /// </summary>
+    internal async Task<Result<T>> ExecuteAsync<T>(
+        CancellationToken cancellationToken,
+        Func<Task<Result<T>>> operation,
+        string failureMessage,
+        Action<Exception> logFailure,
+        Func<Exception, string?>? sentinel = null)
     {
         ThrowIfDisposed();
 
         try
+        {
+            return await operation();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (sentinel?.Invoke(ex) is { } known) return Result.Failure<T>(known);
+
+            logFailure(ex);
+            return Result.Failure<T>(failureMessage);
+        }
+    }
+
+    /// <inheritdoc cref="ExecuteAsync{T}"/>
+    internal async Task<Result> ExecuteAsync(
+        CancellationToken cancellationToken,
+        Func<Task<Result>> operation,
+        string failureMessage,
+        Action<Exception> logFailure,
+        Func<Exception, string?>? sentinel = null)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            return await operation();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (sentinel?.Invoke(ex) is { } known) return Result.Failure(known);
+
+            logFailure(ex);
+            return Result.Failure(failureMessage);
+        }
+    }
+
+    internal static string? FolderSentinel(Exception ex) =>
+        ex is FolderNotFoundException ? FolderNotFound : null;
+
+    internal static string? MessageSentinel(Exception ex) =>
+        ex is MessageNotFoundException ? MessageNotFound : null;
+
+    internal static string? FolderOrMessageSentinel(Exception ex) =>
+        FolderSentinel(ex) ?? MessageSentinel(ex);
+
+    public Task<Result<IReadOnlyList<MailFolderNode>>> ListFoldersAsync(CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var personal = _client.PersonalNamespaces[0];
 
@@ -95,29 +165,18 @@ internal sealed class ImapSession : IImapSession
             }
 
             return Result.Success<IReadOnlyList<MailFolderNode>>(roots);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to list IMAP folders");
-            return Result.Failure<IReadOnlyList<MailFolderNode>>("Unable to read the mailbox folders");
-        }
-    }
+        },
+            "Unable to read the mailbox folders",
+            ex => _logger.LogError(ex, "Failed to list IMAP folders"));
 
-    public async Task<Result<string>> CreateFolderAsync(string parentPath, string name, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        if (!IsValidLeafName(name, DirectorySeparator))
+    public Task<Result<string>> CreateFolderAsync(string parentPath, string name, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
-            return Result.Failure<string>($"A folder name cannot be empty or contain '{DirectorySeparator}'");
-        }
+            if (!IsValidLeafName(name, DirectorySeparator))
+            {
+                return Result.Failure<string>($"A folder name cannot be empty or contain '{DirectorySeparator}'");
+            }
 
-        try
-        {
             var parent = string.IsNullOrEmpty(parentPath)
                 ? _client.GetFolder(_client.PersonalNamespaces[0])
                 : await _client.GetFolderAsync(parentPath, cancellationToken);
@@ -129,29 +188,18 @@ internal sealed class ImapSession : IImapSession
             await created.SubscribeAsync(cancellationToken);
 
             return Result.Success(created.FullName);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create folder {Name} under {Parent}", name, parentPath);
-            return Result.Failure<string>("Unable to create the folder");
-        }
-    }
+        },
+            "Unable to create the folder",
+            ex => _logger.LogError(ex, "Failed to create folder {Name} under {Parent}", name, parentPath));
 
-    public async Task<Result<string>> RenameFolderAsync(string path, string newParentPath, string newName, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        if (!IsValidLeafName(newName, DirectorySeparator))
+    public Task<Result<string>> RenameFolderAsync(string path, string newParentPath, string newName, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
-            return Result.Failure<string>($"A folder name cannot be empty or contain '{DirectorySeparator}'");
-        }
+            if (!IsValidLeafName(newName, DirectorySeparator))
+            {
+                return Result.Failure<string>($"A folder name cannot be empty or contain '{DirectorySeparator}'");
+            }
 
-        try
-        {
             var folder = await _client.GetFolderAsync(path, cancellationToken);
             var newParent = string.IsNullOrEmpty(newParentPath)
                 ? _client.GetFolder(_client.PersonalNamespaces[0])
@@ -160,23 +208,12 @@ internal sealed class ImapSession : IImapSession
             await folder.RenameAsync(newParent, newName, cancellationToken);
 
             return Result.Success(folder.FullName);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to rename folder {Path}", path);
-            return Result.Failure<string>("Unable to rename the folder");
-        }
-    }
+        },
+            "Unable to rename the folder",
+            ex => _logger.LogError(ex, "Failed to rename folder {Path}", path));
 
-    public async Task<Result> DeleteFolderAsync(string path, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result> DeleteFolderAsync(string path, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(path, cancellationToken);
 
@@ -188,23 +225,12 @@ internal sealed class ImapSession : IImapSession
             await folder.DeleteAsync(cancellationToken);
 
             return Result.Success();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete folder {Path}", path);
-            return Result.Failure("Unable to delete the folder");
-        }
-    }
+        },
+            "Unable to delete the folder",
+            ex => _logger.LogError(ex, "Failed to delete folder {Path}", path));
 
-    public async Task<Result> SetSubscriptionAsync(string path, bool subscribed, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result> SetSubscriptionAsync(string path, bool subscribed, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(path, cancellationToken);
 
@@ -212,23 +238,12 @@ internal sealed class ImapSession : IImapSession
             else await folder.UnsubscribeAsync(cancellationToken);
 
             return Result.Success();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to set subscription on {Path}", path);
-            return Result.Failure("Unable to change the folder visibility");
-        }
-    }
+        },
+            "Unable to change the folder visibility",
+            ex => _logger.LogError(ex, "Failed to set subscription on {Path}", path));
 
-    public async Task<Result> SetFlagsAsync(string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result> SetFlagsAsync(string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             // First ReadWrite open of the project: every read path stays ReadOnly.
@@ -242,29 +257,15 @@ internal sealed class ImapSession : IImapSession
             else await folder.RemoveFlagsAsync(ids, messageFlags, silent: true, cancellationToken);
 
             return Result.Success();
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to set {Flag}={Value} on {Count} messages in {Folder}", flag, value, uids.Count, folderPath);
-            return Result.Failure("Unable to update the messages");
-        }
-    }
+        },
+            "Unable to update the messages",
+            ex => _logger.LogError(ex, "Failed to set {Flag}={Value} on {Count} messages in {Folder}", flag, value, uids.Count, folderPath),
+            FolderSentinel);
 
     public const string TargetNotSelectable = "target_not_selectable";
 
-    public async Task<Result> MoveOrCopyAsync(string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result> MoveOrCopyAsync(string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var targetResult = await ResolveTargetOrFailAsync(targetPath, cancellationToken);
             if (targetResult.IsFailure) return Result.Failure(targetResult.Error);
@@ -279,22 +280,11 @@ internal sealed class ImapSession : IImapSession
             else await folder.MoveToAsync(ids, target, cancellationToken);
 
             return Result.Success();
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to {Verb} {Count} messages from {Folder} to {Target}",
-                copy ? "copy" : "move", uids.Count, folderPath, targetPath);
-            return Result.Failure(copy ? "Unable to copy the messages" : "Unable to move the messages");
-        }
-    }
+        },
+            copy ? "Unable to copy the messages" : "Unable to move the messages",
+            ex => _logger.LogError(ex, "Failed to {Verb} {Count} messages from {Folder} to {Target}",
+                copy ? "copy" : "move", uids.Count, folderPath, targetPath),
+            FolderSentinel);
 
     /// <summary>
     /// Resolves a move/empty target, failing with <see cref="TargetNotSelectable"/> when it
@@ -316,18 +306,15 @@ internal sealed class ImapSession : IImapSession
         return Result.Success(target);
     }
 
-    public async Task<Result> DeleteAsync(string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        // A bare EXPUNGE purges every \Deleted message in the folder, including ones another
-        // client marked and has not purged. UID EXPUNGE (UIDPLUS) limits it to ours — without
-        // it, refusing beats widening the purge. Capabilities are read after authentication.
-        if (!_client.Capabilities.HasFlag(ImapCapabilities.UidPlus))
-            return Result.Failure("The mail server cannot delete single messages (no UIDPLUS)");
-
-        try
+    public Task<Result> DeleteAsync(string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
+            // A bare EXPUNGE purges every \Deleted message in the folder, including ones another
+            // client marked and has not purged. UID EXPUNGE (UIDPLUS) limits it to ours — without
+            // it, refusing beats widening the purge. Capabilities are read after authentication.
+            if (!_client.Capabilities.HasFlag(ImapCapabilities.UidPlus))
+                return Result.Failure("The mail server cannot delete single messages (no UIDPLUS)");
+
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
 
@@ -336,29 +323,18 @@ internal sealed class ImapSession : IImapSession
             await folder.ExpungeAsync(ids, cancellationToken);
 
             return Result.Success();
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to expunge {Count} messages from {Folder}", uids.Count, folderPath);
-            return Result.Failure("Unable to delete the messages");
-        }
-    }
+        },
+            "Unable to delete the messages",
+            ex => _logger.LogError(ex, "Failed to expunge {Count} messages from {Folder}", uids.Count, folderPath),
+            FolderSentinel);
 
-    public async Task<Result> EmptyAsync(string folderPath, string? targetPath, CancellationToken cancellationToken)
+    public Task<Result> EmptyAsync(string folderPath, string? targetPath, CancellationToken cancellationToken)
     {
-        ThrowIfDisposed();
-
+        // Read before the operation, not inside it: the failure log below is a sibling argument
+        // and cannot see the operation's locals.
         var move = !string.IsNullOrWhiteSpace(targetPath);
 
-        try
+        return ExecuteAsync(cancellationToken, async () =>
         {
             IMailFolder? target = null;
             if (move)
@@ -387,53 +363,26 @@ internal sealed class ImapSession : IImapSession
             }
 
             return Result.Success();
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to empty {Folder} (move: {Move})", folderPath, move);
-            return Result.Failure("Unable to empty the folder");
-        }
+        },
+            "Unable to empty the folder",
+            ex => _logger.LogError(ex, "Failed to empty {Folder} (move: {Move})", folderPath, move),
+            FolderSentinel);
     }
 
-    public async Task<Result> AppendAsync(string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result> AppendAsync(string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.AppendAsync(message, seen ? MessageFlags.Seen : MessageFlags.None, cancellationToken);
             return Result.Success();
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to append a message to {Folder}", folderPath);
-            return Result.Failure("Unable to file the message");
-        }
-    }
+        },
+            "Unable to file the message",
+            ex => _logger.LogError(ex, "Failed to append a message to {Folder}", folderPath),
+            FolderSentinel);
 
-    public async Task<Result<uint>> SaveDraftAsync(
-        string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<uint>> SaveDraftAsync(
+        string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             var appended = await folder.AppendAsync(message, MessageFlags.Draft | MessageFlags.Seen, cancellationToken);
@@ -464,28 +413,14 @@ internal sealed class ImapSession : IImapSession
             }
 
             return Result.Success(appended.Value.Id);
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure<uint>(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save a draft in {Folder}", folderPath);
-            return Result.Failure<uint>("Unable to save the draft");
-        }
-    }
+        },
+            "Unable to save the draft",
+            ex => _logger.LogError(ex, "Failed to save a draft in {Folder}", folderPath),
+            FolderSentinel);
 
-    public async Task<Result<MailSearchPage>> SearchAsync(
-        string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<MailSearchPage>> SearchAsync(
+        string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var query = MailSearchQueryBuilder.Build(criteria, DateTime.UtcNow.Date);
             var result = new MailSearchPage { Page = page, PageSize = pageSize };
@@ -566,17 +501,9 @@ internal sealed class ImapSession : IImapSession
             }
 
             return Result.Success(result);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to search messages from {Folder} (allFolders: {AllFolders})", folderPath, allFolders);
-            return Result.Failure<MailSearchPage>("Unable to search the messages");
-        }
-    }
+        },
+            "Unable to search the messages",
+            ex => _logger.LogError(ex, "Failed to search messages from {Folder} (allFolders: {AllFolders})", folderPath, allFolders));
 
     /// <summary>The folders one search sweeps: the named one, or every selectable folder.</summary>
     private async Task<IReadOnlyList<IMailFolder>> SearchableFoldersAsync(
@@ -625,11 +552,8 @@ internal sealed class ImapSession : IImapSession
         return kept.OrderByDescending(hit => hit.SortKey).ToList();
     }
 
-    public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(path, cancellationToken);
 
@@ -655,27 +579,13 @@ internal sealed class ImapSession : IImapSession
                 MailboxId = folder.Id,
                 Selectable = true
             });
-        }
-        catch (FolderNotFoundException)
-        {
-            return Result.Failure<MailFolderStatus>(FolderNotFound);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read the status of {Folder}", path);
-            return Result.Failure<MailFolderStatus>("Unable to read the folder");
-        }
-    }
+        },
+            "Unable to read the folder",
+            ex => _logger.LogError(ex, "Failed to read the status of {Folder}", path),
+            FolderSentinel);
 
-    public async Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
@@ -722,17 +632,9 @@ internal sealed class ImapSession : IImapSession
             }
 
             return Result.Success(result);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to list messages in {Folder}", folderPath);
-            return Result.Failure<MailFolderPage>("Unable to read the messages");
-        }
-    }
+        },
+            "Unable to read the messages",
+            ex => _logger.LogError(ex, "Failed to list messages in {Folder}", folderPath));
 
     private const MessageSummaryItems SummaryItems =
         MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.Flags |
@@ -789,11 +691,8 @@ internal sealed class ImapSession : IImapSession
         return trimmed.Length == 0 ? null : trimmed;
     }
 
-    public async Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
@@ -854,50 +753,25 @@ internal sealed class ImapSession : IImapSession
             }
 
             return Result.Success(detail);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath);
-            return Result.Failure<MailMessageDetail>("Unable to read the message");
-        }
-    }
+        },
+            "Unable to read the message",
+            ex => _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath));
 
     /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
-    public async Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
             var message = await folder.GetMessageAsync(new UniqueId(folder.UidValidity, uid), cancellationToken);
             return Result.Success(message);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (MessageNotFoundException)
-        {
-            return Result.Failure<MimeMessage>(MessageNotFound);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read raw message {Uid} in {Folder}", uid, folderPath);
-            return Result.Failure<MimeMessage>("Unable to read the message");
-        }
-    }
+        },
+            "Unable to read the message",
+            ex => _logger.LogError(ex, "Failed to read raw message {Uid} in {Folder}", uid, folderPath),
+            MessageSentinel);
 
-    public async Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        try
+    public Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
@@ -918,26 +792,23 @@ internal sealed class ImapSession : IImapSession
             // A part with no content is not an attachment we can serve, decoded or otherwise.
             if (mimePart.Content == null) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
 
-            using var buffer = new MemoryStream();
+            // GetBodyPartAsync has already materialised the part, so this decodes an in-memory
+            // entity rather than the socket — MailKit exposes no true socket-to-response path.
+            // What it does avoid is the ToArray() that used to follow: the buffer is handed over
+            // as-is instead of being copied a second time into a byte[] on the large object heap.
+            var buffer = new MemoryStream();
             await mimePart.Content.DecodeToAsync(buffer, cancellationToken);
+            buffer.Position = 0;
 
             return Result.Success(new MailAttachmentContent
             {
-                Content = buffer.ToArray(),
+                Content = buffer,
                 FileName = string.IsNullOrEmpty(part.FileName) ? "attachment" : part.FileName,
                 ContentType = part.ContentType?.MimeType ?? "application/octet-stream"
             });
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read attachment {Part} of message {Uid}", partSpecifier, uid);
-            return Result.Failure<MailAttachmentContent>("Unable to read the attachment");
-        }
-    }
+        },
+            "Unable to read the attachment",
+            ex => _logger.LogError(ex, "Failed to read attachment {Part} of message {Uid}", partSpecifier, uid));
 
     /// <summary>
     /// Sentinel errors the controller maps to 404 rather than 502. Shared constants so the

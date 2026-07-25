@@ -134,7 +134,7 @@ public sealed class MailMessageRepositoryTests
         session.Setup(s => s.GetAttachmentAsync("INBOX", 42u, "2", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailAttachmentContent
                {
-                   Content = new byte[] { 1, 2, 3 },
+                   Content = new MemoryStream([1, 2, 3]),
                    FileName = "report.pdf",
                    ContentType = "application/pdf"
                }));

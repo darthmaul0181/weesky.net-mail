@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Authentication.Models;
@@ -45,10 +45,8 @@ public sealed class SlidingSessionMiddleware
         var domain = context.User.FindFirst(ClaimTypes.Dns)?.Value;
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(domain)) return;
 
-        // "exp" rather than "iat": TokenBuilder uses the JwtSecurityToken constructor that
-        // emits an expiry but no issued-at, so remaining lifetime is the only thing
-        // measurable here. Reading a claim that is never present would make this a silent
-        // no-op.
+        // Remaining lifetime, measured on "exp". JsonWebTokenHandler does emit "iat" too, but
+        // "exp" is what the renewal threshold is expressed against and needs no second reading.
         var expClaim = context.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
         if (!long.TryParse(expClaim, out var expiryUnix)) return;
 

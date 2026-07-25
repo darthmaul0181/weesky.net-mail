@@ -37,7 +37,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
             string.IsNullOrWhiteSpace(_options.MasterPassword))
         {
             _logger.LogError("ManageSieve is not configured (Host/MasterUser/MasterPassword missing)");
-            return Result.Failure<IManageSieveSession>("Rules service is not configured");
+            return Result.Failure<IManageSieveSession>(SieveErrors.NotConfigured);
         }
 
         TcpClient? tcp = null;
@@ -60,14 +60,14 @@ internal sealed class ManageSieveClient : IManageSieveClient
 
             var (capabilities, status) = await ReadCapabilitiesAsync(stream, cancellationToken);
             if (!status.IsOk)
-                return Fail($"Greeting failed: {status.Message}");
+                return FailUnreachable("greeting", status.Message);
 
             if (HasCapability(capabilities, "STARTTLS"))
             {
                 await WriteLineAsync(stream, "STARTTLS", cancellationToken);
                 var tlsStatus = await ReadSimpleStatusAsync(stream, cancellationToken);
                 if (!tlsStatus.IsOk)
-                    return Fail($"STARTTLS rejected: {tlsStatus.Message}");
+                    return FailUnreachable("STARTTLS", tlsStatus.Message);
 
                 var ssl = new SslStream(stream, leaveInnerStreamOpen: false, CertificateValidationCallback);
                 await ssl.AuthenticateAsClientAsync(_options.Host);
@@ -76,7 +76,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
                 // Server re-sends capabilities over the encrypted channel.
                 var (_, postTlsStatus) = await ReadCapabilitiesAsync(stream, cancellationToken);
                 if (!postTlsStatus.IsOk)
-                    return Fail($"Post-STARTTLS handshake failed: {postTlsStatus.Message}");
+                    return FailUnreachable("post-STARTTLS handshake", postTlsStatus.Message);
             }
             else if (!_options.AllowCleartext)
             {
@@ -88,7 +88,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
                     "ManageSieve host={Host} does not advertise STARTTLS. Refusing to send the master " +
                     "credentials in the clear. Set Sieve:AllowCleartext only if the link is trusted.",
                     _options.Host);
-                return Fail("Rules service refused: the connection could not be secured");
+                return Fail(SieveErrors.NotSecure);
             }
 
             var saslPayload = $"{targetUser}\0{_options.MasterUser}\0{_options.MasterPassword}";
@@ -98,7 +98,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
             if (!authStatus.IsOk)
             {
                 _logger.LogWarning("ManageSieve auth failed for target={Target}: {Message}", targetUser, authStatus.Message);
-                return Fail("Authentication failed");
+                return Fail(SieveErrors.AuthenticationFailed);
             }
 
             var capturedTcp = tcp;
@@ -120,7 +120,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unable to open ManageSieve session for target={Target}", targetUser);
-            return Result.Failure<IManageSieveSession>("Unable to connect to rules service");
+            return Result.Failure<IManageSieveSession>(SieveErrors.Unreachable);
         }
         finally
         {
@@ -142,6 +142,17 @@ internal sealed class ManageSieveClient : IManageSieveClient
     }
 
     private static Result<IManageSieveSession> Fail(string message) => Result.Failure<IManageSieveSession>(message);
+
+    /// <summary>
+    /// A handshake step the server refused. The server's own wording goes to the log, never to the
+    /// client: it can disclose service state, and the caller only needs to know the rules service
+    /// is unavailable.
+    /// </summary>
+    private Result<IManageSieveSession> FailUnreachable(string step, string? detail)
+    {
+        _logger.LogWarning("ManageSieve {Step} failed on host={Host}: {Detail}", step, _options.Host, detail);
+        return Fail(SieveErrors.Unreachable);
+    }
 
     private static bool HasCapability(IReadOnlyList<string> capabilities, string name) =>
         capabilities.Any(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
