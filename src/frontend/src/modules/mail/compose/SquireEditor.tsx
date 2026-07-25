@@ -92,6 +92,8 @@ const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor(
       // is treated as untrusted input, same as a paste.
       squire.setHTML(initialHtml)
       squire.moveCursorToStart()
+      // A prefilled composer is there to be written in; the To field only owns the focus when blank.
+      squire.focus()
     }
     return () => { squire.destroy(); editor.current = null }
     // Mount once: onChange/onFormatChange identity is the caller's concern, rebinding would rebuild

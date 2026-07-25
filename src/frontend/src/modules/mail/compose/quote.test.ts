@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { forwardQuote, replyQuote } from './quote'
 
 describe('replyQuote', () => {
-  it('puts a cursor line, the attribution, then the blockquote', () => {
+  // Two lines, not one: the caret sits on the first, so the second keeps what gets typed off
+  // the attribution line.
+  it('puts two cursor lines, the attribution, then the blockquote', () => {
     const html = replyQuote('<p>original</p>', { dateText: '25 Jul 2026', name: 'Alice', address: 'a@x' })
     expect(html).toBe(
-      '<div><br></div><div>On 25 Jul 2026, Alice &lt;a@x&gt; wrote:</div><blockquote><p>original</p></blockquote>')
+      '<div><br></div><div><br></div>'
+      + '<div>On 25 Jul 2026, Alice &lt;a@x&gt; wrote:</div><blockquote><p>original</p></blockquote>')
   })
 
   it('escapes the attribution and drops an empty name', () => {
@@ -24,7 +27,8 @@ describe('forwardQuote', () => {
     expect(html).toContain('Date: 25 Jul 2026')
     expect(html).toContain('Subject: Hi &lt;you&gt;')
     expect(html).toContain('To: b@x, c@x')
-    expect(html.startsWith('<div><br></div>')).toBe(true)
+    // Two cursor lines, so what the user types is not glued to the banner.
+    expect(html.startsWith('<div><br></div><div><br></div><div>---')).toBe(true)
     expect(html.endsWith('<p>original</p>')).toBe(true)
   })
 })

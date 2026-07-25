@@ -157,7 +157,7 @@ export default function ComposeView({ onNotify }: Props) {
           )}
         </div>
         <div className="compose-to-row">
-          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo} autoFocus />
+          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo} autoFocus={!seed} />
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>Cc</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>Bcc</button>}

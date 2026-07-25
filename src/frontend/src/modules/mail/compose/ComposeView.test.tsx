@@ -325,6 +325,14 @@ describe('a seeded ComposeView', () => {
     expect(screen.getByTestId('compose-editor')).toHaveValue(seed.html)
   })
 
+  // The recipients are already filled in; the one thing left to do is write, so the editor takes
+  // the focus the To field keeps on a blank composer.
+  it('leaves the focus to the editor instead of the To field', () => {
+    renderCompose('INBOX', seed)
+
+    expect(screen.getByLabelText('To')).not.toHaveFocus()
+  })
+
   // "New message" over a quoted reply describes the wrong thing; edit-as-new genuinely is one.
   it.each([
     ['reply', 'Reply'], ['replyAll', 'Reply'], ['forward', 'Forward'], ['editAsNew', 'New message'],

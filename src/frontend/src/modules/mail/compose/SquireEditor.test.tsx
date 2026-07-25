@@ -167,16 +167,20 @@ describe('SquireEditor', () => {
     expect(onChange).toHaveBeenCalled()
   })
 
-  // A seeded body opens with the caret on the empty line above the quote, not after it.
-  it('loads an initial body at mount and parks the caret at the top', () => {
+  // A seeded body opens with the caret on the empty line above the quote, not after it, and
+  // takes the focus: a prefilled composer is there to be written in, not addressed.
+  it('loads an initial body at mount, parks the caret at the top and takes focus', () => {
     render(<SquireEditor onChange={() => {}} initialHtml="<div><br></div><blockquote>q</blockquote>" />)
     expect(instance.setHTML).toHaveBeenCalledWith('<div><br></div><blockquote>q</blockquote>')
     expect(instance.moveCursorToStart).toHaveBeenCalled()
+    expect(instance.focus).toHaveBeenCalled()
   })
 
+  // Without a seed the To field owns the focus, so the editor must not steal it at mount.
   it('leaves the engine untouched when no initial body is given', () => {
     setup()
     expect(instance.setHTML).not.toHaveBeenCalled()
+    expect(instance.focus).not.toHaveBeenCalled()
   })
 
   it('destroys the engine on unmount', () => {

@@ -27,6 +27,7 @@ describe('SquireEditor against the real engine', () => {
     expect(ref.current!.getHTML()).toContain('original')
     expect(ref.current!.getHTML()).toContain(src)
     expect(ref.current!.isEmpty()).toBe(false)
+    expect(document.activeElement).toBe(view.getByTestId('compose-editor'))
     view.unmount()
   })
 
