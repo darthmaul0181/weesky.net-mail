@@ -765,39 +765,20 @@ public sealed class MailController : ApiBaseController
     {
         if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
 
-        // An explicit "to": null in the body overrides the record's [] default; normalise every
-        // recipient list so a null never NREs downstream.
-        request = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [], References = request.References ?? [] };
-        if (request.To.Count == 0) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one recipient is required"));
-
-        foreach (var address in request.To.Concat(request.Cc).Concat(request.Bcc))
-        {
-            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.FromAddress))
-        {
-            // Parse once and keep the bare address: a decorated "Name <a@b.c>" would never match an
-            // alias downstream and would be refused as foreign instead of accepted.
-            if (!MailboxAddress.TryParse(RecipientAddressParser.Options, request.FromAddress, out var from))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                    $"\"{request.FromAddress}\" is not a valid email address"));
-            request = request with { FromAddress = from.Address };
-        }
+        var invalid = NormalizeOutgoing(request, requireRecipient: true, out var normalized);
+        if (invalid != null) return invalid;
+        request = normalized;
 
         var password = _credentials.Retrieve(Request);
         if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
 
         var result = await _sender.SendAsync(AuthenticatedUser, password.Value, request, cancellationToken);
 
-        if (result.IsFailure && result.Error == IMailSender.UnknownAttachment)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                "An attachment is no longer available; remove it and attach it again"));
-
-        if (result.IsFailure && result.Error == IMailSender.ForbiddenFrom)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                $"Sending from \"{request.FromAddress}\" is not allowed on this account"));
+        if (result.IsFailure)
+        {
+            var refused = RefusedBuild(result.Error, request.FromAddress);
+            if (refused != null) return refused;
+        }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
@@ -878,38 +859,75 @@ public sealed class MailController : ApiBaseController
     {
         if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
 
-        request = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [], References = request.References ?? [] };
-
-        foreach (var address in request.To.Concat(request.Cc).Concat(request.Bcc))
-        {
-            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.FromAddress))
-        {
-            if (!MailboxAddress.TryParse(RecipientAddressParser.Options, request.FromAddress, out var from))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                    $"\"{request.FromAddress}\" is not a valid email address"));
-            request = request with { FromAddress = from.Address };
-        }
+        // No recipient gate here: an empty or recipient-less draft is valid, unlike a send.
+        var invalid = NormalizeOutgoing(request, requireRecipient: false, out var normalized);
+        if (invalid != null) return invalid;
+        request = (SaveDraftRequest)normalized;
 
         var password = _credentials.Retrieve(Request);
         if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
 
         var result = await _drafts.SaveAsync(AuthenticatedUser, password.Value, request, cancellationToken);
 
-        if (result.IsFailure && result.Error == IOutgoingMessageFactory.UnknownAttachment)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                "An attachment is no longer available; remove it and attach it again"));
-        if (result.IsFailure && result.Error == IOutgoingMessageFactory.ForbiddenFrom)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                $"Sending from \"{request.FromAddress}\" is not allowed on this account"));
-        if (result.IsFailure && result.Error == IDraftSaver.NoDraftsFolder)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(
-                "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list."));
+        if (result.IsFailure)
+        {
+            var refused = RefusedBuild(result.Error, request.FromAddress);
+            if (refused != null) return refused;
+            if (result.Error == IDraftSaver.NoDraftsFolder)
+                return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(
+                    "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list."));
+        }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// The validation Send and Drafts share. Coalesces every recipient list (an explicit
+    /// "to": null in the body overrides the record's [] default and would NRE downstream),
+    /// validates each address, and reduces the From to its bare address — a decorated
+    /// "Name &lt;a@b.c&gt;" would never match an alias downstream and would be refused as
+    /// foreign instead of accepted. Returns the 400 to answer with, or null when valid;
+    /// <paramref name="normalized"/> then carries the rewritten request, its runtime type
+    /// preserved — records clone virtually, so a SaveDraftRequest keeps its ReplaceUid.
+    /// </summary>
+    private ActionResult? NormalizeOutgoing(
+        SendMessageRequest request, bool requireRecipient, out SendMessageRequest normalized)
+    {
+        normalized = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [], References = request.References ?? [] };
+        if (requireRecipient && normalized.To.Count == 0)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one recipient is required"));
+
+        foreach (var address in normalized.To.Concat(normalized.Cc).Concat(normalized.Bcc))
+        {
+            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalized.FromAddress))
+        {
+            if (!MailboxAddress.TryParse(RecipientAddressParser.Options, normalized.FromAddress, out var from))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                    $"\"{normalized.FromAddress}\" is not a valid email address"));
+            normalized = normalized with { FromAddress = from.Address };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The 400s Send and Drafts share for a refused message build: an unknown staged attachment
+    /// or a From the account does not own. Null for any other error — the caller keeps its own
+    /// mapping and its 502 fallthrough.
+    /// </summary>
+    private ActionResult? RefusedBuild(string error, string? fromAddress)
+    {
+        if (error == IOutgoingMessageFactory.UnknownAttachment)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                "An attachment is no longer available; remove it and attach it again"));
+        if (error == IOutgoingMessageFactory.ForbiddenFrom)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                $"Sending from \"{fromAddress}\" is not allowed on this account"));
+        return null;
     }
 
     /// <summary>

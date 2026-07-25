@@ -1781,6 +1781,23 @@ public sealed class MailControllerTests
     }
 
     [Fact]
+    public async Task SaveDraft_KeepsReplaceUidThroughTheFromNormalisation()
+    {
+        // The normalisation rewrites the request with `with` on the base record type; the virtual
+        // clone must preserve the derived SaveDraftRequest and its ReplaceUid, not slice it away.
+        SaveDraftRequest? captured = null;
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, string, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SavedDraft(42, "Drafts")));
+
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { FromAddress = "Name <me@weesky.be>", ReplaceUid = 41 }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(41u, captured!.ReplaceUid);
+    }
+
+    [Fact]
     public async Task SaveDraft_RejectsAnUnknownStagedId()
     {
         _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))

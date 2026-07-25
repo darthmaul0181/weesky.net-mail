@@ -17,6 +17,10 @@ internal interface IOutgoingMessageFactory
     /// <summary>Returned when the requested From is neither the primary address nor a live alias.</summary>
     const string ForbiddenFrom = "forbidden_from";
 
+    /// <summary>
+    /// Builds the complete outgoing message for the request, or fails with
+    /// <see cref="UnknownAttachment"/> / <see cref="ForbiddenFrom"/> — never a partial message.
+    /// </summary>
     Task<Result<MimeMessage>> CreateAsync(
         User user, SendMessageRequest request, CancellationToken cancellationToken);
 }
