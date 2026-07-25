@@ -19,8 +19,9 @@ internal sealed class StagedAttachmentSweeper : BackgroundService
         {
             try
             {
+                // Every tick logs, zero included: the line is also the sweeper's heartbeat.
                 var removed = _store.SweepExpired();
-                if (removed > 0) _logger.LogInformation("Swept {Count} expired staged attachments", removed);
+                _logger.LogInformation("Staged attachment sweep: {Count} file(s) removed", removed);
             }
             catch (Exception ex)
             {

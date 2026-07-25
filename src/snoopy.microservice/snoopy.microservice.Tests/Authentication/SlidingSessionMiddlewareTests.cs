@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using weesky.Snoopy.Microservice.Authentication.Middleware;
@@ -67,7 +68,7 @@ public sealed class SlidingSessionMiddlewareTests
         // 10 minutes left of a 30-minute lifetime: past the halfway mark.
         var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10));
 
-        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object);
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         Assert.Contains("BearerAuth=fresh", string.Join(";", context.Response.Headers["Set-Cookie"].ToArray()));
         _credentials.Verify(c => c.Store(It.IsAny<HttpResponse>(), "hunter2", TimeSpan.FromMinutes(30)), Times.Once);
@@ -78,7 +79,7 @@ public sealed class SlidingSessionMiddlewareTests
     {
         var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10));
 
-        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object);
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         _tokens.Verify(t => t.Generate(It.Is<User>(u => u.Email == "alice@weesky.be")), Times.Once);
     }
@@ -89,7 +90,7 @@ public sealed class SlidingSessionMiddlewareTests
         // 25 minutes left of 30: well before the halfway mark.
         var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(25));
 
-        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object);
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         _tokens.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
         _credentials.Verify(c => c.Store(It.IsAny<HttpResponse>(), It.IsAny<string>(), It.IsAny<TimeSpan>()), Times.Never);
@@ -100,7 +101,7 @@ public sealed class SlidingSessionMiddlewareTests
     {
         var context = CreateContext(authenticated: false, remaining: TimeSpan.FromMinutes(10));
 
-        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object);
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         _tokens.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
     }
@@ -112,7 +113,7 @@ public sealed class SlidingSessionMiddlewareTests
                     .Returns(Result.Failure<string>("credentials_unavailable"));
         var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10));
 
-        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object);
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         // Renewing the JWT alone would leave a session that looks alive but cannot open IMAP.
         _tokens.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
@@ -125,7 +126,7 @@ public sealed class SlidingSessionMiddlewareTests
         context.User = new ClaimsPrincipal(new ClaimsIdentity(
             new[] { new Claim(ClaimTypes.Upn, "alice"), new Claim(ClaimTypes.Dns, "weesky.be") }, "Test"));
 
-        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object);
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         _tokens.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
     }
@@ -138,7 +139,7 @@ public sealed class SlidingSessionMiddlewareTests
 
         await sut.InvokeAsync(
             CreateContext(authenticated: false, remaining: TimeSpan.FromMinutes(10)),
-            _tokens.Object, _credentials.Object);
+            _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         Assert.True(called);
     }
@@ -151,7 +152,7 @@ public sealed class SlidingSessionMiddlewareTests
 
         await sut.InvokeAsync(
             CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10)),
-            _tokens.Object, _credentials.Object);
+            _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         Assert.True(called);
     }

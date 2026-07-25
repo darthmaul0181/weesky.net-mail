@@ -27,13 +27,17 @@ public sealed class SlidingSessionMiddleware
         _tokenConstants = tokenConstants;
     }
 
-    public async Task InvokeAsync(HttpContext context, ITokenManager tokens, IMailCredentialStore credentials)
+    public async Task InvokeAsync(
+        HttpContext context, ITokenManager tokens, IMailCredentialStore credentials,
+        ILogger<SlidingSessionMiddleware> logger)
     {
-        TryRenew(context, tokens, credentials);
+        TryRenew(context, tokens, credentials, logger);
         await _next(context);
     }
 
-    private void TryRenew(HttpContext context, ITokenManager tokens, IMailCredentialStore credentials)
+    private void TryRenew(
+        HttpContext context, ITokenManager tokens, IMailCredentialStore credentials,
+        ILogger<SlidingSessionMiddleware> logger)
     {
         if (context.User?.Identity?.IsAuthenticated != true) return;
 
@@ -71,5 +75,7 @@ public sealed class SlidingSessionMiddleware
         });
 
         credentials.Store(context.Response, password.Value, lifetime);
+        logger.LogInformation("Sliding session renewed for {User}: {RemainingMinutes} min remained of {LifetimeMinutes}",
+            renewed.Email, (int)remaining.TotalMinutes, (int)lifetime.TotalMinutes);
     }
 }

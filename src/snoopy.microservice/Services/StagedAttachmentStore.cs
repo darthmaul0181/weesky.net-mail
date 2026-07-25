@@ -76,6 +76,8 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
             _entries[id] = new Entry(info, accountId, path, _clock.GetUtcNow());
             staged = true;
             Release(accountId, limitBytes - written);
+            _logger.LogInformation("Staged attachment {AttachmentId}: {FileName}, {Size} bytes for account {AccountId}",
+                id, info.FileName, written, accountId);
             return Result.Success(info);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -113,6 +115,8 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
 
         Forget(entry);
         TryDeleteFile(entry.FilePath);
+        // The unknown/foreign-id no-op above stays silent: answering 204 either way is the design.
+        _logger.LogInformation("Unstaged attachment {AttachmentId} for account {AccountId}", id, accountId);
     }
 
     public int SweepExpired()
