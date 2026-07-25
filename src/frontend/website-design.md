@@ -35,7 +35,12 @@ When a rule is ambiguous, copy what those screens do.
 
 - **Any list of elements on a page is rendered as tiles**, one per element (`.admin-list` of
   `.admin-list-item`) — never a bare table or an unstyled row list. A tile is a surface card with a
-  border and `--radius-sm`; on hover its border lifts to `--action-primary` with a soft ring.
+  border and `--radius-sm`.
+- **A tile highlights on hover by colouring its border.** The border switches to the accent
+  (`--action-primary`) and a soft ring of the same hue appears around it. Because the highlight is
+  driven by the `--action-primary` token — not a fixed colour — it automatically follows whatever
+  theme (light/dark) and palette the user has chosen; never hard-code the hover colour. This is the
+  standard affordance for every interactive tile (admin rows, identities, aliases).
 - **Tile anatomy is fixed, left to right:**
   1. the **favorite star** on the far left (favorite / set-as-default), when the list has one;
   2. the **primary identifier** (`.admin-list-item-email`, bold — the email, domain, display name…);
@@ -44,6 +49,10 @@ When a rule is ambiguous, copy what those screens do.
   5. the **action icons** (`.admin-list-item-actions`), pinned to the far right.
 - The star always leads on the far left; the action icons are always the rightmost thing on the row.
 - An empty list shows a centred muted line ("No virtual alias domains"), not a blank area.
+- **This tile pattern is for management / settings lists.** A dense content list — the mail message
+  list — is *not* tiled: it uses edge-to-edge rows divided by hairline separators (see *The mail
+  module*). Reach for tiles when the user manages a handful of entities, for content rows when they
+  scan a long stream.
 
 ## Buttons & row actions
 
@@ -95,3 +104,80 @@ Two shapes, both **live** — filtering happens on every keystroke, never behind
      `.ownership-tile` chips (each chip carries a small trash/✕ to unlink it).
 
    This is the picker used for the virtual-domain owners and for the Identities alias field.
+
+## Application shell & column layout
+
+- **The frame is a dark "L".** The topbar and the left rail share one colour (`--topbar-bg` /
+  `--rail-bg`) and read as a single dark L; the content sits inside it as a rounded panel (`--bg`,
+  `--radius-lg`) with a small inset gap that softens the L's inner corner. The app is desktop-first —
+  a `1024px` floor, below which the page scrolls rather than reflowing.
+- **The rail** (`.app-rail`, 56px) is a vertical stack of 40px icon buttons (`.rail-item`,
+  `--radius-md`): the modules at the top, a `.rail-spacer` (`flex:1`) pushing the Settings gear to the
+  bottom. Active = filled (`--rail-item-active` / `-fg`); hover = a soft tint (`--rail-item`).
+- **Columns are band stacks, never scrolling boxes.** A module builds its columns inside the shell's
+  single content area. Each column is `display:flex; flex-direction:column; min-height:0;
+  overflow:hidden` — fixed bands with **exactly one scrolling middle band** (`flex:1; min-height:0;
+  overflow-y:auto`). Headings, toolbars, pagers and footers stay pinned; only the middle scrolls.
+  `min-height:0` is the load-bearing part — without it the scroll escapes to the whole column and the
+  pinned bands drift away. Use this pattern for any new multi-band column.
+
+## Navigation vs. content: two "selected" languages
+
+The app marks "the current / chosen thing" two different ways, and which you use depends on the surface:
+
+- **A navigation pane** — the rail, the folder tree, the settings context pane, the pager — marks its
+  active item with a **fill and heavier weight, no bar** (`--pane-item-active-bg` / `-fg`, or the
+  rail's own pair). It says "you are here".
+- **A content list** — the message rows, the move/copy folder picker — marks a picked or unread row
+  with the **selected fill plus an inset accent bar** down its left edge (`--list-row-selected-bg` /
+  `-fg` + a 3px `--accent-unread` inset). It says "this row is picked".
+
+Never give a navigation item the accent bar, or a content row a bare fill — the two languages are how
+the user tells a nav pane from a list at a glance. (Unread message rows deliberately wear the *same*
+selected tokens, plus bold and a leading dot; the bold and dot are what set unread apart from merely
+selected — same tokens, so the two looks can never drift.)
+
+## Icon buttons: two hover languages
+
+- **Settings / admin icon buttons** (`.admin-icon-btn`, `.folder-action`) tint their **background** on
+  hover and colour the glyph to the accent.
+- **Mail icon buttons** (`.row-btn`, `.action-btn`, `.selection-btn`) recolour **only the glyph** — no
+  background — to `--icon-hover-accent` (the palette's vivid accent, identical in both themes), and a
+  destructive one to `--icon-hover-danger`. An "on" star sits at `--badge-count-bg`.
+
+Match the surrounding surface: glyph-only recolour inside the mail columns, background tint in the
+settings/admin lists.
+
+## Hover-revealed controls sit in reserved space
+
+Controls that appear only on row hover/focus — the selection checkbox, a row's action cluster —
+occupy **permanently reserved** space (a padding gutter or a fixed flex slot), so revealing them never
+shoves the row's text sideways. The line a cluster would cover reserves that width and ends in an
+ellipsis, instead of running under the buttons. The rule for any hover-revealed control: reserve
+first, reveal into the reserve.
+
+## The mail module
+
+Three band-stack columns: **folders** (240px, `--folders-bg`), **message list** (`--surface`) and
+**reader** (`--surface`), with a drag `.pane-splitter` between list and reader (it colours to
+`--accent-unread` on hover/focus).
+
+- **Folder tree** — full-width `.folder-row` buttons (hover `--folders-item-hover`); system-role
+  folders carry **weight only**, no colour; an unread **count pill** (`--badge-count-bg` / `-fg`) sits
+  at the row end; an inset hairline `.folder-separator` divides the role folders from the user's own.
+  A valid drag drop-target is louder than the active row on purpose — an accent ring, a tint and a
+  "Drop here" tag — so the source folder (wearing the active fill) reads as excluded.
+- **Message list** — a pinned heading / `.selection-toolbar` band over the scrolling rows, then a
+  pinned footer (pager or count). The selection toolbar is deliberately tall, with finger-sized 36px
+  targets. Rows come in two skins: a **narrow** two-line stack (sender · date / subject / preview) for
+  the side-by-side layout, and a **wide** single baseline line (fixed-width sender · subject — preview
+  · date) for the bottom / full-width layouts. The preview line is always reserved even when empty, so
+  every row keeps the same height.
+- **Reader** — the header is a vertical `.reader-stack`: subject (18px), then the sender line (name +
+  a green/red auth shield + date), then To/Cc, then the spam gauge — each shown only when it exists.
+  The action cluster sits `align-self:flex-end`, bottom-right of whatever lines are present, with a
+  thin `.actions-rule` between groups. The spam gauge is a pattern worth copying: **one
+  `--gauge-ratio` custom property drives both the bar's length and its green-to-red colour**, so the
+  two can never disagree. The body renders in a sandboxed iframe; attachments are `.attachment-chip`
+  pills in their own band below the body, which scrolls on its own so many attachments can't take over
+  the panel.

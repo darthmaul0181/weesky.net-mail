@@ -12,7 +12,7 @@ The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`,
 
 ## Design & UX
 
-**`website-design.md` (repo `src/frontend/`) is the reference for the site's look and interaction conventions** — the token foundations, page layout, the tile layout every on-page list follows, buttons and row actions, the dialog rules (the ✕ as the only dismissal, icon continuity between a trigger and its title), and the two live-search shapes. The Administration tabs and the Identities page are its reference implementations. Read it before building or restyling any screen, and reuse its classes rather than inventing a local variation.
+**`website-design.md` (repo `src/frontend/`) is the reference for the site's look and interaction conventions** — the token foundations, page layout, the tile layout every on-page list follows, buttons and row actions, the dialog rules (the ✕ as the only dismissal, icon continuity between a trigger and its title), the two live-search shapes, the application shell (the dark L, the rail, the band-stack column layout), and the mail module's look — the two "selected" languages (navigation fill vs. content accent bar), the two icon-button hover languages, hover-revealed controls in reserved space, and the folder-tree / message-list / reader conventions. The Administration tabs, the Identities page and the mail module are its reference implementations. Read it before building or restyling any screen, and reuse its classes rather than inventing a local variation.
 
 ## Architecture
 
