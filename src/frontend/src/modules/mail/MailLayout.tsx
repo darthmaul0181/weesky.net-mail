@@ -14,8 +14,10 @@ import { useListRefresh } from './list/useListRefresh'
 import MessageReader from './reader/MessageReader'
 import type { DragPayload } from './list/dragMessages'
 import {
-  identitiesQueryOptions, useAccountId, useFolders, useIdentities, useMoveMessages, useOpenDraft,
+  identitiesQueryOptions, useAccountId, useFolders, useIdentities, useMailRefresh,
+  useMoveMessages, useOpenDraft,
 } from './queries'
+import RefreshButton from './folders/RefreshButton'
 import { buildDraftSeed } from './compose/composeSeed'
 import { roleLabel } from './roleLabel'
 import { readingPaneOf, usePreferences } from '../../hooks/usePreferences'
@@ -38,6 +40,7 @@ export default function MailLayout() {
   const composing = useMatch('/mail/compose') != null
   const navigate = useNavigate()
   const { data: folders, isLoading, isError } = useFolders()
+  const { refresh, fetching: refreshFetching } = useMailRefresh()
   const { toasts, addToast, removeToast } = useToasts()
   const moveMessages = useMoveMessages(addToast)
   const openDraft = useOpenDraft()
@@ -218,6 +221,7 @@ export default function MailLayout() {
           <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
             <RocketIcon size={15} /> New message
           </button>
+          <RefreshButton fetching={refreshFetching} onRefresh={refresh} />
         </div>
         <div className="mail-folders-scroll">
           {isLoading && <p className="mail-empty">Loading folders…</p>}

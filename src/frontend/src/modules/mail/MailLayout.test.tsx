@@ -134,6 +134,23 @@ describe('MailLayout', () => {
     await waitFor(() => expect(mocks.useListRefresh).toHaveBeenCalledWith('INBOX'))
   })
 
+  // The manual face of the poll: the click forces the same folders refetch the tick drives.
+  it('refetches the folder tree from the refresh button', async () => {
+    renderAt('/mail')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
+    // The initial load spins the button; a click during the tail rotation is a no-op by
+    // design, so wait out the release before clicking.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Refresh').firstElementChild).not.toHaveClass('is-spinning'),
+      { timeout: 2000 })
+    const before = mocks.getMailFolders.mock.calls.length
+    fireEvent.click(screen.getByLabelText('Refresh'))
+    await waitFor(() =>
+      expect(mocks.getMailFolders.mock.calls.length).toBeGreaterThan(before))
+  })
+
   // A mailbox whose inbox the chain did not resolve must not be redirected into nowhere.
   it('picks nothing when no folder holds the inbox role', async () => {
     renderAt('/mail', [node({ path: 'Projects', name: 'Projects' })])
@@ -534,7 +551,8 @@ describe('searching from the layout', () => {
     renderAt('/mail?folder=INBOX')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Search' }))
-    const input = screen.getByPlaceholderText('Search in INBOX')
+    // findBy: the placeholder settles on the role label once the folder tree resolves.
+    const input = await screen.findByPlaceholderText('Search in Inbox')
     fireEvent.change(input, { target: { value: 'x' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -581,7 +599,7 @@ describe('searching from the layout', () => {
     renderAt('/mail?folder=INBOX')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Search' }))
-    const input = screen.getByPlaceholderText('Search in INBOX')
+    const input = await screen.findByPlaceholderText('Search in Inbox')
     fireEvent.change(input, { target: { value: 'x' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await screen.findByText('found')

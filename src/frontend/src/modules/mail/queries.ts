@@ -1,7 +1,8 @@
 import {
-  useInfiniteQuery, useMutation, useQuery, useQueryClient,
+  useInfiniteQuery, useIsFetching, useMutation, useQuery, useQueryClient,
   type InfiniteData, type Query, type QueryClient, type QueryKey,
 } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
@@ -83,6 +84,23 @@ export function useFolders(enabled = true) {
     refetchInterval: POLL_INTERVAL,
     refetchIntervalInBackground: notifies,
   })
+}
+
+/**
+ * The manual counterpart of the poll: force the folders refetch and let useListRefresh's
+ * watcher cascade onto the open folder's list by its own rules — paged invalidate, streaming
+ * block-0 merge, uidValidity reset. No list machinery of its own, so the "never invalidate
+ * the stream" rule holds by construction. `fetching` covers the poll tick too: it is the
+ * signal the refresh button spins on, manual and automatic alike.
+ */
+export function useMailRefresh() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+  const fetching = useIsFetching({ queryKey: mailKeys.folders(accountId) }) > 0
+  const refresh = useCallback(() => {
+    void queryClient.refetchQueries({ queryKey: mailKeys.folders(accountId), type: 'active' })
+  }, [queryClient, accountId])
+  return { refresh, fetching }
 }
 
 export function useMessages(

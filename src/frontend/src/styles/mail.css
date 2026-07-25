@@ -26,8 +26,23 @@
   background: var(--folders-bg);
 }
 
-.mail-folders-compose { flex: none; padding: 10px 10px 4px; }
-.mail-compose-btn { width: 100%; padding: 11px 16px; }
+.mail-folders-compose { flex: none; display: flex; gap: 7px; padding: 10px 10px 4px; }
+.mail-compose-btn { flex: 1; min-width: 0; padding: 11px 16px; }
+.mail-refresh-btn {
+  flex: none;
+  width: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mail-refresh-icon { display: flex; }
+.mail-refresh-icon.is-spinning { animation: mail-refresh-spin 0.7s linear infinite; }
+@keyframes mail-refresh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* The button's fallback timer still releases the state; only the motion is dropped. */
+@media (prefers-reduced-motion: reduce) {
+  .mail-refresh-icon.is-spinning { animation: none; }
+}
 
 .mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
 
