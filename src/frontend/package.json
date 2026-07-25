@@ -5,24 +5,28 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "deploy": "tar --exclude=node_modules -cf - -C D:/development/repos/weesky.net-mail/src/frontend . | ssh root@curiosity.weesky.net \"tar -xf - -C /var/www/admin/mail/account.frontend\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src",
-    "ship": "npm run build && npm run deploy"
+    "lint": "eslint src"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.2",
+    "dompurify": "^3.4.12",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
+    "react-router-dom": "^6.30.4",
+    "squire-rte": "^2.4.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.3.1",
     "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^9.39.4",
@@ -30,6 +34,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
     "vite": "^5.4.0",
     "vitest": "^4.1.5"
   }

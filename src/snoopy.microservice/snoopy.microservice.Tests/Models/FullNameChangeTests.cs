@@ -3,7 +3,7 @@ using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Models;
 
-public class FullNameChangeTests
+public sealed class FullNameChangeTests
 {
     [Fact]
     public void FullName_CanBeSetAndRead()

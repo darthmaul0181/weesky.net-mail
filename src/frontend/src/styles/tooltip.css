@@ -1,0 +1,49 @@
+.tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip-bubble {
+  display: none;
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.tooltip-bubble.is-top-right {
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+}
+
+/* Anchored bottom-left because the mail column is overflow: hidden — a bubble hanging left
+   of the header's leftmost element is the one placement that cannot be clipped. */
+.tooltip-bubble.is-bottom-left {
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 320px;
+}
+
+.tooltip-bubble.is-bottom-right {
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: 320px;
+}
+
+.tooltip-wrap:hover .tooltip-bubble,
+.tooltip-wrap:focus-within .tooltip-bubble {
+  display: block;
+}

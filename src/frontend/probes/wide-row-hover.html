@@ -1,0 +1,88 @@
+<!doctype html>
+<!--
+  Probe: does the wide/"line" row skin ellipsise its subject+preview cleanly when the three-button
+  cluster is revealed, rather than being crushed against it?
+
+  It loads the REAL stylesheets (tokens + palette + mail.css) and builds the exact markup
+  MessageList emits for a wide row: from · line(subject+preview) · date · cluster · star.
+
+  The reveal that hover triggers is driven by the same CSS selectors as :focus-within
+  (.message-row:hover / :focus-within), so focusing a button inside the row reproduces the hovered
+  layout deterministically — no synthetic pointer needed. On reveal the date is display:none and the
+  cluster becomes an in-flow flex sibling; .message-row-line is flex:1/min-width:0 with
+  text-overflow:ellipsis, so it should shrink and clip.
+
+  Served by the Vite dev server (npm run dev) at /probes/wide-row-hover.html. #out holds the JSON.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    body { margin: 0; font: var(--font, 14px system-ui); }
+    /* A representative list width for the bottom/no-split modes, where the list spans the column. */
+    .mail-list-scroll { width: 900px; }
+    #out { padding: 16px; white-space: pre-wrap; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="mail-list-scroll">
+    <ul class="message-list">
+      <li>
+        <div id="row" role="button" tabindex="0" class="message-row is-line"
+             aria-label="Alice Martin: A long subject, Jul 19">
+          <span class="message-row-from">Alice Martin from the accounts department</span>
+          <span class="message-row-line">A long subject line that should keep going<span
+            class="message-row-line-preview"> &mdash; and then a long inline preview that continues well past the visible width so the flex item has to clip it with an ellipsis rather than let it run under the buttons</span></span>
+          <span class="message-row-date">Jul 19</span>
+          <div class="message-row-cluster">
+            <button type="button" class="row-btn" aria-label="Mark as read"></button>
+            <button type="button" class="row-btn" aria-label="Archive"></button>
+            <button type="button" class="row-btn" aria-label="Delete"></button>
+          </div>
+          <button type="button" class="row-btn row-star" aria-label="Star"></button>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <pre id="out"></pre>
+  <script>
+    // Focus a button inside the row: :focus-within fires the same reveal rules as :hover.
+    const row = document.getElementById('row')
+    row.querySelector('.row-star').focus()
+
+    requestAnimationFrame(() => {
+      const line = row.querySelector('.message-row-line')
+      const cluster = row.querySelector('.message-row-cluster')
+      const star = row.querySelector('.row-star')
+      const date = row.querySelector('.message-row-date')
+      const lineBox = line.getBoundingClientRect()
+      const clusterBox = cluster.getBoundingClientRect()
+      const cs = getComputedStyle(line)
+
+      const result = {
+        viewport: { innerWidth: window.innerWidth },
+        listWidth: row.parentElement.getBoundingClientRect().width,
+        clusterDisplay: getComputedStyle(cluster).display,
+        dateDisplay: getComputedStyle(date).display,
+        clusterWidth: Math.round(clusterBox.width),
+        starWidth: Math.round(star.getBoundingClientRect().width),
+        lineRightEdge: Math.round(lineBox.right),
+        clusterLeftEdge: Math.round(clusterBox.left),
+        gap_line_to_cluster: Math.round(clusterBox.left - lineBox.right),
+        textOverflow: cs.textOverflow,
+        whiteSpace: cs.whiteSpace,
+        overflowX: cs.overflowX,
+        lineClientWidth: line.clientWidth,
+        lineScrollWidth: line.scrollWidth,
+        ellipsisActive: line.scrollWidth > line.clientWidth && cs.textOverflow === 'ellipsis',
+      }
+      document.getElementById('out').textContent = JSON.stringify(result, null, 2)
+      document.title = 'probe-done'
+    })
+  </script>
+</body>
+</html>

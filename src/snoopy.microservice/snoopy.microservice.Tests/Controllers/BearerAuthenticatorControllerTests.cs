@@ -8,55 +8,54 @@ using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
-namespace weesky.Snoopy.Microservice.Tests.Controllers
+namespace weesky.Snoopy.Microservice.Tests.Controllers;
+
+public sealed class BearerAuthenticatorControllerTests
 {
-    public class BearerAuthenticatorControllerTests
+    private readonly Mock<IUserAuthenticator> _authenticator = new();
+
+    private BearerAuthenticatorController CreateController()
     {
-        private readonly Mock<IUserAuthenticator> _authenticator = new();
+        var controller = new BearerAuthenticatorController(_authenticator.Object);
+        controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
+        return controller;
+    }
 
-        private BearerAuthenticatorController CreateController()
-        {
-            var controller = new BearerAuthenticatorController(_authenticator.Object);
-            controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
-            return controller;
-        }
+    [Fact]
+    public async Task Authenticate_WithValidCredentials_Returns200WithToken()
+    {
+        var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
+        _authenticator.Setup(a => a.AuthenticateAsync("user@domain.com", "pass"))
+            .ReturnsAsync(Result.Success(token));
 
-        [Fact]
-        public async Task Authenticate_WithValidCredentials_Returns200WithToken()
-        {
-            var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
-            _authenticator.Setup(a => a.AuthenticateAsync("user@domain.com", "pass"))
-                .ReturnsAsync(Result.Success(token));
+        var result = await CreateController().Authenticate(new Credentials { Email = "user@domain.com", Password = "pass" });
 
-            var result = await CreateController().Authenticate(new Credentials { Email = "user@domain.com", Password = "pass" });
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(token, ok.Value);
+    }
 
-            var ok = Assert.IsType<OkObjectResult>(result.Result);
-            Assert.Same(token, ok.Value);
-        }
+    [Fact]
+    public async Task Authenticate_WithInvalidCredentials_Returns401()
+    {
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
 
-        [Fact]
-        public async Task Authenticate_WithInvalidCredentials_Returns401()
-        {
-            _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
-                .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
+        var result = await CreateController().Authenticate(new Credentials { Email = "user@domain.com", Password = "wrong" });
 
-            var result = await CreateController().Authenticate(new Credentials { Email = "user@domain.com", Password = "wrong" });
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(401, obj.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+        Assert.Equal("Authentication failed", envelope.Message);
+    }
 
-            var obj = Assert.IsType<ObjectResult>(result.Result);
-            Assert.Equal(401, obj.StatusCode);
-            var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
-            Assert.Equal("Authentication failed", envelope.Message);
-        }
+    [Fact]
+    public async Task Authenticate_PassesEmailAndPasswordToAuthenticator()
+    {
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(Result.Failure<AuthToken>("fail"));
 
-        [Fact]
-        public async Task Authenticate_PassesEmailAndPasswordToAuthenticator()
-        {
-            _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
-                .ReturnsAsync(Result.Failure<AuthToken>("fail"));
+        await CreateController().Authenticate(new Credentials { Email = "exact@email.com", Password = "exactpass" });
 
-            await CreateController().Authenticate(new Credentials { Email = "exact@email.com", Password = "exactpass" });
-
-            _authenticator.Verify(a => a.AuthenticateAsync("exact@email.com", "exactpass"), Times.Once);
-        }
+        _authenticator.Verify(a => a.AuthenticateAsync("exact@email.com", "exactpass"), Times.Once);
     }
 }

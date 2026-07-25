@@ -3,27 +3,28 @@ using System.Security.Claims;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 
-namespace weesky.Snoopy.Microservice.Authentication.Extensions
+namespace weesky.Snoopy.Microservice.Authentication.Extensions;
+
+public static class ControllerBaseExtensions
 {
-    public static class ControllerBaseExtensions
+    public static User GetUser(this ControllerBase controller)
     {
-        public static User GetUser(this ControllerBase controller)
+        User user = null;
+        IEnumerable<Claim> claims = controller.HttpContext?.User?.Claims ?? Enumerable.Empty<Claim>();
+
+        if (claims.Any())
         {
-            User user = null;
-            IEnumerable<Claim> claims = controller.HttpContext?.User?.Claims ?? Enumerable.Empty<Claim>();
+            string name = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Upn)?.Value;
+            string domain = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Dns)?.Value;
 
-            if (claims.Any())
+            if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(domain))
             {
-                string name = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Upn)?.Value;
-                string domain = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Dns)?.Value;
-
-                if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(domain))
-                {
-                    user = new User($"{name}@{domain}");
-                }
+                user = new User($"{name}@{domain}");
+                if (Guid.TryParse(claims.FirstOrDefault(c => c.Type == WebmailClaimTypes.Uid)?.Value, out var uid))
+                    user.WebmailUid = uid;
             }
-
-            return user;
         }
+
+        return user;
     }
 }

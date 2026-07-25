@@ -32,13 +32,14 @@ See [`snoopy.microservice/DESIGN.md`](snoopy.microservice/DESIGN.md) for archite
 
 ## frontend
 
-React SPA (Vite) for alias, account, and mail-rule management. Talks to the API at `https://api.mail.weesky.net`.
+React SPA (Vite) webmail shell — Mail/Calendar/Contacts modules (Mail/Calendar/Contacts are placeholder pages today) plus a settings area (account, appearance, aliases, mail rules, admin). Talks to the API at `https://api.mail.weesky.net`.
 
-- JWT authentication (bearer + cookie), state persisted in `localStorage` with expiry.
-- No React Router: state-driven navigation (`LoginPage` / `AliasesPage`).
+- `react-router-dom` routing (`AppShell` + `SettingsLayout`), route guards for auth (`RequireAuth`) and admin (`RequireAdmin`).
+- Cookie-based session (`HttpOnly` cookie set by the backend); `AuthContext` tracks login/account state, prepared for multi-account (sub-project 2).
+- Token-based theming (`src/styles/`) with two palettes (night/classic) × two modes (light/dark), toggled from `/settings/appearance`.
 - Centralized API client in `src/api.js` (`request()` helper, `setUnauthorizedHandler` to fall back to the login screen on 401).
-- Sieve rules manager (`RulesPage`) with a step-by-step rule editor and an Extended-rules toggle (Weesky vs Rainloop/Snappymail interop).
-- Tested with Vitest + Testing Library (`npm run test`); linted with ESLint (`npm run lint`).
+- Sieve rules manager (`RulesPage`, at `/settings/rules`) with a step-by-step rule editor and an Extended-rules toggle (Weesky vs Rainloop/Snappymail interop).
+- Tested with Vitest + Testing Library (`npm run test`); linted with ESLint (`npm run lint`); typechecked with `npm run typecheck`.
 
 ```bash
 cd frontend

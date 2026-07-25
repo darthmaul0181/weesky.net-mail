@@ -1,0 +1,1464 @@
+﻿/* Mail module. Three independently scrolling columns inside the shell's single outlet.
+   Every colour goes through a role token — no literal values in this file. */
+
+.mail-layout {
+  display: flex;
+  height: 100%;
+  overflow: hidden;   /* .app-content sets overflow:auto; the columns scroll, not the page */
+}
+
+/* Every column is a stack of bands with one scrolling middle. min-height:0 on each is what
+   lets that middle actually shrink — without it a flex child refuses to go below its content
+   height and the scroll lands on the page instead of the band. */
+.mail-folders,
+.mail-list,
+.mail-reader {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mail-folders {
+  width: 240px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  background: var(--folders-bg);
+}
+
+.mail-folders-compose { flex: none; display: flex; gap: 7px; padding: 10px 10px 4px; }
+.mail-compose-btn { flex: 1; min-width: 0; padding: 11px 16px; }
+.mail-refresh-btn {
+  flex: none;
+  width: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mail-refresh-icon { display: flex; }
+.mail-refresh-icon.is-spinning { animation: mail-refresh-spin 0.7s linear infinite; }
+@keyframes mail-refresh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* The button's fallback timer still releases the state; only the motion is dropped. */
+@media (prefers-reduced-motion: reduce) {
+  .mail-refresh-icon.is-spinning { animation: none; }
+}
+
+.mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
+
+/* The account block, and nothing else: folder creation lives on the settings page. */
+.mail-folders-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 7px 9px;
+  border-top: 1px solid var(--border);
+}
+
+.mail-list {
+  background: var(--surface);
+}
+
+/* The inline width is the splitter's; shrink-not-grow (flex: 0 1 auto) lets a size stored on
+   a large screen give way on a small one instead of pushing the reader off the edge. */
+.is-right .mail-list { flex: 0 1 auto; min-width: 240px; }
+.is-right .mail-reader { min-width: 320px; }
+
+.mail-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.mail-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.is-bottom .mail-list { flex: 0 1 auto; min-height: 120px; }
+.is-bottom .mail-reader { min-height: 160px; }
+
+.is-none .mail-list { flex: 1; min-width: 0; }
+
+/* display:none would lose to .mail-list's own flex display without the class on the same
+   element; !important is not needed once it is. */
+.mail-list.is-hidden { display: none; }
+
+.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+
+.mail-list-footer {
+  flex: none;
+  border-top: 1px solid var(--list-separator);
+  background: var(--surface);
+}
+
+.mail-list-count {
+  display: block;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mail-block-state {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mail-retry {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--action-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.mail-reader {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+}
+
+/* ── Folder tree ─────────────────────────────────────────── */
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-row:hover { background: var(--folders-item-hover); }
+
+.folder-row.is-system { font-weight: 600; }
+
+/* Inset, so it reads as a divider inside the list rather than a border on the column. */
+.folder-separator {
+  height: 0;
+  margin: 8px 10px;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* Background only — no accent bar. That bar is the message list's language for a row you
+   picked; a navigation pane says "you are here" with its fill and its weight. */
+.folder-row.is-active {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+  font-weight: 600;
+}
+
+/* A message hovering over a valid drop target: an accent ring and tint, deliberately louder than
+   is-active — the source folder wears is-active and must read as excluded, not as the target.
+   Reuses the count badge's accent pair, so no palette token had to be added. */
+.folder-line.drop-ready .folder-row {
+  background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px var(--badge-count-bg);
+}
+.folder-line.drop-ready .folder-row::after {
+  content: 'Drop here';
+  margin-left: auto;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--badge-count-bg);
+}
+
+.folder-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-row-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--badge-count-bg);
+  color: var(--badge-count-fg);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  flex: none;
+}
+
+.folder-line { display: flex; align-items: center; }
+.folder-children { margin-left: 14px; }
+
+.folder-toggle {
+  display: flex;
+  flex: none;
+  width: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.folder-toggle.is-open { transform: rotate(90deg); }
+.folder-toggle-spacer { width: 14px; flex: none; }
+
+/* ── Folder management ───────────────────────────────────── */
+
+/* Icon-sized hit target, used both in the column footer and in the manage rows. */
+.folder-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.folder-action:hover { background: var(--pane-item-hover); color: var(--text); }
+.folder-action.is-danger:hover { color: var(--danger); }
+
+/* The dialogs reuse the admin module's .field-h / .toggle-switch / primary-submit shape from
+   index.css; only what is specific to folders lives here. */
+
+/* ── Folders settings page and its dialogs ───────────────── */
+
+.modal-folders {
+  max-width: 520px;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-hint {
+  flex: none;
+  margin: -8px 0 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+/* Bounded: the settings column is as wide as the window, which left a folder name and its
+   actions half a screen apart. */
+.folder-manage-list {
+  list-style: none;
+  margin: 0 -8px;
+  padding: 0;
+  max-width: 560px;
+}
+
+.folders-page-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: -8px 0 20px;
+  max-width: 62ch;
+}
+
+.folders-page-actions {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.folders-page-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Scrolls inside .modal-folders' band stack when the role list runs long. */
+.system-folders-roles {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.system-folders-stale {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  /* Under the control: .field-h puts the label in a fixed first column. */
+  margin: -6px 0 12px 126px;
+}
+
+.folder-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* padding-left comes from the depth, inline. Fixed height so the switches keep one rhythm. */
+  height: 38px;
+  padding-right: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+}
+
+.folder-manage-row:hover { background: var(--pane-item-hover); }
+
+/* Shrinks rather than fills, or flex:1 pushes the role badge to the far edge. */
+.folder-manage-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A system folder's switch is locked; without this it reads as an ordinary "on". */
+.folder-manage-row .toggle-switch input:disabled + .toggle-track {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Weight alone: the role name beside it already says which rule applies. */
+.folder-manage-row.is-system .folder-manage-label { font-weight: 600; }
+
+.folder-manage-role {
+  flex: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--badge-count-bg);
+  color: var(--badge-count-fg);
+}
+
+/* margin-left:auto holds the actions right, now that the label no longer fills the row. */
+.folder-manage-actions { display: flex; gap: 2px; flex: none; margin-left: auto; }
+
+/* Present but unavailable: the control exists, this row cannot use it. */
+.folder-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.folder-action:disabled:hover {
+  background: none;
+  color: var(--text-muted);
+}
+
+/* ── Message list ────────────────────────────────────────── */
+
+/* Owns no box (display:contents), so its three children stay direct bands of .mail-list while
+   one element still catches Escape from the toolbar as well as the rows. */
+.message-list-root { display: contents; }
+
+/* Its own band above the scrolling one, so it never moves. */
+.message-list-heading {
+  flex: none;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A deliberately tall band (~64px), so the bulk actions sit on comfortable, finger-sized targets
+   right above the rows they act on. Height verified in a real browser — jsdom does no layout. */
+.selection-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+}
+
+.selection-master { flex: none; }
+
+/* The name and its filter travel together, so the star sits against the name rather than
+   drifting to the actions on the far side. */
+.selection-heading {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.selection-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.selection-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Larger than the row controls (.row-btn) to suit the taller band; same hover tint. Greyed
+   explicitly when a selection action is unavailable, since a bare disabled icon reads as live. */
+.selection-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.selection-btn:hover:not(:disabled) { color: var(--icon-hover-accent); }
+.selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.selection-btn.is-active {
+  color: var(--badge-count-bg);
+  background: color-mix(in oklab, var(--badge-count-bg) 14%, transparent);
+}
+
+/* The starred filter wears .row-star's look, not .is-active's: the filled star already says it
+   is on, and the same state should not read one way in the heading and another in the rows.
+   No hover rule needed here — .selection-btn:hover:not(:disabled) already outranks this. */
+.selection-star.is-on { color: var(--badge-count-bg); }
+
+/* Quick-search band, folded open by the toolbar's magnifier. */
+.search-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--list-separator);
+}
+
+.search-bar-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.search-bar-advanced {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.search-bar-advanced:hover {
+  background: var(--pane-item-hover);
+  color: var(--text);
+}
+
+.message-list { list-style: none; }
+
+.message-row {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-row:hover { background: var(--list-row-hover); }
+
+/* Unread wears the selected look on purpose — same tokens, so they can never drift apart —
+   plus the dot and the weight. Bold and dot are what still single out unread rows. */
+.message-row.is-unread {
+  background: var(--list-row-selected-bg);
+  color: var(--list-row-selected-fg);
+  box-shadow: inset 3px 0 0 var(--accent-unread);
+}
+.message-row.is-unread .message-row-from,
+.message-row.is-unread .message-row-subject { font-weight: 700; }
+
+.message-row.is-selected {
+  background: var(--list-row-selected-bg);
+  color: var(--list-row-selected-fg);
+  box-shadow: inset 3px 0 0 var(--accent-unread);
+}
+
+/* Dimmed while it rides the cursor: the pill is the thing being moved, the row is its origin. */
+.message-row.is-dragging { opacity: 0.45; }
+
+/* The custom drag image. Detached and appended to <body>, so it is styled globally rather than
+   under .mail-layout. Accent pair borrowed from the count badge — no new token. */
+.drag-pill {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px 8px 11px;
+  border-radius: 999px;
+  background: var(--badge-count-bg);
+  color: var(--badge-count-fg);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(10, 15, 30, 0.35);
+  transform: rotate(-3deg);
+}
+.drag-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--badge-count-fg);
+  color: var(--badge-count-bg);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.message-row-top { display: flex; align-items: baseline; gap: 8px; }
+
+.message-row-from {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row-draft {
+  color: var(--danger);
+  font-size: 12px;
+  margin-right: 6px;
+  flex: none;
+}
+
+.message-row-date { color: var(--text-muted); font-size: 11px; flex: none; }
+/* A hair up in the narrow skin, so the small date reads level with the sender text rather than
+   hanging on the shared baseline. The wide skin swaps the date out on hover, so it stays put. */
+.message-row:not(.is-line) .message-row-date { position: relative; top: -1px; }
+
+.message-row-subject,
+.message-row-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* One pixel tighter to the sender than the subject-to-preview gap that follows it (2px below). */
+.message-row-subject { margin-top: 1px; }
+
+/* min-height, not a hard height: the line is reserved even when a message has no body, so
+   every row is the same height whether or not there is anything to preview. */
+.message-row-preview {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  min-height: 1.35em;
+}
+
+.message-row-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-unread);
+  flex: none;
+}
+
+/* ── Row selection checkbox ──────────────────────────────── */
+
+/* Leftmost in both skins. The column is reserved permanently (a padding gutter in the narrow
+   skin, a flex slot in the wide one) so revealing the box never shoves the sender or subject.
+   Hidden and inert at rest; shown on hover/focus of the row, and pinned once a selection is on. */
+.message-row-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--action-primary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The narrow skin is a block stack: the box floats over a reserved left gutter. Its vertical
+   padding is 2px tighter than the base on each side, for a denser row; the wide skin keeps 10px. */
+.message-row:not(.is-line) { padding-top: 8px; padding-bottom: 8px; padding-left: 34px; }
+/* Vertically centred over the reserved gutter, so it stays centred whether or not the preview
+   line is shown — the row's height changes with it. */
+.message-row:not(.is-line) .message-row-check {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* The wide skin is a baseline flex row: the box is a real leftmost slot, centred like the row-btns. */
+.message-row.is-line .message-row-check { align-self: center; }
+
+.message-row:hover .message-row-check,
+.message-row:focus-within .message-row-check,
+.message-list.has-selection .message-row-check,
+.message-row-check:checked {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Row controls ────────────────────────────────────────── */
+
+.row-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  /* Both row skins align on the baseline, and this box's is synthesized from its first item —
+     the 16px icon, 21px down — so baseline-aligning it hangs 5px over the text. Centring takes
+     it out of the baseline group, which is what puts the sender line back where it was. */
+  align-self: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+/* Hover only recolours the icon — no background, and the tint is --icon-hover-accent (the palette's
+   vivid dark-mode accent, identical in both themes). */
+.row-btn:hover { color: var(--icon-hover-accent); }
+
+.row-star.is-on { color: var(--badge-count-bg); }
+/* Specificity, not decoration: .row-star.is-on ties with .row-btn:hover and would win by order,
+   leaving a starred star as the one button that does not answer the pointer. */
+.row-star.is-on:hover { color: var(--icon-hover-accent); }
+
+/* Narrow skin: the cluster sits on the bottom-right corner, over the last line present. */
+.message-row-cluster {
+  position: absolute;
+  /* Flush with the star above it, which ends at the row's content edge. */
+  right: 12px;
+  bottom: 4px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.message-row:hover .message-row-cluster,
+.message-row:focus-within .message-row-cluster { display: flex; }
+
+/* The cluster is always the last child, so the line before it is the one it would cover — the
+   preview, or the subject when previews are off. Reserving its width there ends that line in an
+   ellipsis instead of running it under the buttons. 3 × 26 + 2 × 2 gaps, plus 6px of air. */
+.message-row:not(.is-line):hover > :nth-last-child(2),
+.message-row:not(.is-line):focus-within > :nth-last-child(2) { padding-right: 88px; }
+
+/* Wide skin has no "bottom": the cluster replaces the date, the star stays at the end. */
+/* align-self, like the buttons': left in the baseline group its baseline is its button's, 21px
+   down against the text's 17px, so revealing it on hover shoved the whole line down 7px. */
+.message-row.is-line .message-row-cluster { position: static; align-self: center; }
+
+/* The 26px target may not drive the row's height — it is a pointer affordance, not content.
+   A margin box deliberately smaller than any line it sits on gives the text the height back,
+   while align-self keeps the full 26px centred on it. */
+.message-row.is-line .row-btn { margin-block: -6px; }
+.message-row.is-line:hover .message-row-date,
+.message-row.is-line:focus-within .message-row-date { display: none; }
+
+/* ── Wide rows (bottom / no-split modes) ─────────────────── */
+
+/* One line per message; the empty-preview reserve is pointless here — the subject fills the
+   line whether or not a preview follows it. */
+.message-row.is-line { display: flex; align-items: baseline; gap: 8px; }
+
+.message-row.is-line .message-row-from { flex: none; width: 180px; }
+
+.message-row.is-line .message-row-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row.is-line .message-row-line-preview { color: var(--text-muted); font-weight: 400; }
+
+.message-row.is-line.is-unread .message-row-line { font-weight: 700; }
+
+/* ── Pager ───────────────────────────────────────────────── */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 10px;
+  flex-wrap: wrap;
+}
+
+.pager-page,
+.pager-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pager-page:hover:not(.is-current),
+.pager-step:hover:not(:disabled) { background: var(--list-row-hover); }
+
+.pager-page.is-current {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+  font-weight: 650;
+  cursor: default;
+}
+
+.pager-step { color: var(--text-muted); }
+.pager-step:disabled { opacity: 0.35; cursor: default; }
+.pager-step-back { display: flex; transform: rotate(180deg); }
+
+.pager-gap {
+  min-width: 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+/* ── Reader ──────────────────────────────────────────────── */
+
+.reader-header {
+  flex: none;
+  display: flex;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--reader-header-border);
+}
+
+.reader-stack { flex: 1; min-width: 0; }
+
+/* flex-end tracks the last line actually present — To/Cc/spam may each be absent,
+   so nothing is anchored to a fixed height. */
+.reader-actions { align-self: flex-end; display: flex; align-items: center; gap: 2px; }
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.action-btn:hover { color: var(--icon-hover-accent); }
+
+/* Muted at rest, danger only on hover — icon-only recolour, no background. Shared by the reader
+   header, the list rows and the selection band so every Delete reddens the same way; the band keeps
+   its own :not(:disabled) guard like its other buttons. --icon-hover-danger is fixed to the
+   dark-mode red, identical in both themes. */
+.action-btn.is-danger:hover,
+.row-btn.is-danger:hover,
+.selection-btn.is-danger:hover:not(:disabled) {
+  color: var(--icon-hover-danger);
+}
+
+.actions-rule { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+.reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
+
+/* Sized against the subject line so the arrow reads as part of it, not as a toolbar. */
+.reader-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.reader-back:hover { background: var(--list-row-hover); color: var(--text); }
+.reader-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.reader-from { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+/* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
+   gap would land between the comma and the name it precedes instead of after it. */
+.reader-recipients { display: block; }
+
+.details-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.details-toggle:hover { color: var(--action-primary); background: var(--surface-sunken); }
+.details-toggle.is-open { transform: rotate(90deg); }
+
+.unsub-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--action-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.unsub-btn:hover { background: var(--surface-sunken); border-color: var(--action-primary); }
+
+.reader-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 5px 14px;
+  margin-top: 4px;
+}
+
+.reader-details dt { text-align: right; }
+.reader-details dd { margin: 0; color: var(--text); overflow-wrap: break-word; min-width: 0; }
+.reader-details a { color: var(--action-primary); }
+.detail-muted { color: var(--text-muted); }
+.reader-security { display: inline-flex; align-items: center; gap: 5px; }
+
+.address-label { color: inherit; font: inherit; }
+
+.address-label.is-sender {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.address-label.is-sender:hover { color: var(--action-primary); }
+
+/* A line shield inheriting the verdict colour — the icon carries its own size, so the badge is
+   just a colour-setting container. --success reads green, --danger red, in both modes. */
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.auth-badge.is-pass { color: var(--success); }
+.auth-badge.is-fail { color: var(--danger); }
+
+/* Block, not flex: a flex row makes "Spam score: " an anonymous item and strips its
+   trailing space — the same trap .reader-recipients fell into. */
+.reader-spam { display: block; }
+
+.spam-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.spam-gauge-track {
+  width: 90px;
+  height: 8px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+/* One custom property drives both the length and the green-to-red mix, so the two can
+   never disagree about how spammy a message looks. */
+.spam-gauge-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--gauge-ratio) * 100%);
+  background: color-mix(in oklab, var(--success), var(--danger) calc(var(--gauge-ratio) * 100%));
+}
+
+.reader-blocked-images {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 22px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: 13px;
+}
+
+/* Pinned right, and a filled-accent fill so it stands out from the sunken banner instead of
+   reading as plain text. --action-primary-fg is the readable foreground over the accent. */
+.reader-blocked-images .btn {
+  margin-left: auto;
+  flex: none;
+  padding: 6px 14px;
+  font-size: 13px;
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+}
+.reader-blocked-images .btn:hover { background: var(--action-primary-hover); }
+
+/* The article carries the column layout so the body can claim the leftover height. Without
+   this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
+   leaving the bottom of the panel empty while the message scrolls in a short window. */
+.mail-reader > article {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* min-height:0, not the 300px floor it used to carry: a floor taller than the space left over
+   pushes the attachments below the fold, which is the one row that must stay reachable. */
+.reader-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+}
+
+.reader-text {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+  white-space: pre-wrap;
+  font-family: var(--font);
+}
+.reader-quote { color: var(--quote-text); }
+
+/* Pinned under the body, never scrolled away with it. max-height so a message with twenty
+   attachments cannot take the panel over — that band scrolls on its own instead. */
+.reader-attachments {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 30%;
+  overflow-y: auto;
+  padding: 12px 22px;
+  border-top: 1px solid var(--reader-header-border);
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--attachment-chip-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.attachment-chip-size { color: var(--text-muted); }
+
+.attachment-split { display: inline-flex; align-items: stretch; }
+.attachment-split .attachment-chip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.attachment-split .dropdown-root { display: flex; }
+.attachment-split-more {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--attachment-chip-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* The back button sits left of the fallback message, not centred above it. */
+.reader-fallback { display: flex; align-items: center; height: 100%; padding: 24px; }
+.reader-fallback .reader-back { margin-right: 12px; }
+.reader-fallback .mail-empty { flex: 1; padding: 0; }
+
+/* ── Attachment viewer modal ─────────────────────────────── */
+
+.attachment-viewer { max-width: min(900px, 92vw); }
+.attachment-viewer-size { color: var(--text-muted); font-size: 13px; margin-right: 8px; flex: none; }
+.attachment-viewer-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  overflow: hidden;
+}
+.attachment-viewer-img { max-width: 100%; max-height: 70vh; object-fit: contain; }
+.attachment-viewer-count { color: var(--text-muted); font-size: 13px; flex: none; }
+.attachment-viewer-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attachment-viewer-nav {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.attachment-viewer-nav:hover:not(:disabled) { background: var(--surface-sunken); }
+.attachment-viewer-nav:disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
+.attachment-viewer-error { color: var(--danger); }
+
+/* ── Pane splitter ───────────────────────────────────────── */
+
+/* The bar carries the panes' separation — the old fixed border-right is gone with it. */
+.pane-splitter {
+  flex: none;
+  background: var(--border);
+  touch-action: none;
+}
+
+.pane-splitter.is-vertical { width: 5px; cursor: col-resize; }
+.pane-splitter.is-horizontal { height: 5px; cursor: row-resize; }
+
+.pane-splitter:hover,
+.pane-splitter:focus-visible { background: var(--accent-unread); outline: none; }
+
+/* ── Move/Copy folder picker ─────────────────────────────── */
+
+.folder-pick-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.folder-pick-search {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.folder-pick-count { margin: 8px 2px 4px; font-size: 11px; color: var(--text-muted); }
+
+.folder-pick-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.folder-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-bottom: 1px solid var(--list-separator);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-pick-row:last-child { border-bottom: none; }
+.folder-pick-row:hover { background: var(--list-row-hover); }
+.folder-pick-row:disabled { background: none; color: var(--text-muted); cursor: not-allowed; }
+
+.folder-pick-row.is-selected {
+  background: var(--list-row-selected-bg);
+  color: var(--list-row-selected-fg);
+  font-weight: 600;
+}
+
+/* indent() writes spaces, which only survive under pre. */
+.folder-pick-indent { white-space: pre; }
+
+.folder-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.folder-pick-badge {
+  margin-left: auto;
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.folder-pick-empty { padding: 18px 10px; text-align: center; color: var(--text-muted); }
+
+.folder-pick-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* ── Advanced search modal ───────────────────────────────── */
+
+/* One criterion per row (From/To/Subject/Body/Date/Search-in as .field-h), then a
+   single checkbox row below with extra top spacing. */
+.advanced-search-checks {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.advanced-search-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Same box as the mail-list row checkbox (.message-row-check). */
+.advanced-search-checks input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--action-primary);
+  cursor: pointer;
+}
+
+/* ── Empty folder banner ─────────────────────────────────── */
+
+/* Pinned strip between toolbar and scroll area; stays put while rows scroll. */
+.empty-folder-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.empty-folder-banner-text { flex: 1; }
+
+.empty-folder-banner-link {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--action-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.empty-folder-banner-link:hover {
+  color: var(--danger);
+}
+
+/* ── Search results banner ───────────────────────────────── */
+
+.search-results-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: color-mix(in oklab, var(--badge-count-bg) 12%, transparent);
+  border-bottom: 1px solid var(--list-separator);
+}
+
+.search-results-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-results-banner-clear {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--badge-count-bg);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* ── Compose: editor ─────────────────────────────────────────────────────── */
+/* The canvas follows the theme (dark in dark mode) by product choice: a dark-mode composer
+   wants a dark writing surface, and composes knowing the recipient still receives on white. */
+.compose-editor {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--text);
+  padding: 12px 16px;
+  outline: none;
+}
+
+/* The global reset zeroes blockquote/list indent, so give the editor visible feedback for the
+   quote and list buttons. Editor-only: the sent HTML carries no inline style, so the recipient
+   keeps their own rendering. */
+.compose-editor blockquote {
+  margin: 0 0 0 4px;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--quote-text);
+}
+.compose-editor ul,
+.compose-editor ol { padding-left: 24px; }
+
+.compose-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.compose-tool {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compose-tool:hover { background: var(--surface-sunken); }
+.compose-tool.is-active { color: var(--badge-count-bg); background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent); }
+
+.compose-toolbar-rule {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.compose-select select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.compose-popover-anchor { position: relative; }
+
+.compose-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+}
+
+.compose-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 20px);
+  gap: 4px;
+}
+
+.compose-swatches button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.compose-link-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Compose: recipients ─────────────────────────────────────────────────── */
+.recipients-box {
+  flex: 1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); padding: 4px 6px; min-height: 32px;
+}
+.recipients-box input { flex: 1; min-width: 140px; border: none; background: none; color: var(--text); outline: none; }
+.recipient-token, .compose-attachment {
+  display: inline-flex; align-items: center;
+  background: var(--surface-sunken); font-size: 12px;
+}
+.recipient-token { gap: 4px; border-radius: 999px; padding: 2px 8px; }
+.compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; }
+.recipient-token.is-invalid { color: var(--danger); border: 1px solid var(--danger); }
+.recipient-token button, .compose-attachment button { background: none; border: none; cursor: pointer; color: inherit; padding: 0; }
+
+.compose-link-form input { width: 220px; }
+
+/* ── Compose: view ───────────────────────────────────────────────────────── */
+.mail-compose { flex: 1; min-width: 0; display: flex; }
+.compose-view {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); min-width: 0; position: relative;
+}
+/* Last child of .compose-view during a file drag, above Squire's contenteditable so the drop
+   lands here rather than in the editor. No pointer-events: none — it has to intercept the drop
+   itself and let it bubble to the root handler. */
+.compose-drop-overlay {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 600; color: var(--text);
+  border: 2px dashed var(--action-primary);
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+}
+.compose-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.compose-header .modal-title { flex: 1; min-width: 0; }
+.compose-send { width: auto; padding: 8px 14px; }
+/* Save draft sits beside Send and has to match its height, not the default .btn padding. */
+.compose-header .btn-ghost { padding: 8px 14px; }
+/* Tight header: no per-row margin (the column gap spaces them) and a narrow label so From/To/
+   Subject values line up close to their labels. */
+.compose-fields { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; }
+.compose-fields .field-h { margin-bottom: 0; gap: 10px; }
+.compose-fields .field-h > label:first-child { width: 66px; }
+.compose-fields .field-h > input[type="text"] { padding: 6px 10px; }
+.compose-to-row { display: flex; align-items: flex-start; gap: 8px; }
+.compose-to-row .recipients-field { flex: 1; }
+.compose-cc-links { display: flex; gap: 8px; padding-top: 6px; }
+.compose-link-btn { background: none; border: none; color: var(--action-primary); cursor: pointer; padding: 0; font-size: 13px; }
+
+/* From is plain text, aligned on the same column as the To/Subject boxes. */
+.compose-from { display: flex; align-items: center; gap: 10px; }
+.compose-from-label {
+  width: 66px; flex-shrink: 0; font-size: 13px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.compose-from-value { font-size: 14px; color: var(--text); }
+.compose-from-select {
+  background: none; border: none; padding: 2px 6px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  font: inherit; color: var(--text); border-radius: 6px;
+}
+.compose-from-select:hover { background: var(--pane-item-hover); }
+.compose-from-select svg { transform: rotate(90deg); }
+
+/* ── Compose: attachments ────────────────────────────────────────────────── */
+.compose-attachments { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border); }
+.compose-attachment.is-error { border: 1px solid var(--danger); }
+.compose-attachment-error { color: var(--danger); }
+.compose-attachment progress { width: 80px; }

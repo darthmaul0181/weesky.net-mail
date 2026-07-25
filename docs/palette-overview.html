@@ -1,0 +1,426 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weesky mail — palette overview</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+         background: #eceff3; color: #1c1a18; padding: 28px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #6f6a64; margin: 0 0 24px; max-width: 74ch; }
+  .card { background: #fff; border: 1px solid #dfe3e8; border-radius: 12px;
+          padding: 18px 20px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .card h2 { font-size: 18px; margin: 0 0 14px; text-transform: capitalize; }
+  .card h2 small { font-weight: 400; font-size: 13px; color: #6f6a64; margin-left: 10px; text-transform: none; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .panels { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+           background: var(--bg); color: var(--text); }
+  .panel-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--text-muted); margin-bottom: 12px; }
+  /* mini mockup */
+  .mock { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .mk-bar { height: 16px; background: var(--topbar-bg); }
+  .mk-body { display: flex; height: 128px; }
+  .mk-rail { width: 26px; background: var(--rail-bg); display: flex; flex-direction: column;
+             align-items: center; gap: 5px; padding: 6px 0; }
+  .mk-rail i { width: 16px; height: 16px; border-radius: 5px; background: var(--rail-item); }
+  .mk-rail i.on { background: var(--rail-item-active); }
+  .mk-sp { flex: 1; }
+  .mk-fold { width: 96px; background: var(--folders-bg); padding: 7px 6px; display: flex;
+             flex-direction: column; gap: 4px; }
+  .mk-f { font-size: 11px; padding: 4px 7px; border-radius: 4px; color: var(--text); display: flex; align-items: center; }
+  .mk-f b { margin-left: auto; background: var(--badge-count-bg); color: var(--badge-count-fg);
+            font-size: 9px; border-radius: 8px; padding: 0 5px; }
+  .mk-f.on { background: var(--pane-item-active-bg); color: var(--pane-item-active-fg); font-weight: 650; }
+  .mk-list { flex: 1; background: var(--surface); padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+  .mk-row { padding: 5px 7px; border-radius: 4px; display: flex; flex-direction: column; gap: 2px;
+            border-bottom: 1px solid var(--list-separator); }
+  .mk-row.unread { background: var(--list-row-selected-bg); color: var(--list-row-selected-fg);
+                   box-shadow: inset 3px 0 0 var(--accent-unread); }
+  .mk-l1 { font-size: 11px; font-weight: 600; }
+  .mk-row.unread .mk-l1 { font-weight: 800; }
+  .mk-l2 { font-size: 10px; color: var(--text-muted); }
+  .mk-actions { margin-top: auto; }
+  .mk-btn { display: inline-block; font-size: 11px; padding: 5px 12px; border-radius: 5px;
+            background: var(--action-primary); color: var(--action-primary-fg); }
+  /* colour families */
+  .fam { margin-bottom: 12px; }
+  .fam:last-child { margin-bottom: 0; }
+  .fam-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+           color: var(--text-muted); margin-bottom: 7px; }
+  .fam-n { font-weight: 400; opacity: .7; }
+  .fam-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sw { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; }
+  .chip { width: 42px; height: 42px; border-radius: 6px; border: 1px solid rgba(128,128,128,.4); }
+  .hex { font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+</style></head><body>
+<h1>Weesky mail — palette overview</h1>
+<p class="sub">Each palette in light and dark: a mini mock-up drawn with the palette's own tokens, then its distinct colours grouped by role — surfaces, folder column, text, top bar &amp; rail, accent &amp; selection, alerts. Each square is captioned with its hex value. Generated from <code>src/frontend/src/styles/theme-*.css</code>.</p>
+
+  <section class="card">
+    <h2>night<small>Nuit &amp; corail (default)</small></h2>
+    <div class="panels">
+      
+    <div class="panel" style="--bg:#f6f3ef;--folders-bg:#e7eaf1;--folders-item-hover:#d9dfec;--surface:#fdfbf8;--surface-raised:#fdfbf8;--surface-sunken:#f4f1ee;--border:#e5e0da;--text:#1c1a18;--text-muted:#6f6a64;--topbar-bg:#182238;--topbar-fg:#ffffff;--rail-bg:#182238;--rail-fg:#c3ccdd;--rail-item:#26334f;--rail-item-active:#e2674a;--rail-item-active-fg:#ffffff;--pane-item-hover:#f0ece8;--list-row-selected-bg:#fdf3f0;--pane-item-active-fg:#182238;--accent-unread:#e2674a;--list-row-hover:#f4f1ee;--list-row-selected-fg:#182238;--list-separator:#ece7e1;--badge-count-bg:#e2674a;--badge-count-fg:#ffffff;--reader-header-border:#ece7e1;--quote-text:#8a827a;--attachment-chip-bg:#f4f1ee;--action-primary:#182238;--action-primary-hover:#26334f;--action-primary-fg:#ffffff;--icon-hover-accent:#f0785c;--icon-hover-danger:#f87171;--danger:#dc2626;--danger-hover:#b91c1c;--success:#16a34a">
+      <div class="panel-h">Light</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f6f3ef"></span><span class="hex">#f6f3ef</span></div><div class="sw"><span class="chip" style="background:#fdfbf8"></span><span class="hex">#fdfbf8</span></div><div class="sw"><span class="chip" style="background:#f4f1ee"></span><span class="hex">#f4f1ee</span></div><div class="sw"><span class="chip" style="background:#e5e0da"></span><span class="hex">#e5e0da</span></div><div class="sw"><span class="chip" style="background:#ece7e1"></span><span class="hex">#ece7e1</span></div><div class="sw"><span class="chip" style="background:#f0ece8"></span><span class="hex">#f0ece8</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e7eaf1"></span><span class="hex">#e7eaf1</span></div><div class="sw"><span class="chip" style="background:#d9dfec"></span><span class="hex">#d9dfec</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1c1a18"></span><span class="hex">#1c1a18</span></div><div class="sw"><span class="chip" style="background:#6f6a64"></span><span class="hex">#6f6a64</span></div><div class="sw"><span class="chip" style="background:#8a827a"></span><span class="hex">#8a827a</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#182238"></span><span class="hex">#182238</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#c3ccdd"></span><span class="hex">#c3ccdd</span></div><div class="sw"><span class="chip" style="background:#26334f"></span><span class="hex">#26334f</span></div><div class="sw"><span class="chip" style="background:#e2674a"></span><span class="hex">#e2674a</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#182238"></span><span class="hex">#182238</span></div><div class="sw"><span class="chip" style="background:#26334f"></span><span class="hex">#26334f</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#e2674a"></span><span class="hex">#e2674a</span></div><div class="sw"><span class="chip" style="background:#f0785c"></span><span class="hex">#f0785c</span></div><div class="sw"><span class="chip" style="background:#fdf3f0"></span><span class="hex">#fdf3f0</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">4</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dc2626"></span><span class="hex">#dc2626</span></div><div class="sw"><span class="chip" style="background:#b91c1c"></span><span class="hex">#b91c1c</span></div><div class="sw"><span class="chip" style="background:#16a34a"></span><span class="hex">#16a34a</span></div><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div></div></div>
+    </div>
+      
+    <div class="panel" style="--bg:#17191d;--folders-bg:#17191d;--folders-item-hover:#262a31;--surface:#212429;--surface-raised:#262a31;--surface-sunken:#1c1f24;--border:#2c3038;--text:#e9e5e1;--text-muted:#9b968f;--topbar-bg:#0f1626;--topbar-fg:#e9e5e1;--rail-bg:#0f1626;--rail-fg:#aab6cc;--rail-item:#1e2942;--rail-item-active:#f0785c;--rail-item-active-fg:#1a0f0b;--pane-item-hover:#262a31;--list-row-selected-bg:#2a2420;--pane-item-active-fg:#f3efeb;--accent-unread:#f0785c;--list-row-hover:#262a31;--list-row-selected-fg:#f3efeb;--list-separator:#2c3038;--badge-count-bg:#f0785c;--badge-count-fg:#1a0f0b;--reader-header-border:#2c3038;--quote-text:#8b857e;--attachment-chip-bg:#262a31;--action-primary:#f0785c;--action-primary-hover:#f28a72;--action-primary-fg:#1a0f0b;--icon-hover-accent:#f0785c;--icon-hover-danger:#f87171;--danger:#f87171;--danger-hover:#ef4444;--success:#4ade80">
+      <div class="panel-h">Dark</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#17191d"></span><span class="hex">#17191d</span></div><div class="sw"><span class="chip" style="background:#212429"></span><span class="hex">#212429</span></div><div class="sw"><span class="chip" style="background:#262a31"></span><span class="hex">#262a31</span></div><div class="sw"><span class="chip" style="background:#1c1f24"></span><span class="hex">#1c1f24</span></div><div class="sw"><span class="chip" style="background:#2c3038"></span><span class="hex">#2c3038</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#17191d"></span><span class="hex">#17191d</span></div><div class="sw"><span class="chip" style="background:#262a31"></span><span class="hex">#262a31</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e9e5e1"></span><span class="hex">#e9e5e1</span></div><div class="sw"><span class="chip" style="background:#9b968f"></span><span class="hex">#9b968f</span></div><div class="sw"><span class="chip" style="background:#8b857e"></span><span class="hex">#8b857e</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#0f1626"></span><span class="hex">#0f1626</span></div><div class="sw"><span class="chip" style="background:#e9e5e1"></span><span class="hex">#e9e5e1</span></div><div class="sw"><span class="chip" style="background:#aab6cc"></span><span class="hex">#aab6cc</span></div><div class="sw"><span class="chip" style="background:#1e2942"></span><span class="hex">#1e2942</span></div><div class="sw"><span class="chip" style="background:#f0785c"></span><span class="hex">#f0785c</span></div><div class="sw"><span class="chip" style="background:#1a0f0b"></span><span class="hex">#1a0f0b</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f0785c"></span><span class="hex">#f0785c</span></div><div class="sw"><span class="chip" style="background:#f28a72"></span><span class="hex">#f28a72</span></div><div class="sw"><span class="chip" style="background:#1a0f0b"></span><span class="hex">#1a0f0b</span></div><div class="sw"><span class="chip" style="background:#2a2420"></span><span class="hex">#2a2420</span></div><div class="sw"><span class="chip" style="background:#f3efeb"></span><span class="hex">#f3efeb</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div><div class="sw"><span class="chip" style="background:#ef4444"></span><span class="hex">#ef4444</span></div><div class="sw"><span class="chip" style="background:#4ade80"></span><span class="hex">#4ade80</span></div></div></div>
+    </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>classic<small>shown as "Sea breeze"</small></h2>
+    <div class="panels">
+      
+    <div class="panel" style="--bg:#eaeef3;--folders-bg:#e6ecf6;--folders-item-hover:#dce5f4;--surface:#fbfdfe;--surface-raised:#fbfdfe;--surface-sunken:#edf1f7;--border:#dde1e7;--text:#1a1d23;--text-muted:#6b7280;--topbar-bg:#3450a3;--topbar-fg:#ffffff;--rail-bg:#3450a3;--rail-fg:#c4cfe8;--rail-item:#4a63b0;--rail-item-active:#ffffff;--rail-item-active-fg:#25397a;--pane-item-hover:#e7eaf0;--list-row-selected-bg:#dbe3f5;--pane-item-active-fg:#25397a;--accent-unread:#3450a3;--list-row-hover:#f0f2f5;--list-row-selected-fg:#25397a;--list-separator:#e6e9ee;--badge-count-bg:#3450a3;--badge-count-fg:#ffffff;--reader-header-border:#dde1e7;--quote-text:#7c8593;--attachment-chip-bg:#f0f2f5;--action-primary:#3450a3;--action-primary-hover:#2a4090;--action-primary-fg:#ffffff;--icon-hover-accent:#84aad8;--icon-hover-danger:#dc2626;--danger:#dc2626;--danger-hover:#b91c1c;--success:#16a34a">
+      <div class="panel-h">Light</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">7</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#eaeef3"></span><span class="hex">#eaeef3</span></div><div class="sw"><span class="chip" style="background:#fbfdfe"></span><span class="hex">#fbfdfe</span></div><div class="sw"><span class="chip" style="background:#edf1f7"></span><span class="hex">#edf1f7</span></div><div class="sw"><span class="chip" style="background:#dde1e7"></span><span class="hex">#dde1e7</span></div><div class="sw"><span class="chip" style="background:#e6e9ee"></span><span class="hex">#e6e9ee</span></div><div class="sw"><span class="chip" style="background:#f0f2f5"></span><span class="hex">#f0f2f5</span></div><div class="sw"><span class="chip" style="background:#e7eaf0"></span><span class="hex">#e7eaf0</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e6ecf6"></span><span class="hex">#e6ecf6</span></div><div class="sw"><span class="chip" style="background:#dce5f4"></span><span class="hex">#dce5f4</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1a1d23"></span><span class="hex">#1a1d23</span></div><div class="sw"><span class="chip" style="background:#6b7280"></span><span class="hex">#6b7280</span></div><div class="sw"><span class="chip" style="background:#7c8593"></span><span class="hex">#7c8593</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#3450a3"></span><span class="hex">#3450a3</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#c4cfe8"></span><span class="hex">#c4cfe8</span></div><div class="sw"><span class="chip" style="background:#4a63b0"></span><span class="hex">#4a63b0</span></div><div class="sw"><span class="chip" style="background:#25397a"></span><span class="hex">#25397a</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">7</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#3450a3"></span><span class="hex">#3450a3</span></div><div class="sw"><span class="chip" style="background:#2a4090"></span><span class="hex">#2a4090</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#84aad8"></span><span class="hex">#84aad8</span></div><div class="sw"><span class="chip" style="background:#c6d6f0"></span><span class="hex">#c6d6f0</span></div><div class="sw"><span class="chip" style="background:#25397a"></span><span class="hex">#25397a</span></div><div class="sw"><span class="chip" style="background:#dbe3f5"></span><span class="hex">#dbe3f5</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dc2626"></span><span class="hex">#dc2626</span></div><div class="sw"><span class="chip" style="background:#b91c1c"></span><span class="hex">#b91c1c</span></div><div class="sw"><span class="chip" style="background:#16a34a"></span><span class="hex">#16a34a</span></div></div></div>
+    </div>
+      
+    <div class="panel" style="--bg:#eaeef3;--folders-bg:#1e2229;--folders-item-hover:#2f3849;--surface:#272d38;--surface-raised:#2c3340;--surface-sunken:#212630;--border:#3b4253;--text:#dce1e9;--text-muted:#8b95a8;--topbar-bg:#232833;--topbar-fg:#e6e9ee;--rail-bg:#232833;--rail-fg:#9aa4b5;--rail-item:#333b49;--rail-item-active:#84aad8;--rail-item-active-fg:#12161c;--pane-item-hover:#2f3849;--list-row-selected-bg:#33405c;--pane-item-active-fg:#bcd2ec;--accent-unread:#84aad8;--list-row-hover:#2f3849;--list-row-selected-fg:#bcd2ec;--list-separator:#333b49;--badge-count-bg:#84aad8;--badge-count-fg:#12161c;--reader-header-border:#333b49;--quote-text:#828d9e;--attachment-chip-bg:#2f3849;--action-primary:#84aad8;--action-primary-hover:#99bbdf;--action-primary-fg:#12161c;--icon-hover-accent:#84aad8;--icon-hover-danger:#dc2626;--danger:#dc2626;--danger-hover:#b91c1c;--success:#16a34a">
+      <div class="panel-h">Dark</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">7</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#eaeef3"></span><span class="hex">#eaeef3</span></div><div class="sw"><span class="chip" style="background:#272d38"></span><span class="hex">#272d38</span></div><div class="sw"><span class="chip" style="background:#2c3340"></span><span class="hex">#2c3340</span></div><div class="sw"><span class="chip" style="background:#212630"></span><span class="hex">#212630</span></div><div class="sw"><span class="chip" style="background:#3b4253"></span><span class="hex">#3b4253</span></div><div class="sw"><span class="chip" style="background:#333b49"></span><span class="hex">#333b49</span></div><div class="sw"><span class="chip" style="background:#2f3849"></span><span class="hex">#2f3849</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1e2229"></span><span class="hex">#1e2229</span></div><div class="sw"><span class="chip" style="background:#2f3849"></span><span class="hex">#2f3849</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dce1e9"></span><span class="hex">#dce1e9</span></div><div class="sw"><span class="chip" style="background:#8b95a8"></span><span class="hex">#8b95a8</span></div><div class="sw"><span class="chip" style="background:#828d9e"></span><span class="hex">#828d9e</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#232833"></span><span class="hex">#232833</span></div><div class="sw"><span class="chip" style="background:#e6e9ee"></span><span class="hex">#e6e9ee</span></div><div class="sw"><span class="chip" style="background:#9aa4b5"></span><span class="hex">#9aa4b5</span></div><div class="sw"><span class="chip" style="background:#333b49"></span><span class="hex">#333b49</span></div><div class="sw"><span class="chip" style="background:#84aad8"></span><span class="hex">#84aad8</span></div><div class="sw"><span class="chip" style="background:#12161c"></span><span class="hex">#12161c</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#84aad8"></span><span class="hex">#84aad8</span></div><div class="sw"><span class="chip" style="background:#99bbdf"></span><span class="hex">#99bbdf</span></div><div class="sw"><span class="chip" style="background:#12161c"></span><span class="hex">#12161c</span></div><div class="sw"><span class="chip" style="background:#33405c"></span><span class="hex">#33405c</span></div><div class="sw"><span class="chip" style="background:#bcd2ec"></span><span class="hex">#bcd2ec</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dc2626"></span><span class="hex">#dc2626</span></div><div class="sw"><span class="chip" style="background:#b91c1c"></span><span class="hex">#b91c1c</span></div><div class="sw"><span class="chip" style="background:#16a34a"></span><span class="hex">#16a34a</span></div></div></div>
+    </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>forest<small>Forest &amp; amber</small></h2>
+    <div class="panels">
+      
+    <div class="panel" style="--bg:#f1f3ec;--folders-bg:#e6ede2;--folders-item-hover:#d8e2d2;--surface:#fcfdfa;--surface-raised:#fcfdfa;--surface-sunken:#eef1ea;--border:#dde2d6;--text:#1a1f1a;--text-muted:#66705f;--topbar-bg:#1e3a2b;--topbar-fg:#ffffff;--rail-bg:#1e3a2b;--rail-fg:#b8ccbe;--rail-item:#2b4d3a;--rail-item-active:#d99a2b;--rail-item-active-fg:#1a1205;--pane-item-hover:#eaeee5;--list-row-selected-bg:#fbf2df;--pane-item-active-fg:#1e3a2b;--accent-unread:#b8791a;--list-row-hover:#eef1ea;--list-row-selected-fg:#1e3a2b;--list-separator:#e6ebe0;--badge-count-bg:#b8791a;--badge-count-fg:#ffffff;--reader-header-border:#e6ebe0;--quote-text:#7c8676;--attachment-chip-bg:#eef1ea;--action-primary:#1e3a2b;--action-primary-hover:#2b4d3a;--action-primary-fg:#ffffff;--icon-hover-accent:#e0a63f;--icon-hover-danger:#f87171;--danger:#c02626;--danger-hover:#9c1c1c;--success:#15803d">
+      <div class="panel-h">Light</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f1f3ec"></span><span class="hex">#f1f3ec</span></div><div class="sw"><span class="chip" style="background:#fcfdfa"></span><span class="hex">#fcfdfa</span></div><div class="sw"><span class="chip" style="background:#eef1ea"></span><span class="hex">#eef1ea</span></div><div class="sw"><span class="chip" style="background:#dde2d6"></span><span class="hex">#dde2d6</span></div><div class="sw"><span class="chip" style="background:#e6ebe0"></span><span class="hex">#e6ebe0</span></div><div class="sw"><span class="chip" style="background:#eaeee5"></span><span class="hex">#eaeee5</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e6ede2"></span><span class="hex">#e6ede2</span></div><div class="sw"><span class="chip" style="background:#d8e2d2"></span><span class="hex">#d8e2d2</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1a1f1a"></span><span class="hex">#1a1f1a</span></div><div class="sw"><span class="chip" style="background:#66705f"></span><span class="hex">#66705f</span></div><div class="sw"><span class="chip" style="background:#7c8676"></span><span class="hex">#7c8676</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1e3a2b"></span><span class="hex">#1e3a2b</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#b8ccbe"></span><span class="hex">#b8ccbe</span></div><div class="sw"><span class="chip" style="background:#2b4d3a"></span><span class="hex">#2b4d3a</span></div><div class="sw"><span class="chip" style="background:#d99a2b"></span><span class="hex">#d99a2b</span></div><div class="sw"><span class="chip" style="background:#1a1205"></span><span class="hex">#1a1205</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1e3a2b"></span><span class="hex">#1e3a2b</span></div><div class="sw"><span class="chip" style="background:#2b4d3a"></span><span class="hex">#2b4d3a</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#b8791a"></span><span class="hex">#b8791a</span></div><div class="sw"><span class="chip" style="background:#e0a63f"></span><span class="hex">#e0a63f</span></div><div class="sw"><span class="chip" style="background:#fbf2df"></span><span class="hex">#fbf2df</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">4</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#c02626"></span><span class="hex">#c02626</span></div><div class="sw"><span class="chip" style="background:#9c1c1c"></span><span class="hex">#9c1c1c</span></div><div class="sw"><span class="chip" style="background:#15803d"></span><span class="hex">#15803d</span></div><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div></div></div>
+    </div>
+      
+    <div class="panel" style="--bg:#141a16;--folders-bg:#141a16;--folders-item-hover:#212a23;--surface:#1c231e;--surface-raised:#212a23;--surface-sunken:#171d19;--border:#2b352d;--text:#e4e9e3;--text-muted:#929c8f;--topbar-bg:#0f1712;--topbar-fg:#e4e9e3;--rail-bg:#0f1712;--rail-fg:#a3b8a8;--rail-item:#1c2a20;--rail-item-active:#e0a63f;--rail-item-active-fg:#191204;--pane-item-hover:#212a23;--list-row-selected-bg:#2a2418;--pane-item-active-fg:#f2ecdc;--accent-unread:#e0a63f;--list-row-hover:#212a23;--list-row-selected-fg:#f2ecdc;--list-separator:#2b352d;--badge-count-bg:#e0a63f;--badge-count-fg:#191204;--reader-header-border:#2b352d;--quote-text:#869080;--attachment-chip-bg:#212a23;--action-primary:#e0a63f;--action-primary-hover:#ebb757;--action-primary-fg:#191204;--icon-hover-accent:#e0a63f;--icon-hover-danger:#f87171;--danger:#f87171;--danger-hover:#ef4444;--success:#4ade80">
+      <div class="panel-h">Dark</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#141a16"></span><span class="hex">#141a16</span></div><div class="sw"><span class="chip" style="background:#1c231e"></span><span class="hex">#1c231e</span></div><div class="sw"><span class="chip" style="background:#212a23"></span><span class="hex">#212a23</span></div><div class="sw"><span class="chip" style="background:#171d19"></span><span class="hex">#171d19</span></div><div class="sw"><span class="chip" style="background:#2b352d"></span><span class="hex">#2b352d</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#141a16"></span><span class="hex">#141a16</span></div><div class="sw"><span class="chip" style="background:#212a23"></span><span class="hex">#212a23</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e4e9e3"></span><span class="hex">#e4e9e3</span></div><div class="sw"><span class="chip" style="background:#929c8f"></span><span class="hex">#929c8f</span></div><div class="sw"><span class="chip" style="background:#869080"></span><span class="hex">#869080</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#0f1712"></span><span class="hex">#0f1712</span></div><div class="sw"><span class="chip" style="background:#e4e9e3"></span><span class="hex">#e4e9e3</span></div><div class="sw"><span class="chip" style="background:#a3b8a8"></span><span class="hex">#a3b8a8</span></div><div class="sw"><span class="chip" style="background:#1c2a20"></span><span class="hex">#1c2a20</span></div><div class="sw"><span class="chip" style="background:#e0a63f"></span><span class="hex">#e0a63f</span></div><div class="sw"><span class="chip" style="background:#191204"></span><span class="hex">#191204</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e0a63f"></span><span class="hex">#e0a63f</span></div><div class="sw"><span class="chip" style="background:#ebb757"></span><span class="hex">#ebb757</span></div><div class="sw"><span class="chip" style="background:#191204"></span><span class="hex">#191204</span></div><div class="sw"><span class="chip" style="background:#2a2418"></span><span class="hex">#2a2418</span></div><div class="sw"><span class="chip" style="background:#f2ecdc"></span><span class="hex">#f2ecdc</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div><div class="sw"><span class="chip" style="background:#ef4444"></span><span class="hex">#ef4444</span></div><div class="sw"><span class="chip" style="background:#4ade80"></span><span class="hex">#4ade80</span></div></div></div>
+    </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>slate<small>Slate &amp; teal</small></h2>
+    <div class="panels">
+      
+    <div class="panel" style="--bg:#eff2f3;--folders-bg:#e0e8ea;--folders-item-hover:#d1dde0;--surface:#fbfcfd;--surface-raised:#fbfcfd;--surface-sunken:#eceff1;--border:#d9dee1;--text:#171b1e;--text-muted:#626d73;--topbar-bg:#2b3a41;--topbar-fg:#ffffff;--rail-bg:#2b3a41;--rail-fg:#b3c3c9;--rail-item:#3a4d55;--rail-item-active:#0f7d78;--rail-item-active-fg:#ffffff;--pane-item-hover:#e7ebed;--list-row-selected-bg:#dcefee;--pane-item-active-fg:#0d5551;--accent-unread:#0f7d78;--list-row-hover:#eceff1;--list-row-selected-fg:#0d5551;--list-separator:#e3e7e9;--badge-count-bg:#0f7d78;--badge-count-fg:#ffffff;--reader-header-border:#e3e7e9;--quote-text:#78838a;--attachment-chip-bg:#eceff1;--action-primary:#0f7d78;--action-primary-hover:#0c6763;--action-primary-fg:#ffffff;--icon-hover-accent:#3fbdb4;--icon-hover-danger:#f87171;--danger:#dc2626;--danger-hover:#b91c1c;--success:#16a34a">
+      <div class="panel-h">Light</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#eff2f3"></span><span class="hex">#eff2f3</span></div><div class="sw"><span class="chip" style="background:#fbfcfd"></span><span class="hex">#fbfcfd</span></div><div class="sw"><span class="chip" style="background:#eceff1"></span><span class="hex">#eceff1</span></div><div class="sw"><span class="chip" style="background:#d9dee1"></span><span class="hex">#d9dee1</span></div><div class="sw"><span class="chip" style="background:#e3e7e9"></span><span class="hex">#e3e7e9</span></div><div class="sw"><span class="chip" style="background:#e7ebed"></span><span class="hex">#e7ebed</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e0e8ea"></span><span class="hex">#e0e8ea</span></div><div class="sw"><span class="chip" style="background:#d1dde0"></span><span class="hex">#d1dde0</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#171b1e"></span><span class="hex">#171b1e</span></div><div class="sw"><span class="chip" style="background:#626d73"></span><span class="hex">#626d73</span></div><div class="sw"><span class="chip" style="background:#78838a"></span><span class="hex">#78838a</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#2b3a41"></span><span class="hex">#2b3a41</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#b3c3c9"></span><span class="hex">#b3c3c9</span></div><div class="sw"><span class="chip" style="background:#3a4d55"></span><span class="hex">#3a4d55</span></div><div class="sw"><span class="chip" style="background:#0f7d78"></span><span class="hex">#0f7d78</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#0f7d78"></span><span class="hex">#0f7d78</span></div><div class="sw"><span class="chip" style="background:#0c6763"></span><span class="hex">#0c6763</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#3fbdb4"></span><span class="hex">#3fbdb4</span></div><div class="sw"><span class="chip" style="background:#dcefee"></span><span class="hex">#dcefee</span></div><div class="sw"><span class="chip" style="background:#0d5551"></span><span class="hex">#0d5551</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">4</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dc2626"></span><span class="hex">#dc2626</span></div><div class="sw"><span class="chip" style="background:#b91c1c"></span><span class="hex">#b91c1c</span></div><div class="sw"><span class="chip" style="background:#16a34a"></span><span class="hex">#16a34a</span></div><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div></div></div>
+    </div>
+      
+    <div class="panel" style="--bg:#14181a;--folders-bg:#14181a;--folders-item-hover:#232a2d;--surface:#1d2225;--surface-raised:#232a2d;--surface-sunken:#181d1f;--border:#2c3438;--text:#e2e8ea;--text-muted:#8d989d;--topbar-bg:#121a1d;--topbar-fg:#e2e8ea;--rail-bg:#121a1d;--rail-fg:#9fb3ba;--rail-item:#1f2b30;--rail-item-active:#3fbdb4;--rail-item-active-fg:#06201e;--pane-item-hover:#232a2d;--list-row-selected-bg:#16332f;--pane-item-active-fg:#b7e6e0;--accent-unread:#3fbdb4;--list-row-hover:#232a2d;--list-row-selected-fg:#b7e6e0;--list-separator:#2c3438;--badge-count-bg:#3fbdb4;--badge-count-fg:#06201e;--reader-header-border:#2c3438;--quote-text:#7f8a8f;--attachment-chip-bg:#232a2d;--action-primary:#3fbdb4;--action-primary-hover:#58ccc3;--action-primary-fg:#06201e;--icon-hover-accent:#3fbdb4;--icon-hover-danger:#f87171;--danger:#f87171;--danger-hover:#ef4444;--success:#4ade80">
+      <div class="panel-h">Dark</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#14181a"></span><span class="hex">#14181a</span></div><div class="sw"><span class="chip" style="background:#1d2225"></span><span class="hex">#1d2225</span></div><div class="sw"><span class="chip" style="background:#232a2d"></span><span class="hex">#232a2d</span></div><div class="sw"><span class="chip" style="background:#181d1f"></span><span class="hex">#181d1f</span></div><div class="sw"><span class="chip" style="background:#2c3438"></span><span class="hex">#2c3438</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#14181a"></span><span class="hex">#14181a</span></div><div class="sw"><span class="chip" style="background:#232a2d"></span><span class="hex">#232a2d</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e2e8ea"></span><span class="hex">#e2e8ea</span></div><div class="sw"><span class="chip" style="background:#8d989d"></span><span class="hex">#8d989d</span></div><div class="sw"><span class="chip" style="background:#7f8a8f"></span><span class="hex">#7f8a8f</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#121a1d"></span><span class="hex">#121a1d</span></div><div class="sw"><span class="chip" style="background:#e2e8ea"></span><span class="hex">#e2e8ea</span></div><div class="sw"><span class="chip" style="background:#9fb3ba"></span><span class="hex">#9fb3ba</span></div><div class="sw"><span class="chip" style="background:#1f2b30"></span><span class="hex">#1f2b30</span></div><div class="sw"><span class="chip" style="background:#3fbdb4"></span><span class="hex">#3fbdb4</span></div><div class="sw"><span class="chip" style="background:#06201e"></span><span class="hex">#06201e</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#3fbdb4"></span><span class="hex">#3fbdb4</span></div><div class="sw"><span class="chip" style="background:#58ccc3"></span><span class="hex">#58ccc3</span></div><div class="sw"><span class="chip" style="background:#06201e"></span><span class="hex">#06201e</span></div><div class="sw"><span class="chip" style="background:#16332f"></span><span class="hex">#16332f</span></div><div class="sw"><span class="chip" style="background:#b7e6e0"></span><span class="hex">#b7e6e0</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div><div class="sw"><span class="chip" style="background:#ef4444"></span><span class="hex">#ef4444</span></div><div class="sw"><span class="chip" style="background:#4ade80"></span><span class="hex">#4ade80</span></div></div></div>
+    </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>plum<small>Plum &amp; gold</small></h2>
+    <div class="panels">
+      
+    <div class="panel" style="--bg:#f4f0f4;--folders-bg:#ede2ed;--folders-item-hover:#e0d1e0;--surface:#fdfcfd;--surface-raised:#fdfcfd;--surface-sunken:#f1ebf1;--border:#e3d9e3;--text:#1f1a1f;--text-muted:#6d626d;--topbar-bg:#3a2140;--topbar-fg:#ffffff;--rail-bg:#3a2140;--rail-fg:#c9b6cd;--rail-item:#4d2e54;--rail-item-active:#c9962b;--rail-item-active-fg:#1c1405;--pane-item-hover:#efe8ef;--list-row-selected-bg:#f9f0dd;--pane-item-active-fg:#3a2140;--accent-unread:#a87a12;--list-row-hover:#f1ebf1;--list-row-selected-fg:#3a2140;--list-separator:#ebe2eb;--badge-count-bg:#a87a12;--badge-count-fg:#ffffff;--reader-header-border:#ebe2eb;--quote-text:#837783;--attachment-chip-bg:#f1ebf1;--action-primary:#3a2140;--action-primary-hover:#4d2e54;--action-primary-fg:#ffffff;--icon-hover-accent:#d9b04a;--icon-hover-danger:#f87171;--danger:#dc2626;--danger-hover:#b91c1c;--success:#16a34a">
+      <div class="panel-h">Light</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f4f0f4"></span><span class="hex">#f4f0f4</span></div><div class="sw"><span class="chip" style="background:#fdfcfd"></span><span class="hex">#fdfcfd</span></div><div class="sw"><span class="chip" style="background:#f1ebf1"></span><span class="hex">#f1ebf1</span></div><div class="sw"><span class="chip" style="background:#e3d9e3"></span><span class="hex">#e3d9e3</span></div><div class="sw"><span class="chip" style="background:#ebe2eb"></span><span class="hex">#ebe2eb</span></div><div class="sw"><span class="chip" style="background:#efe8ef"></span><span class="hex">#efe8ef</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#ede2ed"></span><span class="hex">#ede2ed</span></div><div class="sw"><span class="chip" style="background:#e0d1e0"></span><span class="hex">#e0d1e0</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#1f1a1f"></span><span class="hex">#1f1a1f</span></div><div class="sw"><span class="chip" style="background:#6d626d"></span><span class="hex">#6d626d</span></div><div class="sw"><span class="chip" style="background:#837783"></span><span class="hex">#837783</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#3a2140"></span><span class="hex">#3a2140</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#c9b6cd"></span><span class="hex">#c9b6cd</span></div><div class="sw"><span class="chip" style="background:#4d2e54"></span><span class="hex">#4d2e54</span></div><div class="sw"><span class="chip" style="background:#c9962b"></span><span class="hex">#c9962b</span></div><div class="sw"><span class="chip" style="background:#1c1405"></span><span class="hex">#1c1405</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#3a2140"></span><span class="hex">#3a2140</span></div><div class="sw"><span class="chip" style="background:#4d2e54"></span><span class="hex">#4d2e54</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#a87a12"></span><span class="hex">#a87a12</span></div><div class="sw"><span class="chip" style="background:#d9b04a"></span><span class="hex">#d9b04a</span></div><div class="sw"><span class="chip" style="background:#f9f0dd"></span><span class="hex">#f9f0dd</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">4</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dc2626"></span><span class="hex">#dc2626</span></div><div class="sw"><span class="chip" style="background:#b91c1c"></span><span class="hex">#b91c1c</span></div><div class="sw"><span class="chip" style="background:#16a34a"></span><span class="hex">#16a34a</span></div><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div></div></div>
+    </div>
+      
+    <div class="panel" style="--bg:#17141a;--folders-bg:#17141a;--folders-item-hover:#26212b;--surface:#201c24;--surface-raised:#26212b;--surface-sunken:#1a171e;--border:#322b38;--text:#e8e3ea;--text-muted:#988f9c;--topbar-bg:#150e18;--topbar-fg:#e8e3ea;--rail-bg:#150e18;--rail-fg:#b9a6bf;--rail-item:#291d2e;--rail-item-active:#d9b04a;--rail-item-active-fg:#1c1405;--pane-item-hover:#26212b;--list-row-selected-bg:#2d2617;--pane-item-active-fg:#f0e6cf;--accent-unread:#d9b04a;--list-row-hover:#26212b;--list-row-selected-fg:#f0e6cf;--list-separator:#322b38;--badge-count-bg:#d9b04a;--badge-count-fg:#1c1405;--reader-header-border:#322b38;--quote-text:#8b8290;--attachment-chip-bg:#26212b;--action-primary:#d9b04a;--action-primary-hover:#e3bf63;--action-primary-fg:#1c1405;--icon-hover-accent:#d9b04a;--icon-hover-danger:#f87171;--danger:#f87171;--danger-hover:#ef4444;--success:#4ade80">
+      <div class="panel-h">Dark</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#17141a"></span><span class="hex">#17141a</span></div><div class="sw"><span class="chip" style="background:#201c24"></span><span class="hex">#201c24</span></div><div class="sw"><span class="chip" style="background:#26212b"></span><span class="hex">#26212b</span></div><div class="sw"><span class="chip" style="background:#1a171e"></span><span class="hex">#1a171e</span></div><div class="sw"><span class="chip" style="background:#322b38"></span><span class="hex">#322b38</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#17141a"></span><span class="hex">#17141a</span></div><div class="sw"><span class="chip" style="background:#26212b"></span><span class="hex">#26212b</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e8e3ea"></span><span class="hex">#e8e3ea</span></div><div class="sw"><span class="chip" style="background:#988f9c"></span><span class="hex">#988f9c</span></div><div class="sw"><span class="chip" style="background:#8b8290"></span><span class="hex">#8b8290</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#150e18"></span><span class="hex">#150e18</span></div><div class="sw"><span class="chip" style="background:#e8e3ea"></span><span class="hex">#e8e3ea</span></div><div class="sw"><span class="chip" style="background:#b9a6bf"></span><span class="hex">#b9a6bf</span></div><div class="sw"><span class="chip" style="background:#291d2e"></span><span class="hex">#291d2e</span></div><div class="sw"><span class="chip" style="background:#d9b04a"></span><span class="hex">#d9b04a</span></div><div class="sw"><span class="chip" style="background:#1c1405"></span><span class="hex">#1c1405</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#d9b04a"></span><span class="hex">#d9b04a</span></div><div class="sw"><span class="chip" style="background:#e3bf63"></span><span class="hex">#e3bf63</span></div><div class="sw"><span class="chip" style="background:#1c1405"></span><span class="hex">#1c1405</span></div><div class="sw"><span class="chip" style="background:#2d2617"></span><span class="hex">#2d2617</span></div><div class="sw"><span class="chip" style="background:#f0e6cf"></span><span class="hex">#f0e6cf</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div><div class="sw"><span class="chip" style="background:#ef4444"></span><span class="hex">#ef4444</span></div><div class="sw"><span class="chip" style="background:#4ade80"></span><span class="hex">#4ade80</span></div></div></div>
+    </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>ink<small>Ink</small></h2>
+    <div class="panels">
+      
+    <div class="panel" style="--bg:#f2f2f4;--folders-bg:#e9ebf0;--folders-item-hover:#dbdee7;--surface:#fcfcfd;--surface-raised:#fcfcfd;--surface-sunken:#efeff1;--border:#dcdcdf;--text:#131315;--text-muted:#67676e;--topbar-bg:#131315;--topbar-fg:#ffffff;--rail-bg:#131315;--rail-fg:#a9a9b0;--rail-item:#26262a;--rail-item-active:#2563eb;--rail-item-active-fg:#ffffff;--pane-item-hover:#eaeaec;--list-row-selected-bg:#e4ecfd;--pane-item-active-fg:#1a44a8;--accent-unread:#2563eb;--list-row-hover:#efeff1;--list-row-selected-fg:#1a44a8;--list-separator:#e6e6e9;--badge-count-bg:#2563eb;--badge-count-fg:#ffffff;--reader-header-border:#e6e6e9;--quote-text:#7d7d85;--attachment-chip-bg:#efeff1;--action-primary:#131315;--action-primary-hover:#2b2b30;--action-primary-fg:#ffffff;--icon-hover-accent:#5b8cf7;--icon-hover-danger:#f87171;--danger:#dc2626;--danger-hover:#b91c1c;--success:#16a34a">
+      <div class="panel-h">Light</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f2f2f4"></span><span class="hex">#f2f2f4</span></div><div class="sw"><span class="chip" style="background:#fcfcfd"></span><span class="hex">#fcfcfd</span></div><div class="sw"><span class="chip" style="background:#efeff1"></span><span class="hex">#efeff1</span></div><div class="sw"><span class="chip" style="background:#dcdcdf"></span><span class="hex">#dcdcdf</span></div><div class="sw"><span class="chip" style="background:#e6e6e9"></span><span class="hex">#e6e6e9</span></div><div class="sw"><span class="chip" style="background:#eaeaec"></span><span class="hex">#eaeaec</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e9ebf0"></span><span class="hex">#e9ebf0</span></div><div class="sw"><span class="chip" style="background:#dbdee7"></span><span class="hex">#dbdee7</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#131315"></span><span class="hex">#131315</span></div><div class="sw"><span class="chip" style="background:#67676e"></span><span class="hex">#67676e</span></div><div class="sw"><span class="chip" style="background:#7d7d85"></span><span class="hex">#7d7d85</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#131315"></span><span class="hex">#131315</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#a9a9b0"></span><span class="hex">#a9a9b0</span></div><div class="sw"><span class="chip" style="background:#26262a"></span><span class="hex">#26262a</span></div><div class="sw"><span class="chip" style="background:#2563eb"></span><span class="hex">#2563eb</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">7</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#131315"></span><span class="hex">#131315</span></div><div class="sw"><span class="chip" style="background:#2b2b30"></span><span class="hex">#2b2b30</span></div><div class="sw"><span class="chip" style="background:#ffffff"></span><span class="hex">#ffffff</span></div><div class="sw"><span class="chip" style="background:#2563eb"></span><span class="hex">#2563eb</span></div><div class="sw"><span class="chip" style="background:#5b8cf7"></span><span class="hex">#5b8cf7</span></div><div class="sw"><span class="chip" style="background:#e4ecfd"></span><span class="hex">#e4ecfd</span></div><div class="sw"><span class="chip" style="background:#1a44a8"></span><span class="hex">#1a44a8</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">4</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#dc2626"></span><span class="hex">#dc2626</span></div><div class="sw"><span class="chip" style="background:#b91c1c"></span><span class="hex">#b91c1c</span></div><div class="sw"><span class="chip" style="background:#16a34a"></span><span class="hex">#16a34a</span></div><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div></div></div>
+    </div>
+      
+    <div class="panel" style="--bg:#121214;--folders-bg:#121214;--folders-item-hover:#202024;--surface:#1a1a1d;--surface-raised:#202024;--surface-sunken:#161618;--border:#2a2a2f;--text:#e8e8ea;--text-muted:#92929a;--topbar-bg:#0c0c0e;--topbar-fg:#e8e8ea;--rail-bg:#0c0c0e;--rail-fg:#a0a0a8;--rail-item:#1d1d21;--rail-item-active:#5b8cf7;--rail-item-active-fg:#06122e;--pane-item-hover:#202024;--list-row-selected-bg:#18233d;--pane-item-active-fg:#cbdaf9;--accent-unread:#5b8cf7;--list-row-hover:#202024;--list-row-selected-fg:#cbdaf9;--list-separator:#2a2a2f;--badge-count-bg:#5b8cf7;--badge-count-fg:#06122e;--reader-header-border:#2a2a2f;--quote-text:#85858d;--attachment-chip-bg:#202024;--action-primary:#5b8cf7;--action-primary-hover:#799ff9;--action-primary-fg:#06122e;--icon-hover-accent:#5b8cf7;--icon-hover-danger:#f87171;--danger:#f87171;--danger-hover:#ef4444;--success:#4ade80">
+      <div class="panel-h">Dark</div>
+      
+      <div class="mock">
+        <div class="mk-bar"></div>
+        <div class="mk-body">
+          <div class="mk-rail"><i></i><i></i><i class="on"></i><span class="mk-sp"></span><i></i></div>
+          <div class="mk-fold">
+            <div class="mk-f">Inbox <b>3</b></div>
+            <div class="mk-f on">Sent</div>
+            <div class="mk-f">Archive</div>
+          </div>
+          <div class="mk-list">
+            <div class="mk-row unread"><span class="mk-l1">Alice — Project update</span><span class="mk-l2">Here is the latest…</span></div>
+            <div class="mk-row"><span class="mk-l1">Bob — Lunch?</span><span class="mk-l2">Free at noon</span></div>
+            <div class="mk-actions"><span class="mk-btn">Compose</span></div>
+          </div>
+        </div>
+      </div>
+      
+        <div class="fam"><div class="fam-h">Surfaces & borders <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#121214"></span><span class="hex">#121214</span></div><div class="sw"><span class="chip" style="background:#1a1a1d"></span><span class="hex">#1a1a1d</span></div><div class="sw"><span class="chip" style="background:#202024"></span><span class="hex">#202024</span></div><div class="sw"><span class="chip" style="background:#161618"></span><span class="hex">#161618</span></div><div class="sw"><span class="chip" style="background:#2a2a2f"></span><span class="hex">#2a2a2f</span></div></div></div>
+        <div class="fam"><div class="fam-h">Folder column <span class="fam-n">2</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#121214"></span><span class="hex">#121214</span></div><div class="sw"><span class="chip" style="background:#202024"></span><span class="hex">#202024</span></div></div></div>
+        <div class="fam"><div class="fam-h">Text <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#e8e8ea"></span><span class="hex">#e8e8ea</span></div><div class="sw"><span class="chip" style="background:#92929a"></span><span class="hex">#92929a</span></div><div class="sw"><span class="chip" style="background:#85858d"></span><span class="hex">#85858d</span></div></div></div>
+        <div class="fam"><div class="fam-h">Top bar & rail <span class="fam-n">6</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#0c0c0e"></span><span class="hex">#0c0c0e</span></div><div class="sw"><span class="chip" style="background:#e8e8ea"></span><span class="hex">#e8e8ea</span></div><div class="sw"><span class="chip" style="background:#a0a0a8"></span><span class="hex">#a0a0a8</span></div><div class="sw"><span class="chip" style="background:#1d1d21"></span><span class="hex">#1d1d21</span></div><div class="sw"><span class="chip" style="background:#5b8cf7"></span><span class="hex">#5b8cf7</span></div><div class="sw"><span class="chip" style="background:#06122e"></span><span class="hex">#06122e</span></div></div></div>
+        <div class="fam"><div class="fam-h">Accent & selection <span class="fam-n">5</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#5b8cf7"></span><span class="hex">#5b8cf7</span></div><div class="sw"><span class="chip" style="background:#799ff9"></span><span class="hex">#799ff9</span></div><div class="sw"><span class="chip" style="background:#06122e"></span><span class="hex">#06122e</span></div><div class="sw"><span class="chip" style="background:#18233d"></span><span class="hex">#18233d</span></div><div class="sw"><span class="chip" style="background:#cbdaf9"></span><span class="hex">#cbdaf9</span></div></div></div>
+        <div class="fam"><div class="fam-h">Alerts <span class="fam-n">3</span></div><div class="fam-row"><div class="sw"><span class="chip" style="background:#f87171"></span><span class="hex">#f87171</span></div><div class="sw"><span class="chip" style="background:#ef4444"></span><span class="hex">#ef4444</span></div><div class="sw"><span class="chip" style="background:#4ade80"></span><span class="hex">#4ade80</span></div></div></div>
+    </div>
+    </div>
+  </section>
+</body></html>

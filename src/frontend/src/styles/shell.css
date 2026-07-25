@@ -1,0 +1,470 @@
+/* src/styles/shell.css — application shell layout */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 1024px; /* desktop-first floor; below this the page scrolls */
+}
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px 0 16px;
+  background: var(--topbar-bg);
+  color: var(--topbar-fg);
+  flex: none;
+}
+
+/* The topbar and the rail share one colour, so they read as a single dark L. The content sits in
+   it as a rounded panel: the inset gap below shows that L, which is what softens the L's inner
+   corner. To go back to a plain flush corner, drop the background here and the radius/margin on
+   .app-content, keeping only `border-top-left-radius`. */
+.app-shell-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--rail-bg);
+}
+
+.app-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 56px;
+  padding: 10px 0;
+  background: var(--rail-bg);
+  flex: none;
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--rail-fg);
+}
+
+.rail-item:hover { background: var(--rail-item); }
+
+.rail-item.is-active {
+  background: var(--rail-item-active);
+  color: var(--rail-item-active-fg);
+}
+
+.rail-spacer { flex: 1; }
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius-lg);
+  margin: 0 7px 7px 0;
+}
+
+.coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.coming-soon h1 { color: var(--text); font-size: 22px; }
+.coming-soon-links a { color: var(--action-primary); }
+
+.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
+.topbar-wordmark { height: 16px; }
+
+/* ── Account block, at the foot of the folder column ──────────────────────── */
+/* It sits at the bottom of the screen, so its menu opens upward — inside the column, which is
+   overflow:hidden, the way .dropdown-menu opens downward inside the list. */
+.identity-root {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.identity-pill {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.identity-text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.identity-name,
+.identity-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-name { font-size: 12px; font-weight: 650; color: var(--text); }
+.identity-email { font-size: 11px; color: var(--text-muted); }
+
+.identity-toggle {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+.identity-toggle:hover { background: var(--folders-item-hover); }
+/* The chevron points at the motion to come: up to open, down to close again. */
+.identity-toggle svg { transform: rotate(-90deg); transition: transform 0.15s; }
+.identity-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
+
+.identity-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.identity-account { padding: 7px 12px; font-size: 12.5px; color: var(--text); }
+.identity-account.is-active {
+  font-weight: 650;
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+}
+
+.identity-signout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.identity-signout:hover { background: var(--pane-item-hover); }
+
+.dropdown-root { position: relative; }
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dropdown-item:hover { background: var(--surface-sunken); }
+
+.dropdown-rule { height: 1px; border: 0; background: var(--border); margin: 4px 6px; }
+
+.dropdown-root.is-up .dropdown-menu { top: auto; bottom: calc(100% + 4px); }
+
+.settings-layout { display: flex; height: 100%; }
+
+.context-pane {
+  width: 200px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  /* Same surface as the mail folder column: both are the second band of the L. */
+  background: var(--folders-bg);
+}
+
+.pane-item {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.pane-item:hover { background: var(--pane-item-hover); }
+
+.pane-item.is-active {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 24px 28px;
+}
+
+.settings-page-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.settings-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-page h1 { font-size: 20px; margin-bottom: 18px; }
+.account-section { margin-bottom: 26px; max-width: 560px; }
+.account-section h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.radio-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+
+/* Settings rows. `.field-h` was drawn for the admin dialogs — a narrow box with one-word
+   labels — and a settings page is the opposite shape: a wide column with sentence-length
+   labels, and soon twenty of them rather than two. */
+.field-h.is-setting > label:first-child {
+  width: 260px;
+}
+
+/* The control takes the width its own content needs, not the width of the page: a page-size
+   picker stretched across the column reads as a text field and hides how few values it offers. */
+.field-h.is-setting select,
+.field-h.is-setting input[type="number"] {
+  flex: 0 0 auto;
+}
+
+.settings-note {
+  max-width: 520px;
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* The palette blocks are attribute selectors, deliberately not anchored to <html>: stamping
+   data-palette and data-theme on the thumbnail re-declares all 33 tokens inside it, so a
+   preview costs no colour of its own. Anchoring those selectors blanks every thumbnail. */
+/* A tile, not a row: the preview is the thing being chosen, so it gets the card's whole width
+   and the label sits under it. Beside a sentence-length label it was 62px of colour in 550px
+   of card — too small to tell two palettes apart, which is the one job it has. */
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  max-width: 600px;
+}
+.palette-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.palette-card:hover { border-color: var(--text-muted); }
+.palette-card:has(input:checked) { border-color: var(--action-primary); }
+
+/* ── Reading-pane cards (General) ─────────────────────────── */
+
+.layout-cards { display: flex; gap: 12px; }
+
+.layout-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.layout-card:has(input:checked) { border-color: var(--action-primary); }
+
+.layout-card-name { display: flex; align-items: center; gap: 6px; }
+
+/* The glyph draws the arrangement it stands for: list lines, and a shaded reader pane. */
+.pane-glyph {
+  display: block;
+  width: 56px;
+  height: 38px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.pane-glyph-lines {
+  position: absolute;
+  inset: 5px;
+  background: repeating-linear-gradient(to bottom, var(--text-muted) 0 2px, transparent 2px 8px);
+  opacity: 0.8;
+}
+
+.pane-glyph.is-right .pane-glyph-lines { right: 55%; }
+.pane-glyph.is-bottom .pane-glyph-lines { bottom: 55%; }
+
+.pane-glyph-pane {
+  position: absolute;
+  background: var(--text-muted);
+  opacity: 0.3;
+  border-radius: 2px;
+}
+
+.pane-glyph.is-right .pane-glyph-pane { left: 50%; top: 4px; right: 4px; bottom: 4px; }
+.pane-glyph.is-bottom .pane-glyph-pane { left: 4px; right: 4px; top: 50%; bottom: 4px; }
+
+.palette-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+/* Every colour here is a role token read off the palette this span declares — see the
+   data-palette note in PalettePreview. Never a literal. */
+.palette-preview {
+  height: 104px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+.palette-preview .pp-bar { height: 14px; flex: none; background: var(--topbar-bg); }
+.palette-preview .pp-body { flex: 1; display: flex; min-height: 0; }
+
+.palette-preview .pp-rail {
+  width: 18px;
+  flex: none;
+  background: var(--rail-bg);
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.palette-preview .pp-rail-item {
+  width: 11px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--rail-item);
+}
+.palette-preview .pp-rail-item.is-on { background: var(--rail-item-active); }
+
+.palette-preview .pp-pane {
+  width: 46px;
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 5px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.palette-preview .pp-folder {
+  height: 8px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
+}
+.palette-preview .pp-folder::before {
+  content: '';
+  height: 3px;
+  width: 72%;
+  border-radius: 1px;
+  background: var(--text-muted);
+}
+.palette-preview .pp-folder.is-on { background: var(--pane-item-active-bg); }
+.palette-preview .pp-folder.is-on::before { background: var(--pane-item-active-fg); }
+
+.palette-preview .pp-rows {
+  flex: 1;
+  background: var(--surface);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+/* Two lines per row — a sender and its preview — because one bar per row read as a table,
+   not as a mail list. */
+.palette-preview .pp-row {
+  height: 13px;
+  border-radius: 2px;
+  padding: 0 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+.palette-preview .pp-row::before {
+  content: '';
+  height: 3px;
+  width: 52%;
+  border-radius: 1px;
+  background: var(--text-muted);
+}
+.palette-preview .pp-row::after {
+  content: '';
+  height: 2px;
+  width: 84%;
+  border-radius: 1px;
+  background: var(--list-separator);
+}
+.palette-preview .pp-row.is-unread {
+  background: var(--list-row-selected-bg);
+  border-left: 2px solid var(--accent-unread);
+}
+.palette-preview .pp-row.is-unread::before { background: var(--list-row-selected-fg); }

@@ -1,0 +1,31 @@
+/* Palette "plum" — Plum & gold. */
+[data-palette='plum'] {
+  --bg:#f4f0f4; --folders-bg:#ede2ed; --folders-item-hover:#e0d1e0; --surface:#fdfcfd; --surface-raised:#fdfcfd; --surface-sunken:#f1ebf1;
+  --border:#e3d9e3; --text:#1f1a1f; --text-muted:#6d626d;
+  --topbar-bg:#3a2140; --topbar-fg:#ffffff; --rail-bg:#3a2140; --rail-fg:#c9b6cd;
+  --rail-item:#4d2e54; --rail-item-active:#c9962b; --rail-item-active-fg:#1c1405;
+  --pane-item-hover:#efe8ef; --pane-item-active-bg:#f9f0dd; --pane-item-active-fg:#3a2140;
+  --accent-unread:#a87a12;
+  --list-row-hover:#f1ebf1; --list-row-selected-bg:#f9f0dd; --list-row-selected-fg:#3a2140;
+  --list-separator:#ebe2eb; --badge-count-bg:#a87a12; --badge-count-fg:#ffffff;
+  --reader-header-border:#ebe2eb; --quote-text:#837783; --attachment-chip-bg:#f1ebf1;
+  --action-primary:#3a2140; --action-primary-hover:#4d2e54; --action-primary-fg:#ffffff;
+  --icon-hover-accent:#d9b04a; --icon-hover-danger:#f87171;
+  --danger:#dc2626; --danger-hover:#b91c1c; --success:#16a34a;
+}
+/* Deliberate: --action-primary shifts hue between modes (aubergine in light,
+   gold in dark) — aubergine would dissolve into a dark background. The ROLE
+   is stable, the hue is not. Do not "fix" this. */
+[data-palette='plum'][data-theme='dark'] {
+  --bg:#17141a; --folders-bg:#17141a; --folders-item-hover:#26212b; --surface:#201c24; --surface-raised:#26212b; --surface-sunken:#1a171e;
+  --border:#322b38; --text:#e8e3ea; --text-muted:#988f9c;
+  --topbar-bg:#150e18; --topbar-fg:#e8e3ea; --rail-bg:#150e18; --rail-fg:#b9a6bf;
+  --rail-item:#291d2e; --rail-item-active:#d9b04a; --rail-item-active-fg:#1c1405;
+  --pane-item-hover:#26212b; --pane-item-active-bg:#2d2617; --pane-item-active-fg:#f0e6cf;
+  --accent-unread:#d9b04a;
+  --list-row-hover:#26212b; --list-row-selected-bg:#2d2617; --list-row-selected-fg:#f0e6cf;
+  --list-separator:#322b38; --badge-count-bg:#d9b04a; --badge-count-fg:#1c1405;
+  --reader-header-border:#322b38; --quote-text:#8b8290; --attachment-chip-bg:#26212b;
+  --action-primary:#d9b04a; --action-primary-hover:#e3bf63; --action-primary-fg:#1c1405;
+  --danger:#f87171; --danger-hover:#ef4444; --success:#4ade80;
+}

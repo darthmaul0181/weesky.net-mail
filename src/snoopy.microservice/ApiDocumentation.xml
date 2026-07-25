@@ -17,6 +17,16 @@
             lazily from the application container (no BuildServiceProvider).
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Middleware.SlidingSessionMiddleware">
+             <summary>
+             Extends a live session in place rather than letting it expire mid-use. A webmail stays
+             open for hours; a 30-minute token with no renewal would sign the user out while they
+             read. This achieves that without a refresh token, an extra endpoint or a token store.
+            
+             Both cookies are renewed together, or neither: renewing the JWT alone would leave a
+             session that looks alive but can no longer open IMAP.
+             </summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Authentication.Models.AuthToken.ExpiresIn">
             <summary>
             Expiry in minutes
@@ -25,6 +35,18 @@
         <member name="P:weesky.Snoopy.Microservice.Authentication.Models.AuthToken.Token">
             <summary>
             The Json Web Token used to authenticate the user.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Configuration.MvcFormatterConfiguration">
+            <summary>
+            Output-formatter policy. Lives here rather than inline in Program.cs so it can be tested:
+            controller tests invoke actions directly and never run a formatter.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.MvcFormatterConfiguration.ConfigureFormatters(Microsoft.AspNetCore.Mvc.MvcOptions)">
+            <summary>
+            Drops <see cref="T:Microsoft.AspNetCore.Mvc.Formatters.StringOutputFormatter"/>: MVC writes a bare string as
+            <c>text/plain</c>, which the client's <c>res.json()</c> cannot parse.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetAccountInfo">
@@ -191,10 +213,47 @@
             <response code="401">Wrong credentials</response>
             <response code="429">Too many authentication attempts</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
+            <summary>
+            Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
+            no credentials cookie: both verbs are database reads, so this lives outside MailController.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.#ctor(weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Repositories.IAliasesRepository,weesky.Snoopy.Microservice.Repositories.IUsersRepository)">
+            <summary>
+            Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
+            no credentials cookie: both verbs are database reads, so this lives outside MailController.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.List(System.Threading.CancellationToken)">
+            <summary>
+            The resolved list: the primary address always (FullName label unless overridden), then
+            every stored row; a row whose alias vanished comes back stale, never silently dropped.
+            </summary>
+            <response code="200">The identities, default first</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.Replace(weesky.Snoopy.Microservice.Models.Mail.ReplaceIdentitiesRequest,System.Threading.CancellationToken)">
+            <summary>
+            Replaces the whole set. Addresses must belong to the caller (primary, a live alias, or an
+            already-stored row — the last keeps stale identities alive across saves).
+            </summary>
+            <param name="request">the full identity list</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">A foreign, duplicate or unparsable address, a bad label, or two defaults</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.LoginController.Login(weesky.Snoopy.Microservice.Models.Credentials)">
             <summary>
             Login with user credentials and cookie generation.
             </summary>
+            <remarks>
+            On success two cookies are issued: the JWT auth cookie, and an encrypted
+            credentials cookie the mail endpoints need to open IMAP on the user's behalf.
+            The password is unrecoverable from the database, so this is the only moment it
+            can be captured.
+            </remarks>
             <param name="credentials">user credentials</param>
             <returns></returns>
             <response code="200">Login successful</response>
@@ -208,6 +267,287 @@
             <returns></returns>
             <response code="204">Logout successful</response>
             <response code="401">Try to logout an unauthenticated user</response>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.MailController">
+             <summary>
+             Mail access over IMAP.
+            
+             Two conventions hold across every action. Folder paths never appear in a route
+             segment — the hierarchy separator may be '/', which would break routing — so they
+             travel in the query string or the request body. And the two failure modes are
+             distinct: a missing or undecryptable credentials cookie is 401 with the code
+             "credentials_unavailable" so the client can sign in again, while anything the mail
+             server refuses is 502.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RefuseIfSystemFolderAsync(System.String,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Refuses an operation on a folder holding a well-known role, and returns null when it
+            may proceed. Renaming or deleting one breaks the role for every client on the mailbox;
+            hiding one strands whatever gets filed into it.
+            </summary>
+            <param name="password">the caller's mail password</param>
+            <param name="path">folder the operation targets</param>
+            <param name="verb">what the caller is trying to do, for the message</param>
+            <param name="includeDescendants">
+            True for deletion: removing a parent takes its children with it, so a guard on the
+            target path alone could be stepped around one level up.
+            </param>
+            <param name="cancellationToken">cancellation token</param>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetFolders(System.Threading.CancellationToken)">
+            <summary>
+            Returns the caller's folder tree: hierarchy, well-known roles, subscription state
+            and message counts.
+            </summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The folder tree</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.CreateFolder(weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest,System.Threading.CancellationToken)">
+            <summary>
+            Creates a folder and subscribes it, so it appears without a further step.
+            </summary>
+            <param name="request">parent path and leaf name</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Full path of the new folder</response>
+            <response code="400">The request body or the folder name is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RenameFolder(weesky.Snoopy.Microservice.Models.Mail.RenameFolderRequest,System.Threading.CancellationToken)">
+            <summary>Renames a folder, optionally moving it under a different parent.</summary>
+            <param name="request">current path, new parent path and new leaf name</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Path of the renamed folder</response>
+            <response code="400">The request body, the path or the new name is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.DeleteFolder(weesky.Snoopy.Microservice.Models.Mail.DeleteFolderRequest,System.Threading.CancellationToken)">
+            <summary>Deletes a folder. The inbox cannot be deleted.</summary>
+            <param name="request">path of the folder to delete</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Folder deleted</response>
+            <response code="400">The request body or the path is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SetFolderSubscription(weesky.Snoopy.Microservice.Models.Mail.FolderSubscriptionRequest,System.Threading.CancellationToken)">
+            <summary>
+            Subscribes or unsubscribes a folder. This is how a folder is hidden from the
+            folder list without deleting it.
+            </summary>
+            <param name="request">folder path and desired subscription state</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Visibility changed</response>
+            <response code="400">The request body or the path is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the operation</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetFolderRoles(System.Threading.CancellationToken)">
+            <summary>
+            The five assignable roles, each with what it resolves to and why: the user's
+            override, a server SPECIAL-USE flag, or a name match. A stale override — its folder
+            renamed or deleted outside this app — is signalled alongside whatever discovery
+            now yields; it is kept, never auto-deleted (spec § 5.3).
+            </summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The five roles</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SetFolderRole(weesky.Snoopy.Microservice.Models.Mail.SetFolderRoleRequest,System.Threading.CancellationToken)">
+            <summary>
+            Assigns a role to a folder. Validated against the live mailbox, never against the
+            client's tree: the folder must exist, be selectable, and not be the inbox. The
+            identity guard (uid_validity, mailbox_id) is captured server-side from the live
+            folder — the client only names the role and the path.
+            </summary>
+            <param name="request">role and folder path</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Override stored</response>
+            <response code="400">Unknown role, missing path, inbox target, non-selectable folder, or folder already holding another role</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">The folder no longer exists</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.ClearFolderRole(System.String,System.Threading.CancellationToken)">
+            <summary>Clears an override; the role goes back to discovery. Idempotent.</summary>
+            <param name="role">role to clear</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Override cleared, or was already absent</response>
+            <response code="400">Unknown role</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetMessages(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One page of a folder, newest message first. The folder path travels in the query
+            string rather than a route segment because the hierarchy separator may be '/'.
+            </summary>
+            <param name="folder">full folder path</param>
+            <param name="page">zero-based page index</param>
+            <param name="pageSize">messages per page, 1 to 200</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The page, with the folder's UidValidity</response>
+            <response code="400">The folder is missing, or the paging arguments are out of range</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetMessage(System.String,System.UInt32,System.Threading.CancellationToken)">
+            <summary>
+            A single message: sanitised HTML body, plain-text body, headers and attachment list.
+            Remote images are withheld and counted, so the client can offer to load them.
+            </summary>
+            <param name="folder">full folder path</param>
+            <param name="uid">message UID, valid only for the folder's current UidValidity</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The message</response>
+            <response code="400">The folder is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">No message with that UID in that folder</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetAttachment(System.String,System.UInt32,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Downloads one attachment. Always served as an attachment disposition: message
+            content must never render inline in the browser.
+            </summary>
+            <param name="folder">full folder path</param>
+            <param name="uid">message UID</param>
+            <param name="part">MIME part specifier, taken from the message's attachment list</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The attachment bytes</response>
+            <response code="400">The folder or the part is missing</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">No such message, or no such part on it</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SetMessageFlags(weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest,System.Threading.CancellationToken)">
+            <summary>
+            Sets or clears one flag on a batch of messages. A UID that no longer exists is a
+            silent no-op: the batch never fails partially.
+            </summary>
+            <param name="request">folder, UIDs, the flag and the value to write</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The flags were written</response>
+            <response code="400">The folder is missing, or the batch is empty or above 200 UIDs</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.MoveMessages(weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest,System.Threading.CancellationToken)">
+            <summary>Moves a batch of messages into another folder.</summary>
+            <param name="request">source folder, UIDs and target folder</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The messages were moved</response>
+            <response code="400">A folder is missing, the batch is empty or above 200 UIDs, the target equals the source, or the target cannot hold messages</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.CopyMessages(weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest,System.Threading.CancellationToken)">
+            <summary>Copies a batch of messages into another folder.</summary>
+            <param name="request">source folder, UIDs and target folder</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The messages were copied</response>
+            <response code="400">A folder is missing, the batch is empty or above 200 UIDs, the target equals the source, or the target cannot hold messages</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.DeleteMessages(weesky.Snoopy.Microservice.Models.Mail.DeleteMessagesRequest,System.Threading.CancellationToken)">
+            <summary>
+            Permanently deletes a batch of messages via UID EXPUNGE, bypassing the trash entirely.
+            </summary>
+            <param name="request">folder and UIDs</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The messages were deleted</response>
+            <response code="400">The folder is missing, or the batch is empty or above 200 UIDs</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached, or cannot delete without UIDPLUS</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.EmptyFolder(weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest,System.Threading.CancellationToken)">
+            <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
+            <param name="request">source folder and optional target (blank = purge)</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">The folder was emptied</response>
+            <response code="400">The source is missing, the target equals the source, or the target cannot hold messages</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SearchMessages(weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest,System.Threading.CancellationToken)">
+            <summary>
+            One page of search results, newest first. Criteria combine with AND; Quick is the
+            fast bar and means subject OR sender. AllFolders sweeps every selectable folder in
+            one session. Paths travel in the body, never in a route segment.
+            </summary>
+            <param name="request">criteria, scope and paging</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The page of results</response>
+            <response code="400">The folder is missing, no criterion is filled, or the paging arguments are out of range</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.UploadAttachment(Microsoft.AspNetCore.Http.IFormFile,System.Threading.CancellationToken)">
+            <summary>
+            Stages one outgoing attachment. Files upload as they are added — the Gmail/Rainloop
+            model — and Send references the returned ids. No IMAP involved, so no credentials
+            cookie is read. Kestrel's body cap is disabled: the store enforces the configured
+            limit itself while streaming.
+            </summary>
+            <param name="file">the uploaded file</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Id and metadata of the staged file</response>
+            <response code="400">No file, file over the limit, or account staging cap reached</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.DeleteAttachment(System.Guid)">
+            <summary>
+            Removes one staged attachment. Always 204: the namespace is sealed per account, so an
+            unknown or foreign id resolves to nothing — and deleting nothing is idempotent success.
+            </summary>
+            <param name="id">staged attachment id</param>
+            <response code="204">Gone, or never was</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SendMessage(weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest,System.Threading.CancellationToken)">
+            <summary>
+            Sends a composed message: sanitised multipart/alternative body, staged attachments,
+            then a \Seen copy APPENDed to the sent role. The SMTP envelope is derived from the
+            recipients and MailKit strips the Bcc header at transmission, so only the addressees
+            see it went out; the filed Sent copy keeps the header so the sender can see who was
+            blind-copied. A failed copy never fails the send — the response says which happened.
+            An optional fromAddress sends as one of the account's own addresses (primary or a live
+            alias); the display label is resolved server-side, never taken from the request.
+            </summary>
+            <param name="request">recipients, subject, HTML body, staged attachment ids and an optional fromAddress</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Sent; appendedToSent tells whether the copy was filed</response>
+            <response code="400">No recipient, an invalid address, a fromAddress the account does not own, or a staged id no longer available</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">The mail server refused the submission</response>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.PreferencesController">
+             <summary>
+             The caller's webmail preferences, stored in the separate preferences database.
+            
+             The response always carries every known key: defaults live in the registry on this side, so
+             the client has no second copy to drift from. A key or value the registry does not accept is
+             refused here — the key/value table has no way to check either.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.PreferencesController.GetPreferences(System.Threading.CancellationToken)">
+            <summary>Every known preference, with the account's value where it set one.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Key/value map covering every known preference</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.PreferencesController.SetPreference(weesky.Snoopy.Microservice.Models.SetPreferenceRequest,System.Threading.CancellationToken)">
+            <summary>Sets one preference.</summary>
+            <param name="request">key and value, both from the registry</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Preference stored</response>
+            <response code="400">Unknown key, or a value the key does not accept</response>
+            <response code="401">Not authenticated</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
@@ -259,6 +599,55 @@
             frontend can offer format selection.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride">
+            <summary>
+            One user-chosen folder-role assignment. Absence of a row means the role falls back to
+            discovery (SPECIAL-USE, then name matching): the override is a correction layer, not a
+            replacement, so a freshly provisioned mailbox needs no rows at all.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.Role">
+            <summary>Stable enum value ("trash", never a localised word). See FolderRoles.All.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.FolderPath">
+            <summary>Always stored: the one identifier IMAP guarantees on every server.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.UidValidity">
+            <summary>Staleness guard: catches a path reused by a different folder.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride.MailboxId">
+            <summary>RFC 8474 MAILBOXID — an optional aid, never the key.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.PreferencesDbContext">
+            <summary>
+            Webmail user preferences. A separate database from the dovecot schema on purpose: that
+            schema belongs to Dovecot and can be rebuilt by mail-server provisioning, which would
+            take our data with it. Created manually — no EF migrations in this project; see
+            docs/superpowers/mail-2a5-database-prerequisite.md.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity">
+            <summary>
+            One curated sending identity. Addresses are stored canonical (trimmed, lower-case): the
+            table collates in binary, so a casing difference would split one identity into two.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.UserPreference">
+             <summary>
+             One preference an account has set. Key/value rather than a column per option: this project
+             has no EF migrations, so a typed column would mean a hand-run ALTER on the server for every
+             new setting. Here a new preference is a code change alone.
+            
+             Absence of a row means the default in <see cref="T:weesky.Snoopy.Microservice.Models.UserPreferences"/> applies, so an
+             account that never opened the settings has no rows at all.
+             </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.UserPreference.PreferenceKey">
+            <summary>Dotted and stable, e.g. "mail.pageSize" — never localised, never renamed lightly.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.UserPreference.PreferenceValue">
+            <summary>Always a string. The registry knows how to read it back.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AccountInfo">
             <summary>
             Information about the authenticated user account.
@@ -309,6 +698,12 @@
             <summary>
             The domain
             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AliasExtensions.ToAddress(weesky.Snoopy.Microservice.Models.Alias)">
+            <summary>The one place an alias becomes an email address; identities and sending both read it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AliasExtensions.ToAddresses(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Models.Alias})">
+            <summary>The account's alias addresses, in the shape the identity rules consume.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.CompatibilityCheckRequest">
             <summary>
@@ -362,6 +757,430 @@
             Value of the Dovecot `doveadm_api_key` shared with the service.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest">
+            <summary>
+            Folder paths travel in the body, never in a route segment: the hierarchy separator may
+            be '/', which would break routing.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest.ParentPath">
+            <summary>Parent folder path. Empty creates at the namespace root.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.CreateFolderRequest.Name">
+            <summary>Leaf name of the new folder. Must not contain the hierarchy separator.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.RenameFolderRequest.NewParentPath">
+            <summary>New parent path. Same as the current one for a pure rename.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderSubscriptionRequest.Subscribed">
+            <summary>True subscribes the folder, false hides it from the folder list.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.FolderRoles">
+            <summary>
+            The five user-assignable roles. "inbox" is deliberately absent: INBOX is fixed by the
+            IMAP protocol itself, so there is nothing to correct.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry">
+            <summary>One role as the Settings page sees it: what it resolves to, and why.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry.FolderPath">
+            <summary>Resolved folder path, or null when no source provides one.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry.Provenance">
+            <summary>"override", "specialUse" or "name". Null when the role is unresolved.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.FolderRoleEntry.StaleOverride">
+            <summary>
+            Set when the user's stored choice no longer matches a live folder. Kept and
+            signalled, never auto-deleted — the row only dies by the user's hand — and it
+            coexists with a discovery-resolved FolderPath (spec § 5.3).
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons">
+            <summary>
+            Why a stored override no longer holds. The client words its notice from this: a single
+            undifferentiated "stale" flag left it asserting the folder was renamed or deleted even
+            when the folder is right there, and the truth is that it cannot hold messages or that
+            something else already claimed it.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons.Missing">
+            <summary>No live folder matches — deleted, renamed beyond reach, or its path reused.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons.NotSelectable">
+            <summary>The folder is there but is \NoSelect / \NonExistent: it cannot hold messages.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons.FolderTaken">
+            <summary>The folder is there and usable, but INBOX or a higher-priority override owns it.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideInfo.Reason">
+            <summary>One of <see cref="T:weesky.Snoopy.Microservice.Models.Mail.StaleOverrideReasons"/>.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.IdentityEntry">
+            <summary>One identity as the client submits it. Defaults absorb explicit JSON nulls.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.IdentityListResponse">
+            <summary>The resolved sending identities, primary always included.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.IdentityListResponse.#ctor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo})">
+            <summary>The resolved sending identities, primary always included.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAddressInfo">
+            <summary>One recipient. Name is empty when the message carried no display name.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailAddressInfo.#ctor(System.String,System.String)">
+            <summary>One recipient. Name is empty when the message carried no display name.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent">
+            <summary>A decoded attachment, ready to stream to the client.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo">
+            <summary>An attachment as listed on a message, without its content.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo.Part">
+            <summary>
+            MIME part specifier — the download handle, opaque to the client. Addressed this
+            way rather than by position: an index drifts, so a stale client link would fetch
+            the wrong file instead of failing.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo.Size">
+            <summary>Size in octets, read from the body structure — no download required.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo.IsInline">
+            <summary>
+            True for a part the HTML body references by cid:, not a real attachment. The UI
+            hides these: they are already visible inside the message.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAuthentication">
+            <summary>SPF and DKIM verdicts as the receiving server reported them, plus the header they came from.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailAuthentication.#ctor(System.String,System.String,System.String)">
+            <summary>SPF and DKIM verdicts as the receiving server reported them, plus the header they came from.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFlag">
+            <summary>A message flag the client may set or clear. Serialised as a string in JSON.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode">
+            <summary>A folder as the client sees it. Children are nested, not flattened.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Path">
+            <summary>
+            Full IMAP path, separator included. Opaque to the client: the hierarchy separator
+            is whatever the server uses, so the client must never parse or build one.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Name">
+            <summary>Leaf name for display.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.SpecialUse">
+            <summary>
+            Well-known role when the server advertises one, or when a name fallback matched:
+            "inbox", "sent", "drafts", "trash", "junk", "archive". Null for ordinary folders.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Selectable">
+            <summary>False when the folder holds no messages (a container-only node).</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Subscribed">
+            <summary>Whether the user subscribed to this folder — drives visibility in the UI.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Total">
+            <summary>Total message count. Null when not selectable.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.Unread">
+            <summary>Unread message count. Null when not selectable.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.UidValidity">
+            <summary>
+            Folder UID validity. When it changes, every UID the client cached for this folder
+            is stale and must be discarded, or the client will show the wrong messages.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.UidNext">
+            <summary>Next UID the folder will assign. Rises on every arrival — the poll's signal
+            for new mail. Null when not selectable.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.HighestModSeq">
+            <summary>RFC 7162 modification counter; rises on every flag change, which no message
+            count sees. Null when the server lacks CONDSTORE or the folder is not selectable.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.AttributeRole">
+            <summary>
+            Role derived from the folder's SPECIAL-USE flags alone, before uniqueness. Internal
+            plumbing for the resolution chain — never serialised to the client, which only sees
+            the final SpecialUse.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderNode.MailboxId">
+            <summary>RFC 8474 MAILBOXID when the server supports OBJECTID. Internal plumbing.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailFolderNodeExtensions.FindByPath(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Models.Mail.MailFolderNode},System.String)">
+            <summary>Depth-first lookup by path. Null when the tree holds no such folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailFolderNodeExtensions.Descendants(weesky.Snoopy.Microservice.Models.Mail.MailFolderNode)">
+            <summary>
+            Every folder below this one. Walks the children rather than matching path prefixes:
+            the hierarchy separator belongs to the server and is never assumed here.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage">
+            <summary>One page of a folder, newest message first.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.UidValidity">
+            <summary>
+            UID validity at the time of the read. When this changes, every UID the client
+            cached for this folder is meaningless and must be discarded — otherwise the client
+            will open the wrong messages.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.Total">
+            <summary>Total messages in the folder, all pages combined.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderPage.Page">
+            <summary>Zero-based page index.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailFolderStatus">
+            <summary>Identity snapshot of one live folder, read for override bookkeeping.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailFolderStatus.MailboxId">
+            <summary>RFC 8474 MAILBOXID when the server supports OBJECTID; null otherwise.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailHeaderDetails">
+            <summary>Delivery details for the reader's expanded header. Any field is null when its header is absent.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailHeaderDetails.#ctor(System.String,System.String,System.String,System.String,System.Nullable{System.Boolean})">
+            <summary>Delivery details for the reader's expanded header. Any field is null when its header is absent.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail">
+            <summary>A single message, ready to render.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.UidValidity">
+            <summary>Folder UID validity — see MailFolderPage for why the client needs it.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.Authentication">
+            <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.SpamScore">
+            <summary>The spam filter's verdict. Null when the message carries no recognised anti-spam header.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.MailingList">
+            <summary>Expanded-header details (List-Id, envelope domain, DKIM domain, unsubscribe link, TLS). Each null when absent.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.HtmlBody">
+            <summary>Sanitised HTML body. Empty when the message is text-only.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.TextBody">
+            <summary>Plain-text body. Empty when the message is HTML-only.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.BlockedImageCount">
+            <summary>Remote images withheld by the sanitiser, for the "show images" prompt.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary">
+            <summary>One row of the message list. Envelope-level only — no body is fetched.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Uid">
+            <summary>IMAP UID. Valid only for the UidValidity of its page.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.FromName">
+            <summary>Display name of the first sender, falling back to the address.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Date">
+            <summary>Date the message claims, falling back to the server's internal date.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Size">
+            <summary>Size in octets.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Preview">
+            <summary>Short body extract for the list row. Empty when the server cannot supply one.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions">
+            <summary>
+            Connection settings for the mail server. Only connection parameters live here:
+            everything server-specific (hierarchy separator, namespaces, special-use folders,
+            capabilities) is discovered at runtime from the IMAP session, so that additional
+            domains can point at arbitrary external servers we will never hold configuration for.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.ImapHost">
+            <summary>IMAP host name.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.ImapPort">
+            <summary>IMAP port. 143 for STARTTLS, 993 for implicit TLS.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.ImapSecurity">
+            <summary>
+            IMAP transport security. StartTls fails when the server does not advertise
+            STARTTLS; StartTlsWhenAvailable silently falls back to cleartext, which on port
+            143 would put credentials on the wire. Prefer StartTls.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.SmtpHost">
+            <summary>Submission host name.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.SmtpPort">
+            <summary>Submission port.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.SmtpSecurity">
+            <summary>Submission transport security.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.MaxMessageSizeMb">
+            <summary>Maximum outgoing message size — sum of raw attachment bytes, in megabytes.
+            Base64 adds ~35%: keep this below Postfix's message_size_limit accordingly.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.StagedAttachmentTtlHours">
+            <summary>How long a staged attachment survives without being sent, in hours.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.TimeoutSeconds">
+            <summary>Connect and command timeout, in seconds.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.AllowInvalidCertificate">
+            <summary>
+            Accept invalid server certificates. Development only — logged as a warning on
+            every connection when enabled.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.IsImapConfigured">
+            <summary>True when enough is configured to attempt an IMAP connection.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.IsSmtpConfigured">
+            <summary>True when enough is configured to attempt an SMTP connection.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria">
+            <summary>
+            What the user is searching for. Quick is the fast-bar text (subject OR sender);
+            the rest are the advanced form's fields, combined with AND.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria.#ctor(System.String,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Boolean,System.Boolean,System.Boolean)">
+            <summary>
+            What the user is searching for. Quick is the fast-bar text (subject OR sender);
+            the rest are the advanced form's fields, combined with AND.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSearchPage">
+            <summary>One page of search results, newest first across every searched folder.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailSearchPage.Total">
+            <summary>Total matches, all pages combined.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailSearchPage.Page">
+            <summary>Zero-based page index.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSearchResult">
+            <summary>
+            One search hit: a summary plus where it lives. In all-folders scope each row must name
+            its folder; in single-folder scope they are uniform but the shape stays one.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailSearchResult.UidValidity">
+            <summary>UID validity of that folder at search time — the result is a snapshot.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailSpamScore">
+            <summary>The spam filter's own verdict: score, the threshold it judges against, and the header it came from.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailSpamScore.#ctor(System.Double,System.Double,System.String)">
+            <summary>The spam filter's own verdict: score, the threshold it judges against, and the header it came from.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest">
+            <summary>
+            Batch from day one — multi-select (2b3) reuses this unchanged. The folder path travels
+            in the body, never in a route segment: the hierarchy separator may be '/'.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest.Uids">
+            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest.Value">
+            <summary>True sets the flag, false clears it.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest.Uids">
+            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.DeleteMessagesRequest.Uids">
+            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest">
+            <summary>
+            Empties an entire folder. Unbounded by the 200-UID cap — it operates on 1:* server-side.
+            A null/blank <see cref="P:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest.TargetFolderPath"/> means purge (permanent expunge of everything);
+            a target means move every message there (used to move a normal folder's contents to trash).
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest.TargetFolderPath">
+            <summary>Null or blank = purge. Set = move all messages into this folder.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest">
+            <summary>
+            Search criteria plus paging. FolderPath is required even when AllFolders is set — it
+            names the folder the user searched from. Quick is the fast bar (subject OR sender).
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest.SinceDays">
+            <summary>Compiled server-side to SINCE (today - N): the client never sends a literal date.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.OutgoingBody">
+            <summary>A composed body ready to send: sanitised HTML and its plain-text alternative.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.OutgoingBody.#ctor(System.String,System.String)">
+            <summary>A composed body ready to send: sanitised HTML and its plain-text alternative.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.ReplaceIdentitiesRequest">
+            <summary>The full replacement set — PUT semantics, so order and default are atomic.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml">
+            <summary>A message body made safe to render, plus what was withheld.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SanitizedHtml.BlockedImageCount">
+            <summary>
+            Remote images moved to data-blocked-src. The client offers "show images" and swaps
+            them back in without another round trip. Loading them would tell the sender the
+            message was opened, which is why they are withheld until the user asks.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo">
+            <summary>
+            One resolved sending identity. LabelIsCustom tells the client whether the label comes from a
+            stored row (true) or from the account's live FullName — that flag decides whether the primary
+            belongs in a PUT payload.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo.#ctor(System.String,System.String,System.Boolean,System.Boolean,System.Boolean,System.Boolean)">
+            <summary>
+            One resolved sending identity. LabelIsCustom tells the client whether the label comes from a
+            stored row (true) or from the account's live FullName — that flag decides whether the primary
+            belongs in a PUT payload.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest">
+            <summary>
+            A composed message. Threading (inReplyTo/references) comes with 2c2b — absent today,
+            no dead fields in waiting.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest.FromAddress">
+            <summary>Identity to send as. Null/empty means the primary address — the 2c1 behaviour.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendMessageResult">
+            <summary>The mail is gone either way; false only means the Sent copy could not be filed.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.SendMessageResult.#ctor(System.Boolean)">
+            <summary>The mail is gone either way; false only means the Sent copy could not be filed.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo">
+            <summary>What the upload endpoint answers and the compose client holds on to.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo.#ctor(System.Guid,System.String,System.Int64,System.String)">
+            <summary>What the upload endpoint answers and the compose client holds on to.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.StagedAttachment">
+            <summary>A staged file resolved for sending. The path stays inside the store's root.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.StagedAttachment.#ctor(weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo,System.String)">
+            <summary>A staged file resolved for sending. The path stays inside the store's root.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Quota">
             <summary>
             Mailbox quota usage reported by Dovecot.
@@ -406,6 +1225,9 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.SaveRulesRequest.ScriptName">
             <summary>When null, the chosen provider's default script name is used.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SetPreferenceRequest">
+            <summary>Body of PUT /api/Preferences. Both fields must name entries the registry knows.</summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.SieveAction.Argument">
             <summary>
@@ -585,6 +1407,103 @@
             The full name of the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.PreferenceDefinition">
+            <summary>One preference the client may set, with the values it may take.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.PreferenceDefinition.#ctor(System.String,System.String,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>One preference the client may set, with the values it may take.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.UserPreferences">
+             <summary>
+             The registry of known preferences: the one place a new setting is declared.
+            
+             It is what keeps a key/value table honest. The database cannot check a key or a value, so
+             this does — an unknown key never reaches it, and a row whose value the registry no longer
+             accepts falls back to the default rather than reaching the client.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.UserPreferences.Effective(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Data.Preferences.UserPreference})">
+            <summary>
+            What the account actually gets: every default, with a stored row winning where it is
+            still one the registry accepts.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.FolderRoleStore.CanonicalAccountId(System.String)">
+            <summary>
+            The table's collation is binary — IMAP paths must compare byte for byte — so the
+            account id must be written in exactly one form, or the same user splits into
+            several accounts.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore">
+            <summary>
+            Reads and writes folder-role overrides. Knows nothing about IMAP: validity against the
+            live mailbox is the resolver's business, and capturing uid_validity / mailbox_id from a
+            live folder is the caller's.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.DeleteAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Idempotent: clearing an absent override is not an error.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.ApplyRenameAsync(System.String,System.String,System.String,System.Char,System.UInt64,System.String,System.Threading.CancellationToken)">
+            <summary>
+            After a successful IMAP rename. The exact row gets the new path and the freshly
+            re-read identity; subtree rows get their prefix swapped and keep their own
+            identity. The separator comes from the live session — '.' on the home server,
+            '/' elsewhere — never from a constant.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.RemoveSubtreeAsync(System.String,System.String,System.Char,System.Threading.CancellationToken)">
+            <summary>After a successful IMAP delete: purge the folder's row and its subtree's.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetTreeAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Threading.CancellationToken)">
+            <summary>The user's full folder tree, subscribed and unsubscribed alike.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.CreateFolderAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Creates a folder and subscribes it. Returns its full path.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.RenameFolderAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Renames a folder, optionally moving it under a different parent.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.DeleteFolderAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Deletes a folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.SetSubscriptionAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Subscribes or unsubscribes a folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetFolderStatusAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Live identity of one folder — used by the role PUT to validate and capture.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.ListAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>One page of a folder, newest message first.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.GetAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.UInt32,System.Threading.CancellationToken)">
+            <summary>A single message, body sanitised and attachments listed.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.GetAttachmentAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.UInt32,System.String,System.Threading.CancellationToken)">
+            <summary>One decoded attachment, addressed by MIME part specifier.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.SetFlagsAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},weesky.Snoopy.Microservice.Models.Mail.MailFlag,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Sets or clears a flag on a batch of UIDs.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.MoveOrCopyAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Moves or copies a batch of UIDs into another folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.DeleteAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.Threading.CancellationToken)">
+            <summary>Permanently deletes a batch of UIDs via UID EXPUNGE.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.EmptyAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Empties a whole folder: purge (no target) or move every message to a target.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.SearchAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Boolean,weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>One page of search results across one folder or the whole mailbox.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.AppendAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Appends a message to a folder, optionally marked read.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore.ReplaceAsync(System.String,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.Threading.CancellationToken)">
+            <summary>Replaces the account's whole set in one transaction — the PUT semantics.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
             <summary>
             High-level Sieve management API used by controllers. Each method opens its own
@@ -606,6 +1525,36 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.DeleteAllRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
             <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore">
+            <summary>
+            Reads and writes the rows an account has set. Knows nothing about which keys exist or what
+            they may hold — that is the registry's business, and the caller validates before writing.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore.SetAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Sets or corrects one preference. The pair (account, key) is the row.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.MailFolderRepository">
+            <summary>
+            Folder access over IMAP. One session per method, opened and disposed inside it — the
+            same shape as SieveRepository over ManageSieve.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.MailFolderRepository.TryMoveOverridesAsync(weesky.Snoopy.Microservice.Services.IImapSession,weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            IMAP first, database second. If this bookkeeping fails, the stored overrides go
+            stale and the resolver's staleness guard degrades them to discovery — the rename
+            the user asked for is never failed over it. The identity is re-read from the
+            renamed folder, not carried over: some servers change UIDVALIDITY on rename, and
+            carrying the old value would make our own rename trip our own guard.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.MailMessageRepository">
+            <summary>
+            Message access over IMAP. One session per method, opened and disposed inside it — the
+            same shape as MailFolderRepository.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.SieveRepository.CleanupOtherManagedScriptsAsync(weesky.Snoopy.Microservice.Services.IManageSieveSession,System.String,System.Threading.CancellationToken)">
             <summary>
@@ -759,6 +1708,212 @@
             and returns the rows array.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.FolderRoleResolver">
+             <summary>
+             The role resolution chain (spec § 4.1): user overrides, then SPECIAL-USE flags, then
+             name matching — each level filling only what the previous one left. Level 2, an
+             admin-set domain default, was evaluated and rejected; its slot stays vacant on purpose.
+            
+             Pure over its inputs — the tree and the stored overrides. No IMAP, no database, no
+             HTTP: that is what makes every staleness rule testable without a server.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.FolderRoleResolver.ResolveOverride(weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride,System.Collections.Generic.IReadOnlyDictionary{System.String,weesky.Snoopy.Microservice.Models.Mail.MailFolderNode},System.Collections.Generic.IReadOnlyDictionary{System.String,weesky.Snoopy.Microservice.Models.Mail.MailFolderNode})">
+            <summary>
+            A stored override resolves by MAILBOXID when both sides carry one — immune to
+            renames, ours and other clients' alike — and otherwise by path guarded by
+            UIDVALIDITY, which catches the one failure mode that lies rather than degrades: a
+            deleted folder whose path was reused by a different one.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.FolderRoleResolver.FirstWins(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Models.Mail.MailFolderNode},System.Func{weesky.Snoopy.Microservice.Models.Mail.MailFolderNode,System.String})">
+            <summary>
+            Index by <paramref name="key"/>, keeping the first node for a repeated key rather
+            than throwing the way ToDictionary does.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.FolderRoleResolution.Roles">
+            <summary>Exactly the five assignable roles, in FolderRoles.All order.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.FolderRoleResolution.RoleByPath">
+            <summary>
+            Authoritative path→role map, "inbox" included. GET /Folders stamps this onto the
+            tree's SpecialUse, so the client always sees the chain's output.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.HeaderListExtensions">
+            <summary>Header lookups shared by the mail header readers.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.HeaderListExtensions.Topmost(MimeKit.HeaderList,System.String)">
+            <summary>The topmost occurrence — everything below it could have been forged by the sender.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IdentityResolver">
+            <summary>
+            The one place the identity list is derived from its three sources — stored rows, the primary
+            address, the live alias list. GET /api/Identities and MailSender both call it, so the rule
+            cannot drift between display and send.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.CanonicalSet(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Canonicalises an alias list once, for callers that test many addresses against it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.Owns(System.Collections.Generic.IEnumerable{System.String},System.String,System.String)">
+            <summary>
+            Whether the account may send as this address: its primary, or one of its live aliases.
+            The stored identity rows are deliberately not consulted — a stale row owns nothing.
+            Canonicalises the alias list itself; the name differs from <see cref="M:weesky.Snoopy.Microservice.Services.IdentityResolver.OwnsCanonical(System.Collections.Generic.IReadOnlySet{System.String},System.String,System.String)"/> so no
+            call site can skip that by handing over a set.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.OwnsCanonical(System.Collections.Generic.IReadOnlySet{System.String},System.String,System.String)">
+            <summary>The same rule over an already-canonical set; accounts carry 100+ aliases, so a
+            caller testing many addresses builds the set once with <see cref="M:weesky.Snoopy.Microservice.Services.IdentityResolver.CanonicalSet(System.Collections.Generic.IEnumerable{System.String})"/>.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.LabelFor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.String,System.String)">
+            <summary>Label precedence: the stored row, then the account's FullName, then the address.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IImapConnectionFactory">
+            <summary>Opens an authenticated IMAP session for one user, for one request.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IImapSession">
+            <summary>
+            An open, authenticated IMAP session. One session per repository method, disposed at the
+            end of it — there is no pooling, which is also how Rainloop operates.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.IImapSession.DirectorySeparator">
+            <summary>
+            Hierarchy separator, read from the server's personal namespace rather than
+            configured: an additional domain may point at a server that uses a different one.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListFoldersAsync(System.Threading.CancellationToken)">
+            <summary>The full folder tree, subscribed and unsubscribed alike.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.CreateFolderAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Creates a folder and subscribes it — a folder the user just created should be
+            visible. Returns its full path, which only the server can compose since it owns
+            the separator.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.RenameFolderAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Renames a folder, optionally moving it under a different parent.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.DeleteFolderAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Deletes a folder. Refuses the inbox.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SetSubscriptionAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Subscribes or unsubscribes a folder, which is how the UI hides it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.GetFolderStatusAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Identity snapshot of one folder, read live: path, UIDVALIDITY, MAILBOXID when the
+            server supports OBJECTID, and selectability. Fails with ImapSession.FolderNotFound
+            when the path no longer resolves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListMessagesAsync(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One page of a folder, newest message first, envelope-level only. Carries the
+            folder's UidValidity so the client knows when its cached UIDs went stale.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.GetMessageAsync(System.String,System.UInt32,System.Threading.CancellationToken)">
+            <summary>
+            A single message: sanitised HTML body, plain-text body, headers and the attachment
+            list. Fails with ImapSession.MessageNotFound when the UID no longer resolves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.GetAttachmentAsync(System.String,System.UInt32,System.String,System.Threading.CancellationToken)">
+            <summary>
+            One decoded attachment, addressed by MIME part specifier. Fails with
+            ImapSession.MessageNotFound or ImapSession.AttachmentNotFound.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SetFlagsAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},weesky.Snoopy.Microservice.Models.Mail.MailFlag,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Sets or clears a flag on a batch of UIDs. Fails with ImapSession.FolderNotFound
+            when the path no longer resolves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.MoveOrCopyAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Moves or copies a batch of UIDs into another folder. Fails with
+            ImapSession.TargetNotSelectable when the target cannot hold messages, or
+            ImapSession.FolderNotFound when the source path no longer resolves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.DeleteAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.Threading.CancellationToken)">
+            <summary>
+            Permanently deletes a batch of UIDs via UID EXPUNGE. Fails with
+            ImapSession.FolderNotFound when the path no longer resolves, or refuses when the server
+            lacks UIDPLUS (a bare EXPUNGE would purge beyond the caller's own \Deleted messages).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.EmptyAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Empties a whole folder. A null/blank <paramref name="targetPath"/> purges it
+            (mark 1:* \Deleted + EXPUNGE, no UIDPLUS needed — the whole folder is expunged, not a
+            subset). A target moves every message there, failing with
+            ImapSession.TargetNotSelectable when the target cannot hold messages.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SearchAsync(System.String,System.Boolean,weesky.Snoopy.Microservice.Models.Mail.MailSearchCriteria,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One page of search results, newest first. Single folder uses server SORT when
+            advertised; all-folders (or no SORT) merges per-folder SEARCH matches by internal
+            date in memory. HasAttachment is refined on BODYSTRUCTURE before paging, so Total
+            and the page windows stay honest.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.AppendAsync(System.String,MimeKit.MimeMessage,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Appends a message to a folder — the Sent copy after a send.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
+             <summary>
+             Carries the user's mail password between requests, encrypted into a cookie.
+            
+             The password cannot be recovered from the database — MariaDB stores SHA-512 crypt —
+             so it is captured at login. It is encrypted with Data Protection and kept in the
+             client's cookie rather than in server-side session state, so the server never holds
+             both the key and the ciphertext at rest.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Store(Microsoft.AspNetCore.Http.HttpResponse,System.String,System.TimeSpan)">
+            <summary>Encrypts the password into the credentials cookie.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Retrieve(Microsoft.AspNetCore.Http.HttpRequest)">
+            <summary>
+            Decrypts the credentials cookie. Fails with "credentials_unavailable" when the
+            cookie is absent or no longer decryptable, which the caller must surface as a 401
+            so the client can sign in again rather than show an opaque IMAP error.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailCredentialStore.Clear(Microsoft.AspNetCore.Http.HttpResponse)">
+            <summary>Expires the credentials cookie.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IMailHtmlSanitizer">
+             <summary>
+             Makes a message body safe to render. A message body is hostile input by construction.
+            
+             The allowed tag and style set is a contract shared with the rich editor of the
+             composing slice: replying round-trips a sanitised body through the editor and back out
+             to SMTP, so formatting degrades on every pass if the two ends disagree.
+            
+             This is the first of two independent barriers. The second is the sandboxed iframe the
+             client renders into, which can neither run scripts nor reach our origin.
+             </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.IMailSender.UnknownAttachment">
+            <summary>Returned as the failure when a staged attachment id no longer resolves.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.IMailSender.ForbiddenFrom">
+            <summary>Returned when the requested From is neither the primary address nor a live alias.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IMailSender.SendAsync(weesky.Snoopy.Microservice.Models.User,System.String,weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest,System.Threading.CancellationToken)">
+            <summary>Builds, submits over SMTP, files the Sent copy and purges the staged files.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
             <summary>
             Opens authenticated ManageSieve sessions on behalf of any mailbox user, using the
@@ -783,6 +1938,315 @@
             <summary>
             Activate a script by name. Pass an empty string to deactivate all scripts.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ImapConnectionFactory">
+             <summary>
+             Opens one IMAP connection per request — no pooling, the Rainloop model. Modelled on
+             ManageSieveClient.OpenSessionAsync: guard on unconfigured options, a generic message to
+             the client with the detail logged, and ownership of the client transferred to the
+             session on success so the finally block is a no-op on the happy path.
+            
+             Options are read through IOptionsMonitor, not IOptions, so a correction in
+             appsettings.json takes effect without restarting the service and dropping live sessions.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveTargetOrFailAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Resolves a move/empty target, failing with <see cref="F:weesky.Snoopy.Microservice.Services.ImapSession.TargetNotSelectable"/> when it
+            does not exist or is a \NoSelect container — a folder that cannot hold messages.
+            Shared by <see cref="M:weesky.Snoopy.Microservice.Services.ImapSession.MoveOrCopyAsync(System.String,System.Collections.Generic.IReadOnlyList{System.UInt32},System.String,System.Boolean,System.Threading.CancellationToken)"/> and <see cref="M:weesky.Snoopy.Microservice.Services.ImapSession.EmptyAsync(System.String,System.String,System.Threading.CancellationToken)"/> so the two never
+            drift apart on what "selectable" means.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SearchableFoldersAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>The folders one search sweeps: the named one, or every selectable folder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.WithAttachmentsAsync(MailKit.IMailFolder,System.Collections.Generic.IList{MailKit.UniqueId},System.Threading.CancellationToken)">
+            <summary>
+            Keeps only the matches whose BODYSTRUCTURE shows an attachment — the same predicate
+            that fills HasAttachments. Runs before paging: filtering after would falsify Total.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ImapSession.SearchHit">
+            <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SearchHit.#ctor(MailKit.UniqueId,MailKit.IMailFolder,System.DateTimeOffset,System.Boolean)">
+            <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SortKeyOf(System.Nullable{System.DateTimeOffset},System.Nullable{System.DateTimeOffset})">
+            <summary>
+            The merge sort key: the sent date, falling back to arrival then MinValue so a malformed
+            message missing its Envelope.Date still orders sanely and never yields null.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.OrderHits(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Services.ImapSession.SearchHit},System.Boolean)">
+            <summary>
+            Orders merge-path hits by sent date, newest first, optionally keeping only those carrying an
+            attachment. Pure so the refine-before-Total ordering is unit-tested apart from any IMAP call.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.FillSummary``1(``0,MailKit.IMessageSummary)">
+            <summary>One mapping for list rows and search hits — the eleven fields cannot drift apart.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.ImapSession.MessageNotFound">
+            <summary>
+            Sentinel errors the controller maps to 404 rather than 502. Shared constants so the
+            two layers cannot drift apart on the exact wording.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ParentPath(System.String,System.Char)">
+            <summary>Parent path, or null when the folder sits at the namespace root.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.IsValidLeafName(System.String,System.Char)">
+            <summary>
+            A leaf name may not contain the hierarchy separator: it would silently create a
+            nested folder instead of the one the user asked for.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ComputePageWindow(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Maps a newest-first page onto an IMAP sequence range, which runs oldest-first: page
+            zero is the window at the *end* of the folder. Returns (-1, -1) when the page lies
+            past the end, or when the arguments make no sense.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.PageOf``1(System.Collections.Generic.IEnumerable{``0},System.Int32,System.Int32)">
+            <summary>Slice of an already-ordered list, or empty when the page lies past its end.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.InOrderOf``2(System.Collections.Generic.IEnumerable{``0},System.Collections.Generic.IEnumerable{``1},System.Func{``0,``1})">
+            <summary>
+            Re-orders fetched items to match the order they were asked for. A server answers a UID
+            FETCH in whatever order it likes — ascending UID in practice, which is exactly not the
+            sort order requested.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveSpecialUses(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.String,System.Boolean}},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+             <summary>
+             Assigns discovered roles, each to at most one folder — and each folder to at most
+             one role.
+             </summary>
+             <remarks>
+             Two claim sets, not one. Claimed roles keep a mailbox holding both "Drafts" and
+             "Brouillons" from ending up with two drafts folders. Claimed folders keep one
+             folder from holding two roles — a folder flagged \Sent but named "Trash" used to
+             claim both, which is undecidable to display. Callers may seed both sets: the role
+             resolver runs user overrides first and hands discovery only the leftovers.
+            
+             A non-selectable folder never holds a role, in either pass. The ordinary shape
+             that makes this load-bearing: "Archive" exists only as a \NoSelect container for
+             "Archive/2024" and "Archive/2025". Letting the container win the name pass stamped
+             a role on a mailbox that cannot hold a message and locked the real archive folder
+             out of it. Level 1 already refuses a non-selectable override target; the same rule
+             has to hold here.
+             </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.SpecialUseFromName(System.String)">
+            <summary>
+            Last-resort guess for servers that advertise no SPECIAL-USE. Covers the localised
+            names a mail client creates when it, not the server, provisioned the folders.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IOutgoingMailSanitizer">
+            <summary>
+            Sanitises composed HTML for sending. A policy of its own, deliberately not
+            IMailHtmlSanitizer: that one blocks remote images and culls url() — display rules,
+            absurd on the way out.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ISmtpConnectionFactory.OpenAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Opens an authenticated SMTP session with the user's own credentials.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ISmtpSession.SendAsync(MimeKit.MimeMessage,System.Threading.CancellationToken)">
+            <summary>Submits one message. The envelope is derived from the message's To/Cc/Bcc.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore">
+            <summary>
+            Temporary store for outgoing attachments, the Rainloop model: uploaded on add, referenced
+            by id at send time. Ids are sealed to the account that created them.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.SaveAsync(System.String,System.String,System.String,System.IO.Stream,System.Threading.CancellationToken)">
+            <summary>Streams one upload to disk. Fails when the file or the account total exceeds the caps.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.Open(System.String,System.Guid)">
+            <summary>Resolves one staged file. An unknown or foreign id is a plain failure.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.Delete(System.String,System.Guid)">
+            <summary>Removes one staged file. Removing what is already gone is a no-op.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.SweepExpired">
+            <summary>Drops entries older than the TTL; answers how many went.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailAuthenticationReader">
+            <summary>Reads the SPF and DKIM verdicts out of the topmost Authentication-Results header (RFC 7601).</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">
+            <summary>Cookie name. Distinct from the JWT cookie so both can be cleared independently.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailHeaderDetailsReader">
+            <summary>Reads the reader's expanded-header details out of a message's headers. Topmost occurrence only.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHeaderDetailsReader.AngleToken">
+            <remarks>
+            Pattern:<br/>
+            <code>&lt;([^&gt;]*)&gt;</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match '&lt;'.<br/>
+            ○ 1st capture group.<br/>
+                ○ Match a character other than '&gt;' atomically any number of times.<br/>
+            ○ Match '&gt;'.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHeaderDetailsReader.LocalDelivery">
+            <remarks>
+            Pattern:<br/>
+            <code>\\bwith\\s+(LMTP[AS]*|local)\\b</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at a word boundary.<br/>
+            ○ Match a character in the set [Ww].<br/>
+            ○ Match a character in the set [Ii].<br/>
+            ○ Match a character in the set [Tt].<br/>
+            ○ Match a character in the set [Hh].<br/>
+            ○ Match a whitespace character atomically at least once.<br/>
+            ○ 1st capture group.<br/>
+                ○ Match a character in the set [Ll].<br/>
+                ○ Match with 2 alternative expressions.<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Mm].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [ASas] greedily any number of times.<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Ll].<br/>
+            ○ Match if at a word boundary.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHeaderDetailsReader.EsmtpsToken">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;![A-Za-z0-9])ESMTPS</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Zero-width negative lookbehind.<br/>
+                ○ Match a character in the set [0-9A-Za-z\u212A] right-to-left.<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match a character in the set [Ss].<br/>
+            ○ Match a character in the set [Mm].<br/>
+            ○ Match a character in the set [Tt].<br/>
+            ○ Match a character in the set [Pp].<br/>
+            ○ Match a character in the set [Ss].<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHeaderDetailsReader.TlsToken">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;![A-Za-z0-9])TLS</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Zero-width negative lookbehind.<br/>
+                ○ Match an ASCII letter or digit right-to-left.<br/>
+            ○ Match the string "TLS".<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailSearchQueryBuilder">
+            <summary>
+            Compiles search criteria into a MailKit <see cref="T:MailKit.Search.SearchQuery"/>. Pure: the date is
+            injected so tests never race midnight. HasAttachment is deliberately not compiled —
+            no standard IMAP criterion exists, it is post-filtered on BODYSTRUCTURE by the session.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailSender">
+            <summary>
+            The send pipeline. Order is load-bearing: the From is validated before anything reaches the
+            wire, staged ids resolve next (a desync fails the whole request, never a partial send),
+            SMTP failure keeps the staged files for a retry, and once SMTP accepted, nothing after it
+            may fail the operation — the mail is gone.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.LoadIdentitiesAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            The preferences database only carries display labels, so an outage degrades to the account's
+            own label rather than failing a send that would otherwise have gone out.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.AppendToSentAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Threading.CancellationToken)">
+            <summary>Best-effort by design: the mail is already gone, so every failure degrades to false.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailSpamScoreReader">
+            <summary>Reads the spam score out of the topmost header of each known anti-spam engine.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSpamScoreReader.RspamdScore">
+            <remarks>
+            Pattern:<br/>
+            <code>\\[(-?\\d+(?:\\.\\d+)?)\\s*/\\s*(-?\\d+(?:\\.\\d+)?)\\]</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match '['.<br/>
+            ○ 1st capture group.<br/>
+                ○ Match '-' atomically, optionally.<br/>
+                ○ Match a Unicode digit greedily at least once.<br/>
+                ○ Optional (greedy).<br/>
+                    ○ Match '.'.<br/>
+                    ○ Match a Unicode digit atomically at least once.<br/>
+            ○ Match a whitespace character atomically any number of times.<br/>
+            ○ Match '/'.<br/>
+            ○ Match a whitespace character atomically any number of times.<br/>
+            ○ 2nd capture group.<br/>
+                ○ Match '-' atomically, optionally.<br/>
+                ○ Match a Unicode digit greedily at least once.<br/>
+                ○ Optional (greedy).<br/>
+                    ○ Match '.'.<br/>
+                    ○ Match a Unicode digit atomically at least once.<br/>
+            ○ Match ']'.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSpamScoreReader.SpamAssassinScore">
+            <remarks>
+            Pattern:<br/>
+            <code>\\bscore=(-?\\d+(?:\\.\\d+)?)</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at a word boundary.<br/>
+            ○ Match the string "score=".<br/>
+            ○ 1st capture group.<br/>
+                ○ Match '-' atomically, optionally.<br/>
+                ○ Match a Unicode digit greedily at least once.<br/>
+                ○ Optional (greedy).<br/>
+                    ○ Match '.'.<br/>
+                    ○ Match a Unicode digit atomically at least once.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSpamScoreReader.SpamAssassinRequired">
+            <remarks>
+            Pattern:<br/>
+            <code>\\brequired=(-?\\d+(?:\\.\\d+)?)</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at a word boundary.<br/>
+            ○ Match the string "required=".<br/>
+            ○ 1st capture group.<br/>
+                ○ Match '-' atomically, optionally.<br/>
+                ○ Match a Unicode digit greedily at least once.<br/>
+                ○ Optional (greedy).<br/>
+                    ○ Match '.'.<br/>
+                    ○ Match a Unicode digit atomically at least once.<br/>
+            </code>
+            </remarks>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ManageSieveClient">
             <summary>
@@ -812,6 +2276,13 @@
             "(code)" prefix and unquoting the trailing quoted string if present.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.RecipientAddressParser">
+            <summary>
+            The address-parsing policy every literal address field on the API shares — recipients,
+            fromAddress, and the identities payload — so the three cannot silently drift apart.
+            MimeKit accepts a bare local part by default, so "not-an-address" would parse.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SieveScriptListEntry">
             <summary>
             One entry in the LISTSCRIPTS response from a ManageSieve server.
@@ -821,6 +2292,310 @@
             <summary>
             One entry in the LISTSCRIPTS response from a ManageSieve server.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SmtpConnectionFactory">
+            <summary>
+            Opens one SMTP connection per request, the same model as ImapConnectionFactory: the
+            user's own password from the credentials cookie, options through IOptionsMonitor so a
+            correction in appsettings.json applies without a restart.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SmtpSession.DescribeFailure(System.Exception,MimeKit.MimeMessage)">
+            <summary>
+            A sender rejection names the address: with alias identities the likely cause is Postfix's
+            smtpd_sender_login_maps not allowing that From, and the user must see it is a server rule.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SpecialUseAssignment">
+            <summary>Where a discovered role came from: a server SPECIAL-USE flag, or a name guess.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SpecialUseAssignment.#ctor(System.String,System.String)">
+            <summary>Where a discovered role came from: a server SPECIAL-USE flag, or a name guess.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.StagedAttachmentStore">
+            <summary>
+            Files land under a per-account directory below one root; metadata lives in process memory,
+            so a restart forgets uploads in flight — the client simply re-uploads and the sweep reclaims
+            the files left behind. TimeProvider is injected for the TTL tests; the root is overridable too.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.StagedAttachmentStore.SweepOrphans(System.DateTimeOffset)">
+            <summary>A restart takes the index with it; on disk, the write time is all that dates a file.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.StagedAttachmentSweeper">
+            <summary>Hourly GC over the staged store, so abandoned uploads never accumulate.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the AngleToken method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.AngleToken_0.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_1">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the LocalDelivery method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.LocalDelivery_1.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_2">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the EsmtpsToken method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.EsmtpsToken_2.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_3">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the TlsToken method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.TlsToken_3.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_4">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the RspamdScore method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.RspamdScore_4.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_5">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SpamAssassinScore method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SpamAssassinRequired method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Utilities">
+            <summary>Helper methods used by generated <see cref="T:System.Text.RegularExpressions.Regex"/>-derived implementations.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout">
+            <summary>Default timeout value set in <see cref="T:System.AppContext"/>, or <see cref="F:System.Text.RegularExpressions.Regex.InfiniteMatchTimeout"/> if none was set.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_hasTimeout">
+            <summary>Whether <see cref="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout"/> is non-infinite.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IsBoundaryWordChar(System.Char)">
+            <summary>Determines whether the specified index is a boundary word character.</summary>
+            <remarks>This is the same as \w plus U+200C ZERO WIDTH NON-JOINER and U+200D ZERO WIDTH JOINER.</remarks>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IsPostWordCharBoundary(System.ReadOnlySpan{System.Char},System.Int32)">
+            <summary>Determines whether the specified index is a boundary.</summary>
+            <remarks>This variant is only employed when the previous character has already been validated as a word character.</remarks>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IsPreWordCharBoundary(System.ReadOnlySpan{System.Char},System.Int32)">
+            <summary>Determines whether the specified index is a boundary.</summary>
+            <remarks>This variant is only employed when the subsequent character will separately be validated as a word character.</remarks>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.StackPush(System.Int32[]@,System.Int32@,System.Int32,System.Int32)">
+            <summary>Pushes 2 values onto the backtracking stack.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.WordCategoriesMask">
+            <summary>Provides a mask of Unicode categories that combine to form [\w].</summary>
+        </member>
+        <member name="P:System.Text.RegularExpressions.Generated.Utilities.WordCharBitmap">
+            <summary>Gets a bitmap for whether each character 0 through 127 is in [\w]</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_ascii_200080002000800">
+            <summary>Supports searching for characters in or not in "ASas".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_indexOfString_4834C90D8A447D5A812CAA44734ED5D2553D21557FACAD7011265E456FA0176E">
+            <summary>Supports searching for the string "required=".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_indexOfString_F6E856FD251A94846A5197C4E70C295876B72C8EDFC9285CB926189332C3AC00">
+            <summary>Supports searching for the string "score=".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_indexOfString_TLS_Ordinal">
+            <summary>Supports searching for the string "TLS".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_indexOfString_esmtps_OrdinalIgnoreCase">
+            <summary>Supports searching for the string "esmtps".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_indexOfString_with_OrdinalIgnoreCase">
+            <summary>Supports searching for the string "with".</summary>
         </member>
     </members>
 </doc>

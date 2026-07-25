@@ -1,4 +1,4 @@
-using System.Threading.RateLimiting;
+﻿using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -7,11 +7,16 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
+using weesky.Snoopy.Microservice.Configuration;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
+using weesky.Snoopy.Microservice.Authentication.Middleware;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
+using Microsoft.AspNetCore.DataProtection;
 using weesky.Snoopy.Microservice.Data;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.HealthChecks;
 using weesky.Snoopy.Microservice.RuleProviders;
@@ -35,6 +40,9 @@ builder.Host.UseSerilog((ctx, cfg) =>
     cfg
         .MinimumLevel.Information()
         .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+        // EF Core logs every executed statement at Information, which buried the log under SQL.
+        // Warning keeps command failures, which it logs at Error under this same category.
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
         .Enrich.FromLogContext()
         .WriteTo.Logger(l => l
             .Filter.ByIncludingOnly(Matching.FromSource(requestLoggerSource))
@@ -71,10 +79,43 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     .LogTo(Console.WriteLine, LogLevel.Warning);
 });
 
+// User preferences (folder roles) live in their own database: the dovecot schema belongs to
+// Dovecot and can be rebuilt by mail-server provisioning, which would take our data with it.
+// Creation is manual — no EF migrations here. See docs/superpowers/mail-2a5-database-prerequisite.md.
+var preferencesConnectionString = builder.Configuration.GetConnectionString("WebmailPreferencesDatabase");
+if (string.IsNullOrEmpty(preferencesConnectionString))
+{
+    throw new InvalidOperationException(
+        "Connection string 'WebmailPreferencesDatabase' is missing. " +
+        "Apply docs/superpowers/mail-2a5-database-prerequisite.md, then configure the connection string. " +
+        "Refusing to start rather than running with folder roles silently inert.");
+}
+
+var preferencesServerVersion = ServerVersion.AutoDetect(preferencesConnectionString);
+builder.Services.AddDbContext<PreferencesDbContext>(options =>
+{
+    options.UseMySql(preferencesConnectionString, preferencesServerVersion)
+        .LogTo(Console.WriteLine, LogLevel.Warning);
+});
+
 builder.Services.AddOptions<TokenConstants>().Configure(options => builder.Configuration.GetSection("TokenConstants").Bind(options));
 builder.Services.AddOptions<DovecotOptions>().Bind(builder.Configuration.GetSection("Dovecot"));
 builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSection("Sieve"));
+builder.Services.AddOptions<MailOptions>().Bind(builder.Configuration.GetSection("Mail"));
 builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
+builder.Services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
+builder.Services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
+builder.Services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
+builder.Services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
+builder.Services.AddSingleton<IQuotePreparer, QuotePreparer>();
+builder.Services.AddSingleton(TimeProvider.System);
+// Singleton is load-bearing: staged metadata and per-account reserved bytes live in this
+// instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.
+builder.Services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
+builder.Services.AddHostedService<StagedAttachmentSweeper>();
+builder.Services.AddScoped<IOutgoingMessageFactory, OutgoingMessageFactory>();
+builder.Services.AddScoped<IMailSender, MailSender>();
+builder.Services.AddScoped<IDraftSaver, DraftSaver>();
 builder.Services.AddSingleton<IRuleProvider, WeeskyRuleProvider>();
 builder.Services.AddSingleton<IRuleProvider, RainloopRuleProvider>();
 builder.Services.AddSingleton<IRuleProviderRegistry, RuleProviderRegistry>();
@@ -82,6 +123,14 @@ builder.Services.AddScoped<ISieveRepository, SieveRepository>();
 builder.Services.AddScoped<IUsersRepository, UsersRepository>();
 builder.Services.AddScoped<IAliasesRepository, AliasesRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
+builder.Services.AddScoped<IMailFolderRepository, MailFolderRepository>();
+builder.Services.AddScoped<IMailMessageRepository, MailMessageRepository>();
+builder.Services.AddScoped<IFolderRoleStore, FolderRoleStore>();
+builder.Services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
+builder.Services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
+builder.Services.AddScoped<IWebmailUserStore, WebmailUserStore>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IMailCredentialStore, MailCredentialStore>();
 builder.Services.AddScoped<IUserAuthenticator, UserAuthenticator>();
 builder.Services.AddScoped<ITokenManager, TokenManager>();
 builder.Services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>
@@ -134,7 +183,7 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-builder.Services.AddControllers().AddJsonOptions(o =>
+builder.Services.AddControllers(MvcFormatterConfiguration.ConfigureFormatters).AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
@@ -161,7 +210,32 @@ builder.Services.AddSwaggerGen(options =>
     options.IncludeXmlComments(filePath);
 });
 
+// Data Protection key ring. It encrypts the IMAP credentials cookie, so it must survive
+// restarts: losing it makes every live credentials cookie undecryptable and forces every user
+// to sign in again. systemd's StateDirectory= provides a directory outside the deployment path
+// (which the release chmod/chown walk recursively) and owned by the service user.
+var stateDirectory = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
+
+if (string.IsNullOrEmpty(stateDirectory) && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "STATE_DIRECTORY is not set. Add 'StateDirectory=snoopy.microservice' to the systemd unit. " +
+        "Refusing to start rather than falling back to a key ring under the deployment directory.");
+}
+
+var keyRingPath = string.IsNullOrEmpty(stateDirectory)
+    ? Path.Combine(builder.Environment.ContentRootPath, "keys")   // development only
+    : Path.Combine(stateDirectory, "keys");
+
+Directory.CreateDirectory(keyRingPath);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
+    .SetApplicationName($"snoopy.microservice.{builder.Environment.EnvironmentName}");
+
 var app = builder.Build();
+
+app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
 
 app.UseSerilogRequestLogging(options =>
 {
@@ -193,6 +267,11 @@ if (app.Environment.IsDevelopment())
 app.UseCors("Frontend");
 app.UseRateLimiter();
 app.UseAuthentication();
+
+// After authentication so the principal exists, before authorization so a renewal still
+// happens on a request that authorization will go on to reject for other reasons.
+app.UseMiddleware<SlidingSessionMiddleware>();
+
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");

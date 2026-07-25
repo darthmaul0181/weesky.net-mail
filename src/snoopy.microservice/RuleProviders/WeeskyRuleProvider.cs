@@ -4,439 +4,438 @@ using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using weesky.Snoopy.Microservice.Models;
 
-namespace weesky.Snoopy.Microservice.RuleProviders
+namespace weesky.Snoopy.Microservice.RuleProviders;
+
+/// <summary>
+/// Native rule format for this microservice. The script begins with a marker comment
+/// <c># WEESKY-RULES-V1:&lt;base64 JSON&gt;</c> that round-trips the structured model,
+/// followed by a minimal <c>require[]</c> and a Sieve <c>if</c> block per enabled rule.
+/// </summary>
+internal sealed class WeeskyRuleProvider : IRuleProvider
 {
-    /// <summary>
-    /// Native rule format for this microservice. The script begins with a marker comment
-    /// <c># WEESKY-RULES-V1:&lt;base64 JSON&gt;</c> that round-trips the structured model,
-    /// followed by a minimal <c>require[]</c> and a Sieve <c>if</c> block per enabled rule.
-    /// </summary>
-    public class WeeskyRuleProvider : IRuleProvider
+    public const string MarkerPrefix = "# WEESKY-RULES-V1:";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        public const string MarkerPrefix = "# WEESKY-RULES-V1:";
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = false,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+    };
 
-        private static readonly JsonSerializerOptions JsonOptions = new()
+    public string Id => "weesky";
+    public string DisplayName => "weesky.net";
+    public string DefaultScriptName => "weesky-rules";
+
+    public bool CanHandle(string scriptContent)
+    {
+        if (string.IsNullOrEmpty(scriptContent)) return false;
+        var firstLine = ExtractFirstLine(scriptContent);
+        return firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal);
+    }
+
+    public Result<IReadOnlyList<SieveRule>> Parse(string scriptContent)
+    {
+        if (string.IsNullOrEmpty(scriptContent))
+            return Result.Success<IReadOnlyList<SieveRule>>(Array.Empty<SieveRule>());
+
+        var firstLine = ExtractFirstLine(scriptContent);
+        if (!firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal))
+            return Result.Failure<IReadOnlyList<SieveRule>>("Script does not contain the WEESKY-RULES marker");
+
+        var encoded = firstLine.Substring(MarkerPrefix.Length).Trim();
+        try
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = false,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-        };
-
-        public string Id => "weesky";
-        public string DisplayName => "weesky.net";
-        public string DefaultScriptName => "weesky-rules";
-
-        public bool CanHandle(string scriptContent)
+            var bytes = Convert.FromBase64String(encoded);
+            var json = Encoding.UTF8.GetString(bytes);
+            var payload = JsonSerializer.Deserialize<Payload>(json, JsonOptions);
+            return Result.Success<IReadOnlyList<SieveRule>>(payload?.Rules ?? Array.Empty<SieveRule>());
+        }
+        catch (Exception ex)
         {
-            if (string.IsNullOrEmpty(scriptContent)) return false;
-            var firstLine = ExtractFirstLine(scriptContent);
-            return firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal);
+            return Result.Failure<IReadOnlyList<SieveRule>>($"Unable to decode WEESKY-RULES marker: {ex.Message}");
+        }
+    }
+
+    public Result<string> Compile(IReadOnlyList<SieveRule> rules)
+    {
+        if (rules == null) return Result.Failure<string>("Rules collection is required");
+
+        for (int i = 0; i < rules.Count; i++)
+        {
+            var v = Validate(rules[i]);
+            if (v.IsFailure)
+            {
+                var label = string.IsNullOrWhiteSpace(rules[i].Name) ? $"rule #{i + 1}" : $"rule '{rules[i].Name}'";
+                return Result.Failure<string>($"Invalid {label}: {v.Error}");
+            }
         }
 
-        public Result<IReadOnlyList<SieveRule>> Parse(string scriptContent)
+        var json = JsonSerializer.Serialize(new Payload(rules), JsonOptions);
+        var marker = MarkerPrefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+
+        var requires = ComputeRequires(rules);
+
+        var sb = new StringBuilder();
+        sb.Append(marker).Append('\n');
+        if (requires.Count > 0)
         {
-            if (string.IsNullOrEmpty(scriptContent))
-                return Result.Success<IReadOnlyList<SieveRule>>(Array.Empty<SieveRule>());
+            sb.Append("require [");
+            sb.Append(string.Join(", ", requires.Select(Quote)));
+            sb.Append("];\n");
+        }
+        sb.Append('\n');
 
-            var firstLine = ExtractFirstLine(scriptContent);
-            if (!firstLine.StartsWith(MarkerPrefix, StringComparison.Ordinal))
-                return Result.Failure<IReadOnlyList<SieveRule>>("Script does not contain the WEESKY-RULES marker");
-
-            var encoded = firstLine.Substring(MarkerPrefix.Length).Trim();
-            try
-            {
-                var bytes = Convert.FromBase64String(encoded);
-                var json = Encoding.UTF8.GetString(bytes);
-                var payload = JsonSerializer.Deserialize<Payload>(json, JsonOptions);
-                return Result.Success<IReadOnlyList<SieveRule>>(payload?.Rules ?? Array.Empty<SieveRule>());
-            }
-            catch (Exception ex)
-            {
-                return Result.Failure<IReadOnlyList<SieveRule>>($"Unable to decode WEESKY-RULES marker: {ex.Message}");
-            }
+        foreach (var rule in rules.Where(r => r.Enabled))
+        {
+            EmitRule(sb, rule);
         }
 
-        public Result<string> Compile(IReadOnlyList<SieveRule> rules)
+        return Result.Success(sb.ToString());
+    }
+
+    /// <summary>
+    /// The Weesky format is a superset of every supported rule feature, so it can
+    /// represent any rule that compiles. We surface compile-level validation here so a
+    /// structurally invalid rule (e.g. missing name) is reported rather than silently
+    /// passing a compatibility check.
+    /// </summary>
+    public Result CanRepresent(SieveRule rule) => Validate(rule);
+
+    // ---------- Validation ----------
+
+    private static Result Validate(SieveRule rule)
+    {
+        if (rule == null) return Result.Failure("Rule is null");
+        if (string.IsNullOrWhiteSpace(rule.Name)) return Result.Failure("Name is required");
+        if (rule.Conditions == null || rule.Conditions.Count == 0) return Result.Failure("At least one condition is required");
+        if (rule.Actions == null || rule.Actions.Count == 0) return Result.Failure("At least one action is required");
+
+        foreach (var c in rule.Conditions)
         {
-            if (rules == null) return Result.Failure<string>("Rules collection is required");
+            var cv = ValidateCondition(c);
+            if (cv.IsFailure) return cv;
+        }
+        foreach (var a in rule.Actions)
+        {
+            var av = ValidateAction(a);
+            if (av.IsFailure) return av;
+        }
+        return Result.Success();
+    }
 
-            for (int i = 0; i < rules.Count; i++)
-            {
-                var v = Validate(rules[i]);
-                if (v.IsFailure)
-                {
-                    var label = string.IsNullOrWhiteSpace(rules[i].Name) ? $"rule #{i + 1}" : $"rule '{rules[i].Name}'";
-                    return Result.Failure<string>($"Invalid {label}: {v.Error}");
-                }
-            }
+    private static Result ValidateCondition(SieveCondition c)
+    {
+        bool isSize = c.Field == SieveConditionField.Size;
+        bool isSizeOp = c.Operator == SieveConditionOperator.Larger || c.Operator == SieveConditionOperator.Smaller;
+        bool isDateField = c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate;
+        bool isHourField = c.Field == SieveConditionField.CurrentHour;
+        bool isDateOp = c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter;
 
-            var json = JsonSerializer.Serialize(new Payload(rules), JsonOptions);
-            var marker = MarkerPrefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+        if (isSize && !isSizeOp) return Result.Failure("Size condition requires the Larger or Smaller operator");
+        if (!isSize && isSizeOp) return Result.Failure("Larger/Smaller operator is only valid for the Size field");
+        if (!isDateField && !isHourField && isDateOp)
+            return Result.Failure("Before/OnOrAfter operator is only valid for date/hour fields");
 
-            var requires = ComputeRequires(rules);
-
-            var sb = new StringBuilder();
-            sb.Append(marker).Append('\n');
-            if (requires.Count > 0)
-            {
-                sb.Append("require [");
-                sb.Append(string.Join(", ", requires.Select(Quote)));
-                sb.Append("];\n");
-            }
-            sb.Append('\n');
-
-            foreach (var rule in rules.Where(r => r.Enabled))
-            {
-                EmitRule(sb, rule);
-            }
-
-            return Result.Success(sb.ToString());
+        if (isDateField)
+        {
+            if (!isDateOp && c.Operator != SieveConditionOperator.Equals)
+                return Result.Failure("Date condition requires Before, OnOrAfter or Equals operator");
+            if (string.IsNullOrWhiteSpace(c.Value))
+                return Result.Failure("Date condition requires a value");
+            if (!DateOnly.TryParseExact(c.Value.Trim(), "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out _))
+                return Result.Failure("Date value must be in YYYY-MM-DD format (e.g. 2026-06-07)");
+            return Result.Success();
         }
 
-        /// <summary>
-        /// The Weesky format is a superset of every supported rule feature, so it can
-        /// represent any rule that compiles. We surface compile-level validation here so a
-        /// structurally invalid rule (e.g. missing name) is reported rather than silently
-        /// passing a compatibility check.
-        /// </summary>
-        public Result CanRepresent(SieveRule rule) => Validate(rule);
-
-        // ---------- Validation ----------
-
-        private static Result Validate(SieveRule rule)
+        if (isHourField)
         {
-            if (rule == null) return Result.Failure("Rule is null");
-            if (string.IsNullOrWhiteSpace(rule.Name)) return Result.Failure("Name is required");
-            if (rule.Conditions == null || rule.Conditions.Count == 0) return Result.Failure("At least one condition is required");
-            if (rule.Actions == null || rule.Actions.Count == 0) return Result.Failure("At least one action is required");
+            if (!isDateOp && c.Operator != SieveConditionOperator.Equals)
+                return Result.Failure("Hour condition requires Before, OnOrAfter or Equals operator");
+            if (string.IsNullOrWhiteSpace(c.Value))
+                return Result.Failure("Hour condition requires a value");
+            if (!int.TryParse(c.Value.Trim(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var h) || h < 0 || h > 23)
+                return Result.Failure("Hour value must be an integer between 0 and 23");
+            return Result.Success();
+        }
 
-            foreach (var c in rule.Conditions)
-            {
-                var cv = ValidateCondition(c);
-                if (cv.IsFailure) return cv;
-            }
+        if (c.Field == SieveConditionField.CurrentWeekday)
+        {
+            if (string.IsNullOrWhiteSpace(c.Value))
+                return Result.Failure("Weekday condition requires a value");
+            var wparts = c.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (wparts.Length == 0)
+                return Result.Failure("Weekday condition requires at least one day");
+            foreach (var p in wparts)
+                if (!int.TryParse(p, out var d) || d < 0 || d > 6)
+                    return Result.Failure($"Invalid weekday value: {p} (must be 0-6, where 0=Sunday)");
+            return Result.Success();
+        }
+
+        if (c.Field == SieveConditionField.Duplicate)
+        {
+            if (isSizeOp) return Result.Failure("Larger/Smaller operator is not valid for the Duplicate condition");
+            if (!string.IsNullOrWhiteSpace(c.Value) &&
+                (!long.TryParse(c.Value.Trim(), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var secs) || secs <= 0))
+                return Result.Failure("Duplicate :seconds value must be a positive integer");
+            return Result.Success();
+        }
+
+        if (c.Field == SieveConditionField.Body &&
+            c.Operator != SieveConditionOperator.Contains &&
+            c.Operator != SieveConditionOperator.NotContains &&
+            c.Operator != SieveConditionOperator.Matches &&
+            c.Operator != SieveConditionOperator.Regex)
+            return Result.Failure("Body condition only supports the Contains, NotContains, Matches or Regex operator");
+
+        if (c.Field == SieveConditionField.Header && string.IsNullOrWhiteSpace(c.HeaderName))
+            return Result.Failure("Header name is required when matching a custom header");
+
+        if (string.IsNullOrEmpty(c.Value)) return Result.Failure("Condition value is required");
+
+        if (isSize && !IsValidSize(c.Value)) return Result.Failure($"Invalid size value: {c.Value}");
+        return Result.Success();
+    }
+
+    private static Result ValidateAction(SieveAction a)
+    {
+        switch (a.Type)
+        {
+            case SieveActionType.FileInto:
+            case SieveActionType.Redirect:
+            case SieveActionType.Reject:
+            case SieveActionType.SetFlag:
+                if (string.IsNullOrEmpty(a.Argument))
+                    return Result.Failure($"{a.Type} action requires an argument");
+                break;
+            case SieveActionType.Discard:
+            case SieveActionType.Keep:
+                break;
+        }
+        return Result.Success();
+    }
+
+    private static bool IsValidSize(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        var trimmed = s.Trim();
+        var suffix = trimmed[^1];
+        var digits = suffix is 'K' or 'M' or 'G' or 'k' or 'm' or 'g'
+            ? trimmed[..^1]
+            : trimmed;
+        return long.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0;
+    }
+
+    // ---------- Emission ----------
+
+    private static IReadOnlyList<string> ComputeRequires(IReadOnlyList<SieveRule> rules)
+    {
+        var set = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var rule in rules.Where(r => r.Enabled))
+        {
             foreach (var a in rule.Actions)
             {
-                var av = ValidateAction(a);
-                if (av.IsFailure) return av;
-            }
-            return Result.Success();
-        }
-
-        private static Result ValidateCondition(SieveCondition c)
-        {
-            bool isSize = c.Field == SieveConditionField.Size;
-            bool isSizeOp = c.Operator == SieveConditionOperator.Larger || c.Operator == SieveConditionOperator.Smaller;
-            bool isDateField = c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate;
-            bool isHourField = c.Field == SieveConditionField.CurrentHour;
-            bool isDateOp = c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter;
-
-            if (isSize && !isSizeOp) return Result.Failure("Size condition requires the Larger or Smaller operator");
-            if (!isSize && isSizeOp) return Result.Failure("Larger/Smaller operator is only valid for the Size field");
-            if (!isDateField && !isHourField && isDateOp)
-                return Result.Failure("Before/OnOrAfter operator is only valid for date/hour fields");
-
-            if (isDateField)
-            {
-                if (!isDateOp && c.Operator != SieveConditionOperator.Equals)
-                    return Result.Failure("Date condition requires Before, OnOrAfter or Equals operator");
-                if (string.IsNullOrWhiteSpace(c.Value))
-                    return Result.Failure("Date condition requires a value");
-                if (!DateOnly.TryParseExact(c.Value.Trim(), "yyyy-MM-dd",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None, out _))
-                    return Result.Failure("Date value must be in YYYY-MM-DD format (e.g. 2026-06-07)");
-                return Result.Success();
-            }
-
-            if (isHourField)
-            {
-                if (!isDateOp && c.Operator != SieveConditionOperator.Equals)
-                    return Result.Failure("Hour condition requires Before, OnOrAfter or Equals operator");
-                if (string.IsNullOrWhiteSpace(c.Value))
-                    return Result.Failure("Hour condition requires a value");
-                if (!int.TryParse(c.Value.Trim(), System.Globalization.NumberStyles.None,
-                    System.Globalization.CultureInfo.InvariantCulture, out var h) || h < 0 || h > 23)
-                    return Result.Failure("Hour value must be an integer between 0 and 23");
-                return Result.Success();
-            }
-
-            if (c.Field == SieveConditionField.CurrentWeekday)
-            {
-                if (string.IsNullOrWhiteSpace(c.Value))
-                    return Result.Failure("Weekday condition requires a value");
-                var wparts = c.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (wparts.Length == 0)
-                    return Result.Failure("Weekday condition requires at least one day");
-                foreach (var p in wparts)
-                    if (!int.TryParse(p, out var d) || d < 0 || d > 6)
-                        return Result.Failure($"Invalid weekday value: {p} (must be 0-6, where 0=Sunday)");
-                return Result.Success();
-            }
-
-            if (c.Field == SieveConditionField.Duplicate)
-            {
-                if (isSizeOp) return Result.Failure("Larger/Smaller operator is not valid for the Duplicate condition");
-                if (!string.IsNullOrWhiteSpace(c.Value) &&
-                    (!long.TryParse(c.Value.Trim(), System.Globalization.NumberStyles.None,
-                        System.Globalization.CultureInfo.InvariantCulture, out var secs) || secs <= 0))
-                    return Result.Failure("Duplicate :seconds value must be a positive integer");
-                return Result.Success();
-            }
-
-            if (c.Field == SieveConditionField.Body &&
-                c.Operator != SieveConditionOperator.Contains &&
-                c.Operator != SieveConditionOperator.NotContains &&
-                c.Operator != SieveConditionOperator.Matches &&
-                c.Operator != SieveConditionOperator.Regex)
-                return Result.Failure("Body condition only supports the Contains, NotContains, Matches or Regex operator");
-
-            if (c.Field == SieveConditionField.Header && string.IsNullOrWhiteSpace(c.HeaderName))
-                return Result.Failure("Header name is required when matching a custom header");
-
-            if (string.IsNullOrEmpty(c.Value)) return Result.Failure("Condition value is required");
-
-            if (isSize && !IsValidSize(c.Value)) return Result.Failure($"Invalid size value: {c.Value}");
-            return Result.Success();
-        }
-
-        private static Result ValidateAction(SieveAction a)
-        {
-            switch (a.Type)
-            {
-                case SieveActionType.FileInto:
-                case SieveActionType.Redirect:
-                case SieveActionType.Reject:
-                case SieveActionType.SetFlag:
-                    if (string.IsNullOrEmpty(a.Argument))
-                        return Result.Failure($"{a.Type} action requires an argument");
-                    break;
-                case SieveActionType.Discard:
-                case SieveActionType.Keep:
-                    break;
-            }
-            return Result.Success();
-        }
-
-        private static bool IsValidSize(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return false;
-            var trimmed = s.Trim();
-            var suffix = trimmed[^1];
-            var digits = suffix is 'K' or 'M' or 'G' or 'k' or 'm' or 'g'
-                ? trimmed[..^1]
-                : trimmed;
-            return long.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0;
-        }
-
-        // ---------- Emission ----------
-
-        private static IReadOnlyList<string> ComputeRequires(IReadOnlyList<SieveRule> rules)
-        {
-            var set = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (var rule in rules.Where(r => r.Enabled))
-            {
-                foreach (var a in rule.Actions)
+                switch (a.Type)
                 {
-                    switch (a.Type)
-                    {
-                        case SieveActionType.FileInto:
-                            set.Add("fileinto");
-                            if (a.AutoCreate) set.Add("mailbox");
-                            break;
-                        case SieveActionType.Reject: set.Add("reject"); break;
-                        case SieveActionType.SetFlag: set.Add("imap4flags"); break;
-                    }
-                }
-                foreach (var c in rule.Conditions)
-                {
-                    if (c.Field == SieveConditionField.Body) set.Add("body");
-                    if (c.Field == SieveConditionField.RecipientDetail) set.Add("subaddress");
-                    if (c.Field == SieveConditionField.Duplicate) set.Add("duplicate");
-                    if (c.Operator == SieveConditionOperator.Regex) set.Add("regex");
-                    if (c.Field is SieveConditionField.CurrentDate or SieveConditionField.MessageDate
-                        or SieveConditionField.CurrentHour or SieveConditionField.CurrentWeekday)
-                    {
-                        set.Add("date");
-                        if (c.Field != SieveConditionField.CurrentWeekday &&
-                            (c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter))
-                            set.Add("relational");
-                    }
+                    case SieveActionType.FileInto:
+                        set.Add("fileinto");
+                        if (a.AutoCreate) set.Add("mailbox");
+                        break;
+                    case SieveActionType.Reject: set.Add("reject"); break;
+                    case SieveActionType.SetFlag: set.Add("imap4flags"); break;
                 }
             }
-            return set.ToList();
+            foreach (var c in rule.Conditions)
+            {
+                if (c.Field == SieveConditionField.Body) set.Add("body");
+                if (c.Field == SieveConditionField.RecipientDetail) set.Add("subaddress");
+                if (c.Field == SieveConditionField.Duplicate) set.Add("duplicate");
+                if (c.Operator == SieveConditionOperator.Regex) set.Add("regex");
+                if (c.Field is SieveConditionField.CurrentDate or SieveConditionField.MessageDate
+                    or SieveConditionField.CurrentHour or SieveConditionField.CurrentWeekday)
+                {
+                    set.Add("date");
+                    if (c.Field != SieveConditionField.CurrentWeekday &&
+                        (c.Operator == SieveConditionOperator.Before || c.Operator == SieveConditionOperator.OnOrAfter))
+                        set.Add("relational");
+                }
+            }
+        }
+        return set.ToList();
+    }
+
+    private static void EmitRule(StringBuilder sb, SieveRule rule)
+    {
+        sb.Append("# Rule: ").Append(EscapeForComment(rule.Name)).Append('\n');
+        sb.Append("if ");
+        if (rule.Conditions.Count == 1)
+        {
+            sb.Append(BuildCondition(rule.Conditions[0]));
+        }
+        else
+        {
+            sb.Append(rule.MatchAll ? "allof " : "anyof ");
+            sb.Append('(');
+            sb.Append(string.Join(", ", rule.Conditions.Select(BuildCondition)));
+            sb.Append(')');
+        }
+        sb.Append(" {\n");
+        foreach (var action in rule.Actions)
+        {
+            sb.Append("    ").Append(BuildAction(action)).Append('\n');
+        }
+        if (rule.StopAfter)
+        {
+            sb.Append("    stop;\n");
+        }
+        sb.Append("}\n\n");
+    }
+
+    private static string BuildCondition(SieveCondition c)
+    {
+        if (c.Field == SieveConditionField.Size)
+        {
+            var op = c.Operator == SieveConditionOperator.Larger ? ":over" : ":under";
+            return $"size {op} {c.Value.Trim()}";
         }
 
-        private static void EmitRule(StringBuilder sb, SieveRule rule)
+        if (c.Field == SieveConditionField.Duplicate)
         {
-            sb.Append("# Rule: ").Append(EscapeForComment(rule.Name)).Append('\n');
-            sb.Append("if ");
-            if (rule.Conditions.Count == 1)
-            {
-                sb.Append(BuildCondition(rule.Conditions[0]));
-            }
-            else
-            {
-                sb.Append(rule.MatchAll ? "allof " : "anyof ");
-                sb.Append('(');
-                sb.Append(string.Join(", ", rule.Conditions.Select(BuildCondition)));
-                sb.Append(')');
-            }
-            sb.Append(" {\n");
-            foreach (var action in rule.Actions)
-            {
-                sb.Append("    ").Append(BuildAction(action)).Append('\n');
-            }
-            if (rule.StopAfter)
-            {
-                sb.Append("    stop;\n");
-            }
-            sb.Append("}\n\n");
+            return string.IsNullOrWhiteSpace(c.Value)
+                ? "duplicate"
+                : $"duplicate :seconds {c.Value.Trim()}";
         }
 
-        private static string BuildCondition(SieveCondition c)
+        if (c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate)
         {
-            if (c.Field == SieveConditionField.Size)
+            var dateValue = Quote(c.Value!.Trim());
+            bool isCurrent = c.Field == SieveConditionField.CurrentDate;
+            return c.Operator switch
             {
-                var op = c.Operator == SieveConditionOperator.Larger ? ":over" : ":under";
-                return $"size {op} {c.Value.Trim()}";
-            }
+                SieveConditionOperator.Before => isCurrent
+                    ? $"currentdate :value \"lt\" \"date\" {dateValue}"
+                    : $"date :value \"lt\" \"date\" \"Date\" {dateValue}",
+                SieveConditionOperator.OnOrAfter => isCurrent
+                    ? $"currentdate :value \"ge\" \"date\" {dateValue}"
+                    : $"date :value \"ge\" \"date\" \"Date\" {dateValue}",
+                _ => isCurrent
+                    ? $"currentdate :is \"date\" {dateValue}"
+                    : $"date :is \"date\" \"Date\" {dateValue}"
+            };
+        }
 
-            if (c.Field == SieveConditionField.Duplicate)
-            {
-                return string.IsNullOrWhiteSpace(c.Value)
-                    ? "duplicate"
-                    : $"duplicate :seconds {c.Value.Trim()}";
-            }
+        if (c.Field == SieveConditionField.CurrentWeekday)
+        {
+            var parts = c.Value!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 1)
+                return $"currentdate :is \"weekday\" {Quote(parts[0])}";
+            return "currentdate :is \"weekday\" [" + string.Join(", ", parts.Select(Quote)) + "]";
+        }
 
-            if (c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate)
+        if (c.Field == SieveConditionField.CurrentHour)
+        {
+            var hourVal = Quote(c.Value!.Trim());
+            return c.Operator switch
             {
-                var dateValue = Quote(c.Value!.Trim());
-                bool isCurrent = c.Field == SieveConditionField.CurrentDate;
-                return c.Operator switch
-                {
-                    SieveConditionOperator.Before => isCurrent
-                        ? $"currentdate :value \"lt\" \"date\" {dateValue}"
-                        : $"date :value \"lt\" \"date\" \"Date\" {dateValue}",
-                    SieveConditionOperator.OnOrAfter => isCurrent
-                        ? $"currentdate :value \"ge\" \"date\" {dateValue}"
-                        : $"date :value \"ge\" \"date\" \"Date\" {dateValue}",
-                    _ => isCurrent
-                        ? $"currentdate :is \"date\" {dateValue}"
-                        : $"date :is \"date\" \"Date\" {dateValue}"
-                };
-            }
+                SieveConditionOperator.Before => $"currentdate :value \"lt\" \"hour\" {hourVal}",
+                SieveConditionOperator.OnOrAfter => $"currentdate :value \"ge\" \"hour\" {hourVal}",
+                _ => $"currentdate :is \"hour\" {hourVal}"
+            };
+        }
 
-            if (c.Field == SieveConditionField.CurrentWeekday)
+        if (c.Field == SieveConditionField.Body)
+        {
+            bool bodyNegate = c.Operator == SieveConditionOperator.NotContains;
+            var bodyOp = c.Operator switch
             {
-                var parts = c.Value!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (parts.Length == 1)
-                    return $"currentdate :is \"weekday\" {Quote(parts[0])}";
-                return "currentdate :is \"weekday\" [" + string.Join(", ", parts.Select(Quote)) + "]";
-            }
-
-            if (c.Field == SieveConditionField.CurrentHour)
-            {
-                var hourVal = Quote(c.Value!.Trim());
-                return c.Operator switch
-                {
-                    SieveConditionOperator.Before => $"currentdate :value \"lt\" \"hour\" {hourVal}",
-                    SieveConditionOperator.OnOrAfter => $"currentdate :value \"ge\" \"hour\" {hourVal}",
-                    _ => $"currentdate :is \"hour\" {hourVal}"
-                };
-            }
-
-            if (c.Field == SieveConditionField.Body)
-            {
-                bool bodyNegate = c.Operator == SieveConditionOperator.NotContains;
-                var bodyOp = c.Operator switch
-                {
-                    SieveConditionOperator.Matches => ":matches",
-                    SieveConditionOperator.Regex => ":regex",
-                    _ => ":contains"
-                };
-                var bodyExpr = $"body :text {bodyOp} {Quote(c.Value)}";
-                return bodyNegate ? $"not {bodyExpr}" : bodyExpr;
-            }
-
-            bool negate = c.Operator is SieveConditionOperator.NotContains or SieveConditionOperator.NotEquals;
-            var matchOp = c.Operator switch
-            {
-                SieveConditionOperator.Contains or SieveConditionOperator.NotContains => ":contains",
-                SieveConditionOperator.Equals or SieveConditionOperator.NotEquals => ":is",
                 SieveConditionOperator.Matches => ":matches",
                 SieveConditionOperator.Regex => ":regex",
-                _ => throw new InvalidOperationException($"Operator {c.Operator} is not valid for a text field")
+                _ => ":contains"
             };
-
-            string expr;
-            if (c.Field == SieveConditionField.Recipient)
-            {
-                expr = $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
-            }
-            else if (c.Field == SieveConditionField.EnvelopeFrom || c.Field == SieveConditionField.EnvelopeTo)
-            {
-                var part = c.Field == SieveConditionField.EnvelopeFrom ? "from" : "to";
-                expr = $"envelope {matchOp} {Quote(part)} {Quote(c.Value)}";
-            }
-            else if (c.Field == SieveConditionField.RecipientDetail)
-            {
-                expr = $"address :detail {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
-            }
-            else
-            {
-                var headerName = c.Field switch
-                {
-                    SieveConditionField.From => "From",
-                    SieveConditionField.To => "To",
-                    SieveConditionField.Cc => "Cc",
-                    SieveConditionField.Subject => "Subject",
-                    SieveConditionField.Header => c.HeaderName!,
-                    _ => throw new InvalidOperationException($"Field {c.Field} is not a text field")
-                };
-                expr = $"header {matchOp} {Quote(headerName)} {Quote(c.Value)}";
-            }
-
-            return negate ? $"not {expr}" : expr;
+            var bodyExpr = $"body :text {bodyOp} {Quote(c.Value)}";
+            return bodyNegate ? $"not {bodyExpr}" : bodyExpr;
         }
 
-        private static string BuildAction(SieveAction a) => a.Type switch
+        bool negate = c.Operator is SieveConditionOperator.NotContains or SieveConditionOperator.NotEquals;
+        var matchOp = c.Operator switch
         {
-            SieveActionType.FileInto => a.AutoCreate
-                ? $"fileinto :create {Quote(a.Argument!)};"
-                : $"fileinto {Quote(a.Argument!)};",
-            SieveActionType.Redirect => $"redirect {Quote(a.Argument!)};",
-            SieveActionType.Discard => "discard;",
-            SieveActionType.Reject => $"reject {Quote(a.Argument!)};",
-            SieveActionType.SetFlag => $"addflag {Quote(a.Argument!)};",
-            SieveActionType.Keep => "keep;",
-            _ => throw new InvalidOperationException($"Unknown action type {a.Type}")
+            SieveConditionOperator.Contains or SieveConditionOperator.NotContains => ":contains",
+            SieveConditionOperator.Equals or SieveConditionOperator.NotEquals => ":is",
+            SieveConditionOperator.Matches => ":matches",
+            SieveConditionOperator.Regex => ":regex",
+            _ => throw new InvalidOperationException($"Operator {c.Operator} is not valid for a text field")
         };
 
-        private static string Quote(string s)
+        string expr;
+        if (c.Field == SieveConditionField.Recipient)
         {
-            var sb = new StringBuilder(s.Length + 2);
-            sb.Append('"');
-            foreach (var c in s)
+            expr = $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+        }
+        else if (c.Field == SieveConditionField.EnvelopeFrom || c.Field == SieveConditionField.EnvelopeTo)
+        {
+            var part = c.Field == SieveConditionField.EnvelopeFrom ? "from" : "to";
+            expr = $"envelope {matchOp} {Quote(part)} {Quote(c.Value)}";
+        }
+        else if (c.Field == SieveConditionField.RecipientDetail)
+        {
+            expr = $"address :detail {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+        }
+        else
+        {
+            var headerName = c.Field switch
             {
-                if (c == '"' || c == '\\') sb.Append('\\');
-                sb.Append(c);
-            }
-            sb.Append('"');
-            return sb.ToString();
+                SieveConditionField.From => "From",
+                SieveConditionField.To => "To",
+                SieveConditionField.Cc => "Cc",
+                SieveConditionField.Subject => "Subject",
+                SieveConditionField.Header => c.HeaderName!,
+                _ => throw new InvalidOperationException($"Field {c.Field} is not a text field")
+            };
+            expr = $"header {matchOp} {Quote(headerName)} {Quote(c.Value)}";
         }
 
-        private static string EscapeForComment(string s) =>
-            s.Replace("\r", " ").Replace("\n", " ");
-
-        private static string ExtractFirstLine(string s)
-        {
-            var newlineIndex = s.IndexOf('\n');
-            var firstLine = newlineIndex < 0 ? s : s.Substring(0, newlineIndex);
-            return firstLine.TrimEnd('\r');
-        }
-
-        private sealed record Payload(IReadOnlyList<SieveRule> Rules);
+        return negate ? $"not {expr}" : expr;
     }
+
+    private static string BuildAction(SieveAction a) => a.Type switch
+    {
+        SieveActionType.FileInto => a.AutoCreate
+            ? $"fileinto :create {Quote(a.Argument!)};"
+            : $"fileinto {Quote(a.Argument!)};",
+        SieveActionType.Redirect => $"redirect {Quote(a.Argument!)};",
+        SieveActionType.Discard => "discard;",
+        SieveActionType.Reject => $"reject {Quote(a.Argument!)};",
+        SieveActionType.SetFlag => $"addflag {Quote(a.Argument!)};",
+        SieveActionType.Keep => "keep;",
+        _ => throw new InvalidOperationException($"Unknown action type {a.Type}")
+    };
+
+    private static string Quote(string s)
+    {
+        var sb = new StringBuilder(s.Length + 2);
+        sb.Append('"');
+        foreach (var c in s)
+        {
+            if (c == '"' || c == '\\') sb.Append('\\');
+            sb.Append(c);
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    private static string EscapeForComment(string s) =>
+        s.Replace("\r", " ").Replace("\n", " ");
+
+    private static string ExtractFirstLine(string s)
+    {
+        var newlineIndex = s.IndexOf('\n');
+        var firstLine = newlineIndex < 0 ? s : s.Substring(0, newlineIndex);
+        return firstLine.TrimEnd('\r');
+    }
+
+    private sealed record Payload(IReadOnlyList<SieveRule> Rules);
 }

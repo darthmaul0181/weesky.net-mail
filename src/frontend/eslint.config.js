@@ -2,11 +2,12 @@ import js from '@eslint/js'
 import globals from 'globals'
 import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
+import tseslint from 'typescript-eslint'
 
 export default [
   { ignores: ['dist'] },
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['**/*.{js,jsx,ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       globals: globals.browser,
@@ -30,4 +31,8 @@ export default [
       react: { version: 'detect' },
     },
   },
+  ...tseslint.configs.recommended.map(cfg => ({
+    ...cfg,
+    files: ['**/*.{ts,tsx}'],
+  })),
 ]

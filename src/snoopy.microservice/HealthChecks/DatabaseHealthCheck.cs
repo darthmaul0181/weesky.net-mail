@@ -3,7 +3,7 @@ using weesky.Snoopy.Microservice.Data;
 
 namespace weesky.Snoopy.Microservice.HealthChecks;
 
-public class DatabaseHealthCheck(ApplicationDbContext dbContext) : IHealthCheck
+internal sealed class DatabaseHealthCheck(ApplicationDbContext dbContext) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
