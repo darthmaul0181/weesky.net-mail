@@ -60,8 +60,12 @@ export default function IdentitiesPage() {
     <div className="settings-page">
       <h1>Identities</h1>
       <p className="identities-hint">
-        The addresses you can send an email from, each with its own name. Removing an identity never
-        touches the alias itself; your primary name comes from the Account tab.
+        An identity is an address from which you can send emails.<br />
+        Each identity is linked to one of your aliases and has its own name, which will be visible to your recipients.
+      </p>
+      <p className="identities-hint">
+        Deleting an identity does not affect the alias itself in any way.<br />
+        Your primary identity cannot be deleted. Its name can be changed via the ‘Account’ page.
       </p>
 
       {isLoading && <p>Loading…</p>}
