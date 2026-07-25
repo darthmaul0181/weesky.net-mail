@@ -114,6 +114,10 @@ Two shapes, both **live** — filtering happens on every keystroke, never behind
 - **The rail** (`.app-rail`, 56px) is a vertical stack of 40px icon buttons (`.rail-item`,
   `--radius-md`): the modules at the top, a `.rail-spacer` (`flex:1`) pushing the Settings gear to the
   bottom. Active = filled (`--rail-item-active` / `-fg`); hover = a soft tint (`--rail-item`).
+- **The band beside the rail shares one surface across modules.** The first column of a module — the
+  mail folder tree and the settings context pane alike — sits on `--folders-bg` behind a `--border`
+  right hairline; the content columns to its right sit on `--surface`. One surface, so switching
+  modules never repaints the navigation band a different colour.
 - **Columns are band stacks, never scrolling boxes.** A module builds its columns inside the shell's
   single content area. Each column is `display:flex; flex-direction:column; min-height:0;
   overflow:hidden` — fixed bands with **exactly one scrolling middle band** (`flex:1; min-height:0;

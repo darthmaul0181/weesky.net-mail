@@ -215,6 +215,8 @@
   gap: 2px;
   padding: 14px 10px;
   border-right: 1px solid var(--border);
+  /* Same surface as the mail folder column: both are the second band of the L. */
+  background: var(--folders-bg);
 }
 
 .pane-item {
