@@ -29,7 +29,12 @@ export interface ActiveFormats {
   unorderedList: boolean; orderedList: boolean
 }
 
-interface Props { onChange: () => void; onFormatChange?: (active: ActiveFormats) => void }
+interface Props {
+  onChange: () => void
+  onFormatChange?: (active: ActiveFormats) => void
+  /** A reply/forward body, loaded once at mount. */
+  initialHtml?: string
+}
 
 const activeFormats = (squire: Squire): ActiveFormats => ({
   bold: squire.hasFormat('b'), italic: squire.hasFormat('i'),
@@ -69,7 +74,9 @@ const sanitizeToDOMFragment = (html: string): DocumentFragment => {
  * Thin React shell over Squire. The canvas follows the app theme (see .compose-editor); the
  * toolbar's active state rides Squire's pathChange event.
  */
-const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor({ onChange, onFormatChange }, ref) {
+const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor(
+  { onChange, onFormatChange, initialHtml }, ref,
+) {
   const root = useRef<HTMLDivElement>(null)
   const editor = useRef<Squire | null>(null)
 
@@ -80,8 +87,15 @@ const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor({ onC
     squire.addEventListener('pathChange', report)
     report()
     editor.current = squire
+    if (initialHtml) {
+      // Passes through sanitizeToDOMFragment like every setHTML; the caller's quote/seed markup
+      // is treated as untrusted input, same as a paste.
+      squire.setHTML(initialHtml)
+      squire.moveCursorToStart()
+    }
     return () => { squire.destroy(); editor.current = null }
-    // Mount once: onChange/onFormatChange identity is the caller's concern, rebinding would rebuild the editor.
+    // Mount once: onChange/onFormatChange identity is the caller's concern, rebinding would rebuild
+    // the editor; initialHtml is read once here by design, later edits are the user's.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

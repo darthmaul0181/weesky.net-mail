@@ -271,6 +271,9 @@ export const api = {
   deleteAttachment: (id) =>
     request('DELETE', `/api/Mail/Attachments/${id}`),
 
+  prepareQuote: (folder, uid, purpose) =>
+    request('POST', '/api/Mail/Messages/PrepareQuote', { folder, uid, purpose }),
+
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second
   // copy here to drift from.
@@ -285,6 +288,18 @@ export const api = {
 /** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */
 export function mailAttachmentUrl(folder, uid, part) {
   return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}`
+}
+
+/** The API origin. Exported so the composer can undo an absolute staged URL before sending. */
+export const API_BASE = BASE
+
+/**
+ * Builds a staged attachment's content URL — the src the composer shows inline images through.
+ * Absolute, unlike mailAttachmentUrl: that one is a request path handed to requestBlob, which
+ * prefixes BASE itself, while an <img> subresource would resolve against the SPA's own origin.
+ */
+export function stagedAttachmentUrl(id) {
+  return `${BASE}/api/Mail/Attachments/${id}/content`
 }
 
 /**

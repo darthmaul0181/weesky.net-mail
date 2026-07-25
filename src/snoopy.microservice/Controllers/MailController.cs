@@ -30,6 +30,7 @@ public sealed class MailController : ApiBaseController
     private readonly IFolderRoleStore _roleStore;
     private readonly IStagedAttachmentStore _staged;
     private readonly IMailSender _sender;
+    private readonly IQuotePreparer _quotes;
 
     public MailController(
         IMailFolderRepository folders,
@@ -37,7 +38,8 @@ public sealed class MailController : ApiBaseController
         IMailCredentialStore credentials,
         IFolderRoleStore roleStore,
         IStagedAttachmentStore staged,
-        IMailSender sender)
+        IMailSender sender,
+        IQuotePreparer quotes)
     {
         _folders = folders;
         _messages = messages;
@@ -45,6 +47,7 @@ public sealed class MailController : ApiBaseController
         _roleStore = roleStore;
         _staged = staged;
         _sender = sender;
+        _quotes = quotes;
     }
 
     /// <summary>
@@ -704,6 +707,38 @@ public sealed class MailController : ApiBaseController
     }
 
     /// <summary>
+    /// Serves one staged attachment back to its owner, so the composer can display the inline
+    /// images PrepareQuote staged. Always an attachment disposition plus nosniff: an img
+    /// subresource renders regardless, while navigating to the URL downloads instead of
+    /// rendering staged mail content on our origin.
+    /// </summary>
+    /// <param name="id">staged attachment id</param>
+    /// <response code="200">The staged bytes</response>
+    /// <response code="401">Not authenticated</response>
+    /// <response code="404">Unknown id, or one staged by another account</response>
+    [HttpGet("Attachments/{id:guid}/content")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult GetStagedAttachment(Guid id)
+    {
+        var result = _staged.Open(AuthenticatedUser.WebmailUid.ToString(), id);
+        if (result.IsFailure) return NotFound(ResultEnveloppe.CreateErrorEnveloppe("Attachment not found"));
+
+        Response.Headers.XContentTypeOptions = "nosniff";
+        try
+        {
+            var stream = System.IO.File.OpenRead(result.Value.FilePath);
+            return File(stream, result.Value.Info.ContentType, result.Value.Info.FileName);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // Vanished between Open and read (TTL sweep / concurrent DELETE).
+            return NotFound(ResultEnveloppe.CreateErrorEnveloppe("Attachment not found"));
+        }
+    }
+
+    /// <summary>
     /// Sends a composed message: sanitised multipart/alternative body, staged attachments,
     /// then a \Seen copy APPENDed to the sent role. The SMTP envelope is derived from the
     /// recipients and MailKit strips the Bcc header at transmission, so only the addressees
@@ -729,7 +764,7 @@ public sealed class MailController : ApiBaseController
 
         // An explicit "to": null in the body overrides the record's [] default; normalise every
         // recipient list so a null never NREs downstream.
-        request = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [] };
+        request = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [], References = request.References ?? [] };
         if (request.To.Count == 0) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one recipient is required"));
 
         foreach (var address in request.To.Concat(request.Cc).Concat(request.Bcc))
@@ -762,6 +797,60 @@ public sealed class MailController : ApiBaseController
                 $"Sending from \"{request.FromAddress}\" is not allowed on this account"));
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Prepares quoting a message for the composer: the body re-sanitised by the outgoing policy
+    /// with cid images rewritten to staged-content URLs, inline parts staged, and — for forward
+    /// and editAsNew — the real attachments re-staged server-side. Called on the Reply / Forward
+    /// / Edit-as-new click, never on ordinary reading.
+    /// </summary>
+    /// <param name="request">folder, uid, and the purpose ("reply", "forward" or "editAsNew")</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The quotable body and the staged parts</response>
+    /// <response code="400">Missing folder, unknown purpose, or staging over the account caps</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="404">No message with that UID in that folder</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("Messages/PrepareQuote")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<PreparedQuote>> PrepareQuote(PrepareQuoteRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Folder))
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+
+        QuotePurpose? purpose = request.Purpose switch
+        {
+            "reply" => QuotePurpose.Reply,
+            "forward" => QuotePurpose.Forward,
+            "editAsNew" => QuotePurpose.EditAsNew,
+            _ => null,
+        };
+        if (purpose == null)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Purpose must be reply, forward or editAsNew"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var message = await _messages.GetMimeMessageAsync(
+            AuthenticatedUser, password.Value, request.Folder, request.Uid, cancellationToken);
+        if (message.IsFailure && message.Error == ImapSession.MessageNotFound)
+            return NotFound(ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+        if (message.IsFailure)
+            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+
+        var prepared = await _quotes.PrepareAsync(
+            AuthenticatedUser.WebmailUid.ToString(), message.Value, purpose.Value, cancellationToken);
+
+        // A failure here is the staging caps talking (file size / account quota): 400, actionable.
+        if (prepared.IsFailure)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(prepared.Error));
+
+        return Ok(prepared.Value);
     }
 
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)

@@ -36,7 +36,7 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
     }
 
     public async Task<Result<StagedAttachmentInfo>> SaveAsync(
-        string accountId, string fileName, string contentType, Stream content, CancellationToken cancellationToken)
+        string accountId, string fileName, string contentType, Stream content, CancellationToken cancellationToken, string? contentId = null)
     {
         var limitMb = _options.CurrentValue.MaxMessageSizeMb;
         var limitBytes = (long)limitMb * 1024 * 1024;
@@ -72,7 +72,7 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
             }
 
             var info = new StagedAttachmentInfo(id, Path.GetFileName(fileName), written,
-                string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType);
+                string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType, contentId);
             _entries[id] = new Entry(info, accountId, path, _clock.GetUtcNow());
             staged = true;
             Release(accountId, limitBytes - written);

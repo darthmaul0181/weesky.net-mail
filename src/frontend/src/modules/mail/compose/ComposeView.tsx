@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
+import { api } from '../../../api.js'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useIdentities, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
@@ -8,11 +9,18 @@ import EditorToolbar from './EditorToolbar'
 import IdentitySelect from './IdentitySelect'
 import RecipientsField, { isValidAddress } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
+import type { ComposeAction, ComposeSeed } from './composeSeed'
+import { relativizeStagedUrls } from './stagedUrls'
 import { useStagedAttachments } from './useStagedAttachments'
 
 const NO_FORMATS: ActiveFormats = {
   bold: false, italic: false, underline: false, strikethrough: false,
   unorderedList: false, orderedList: false,
+}
+
+// Edit-as-new is left out on purpose: it starts a message of its own, threaded to nothing.
+const TITLES: Record<ComposeAction, string> = {
+  reply: 'Reply', replyAll: 'Reply', forward: 'Forward', editAsNew: 'New message',
 }
 
 interface Props { onNotify: (message: string, kind?: string) => void }
@@ -21,6 +29,7 @@ interface Props { onNotify: (message: string, kind?: string) => void }
  * The compose surface, replacing list+reader inside the mail module. No drafts yet (2c3),
  * so leaving means losing the message: a router blocker owns every exit — folder click,
  * ✕, Back — and beforeunload covers the tab.
+ * A reply/forward arrives as `location.state.seed`; a plain new message carries none.
  */
 export default function ComposeView({ onNotify }: Props) {
   const { identity } = useAuth()
@@ -33,15 +42,24 @@ export default function ComposeView({ onNotify }: Props) {
   const [editor, setEditor] = useState<EditorHandle | null>(null)
   const [active, setActive] = useState<ActiveFormats>(NO_FORMATS)
 
-  const [to, setTo] = useState<string[]>([])
-  const [cc, setCc] = useState<string[]>([])
-  const [bcc, setBcc] = useState<string[]>([])
-  const [showCc, setShowCc] = useState(false)
-  const [showBcc, setShowBcc] = useState(false)
-  const [subject, setSubject] = useState('')
-  const [bodyTouched, setBodyTouched] = useState(false)
-  const [fromAddress, setFromAddress] = useState<string | null>(null)
-  const attachments = useStagedAttachments()
+  const state = location.state as { from?: string; seed?: ComposeSeed } | null
+  const from = state?.from
+  const seed = state?.seed ?? null
+
+  const [to, setTo] = useState<string[]>(seed?.to ?? [])
+  const [cc, setCc] = useState<string[]>(seed?.cc ?? [])
+  const [bcc, setBcc] = useState<string[]>(seed?.bcc ?? [])
+  const [showCc, setShowCc] = useState((seed?.cc.length ?? 0) > 0)
+  const [showBcc, setShowBcc] = useState((seed?.bcc.length ?? 0) > 0)
+  const [subject, setSubject] = useState(seed?.subject ?? '')
+  // A seeded body is content the user can lose — dirty from the first render.
+  const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html))
+  const [fromAddress, setFromAddress] = useState<string | null>(seed?.fromAddress ?? null)
+  // Inline resources live in the body, not the tray; their ids still ride the send payload.
+  const seedTray = useMemo(() => (seed?.attachments ?? []).filter(a => !a.contentId), [seed])
+  const inlineIds = useMemo(
+    () => (seed?.attachments ?? []).filter(a => a.contentId).map(a => a.id), [seed])
+  const attachments = useStagedAttachments(seedTray)
 
   const usableIdentities = (identityList ?? []).filter(i => !i.stale)
   const effectiveFrom = fromAddress
@@ -77,7 +95,6 @@ export default function ComposeView({ onNotify }: Props) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
 
-  const from = (location.state as { from?: string } | null)?.from
   const backTarget = from ? `/mail?folder=${encodeURIComponent(from)}` : '/mail'
 
   const leave = useCallback(() => {
@@ -94,8 +111,11 @@ export default function ComposeView({ onNotify }: Props) {
   function submit() {
     send.mutate(
       {
-        to, cc, bcc, subject, htmlBody: editor?.getHTML() ?? '', attachmentIds: attachments.ids,
+        to, cc, bcc, subject, htmlBody: relativizeStagedUrls(editor?.getHTML() ?? ''),
+        attachmentIds: [...inlineIds, ...attachments.ids],
         fromAddress: effectiveFrom ?? undefined,
+        inReplyTo: seed?.inReplyTo ?? undefined,
+        references: seed?.references && seed.references.length > 0 ? seed.references : undefined,
       },
       {
         onSuccess: (result) => {
@@ -116,7 +136,7 @@ export default function ComposeView({ onNotify }: Props) {
   return (
     <div className="compose-view" data-testid="compose-view">
       <div className="compose-header">
-        <span className="modal-title">New message</span>
+        <span className="modal-title">{(seed && TITLES[seed.action]) || 'New message'}</span>
         <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
           <RocketIcon size={15} /> {send.isPending ? 'Sending…' : 'Send'}
         </button>
@@ -152,7 +172,7 @@ export default function ComposeView({ onNotify }: Props) {
       </div>
 
       <EditorToolbar editor={editor} active={active} />
-      <SquireEditor ref={setEditor} onChange={touchBody} onFormatChange={setActive} />
+      <SquireEditor ref={setEditor} initialHtml={seed?.html} onChange={touchBody} onFormatChange={setActive} />
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={attachments.remove} />
 
@@ -166,7 +186,12 @@ export default function ComposeView({ onNotify }: Props) {
             <div className="folder-pick-actions">
               <button type="button" className="btn btn-ghost" onClick={() => blocker.reset?.()}>Keep editing</button>
               <button type="button" className="btn btn-primary"
-                onClick={() => { attachments.discardAll(); leavingRef.current = true; blocker.proceed?.() }}>
+                onClick={() => {
+                  attachments.discardAll()
+                  inlineIds.forEach(id => { api.deleteAttachment(id).catch(() => { /* sweeper's problem */ }) })
+                  leavingRef.current = true
+                  blocker.proceed?.()
+                }}>
                 Discard
               </button>
             </div>

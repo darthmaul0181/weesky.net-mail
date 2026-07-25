@@ -84,6 +84,16 @@ describe('useStagedAttachments', () => {
     expect(result.current.items).toHaveLength(0)
   })
 
+  it('seeds already-staged items as completed uploads', () => {
+    const { result } = renderHook(() =>
+      useStagedAttachments([{ id: 'a1', fileName: 'doc.pdf', size: 9 }]))
+
+    expect(result.current.items).toHaveLength(1)
+    expect(result.current.items[0]).toMatchObject({ id: 'a1', fileName: 'doc.pdf', progress: 1, error: null })
+    expect(result.current.ids).toEqual(['a1'])
+    expect(result.current.uploading).toBe(false)
+  })
+
   it('keeps each row on its own progress when two uploads interleave', async () => {
     let resolveA!: (v: unknown) => void
     let resolveB!: (v: unknown) => void

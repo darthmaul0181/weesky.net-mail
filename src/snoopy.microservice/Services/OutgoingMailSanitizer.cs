@@ -26,6 +26,9 @@ internal sealed class OutgoingMailSanitizer : IOutgoingMailSanitizer
         _sanitizer.AllowedSchemes.Add("http");
         _sanitizer.AllowedSchemes.Add("https");
         _sanitizer.AllowedSchemes.Add("mailto");
+        // cid: references an embedded part — no file access, no tracker. Without this, Ganss
+        // strips the src attribute before the image cull below ever sees it (the first gate).
+        _sanitizer.AllowedSchemes.Add("cid");
     }
 
     public OutgoingBody Prepare(string html)
@@ -35,12 +38,11 @@ internal sealed class OutgoingMailSanitizer : IOutgoingMailSanitizer
         var document = _parser.ParseDocument($"<body>{sanitized}</body>");
         var body = document.Body!;
 
-        // No cid: machinery in 2c1, and most receivers block data: URIs anyway — an image
-        // with no usable remote source is noise in the wire format.
+        // An image with no usable source is noise in the wire format; cid: is usable since 2c2b.
         foreach (var img in body.QuerySelectorAll("img").ToList())
         {
             var src = img.GetAttribute("src") ?? string.Empty;
-            if (!IsRemote(src)) img.Remove();
+            if (!IsAllowedImageSource(src)) img.Remove();
         }
 
         // Ganss's HtmlFormatter escapes < and > in attribute values; AngleSharp's default
@@ -48,11 +50,13 @@ internal sealed class OutgoingMailSanitizer : IOutgoingMailSanitizer
         return new OutgoingBody(body.ChildNodes.ToHtml(HtmlFormatter.Instance), ExtractText(body));
     }
 
-    // Ganss has already dropped every scheme but http, https and mailto, so what is left to
-    // reject is the schemeless src: relative to nothing once the message leaves us.
-    private static bool IsRemote(string src) =>
+    // Ganss has already dropped every scheme but http, https, mailto and cid, so what is left to
+    // reject is the schemeless src: relative to nothing once the message leaves us. cid is the
+    // second gate — an inline part reference is a legitimate outgoing source since 2c2b.
+    private static bool IsAllowedImageSource(string src) =>
         src.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-        || src.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        || src.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+        || src.StartsWith("cid:", StringComparison.OrdinalIgnoreCase);
 
     private static string ExtractText(IElement root)
     {

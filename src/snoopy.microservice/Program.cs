@@ -107,6 +107,7 @@ builder.Services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
 builder.Services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
 builder.Services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
 builder.Services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
+builder.Services.AddSingleton<IQuotePreparer, QuotePreparer>();
 builder.Services.AddSingleton(TimeProvider.System);
 // Singleton is load-bearing: staged metadata and per-account reserved bytes live in this
 // instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.

@@ -1,5 +1,7 @@
+using System.Net;
 using CSharpFunctionalExtensions;
 using MimeKit;
+using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -113,7 +115,36 @@ internal sealed class MailSender : IMailSender
     {
         // FullName lives in the database, not in the JWT claims.
         var dbUser = await _users.FindByEmailAsync(user.Email);
-        var body = _sanitizer.Prepare(request.HtmlBody);
+
+        // The composer displays a staged inline image through its content URL; on the wire that
+        // becomes a cid reference into the multipart/related. An image the user deleted from the
+        // body has no URL left to rewrite: it is not packed, and still purged after the send.
+        var html = request.HtmlBody;
+        var linked = new List<StagedAttachment>();
+        var regular = new List<StagedAttachment>();
+        foreach (var attachment in attachments)
+        {
+            if (attachment.Info.ContentId == null) { regular.Add(attachment); continue; }
+            var url = $"/api/Mail/Attachments/{attachment.Info.Id}/content";
+            if (!html.Contains(url, StringComparison.OrdinalIgnoreCase)) continue;
+            // This relative form is a contract with QuotePreparer, the sole producer of these URLs.
+            html = html.Replace(url, $"cid:{attachment.Info.ContentId}", StringComparison.OrdinalIgnoreCase);
+            linked.Add(attachment);
+        }
+
+        // Rewrite first, sanitize second: the outgoing policy keeps cid: and culls any leftover
+        // relative URL, so no staged URL can survive into the wire format.
+        var body = _sanitizer.Prepare(html);
+
+        // The sanitizer may still have dropped an image the raw body named; only what the final
+        // body references gets packed, so no resource rides along unreferenced. Match on the decoded
+        // body: the sanitizer's formatter escapes attribute values, so a Content-ID carrying '&' —
+        // legal, and taken straight off the inbound part — reads back as "&amp;" and would be culled.
+        if (linked.Count > 0)
+        {
+            var referenced = WebUtility.HtmlDecode(body.Html);
+            linked.RemoveAll(a => !referenced.Contains($"cid:{a.Info.ContentId}", StringComparison.OrdinalIgnoreCase));
+        }
 
         var message = new MimeMessage();
         var stored = await LoadIdentitiesAsync(userId, cancellationToken);
@@ -124,9 +155,19 @@ internal sealed class MailSender : IMailSender
         AddAddresses(message.Cc, request.Cc);
         AddAddresses(message.Bcc, request.Bcc);
         message.Subject = request.Subject;
+        message.MessageId = MimeUtils.GenerateMessageId(DomainOf(fromAddress));
+        ApplyThreadingHeaders(message, request);
 
         var builder = new BodyBuilder { HtmlBody = body.Html, TextBody = body.Text };
-        foreach (var attachment in attachments)
+        foreach (var attachment in linked)
+        {
+            await using var content = File.OpenRead(attachment.FilePath);
+            var resource = ContentType.TryParse(attachment.Info.ContentType, out var linkedType)
+                ? await builder.LinkedResources.AddAsync(attachment.Info.FileName, content, linkedType, cancellationToken)
+                : await builder.LinkedResources.AddAsync(attachment.Info.FileName, content, cancellationToken);
+            resource.ContentId = attachment.Info.ContentId;
+        }
+        foreach (var attachment in regular)
         {
             await using var content = File.OpenRead(attachment.FilePath);
             if (ContentType.TryParse(attachment.Info.ContentType, out var contentType))
@@ -137,6 +178,27 @@ internal sealed class MailSender : IMailSender
 
         message.Body = builder.ToMessageBody();
         return message;
+    }
+
+    private static string DomainOf(string address)
+    {
+        var at = address.LastIndexOf('@');
+        return at >= 0 && at < address.Length - 1 ? address[(at + 1)..] : "localhost";
+    }
+
+    /// <summary>
+    /// Threading is best-effort and per-id. The client controls these ids, and neither
+    /// <c>MessageIdList.Add</c> nor the <c>InReplyTo</c> setter rejects a CRLF-bearing one — appended
+    /// verbatim, it would inject a header line into a message we are about to DKIM-sign. Parsing each
+    /// id keeps only the msg-id itself, so a malformed one is dropped and none can ever fail a send.
+    /// </summary>
+    private static void ApplyThreadingHeaders(MimeMessage message, SendMessageRequest request)
+    {
+        if (request.InReplyTo is { } parent && MimeUtils.ParseMessageId(parent) is { } parsed)
+            message.InReplyTo = parsed;
+        foreach (var reference in request.References)
+            if (reference is not null && MimeUtils.ParseMessageId(reference) is { } id)
+                message.References.Add(id);
     }
 
     /// <summary>

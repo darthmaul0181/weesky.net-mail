@@ -98,4 +98,7 @@ public interface IImapSession : IAsyncDisposable
 
     /// <summary>Appends a message to a folder — the Sent copy after a send.</summary>
     Task<Result> AppendAsync(string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken);
+
+    /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
+    Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken);
 }

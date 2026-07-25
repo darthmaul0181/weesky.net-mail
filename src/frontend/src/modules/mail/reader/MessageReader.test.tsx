@@ -1,6 +1,7 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { settle } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
@@ -17,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn((folder: string, uid: number, part: string) =>
     `/api/Mail/Messages/Attachment?folder=${folder}&uid=${uid}&part=${part}`),
+  getIdentities: vi.fn(),
+  getAliases: vi.fn(),
+  prepareQuote: vi.fn(),
 }))
 
 vi.mock('../../../api.js', () => ({
@@ -25,13 +29,18 @@ vi.mock('../../../api.js', () => ({
     setMessageFlags: mocks.setMessageFlags, getMailFolders: mocks.getMailFolders,
     moveMessages: mocks.moveMessages, copyMessages: mocks.copyMessages,
     deleteMessages: mocks.deleteMessages,
+    getIdentities: mocks.getIdentities, getAliases: mocks.getAliases,
+    prepareQuote: mocks.prepareQuote,
   },
   requestBlob: mocks.requestBlob,
   mailAttachmentUrl: mocks.mailAttachmentUrl,
 }))
 
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({
+    activeAccount: { id: 'primary' },
+    identity: { displayName: 'Mick Weesky', email: 'mick@weesky.be' },
+  }),
 }))
 
 const theme = vi.hoisted(() => ({ isDark: false }))
@@ -62,7 +71,11 @@ function makeClient(tree: MailFolderNode[] = roleTree) {
 }
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={makeClient()}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={makeClient()}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  )
 }
 
 const detail = {
@@ -70,6 +83,7 @@ const detail = {
   subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
   to: [{ name: 'Mick', address: 'mick@weesky.be' }], cc: [],
   date: '2026-07-18T09:00:00Z', authentication: null,
+  messageId: 'm@x.be', references: [], inReplyTo: null, replyTo: [], bcc: [],
   spamScore: null,
   mailingList: null, sentBy: null, signedBy: null, unsubscribeUrl: null, tlsReceived: null,
   htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0,
@@ -100,7 +114,9 @@ function renderWithCachedSummary(
   })
   render(
     <QueryClientProvider client={client}>
-      <MessageReader folderPath="INBOX" uid={2} onNotify={onNotify} />
+      <MemoryRouter>
+        <MessageReader folderPath="INBOX" uid={2} onNotify={onNotify} />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -114,6 +130,8 @@ describe('MessageReader', () => {
     mocks.moveMessages.mockResolvedValue(undefined)
     mocks.copyMessages.mockResolvedValue(undefined)
     mocks.deleteMessages.mockResolvedValue(undefined)
+    mocks.getIdentities.mockResolvedValue({ identities: [] })
+    mocks.getAliases.mockResolvedValue([])
   })
 
   it('prompts when nothing is selected', () => {
@@ -808,7 +826,9 @@ describe('MessageReader', () => {
     function renderReader(props: Partial<ReaderProps> = {}, tree: MailFolderNode[] = roleTree) {
       render(
         <QueryClientProvider client={makeClient(tree)}>
-          <MessageReader folderPath="INBOX" uid={2} {...props} />
+          <MemoryRouter>
+            <MessageReader folderPath="INBOX" uid={2} {...props} />
+          </MemoryRouter>
         </QueryClientProvider>,
       )
     }
@@ -958,6 +978,67 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
       await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not move the message'))
+    })
+  })
+
+  describe('the quote actions', () => {
+    function ComposeProbe() {
+      const location = useLocation()
+      return <pre data-testid="compose-state">{JSON.stringify(location.state)}</pre>
+    }
+
+    function renderWithRouter(props: Partial<Parameters<typeof MessageReader>[0]> = {}) {
+      const client = makeClient()
+      const router = createMemoryRouter(
+        [
+          { path: '/mail', element: <MessageReader folderPath="INBOX" uid={2} {...props} /> },
+          { path: '/mail/compose', element: <ComposeProbe /> },
+        ],
+        { initialEntries: ['/mail'] },
+      )
+      render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+    }
+
+    it('prepares and navigates seeded on Reply', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.prepareQuote.mockResolvedValue({ quotableHtml: '<p>o</p>', attachments: [] })
+
+      renderWithRouter()
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+
+      await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'reply'))
+      const state = await screen.findByTestId('compose-state')
+      const parsed = JSON.parse(state.textContent ?? '{}')
+      expect(parsed.seed.subject).toMatch(/^Re:/)
+    })
+
+    it('lets "Edit as new" live in the kebab', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.prepareQuote.mockResolvedValue({ quotableHtml: '<p>o</p>', attachments: [] })
+
+      renderWithRouter()
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Edit as new' }))
+
+      await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'editAsNew'))
+    })
+
+    it('notifies and stays when a preparation fails', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.prepareQuote.mockRejectedValue(new Error('over the cap'))
+      const onNotify = vi.fn()
+
+      renderWithRouter({ onNotify })
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
+
+      await waitFor(() => expect(onNotify).toHaveBeenCalledWith('over the cap'))
+      expect(screen.queryByTestId('compose-state')).not.toBeInTheDocument()
     })
   })
 })

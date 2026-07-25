@@ -716,6 +716,16 @@ internal sealed class ImapSession : IImapSession
     public static List<MailAddressInfo> ToAddressInfos(InternetAddressList? addresses) =>
         addresses?.Mailboxes?.Select(m => new MailAddressInfo(m.Name ?? string.Empty, m.Address)).ToList() ?? [];
 
+    /// <summary>Threading and reply-routing headers — 2c2b's transcription duty on the detail.</summary>
+    internal static void ApplyThreading(MailMessageDetail detail, MimeMessage message)
+    {
+        detail.MessageId = string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId;
+        detail.References = message.References?.ToList() ?? [];
+        detail.InReplyTo = string.IsNullOrWhiteSpace(message.InReplyTo) ? null : message.InReplyTo;
+        detail.ReplyTo = ToAddressInfos(message.ReplyTo);
+        detail.Bcc = ToAddressInfos(message.Bcc);
+    }
+
     public async Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -763,6 +773,8 @@ internal sealed class ImapSession : IImapSession
                 TlsReceived = headerDetails.TlsReceived
             };
 
+            ApplyThreading(detail, message);
+
             foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())
             {
                 if (!part.IsAttachment && string.IsNullOrEmpty(part.FileName)) continue;
@@ -787,6 +799,33 @@ internal sealed class ImapSession : IImapSession
         {
             _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath);
             return Result.Failure<MailMessageDetail>("Unable to read the message");
+        }
+    }
+
+    /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
+    public async Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+            var message = await folder.GetMessageAsync(new UniqueId(folder.UidValidity, uid), cancellationToken);
+            return Result.Success(message);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (MessageNotFoundException)
+        {
+            return Result.Failure<MimeMessage>(MessageNotFound);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read raw message {Uid} in {Folder}", uid, folderPath);
+            return Result.Failure<MimeMessage>("Unable to read the message");
         }
     }
 

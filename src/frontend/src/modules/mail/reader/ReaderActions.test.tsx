@@ -17,6 +17,10 @@ const base = {
   deleteDisabled: false,
   onDelete: noop,
   actions: [] as MenuEntry[],
+  onReply: noop,
+  onReplyAll: noop,
+  onForward: noop,
+  preparing: false,
 }
 
 describe('ReaderActions', () => {
@@ -55,12 +59,13 @@ describe('ReaderActions', () => {
   })
 
   // A rule beside a lone button reads as a rendering fault — same reason the folder tree
-  // only draws its hr between two populated blocks.
+  // only draws its hr between two populated blocks. The quote-actions group always carries
+  // its own leading rule, so only the colour toggle's rule is what disappears with it.
   it('hides the toggle and its rule together, keeping the menu button', () => {
     const { container } = render(<ReaderActions {...base} showColourToggle={false} />)
 
     expect(screen.queryByRole('button', { name: 'Original colours' })).not.toBeInTheDocument()
-    expect(container.querySelector('.actions-rule')).toBeNull()
+    expect(container.querySelectorAll('.actions-rule')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Message actions' })).toBeInTheDocument()
   })
 
@@ -176,6 +181,26 @@ describe('ReaderActions', () => {
 
       fireEvent.click(button)
       expect(onDelete).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('the quote actions', () => {
+    it('fires the three quote actions and disables them while preparing', () => {
+      const onReply = vi.fn(); const onReplyAll = vi.fn(); const onForward = vi.fn()
+      render(<ReaderActions {...base} onReply={onReply} onReplyAll={onReplyAll} onForward={onForward} preparing={false} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Reply all' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
+      expect(onReply).toHaveBeenCalledOnce()
+      expect(onReplyAll).toHaveBeenCalledOnce()
+      expect(onForward).toHaveBeenCalledOnce()
+    })
+
+    it('disables the quote actions while a preparation is pending', () => {
+      render(<ReaderActions {...base} onReply={vi.fn()} onReplyAll={vi.fn()} onForward={vi.fn()} preparing />)
+      expect(screen.getByRole('button', { name: 'Reply' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Forward' })).toBeDisabled()
     })
   })
 

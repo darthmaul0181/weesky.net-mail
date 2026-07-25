@@ -9,6 +9,7 @@ const message: MailMessageDetail = {
   to: [{ name: '', address: 'mick@weesky.be' }],
   cc: [{ name: 'Bob', address: 'bob@x.be' }],
   date: '2026-07-02T10:03:00Z',
+  messageId: null, references: [], inReplyTo: null, replyTo: [], bcc: [],
   authentication: null, spamScore: null,
   mailingList: '<news.weesky.net>', sentBy: 'a547955.bnc3.mailjet.com', signedBy: 'weesky.net',
   unsubscribeUrl: 'https://news.weesky.net/unsub', tlsReceived: true,

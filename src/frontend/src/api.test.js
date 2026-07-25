@@ -614,6 +614,19 @@ describe('mailAttachmentUrl', () => {
   })
 })
 
+// Unlike mailAttachmentUrl, this one is an <img src>, not a request path: a relative URL would
+// resolve against the SPA origin, where the endpoint does not exist.
+describe('stagedAttachmentUrl', () => {
+  it('is absolute, against the API origin', async () => {
+    const { stagedAttachmentUrl, API_BASE } = await import('./api.js')
+
+    const url = stagedAttachmentUrl('abc')
+
+    expect(url).toBe(`${API_BASE}/api/Mail/Attachments/abc/content`)
+    expect(url).toMatch(/^https?:\/\//)
+  })
+})
+
 describe('requestBlob', () => {
   function mockBlobFetch({ status = 200, disposition = null, ok = true, text = '' } = {}) {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

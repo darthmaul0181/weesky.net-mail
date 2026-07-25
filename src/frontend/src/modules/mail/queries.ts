@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, MailSearchPage,
-  FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity,
+  FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote, QuotePurpose,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -630,6 +630,9 @@ export interface SendMessageArgs {
   attachmentIds: string[]
   /** Omitted picks the account's own address server-side; the display label is always server-resolved. */
   fromAddress?: string
+  /** Threading of a reply/forward: the original's id and its extended references chain. */
+  inReplyTo?: string
+  references?: string[]
 }
 
 export interface SendMessageResult { appendedToSent: boolean }
@@ -654,6 +657,17 @@ export function useSendMessage() {
         queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.node.path) })
       }
     },
+  })
+}
+
+/**
+ * Stages the quotable body server-side. A mutation, not a query: every call stages files
+ * (a side effect with a TTL), so the result must never be cached or replayed.
+ */
+export function usePrepareQuote() {
+  return useMutation({
+    mutationFn: (args: { folder: string; uid: number; purpose: QuotePurpose }) =>
+      api.prepareQuote(args.folder, args.uid, args.purpose) as Promise<PreparedQuote>,
   })
 }
 

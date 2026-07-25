@@ -101,4 +101,22 @@ public sealed class OutgoingMailSanitizerTests
 
         Assert.Contains("mailto:someone@example.org", body.Html);
     }
+
+    [Fact]
+    public void Prepare_KeepsACidImageWithItsSrcIntact()
+    {
+        var body = _sanitizer.Prepare("<p>Hi</p><img src=\"cid:logo@mail\">");
+
+        Assert.Contains("cid:logo@mail", body.Html);
+        Assert.Contains("<img", body.Html);
+    }
+
+    [Fact]
+    public void Prepare_StillRemovesNonRemoteNonCidImages()
+    {
+        var body = _sanitizer.Prepare(
+            "<img src=\"file:///etc/passwd\"><img src=\"/relative.png\"><img src=\"data:image/png;base64,AA==\">");
+
+        Assert.DoesNotContain("<img", body.Html);
+    }
 }

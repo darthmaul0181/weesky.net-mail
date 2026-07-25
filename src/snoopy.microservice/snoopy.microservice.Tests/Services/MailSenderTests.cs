@@ -394,4 +394,180 @@ public sealed class MailSenderTests
         Assert.True((await sender.SendAsync(_user, "pw", Request(), CancellationToken.None)).IsSuccess);
         Assert.Equal("mick@weesky.be", Assert.IsType<MailboxAddress>(sent!.From[0]).Address);
     }
+
+    [Fact]
+    public async Task SendAsync_SetsTheThreadingHeaders()
+    {
+        MimeMessage? sent = null;
+        var sender = CreateSender();
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var request = Request() with { InReplyTo = "parent@id", References = ["root@id", "parent@id"] };
+        var result = await sender.SendAsync(_user, "pw", request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("parent@id", sent!.InReplyTo);
+        Assert.Equal(new[] { "root@id", "parent@id" }, sent.References);
+        Assert.EndsWith("@weesky.be", sent.MessageId);
+    }
+
+    [Fact]
+    public async Task SendAsync_AReferenceCarryingCrlf_CannotInjectAHeader()
+    {
+        MimeMessage? sent = null;
+        var sender = CreateSender();
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var request = Request() with { References = ["a@b\r\nBcc: evil@example.com"] };
+        var result = await sender.SendAsync(_user, "pw", request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new[] { "a@b" }, sent!.References);
+        // Request() already carries one legitimate Bcc: a second one would be the injected line.
+        Assert.Single(sent.Headers, h => h.Field.Equals("Bcc", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain("evil@example.com", sent.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SendAsync_MalformedThreadingIds_AreNormalisedNotRejected()
+    {
+        MimeMessage? sent = null;
+        var sender = CreateSender();
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var request = Request() with { InReplyTo = "not a msgid!!", References = ["", "garbage", "root@id"] };
+        var result = await sender.SendAsync(_user, "pw", request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        // A bad id never costs the ones after it: the valid tail of the chain still ships.
+        Assert.Contains("root@id", sent!.References);
+        Assert.DoesNotContain("", sent.References);
+        // MimeKit's parser is the gate, and it normalises junk rather than rejecting it — what
+        // matters is that only a parsed msg-id ever reaches the wire, and that the send survives.
+        Assert.Equal("notamsgid!!", sent.InReplyTo);
+    }
+
+    [Fact]
+    public async Task SendAsync_WithoutThreading_SendsAFreshMessage()
+    {
+        MimeMessage? sent = null;
+        var sender = CreateSender();
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var result = await sender.SendAsync(_user, "pw", Request(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(sent!.InReplyTo);
+        Assert.Empty(sent.References);
+        Assert.EndsWith("@weesky.be", sent.MessageId);
+    }
+
+    [Fact]
+    public async Task SendAsync_PacksAReferencedInlinePartAsALinkedResource()
+    {
+        var id = Guid.NewGuid();
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        await File.WriteAllBytesAsync(path, new byte[] { 1, 2, 3 });
+        try
+        {
+            MimeMessage? sent = null;
+            var sender = CreateSender();
+            var info = new StagedAttachmentInfo(id, "logo.png", 3, "image/png", "logo@mail");
+            _staged.Setup(s => s.Open(It.IsAny<string>(), id))
+                .Returns(Result.Success(new StagedAttachment(info, path)));
+            // Pass-through: what the sanitizer received is what the rewrite must have produced.
+            _sanitizer.Setup(s => s.Prepare(It.IsAny<string>()))
+                .Returns<string>(html => new OutgoingBody(html, "hi"));
+            _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+                .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+                .ReturnsAsync(Result.Success());
+
+            var request = Request() with
+            {
+                HtmlBody = $"<p>Hi</p><img src=\"/api/Mail/Attachments/{id}/content\">",
+                AttachmentIds = [id],
+            };
+            var result = await sender.SendAsync(_user, "pw", request, CancellationToken.None);
+
+            Assert.True(result.IsSuccess);
+            var resource = sent!.BodyParts.OfType<MimePart>().Single(p => p.ContentId == "logo@mail");
+            Assert.Equal("image/png", resource.ContentType.MimeType);
+            Assert.Contains("cid:logo@mail", sent.HtmlBody);
+            Assert.DoesNotContain("/api/Mail/Attachments/", sent.HtmlBody);
+            // Packed as a related resource, not an attachment.
+            Assert.DoesNotContain(sent.Attachments, a => a is MimePart mp && mp.ContentId == "logo@mail");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task SendAsync_PacksAnInlinePartWhoseContentIdCarriesAnAmpersand()
+    {
+        var id = Guid.NewGuid();
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        await File.WriteAllBytesAsync(path, new byte[] { 1, 2, 3 });
+        try
+        {
+            MimeMessage? sent = null;
+            var sender = CreateSender();
+            // '&' is legal in a Content-ID and comes off the inbound part untouched.
+            var info = new StagedAttachmentInfo(id, "logo.png", 3, "image/png", "a&b@x");
+            _staged.Setup(s => s.Open(It.IsAny<string>(), id))
+                .Returns(Result.Success(new StagedAttachment(info, path)));
+            // The real sanitizer, because the bug is in its re-serialisation: the formatter escapes
+            // the '&' in the src, so a check against the raw HTML no longer finds the reference.
+            _sanitizer.Setup(s => s.Prepare(It.IsAny<string>()))
+                .Returns<string>(html => new OutgoingMailSanitizer().Prepare(html));
+            _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+                .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+                .ReturnsAsync(Result.Success());
+
+            var request = Request() with
+            {
+                HtmlBody = $"<p>Hi</p><img src=\"/api/Mail/Attachments/{id}/content\">",
+                AttachmentIds = [id],
+            };
+            var result = await sender.SendAsync(_user, "pw", request, CancellationToken.None);
+
+            Assert.True(result.IsSuccess);
+            Assert.Contains(sent!.BodyParts.OfType<MimePart>(), p => p.ContentId == "a&b@x");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task SendAsync_SkipsAnInlinePartTheBodyNoLongerReferences()
+    {
+        var id = Guid.NewGuid();
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        await File.WriteAllBytesAsync(path, new byte[] { 1 });
+        try
+        {
+            MimeMessage? sent = null;
+            var sender = CreateSender();
+            var info = new StagedAttachmentInfo(id, "logo.png", 1, "image/png", "logo@mail");
+            _staged.Setup(s => s.Open(It.IsAny<string>(), id))
+                .Returns(Result.Success(new StagedAttachment(info, path)));
+            _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+                .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+                .ReturnsAsync(Result.Success());
+
+            // The user deleted the image in the editor: the id is still staged, the body has no URL.
+            var request = Request() with { HtmlBody = "<p>no image left</p>", AttachmentIds = [id] };
+            var result = await sender.SendAsync(_user, "pw", request, CancellationToken.None);
+
+            Assert.True(result.IsSuccess);
+            Assert.DoesNotContain(sent!.BodyParts.OfType<MimePart>(), p => p.ContentId == "logo@mail");
+            _staged.Verify(s => s.Delete(It.IsAny<string>(), id), Times.Once); // still purged after send
+        }
+        finally { File.Delete(path); }
+    }
 }

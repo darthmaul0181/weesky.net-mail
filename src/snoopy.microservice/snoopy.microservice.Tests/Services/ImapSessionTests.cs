@@ -483,4 +483,42 @@ public sealed class ImapSessionTests
         Assert.Equal(string.Empty, result[2].Name);
         Assert.Equal("eve@example.com", result[2].Address);
     }
+
+    [Fact]
+    public void ApplyThreading_TranscribesTheHeaders()
+    {
+        var message = new MimeMessage();
+        message.MessageId = "current@id";
+        message.InReplyTo = "parent@id";
+        message.References.Add("grandparent@id");
+        message.References.Add("parent@id");
+        message.ReplyTo.Add(new MailboxAddress("List", "list@x.example"));
+        message.Bcc.Add(new MailboxAddress("Hidden", "bcc@x.example"));
+
+        var detail = new MailMessageDetail();
+        ImapSession.ApplyThreading(detail, message);
+
+        Assert.Equal("current@id", detail.MessageId);
+        Assert.Equal("parent@id", detail.InReplyTo);
+        Assert.Equal(new[] { "grandparent@id", "parent@id" }, detail.References);
+        Assert.Equal("list@x.example", Assert.Single(detail.ReplyTo).Address);
+        Assert.Equal("bcc@x.example", Assert.Single(detail.Bcc).Address);
+    }
+
+    [Fact]
+    public void ApplyThreading_DefaultsToNullAndEmptyWhenAbsent()
+    {
+        // MimeMessage's constructor generates a Message-Id — remove it to model a header-less original.
+        var message = new MimeMessage();
+        message.Headers.Remove(HeaderId.MessageId);
+
+        var detail = new MailMessageDetail();
+        ImapSession.ApplyThreading(detail, message);
+
+        Assert.Null(detail.MessageId);
+        Assert.Null(detail.InReplyTo);
+        Assert.Empty(detail.References);
+        Assert.Empty(detail.ReplyTo);
+        Assert.Empty(detail.Bcc);
+    }
 }

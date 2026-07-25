@@ -12,8 +12,11 @@ export interface StagedItem {
 
 let nextKey = 0
 
-export function useStagedAttachments() {
-  const [items, setItems] = useState<StagedItem[]>([])
+/** `initial` seeds parts the backend already staged (a forward's attachments): uploaded, done. */
+export function useStagedAttachments(initial: { id: string; fileName: string; size: number }[] = []) {
+  const [items, setItems] = useState<StagedItem[]>(() => initial.map(item => ({
+    key: `staged-${nextKey++}`, id: item.id, fileName: item.fileName, size: item.size, progress: 1, error: null,
+  })))
   const itemsRef = useRef(items)
 
   // Keeps the ref authoritative at every instant, not just after the next

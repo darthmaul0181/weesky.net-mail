@@ -1,9 +1,12 @@
 import Tooltip from '../../../components/Tooltip'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
+import ForwardIcon from '../../../icons/ForwardIcon'
 import KebabIcon from '../../../icons/KebabIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import MoonIcon from '../../../icons/MoonIcon'
+import ReplyIcon from '../../../icons/ReplyIcon'
+import ReplyAllIcon from '../../../icons/ReplyAllIcon'
 import StarIcon from '../../../icons/StarIcon'
 import SunIcon from '../../../icons/SunIcon'
 import TrashIcon from '../../../icons/TrashIcon'
@@ -22,6 +25,11 @@ interface Props {
   deleteDisabled: boolean
   onDelete: () => void
   actions: MenuEntry[]
+  onReply: () => void
+  onReplyAll: () => void
+  onForward: () => void
+  /** A PrepareQuote round-trip is in flight — the quote actions hold until it lands. */
+  preparing: boolean
 }
 
 /** Icon AND tooltip describe the action to come, not the current state — the validated design
@@ -30,9 +38,23 @@ interface Props {
 export default function ReaderActions({
   showColourToggle, originalColours, onToggleColours, seen, flagged, onToggleSeen, onToggleFlagged,
   deleteLabel, deleteDisabled, onDelete, actions,
+  onReply, onReplyAll, onForward, preparing,
 }: Props) {
   return (
     <div className="reader-actions">
+      <button type="button" className="action-btn" aria-label="Reply" title="Reply"
+        disabled={preparing} onClick={onReply}>
+        <ReplyIcon size={18} />
+      </button>
+      <button type="button" className="action-btn" aria-label="Reply all" title="Reply all"
+        disabled={preparing} onClick={onReplyAll}>
+        <ReplyAllIcon size={18} />
+      </button>
+      <button type="button" className="action-btn" aria-label="Forward" title="Forward"
+        disabled={preparing} onClick={onForward}>
+        <ForwardIcon size={18} />
+      </button>
+      <span className="actions-rule" />
       {showColourToggle && (
         <>
           <Tooltip

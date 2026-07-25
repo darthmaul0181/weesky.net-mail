@@ -4,12 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
+import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   deleteAttachment: vi.fn(),
   uploadAttachment: vi.fn(),
+  apiBase: 'https://api.test.example',
 }))
 // The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
 // it here would only re-test what SquireEditor.mount already covers.
@@ -18,6 +20,8 @@ const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[] }))
 vi.mock('../../../api.js', () => ({
   api: { sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment },
   uploadAttachment: mocks.uploadAttachment,
+  API_BASE: mocks.apiBase,
+  stagedAttachmentUrl: (id: string) => `${mocks.apiBase}/api/Mail/Attachments/${id}/content`,
 }))
 vi.mock('../queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../queries')>()
@@ -31,8 +35,8 @@ vi.mock('../../../contexts/AuthContext', () => ({
 }))
 vi.mock('./SquireEditor', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
-  const Stub = forwardRef<EditorHandle, { onChange: () => void }>(
-    function SquireEditorStub({ onChange }, ref) {
+  const Stub = forwardRef<EditorHandle, { onChange: () => void; initialHtml?: string }>(
+    function SquireEditorStub({ onChange, initialHtml }, ref) {
       useImperativeHandle(ref, () => ({
         getHTML: () => editorState.html,
         isEmpty: () => editorState.html === '',
@@ -44,6 +48,7 @@ vi.mock('./SquireEditor', async () => {
       return (
         <textarea
           data-testid="compose-editor"
+          defaultValue={initialHtml}
           onChange={event => { editorState.html = event.target.value; onChange() }}
         />
       )
@@ -51,7 +56,7 @@ vi.mock('./SquireEditor', async () => {
   return { default: Stub }
 })
 
-function renderCompose(from = 'INBOX') {
+function renderCompose(from = 'INBOX', seed?: ComposeSeed) {
   const onNotify = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -61,7 +66,7 @@ function renderCompose(from = 'INBOX') {
       { path: '/mail', element: <span data-testid="mail-view">mail</span> },
       { path: '/mail/compose', element: <ComposeView onNotify={onNotify} /> },
     ],
-    { initialEntries: ['/mail', { pathname: '/mail/compose', state: { from } }], initialIndex: 1 },
+    { initialEntries: ['/mail', { pathname: '/mail/compose', state: { from, seed } }], initialIndex: 1 },
   )
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return { onNotify, router }
@@ -102,6 +107,7 @@ describe('ComposeView', () => {
   it('shows the identity as plain-text From, focuses To and refuses to send with no recipient', () => {
     renderCompose()
 
+    expect(screen.getByText('New message')).toBeInTheDocument()
     expect(screen.getByText('Mick Weesky (mick@weesky.be)')).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'From' })).toBeNull()
     expect(screen.getByLabelText('To')).toHaveFocus()
@@ -292,6 +298,99 @@ describe('ComposeView', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
     expect(screen.queryByText('Discard this message?')).toBeNull()
+  })
+})
+
+// A reply/forward arrives as router state; the composer opens on it instead of on a blank form.
+describe('a seeded ComposeView', () => {
+  const seed: ComposeSeed = {
+    action: 'reply',
+    to: ['alice@ext.example'], cc: ['bob@ext.example'], bcc: [],
+    subject: 'Re: Hello', html: '<div><br></div><blockquote><p>original</p></blockquote>',
+    fromAddress: null,
+    attachments: [
+      { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
+      { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+    ],
+    inReplyTo: 'm@x', references: ['m@x'],
+  }
+
+  it('prefills the form', () => {
+    renderCompose('INBOX', seed)
+
+    expect(screen.getByText('alice@ext.example')).toBeInTheDocument()
+    expect(screen.getByLabelText('Cc')).toBeInTheDocument()
+    expect(screen.getByText('bob@ext.example')).toBeInTheDocument()
+    expect(screen.getByLabelText('Subject')).toHaveValue('Re: Hello')
+    expect(screen.getByTestId('compose-editor')).toHaveValue(seed.html)
+  })
+
+  // "New message" over a quoted reply describes the wrong thing; edit-as-new genuinely is one.
+  it.each([
+    ['reply', 'Reply'], ['replyAll', 'Reply'], ['forward', 'Forward'], ['editAsNew', 'New message'],
+  ] as const)('titles a %s composer "%s"', (action, title) => {
+    renderCompose('INBOX', { ...seed, action })
+
+    expect(screen.getByText(title)).toBeInTheDocument()
+  })
+
+  it('seeds only regular attachments into the tray', () => {
+    renderCompose('INBOX', seed)
+
+    expect(screen.getByText('doc.pdf')).toBeInTheDocument()
+    expect(screen.queryByText('logo.png')).toBeNull()
+  })
+
+  it('sends the threading and every staged id', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose('INBOX', seed)
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      inReplyTo: 'm@x', references: ['m@x'], attachmentIds: expect.arrayContaining(['i1', 'a1']),
+    })))
+  })
+
+  // The composer displays staged images absolute, but MailSender swaps a staged URL for a cid by
+  // matching the relative form only — and an absolute https URL would survive the outgoing
+  // sanitiser and ship a link to our API in the recipient's mail.
+  it('relativizes the staged image URLs before they go on the wire', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose('INBOX', seed)
+    editorState.html = `<p>hi</p><img src="${mocks.apiBase}/api/Mail/Attachments/i1/content">`
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    const { htmlBody } = mocks.sendMessage.mock.calls[0][0]
+    expect(htmlBody).toContain('src="/api/Mail/Attachments/i1/content"')
+    expect(htmlBody).not.toContain(mocks.apiBase)
+  })
+
+  // Only the quoted body is seeded here: the guard has to trip on it alone, not on a recipient
+  // or a subject it happens to come with.
+  it('a seeded composer is dirty from the start', async () => {
+    const bodyOnly: ComposeSeed = {
+      ...seed, to: [], cc: [], bcc: [], subject: '', attachments: [], inReplyTo: null, references: [],
+    }
+    const { router } = renderCompose('INBOX', bodyOnly)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  it('releases the inline resources too when the message is discarded', async () => {
+    renderCompose('INBOX', seed)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    const modal = await discardModal()
+    fireEvent.click(within(modal).getByRole('button', { name: 'Discard' }))
+
+    await waitFor(() => expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1'))
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
   })
 })
 

@@ -53,6 +53,26 @@ public sealed class StagedAttachmentStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_CarriesTheContentIdThrough()
+    {
+        var result = await _store.SaveAsync("me", "logo.png", "image/png",
+            new MemoryStream([1, 2, 3]), CancellationToken.None, "logo@mail");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("logo@mail", result.Value.ContentId);
+    }
+
+    [Fact]
+    public async Task SaveAsync_DefaultsContentIdToNull()
+    {
+        var result = await _store.SaveAsync("me", "a.pdf", "application/pdf",
+            new MemoryStream([1]), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.ContentId);
+    }
+
+    [Fact]
     public async Task Open_RefusesAnotherAccountsId()
     {
         var saved = await _store.SaveAsync("me", "a.txt", "text/plain", Bytes(4), CancellationToken.None);

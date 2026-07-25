@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using MimeKit;
 using Moq;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
@@ -23,6 +24,7 @@ public sealed class MailControllerTests
     private readonly Mock<IFolderRoleStore> _roleStore = new();
     private readonly Mock<IStagedAttachmentStore> _staged = new();
     private readonly Mock<IMailSender> _sender = new();
+    private readonly Mock<IQuotePreparer> _quotes = new();
 
     private MailController CreateController()
     {
@@ -31,7 +33,7 @@ public sealed class MailControllerTests
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
         return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
-                                  _staged.Object, _sender.Object)
+                                  _staged.Object, _sender.Object, _quotes.Object)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
@@ -1423,6 +1425,40 @@ public sealed class MailControllerTests
         _staged.Verify(s => s.Delete(WebmailUid.ToString(), id), Times.Once);
     }
 
+    [Fact]
+    public void GetStagedAttachment_ServesTheOwnersFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        File.WriteAllBytes(path, new byte[] { 1, 2, 3 });
+        try
+        {
+            var id = Guid.NewGuid();
+            var info = new StagedAttachmentInfo(id, "logo.png", 3, "image/png", "logo@mail");
+            _staged.Setup(s => s.Open(It.IsAny<string>(), id))
+                .Returns(Result.Success(new StagedAttachment(info, path)));
+
+            var controller = CreateController();
+            var result = controller.GetStagedAttachment(id);
+
+            var file = Assert.IsType<FileStreamResult>(result);
+            Assert.Equal("image/png", file.ContentType);
+            Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions);
+            file.FileStream.Dispose(); // normally disposed by the MVC pipeline once the response is written
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void GetStagedAttachment_AnswersNotFoundForAForeignId()
+    {
+        _staged.Setup(s => s.Open(It.IsAny<string>(), It.IsAny<Guid>()))
+            .Returns(Result.Failure<StagedAttachment>("unknown_attachment"));
+
+        var result = CreateController().GetStagedAttachment(Guid.NewGuid());
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
     // ── Send ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -1498,6 +1534,22 @@ public sealed class MailControllerTests
     }
 
     [Fact]
+    public async Task SendMessage_TreatsANullReferencesListAsNoThreading()
+    {
+        SendMessageRequest? captured = null;
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, string, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SendMessageResult(true)));
+        var request = new SendMessageRequest { To = ["ok@example.com"], References = null! };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Empty(captured!.References);
+    }
+
+    [Fact]
     public async Task SendMessage_RejectsANullRecipientElement()
     {
         var request = new SendMessageRequest { To = ["a@example.com", null!] };
@@ -1559,5 +1611,93 @@ public sealed class MailControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.False(((SendMessageResult)ok.Value!).AppendedToSent);
+    }
+
+    // ── PrepareQuote ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task PrepareQuote_RefusesAnUnknownPurpose()
+    {
+        var result = await CreateController().PrepareQuote(
+            new PrepareQuoteRequest { Folder = "INBOX", Uid = 1, Purpose = "resend" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task PrepareQuote_RefusesAMissingFolder()
+    {
+        var result = await CreateController().PrepareQuote(
+            new PrepareQuoteRequest { Folder = " ", Uid = 1, Purpose = "reply" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task PrepareQuote_MapsMessageNotFoundTo404()
+    {
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<MimeMessage>(ImapSession.MessageNotFound));
+
+        var result = await CreateController().PrepareQuote(
+            new PrepareQuoteRequest { Folder = "INBOX", Uid = 7, Purpose = "reply" }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task PrepareQuote_AnswersThePreparedQuote()
+    {
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new MimeMessage()));
+        var prepared = new PreparedQuote("<p>q</p>", []);
+        _quotes.Setup(q => q.PrepareAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), QuotePurpose.Forward, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(prepared));
+
+        var result = await CreateController().PrepareQuote(
+            new PrepareQuoteRequest { Folder = "INBOX", Uid = 7, Purpose = "forward" }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(prepared, ok.Value);
+    }
+
+    [Fact]
+    public async Task PrepareQuote_MapsAStagingRefusalTo400()
+    {
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new MimeMessage()));
+        _quotes.Setup(q => q.PrepareAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), It.IsAny<QuotePurpose>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<PreparedQuote>("The attachment exceeds the 25 MB limit"));
+
+        var result = await CreateController().PrepareQuote(
+            new PrepareQuoteRequest { Folder = "INBOX", Uid = 7, Purpose = "forward" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task PrepareQuote_Returns401WhenCredentialsAreUnavailable()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.PrepareQuote(
+            new PrepareQuoteRequest { Folder = "INBOX", Uid = 7, Purpose = "reply" }, CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task PrepareQuote_Returns502WhenImapFails()
+    {
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<MimeMessage>("Unable to read the message"));
+
+        var result = await CreateController().PrepareQuote(
+            new PrepareQuoteRequest { Folder = "INBOX", Uid = 7, Purpose = "reply" }, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
     }
 }

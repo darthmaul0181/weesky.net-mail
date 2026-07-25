@@ -1,9 +1,6 @@
 namespace weesky.Snoopy.Microservice.Models.Mail;
 
-/// <summary>
-/// A composed message. Threading (inReplyTo/references) comes with 2c2b — absent today,
-/// no dead fields in waiting.
-/// </summary>
+/// <summary>A composed message.</summary>
 public sealed record SendMessageRequest
 {
     public IReadOnlyList<string> To { get; init; } = [];
@@ -16,4 +13,10 @@ public sealed record SendMessageRequest
     public string? FromAddress { get; init; }
 
     public IReadOnlyList<Guid> AttachmentIds { get; init; } = [];
+
+    /// <summary>Message-Id being replied to, bare (no angle brackets). Absent on a fresh message.</summary>
+    public string? InReplyTo { get; init; }
+
+    /// <summary>References chain for the reply, oldest first, bare ids. Empty on a fresh message.</summary>
+    public IReadOnlyList<string> References { get; init; } = [];
 }

@@ -14,6 +14,22 @@ public sealed class MailMessageDetail
     public string FromAddress { get; set; } = string.Empty;
     public List<MailAddressInfo> To { get; set; } = [];
     public List<MailAddressInfo> Cc { get; set; } = [];
+
+    /// <summary>RFC 5322 Message-Id, bare (no angle brackets). Null when the message carries none.</summary>
+    public string? MessageId { get; set; }
+
+    /// <summary>References chain, oldest first, bare ids. Empty when absent.</summary>
+    public List<string> References { get; set; } = [];
+
+    /// <summary>In-Reply-To, bare id. Null when absent.</summary>
+    public string? InReplyTo { get; set; }
+
+    /// <summary>Reply-To mailboxes — the reply target when present. Empty when absent.</summary>
+    public List<MailAddressInfo> ReplyTo { get; set; } = [];
+
+    /// <summary>Bcc mailboxes — kept on a Sent copy; empty on received mail. Feeds Edit-as-new.</summary>
+    public List<MailAddressInfo> Bcc { get; set; } = [];
+
     public DateTimeOffset Date { get; set; }
 
     /// <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>

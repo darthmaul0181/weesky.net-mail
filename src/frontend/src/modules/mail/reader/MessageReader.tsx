@@ -1,6 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
+import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
@@ -10,8 +12,10 @@ import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
+import PencilIcon from '../../../icons/PencilIcon.jsx'
 import {
-  useAccountId, useDeleteMessages, useFolders, useMessage, useMoveMessages, useSetFlags,
+  useAccountId, useAliases, useDeleteMessages, useFolders, useIdentities, useMessage,
+  useMoveMessages, usePrepareQuote, useSetFlags,
 } from '../queries'
 import { rolePathsOf } from '../folders/folderNodes'
 import type { MenuEntry } from '../../../components/DropdownMenu'
@@ -19,6 +23,7 @@ import type { SpecialUse } from '../api/mailTypes'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import MoveMessagesModal from '../MoveMessagesModal'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
+import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
 import { formatReaderDate } from './formatReaderDate'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
@@ -62,6 +67,11 @@ export default function MessageReader(
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
+  const navigate = useNavigate()
+  const { identity } = useAuth()
+  const { data: identityList } = useIdentities()
+  const { data: aliases } = useAliases()
+  const prepare = usePrepareQuote()
 
   useMarkSeenOnOpen(folderPath, uid, Boolean(data))
 
@@ -165,6 +175,18 @@ export default function MessageReader(
     onDeparted?.(uid!)
   }
 
+  async function openCompose(action: ComposeAction) {
+    try {
+      const purpose = action === 'editAsNew' ? 'editAsNew' : action === 'forward' ? 'forward' : 'reply'
+      const prepared = await prepare.mutateAsync({ folder: folderPath!, uid: uid!, purpose })
+      const seed = buildComposeSeed(
+        action, data!, prepared, identityList ?? [], aliases ?? [], identity?.email ?? null)
+      navigate('/mail/compose', { state: { from: folderPath, seed } })
+    } catch (error) {
+      onNotify?.(error instanceof Error ? error.message : 'Could not prepare the message')
+    }
+  }
+
   const actions: MenuEntry[] = [
     {
       label: 'Archive', icon: <ArchiveIcon size={18} />,
@@ -178,6 +200,7 @@ export default function MessageReader(
     },
     { label: 'Move to…', icon: <FolderMoveIcon size={18} />, onSelect: () => setPicker({ mode: 'move' }) },
     { label: 'Copy to…', icon: <CopyIcon size={18} />, onSelect: () => setPicker({ mode: 'copy' }) },
+    { label: 'Edit as new', icon: <PencilIcon size={18} />, onSelect: () => void openCompose('editAsNew') },
   ]
 
   return (
@@ -248,6 +271,10 @@ export default function MessageReader(
           deleteDisabled={deleteDisabled}
           onDelete={onDelete}
           actions={actions}
+          onReply={() => void openCompose('reply')}
+          onReplyAll={() => void openCompose('replyAll')}
+          onForward={() => void openCompose('forward')}
+          preparing={prepare.isPending}
         />
       </header>
 

@@ -9,6 +9,7 @@ import SquireEditor, { type EditorHandle } from './SquireEditor'
 const instance = {
   getHTML: vi.fn(() => '<div>hi</div>'),
   setHTML: vi.fn(),
+  moveCursorToStart: vi.fn(),
   addEventListener: vi.fn(),
   destroy: vi.fn(),
   focus: vi.fn(),
@@ -164,6 +165,18 @@ describe('SquireEditor', () => {
     const inputHandler = instance.addEventListener.mock.calls.find(c => c[0] === 'input')![1]
     inputHandler()
     expect(onChange).toHaveBeenCalled()
+  })
+
+  // A seeded body opens with the caret on the empty line above the quote, not after it.
+  it('loads an initial body at mount and parks the caret at the top', () => {
+    render(<SquireEditor onChange={() => {}} initialHtml="<div><br></div><blockquote>q</blockquote>" />)
+    expect(instance.setHTML).toHaveBeenCalledWith('<div><br></div><blockquote>q</blockquote>')
+    expect(instance.moveCursorToStart).toHaveBeenCalled()
+  })
+
+  it('leaves the engine untouched when no initial body is given', () => {
+    setup()
+    expect(instance.setHTML).not.toHaveBeenCalled()
   })
 
   it('destroys the engine on unmount', () => {

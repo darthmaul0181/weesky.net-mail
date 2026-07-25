@@ -96,6 +96,14 @@ export interface MailMessageDetail {
   to: MailAddressInfo[]
   cc: MailAddressInfo[]
   date: string
+  /** RFC 5322 message id, bare (no angle brackets). Null when the original carries none. */
+  messageId: string | null
+  /** References chain, oldest first, bare ids. Empty when absent. */
+  references: string[]
+  inReplyTo: string | null
+  replyTo: MailAddressInfo[]
+  /** Kept on a Sent copy; empty on received mail. Feeds Edit-as-new. */
+  bcc: MailAddressInfo[]
   authentication: MailAuthentication | null
   spamScore: MailSpamScore | null
   /** Expanded-header details — each null when the message carries no such header. */
@@ -146,3 +154,21 @@ export interface SendingIdentity {
 export interface IdentityListResponse { identities: SendingIdentity[] }
 
 export interface AliasInfo { name: string; domain: string }
+
+/** One staged outgoing file, as the backend answers it. */
+export interface StagedAttachmentInfo {
+  id: string
+  fileName: string
+  size: number
+  contentType: string
+  /** Non-null marks an inline body resource (cid part) — hidden from the attachment tray. */
+  contentId: string | null
+}
+
+export type QuotePurpose = 'reply' | 'forward' | 'editAsNew'
+
+/** What PrepareQuote answers: the outbound-sanitised original, cid images rewritten to staged URLs. */
+export interface PreparedQuote {
+  quotableHtml: string
+  attachments: StagedAttachmentInfo[]
+}

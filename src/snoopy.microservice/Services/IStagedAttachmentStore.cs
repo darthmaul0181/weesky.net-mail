@@ -9,8 +9,9 @@ namespace weesky.Snoopy.Microservice.Services;
 /// </summary>
 public interface IStagedAttachmentStore
 {
-    /// <summary>Streams one upload to disk. Fails when the file or the account total exceeds the caps.</summary>
-    Task<Result<StagedAttachmentInfo>> SaveAsync(string accountId, string fileName, string contentType, Stream content, CancellationToken cancellationToken);
+    /// <summary>Streams one upload to disk. Fails when the file or the account total exceeds the caps.
+    /// A contentId marks the file as an inline body resource rather than a plain attachment.</summary>
+    Task<Result<StagedAttachmentInfo>> SaveAsync(string accountId, string fileName, string contentType, Stream content, CancellationToken cancellationToken, string? contentId = null);
 
     /// <summary>Resolves one staged file. An unknown or foreign id is a plain failure.</summary>
     Result<StagedAttachment> Open(string accountId, Guid id);
