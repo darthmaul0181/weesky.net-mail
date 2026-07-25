@@ -3,9 +3,9 @@ namespace weesky.Snoopy.Microservice.Models;
 public class ResultEnveloppe
 {
     public ResultState State { get; set; }
-    public string Message { get; set; }
+    public string? Message { get; set; }
 
-    public static ResultEnveloppe CreateSuccessEnveloppe(string message = null)
+    public static ResultEnveloppe CreateSuccessEnveloppe(string? message = null)
     {
         return new ResultEnveloppe
         {
@@ -25,7 +25,7 @@ public class ResultEnveloppe
 
 public class ResultEnveloppe<T> : ResultEnveloppe
 {
-    public T Result { get; set; }
+    public T? Result { get; set; }
 }
 
 public enum ResultState

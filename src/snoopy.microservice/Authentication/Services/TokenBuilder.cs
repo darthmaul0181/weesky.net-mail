@@ -7,19 +7,11 @@ namespace weesky.Snoopy.Microservice.Authentication.Services;
 
 public sealed class TokenBuilder
 {
-    #region Members
-    private string _issuer;
-    private string _audience;
+    private readonly List<Claim> _claims = [];
+    private string? _issuer;
+    private string? _audience;
     private DateTime _expires;
-    private SigningCredentials _credentials;
-    private SymmetricSecurityKey _key;
-    private List<Claim> _claims;
-    #endregion
-
-    public TokenBuilder()
-    {
-        _claims = new List<Claim>();
-    }
+    private SigningCredentials? _credentials;
 
     public TokenBuilder AddClaims(params Claim[] claims)
     {
@@ -59,8 +51,8 @@ public sealed class TokenBuilder
 
     public TokenBuilder AddKey(string key)
     {
-        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
-        _credentials = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256);
+        var material = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        _credentials = new SigningCredentials(material, SecurityAlgorithms.HmacSha256);
 
         return this;
     }

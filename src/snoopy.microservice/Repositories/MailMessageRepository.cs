@@ -7,137 +7,68 @@ using weesky.Snoopy.Microservice.Services;
 namespace weesky.Snoopy.Microservice.Repositories;
 
 /// <summary>
-/// Message access over IMAP. One session per method, opened and disposed inside it — the
-/// same shape as MailFolderRepository.
+/// Message access over IMAP. Every method runs against the request's shared session — the same
+/// shape as MailFolderRepository — so a request needing several operations pays one connection.
 /// </summary>
-internal sealed class MailMessageRepository : IMailMessageRepository
+internal sealed class MailMessageRepository(IImapSessionProvider sessions) : IMailMessageRepository
 {
-    private readonly IImapConnectionFactory _factory;
-    private readonly ILogger<MailMessageRepository> _logger;
+    public Task<Result<MailFolderPage>> ListAsync(
+        User user, string password, string folderPath, int page, int pageSize, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.ListMessagesAsync(folderPath, page, pageSize, cancellationToken), cancellationToken);
 
-    public MailMessageRepository(IImapConnectionFactory factory, ILogger<MailMessageRepository> logger)
-    {
-        _factory = factory;
-        _logger = logger;
-    }
+    public Task<Result<MailMessageDetail>> GetAsync(
+        User user, string password, string folderPath, uint uid, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.GetMessageAsync(folderPath, uid, cancellationToken), cancellationToken);
 
-    public async Task<Result<MailFolderPage>> ListAsync(User user, string password, string folderPath, int page, int pageSize, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+    public Task<Result<MailAttachmentContent>> GetAttachmentAsync(
+        User user, string password, string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.GetAttachmentAsync(folderPath, uid, partSpecifier, cancellationToken), cancellationToken);
 
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<MailFolderPage>(sessionResult.Error);
-        await using var session = sessionResult.Value;
+    public Task<Result> SetFlagsAsync(
+        User user, string password, string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value,
+        CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.SetFlagsAsync(folderPath, uids, flag, value, cancellationToken), cancellationToken);
 
-        return await session.ListMessagesAsync(folderPath, page, pageSize, cancellationToken);
-    }
+    public Task<Result> MoveOrCopyAsync(
+        User user, string password, string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy,
+        CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.MoveOrCopyAsync(folderPath, uids, targetPath, copy, cancellationToken), cancellationToken);
 
-    public async Task<Result<MailMessageDetail>> GetAsync(User user, string password, string folderPath, uint uid, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+    public Task<Result> DeleteAsync(
+        User user, string password, string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.DeleteAsync(folderPath, uids, cancellationToken), cancellationToken);
 
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<MailMessageDetail>(sessionResult.Error);
-        await using var session = sessionResult.Value;
+    public Task<Result> EmptyAsync(
+        User user, string password, string folderPath, string? targetPath, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.EmptyAsync(folderPath, targetPath, cancellationToken), cancellationToken);
 
-        return await session.GetMessageAsync(folderPath, uid, cancellationToken);
-    }
+    public Task<Result<MailSearchPage>> SearchAsync(
+        User user, string password, string folderPath, bool allFolders, MailSearchCriteria criteria,
+        int page, int pageSize, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.SearchAsync(folderPath, allFolders, criteria, page, pageSize, cancellationToken),
+            cancellationToken);
 
-    public async Task<Result<MailAttachmentContent>> GetAttachmentAsync(User user, string password, string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+    public Task<Result> AppendAsync(
+        User user, string password, string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.AppendAsync(folderPath, message, seen, cancellationToken), cancellationToken);
 
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<MailAttachmentContent>(sessionResult.Error);
-        await using var session = sessionResult.Value;
+    public Task<Result<uint>> SaveDraftAsync(
+        User user, string password, string folderPath, MimeMessage message, uint? replaceUid,
+        CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.SaveDraftAsync(folderPath, message, replaceUid, cancellationToken), cancellationToken);
 
-        return await session.GetAttachmentAsync(folderPath, uid, partSpecifier, cancellationToken);
-    }
-
-    public async Task<Result> SetFlagsAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, MailFlag flag, bool value, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.SetFlagsAsync(folderPath, uids, flag, value, cancellationToken);
-    }
-
-    public async Task<Result> MoveOrCopyAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, string targetPath, bool copy, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.MoveOrCopyAsync(folderPath, uids, targetPath, copy, cancellationToken);
-    }
-
-    public async Task<Result> DeleteAsync(User user, string password, string folderPath, IReadOnlyList<uint> uids, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.DeleteAsync(folderPath, uids, cancellationToken);
-    }
-
-    public async Task<Result> EmptyAsync(User user, string password, string folderPath, string? targetPath, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
-        return await session.EmptyAsync(folderPath, targetPath, cancellationToken);
-    }
-
-    public async Task<Result<MailSearchPage>> SearchAsync(User user, string password, string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<MailSearchPage>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.SearchAsync(folderPath, allFolders, criteria, page, pageSize, cancellationToken);
-    }
-
-    public async Task<Result> AppendAsync(User user, string password, string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.AppendAsync(folderPath, message, seen, cancellationToken);
-    }
-
-    public async Task<Result<uint>> SaveDraftAsync(User user, string password, string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<uint>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.SaveDraftAsync(folderPath, message, replaceUid, cancellationToken);
-    }
-
-    public async Task<Result<MimeMessage>> GetMimeMessageAsync(User user, string password, string folderPath, uint uid, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<MimeMessage>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.GetMimeMessageAsync(folderPath, uid, cancellationToken);
-    }
+    public Task<Result<MimeMessage>> GetMimeMessageAsync(
+        User user, string password, string folderPath, uint uid, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.GetMimeMessageAsync(folderPath, uid, cancellationToken), cancellationToken);
 }

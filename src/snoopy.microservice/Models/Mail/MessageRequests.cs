@@ -4,36 +4,38 @@ namespace weesky.Snoopy.Microservice.Models.Mail;
 /// Batch from day one — multi-select (2b3) reuses this unchanged. The folder path travels
 /// in the body, never in a route segment: the hierarchy separator may be '/'.
 /// </summary>
-public sealed class SetMessageFlagsRequest
+public abstract class MessageBatchRequest
 {
+    private IReadOnlyList<uint> _uids = [];
+
     public string FolderPath { get; set; } = string.Empty;
 
-    /// <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
-    public IReadOnlyList<uint> Uids { get; set; } = [];
+    /// <summary>
+    /// 1 to 200 entries — the same ceiling as pageSize. The setter coalesces because an
+    /// initialiser only covers an *absent* property: a body carrying <c>"uids": null</c>
+    /// overwrites it, and the controller's count check then threw a 500 on a bad request.
+    /// </summary>
+    public IReadOnlyList<uint> Uids
+    {
+        get => _uids;
+        set => _uids = value ?? [];
+    }
+}
 
+public sealed class SetMessageFlagsRequest : MessageBatchRequest
+{
     public MailFlag Flag { get; set; }
 
     /// <summary>True sets the flag, false clears it.</summary>
     public bool Value { get; set; }
 }
 
-public sealed class MoveMessagesRequest
+public sealed class MoveMessagesRequest : MessageBatchRequest
 {
-    public string FolderPath { get; set; } = string.Empty;
-
-    /// <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
-    public IReadOnlyList<uint> Uids { get; set; } = [];
-
     public string TargetFolderPath { get; set; } = string.Empty;
 }
 
-public sealed class DeleteMessagesRequest
-{
-    public string FolderPath { get; set; } = string.Empty;
-
-    /// <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
-    public IReadOnlyList<uint> Uids { get; set; } = [];
-}
+public sealed class DeleteMessagesRequest : MessageBatchRequest;
 
 /// <summary>
 /// Empties an entire folder. Unbounded by the 200-UID cap — it operates on 1:* server-side.

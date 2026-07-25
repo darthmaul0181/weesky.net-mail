@@ -22,10 +22,12 @@ public sealed class UserAuthenticator : IUserAuthenticator
 
     public async Task<Result<AuthToken>> AuthenticateAsync(string email, string password)
     {
-        User user = await _usersRepository.FindByEmailAsync(email);
+        User? user = await _usersRepository.FindByEmailAsync(email);
         if (user == null)
         {
-            _logger.LogInformation("Audit: login email={Email} outcome=failure reason=unknown_user", email);
+            // One reason for both causes on purpose: the response must not tell an attacker
+            // whether the mailbox exists but is disabled, or never existed at all.
+            _logger.LogInformation("Audit: login email={Email} outcome=failure reason=unknown_or_inactive_user", email);
             return Result.Failure<AuthToken>("Authentication failed");
         }
 

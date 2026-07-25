@@ -104,6 +104,9 @@ builder.Services.AddOptions<SieveOptions>().Bind(builder.Configuration.GetSectio
 builder.Services.AddOptions<MailOptions>().Bind(builder.Configuration.GetSection("Mail"));
 builder.Services.AddSingleton<IManageSieveClient, ManageSieveClient>();
 builder.Services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
+// Scoped, so the whole request shares one authenticated IMAP connection and the container
+// closes it when the request ends. See ScopedImapSessionProvider.
+builder.Services.AddScoped<IImapSessionProvider, ScopedImapSessionProvider>();
 builder.Services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
 builder.Services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
 builder.Services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
@@ -113,6 +116,17 @@ builder.Services.AddSingleton(TimeProvider.System);
 // instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.
 builder.Services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
 builder.Services.AddHostedService<StagedAttachmentSweeper>();
+builder.Services.AddScoped<AttachmentSizeLimitFilter>();
+
+// Kept in step with the per-request cap the filter applies. Left at its 128 MB default it
+// becomes the real ceiling whenever MaxMessageSizeMb is raised past it, and the error a caller
+// gets then no longer matches the configured limit.
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    var maxMessageSizeMb = builder.Configuration.GetSection("Mail").Get<MailOptions>()?.MaxMessageSizeMb
+        ?? new MailOptions().MaxMessageSizeMb;
+    options.MultipartBodyLengthLimit = (long)maxMessageSizeMb * 1024 * 1024 + 1024 * 1024;
+});
 builder.Services.AddScoped<IOutgoingMessageFactory, OutgoingMessageFactory>();
 builder.Services.AddScoped<IMailSender, MailSender>();
 builder.Services.AddScoped<IDraftSaver, DraftSaver>();

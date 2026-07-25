@@ -14,20 +14,20 @@ public sealed class MailFolderRepositoryTests
     private static readonly Guid AliceUid = Guid.NewGuid();
     private static readonly User Alice = new("alice@weesky.be") { WebmailUid = AliceUid };
 
-    private static (MailFolderRepository repo, Mock<IImapConnectionFactory> factory,
+    private static (MailFolderRepository repo, Mock<IImapSessionProvider> sessions,
                     Mock<IImapSession> session, Mock<IFolderRoleStore> store) CreateSut()
     {
         var session = new Mock<IImapSession>();
         session.SetupGet(s => s.DirectorySeparator).Returns('/');
 
-        var factory = new Mock<IImapConnectionFactory>();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var sessions = new Mock<IImapSessionProvider>();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success<IImapSession>(session.Object));
 
         var store = new Mock<IFolderRoleStore>();
 
-        var repo = new MailFolderRepository(factory.Object, store.Object, Mock.Of<ILogger<MailFolderRepository>>());
-        return (repo, factory, session, store);
+        var repo = new MailFolderRepository(sessions.Object, store.Object, Mock.Of<ILogger<MailFolderRepository>>());
+        return (repo, sessions, session, store);
     }
 
     private static void SetupRename(Mock<IImapSession> session, string newPath, uint uidValidity = 42, string? mailboxId = null)
@@ -46,7 +46,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task GetTreeAsync_ReturnsTheSessionTree()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         SetupTree(session, new MailFolderNode { Path = "INBOX", Name = "INBOX", SpecialUse = "inbox", Unread = 4 });
 
         var result = await repo.GetTreeAsync(Alice, "hunter2", CancellationToken.None);
@@ -59,19 +59,19 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task GetTreeAsync_OpensTheSessionForTheAuthenticatedUser()
     {
-        var (repo, factory, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         SetupTree(session);
 
         await repo.GetTreeAsync(Alice, "hunter2", CancellationToken.None);
 
-        factory.Verify(f => f.OpenAsync("alice@weesky.be", "hunter2", It.IsAny<CancellationToken>()), Times.Once);
+        sessions.Verify(f => f.GetAsync("alice@weesky.be", "hunter2", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetTreeAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Mail authentication failed"));
 
         var result = await repo.GetTreeAsync(Alice, "wrong", CancellationToken.None);
@@ -81,29 +81,29 @@ public sealed class MailFolderRepositoryTests
     }
 
     [Fact]
-    public async Task GetTreeAsync_DisposesTheSession()
+    public async Task GetTreeAsync_UsesTheRequestSession()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         SetupTree(session);
 
         await repo.GetTreeAsync(Alice, "hunter2", CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetTreeAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _, _) = CreateSut();
+        var (repo, sessions, _, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.GetTreeAsync(null!, "hunter2", CancellationToken.None));
     }
 
     [Fact]
-    public async Task CreateFolderAsync_DelegatesToTheSessionAndDisposesIt()
+    public async Task CreateFolderAsync_DelegatesToTheRequestSession()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.CreateFolderAsync("INBOX", "Projects", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success("INBOX/Projects"));
 
@@ -111,13 +111,13 @@ public sealed class MailFolderRepositoryTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("INBOX/Projects", result.Value);
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task CreateFolderAsync_PropagatesTheSessionValidationFailure()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.CreateFolderAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<string>("A folder name cannot be empty or contain '/'"));
 
@@ -130,8 +130,8 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task CreateFolderAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Unable to connect to the mail service"));
 
         var result = await repo.CreateFolderAsync(Alice, "hunter2", "", "Projects", CancellationToken.None);
@@ -141,23 +141,23 @@ public sealed class MailFolderRepositoryTests
     }
 
     [Fact]
-    public async Task RenameFolderAsync_DelegatesToTheSessionAndDisposesIt()
+    public async Task RenameFolderAsync_DelegatesToTheRequestSession()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.RenameFolderAsync("Old", "INBOX", "New", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success("INBOX/New"));
 
         var result = await repo.RenameFolderAsync(Alice, "hunter2", "Old", "INBOX", "New", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task RenameFolderAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Mail authentication failed"));
 
         var result = await repo.RenameFolderAsync(Alice, "hunter2", "Old", "", "New", CancellationToken.None);
@@ -170,7 +170,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task Rename_UpdatesOverridesWithTheSessionSeparatorAndFreshIdentity()
     {
-        var (repo, _, session, store) = CreateSut();
+        var (repo, sessions, session, store) = CreateSut();
         session.SetupGet(s => s.DirectorySeparator).Returns('.');
         SetupRename(session, "Work", uidValidity: 42, mailboxId: "M-new");
 
@@ -186,7 +186,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task Rename_StillSucceedsWhenTheStoreWriteFails()
     {
-        var (repo, _, session, store) = CreateSut();
+        var (repo, sessions, session, store) = CreateSut();
         SetupRename(session, "Work");
         store.Setup(s => s.ApplyRenameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<char>(), It.IsAny<ulong>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -200,7 +200,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task Rename_SkipsTheStoreWhenTheStatusReReadFails()
     {
-        var (repo, _, session, store) = CreateSut();
+        var (repo, sessions, session, store) = CreateSut();
         session.Setup(s => s.RenameFolderAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success("Work"));
         session.Setup(s => s.GetFolderStatusAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -216,7 +216,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task Rename_TouchesNothingWhenImapRefuses()
     {
-        var (repo, _, session, store) = CreateSut();
+        var (repo, sessions, session, store) = CreateSut();
         session.Setup(s => s.RenameFolderAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<string>("refused"));
 
@@ -227,22 +227,22 @@ public sealed class MailFolderRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteFolderAsync_DelegatesToTheSessionAndDisposesIt()
+    public async Task DeleteFolderAsync_DelegatesToTheRequestSession()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.DeleteFolderAsync("Projects", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
         var result = await repo.DeleteFolderAsync(Alice, "hunter2", "Projects", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task DeleteFolderAsync_PropagatesTheInboxRefusal()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.DeleteFolderAsync("INBOX", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure("The inbox cannot be deleted"));
 
@@ -255,8 +255,8 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task DeleteFolderAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Unable to connect to the mail service"));
 
         var result = await repo.DeleteFolderAsync(Alice, "hunter2", "Projects", CancellationToken.None);
@@ -270,7 +270,7 @@ public sealed class MailFolderRepositoryTests
     [InlineData('.')]
     public async Task Delete_PurgesTheSubtreeOverrides(char separator)
     {
-        var (repo, _, session, store) = CreateSut();
+        var (repo, sessions, session, store) = CreateSut();
         session.SetupGet(s => s.DirectorySeparator).Returns(separator);
         session.Setup(s => s.DeleteFolderAsync("Projects", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
@@ -285,7 +285,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task Delete_TouchesNothingWhenImapRefuses()
     {
-        var (repo, _, session, store) = CreateSut();
+        var (repo, sessions, session, store) = CreateSut();
         session.Setup(s => s.DeleteFolderAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure("The inbox cannot be deleted"));
 
@@ -297,7 +297,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task GetFolderStatus_PassesThroughTheSession()
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.GetFolderStatusAsync("Archive", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderStatus { Path = "Archive", UidValidity = 7 }));
 
@@ -312,7 +312,7 @@ public sealed class MailFolderRepositoryTests
     [InlineData(false)]
     public async Task SetSubscriptionAsync_PassesTheDesiredState(bool subscribed)
     {
-        var (repo, _, session, _) = CreateSut();
+        var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.SetSubscriptionAsync("Projects", subscribed, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
@@ -320,14 +320,14 @@ public sealed class MailFolderRepositoryTests
 
         Assert.True(result.IsSuccess);
         session.Verify(s => s.SetSubscriptionAsync("Projects", subscribed, It.IsAny<CancellationToken>()), Times.Once);
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task SetSubscriptionAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Unable to connect to the mail service"));
 
         var result = await repo.SetSubscriptionAsync(Alice, "hunter2", "Projects", true, CancellationToken.None);
@@ -338,7 +338,7 @@ public sealed class MailFolderRepositoryTests
     [Fact]
     public async Task FolderMutations_ThrowWhenUserIsNull()
     {
-        var (repo, _, _, _) = CreateSut();
+        var (repo, sessions, _, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => repo.CreateFolderAsync(null!, "p", "", "n", CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentNullException>(() => repo.RenameFolderAsync(null!, "p", "a", "", "b", CancellationToken.None));

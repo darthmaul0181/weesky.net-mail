@@ -17,17 +17,25 @@ internal sealed class UsersRepository : IUsersRepository
         _logger = logger;
     }
 
-    public async Task<User> FindByEmailAsync(string email)
+    /// <summary>
+    /// Resolves a *usable* account: a deactivated one (<c>active = 'N'</c>) reads as absent.
+    /// Both authentication paths funnel through here — the login itself and the per-request
+    /// existence check in <c>OnTokenValidated</c> — so filtering once closes both. Dovecot
+    /// already refuses IMAP for such an account; without this, everything that does not go
+    /// through the mail server (aliases, preferences, admin, and Sieve rules, which
+    /// authenticate as the master user) kept working for a disabled mailbox.
+    /// </summary>
+    public async Task<User?> FindByEmailAsync(string email)
     {
-        string[] emailParts = email.Split(new char[] { '@' });
+        string[] emailParts = email.Split('@');
 
-        if (emailParts == null || emailParts.Length != 2)
+        if (emailParts.Length != 2)
         {
             return null;
         }
 
         var match = await FindMailUserAsync(emailParts[0], emailParts[1]);
-        if (match == null)
+        if (match == null || match.Value.MailUser.Active != ActiveState.Y)
         {
             return null;
         }
@@ -120,13 +128,13 @@ internal sealed class UsersRepository : IUsersRepository
     /// </summary>
     private async Task<(MailUser MailUser, MailDomain Domain)?> FindMailUserAsync(string name, string domainName)
     {
-        MailDomain domain = await _context.Domains.FirstOrDefaultAsync(dom => dom.Name == domainName);
+        MailDomain? domain = await _context.Domains.FirstOrDefaultAsync(dom => dom.Name == domainName);
         if (domain == null)
         {
             return null;
         }
 
-        MailUser mailUser = await _context.Users.FirstOrDefaultAsync(o => string.Equals(o.Name, name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
+        MailUser? mailUser = await _context.Users.FirstOrDefaultAsync(o => string.Equals(o.Name, name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
         if (mailUser == null)
         {
             return null;

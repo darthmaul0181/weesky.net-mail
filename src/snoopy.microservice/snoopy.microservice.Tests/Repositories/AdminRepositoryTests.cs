@@ -436,6 +436,56 @@ public sealed class AdminRepositoryTests
         Assert.True(result.Value.Admin);
     }
 
+    // A PUT that omits a field means "leave it alone". While QuotaMb/Active/Admin were plain
+    // value types they carried a non-null default, so omitting them reset the quota to 1024 and
+    // revoked admin -- and the repository could not tell "false" from "not sent".
+    [Fact]
+    public async Task UpdateUser_WhenQuotaOmitted_KeepsTheStoredQuota()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", quotaMb: 8192);
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "alice", FullName = "Alice" });
+        Assert.Equal(8192, result.Value.QuotaMb);
+        Assert.Equal(8192, ctx.Users.First(u => u.Id == user.Id).QuotaMb);
+    }
+
+    [Fact]
+    public async Task UpdateUser_WhenAdminOmitted_KeepsTheAdminRole()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "alice", FullName = "Alice" });
+        Assert.True(result.Value.Admin);
+        Assert.Equal(ActiveState.Y, ctx.Users.First(u => u.Id == user.Id).Admin);
+    }
+
+    [Fact]
+    public async Task UpdateUser_WhenActiveOmitted_KeepsTheAccountDeactivated()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", active: ActiveState.N);
+        var result = await CreateRepository(ctx).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "alice", FullName = "Alice" });
+        Assert.False(result.Value.Active);
+    }
+
+    [Fact]
+    public async Task CreateUser_WhenQuotaOmitted_AppliesTheDefault()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var result = await CreateRepository(ctx).CreateUserAsync(
+            new AdminUserRequest { UserName = "alice", DomainId = "WSY", Password = "password123" });
+        Assert.Equal(1024, result.Value.QuotaMb);
+        Assert.True(result.Value.Active);
+        Assert.False(result.Value.Admin);
+    }
+
     // ── DeleteUser ────────────────────────────────────────
 
     [Fact]

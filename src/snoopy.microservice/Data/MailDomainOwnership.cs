@@ -11,7 +11,7 @@ public sealed class MailDomainOwnership
     [Required]
     [StringLength(3)]
     [Column("domainId")]
-    public string DomainId { get; set; }
+    public string DomainId { get; set; } = string.Empty;
 
     [Required]
     [Column("userId")]

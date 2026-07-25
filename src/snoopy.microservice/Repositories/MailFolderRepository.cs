@@ -6,58 +6,34 @@ using weesky.Snoopy.Microservice.Services;
 namespace weesky.Snoopy.Microservice.Repositories;
 
 /// <summary>
-/// Folder access over IMAP. One session per method, opened and disposed inside it — the
-/// same shape as SieveRepository over ManageSieve.
+/// Folder access over IMAP. Every method runs against the request's shared session, so a
+/// rename — which reads the tree first to refuse a system folder — no longer opens two
+/// connections to do one thing.
 /// </summary>
-internal sealed class MailFolderRepository : IMailFolderRepository
+internal sealed class MailFolderRepository(
+    IImapSessionProvider sessions, IFolderRoleStore roleStore, ILogger<MailFolderRepository> logger)
+    : IMailFolderRepository
 {
-    private readonly IImapConnectionFactory _factory;
-    private readonly IFolderRoleStore _roleStore;
-    private readonly ILogger<MailFolderRepository> _logger;
+    public Task<Result<IReadOnlyList<MailFolderNode>>> GetTreeAsync(
+        User user, string password, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.ListFoldersAsync(cancellationToken), cancellationToken);
 
-    public MailFolderRepository(IImapConnectionFactory factory, IFolderRoleStore roleStore, ILogger<MailFolderRepository> logger)
-    {
-        _factory = factory;
-        _roleStore = roleStore;
-        _logger = logger;
-    }
+    public Task<Result<string>> CreateFolderAsync(
+        User user, string password, string parentPath, string name, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.CreateFolderAsync(parentPath, name, cancellationToken), cancellationToken);
 
-    public async Task<Result<IReadOnlyList<MailFolderNode>>> GetTreeAsync(User user, string password, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+    public Task<Result<string>> RenameFolderAsync(
+        User user, string password, string path, string newParentPath, string newName, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password, async session =>
+        {
+            var renamed = await session.RenameFolderAsync(path, newParentPath, newName, cancellationToken);
+            if (renamed.IsFailure) return renamed;
 
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<IReadOnlyList<MailFolderNode>>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.ListFoldersAsync(cancellationToken);
-    }
-
-    public async Task<Result<string>> CreateFolderAsync(User user, string password, string parentPath, string name, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<string>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.CreateFolderAsync(parentPath, name, cancellationToken);
-    }
-
-    public async Task<Result<string>> RenameFolderAsync(User user, string password, string path, string newParentPath, string newName, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<string>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        var renamed = await session.RenameFolderAsync(path, newParentPath, newName, cancellationToken);
-        if (renamed.IsFailure) return renamed;
-
-        await TryMoveOverridesAsync(session, user, path, renamed.Value, cancellationToken);
-        return renamed;
-    }
+            await TryMoveOverridesAsync(session, user, path, renamed.Value, cancellationToken);
+            return renamed;
+        }, cancellationToken);
 
     /// <summary>
     /// IMAP first, database second. If this bookkeeping fails, the stored overrides go
@@ -66,72 +42,56 @@ internal sealed class MailFolderRepository : IMailFolderRepository
     /// renamed folder, not carried over: some servers change UIDVALIDITY on rename, and
     /// carrying the old value would make our own rename trip our own guard.
     /// </summary>
-    private async Task TryMoveOverridesAsync(IImapSession session, User user, string oldPath, string newPath, CancellationToken cancellationToken)
+    private async Task TryMoveOverridesAsync(
+        IImapSession session, User user, string oldPath, string newPath, CancellationToken cancellationToken)
     {
         try
         {
             var status = await session.GetFolderStatusAsync(newPath, cancellationToken);
             if (status.IsFailure)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Rename of {OldPath} succeeded but the status re-read failed: {Error}. Overrides left to the staleness guard.",
                     oldPath, status.Error);
                 return;
             }
 
-            await _roleStore.ApplyRenameAsync(
+            await roleStore.ApplyRenameAsync(
                 user.WebmailUid, oldPath, newPath, session.DirectorySeparator,
                 status.Value.UidValidity, status.Value.MailboxId, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to move folder role overrides after renaming {OldPath}", oldPath);
+            logger.LogError(ex, "Failed to move folder role overrides after renaming {OldPath}", oldPath);
         }
     }
 
-    public async Task<Result> DeleteFolderAsync(User user, string password, string path, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        var result = await session.DeleteFolderAsync(path, cancellationToken);
-        if (result.IsFailure) return result;
-
-        try
+    public Task<Result> DeleteFolderAsync(User user, string password, string path, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password, async session =>
         {
-            await _roleStore.RemoveSubtreeAsync(
-                user.WebmailUid, path, session.DirectorySeparator, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to purge folder role overrides after deleting {Path}", path);
-        }
+            var result = await session.DeleteFolderAsync(path, cancellationToken);
+            if (result.IsFailure) return result;
 
-        return result;
-    }
+            try
+            {
+                await roleStore.RemoveSubtreeAsync(
+                    user.WebmailUid, path, session.DirectorySeparator, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to purge folder role overrides after deleting {Path}", path);
+            }
 
-    public async Task<Result> SetSubscriptionAsync(User user, string password, string path, bool subscribed, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+            return result;
+        }, cancellationToken);
 
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
-        await using var session = sessionResult.Value;
+    public Task<Result> SetSubscriptionAsync(
+        User user, string password, string path, bool subscribed, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.SetSubscriptionAsync(path, subscribed, cancellationToken), cancellationToken);
 
-        return await session.SetSubscriptionAsync(path, subscribed, cancellationToken);
-    }
-
-    public async Task<Result<MailFolderStatus>> GetFolderStatusAsync(User user, string password, string path, CancellationToken cancellationToken)
-    {
-        if (user == null) throw new ArgumentNullException(nameof(user));
-
-        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
-        if (sessionResult.IsFailure) return Result.Failure<MailFolderStatus>(sessionResult.Error);
-        await using var session = sessionResult.Value;
-
-        return await session.GetFolderStatusAsync(path, cancellationToken);
-    }
+    public Task<Result<MailFolderStatus>> GetFolderStatusAsync(
+        User user, string password, string path, CancellationToken cancellationToken) =>
+        sessions.WithSessionAsync(user, password,
+            session => session.GetFolderStatusAsync(path, cancellationToken), cancellationToken);
 }

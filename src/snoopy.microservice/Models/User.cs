@@ -6,13 +6,9 @@ namespace weesky.Snoopy.Microservice.Models;
 [DebuggerDisplay("{Email}")]
 public sealed class User
 {
-    public User()
-    { }
-
     public User(string email)
     {
-        if (email == null)
-            throw new ArgumentNullException("email");
+        ArgumentNullException.ThrowIfNull(email);
 
         string[] mailParts = email.Split('@');
 
@@ -39,7 +35,7 @@ public sealed class User
     /// <summary>
     /// The full name of the user.
     /// </summary>
-    public string FullName { get; set; }
+    public string? FullName { get; set; }
 
     /// <summary>The snoopy_webmail surrogate key. Stamped into the JWT at login, read every request.</summary>
     public Guid WebmailUid { get; set; }

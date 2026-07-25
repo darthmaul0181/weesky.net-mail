@@ -51,7 +51,7 @@ public sealed class LoginController : ApiBaseController
     {
         Result<AuthToken> result = await _authenticator.AuthenticateAsync(credentials.Email, credentials.Password);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && !string.IsNullOrEmpty(result.Value.Token))
         {
             HttpContext.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, result.Value.Token, new CookieOptions
             {

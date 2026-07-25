@@ -89,6 +89,9 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
         string accountId, MimePart part, string? contentId, CancellationToken cancellationToken)
     {
         // Content.Open() decodes on the fly — no in-memory buffering of a possibly large part.
+        if (part.Content == null)
+            return Result.Failure<StagedAttachmentInfo>("An inline part of this message is unreadable");
+
         await using var content = part.Content.Open();
         return await staged.SaveAsync(
             accountId, part.FileName ?? "inline", part.ContentType.MimeType, content, cancellationToken, contentId);
@@ -103,7 +106,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
         // the entity would prepend the part's own message/rfc822 headers, so the staged file would
         // not parse standalone and the sender would wrap it a second time.
         await using var buffer = new MemoryStream();
-        if (entity is MessagePart attached) await attached.Message.WriteToAsync(buffer, cancellationToken);
+        if (entity is MessagePart { Message: { } inner }) await inner.WriteToAsync(buffer, cancellationToken);
         else await entity.WriteToAsync(buffer, cancellationToken);
         buffer.Position = 0;
         var name = entity.ContentDisposition?.FileName ?? "attached-message.eml";

@@ -13,22 +13,22 @@ public sealed class AccountInfo
     /// <summary>
     /// The mailbox name (without domain).
     /// </summary>
-    public string UserName { get; set; }
+    public string UserName { get; set; } = string.Empty;
 
     /// <summary>
     /// The full name of the user.
     /// </summary>
-    public string FullName { get; set; }
+    public string? FullName { get; set; }
 
     /// <summary>
     /// The domain id of the user's primary mailbox (matches one of the Domains ids).
     /// </summary>
-    public string Mailbox { get; set; }
+    public string Mailbox { get; set; } = string.Empty;
 
     /// <summary>
     /// Domains owned by this user.
     /// </summary>
-    public IEnumerable<Domain> Domains { get; set; }
+    public IEnumerable<Domain> Domains { get; set; } = [];
 
     /// <summary>
     /// Whether this user has administrator privileges.

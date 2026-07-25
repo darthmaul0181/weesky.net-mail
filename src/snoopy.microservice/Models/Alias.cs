@@ -13,14 +13,14 @@ public sealed class Alias
     [Required]
     [StringLength(30, MinimumLength = 1)]
     [RegularExpression(@"^[A-Za-z0-9._%+-]+$")]
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// The domain
     /// </summary>
     [Required]
     [StringLength(30, MinimumLength = 1)]
-    public string Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
 
     [JsonIgnore]
     public string DebuggerDisplay => $"{Name}@{Domain}";

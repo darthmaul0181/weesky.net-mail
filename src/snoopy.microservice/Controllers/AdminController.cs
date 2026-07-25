@@ -48,9 +48,9 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<AdminUserInfo>> CreateUser(AdminUserRequest request)
     {
         if (string.IsNullOrEmpty(request.Password))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Password is required"));
+            return BadRequestEnveloppe("Password is required");
         Result<AdminUserInfo> result = await _adminRepository.CreateUserAsync(request);
-        if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
@@ -67,7 +67,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<AdminUserInfo>> UpdateUser(int id, AdminUserRequest request)
     {
         Result<AdminUserInfo> result = await _adminRepository.UpdateUserAsync(id, request);
-        if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return Ok(result.Value);
     }
 
@@ -113,7 +113,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<Domain>> CreateDomain(AdminDomainRequest request)
     {
         Result<Domain> result = await _adminRepository.CreateDomainAsync(request);
-        if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
@@ -130,7 +130,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<Domain>> UpdateDomain(string id, AdminDomainRequest request)
     {
         Result<Domain> result = await _adminRepository.UpdateDomainAsync(id, request);
-        if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return Ok(result.Value);
     }
 
@@ -149,7 +149,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<Quota>> GetUserQuota(int id, CancellationToken cancellationToken)
     {
         var userInfo = await _adminRepository.GetUserByIdAsync(id);
-        if (userInfo == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"User {id} not found"));
+        if (userInfo == null) return BadRequestEnveloppe($"User {id} not found");
 
         var user = new User($"{userInfo.UserName}@{userInfo.DomainName}");
         Result<Quota> result = await _dovecotQuotaClient.GetQuotaAsync(user, cancellationToken);
@@ -198,7 +198,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<VirtualDomainInfo>> AddVirtualDomainOwner(string domainId, AdminVirtualDomainOwnerRequest request)
     {
         Result<VirtualDomainInfo> result = await _adminRepository.AddVirtualDomainOwnerAsync(domainId, request.UserId);
-        if (result.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return Ok(result.Value);
     }
 

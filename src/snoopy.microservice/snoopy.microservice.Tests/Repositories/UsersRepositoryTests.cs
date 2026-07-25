@@ -71,6 +71,21 @@ public sealed class UsersRepositoryTests
         Assert.Null(user);
     }
 
+    // Dovecot refuses IMAP for a deactivated mailbox, but everything that does not go through
+    // the mail server -- aliases, preferences, admin, and Sieve rules, which authenticate as the
+    // master user -- kept working until this filter existed.
+    [Fact]
+    public async Task FindByEmail_WhenAccountIsDeactivated_ReturnsNull()
+    {
+        var (repo, context) = CreateSut();
+        context.Users.First().Active = ActiveState.N;
+        await context.SaveChangesAsync();
+
+        var user = await repo.FindByEmailAsync(TestEmail);
+
+        Assert.Null(user);
+    }
+
     [Fact]
     public async Task FindByEmail_WhenUsernameNotFound_ReturnsNull()
     {

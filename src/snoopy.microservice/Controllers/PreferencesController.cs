@@ -50,11 +50,11 @@ public sealed class PreferencesController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> SetPreference(SetPreferenceRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
 
         if (!UserPreferences.IsValid(request.Key ?? string.Empty, request.Value ?? string.Empty))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                $"'{request.Value}' is not a value '{request.Key}' accepts"));
+            return BadRequestEnveloppe(
+                $"'{request.Value}' is not a value '{request.Key}' accepts");
 
         await _store.SetAsync(AuthenticatedUser.WebmailUid, request.Key!, request.Value!, cancellationToken);
 

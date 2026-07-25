@@ -78,6 +78,18 @@ internal sealed class ManageSieveClient : IManageSieveClient
                 if (!postTlsStatus.IsOk)
                     return Fail($"Post-STARTTLS handshake failed: {postTlsStatus.Message}");
             }
+            else if (!_options.AllowCleartext)
+            {
+                // The next thing on this socket is the master password inside a SASL PLAIN
+                // payload. The banner that advertises STARTTLS arrives unencrypted, so a
+                // missing capability is indistinguishable from one an attacker stripped:
+                // refuse rather than downgrade silently.
+                _logger.LogError(
+                    "ManageSieve host={Host} does not advertise STARTTLS. Refusing to send the master " +
+                    "credentials in the clear. Set Sieve:AllowCleartext only if the link is trusted.",
+                    _options.Host);
+                return Fail("Rules service refused: the connection could not be secured");
+            }
 
             var saslPayload = $"{targetUser}\0{_options.MasterUser}\0{_options.MasterPassword}";
             var b64 = Convert.ToBase64String(Utf8.GetBytes(saslPayload));

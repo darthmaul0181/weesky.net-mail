@@ -1,4 +1,4 @@
-﻿using CSharpFunctionalExtensions;
+using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -123,6 +123,7 @@ internal sealed class ImapSession : IImapSession
                 : await _client.GetFolderAsync(parentPath, cancellationToken);
 
             var created = await parent.CreateAsync(name, isMessageFolder: true, cancellationToken);
+            if (created == null) return Result.Failure<string>("Unable to create the folder");
 
             // A folder the user just created should show up without a second step.
             await created.SubscribeAsync(cancellationToken);
@@ -913,6 +914,9 @@ internal sealed class ImapSession : IImapSession
 
             var entity = await folder.GetBodyPartAsync(uniqueId, part, cancellationToken);
             if (entity is not MimePart mimePart) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
+
+            // A part with no content is not an attachment we can serve, decoded or otherwise.
+            if (mimePart.Content == null) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
 
             using var buffer = new MemoryStream();
             await mimePart.Content.DecodeToAsync(buffer, cancellationToken);

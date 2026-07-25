@@ -82,7 +82,7 @@ public sealed class MailSenderTests
         Assert.Equal("mick@weesky.be", ((MailboxAddress)sent.From[0]).Address);
         Assert.Equal("hidden@example.com", ((MailboxAddress)sent.Bcc[0]).Address);
         Assert.Contains("hi", sent.HtmlBody);
-        Assert.Equal("hi", sent.TextBody.Trim());
+        Assert.Equal("hi", sent.TextBody!.Trim());
         _messages.Verify(m => m.AppendAsync(_user, "pw", "Sent", It.IsAny<MimeMessage>(), true, It.IsAny<CancellationToken>()), Times.Once);
         _identities.Verify(i => i.GetAsync(WebmailUid, It.IsAny<CancellationToken>()), Times.Once);
     }

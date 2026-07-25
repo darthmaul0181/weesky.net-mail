@@ -9,6 +9,7 @@ namespace weesky.Snoopy.Microservice.Repositories;
 internal sealed class AdminRepository : IAdminRepository
 {
     private const int MinPasswordLength = 8;
+    private const int DefaultQuotaMb = 1024;
 
     private readonly ApplicationDbContext _context;
     private readonly IWebmailUserStore _webmailUsers;
@@ -93,9 +94,9 @@ internal sealed class AdminRepository : IAdminRepository
             DomainId = request.DomainId,
             Password = request.Password,
             FullName = request.FullName ?? string.Empty,
-            QuotaMb = request.QuotaMb,
-            Active = request.Active ? ActiveState.Y : ActiveState.N,
-            Admin = request.Admin ? ActiveState.Y : ActiveState.N,
+            QuotaMb = request.QuotaMb ?? DefaultQuotaMb,
+            Active = State(request.Active ?? true),
+            Admin = State(request.Admin ?? false),
             LastUpdate = DateTime.UtcNow
         };
 
@@ -116,10 +117,12 @@ internal sealed class AdminRepository : IAdminRepository
 
         var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
 
+        // Absent means "leave it alone", never "set it to the default": a PUT that omits
+        // quota or the admin flag must not reset the quota nor revoke the role.
         user.FullName = request.FullName ?? user.FullName;
-        user.QuotaMb = request.QuotaMb;
-        user.Active = request.Active ? ActiveState.Y : ActiveState.N;
-        user.Admin = request.Admin ? ActiveState.Y : ActiveState.N;
+        if (request.QuotaMb is { } quota) user.QuotaMb = quota;
+        if (request.Active is { } active) user.Active = State(active);
+        if (request.Admin is { } admin) user.Admin = State(admin);
 
         if (!string.IsNullOrEmpty(request.Password))
         {
@@ -226,18 +229,21 @@ internal sealed class AdminRepository : IAdminRepository
             .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
             .ToList();
 
-        var result = new List<VirtualDomainInfo>();
-        foreach (var domain in aliasDomains)
-        {
-            result.Add(new VirtualDomainInfo
+        // One query for every owner, grouped in memory: the per-domain lookup this replaces
+        // issued a round trip per alias domain.
+        var ids = aliasDomains.Select(d => d.Id).ToList();
+        var ownersByDomain = (await OwnersQuery(o => ids.Contains(o.DomainId)).ToListAsync())
+            .GroupBy(x => x.DomainId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Owner).ToList(), StringComparer.Ordinal);
+
+        return aliasDomains
+            .Select(domain => new VirtualDomainInfo
             {
                 DomainId = domain.Id,
                 DomainName = domain.Name,
-                Owners = await GetDomainOwnersAsync(domain.Id)
-            });
-        }
-
-        return result;
+                Owners = ownersByDomain.TryGetValue(domain.Id, out var owners) ? owners : []
+            })
+            .ToList();
     }
 
     public async Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId)
@@ -276,6 +282,8 @@ internal sealed class AdminRepository : IAdminRepository
 
     // ---------- Helpers ----------
 
+    private static ActiveState State(bool on) => on ? ActiveState.Y : ActiveState.N;
+
     private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null)
     {
         return new AdminUserInfo
@@ -307,13 +315,22 @@ internal sealed class AdminRepository : IAdminRepository
             .ToList();
     }
 
-    private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId)
-    {
-        return (from ownership in _context.DomainsOwnerships
-                join user in _context.Users on ownership.UserId equals user.Id
-                join domain in _context.Domains on user.DomainId equals domain.Id
-                where ownership.DomainId == domainId
-                select new OwnerInfo { OwnerId = ownership.UserId, OwnerEmail = user.Name + "@" + domain.Name })
-            .ToListAsync();
-    }
+    private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId) =>
+        OwnersQuery(o => o.DomainId == domainId).Select(x => x.Owner).ToListAsync();
+
+    /// <summary>
+    /// Owners of the ownerships matching <paramref name="scope"/>, each carrying the domain it
+    /// belongs to. One shape for the single-domain read and the grouped listing, so the two
+    /// cannot report a different owner set for the same rows.
+    /// </summary>
+    private IQueryable<DomainOwner> OwnersQuery(
+        System.Linq.Expressions.Expression<Func<MailDomainOwnership, bool>> scope) =>
+        from ownership in _context.DomainsOwnerships.Where(scope)
+        join user in _context.Users on ownership.UserId equals user.Id
+        join domain in _context.Domains on user.DomainId equals domain.Id
+        select new DomainOwner(
+            ownership.DomainId,
+            new OwnerInfo { OwnerId = ownership.UserId, OwnerEmail = user.Name + "@" + domain.Name });
+
+    private sealed record DomainOwner(string DomainId, OwnerInfo Owner);
 }

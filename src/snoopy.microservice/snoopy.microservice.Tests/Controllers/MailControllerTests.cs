@@ -632,7 +632,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SetFolderRole_RejectsAMissingBody()
     {
-        var result = await CreateController().SetFolderRole(null, CancellationToken.None);
+        var result = await CreateController().SetFolderRole(null!, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
     }
@@ -792,6 +792,47 @@ public sealed class MailControllerTests
         _messages.Verify(m => m.SetFlagsAsync(It.IsAny<User>(), "hunter2", "INBOX",
             It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
             MailFlag.Seen, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // An initialiser only covers an *absent* property. A body carrying an explicit "uids": null
+    // overwrites it, and the count check then dereferenced null: a 500 on a malformed request.
+    [Theory]
+    [InlineData("flags")]
+    [InlineData("move")]
+    [InlineData("copy")]
+    [InlineData("delete")]
+    public async Task MessageBatch_WithExplicitlyNullUids_Returns400NotAnUnhandledException(string verb)
+    {
+        var controller = CreateController();
+
+        ActionResult result = verb switch
+        {
+            "flags" => await controller.SetMessageFlags(
+                new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = null!, Flag = MailFlag.Seen }, CancellationToken.None),
+            "move" => await controller.MoveMessages(
+                new MoveMessagesRequest { FolderPath = "INBOX", Uids = null!, TargetFolderPath = "Trash" }, CancellationToken.None),
+            "copy" => await controller.CopyMessages(
+                new MoveMessagesRequest { FolderPath = "INBOX", Uids = null!, TargetFolderPath = "Trash" }, CancellationToken.None),
+            _ => await controller.DeleteMessages(
+                new DeleteMessagesRequest { FolderPath = "INBOX", Uids = null! }, CancellationToken.None),
+        };
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SendMessage_WithExplicitlyNullAttachmentIds_DoesNotThrow()
+    {
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(new SendMessageResult(true)));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["bob@weesky.be"], AttachmentIds = null! }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _sender.Verify(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+            It.Is<SendMessageRequest>(r => r.AttachmentIds != null && r.AttachmentIds.Count == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1849,8 +1890,8 @@ public sealed class MailControllerTests
         message.Subject = "Draft subject";
         message.From.Add(MailboxAddress.Parse("Me <me@weesky.be>"));
         message.InReplyTo = MimeUtils.ParseMessageId("<parent@x.com>");
-        message.References.Add(MimeUtils.ParseMessageId("<oldest@x.com>"));
-        message.References.Add(MimeUtils.ParseMessageId("<newest@x.com>"));
+        message.References.Add(MimeUtils.ParseMessageId("<oldest@x.com>")!);
+        message.References.Add(MimeUtils.ParseMessageId("<newest@x.com>")!);
         _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), "hunter2", "Drafts", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(message));
         var stagedInfo = new StagedAttachmentInfo(Guid.NewGuid(), "logo.png", 3, "image/png", "logo@mail");

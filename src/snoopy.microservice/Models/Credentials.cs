@@ -10,12 +10,12 @@ public sealed class Credentials
     [Required]
     [EmailAddress]
     [StringLength(159)]
-    public string Email { get; set; }
+    public string Email { get; set; } = string.Empty;
 
     /// <summary>
     /// The password of the user
     /// </summary>
     [Required]
     [StringLength(256, MinimumLength = 1)]
-    public string Password { get; set; }
+    public string Password { get; set; } = string.Empty;
 }

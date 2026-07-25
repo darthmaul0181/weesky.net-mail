@@ -48,13 +48,13 @@ public sealed class IdentitiesController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> Replace(ReplaceIdentitiesRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
 
         var (stored, aliasAddresses, _) = await LoadSourcesAsync(cancellationToken);
         var validated = IdentityResolver.Validate(
             request.Identities ?? [], AuthenticatedUser.Email,
             aliasAddresses, stored.Select(r => r.Address).ToList());
-        if (validated.IsFailure) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(validated.Error));
+        if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
         await store.ReplaceAsync(AuthenticatedUser.WebmailUid, validated.Value, cancellationToken);
         return NoContent();

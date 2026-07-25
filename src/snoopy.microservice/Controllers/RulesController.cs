@@ -34,7 +34,7 @@ public sealed class RulesController : ApiBaseController
     {
         Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
         if (result.IsSuccess) return Ok(result.Value);
-        return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        return BadRequestEnveloppe(result.Error);
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ public sealed class RulesController : ApiBaseController
     public async Task<ActionResult<ResultEnveloppe>> Replace([FromBody] SaveRulesRequest request, CancellationToken cancellationToken)
     {
         if (request == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            return BadRequestEnveloppe("Request body is required");
 
         Result result = await _sieveRepository.SaveRulesAsync(
             AuthenticatedUser, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
@@ -84,7 +84,7 @@ public sealed class RulesController : ApiBaseController
     {
         Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
         if (result.IsFailure)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+            return BadRequestEnveloppe(result.Error);
 
         return Ok(new SieveRawScript
         {
@@ -106,7 +106,7 @@ public sealed class RulesController : ApiBaseController
     public async Task<ActionResult<ResultEnveloppe>> PutRaw([FromBody] SieveRawScript script, CancellationToken cancellationToken)
     {
         if (script == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            return BadRequestEnveloppe("Request body is required");
 
         Result result = await _sieveRepository.SaveRawScriptAsync(
             AuthenticatedUser, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
@@ -126,13 +126,13 @@ public sealed class RulesController : ApiBaseController
     public ActionResult<CompatibilityCheckResult> CompatibilityCheck([FromBody] CompatibilityCheckRequest request)
     {
         if (request == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            return BadRequestEnveloppe("Request body is required");
 
         var provider = request.ProviderId != null
             ? _providers.GetById(request.ProviderId)
             : _providers.Default;
         if (provider == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"Unknown rule provider: {request.ProviderId}"));
+            return BadRequestEnveloppe($"Unknown rule provider: {request.ProviderId}");
 
         var incompatible = new List<IncompatibleRule>();
         foreach (var rule in request.Rules ?? new List<SieveRule>())
