@@ -148,6 +148,8 @@ export default function MessageReader(
   const flagged = summary?.flagged ?? false
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
+  // One list for the split chips and the viewer's navigation — the two can never disagree.
+  const imageAttachments = attachments.filter(a => a.contentType?.toLowerCase().startsWith('image/'))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
 
   async function download(part: string, fileName: string) {
@@ -345,7 +347,7 @@ export default function MessageReader(
                 <span className="attachment-chip-size">{formatSize(attachment.size)}</span>
               </button>
             )
-            if (!attachment.contentType?.toLowerCase().startsWith('image/')) {
+            if (!imageAttachments.includes(attachment)) {
               return cloneElement(chip, { key: attachment.part })
             }
             return (
@@ -369,10 +371,14 @@ export default function MessageReader(
 
       {viewed && (
         <AttachmentViewerModal
-          src={mailAttachmentUrl(folderPath!, uid!, viewed.part)}
-          fileName={viewed.fileName}
-          size={viewed.size}
-          onDownload={() => download(viewed.part, viewed.fileName)}
+          images={imageAttachments.map(a => ({
+            part: a.part,
+            src: mailAttachmentUrl(folderPath!, uid!, a.part),
+            fileName: a.fileName,
+            size: a.size,
+          }))}
+          initialIndex={Math.max(0, imageAttachments.findIndex(a => a.part === viewed.part))}
+          onDownload={image => download(image.part, image.fileName)}
           onClose={() => setViewed(null)}
         />
       )}
