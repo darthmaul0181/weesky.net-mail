@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import RefreshIcon from '../../../icons/RefreshIcon'
+import LoaderIcon from '../../../icons/LoaderIcon'
 
 interface Props {
   /** True while the folders query fetches — a manual click and the 60s poll tick alike. */
@@ -41,7 +41,7 @@ export default function RefreshButton({ fetching, onRefresh }: Props) {
       title="Check for new mail"
       onClick={() => { if (!spinning) onRefresh() }}>
       <span ref={iconRef} className={`mail-refresh-icon${spinning ? ' is-spinning' : ''}`}>
-        <RefreshIcon size={15} />
+        <LoaderIcon size={15} />
       </span>
     </button>
   )
