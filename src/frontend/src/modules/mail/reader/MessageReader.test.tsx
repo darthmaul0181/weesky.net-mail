@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
@@ -410,6 +410,84 @@ describe('MessageReader', () => {
     fireEvent.click(await screen.findByRole('button', { name: /report\.pdf/ }))
 
     expect(await screen.findByText('Attachment not found')).toBeInTheDocument()
+  })
+
+  describe('the image attachment split control', () => {
+    const imageAttachment = {
+      ...detail,
+      attachments: [
+        { part: '4', fileName: 'photo.png', contentType: 'image/png', size: 2048, isInline: false, contentId: null },
+      ],
+    }
+
+    // These two tests stub URL.createObjectURL/revokeObjectURL (jsdom has neither); restored
+    // so the stubs don't leak into later tests in the file.
+    const originalCreateObjectURL = globalThis.URL.createObjectURL
+    const originalRevokeObjectURL = globalThis.URL.revokeObjectURL
+
+    afterEach(() => {
+      globalThis.URL.createObjectURL = originalCreateObjectURL
+      globalThis.URL.revokeObjectURL = originalRevokeObjectURL
+    })
+
+    it('gives an image attachment the split control with Download and View', async () => {
+      mocks.getMailMessage.mockResolvedValue(imageAttachment)
+      mocks.requestBlob.mockResolvedValue({ blob: new Blob(['x']), fileName: 'photo.png' })
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:x')
+      globalThis.URL.revokeObjectURL = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      fireEvent.click(await screen.findByRole('button', { name: /^photo\.png/ }))
+      await waitFor(() =>
+        expect(mocks.requestBlob).toHaveBeenCalledWith(expect.stringContaining('part=4')))
+
+      fireEvent.click(screen.getByRole('button', { name: 'More actions for photo.png' }))
+      expect(screen.getByRole('menuitem', { name: 'Download' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'View' })).toBeInTheDocument()
+    })
+
+    it('opens the viewer from the menu and closes it with the cross', async () => {
+      mocks.getMailMessage.mockResolvedValue(imageAttachment)
+      mocks.requestBlob.mockResolvedValue({ blob: new Blob(['x'], { type: 'image/png' }), fileName: 'photo.png' })
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:x')
+      globalThis.URL.revokeObjectURL = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByRole('button', { name: /^photo\.png/ })
+
+      fireEvent.click(screen.getByRole('button', { name: 'More actions for photo.png' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+
+      expect(await screen.findByRole('img', { name: 'photo.png' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      expect(screen.queryByRole('img', { name: 'photo.png' })).not.toBeInTheDocument()
+    })
+
+    // Regression pin: only image/* attachments get the split control.
+    it('keeps the plain chip on a non-image attachment', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByRole('button', { name: /report\.pdf/ })
+
+      expect(screen.queryByRole('button', { name: /More actions for/ })).not.toBeInTheDocument()
+    })
+
+    // Pins the toLowerCase() in MessageReader's split-control check against a server that
+    // reports the content type upper-cased.
+    it('gives the split control to an upper-cased image content type too', async () => {
+      mocks.getMailMessage.mockResolvedValue({
+        ...imageAttachment,
+        attachments: [{ ...imageAttachment.attachments[0], contentType: 'IMAGE/PNG' }],
+      })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByRole('button', { name: /^photo\.png/ })
+
+      expect(screen.getByRole('button', { name: 'More actions for photo.png' })).toBeInTheDocument()
+    })
   })
 
   it('hides inline parts from the attachment list', async () => {
@@ -879,6 +957,37 @@ describe('MessageReader', () => {
 
       await settle()
       expect(onBack).not.toHaveBeenCalled()
+    })
+
+    // The viewer has no Escape handler of its own to suppress the reader's ← mirror, so an
+    // unguarded reader would close the picture AND navigate back on the same keypress.
+    it('does not back out on Escape while the attachment viewer is open, and closes the viewer', async () => {
+      const imageAttachment = {
+        ...detail,
+        attachments: [
+          { part: '4', fileName: 'photo.png', contentType: 'image/png', size: 2048, isInline: false, contentId: null },
+        ],
+      }
+      mocks.getMailMessage.mockResolvedValue(imageAttachment)
+      mocks.requestBlob.mockResolvedValue({ blob: new Blob(['x'], { type: 'image/png' }), fileName: 'photo.png' })
+      const originalCreateObjectURL = globalThis.URL.createObjectURL
+      const originalRevokeObjectURL = globalThis.URL.revokeObjectURL
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:x')
+      globalThis.URL.revokeObjectURL = vi.fn()
+      const onBack = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions for photo.png' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+      expect(await screen.findByRole('img', { name: 'photo.png' })).toBeInTheDocument()
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      await waitFor(() => expect(screen.queryByRole('img', { name: 'photo.png' })).not.toBeInTheDocument())
+      expect(onBack).not.toHaveBeenCalled()
+
+      globalThis.URL.createObjectURL = originalCreateObjectURL
+      globalThis.URL.revokeObjectURL = originalRevokeObjectURL
     })
   })
 

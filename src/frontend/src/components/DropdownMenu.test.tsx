@@ -141,4 +141,50 @@ describe('DropdownMenu', () => {
     expect(onSelect).not.toHaveBeenCalled()
     expect(screen.getByRole('menu')).toBeInTheDocument()
   })
+
+  describe('direction="up"', () => {
+    // Inside a scroll container (the reader's attachment band), an absolutely-positioned
+    // upward menu lands past the band's own block-start edge — the one edge a scroll
+    // container can never reveal. Fixed positioning, measured off the trigger, escapes it.
+    it('positions the menu fixed off the trigger, clear of any scroll-container clip', () => {
+      const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockReturnValue({ top: 500, right: 620, bottom: 520, left: 580, width: 40, height: 20 } as DOMRect)
+      vi.stubGlobal('innerWidth', 1000)
+      vi.stubGlobal('innerHeight', 800)
+
+      render(<DropdownMenu ariaLabel="More actions" trigger="..." items={items()} direction="up" />)
+      fireEvent.click(screen.getByLabelText('More actions'))
+
+      const menu = screen.getByRole('menu')
+      expect(menu).toHaveStyle({ position: 'fixed', bottom: '304px', right: '380px' })
+
+      rectSpy.mockRestore()
+      vi.unstubAllGlobals()
+    })
+
+    // A fixed menu does not track the trigger the way an absolutely-positioned one does, so it
+    // must not be left floating over the wrong spot after the page moves under it.
+    it('closes on a window scroll while open', () => {
+      render(<DropdownMenu ariaLabel="More actions" trigger="..." items={items()} direction="up" />)
+      fireEvent.click(screen.getByLabelText('More actions'))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+
+      fireEvent.scroll(window)
+
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+  })
+
+  // Regression pin: the default ('down') path must render exactly as it did before direction
+  // existed — no inline position style, no scroll-close wiring.
+  it('renders the down menu with no inline positioning, unaffected by scroll', () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+
+    const menu = screen.getByRole('menu')
+    expect(menu).not.toHaveAttribute('style')
+
+    fireEvent.scroll(window)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
 })

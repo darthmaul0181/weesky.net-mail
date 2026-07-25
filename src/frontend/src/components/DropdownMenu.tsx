@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 export interface MenuItem {
   label: string
@@ -17,12 +17,29 @@ interface Props {
   trigger: ReactNode
   items: MenuEntry[]
   className?: string
+  /** Which way the menu opens relative to the trigger. Defaults to 'down'. */
+  direction?: 'down' | 'up'
 }
 
 /** Click-toggled dropdown on the IdentityMenu pattern: outside mousedown and Escape close it. */
-export default function DropdownMenu({ ariaLabel, trigger, items, className }: Props) {
+export default function DropdownMenu({ ariaLabel, trigger, items, className, direction = 'down' }: Props) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [fixedStyle, setFixedStyle] = useState<CSSProperties | undefined>(undefined)
+
+  // 'up' menus escape any ancestor scroll clip (the reader's attachment band is one) by going
+  // `position: fixed` off the trigger's own rect instead of the CSS `bottom: calc(100% + …)`,
+  // which is relative to a containing block that can sit inside that clipped band.
+  useLayoutEffect(() => {
+    if (!open || direction !== 'up' || !triggerRef.current) { setFixedStyle(undefined); return }
+    const rect = triggerRef.current.getBoundingClientRect()
+    setFixedStyle({
+      position: 'fixed',
+      bottom: `${window.innerHeight - rect.top + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    })
+  }, [open, direction])
 
   useEffect(() => {
     if (!open) return
@@ -40,14 +57,28 @@ export default function DropdownMenu({ ariaLabel, trigger, items, className }: P
     }
   }, [open])
 
+  // A fixed menu does not travel with a scrolled trigger the way an absolutely-positioned one
+  // does, so any scroll or resize while it is open just closes it rather than leaving it
+  // stranded. Capture:true so a scroll inside an ancestor band (the attachment row) counts too.
+  useEffect(() => {
+    if (!open || direction !== 'up') return
+    function onScrollOrResize() { setOpen(false) }
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize, true)
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize, true)
+    }
+  }, [open, direction])
+
   return (
-    <div className="dropdown-root" ref={rootRef}>
+    <div className={`dropdown-root${direction === 'up' ? ' is-up' : ''}`} ref={rootRef}>
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
-        onClick={() => setOpen(o => !o)}>
+        ref={triggerRef} onClick={() => setOpen(o => !o)}>
         {trigger}
       </button>
       {open && (
-        <div className="dropdown-menu" role="menu">
+        <div className="dropdown-menu" role="menu" style={fixedStyle}>
           {items.map((entry, index) =>
             entry === 'separator' ? (
               <hr key={index} className="dropdown-rule" />

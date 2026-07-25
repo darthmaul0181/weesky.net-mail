@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { cloneElement, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
@@ -6,6 +6,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
+import ChevronUpIcon from '../../../icons/ChevronUpIcon'
 import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
 import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
@@ -18,10 +19,11 @@ import {
   useMoveMessages, usePrepareQuote, useSetFlags,
 } from '../queries'
 import { rolePathsOf } from '../folders/folderNodes'
-import type { MenuEntry } from '../../../components/DropdownMenu'
-import type { SpecialUse } from '../api/mailTypes'
+import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
+import type { MailAttachmentInfo, SpecialUse } from '../api/mailTypes'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import MoveMessagesModal from '../MoveMessagesModal'
+import AttachmentViewerModal from './AttachmentViewerModal'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
 import { formatReaderDate } from './formatReaderDate'
@@ -63,6 +65,7 @@ export default function MessageReader(
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [viewed, setViewed] = useState<MailAttachmentInfo | null>(null)
   const accountId = useAccountId()
   const queryClient = useQueryClient()
   const setFlags = useSetFlags(onNotify)
@@ -86,18 +89,19 @@ export default function MessageReader(
     setDetailsOpen(false)
     setPicker(null)
     setConfirmDelete(false)
+    setViewed(null)
   }, [folderPath, uid])
 
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
   // replaced the list and needs a way back. An open modal owns Escape, so the reader stays put
-  // rather than backing out from under the picker or the confirm.
+  // rather than backing out from under the picker, the confirm, or the attachment viewer.
   useEffect(() => {
-    if (!onBack || picker || confirmDelete) return
+    if (!onBack || picker || confirmDelete || viewed) return
 
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onBack() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, picker, confirmDelete])
+  }, [onBack, picker, confirmDelete, viewed])
 
   // The body is computed above the early returns because useInlineImages hangs off it and hooks
   // cannot be conditional; before the detail lands it works on an empty document.
@@ -326,19 +330,51 @@ export default function MessageReader(
 
       {attachments.length > 0 && (
         <div className="reader-attachments">
-          {attachments.map(attachment => (
-            <button
-              key={attachment.part}
-              type="button"
-              className="attachment-chip"
-              onClick={() => download(attachment.part, attachment.fileName)}
-            >
-              <PaperclipIcon size={13} />
-              {attachment.fileName}
-              <span className="attachment-chip-size">{formatSize(attachment.size)}</span>
-            </button>
-          ))}
+          {attachments.map(attachment => {
+            // Built without a key: the non-image branch clones one on (no wrapping element,
+            // byte-identical DOM to the old unconditional loop), the image branch keys the
+            // wrapping <span> instead, since the chip is no longer the array's direct child.
+            const chip = (
+              <button
+                type="button"
+                className="attachment-chip"
+                onClick={() => download(attachment.part, attachment.fileName)}
+              >
+                <PaperclipIcon size={13} />
+                {attachment.fileName}
+                <span className="attachment-chip-size">{formatSize(attachment.size)}</span>
+              </button>
+            )
+            if (!attachment.contentType?.toLowerCase().startsWith('image/')) {
+              return cloneElement(chip, { key: attachment.part })
+            }
+            return (
+              <span key={attachment.part} className="attachment-split">
+                {chip}
+                <DropdownMenu
+                  direction="up"
+                  ariaLabel={`More actions for ${attachment.fileName}`}
+                  className="attachment-split-more"
+                  trigger={<ChevronUpIcon size={13} />}
+                  items={[
+                    { label: 'Download', onSelect: () => download(attachment.part, attachment.fileName) },
+                    { label: 'View', onSelect: () => setViewed(attachment) },
+                  ]}
+                />
+              </span>
+            )
+          })}
         </div>
+      )}
+
+      {viewed && (
+        <AttachmentViewerModal
+          src={mailAttachmentUrl(folderPath!, uid!, viewed.part)}
+          fileName={viewed.fileName}
+          size={viewed.size}
+          onDownload={() => download(viewed.part, viewed.fileName)}
+          onClose={() => setViewed(null)}
+        />
       )}
 
       {picker && (

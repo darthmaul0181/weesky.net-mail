@@ -203,6 +203,8 @@
 
 .dropdown-rule { height: 1px; border: 0; background: var(--border); margin: 4px 6px; }
 
+.dropdown-root.is-up .dropdown-menu { top: auto; bottom: calc(100% + 4px); }
+
 .settings-layout { display: flex; height: 100%; }
 
 .context-pane {

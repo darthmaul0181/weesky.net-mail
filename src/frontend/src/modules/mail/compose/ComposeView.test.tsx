@@ -93,6 +93,10 @@ async function discardModal() {
   return title.closest('.modal') as HTMLElement
 }
 
+function fileDragData(files: File[] = []) {
+  return { dataTransfer: { types: ['Files'], files, items: files.map(() => ({ kind: 'file' })) } }
+}
+
 const identityList = [
   { address: 'mick@weesky.be', displayName: 'Mick', isDefault: false, isPrimary: true, stale: false, labelIsCustom: false },
   { address: 'michel@weesky.be', displayName: 'Michel', isDefault: true, isPrimary: false, stale: false, labelIsCustom: true },
@@ -486,6 +490,50 @@ describe('leaving a dirty composer', () => {
     const dirtyEvent = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(dirtyEvent)
     expect(dirtyEvent.defaultPrevented).toBe(true)
+  })
+})
+
+describe('dropping files on the composer', () => {
+  it('shows the overlay while a file drag hovers and hides it when the drag leaves', () => {
+    renderCompose()
+    const view = screen.getByTestId('compose-view')
+
+    fireEvent.dragEnter(view, fileDragData())
+    expect(screen.getByText('Drop files to attach')).toBeInTheDocument()
+
+    // Nested enter/leave (child boundaries) must not blink the overlay off.
+    fireEvent.dragEnter(view, fileDragData())
+    fireEvent.dragLeave(view, fileDragData())
+    expect(screen.getByText('Drop files to attach')).toBeInTheDocument()
+
+    fireEvent.dragLeave(view, fileDragData())
+    expect(screen.queryByText('Drop files to attach')).not.toBeInTheDocument()
+  })
+
+  it('ignores a drag that carries no files', () => {
+    renderCompose()
+
+    fireEvent.dragEnter(screen.getByTestId('compose-view'),
+      { dataTransfer: { types: ['text/plain'], files: [], items: [] } })
+
+    expect(screen.queryByText('Drop files to attach')).not.toBeInTheDocument()
+  })
+
+  it('stages the dropped files and dirties the composer', async () => {
+    const { router } = renderCompose()
+    const file = new File(['x'], 'photo.png', { type: 'image/png' })
+
+    // fireEvent returns false when a handler called preventDefault — pins that a drop never
+    // falls through to the browser's own "open this file" navigation.
+    const dropped = fireEvent.drop(screen.getByTestId('compose-view'), fileDragData([file]))
+    expect(dropped).toBe(false)
+
+    await screen.findByText('photo.png')
+    expect(screen.queryByText('Drop files to attach')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
   })
 })
 

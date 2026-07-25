@@ -1022,6 +1022,21 @@
 
 .attachment-chip-size { color: var(--text-muted); }
 
+.attachment-split { display: inline-flex; align-items: stretch; }
+.attachment-split .attachment-chip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.attachment-split .dropdown-root { display: flex; }
+.attachment-split-more {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--attachment-chip-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
 .mail-empty {
   display: flex;
   align-items: center;
@@ -1036,6 +1051,20 @@
 .reader-fallback { display: flex; align-items: center; height: 100%; padding: 24px; }
 .reader-fallback .reader-back { margin-right: 12px; }
 .reader-fallback .mail-empty { flex: 1; padding: 0; }
+
+/* ── Attachment viewer modal ─────────────────────────────── */
+
+.attachment-viewer { max-width: min(900px, 92vw); }
+.attachment-viewer-size { color: var(--text-muted); font-size: 13px; margin-right: 8px; flex: none; }
+.attachment-viewer-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  overflow: hidden;
+}
+.attachment-viewer-img { max-width: 100%; max-height: 70vh; object-fit: contain; }
+.attachment-viewer-error { color: var(--danger); }
 
 /* ── Pane splitter ───────────────────────────────────────── */
 
@@ -1347,7 +1376,17 @@
 .mail-compose { flex: 1; min-width: 0; display: flex; }
 .compose-view {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
-  background: var(--surface); min-width: 0;
+  background: var(--surface); min-width: 0; position: relative;
+}
+/* Last child of .compose-view during a file drag, above Squire's contenteditable so the drop
+   lands here rather than in the editor. No pointer-events: none — it has to intercept the drop
+   itself and let it bubble to the root handler. */
+.compose-drop-overlay {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 600; color: var(--text);
+  border: 2px dashed var(--action-primary);
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
 }
 .compose-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .compose-header .modal-title { flex: 1; min-width: 0; }

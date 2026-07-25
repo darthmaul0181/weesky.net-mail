@@ -100,6 +100,37 @@ export default function ComposeView({ onNotify }: Props) {
   // The one edit that shrinks the form, so nothing else can notice it.
   const removeFile = useCallback((key: string) => { markDirty(); removeStaged(key) }, [markDirty, removeStaged])
 
+  // Counter, not a boolean: dragleave fires at every child boundary, so the overlay only
+  // goes away when as many leaves as enters have fired (or on drop).
+  const [dropTarget, setDropTarget] = useState(false)
+  const dragDepth = useRef(0)
+
+  function carriesFiles(event: React.DragEvent) {
+    return Array.from(event.dataTransfer.types).includes('Files')
+  }
+  function onDragEnter(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    dragDepth.current += 1
+    setDropTarget(true)
+  }
+  function onDragOver(event: React.DragEvent) {
+    if (carriesFiles(event)) event.preventDefault()
+  }
+  function onDragLeave(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setDropTarget(false)
+  }
+  function onDrop(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    dragDepth.current = 0
+    setDropTarget(false)
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length > 0) addFiles(files)
+  }
+
   const blocker = useBlocker(useCallback(() => dirtyRef.current && !leavingRef.current, []))
 
   useEffect(() => {
@@ -172,7 +203,8 @@ export default function ComposeView({ onNotify }: Props) {
   }
 
   return (
-    <div className="compose-view" data-testid="compose-view">
+    <div className="compose-view" data-testid="compose-view"
+      onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <div className="compose-header">
         <span className="modal-title">{(seed && TITLES[seed.action]) || 'New message'}</span>
         <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
@@ -249,6 +281,10 @@ export default function ComposeView({ onNotify }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {dropTarget && (
+        <div className="compose-drop-overlay">Drop files to attach</div>
       )}
     </div>
   )
