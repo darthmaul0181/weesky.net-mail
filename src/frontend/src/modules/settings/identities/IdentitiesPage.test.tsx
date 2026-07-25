@@ -46,6 +46,31 @@ describe('IdentitiesPage', () => {
     expect(tileNames(container)).toEqual(['Mick Dubois', 'Ancien', 'Michel'])
   })
 
+  it('shows no identity count in the list header', () => {
+    const { container } = render(<IdentitiesPage />)
+    expect(container.querySelector('.admin-list-title')).toBeNull()
+  })
+
+  it('greys out Add when the account owns no alias', () => {
+    render(<IdentitiesPage />)
+    expect(screen.getByRole('button', { name: 'Add identity' })).toBeDisabled()
+  })
+
+  it('enables Add as soon as the account owns an alias', () => {
+    vi.mocked(useAliases).mockReturnValue({
+      data: [{ name: 'support', domain: 'weesky.be' }], isLoading: false,
+    } as never)
+    render(<IdentitiesPage />)
+    expect(screen.getByRole('button', { name: 'Add identity' })).toBeEnabled()
+  })
+
+  // A network blip must not read as "you have no aliases" and lock the button.
+  it('keeps Add enabled while the alias list is loading or failed', () => {
+    vi.mocked(useAliases).mockReturnValue({ data: undefined, isLoading: true } as never)
+    render(<IdentitiesPage />)
+    expect(screen.getByRole('button', { name: 'Add identity' })).toBeEnabled()
+  })
+
   it('moving the default saves the whole list', () => {
     render(<IdentitiesPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Make michel@weesky.be the default' }))

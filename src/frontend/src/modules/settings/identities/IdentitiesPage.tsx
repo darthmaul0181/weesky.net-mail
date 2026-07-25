@@ -7,7 +7,7 @@ import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import type { SendingIdentity } from '../../mail/api/mailTypes'
-import { useIdentities, useReplaceIdentities } from '../../mail/queries'
+import { useAliases, useIdentities, useReplaceIdentities } from '../../mail/queries'
 import IdentityDialog from './IdentityDialog'
 import { applyAddition, applyDefault, applyLabel, applyRemoval, sortIdentities, toRows } from './identityRows'
 
@@ -20,6 +20,7 @@ import { applyAddition, applyDefault, applyLabel, applyRemoval, sortIdentities, 
 export default function IdentitiesPage() {
   const { identity } = useAuth()
   const { data: identities, isLoading, isError } = useIdentities()
+  const { data: aliases, isLoading: aliasesLoading, isError: aliasesError } = useAliases()
   const replace = useReplaceIdentities()
   const { toasts, addToast, removeToast } = useToasts()
   const [adding, setAdding] = useState(false)
@@ -51,6 +52,10 @@ export default function IdentitiesPage() {
     })
   }
 
+  // An identity is built from an alias; with none owned there is nothing to add. A still-loading
+  // or failed alias query is not "none" — the button stays live so a blip does not lock it.
+  const noAliases = !aliasesLoading && !aliasesError && (aliases?.length ?? 0) === 0
+
   // The primary is pinned first; every other identity is ordered alphabetically by display name.
   const tiles = shown
     ? [...shown.filter(i => i.isPrimary), ...sortIdentities(shown.filter(i => !i.isPrimary))]
@@ -76,12 +81,10 @@ export default function IdentitiesPage() {
         <div className="identity-panel">
           <div className="admin-list-header">
             <button className="btn btn-primary" style={{ width: 'auto' }} aria-label="Add identity"
+              disabled={noAliases} title={noAliases ? 'You have no alias to create an identity from' : undefined}
               onClick={() => setAdding(true)}>
               <PersonPlusIcon /> Add
             </button>
-            <span className="admin-list-title">
-              {shown.length} {shown.length === 1 ? 'identity' : 'identities'}
-            </span>
           </div>
           {/* Usable but possibly out of date — the page edits this list, and a save built on stale
               rows comes back refused. */}
