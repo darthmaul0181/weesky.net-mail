@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import { useAuth } from '../../../contexts/AuthContext'
+import MailIcon from '../../../icons/MailIcon'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import StarIcon from '../../../icons/StarIcon'
@@ -63,7 +64,9 @@ export default function IdentitiesPage() {
 
   return (
     <div className="settings-page">
-      <h1>Identities</h1>
+      <div className="settings-page-header">
+        <span className="settings-page-title"><MailIcon size={17} /> Identities</span>
+      </div>
       <p className="identities-hint">
         An identity is an address from which you can send emails.<br />
         Each identity is linked to one of your aliases and has its own name, which will be visible to your recipients.
