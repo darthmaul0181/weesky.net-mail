@@ -30,6 +30,7 @@ internal static class SecurityConfiguration
         services.AddScoped<IMailCredentialStore, MailCredentialStore>();
         services.AddScoped<IUserAuthenticator, UserAuthenticator>();
         services.AddScoped<ITokenManager, TokenManager>();
+        services.AddScoped<ISessionGuard, SessionGuard>();
 
         return services;
     }

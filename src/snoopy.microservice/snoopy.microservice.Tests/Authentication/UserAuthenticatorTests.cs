@@ -114,7 +114,7 @@ public sealed class UserAuthenticatorTests
     {
         var uid = Guid.NewGuid();
         _webmailUsers.Setup(s => s.RegisterLoginAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(uid);
+            .ReturnsAsync(new WebmailAccount(uid, Guid.NewGuid()));
         SetupCheck(CredentialCheck.Success(new User("mick@weesky.be")));
 
         var sut = new UserAuthenticator(_usersRepo.Object, RealTokenManager(), _webmailUsers.Object,

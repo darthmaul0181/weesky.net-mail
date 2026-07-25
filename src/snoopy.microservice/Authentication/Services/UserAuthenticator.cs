@@ -35,7 +35,9 @@ public sealed class UserAuthenticator : IUserAuthenticator
         }
 
         _logger.LogInformation("Audit: login email={Email} outcome=success", email);
-        user.WebmailUid = await _webmailUsers.RegisterLoginAsync(user.Email, CancellationToken.None);
+        var account = await _webmailUsers.RegisterLoginAsync(user.Email, CancellationToken.None);
+        user.WebmailUid = account.Id;
+        user.SecurityStamp = account.SecurityStamp;
         return Result.Success(_tokenManager.Generate(user));
     }
 

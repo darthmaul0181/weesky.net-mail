@@ -46,6 +46,43 @@
             The Json Web Token used to authenticate the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard">
+             <summary>
+             Decides whether the session a bearer token describes is still live, and cuts every session of
+             an account when asked.
+            
+             A JWT is self-contained: once signed it is valid until it expires, and nothing about signing
+             out, changing a password or disabling an account reaches it. This is what closes that gap —
+             the account carries a stamp, every token carries the stamp that was current when it was
+             issued, and rotating the stored one leaves every token already out there unable to match.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard.IsCurrentAsync(System.String,System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Whether the account still exists, is usable, and has not had its sessions revoked since the
+            token was issued. Answered from a short-lived cache: this runs on every authenticated
+            request, and the TTL is the ceiling on how long a revoked session keeps working.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard.Forget(System.String)">
+            <summary>
+            Drops the cached state for an account, so a rotation takes effect immediately instead of
+            at the end of the cache window. Called by whoever rotates the stamp.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.CacheWindow">
+            <summary>
+            How long an account's state is reused across requests. It is the ceiling on how long a
+            revoked session keeps working when the rotation happened on another instance or process;
+            on this one <see cref="M:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.Forget(System.String)"/> makes it immediate.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.AccountState">
+            <summary>Null stamp means the account is gone, or was never registered in the webmail database.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.AccountState.#ctor(System.Boolean,System.Nullable{System.Guid})">
+            <summary>Null stamp means the account is gone, or was never registered in the webmail database.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Authentication.Services.TokenBuilder">
              <summary>
              Builds the signed JWT the API authenticates with.
@@ -66,8 +103,18 @@
             is the one this log has always used, and it keeps it.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.SessionCookies">
+            <summary>
+            Writes and clears the JWT cookie. Three places issue a session — the login, the sliding
+            renewal, and a password change re-issuing its own — and the cookie's flags are a security
+            property, so they are spelled out once rather than three times.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Authentication.WebmailClaimTypes">
             <summary>Custom JWT claim types. Upn/Dns come from System.Security.Claims; this one is ours.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Authentication.WebmailClaimTypes.Stamp">
+            <summary>The account's revocation stamp. A token without it is refused, never trusted.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Configuration.ApiDocumentationConfiguration.AddApiDocumentation(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
             <summary>
@@ -201,7 +248,7 @@
             <response code="401">Unauthenticated user</response>
             <response code="502">Unable to reach Dovecot</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangePassword(weesky.Snoopy.Microservice.Models.SecretChange)">
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangePassword(weesky.Snoopy.Microservice.Models.SecretChange,System.Threading.CancellationToken)">
             <summary>
             Change the mailbox password
             </summary>
@@ -212,6 +259,7 @@
             authentication for the rest of the token's lifetime.
             </remarks>
             <param name="secretChange">the new secret</param>
+            <param name="cancellationToken">cancellation token</param>
             <response code="204">Secret changed successfully</response>
             <response code="400">Wrong credentials</response>
             <response code="401">Unauthenticated user</response>
@@ -354,16 +402,6 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadGatewayEnveloppe(System.String)">
             <summary>502 carrying the error envelope — anything the mail server refused.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.BearerAuthenticatorController.Authenticate(weesky.Snoopy.Microservice.Models.Credentials)">
-            <summary>
-            Generates a Json Web Token (JWT) for bearer authentication.
-            </summary>
-            <param name="credentials">user credentials</param>
-            <returns></returns>
-            <response code="200">User authentication succeeded</response>
-            <response code="401">Wrong credentials</response>
-            <response code="429">Too many authentication attempts</response>
-        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
             <summary>
             Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
@@ -418,6 +456,20 @@
             <returns></returns>
             <response code="204">Logout successful</response>
             <response code="401">Try to logout an unauthenticated user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.LoginController.LogoutEverywhere(System.Threading.CancellationToken)">
+            <summary>
+            Signs the account out everywhere, this device included.
+            </summary>
+            <remarks>
+            The ordinary logout only clears this browser's cookies; the token itself stays valid until
+            it expires, so a copy taken off the machine keeps working. This rotates the account's
+            security stamp, which leaves every token already issued unable to match — the control to
+            reach for when a session is believed to be in someone else's hands.
+            </remarks>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Every session was revoked</response>
+            <response code="401">Not authenticated</response>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.MailController">
              <summary>
@@ -915,6 +967,13 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Data.Preferences.WebmailUser.Email">
             <summary>Canonical (trimmed, lower-case); the table collates in binary.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.WebmailUser.SecurityStamp">
+            <summary>
+            Rotated whenever the account's sessions must be cut. Every JWT carries the value that was
+            current when it was issued, so one write here revokes every token for this account at once
+            — which is the only way a password change can actually sign the other devices out.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AccountInfo">
             <summary>
@@ -1779,6 +1838,13 @@
         <member name="P:weesky.Snoopy.Microservice.Models.User.WebmailUid">
             <summary>The snoopy_webmail surrogate key. Stamped into the JWT at login, read every request.</summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.User.SecurityStamp">
+            <summary>
+            The account's revocation stamp at the time the token was issued. Travels in the JWT the
+            same way <see cref="P:weesky.Snoopy.Microservice.Models.User.WebmailUid"/> does, and is compared against the stored one on every
+            request: a mismatch means the session was revoked.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.PreferenceDefinition">
             <summary>One preference the client may set, with the values it may take.</summary>
         </member>
@@ -1920,10 +1986,26 @@
             password, which is enough to enumerate the mailboxes that exist.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.WebmailAccount">
+            <summary>The webmail account row as the session layer needs it: its key and its revocation stamp.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.WebmailAccount.#ctor(System.Guid,System.Guid)">
+            <summary>The webmail account row as the session layer needs it: its key and its revocation stamp.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.RegisterLoginAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Ensures the account's row exists and stamps the login. Called once per login, never per
-            request. Returns the stable GUID (created if absent). Email is canonicalised.
+            request. Returns the stable GUID (created if absent) and the current security stamp.
+            Email is canonicalised.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.FindByEmailAsync(System.String,System.Threading.CancellationToken)">
+            <summary>The account's key and stamp, or null when no row exists. Read on the session path.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.RotateSecurityStampAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Draws a new security stamp, which invalidates every token already issued for this account.
+            Returns it so the caller can re-issue its own session rather than sign itself out.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.DeleteByEmailAsync(System.String,System.Threading.CancellationToken)">

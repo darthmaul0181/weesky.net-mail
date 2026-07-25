@@ -2,6 +2,7 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Authentication.Models;
+using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Services;
@@ -58,19 +59,18 @@ public sealed class SlidingSessionMiddleware
         var password = credentials.Retrieve(context.Request);
         if (password.IsFailure) return;
 
-        var renewed = new User($"{name}@{domain}");
+        // Carried from the principal, not re-read from the database: the renewal must stay free
+        // of a query, and a renewed token that dropped the stamp would be refused on its next use
+        // — a mass sign-out surfacing a day later, which is the worst kind to diagnose.
+        if (!Guid.TryParse(context.User.FindFirst(WebmailClaimTypes.Stamp)?.Value, out var stamp)) return;
+
+        var renewed = new User($"{name}@{domain}") { SecurityStamp = stamp };
         if (Guid.TryParse(context.User.FindFirst(WebmailClaimTypes.Uid)?.Value, out var uid))
             renewed.WebmailUid = uid;
         var token = tokens.Generate(renewed);
         if (string.IsNullOrEmpty(token.Token)) return;
 
-        context.Response.Cookies.Append(_tokenConstants.Value.AuthCookieName, token.Token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTimeOffset.UtcNow.Add(lifetime)
-        });
+        context.Response.WriteAuthCookie(_tokenConstants.Value, token.Token);
 
         credentials.Store(context.Response, password.Value, lifetime);
         logger.LogInformation("Sliding session renewed for {User}: {RemainingMinutes} min remained of {LifetimeMinutes}",

@@ -5,17 +5,18 @@
 **Branche :** `webmail`
 
 > **Statut au 2026-07-26 :** les priorités **1 à 9** de la §6 ont été traitées, puis les constats
-> **2.7, 3.3, 3.4, 4.4, 4.7, 4.9** et enfin **1.8, 1.9, 2.5**. Build sans avertissement,
-> **1141 tests au vert** (1104 au départ, +37 nouveaux).
+> **2.7, 3.3, 3.4, 4.4, 4.7, 4.9**, puis **1.8, 1.9, 2.5**, et enfin **1.4** et **3.5**. Build
+> sans avertissement, **1168 tests au vert** (1104 au départ ; le total baisse de deux parce que
+> `BearerAuthenticatorController` et ses tests ont été supprimés).
 
 Chaque constat porte son état, et le détail des corrections est en §6 :
 
 | | Signification | Constats |
 |---|---|---|
-| ✅ | corrigé | 1.1, 1.2, 1.3, 1.5, 1.8, 1.9, 1.12, 2.1, 2.3, 2.5, 3.1, 3.2, 3.3, 3.4, 4.1, 4.4, 4.7, 4.8, 4.9, 5.1, 5.3 |
+| ✅ | corrigé | 1.1 à 1.5, 1.8, 1.9, 1.12, 2.1, 2.3, 2.5, 3.1 à 3.5, 4.1, 4.4, 4.7 à 4.9, 5.1, 5.3 |
 | 🟡 | partiellement corrigé | 2.7, 4.2, 4.3, 4.5, 4.6 |
 | ⚠️ | écarté, constat révisé | 2.4 |
-| ⬜ | ouvert | 1.4, 1.6, 1.7, 1.10, 1.11, 2.2, 2.6, 2.8, 3.5 à 3.7, 4.10, 4.11, 5.2 |
+| ⬜ | ouvert | 1.6, 1.7, 1.10, 1.11, 2.2, 2.6, 2.8, 3.6, 3.7, 4.10, 4.11, 5.2 |
 
 ---
 
@@ -81,7 +82,9 @@ mais toute opération mail échoue en « Mail authentication failed » — jusqu
 l'utilisateur comprenne pourquoi. Fonctionnellement c'est un bug ; côté sécurité, c'est aussi un
 changement de secret qui n'invalide rien.
 
-#### ⬜ 1.4 — Aucune révocation de session
+#### ✅ 1.4 — Aucune révocation de session
+
+> **Corrigé** — un *security stamp* par compte sur `snoopy_webmail.users`, porté par chaque JWT et comparé à chaque requête via `ISessionGuard` (même lecture cachée que le contrôle d'existence, donc aucune requête supplémentaire par requête HTTP). Le faire tourner coupe toutes les sessions du compte d'un coup : c'est ce que fait désormais un changement de mot de passe, et ce que fait le nouveau `DELETE /api/Login/All`. Un jeton sans claim de stamp est **refusé**, jamais toléré — donc le déploiement coupe une fois toutes les sessions ouvertes. DDL manuel préalable : `docs/superpowers/webmail-security-stamp.md`.
 
 Le JWT n'a ni `jti` ni liste de révocation ; `Logout` se contente de supprimer les cookies. Un token
 capturé reste valide jusqu'à `exp` (**2880 min = 48 h**), et il est accepté aussi bien en cookie
@@ -310,7 +313,9 @@ Même structure, même `ValidateCertificate` (dupliqué à l'identique), même g
 messages. Une classe de base générique ou un helper partagé pour `ValidateCertificate` élimine le
 risque de divergence.
 
-### ⬜ 3.5 — `LoginController` vs `BearerAuthenticatorController`
+### ✅ 3.5 — `LoginController` vs `BearerAuthenticatorController`
+
+> **Corrigé** — l'endpoint n'était utilisé nulle part : ni par le frontend, ni par les tests hors les siens, ni par la documentation. `BearerAuthenticatorController` est supprimé, ce qui retire un second point d'authentification public. Sa seule assertion qui n'avait pas d'équivalent — les identifiants atteignent l'authentificateur inaltérés — est reportée dans `LoginControllerTests`.
 
 Deux endpoints publics d'authentification, le second n'étant que le premier sans les cookies. Il
 double la surface d'attaque de login. **Est-il encore utilisé ?** Sinon, à supprimer.
@@ -568,6 +573,32 @@ instable sur une machine partagée. Ce qui est épinglé, c'est le mécanisme do
 `AbsentAccountHash_IsARealSha512CryptHashOfProductionCost` vérifie que le leurre reste un vrai
 `$6$` aux mêmes paramètres de coût que les hashs stockés. Si cette propriété tombe, l'égalisation
 tombe avec, et c'est le seul endroit où elle pourrait tomber en silence.
+
+### Quatrième passe — 1.4, révocation de session
+
+Un *security stamp* par compte (`snoopy_webmail.users.security_stamp`), placé dans le JWT à
+l'émission et comparé au stocké à chaque requête. Le faire tourner rend inutilisable tout jeton
+déjà émis pour ce compte.
+
+Points de rotation : le changement de mot de passe, et `DELETE /api/Login/All` (« se déconnecter
+partout »). La désactivation et la suppression restaient déjà couvertes par le contrôle
+d'existence.
+
+Les quatre pièges identifiés à la conception sont chacun verrouillés par un test, parce qu'aucun
+ne se voit à la lecture :
+
+1. **L'appareil qui change le mot de passe ne se déconnecte pas lui-même** — il reçoit un JWT
+   frais dans la même réponse. Sans ça, c'est le bug 1.3 sous une autre forme.
+2. **Le renouvellement glissant reporte le stamp.** L'oublier produirait un jeton refusé à son
+   usage suivant : une déconnexion massive surgissant un jour plus tard. Les deux tests existants
+   du middleware ont d'ailleurs échoué à la première exécution — c'est exactement ce piège.
+3. **Un jeton sans claim de stamp est refusé**, jamais toléré : l'accepter rendrait le contrôle
+   contournable par omission.
+4. **Le cache est invalidé à la rotation**, sinon la révocation traînerait jusqu'à 60 s.
+
+Ce que ça ne fait pas : pas de révocation par appareil. Un logout ordinaire efface toujours
+simplement les cookies. « Se déconnecter partout » est le contrôle à utiliser quand une session
+est soupçonnée d'être ailleurs.
 
 ### Non fait volontairement
 

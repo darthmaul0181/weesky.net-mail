@@ -23,6 +23,7 @@ public sealed class TokenManager : ITokenManager
         string token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
             .AddClaim(ClaimTypes.Dns, user.Domain)
             .AddClaim(WebmailClaimTypes.Uid, user.WebmailUid.ToString())
+            .AddClaim(WebmailClaimTypes.Stamp, user.SecurityStamp.ToString())
             .AddIssuer(TokenConstants.Value.Issuer)
             .AddAudience(TokenConstants.Value.Audience)
             .AddExpiry(TokenConstants.Value.ExpiryInMinutes)

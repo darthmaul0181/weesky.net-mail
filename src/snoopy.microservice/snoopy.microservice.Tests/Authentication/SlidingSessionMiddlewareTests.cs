@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Middleware;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
@@ -39,20 +40,24 @@ public sealed class SlidingSessionMiddlewareTests
     /// The token builder does not emit "iat", so remaining lifetime — not age — is the
     /// only thing the middleware can measure.
     /// </summary>
-    private static HttpContext CreateContext(bool authenticated, TimeSpan remaining)
+    internal static readonly Guid Stamp = Guid.NewGuid();
+
+    private static HttpContext CreateContext(bool authenticated, TimeSpan remaining, Guid? stamp = null)
     {
         var context = new DefaultHttpContext();
 
         if (authenticated)
         {
-            var claims = new[]
+            var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Upn, "alice"),
-                new Claim(ClaimTypes.Dns, "weesky.be"),
-                new Claim(JwtRegisteredClaimNames.Exp,
+                new(ClaimTypes.Upn, "alice"),
+                new(ClaimTypes.Dns, "weesky.be"),
+                new(JwtRegisteredClaimNames.Exp,
                     DateTimeOffset.UtcNow.Add(remaining).ToUnixTimeSeconds().ToString(),
                     ClaimValueTypes.Integer64)
             };
+            if (stamp is { } value) claims.Add(new Claim(WebmailClaimTypes.Stamp, value.ToString()));
+
             context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
         }
 
@@ -66,7 +71,7 @@ public sealed class SlidingSessionMiddlewareTests
     public async Task Invoke_RenewsBothCookiesPastHalfLife()
     {
         // 10 minutes left of a 30-minute lifetime: past the halfway mark.
-        var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10));
+        var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10));
 
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
@@ -77,7 +82,7 @@ public sealed class SlidingSessionMiddlewareTests
     [Fact]
     public async Task Invoke_RenewsForTheAuthenticatedUser()
     {
-        var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10));
+        var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10));
 
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
@@ -88,7 +93,7 @@ public sealed class SlidingSessionMiddlewareTests
     public async Task Invoke_DoesNotRenewBeforeHalfLife()
     {
         // 25 minutes left of 30: well before the halfway mark.
-        var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(25));
+        var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(25));
 
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
@@ -111,7 +116,7 @@ public sealed class SlidingSessionMiddlewareTests
     {
         _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
                     .Returns(Result.Failure<string>("credentials_unavailable"));
-        var context = CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10));
+        var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10));
 
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
@@ -151,9 +156,33 @@ public sealed class SlidingSessionMiddlewareTests
         var sut = CreateSut(_ => { called = true; return Task.CompletedTask; });
 
         await sut.InvokeAsync(
-            CreateContext(authenticated: true, remaining: TimeSpan.FromMinutes(10)),
+            CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10)),
             _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         Assert.True(called);
+    }
+
+    // Trap 2. The renewal rebuilds the token from the principal. A renewed token that dropped the
+    // stamp would pass today and be refused on its next use — a mass sign-out surfacing a day
+    // later, from a code path that looks correct.
+    [Fact]
+    public async Task Invoke_CarriesTheSecurityStampIntoTheRenewedToken()
+    {
+        var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10));
+
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
+
+        _tokens.Verify(t => t.Generate(It.Is<User>(u => u.SecurityStamp == Stamp)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Invoke_RenewsNothingWhenTheTokenCarriesNoStamp()
+    {
+        var context = CreateContext(authenticated: true, stamp: null, remaining: TimeSpan.FromMinutes(10));
+
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
+
+        _tokens.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
+        Assert.Empty(context.Response.Headers["Set-Cookie"].ToArray());
     }
 }

@@ -6,6 +6,8 @@ using Moq;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Controllers;
+using weesky.Snoopy.Microservice.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -26,10 +28,14 @@ public sealed class LoginControllerTests
 
     private readonly Mock<IUserAuthenticator> _authenticator = new();
     private readonly Mock<IMailCredentialStore> _credentialStore = new();
+    private readonly Mock<IWebmailUserStore> _webmailUsers = new();
+    private readonly Mock<ISessionGuard> _sessions = new();
 
     private LoginController CreateController(DefaultHttpContext? httpContext = null)
     {
-        var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object);
+        var controller = new LoginController(
+            _authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object,
+            _webmailUsers.Object, _sessions.Object, NullLogger<LoginController>.Instance);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext ?? new DefaultHttpContext()
@@ -63,6 +69,19 @@ public sealed class LoginControllerTests
         Assert.True(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
     }
 
+    // Carried over from BearerAuthenticatorControllerTests when that endpoint was retired: the
+    // credentials must reach the authenticator unaltered, and nothing else asserted it outright.
+    [Fact]
+    public async Task Login_PassesEmailAndPasswordToTheAuthenticator()
+    {
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
+
+        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" });
+
+        _authenticator.Verify(a => a.AuthenticateAsync("user@domain.com", "pass"), Times.Once);
+    }
+
     [Fact]
     public async Task Login_WithInvalidCredentials_Returns401()
     {
@@ -92,7 +111,9 @@ public sealed class LoginControllerTests
     [Fact]
     public void Logout_Returns204()
     {
-        var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object);
+        var controller = new LoginController(
+            _authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object,
+            _webmailUsers.Object, _sessions.Object, NullLogger<LoginController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
 
         var result = controller.Logout();
@@ -129,11 +150,29 @@ public sealed class LoginControllerTests
     [Fact]
     public void Logout_ClearsTheCredentialsCookie()
     {
-        var controller = new LoginController(_authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object);
+        var controller = new LoginController(
+            _authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object,
+            _webmailUsers.Object, _sessions.Object, NullLogger<LoginController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
 
         controller.Logout();
 
         _credentialStore.Verify(s => s.Clear(It.IsAny<HttpResponse>()), Times.Once);
+    }
+
+    // The ordinary logout only clears this browser's cookies; a copy taken off the machine keeps
+    // working until the token expires. This is the control that actually cuts it.
+    [Fact]
+    public async Task LogoutEverywhere_RotatesTheStampAndDropsTheCachedState()
+    {
+        var controller = CreateController();
+        controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
+
+        var result = await controller.LogoutEverywhere(CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        _webmailUsers.Verify(s => s.RotateSecurityStampAsync("john@example.com", It.IsAny<CancellationToken>()), Times.Once);
+        _sessions.Verify(s => s.Forget("john@example.com"), Times.Once);
+        _credentialStore.Verify(c => c.Clear(It.IsAny<HttpResponse>()), Times.Once);
     }
 }
