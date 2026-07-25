@@ -1,7 +1,7 @@
 namespace weesky.Snoopy.Microservice.Models.Mail;
 
 /// <summary>A composed message.</summary>
-public sealed record SendMessageRequest
+public record SendMessageRequest
 {
     public IReadOnlyList<string> To { get; init; } = [];
     public IReadOnlyList<string> Cc { get; init; } = [];

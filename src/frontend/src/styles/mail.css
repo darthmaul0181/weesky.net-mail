@@ -553,6 +553,13 @@
   white-space: nowrap;
 }
 
+.message-row-draft {
+  color: var(--danger);
+  font-size: 12px;
+  margin-right: 6px;
+  flex: none;
+}
+
 .message-row-date { color: var(--text-muted); font-size: 11px; flex: none; }
 /* A hair up in the narrow skin, so the small date reads level with the sender text rather than
    hanging on the shared baseline. The wide skin swaps the date out on hover, so it stays put. */
@@ -1345,6 +1352,8 @@
 .compose-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .compose-header .modal-title { flex: 1; min-width: 0; }
 .compose-send { width: auto; padding: 8px 14px; }
+/* Save draft sits beside Send and has to match its height, not the default .btn padding. */
+.compose-header .btn-ghost { padding: 8px 14px; }
 /* Tight header: no per-row margin (the column gap spaces them) and a narrow label so From/To/
    Subject values line up close to their labels. */
 .compose-fields { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; }

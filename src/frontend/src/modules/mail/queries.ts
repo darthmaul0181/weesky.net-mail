@@ -8,6 +8,7 @@ import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, MailSearchPage,
   FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote, QuotePurpose,
+  SavedDraft, OpenedDraft,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -152,15 +153,21 @@ export function useFolderRoles() {
   })
 }
 
-/** The curated From list. Long staleTime: it changes only from Settings, which invalidates it. */
+/** The curated From list. Long staleTime: it changes only from Settings, which invalidates it.
+    Exported as options so an imperative `ensureQueryData` shares the hook's one definition; the
+    `select` stays on the hook, since `ensureQueryData` answers the raw response either way. */
+export const identitiesQueryOptions = (accountId: string) => ({
+  queryKey: mailKeys.identities(accountId),
+  queryFn: () => api.getIdentities() as Promise<IdentityListResponse>,
+  staleTime: 5 * 60_000,
+})
+
 export function useIdentities() {
   const accountId = useAccountId()
 
   return useQuery({
-    queryKey: mailKeys.identities(accountId),
-    queryFn: () => api.getIdentities() as Promise<IdentityListResponse>,
+    ...identitiesQueryOptions(accountId),
     select: (data): SendingIdentity[] => data.identities,
-    staleTime: 5 * 60_000,
   })
 }
 
@@ -668,6 +675,35 @@ export function usePrepareQuote() {
   return useMutation({
     mutationFn: (args: { folder: string; uid: number; purpose: QuotePurpose }) =>
       api.prepareQuote(args.folder, args.uid, args.purpose) as Promise<PreparedQuote>,
+  })
+}
+
+export type SaveDraftArgs = SendMessageArgs & { replaceUid?: number }
+
+/** Files the draft under the drafts role; each success replaces the version before it. */
+export function useSaveDraft() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: (args: SaveDraftArgs) => api.saveDraft(args) as Promise<SavedDraft>,
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, saved.folderPath) })
+      queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, saved.folderPath) })
+    },
+  })
+}
+
+/**
+ * Opens a draft for the composer. A mutation, not a query: every call re-stages the draft's
+ * parts (a side effect with a TTL), so the result must never be cached or replayed.
+ */
+export function useOpenDraft() {
+  return useMutation({
+    mutationFn: (args: { folder: string; uid: number }) =>
+      api.openDraft(args.folder, args.uid) as Promise<OpenedDraft>,
   })
 }
 

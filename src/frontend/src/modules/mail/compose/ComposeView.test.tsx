@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ComposeView from './ComposeView'
@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   deleteAttachment: vi.fn(),
   uploadAttachment: vi.fn(),
+  saveDraft: vi.fn(),
+  deleteMessages: vi.fn(),
   apiBase: 'https://api.test.example',
 }))
 // The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
@@ -18,7 +20,10 @@ const mocks = vi.hoisted(() => ({
 const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[] }))
 
 vi.mock('../../../api.js', () => ({
-  api: { sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment },
+  api: {
+    sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment,
+    saveDraft: mocks.saveDraft, deleteMessages: mocks.deleteMessages,
+  },
   uploadAttachment: mocks.uploadAttachment,
   API_BASE: mocks.apiBase,
   stagedAttachmentUrl: (id: string) => `${mocks.apiBase}/api/Mail/Attachments/${id}/content`,
@@ -84,7 +89,7 @@ const attach = (name = 'a.txt') =>
     { target: { files: [new File(['x'], name, { type: 'text/plain' })] } })
 
 async function discardModal() {
-  const title = await screen.findByText('Discard this message?')
+  const title = await screen.findByText('Save this draft?')
   return title.closest('.modal') as HTMLElement
 }
 
@@ -99,6 +104,8 @@ beforeEach(() => {
   editorState.commands = []
   mocks.uploadAttachment.mockResolvedValue({ id: 'att-1', size: 3 })
   mocks.deleteAttachment.mockResolvedValue(undefined)
+  mocks.deleteMessages.mockResolvedValue(undefined)
+  mocks.saveDraft.mockResolvedValue({ uid: 7, folderPath: 'Drafts' })
   // Default: identities still loading — every pre-existing test keeps the 2c1 plain From.
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
@@ -297,7 +304,7 @@ describe('ComposeView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
-    expect(screen.queryByText('Discard this message?')).toBeNull()
+    expect(screen.queryByText('Save this draft?')).toBeNull()
   })
 })
 
@@ -313,6 +320,7 @@ describe('a seeded ComposeView', () => {
       { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
     ],
     inReplyTo: 'm@x', references: ['m@x'],
+    draftRef: null,
   }
 
   it('prefills the form', () => {
@@ -336,6 +344,7 @@ describe('a seeded ComposeView', () => {
   // "New message" over a quoted reply describes the wrong thing; edit-as-new genuinely is one.
   it.each([
     ['reply', 'Reply'], ['replyAll', 'Reply'], ['forward', 'Forward'], ['editAsNew', 'New message'],
+    ['draft', 'Draft'],
   ] as const)('titles a %s composer "%s"', (action, title) => {
     renderCompose('INBOX', { ...seed, action })
 
@@ -414,7 +423,7 @@ describe('leaving a dirty composer', () => {
     const modal = await discardModal()
     fireEvent.click(within(modal).getByRole('button', { name: 'Keep editing' }))
 
-    await waitFor(() => expect(screen.queryByText('Discard this message?')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Save this draft?')).toBeNull())
     expect(router.state.location.pathname).toBe('/mail/compose')
     expect(screen.getByTestId('compose-view')).toBeInTheDocument()
   })
@@ -448,7 +457,7 @@ describe('leaving a dirty composer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
-    expect(screen.queryByText('Discard this message?')).toBeNull()
+    expect(screen.queryByText('Save this draft?')).toBeNull()
   })
 
   // The guard must block a folder navigation once the form is dirty. The onChange callbacks mark
@@ -477,5 +486,210 @@ describe('leaving a dirty composer', () => {
     const dirtyEvent = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(dirtyEvent)
     expect(dirtyEvent.defaultPrevented).toBe(true)
+  })
+})
+
+// Drafts turn `dirty` from "the form is non-empty" into "changed since open or the last save",
+// and give the leave dialog a third answer.
+describe('drafts in the composer', () => {
+  const draftSeed: ComposeSeed = {
+    action: 'draft',
+    to: ['alice@ext.example'], cc: [], bcc: [],
+    subject: 'Half written', html: '<p>later</p>',
+    fromAddress: null, attachments: [],
+    inReplyTo: null, references: [],
+    draftRef: { folderPath: 'Drafts', uid: 41 },
+  }
+  const withParts: ComposeSeed = {
+    ...draftSeed,
+    attachments: [
+      { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
+      { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+    ],
+  }
+  // Nothing else on this seed is content the composer could add: the subject is all there is.
+  const subjectOnly: ComposeSeed = { ...draftSeed, to: [], subject: 'Only this', html: '' }
+  const headerSave = () => screen.getByRole('button', { name: 'Save draft' })
+
+  it('saves a draft and replaces it on the next save', async () => {
+    const { onNotify } = renderCompose()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
+    fireEvent.click(headerSave())
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Draft saved'))
+    expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ subject: 'Notes' })
+    expect(mocks.saveDraft.mock.calls[0][0].replaceUid).toBeUndefined()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes and more' } })
+    fireEvent.click(headerSave())
+
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(2))
+    expect(mocks.saveDraft.mock.calls[1][0]).toMatchObject({ subject: 'Notes and more', replaceUid: 7 })
+  })
+
+  // The old rule was "the form is non-empty", which a resumed draft satisfies without a single
+  // edit — and which no From pick could ever satisfy on its own.
+  it('a draft seed opens clean and a From-only change dirties it', async () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    const untouched = renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(untouched.router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+    cleanup()
+
+    const { router } = renderCompose('INBOX', draftSeed)
+    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  // Removing a part is the one edit that shrinks the form, so the non-empty clause can never see
+  // it: only the callback marking the composer changed can.
+  it('removing an attachment dirties a resumed draft', async () => {
+    const { router } = renderCompose('INBOX', withParts)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove doc.pdf' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  // Clearing a filed draft is a change worth keeping; the emptied form must not read as nothing
+  // to lose, or the clearing is dropped and the stored version survives it.
+  it('emptying a resumed draft still asks before leaving', async () => {
+    const { router } = renderCompose('INBOX', subjectOnly)
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  it('the leave dialog offers Save draft / Discard / Keep editing', async () => {
+    const kept = renderCompose('INBOX', withParts)
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    let modal = await discardModal()
+    for (const name of ['Keep editing', 'Discard', 'Save draft']) {
+      expect(within(modal).getByRole('button', { name })).toBeInTheDocument()
+    }
+
+    fireEvent.click(within(modal).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(screen.queryByText('Save this draft?')).toBeNull())
+    expect(kept.router.state.location.pathname).toBe('/mail/compose')
+    expect(mocks.deleteAttachment).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    modal = await discardModal()
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalled())
+    await waitFor(() => expect(kept.router.state.location.pathname).toBe('/mail'))
+    // The saved draft holds its own bytes in IMAP, so the staged copies go on this path too.
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+    cleanup()
+    mocks.deleteAttachment.mockClear()
+
+    const discarded = renderCompose('INBOX', withParts)
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    modal = await discardModal()
+    fireEvent.click(within(modal).getByRole('button', { name: 'Discard' }))
+
+    await waitFor(() => expect(discarded.router.state.location.pathname).toBe('/mail'))
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+  })
+
+  // Discard deletes the staged ids the save in flight may still be uploading from.
+  it('locks Discard while the draft is being saved', async () => {
+    mocks.saveDraft.mockReturnValue(new Promise(() => {}))
+    renderCompose('INBOX', withParts)
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    const modal = await discardModal()
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(within(modal).getByRole('button', { name: 'Discard' })).toBeDisabled())
+  })
+
+  // Send and Save both consume the staged ids and file a message; whichever lost would leave a
+  // draft behind that the winner's cleanup never knew about.
+  it('locks Send and Save draft against each other while either is in flight', async () => {
+    mocks.saveDraft.mockReturnValue(new Promise(() => {}))
+    renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(headerSave())
+
+    await waitFor(() => expect(sendButton()).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+  })
+
+  // The composer is clean, but the tray still holds staged copies nothing else will release.
+  it('releases the staged copies when a clean composer is closed', async () => {
+    const { router } = renderCompose('INBOX', withParts)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+  })
+
+  // The sent copy makes the stored draft a duplicate of a message that already left.
+  it('sending a resumed draft deletes it', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    const { router } = renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.deleteMessages).toHaveBeenCalledWith('Drafts', [41]))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+  })
+
+  // The composer is already unmounted when the DELETE answers, so the toast has to come from the
+  // mutation's own callback. Staying silent leaves a re-sendable draft of a message that went out.
+  it('says so when the draft of a sent message could not be removed', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    mocks.deleteMessages.mockRejectedValue(new Error('IMAP is down'))
+    const { onNotify, router } = renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+      'Message sent — the draft could not be removed', 'error'))
+    expect(router.state.location.pathname).toBe('/mail')
+  })
+
+  it('says why the leave dialog locks Save draft on an invalid address', async () => {
+    renderCompose('INBOX', draftSeed)
+
+    addRecipient('To', 'nope')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    const save = within(await discardModal()).getByRole('button', { name: 'Save draft' })
+
+    expect(save).toBeDisabled()
+    expect(save).toHaveAttribute('title', 'Fix the invalid address first')
+  })
+
+  it('saving a resumed draft targets its own uid', async () => {
+    mocks.saveDraft.mockResolvedValue({ uid: 42, folderPath: 'Drafts' })
+    renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(headerSave())
+
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalled())
+    expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ replaceUid: 41 })
   })
 })

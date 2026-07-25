@@ -13,6 +13,9 @@ public class MailMessageSummary
 
     public string FromAddress { get; set; } = string.Empty;
 
+    /// <summary>Recipients from the envelope — the drafts folder lists "To:" instead of the sender.</summary>
+    public List<MailAddressInfo> To { get; set; } = [];
+
     /// <summary>Date the message claims, falling back to the server's internal date.</summary>
     public DateTimeOffset Date { get; set; }
 

@@ -34,7 +34,7 @@ function pageOf(uids: number[]): MailFolderPage {
   return {
     folderPath: 'INBOX', uidValidity: 100, total: 5, page: 0, pageSize: uids.length,
     messages: uids.map(uid => ({
-      uid, subject: '', fromName: '', fromAddress: '', date: '2026-07-21T00:00:00Z',
+      uid, subject: '', fromName: '', fromAddress: '', to: [], date: '2026-07-21T00:00:00Z',
       seen: true, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
     })),
   }

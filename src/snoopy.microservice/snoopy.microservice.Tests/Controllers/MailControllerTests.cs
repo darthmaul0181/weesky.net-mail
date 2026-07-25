@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using MimeKit;
+using MimeKit.Utils;
 using Moq;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
@@ -25,6 +26,7 @@ public sealed class MailControllerTests
     private readonly Mock<IStagedAttachmentStore> _staged = new();
     private readonly Mock<IMailSender> _sender = new();
     private readonly Mock<IQuotePreparer> _quotes = new();
+    private readonly Mock<IDraftSaver> _drafts = new();
 
     private MailController CreateController()
     {
@@ -33,7 +35,7 @@ public sealed class MailControllerTests
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
         return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
-                                  _staged.Object, _sender.Object, _quotes.Object)
+                                  _staged.Object, _sender.Object, _quotes.Object, _drafts.Object)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
@@ -1699,5 +1701,197 @@ public sealed class MailControllerTests
 
         var status = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
+    // ── SaveDraft ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SaveDraft_Returns200WithTheSavedLocation()
+    {
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), "hunter2", It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new SavedDraft(7, "Drafts")));
+
+        var result = await CreateController().SaveDraft(new SaveDraftRequest(), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var saved = Assert.IsType<SavedDraft>(ok.Value);
+        Assert.Equal(7u, saved.Uid);
+        Assert.Equal("Drafts", saved.FolderPath);
+    }
+
+    [Fact]
+    public async Task SaveDraft_AcceptsNoRecipient()
+    {
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), "hunter2", It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new SavedDraft(1, "Drafts")));
+
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { To = [], Cc = [], Bcc = [] }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), "hunter2", It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SaveDraft_RejectsAMalformedRecipient()
+    {
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { To = ["not an address"] }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveDraft_RejectsAForeignFrom()
+    {
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<SavedDraft>(IOutgoingMessageFactory.ForbiddenFrom));
+
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { FromAddress = "other@weesky.be" }, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("other@weesky.be", ((ResultEnveloppe)bad.Value!).Message);
+    }
+
+    [Fact]
+    public async Task SaveDraft_RefusesAMalformedFrom()
+    {
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { FromAddress = "not an address" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveDraft_BaresADecoratedFromBeforeTheSaver()
+    {
+        SaveDraftRequest? captured = null;
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, string, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SavedDraft(1, "Drafts")));
+
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { FromAddress = "Name <me@weesky.be>" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("me@weesky.be", captured!.FromAddress);
+    }
+
+    [Fact]
+    public async Task SaveDraft_RejectsAnUnknownStagedId()
+    {
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<SavedDraft>(IOutgoingMessageFactory.UnknownAttachment));
+
+        var result = await CreateController().SaveDraft(new SaveDraftRequest(), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SaveDraft_Returns502WithoutADraftsFolder()
+    {
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<SavedDraft>(IDraftSaver.NoDraftsFolder));
+
+        var result = await CreateController().SaveDraft(new SaveDraftRequest(), CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(status.Value);
+        Assert.Equal(
+            "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list.",
+            envelope.Message);
+    }
+
+    [Fact]
+    public async Task SaveDraft_Returns401WithoutCredentials()
+    {
+        var controller = CreateController();
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
+                    .Returns(Result.Failure<string>("credentials_unavailable"));
+
+        var result = await controller.SaveDraft(new SaveDraftRequest(), CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── OpenDraft ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task OpenDraft_ReturnsTheEnvelopeAndPreparedBody()
+    {
+        var message = new MimeMessage();
+        message.To.Add(MailboxAddress.Parse("a@example.com"));
+        message.To.Add(MailboxAddress.Parse("b@example.com"));
+        message.Cc.Add(MailboxAddress.Parse("c@example.com"));
+        message.Subject = "Draft subject";
+        message.From.Add(MailboxAddress.Parse("Me <me@weesky.be>"));
+        message.InReplyTo = MimeUtils.ParseMessageId("<parent@x.com>");
+        message.References.Add(MimeUtils.ParseMessageId("<oldest@x.com>"));
+        message.References.Add(MimeUtils.ParseMessageId("<newest@x.com>"));
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), "hunter2", "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(message));
+        var stagedInfo = new StagedAttachmentInfo(Guid.NewGuid(), "logo.png", 3, "image/png", "logo@mail");
+        var prepared = new PreparedQuote("<p>Hi</p>", [stagedInfo]);
+        _quotes.Setup(q => q.PrepareAsync(WebmailUid.ToString(), message, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(prepared));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var opened = Assert.IsType<OpenedDraft>(ok.Value);
+        Assert.Equal(["a@example.com", "b@example.com"], opened.To);
+        Assert.Equal(["c@example.com"], opened.Cc);
+        Assert.Empty(opened.Bcc);
+        Assert.Equal("Draft subject", opened.Subject);
+        Assert.Equal("me@weesky.be", opened.FromAddress);
+        Assert.Equal("<p>Hi</p>", opened.HtmlBody);
+        Assert.Same(stagedInfo, Assert.Single(opened.Attachments));
+        Assert.Equal("parent@x.com", opened.InReplyTo);
+        Assert.Equal(["oldest@x.com", "newest@x.com"], opened.References);
+    }
+
+    [Fact]
+    public async Task OpenDraft_Returns404ForAMissingUid()
+    {
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "Drafts", 9u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<MimeMessage>(ImapSession.MessageNotFound));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 9), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task OpenDraft_Returns400WhenStagingFails()
+    {
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new MimeMessage()));
+        _quotes.Setup(q => q.PrepareAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<PreparedQuote>("cap"));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task OpenDraft_RequiresAFolder()
+    {
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("", 7), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _messages.Verify(m => m.GetMimeMessageAsync(
+            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

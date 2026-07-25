@@ -302,6 +302,75 @@ describe('MessageList', () => {
   })
 })
 
+const draftSample = [
+  {
+    uid: 5, subject: 'To Bob', fromName: 'Me', fromAddress: 'me@x.be',
+    to: [{ name: 'Bob', address: 'bob@x.example' }, { name: '', address: 'carol@ext.example' }],
+    date: '2026-07-20T09:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 10, preview: '',
+  },
+  {
+    uid: 6, subject: 'No recipient yet', fromName: 'Me', fromAddress: 'me@x.be',
+    to: [],
+    date: '2026-07-20T10:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 10, preview: '',
+  },
+]
+
+describe('a drafts folder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: draftSample }))
+  })
+
+  it('shows the joined recipients and a Draft marker instead of the sender', async () => {
+    renderList({ folderRole: 'drafts' })
+
+    expect(await screen.findByText('Bob, carol@ext.example')).toBeInTheDocument()
+    expect(screen.getAllByText('Draft')).toHaveLength(draftSample.length)
+  })
+
+  // The row is children-presentational, so a marker it shows and its name omits is invisible.
+  it('voices the Draft marker in the row name', async () => {
+    renderList({ folderRole: 'drafts' })
+
+    expect(await screen.findByRole('button', { name: /^Draft\. Bob, carol@ext\.example: To Bob/ }))
+      .toBeInTheDocument()
+  })
+
+  it('shows a placeholder when the draft has no recipient', async () => {
+    renderList({ folderRole: 'drafts' })
+
+    expect(await screen.findByText('(no recipient)')).toBeInTheDocument()
+  })
+
+  it('shows the recipients and the marker in the wide skin too', async () => {
+    renderList({ folderRole: 'drafts', wide: true })
+
+    expect(await screen.findByText('Bob, carol@ext.example')).toBeInTheDocument()
+    expect(screen.getAllByText('Draft')).toHaveLength(draftSample.length)
+  })
+})
+
+// Regression pin: only a drafts-role folder swaps the sender for the recipients.
+describe('a non-drafts folder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  it('still shows the sender, with no Draft marker', async () => {
+    renderList({ folderRole: null })
+
+    expect(await screen.findByText('Alice Martin')).toBeInTheDocument()
+    expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+  })
+})
+
 describe('the row controls', () => {
   beforeEach(() => {
     vi.clearAllMocks()

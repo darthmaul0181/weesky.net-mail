@@ -1,5 +1,6 @@
 ﻿using MailKit;
 using MimeKit;
+using Moq;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
@@ -28,6 +29,36 @@ public sealed class ImapSessionTests
     public void SpecialUseFromAttributes_ReturnsInboxForTheInbox()
     {
         Assert.Equal("inbox", ImapSession.SpecialUseFromAttributes(FolderAttributes.None, isInbox: true));
+    }
+
+    [Fact]
+    public void FillSummary_TranscribesTheEnvelopeRecipients()
+    {
+        var envelope = new Envelope();
+        envelope.To.Add(new MailboxAddress("Bob", "bob@ext.example"));
+        envelope.To.Add(new MailboxAddress(string.Empty, "carol@ext.example"));
+        var item = new Mock<IMessageSummary>();
+        item.SetupGet(i => i.UniqueId).Returns(new UniqueId(7));
+        item.SetupGet(i => i.Envelope).Returns(envelope);
+
+        var summary = ImapSession.FillSummary(new MailMessageSummary(), item.Object);
+
+        Assert.Equal(2, summary.To.Count);
+        Assert.Equal("Bob", summary.To[0].Name);
+        Assert.Equal("bob@ext.example", summary.To[0].Address);
+        Assert.Equal("carol@ext.example", summary.To[1].Address);
+    }
+
+    [Fact]
+    public void FillSummary_LeavesToEmptyWithoutAnEnvelope()
+    {
+        var item = new Mock<IMessageSummary>();
+        item.SetupGet(i => i.UniqueId).Returns(new UniqueId(7));
+        item.SetupGet(i => i.Envelope).Returns((Envelope?)null);
+
+        var summary = ImapSession.FillSummary(new MailMessageSummary(), item.Object);
+
+        Assert.Empty(summary.To);
     }
 
     [Fact]

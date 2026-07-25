@@ -31,6 +31,7 @@ public sealed class MailController : ApiBaseController
     private readonly IStagedAttachmentStore _staged;
     private readonly IMailSender _sender;
     private readonly IQuotePreparer _quotes;
+    private readonly IDraftSaver _drafts;
 
     public MailController(
         IMailFolderRepository folders,
@@ -39,7 +40,8 @@ public sealed class MailController : ApiBaseController
         IFolderRoleStore roleStore,
         IStagedAttachmentStore staged,
         IMailSender sender,
-        IQuotePreparer quotes)
+        IQuotePreparer quotes,
+        IDraftSaver drafts)
     {
         _folders = folders;
         _messages = messages;
@@ -48,6 +50,7 @@ public sealed class MailController : ApiBaseController
         _staged = staged;
         _sender = sender;
         _quotes = quotes;
+        _drafts = drafts;
     }
 
     /// <summary>
@@ -852,6 +855,120 @@ public sealed class MailController : ApiBaseController
 
         return Ok(prepared.Value);
     }
+
+    /// <summary>
+    /// Saves the composer's content as a draft in the drafts-role folder (\Draft \Seen), replacing
+    /// the previous version when replaceUid names one. An empty or recipient-less draft is valid;
+    /// the message itself is built by the same pipeline as Send, so threading and attachments
+    /// survive a save/resume round trip. Attachments live in the stored message — the staged
+    /// files remain for the still-open composer and expire on their own.
+    /// </summary>
+    /// <param name="request">the draft content, plus the UID it replaces</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">Saved; the new UID and the folder it landed in</response>
+    /// <response code="400">An invalid address, a fromAddress the account does not own, or a staged id no longer available</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="502">No folder holds the drafts role, or the mail server refused the save</response>
+    [HttpPost("Drafts")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<SavedDraft>> SaveDraft(SaveDraftRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+
+        request = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [], References = request.References ?? [] };
+
+        foreach (var address in request.To.Concat(request.Cc).Concat(request.Bcc))
+        {
+            if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.FromAddress))
+        {
+            if (!MailboxAddress.TryParse(RecipientAddressParser.Options, request.FromAddress, out var from))
+                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                    $"\"{request.FromAddress}\" is not a valid email address"));
+            request = request with { FromAddress = from.Address };
+        }
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var result = await _drafts.SaveAsync(AuthenticatedUser, password.Value, request, cancellationToken);
+
+        if (result.IsFailure && result.Error == IOutgoingMessageFactory.UnknownAttachment)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                "An attachment is no longer available; remove it and attach it again"));
+        if (result.IsFailure && result.Error == IOutgoingMessageFactory.ForbiddenFrom)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
+                $"Sending from \"{request.FromAddress}\" is not allowed on this account"));
+        if (result.IsFailure && result.Error == IDraftSaver.NoDraftsFolder)
+            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(
+                "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list."));
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Reopens a saved draft for editing: envelope, outbound-sanitised body with cid images
+    /// rewritten to staged-content URLs, and the message's real attachments re-staged under
+    /// the calling account so the composer can offer them again. Uses the same GetMimeMessage +
+    /// PrepareAsync(EditAsNew) pipeline as PrepareQuote, so a save/resume round trip behaves the
+    /// same way a forward or edit-as-new does.
+    /// </summary>
+    /// <param name="request">the drafts-role folder and the UID of the stored draft</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The envelope, editable body and re-staged attachments</response>
+    /// <response code="400">Missing folder, or staging over the account caps</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="404">No message with that UID in that folder</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("Drafts/Open")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<OpenedDraft>> OpenDraft(OpenDraftRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Folder))
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+
+        var password = _credentials.Retrieve(Request);
+        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+
+        var message = await _messages.GetMimeMessageAsync(
+            AuthenticatedUser, password.Value, request.Folder, request.Uid, cancellationToken);
+        if (message.IsFailure && message.Error == ImapSession.MessageNotFound)
+            return NotFound(ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+        if (message.IsFailure)
+            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+
+        var prepared = await _quotes.PrepareAsync(
+            AuthenticatedUser.WebmailUid.ToString(), message.Value, QuotePurpose.EditAsNew, cancellationToken);
+
+        // A failure here is the staging caps talking (file size / account quota): 400, actionable.
+        if (prepared.IsFailure)
+            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(prepared.Error));
+
+        return Ok(ToOpenedDraft(message.Value, prepared.Value));
+    }
+
+    private static OpenedDraft ToOpenedDraft(MimeMessage message, PreparedQuote prepared) =>
+        new(
+            Addresses(message.To), Addresses(message.Cc), Addresses(message.Bcc),
+            message.Subject ?? string.Empty,
+            message.From?.Mailboxes?.FirstOrDefault()?.Address,
+            prepared.QuotableHtml,
+            prepared.Attachments,
+            string.IsNullOrWhiteSpace(message.InReplyTo) ? null : message.InReplyTo,
+            message.References?.ToList() ?? []);
+
+    private static List<string> Addresses(InternetAddressList? list) =>
+        list?.Mailboxes?.Select(m => m.Address).ToList() ?? [];
 
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
     {

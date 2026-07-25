@@ -274,6 +274,12 @@ export const api = {
   prepareQuote: (folder, uid, purpose) =>
     request('POST', '/api/Mail/Messages/PrepareQuote', { folder, uid, purpose }),
 
+  saveDraft: (payload) =>
+    request('POST', '/api/Mail/Drafts', payload),
+
+  openDraft: (folder, uid) =>
+    request('POST', '/api/Mail/Drafts/Open', { folder, uid }),
+
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second
   // copy here to drift from.

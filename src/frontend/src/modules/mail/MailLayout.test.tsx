@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   searchMessages: vi.fn(),
   setMessageFlags: vi.fn(),
   useListRefresh: vi.fn(),
+  openDraft: vi.fn(),
+  getIdentities: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -56,18 +58,24 @@ function Where() {
     <>
       <span data-testid="search">{location.search}</span>
       <span data-testid="path">{location.pathname}</span>
+      {/* Echoes the navigation state so a test can check what a `navigate(..., { state })`
+          call actually carried, not just that some navigation happened. */}
+      <span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     </>
   )
 }
 
 function renderAt(
   initial: string, tree: MailFolderNode[] = folders, pane = 'right', messages: object[] = [],
+  // A promise a test resolves itself is what lets it act while the identities are still in flight.
+  identities: object | Promise<object> = { identities: [] },
 ) {
   mocks.getMailFolders.mockResolvedValue(tree)
   mocks.getMailMessages.mockResolvedValue({
     folderPath: 'INBOX', uidValidity: 1, total: messages.length, page: 0, pageSize: 30, messages,
   })
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': pane })
+  mocks.getIdentities.mockReturnValue(Promise.resolve(identities))
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -397,6 +405,94 @@ describe('reading pane arrangements', () => {
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
     expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
+  })
+})
+
+// A drafts-role folder opens straight into the composer instead of the reading pane: the row is
+// the account's own unsent text, not a message worth reading in place.
+describe('opening a draft from the drafts folder', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const draftFolders = [
+    node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    node({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts' }),
+  ]
+
+  const draftRow = {
+    uid: 9, subject: 'unsent', fromName: '', fromAddress: 'me@x.be',
+    to: [{ name: 'Bob', address: 'bob@x.example' }], date: '2026-07-20T09:00:00Z',
+    seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
+  }
+
+  it('opens the composer instead of the reader when a draft row is clicked', async () => {
+    mocks.openDraft.mockResolvedValue({
+      to: ['bob@x.example'], cc: [], bcc: [], subject: 'unsent', fromAddress: null,
+      htmlBody: '<p>hi</p>', attachments: [], inReplyTo: null, references: [],
+    })
+    renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
+
+    fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
+
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
+    expect(mocks.openDraft).toHaveBeenCalledWith('Drafts', 9)
+    expect(screen.getByTestId('search')).not.toHaveTextContent('uid')
+    expect(mocks.getMailMessage).not.toHaveBeenCalled()
+
+    // The navigation is only right if the seed it carries actually came from this draft: proves
+    // the openDraft → buildDraftSeed → navigate chain, not just that some navigation happened.
+    const state = JSON.parse(screen.getByTestId('state').textContent || 'null')
+    expect(state.from).toBe('Drafts')
+    expect(state.seed.action).toBe('draft')
+    expect(state.seed.draftRef).toEqual({ folderPath: 'Drafts', uid: 9 })
+    expect(state.seed.to).toEqual(['bob@x.example'])
+  })
+
+  // An unresolved identities query is not "no identities": seeding from [] rewrites the draft's
+  // From to the account default, so a resumed draft would go out from an address nobody picked.
+  it('waits for the identities before it seeds the draft From', async () => {
+    let release!: (value: object) => void
+    const identities = new Promise<object>(resolve => { release = resolve })
+    mocks.openDraft.mockResolvedValue({
+      to: ['bob@x.example'], cc: [], bcc: [], subject: 'unsent', fromAddress: 'michel@weesky.be',
+      htmlBody: '<p>hi</p>', attachments: [], inReplyTo: null, references: [],
+    })
+    renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow], identities)
+
+    fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
+    await waitFor(() => expect(mocks.openDraft).toHaveBeenCalled())
+    release({ identities: [{
+      address: 'michel@weesky.be', displayName: 'Michel', isDefault: false, isPrimary: false,
+      stale: false, labelIsCustom: false,
+    }] })
+    await settle()
+
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
+    const state = JSON.parse(screen.getByTestId('state').textContent || 'null')
+    expect(state.seed.fromAddress).toBe('michel@weesky.be')
+  })
+
+  // Two Open calls stage the draft's parts twice; the losing set is left to the TTL sweeper.
+  it('ignores a second click while the draft is being opened', async () => {
+    mocks.openDraft.mockReturnValue(new Promise(() => {}))
+    renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
+
+    const row = await screen.findByRole('button', { name: /unsent/i })
+    fireEvent.click(row)
+    await waitFor(() => expect(mocks.openDraft).toHaveBeenCalledTimes(1))
+    fireEvent.click(row)
+    await settle()
+
+    expect(mocks.openDraft).toHaveBeenCalledTimes(1)
+  })
+
+  it('toasts instead of navigating when the draft cannot be opened', async () => {
+    mocks.openDraft.mockRejectedValue(new Error('Draft is gone'))
+    renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
+
+    fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
+
+    expect(await screen.findByText('Draft is gone')).toBeInTheDocument()
+    expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/)
   })
 })
 

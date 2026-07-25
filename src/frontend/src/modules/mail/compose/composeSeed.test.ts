@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { MailMessageDetail, SendingIdentity } from '../api/mailTypes'
+import type { MailMessageDetail, OpenedDraft, SendingIdentity } from '../api/mailTypes'
 import { stagedAttachmentUrl } from '../../../api.js'
-import { buildComposeSeed } from './composeSeed'
+import { buildComposeSeed, buildDraftSeed } from './composeSeed'
 
 const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail => ({
   uid: 1, folderPath: 'INBOX', uidValidity: 1, subject: 'Hello',
@@ -75,5 +75,44 @@ describe('buildComposeSeed', () => {
     expect(seed.html).toBe('<p>original</p>')
     expect(seed.inReplyTo).toBeNull()
     expect(seed.references).toEqual([])
+  })
+})
+
+describe('buildDraftSeed', () => {
+  const opened: OpenedDraft = {
+    to: ['bob@ext.example'], cc: ['carol@ext.example'], bcc: [],
+    subject: 'WIP', fromAddress: 'sales@weesky.be',
+    htmlBody: '<p>hello <img src="/api/Mail/Attachments/a1/content"></p>',
+    attachments: [
+      { id: 'a1', fileName: 'logo.png', size: 5, contentType: 'image/png', contentId: 'logo@mail' },
+      { id: 'a2', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+    ],
+    inReplyTo: 'msg1@ext.example', references: ['msg0@ext.example', 'msg1@ext.example'],
+  }
+  const ref = { folderPath: 'Drafts', uid: 41 }
+
+  it('carries the envelope, threading and draftRef', () => {
+    const seed = buildDraftSeed(opened, [identity('sales@weesky.be')], ref)
+    expect(seed.action).toBe('draft')
+    expect(seed.to).toEqual(['bob@ext.example'])
+    expect(seed.subject).toBe('WIP')
+    expect(seed.inReplyTo).toBe('msg1@ext.example')
+    expect(seed.references).toEqual(['msg0@ext.example', 'msg1@ext.example'])
+    expect(seed.draftRef).toEqual(ref)
+    expect(seed.attachments).toHaveLength(2)
+  })
+
+  it('absolutizes the staged URLs in the body', () => {
+    const seed = buildDraftSeed(opened, [], ref)
+    expect(seed.html).toContain(stagedAttachmentUrl('a1'))
+  })
+
+  it('keeps the draft From only when a usable identity owns it', () => {
+    expect(buildDraftSeed(opened, [identity('sales@weesky.be')], ref).fromAddress).toBe('sales@weesky.be')
+    expect(buildDraftSeed(opened, [identity('sales@weesky.be', { stale: true })], ref).fromAddress).toBeNull()
+    expect(buildDraftSeed(opened, [identity('other@weesky.be')], ref).fromAddress).toBeNull()
+    // Case differences must not lose the choice: an IMAP client may have stored it capitalised.
+    expect(buildDraftSeed({ ...opened, fromAddress: 'Sales@weesky.be' }, [identity('sales@weesky.be')], ref)
+      .fromAddress).toBe('sales@weesky.be')
   })
 })

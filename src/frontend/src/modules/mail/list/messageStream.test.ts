@@ -5,7 +5,7 @@ import { PREFETCH_ROWS, dedupeByUid, nextBlockIndex, sentinelIndexOf } from './m
 
 function message(uid: number): MailMessageSummary {
   return {
-    uid, subject: `s${uid}`, fromName: '', fromAddress: 'a@b.c', date: '2026-07-21T00:00:00Z',
+    uid, subject: `s${uid}`, fromName: '', fromAddress: 'a@b.c', to: [], date: '2026-07-21T00:00:00Z',
     seen: false, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
   }
 }

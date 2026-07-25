@@ -34,6 +34,9 @@ public interface IMailMessageRepository
     /// <summary>Appends a message to a folder, optionally marked read.</summary>
     Task<Result> AppendAsync(User user, string password, string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken);
 
+    /// <summary>Appends a draft (\Draft \Seen), replacing the previous version when given. Returns the new UID.</summary>
+    Task<Result<uint>> SaveDraftAsync(User user, string password, string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken);
+
     /// <summary>The raw MimeKit message, for quoting: unsanitised body, cid parts, attachments.</summary>
     Task<Result<MimeMessage>> GetMimeMessageAsync(User user, string password, string folderPath, uint uid, CancellationToken cancellationToken);
 }

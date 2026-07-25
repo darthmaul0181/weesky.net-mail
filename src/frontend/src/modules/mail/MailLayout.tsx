@@ -1,4 +1,5 @@
 ﻿import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import type { SearchCriteria } from './list/searchCriteria'
 import Toasts from '../../components/Toasts.jsx'
@@ -12,7 +13,10 @@ import { nextUidOf } from './list/nextUid'
 import { useListRefresh } from './list/useListRefresh'
 import MessageReader from './reader/MessageReader'
 import type { DragPayload } from './list/dragMessages'
-import { useFolders, useMoveMessages } from './queries'
+import {
+  identitiesQueryOptions, useAccountId, useFolders, useIdentities, useMoveMessages, useOpenDraft,
+} from './queries'
+import { buildDraftSeed } from './compose/composeSeed'
 import { roleLabel } from './roleLabel'
 import { readingPaneOf, usePreferences } from '../../hooks/usePreferences'
 import PaneSplitter from './split/PaneSplitter'
@@ -36,6 +40,10 @@ export default function MailLayout() {
   const { data: folders, isLoading, isError } = useFolders()
   const { toasts, addToast, removeToast } = useToasts()
   const moveMessages = useMoveMessages(addToast)
+  const openDraft = useOpenDraft()
+  const { data: identityList } = useIdentities()
+  const queryClient = useQueryClient()
+  const accountId = useAccountId()
 
   const folder = params.get('folder')
   const uidParam = params.get('uid')
@@ -95,8 +103,27 @@ export default function MailLayout() {
 
   function selectMessage(nextUid: number) {
     if (!folder) return
+    // A draft opens as an editor, not a reading pane — the row is the account's own unsent text.
+    if (folderNode?.specialUse === 'drafts') { void openDraftInComposer(nextUid); return }
     setResultFolder(null)
     setParams({ folder, uid: String(nextUid) })
+  }
+
+  async function openDraftInComposer(draftUid: number) {
+    // A double-click stages the draft's parts twice; the losing set is left to the TTL sweeper.
+    if (openDraft.isPending) return
+    try {
+      const opened = await openDraft.mutateAsync({ folder: folder!, uid: draftUid })
+      // An unresolved query is not "no identities": seeding from [] rewrites the draft's From to
+      // the default. A failed fetch still falls back rather than blocking the draft from opening.
+      const identities = identityList ?? await queryClient
+        .ensureQueryData(identitiesQueryOptions(accountId))
+        .then(list => list.identities, () => [])
+      const seed = buildDraftSeed(opened, identities, { folderPath: folder!, uid: draftUid })
+      navigate('/mail/compose', { state: { from: folder, seed } })
+    } catch (error) {
+      addToast((error as Error).message || 'Could not open the draft', 'error')
+    }
   }
 
   const changeSearch = useCallback((criteria: SearchCriteria | null) => {

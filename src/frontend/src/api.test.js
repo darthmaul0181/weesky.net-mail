@@ -690,6 +690,35 @@ describe('sendMessage', () => {
   })
 })
 
+describe('saveDraft', () => {
+  it('posts the payload to /api/Mail/Drafts', async () => {
+    mockFetch(200, { json: { uid: 7, folderPath: 'Drafts' } })
+    const { api } = await import('./api.js')
+
+    const result = await api.saveDraft({ to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [] })
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Mail/Drafts')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body).to[0]).toBe('a@b.c')
+    expect(result).toEqual({ uid: 7, folderPath: 'Drafts' })
+  })
+})
+
+describe('openDraft', () => {
+  it('posts { folder, uid } to /api/Mail/Drafts/Open', async () => {
+    mockFetch(200, { json: { to: [], cc: [], bcc: [], subject: '', fromAddress: null, htmlBody: '', attachments: [], inReplyTo: null, references: [] } })
+    const { api } = await import('./api.js')
+
+    await api.openDraft('Drafts', 7)
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Mail/Drafts/Open')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body)).toEqual({ folder: 'Drafts', uid: 7 })
+  })
+})
+
 describe('deleteAttachment', () => {
   it('targets the id', async () => {
     mockFetch(204)

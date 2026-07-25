@@ -67,6 +67,15 @@ describe('useStagedAttachments', () => {
     expect(api.deleteAttachment).toHaveBeenCalledWith('id-1')
   })
 
+  // The inline parts live in the body rather than the tray, so nothing else would release them.
+  it('discardAll deletes the inline ids too', () => {
+    const { result } = renderHook(() => useStagedAttachments([], ['i1']))
+
+    act(() => { result.current.discardAll() })
+
+    expect(api.deleteAttachment).toHaveBeenCalledWith('i1')
+  })
+
   it('remove while the upload is still in flight skips the DELETE', async () => {
     let resolve!: (v: unknown) => void
     vi.mocked(uploadAttachment).mockReturnValue(new Promise(r => { resolve = r }))

@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
+using MimeKit;
 using Moq;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -418,5 +419,51 @@ public sealed class MailMessageRepositoryTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.SearchAsync(null!, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_DelegatesToTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.SaveDraftAsync("Drafts", It.IsAny<MimeMessage>(), 41u, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(42u));
+
+        var result = await repo.SaveDraftAsync(Alice, "pw", "Drafts", new MimeMessage(), 41u, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(42u, result.Value);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_FailsWhenTheSessionCannotOpen()
+    {
+        var (repo, factory, _) = CreateSut();
+        factory.Setup(f => f.OpenAsync(Alice.Email, "pw", It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Failure<IImapSession>("boom"));
+
+        var result = await repo.SaveDraftAsync(Alice, "pw", "Drafts", new MimeMessage(), null, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_DisposesTheSession()
+    {
+        var (repo, _, session) = CreateSut();
+        session.Setup(s => s.SaveDraftAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), It.IsAny<uint?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(1u));
+
+        await repo.SaveDraftAsync(Alice, "pw", "Drafts", new MimeMessage(), null, CancellationToken.None);
+
+        session.Verify(s => s.DisposeAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_ThrowsWhenUserIsNull()
+    {
+        var (repo, _, _) = CreateSut();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.SaveDraftAsync(null!, "pw", "Drafts", new MimeMessage(), null, CancellationToken.None));
     }
 }

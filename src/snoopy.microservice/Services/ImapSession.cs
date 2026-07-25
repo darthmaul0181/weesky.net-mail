@@ -427,6 +427,58 @@ internal sealed class ImapSession : IImapSession
         }
     }
 
+    public async Task<Result<uint>> SaveDraftAsync(
+        string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            var appended = await folder.AppendAsync(message, MessageFlags.Draft | MessageFlags.Seen, cancellationToken);
+            // No APPENDUID (UIDPLUS absent) would leave the composer unable to replace this version
+            // on its next save, piling up one copy per save: refuse outright, like DeleteAsync does.
+            if (appended == null)
+                return Result.Failure<uint>("The mail server cannot track saved drafts (no UIDPLUS)");
+
+            if (replaceUid is { } previous)
+            {
+                try
+                {
+                    await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+                    var ids = new List<UniqueId> { new(previous) };
+                    await folder.AddFlagsAsync(ids, MessageFlags.Deleted, silent: true, cancellationToken);
+                    await folder.ExpungeAsync(ids, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // The new version is already filed; an orphan predecessor is visible but harmless
+                    // and goes with the folder's next manual cleanup.
+                    _logger.LogWarning(ex, "Could not remove replaced draft {Uid} in {Folder}", previous, folderPath);
+                }
+            }
+
+            return Result.Success(appended.Value.Id);
+        }
+        catch (FolderNotFoundException)
+        {
+            return Result.Failure<uint>(FolderNotFound);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save a draft in {Folder}", folderPath);
+            return Result.Failure<uint>("Unable to save the draft");
+        }
+    }
+
     public async Task<Result<MailSearchPage>> SearchAsync(
         string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken)
     {
@@ -688,8 +740,8 @@ internal sealed class ImapSession : IImapSession
 
     private static MailMessageSummary ToSummary(IMessageSummary item) => FillSummary(new MailMessageSummary(), item);
 
-    /// <summary>One mapping for list rows and search hits — the eleven fields cannot drift apart.</summary>
-    private static T FillSummary<T>(T summary, IMessageSummary item) where T : MailMessageSummary
+    /// <summary>One mapping for list rows and search hits — the fields cannot drift apart.</summary>
+    internal static T FillSummary<T>(T summary, IMessageSummary item) where T : MailMessageSummary
     {
         var sender = item.Envelope?.From?.Mailboxes?.FirstOrDefault();
 
@@ -697,6 +749,7 @@ internal sealed class ImapSession : IImapSession
         summary.Subject = item.Envelope?.Subject ?? string.Empty;
         summary.FromName = sender?.Name is { Length: > 0 } name ? name : sender?.Address ?? string.Empty;
         summary.FromAddress = sender?.Address ?? string.Empty;
+        summary.To = ToAddressInfos(item.Envelope?.To);
         // Arrival date, not the Date header. The page window is a range of sequence
         // numbers, so the list is ordered by arrival; showing the header date would
         // print a date that contradicts the row's own position — a message written in

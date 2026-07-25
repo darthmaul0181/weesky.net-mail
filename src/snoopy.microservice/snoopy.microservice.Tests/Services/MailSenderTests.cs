@@ -53,9 +53,11 @@ public sealed class MailSenderTests
 
         // Every setup above is the happy path; a test that wants another one overrides it on the
         // shared mocks *after* CreateSender(), since a later Setup replaces an earlier one.
-        return new MailSender(_users.Object, _aliases.Object, _identities.Object, _sanitizer.Object,
-            _staged.Object, _smtpFactory.Object, _folders.Object, _roles.Object, _messages.Object,
-            NullLogger<MailSender>.Instance);
+        // The real factory, not a mock: these tests assert on the built message's wire form.
+        var factory = new OutgoingMessageFactory(_users.Object, _aliases.Object, _identities.Object,
+            _sanitizer.Object, _staged.Object, NullLogger<OutgoingMessageFactory>.Instance);
+        return new MailSender(factory, _staged.Object, _smtpFactory.Object, _folders.Object,
+            _roles.Object, _messages.Object, NullLogger<MailSender>.Instance);
     }
 
     private static SendMessageRequest Request() => new()

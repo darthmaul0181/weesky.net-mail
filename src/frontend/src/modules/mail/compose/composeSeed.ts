@@ -1,5 +1,5 @@
 import type {
-  AliasInfo, MailMessageDetail, PreparedQuote, SendingIdentity, StagedAttachmentInfo,
+  AliasInfo, MailMessageDetail, OpenedDraft, PreparedQuote, SendingIdentity, StagedAttachmentInfo,
 } from '../api/mailTypes'
 import { formatReaderDate } from '../reader/formatReaderDate'
 import {
@@ -9,9 +9,12 @@ import { threadingHeaders } from './threadingHeaders'
 import { forwardQuote, replyQuote } from './quote'
 import { absolutizeStagedUrls } from './stagedUrls'
 
-export type ComposeAction = 'reply' | 'replyAll' | 'forward' | 'editAsNew'
+export type ComposeAction = 'reply' | 'replyAll' | 'forward' | 'editAsNew' | 'draft'
 
-/** Everything a prefilled composer opens with — the shape a 2c3 draft will also take. */
+/** Identifies the stored draft a save from the composer replaces. */
+export interface DraftRef { folderPath: string; uid: number }
+
+/** Everything a prefilled composer opens with — the shape a 2c3 draft also takes. */
 export interface ComposeSeed {
   /** What opened the composer — the header names it. */
   action: ComposeAction
@@ -24,6 +27,8 @@ export interface ComposeSeed {
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]
+  /** Set when the composer is editing an existing draft — the version a save replaces. */
+  draftRef: DraftRef | null
 }
 
 /** One place turns an original plus its prepared quote into a composer seed. Pure. */
@@ -50,6 +55,7 @@ export function buildComposeSeed(
       attachments: prepared.attachments,
       inReplyTo: null,
       references: [],
+      draftRef: null,
     }
   }
 
@@ -69,6 +75,7 @@ export function buildComposeSeed(
       attachments: prepared.attachments,
       inReplyTo: threading.inReplyTo,
       references: threading.references,
+      draftRef: null,
     }
   }
 
@@ -83,5 +90,27 @@ export function buildComposeSeed(
     attachments: prepared.attachments,
     inReplyTo: threading.inReplyTo,
     references: threading.references,
+    draftRef: null,
+  }
+}
+
+/** Turns an opened draft into a composer seed. Pure. */
+export function buildDraftSeed(
+  opened: OpenedDraft, identities: SendingIdentity[], ref: DraftRef,
+): ComposeSeed {
+  const usable = identities.filter(i => !i.stale)
+  const owned = opened.fromAddress
+    ? usable.find(i => i.address.toLowerCase() === opened.fromAddress!.toLowerCase())
+    : undefined
+  return {
+    action: 'draft',
+    to: opened.to, cc: opened.cc, bcc: opened.bcc,
+    subject: opened.subject,
+    html: absolutizeStagedUrls(opened.htmlBody, opened.attachments.map(a => a.id)),
+    fromAddress: owned?.address ?? null,
+    attachments: opened.attachments,
+    inReplyTo: opened.inReplyTo,
+    references: opened.references,
+    draftRef: ref,
   }
 }

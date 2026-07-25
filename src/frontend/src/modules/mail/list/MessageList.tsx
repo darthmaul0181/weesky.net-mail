@@ -295,6 +295,10 @@ export default function MessageList(
 
   if (!folderPath) return <p className="mail-empty">Select a folder</p>
 
+  // The drafts folder has no sender worth showing — it's always the account itself — so the row
+  // names who the draft is going to instead, with a marker calling out that it isn't sent mail.
+  const drafts = folderRole === 'drafts'
+
   function rows() {
     if (isLoading) return <p className="mail-empty">{searching ? 'Searching…' : 'Loading messages…'}</p>
     if (isError) return <p className="mail-empty">Could not load messages.</p>
@@ -312,13 +316,17 @@ export default function MessageList(
             if (message.uid === selectedUid) classes.push('is-selected')
             if (draggingUids?.includes(message.uid)) classes.push('is-dragging')
 
-            const from = message.fromName || message.fromAddress
+            const from = drafts
+              ? (message.to.length > 0
+                  ? message.to.map(a => a.name || a.address).join(', ')
+                  : '(no recipient)')
+              : (message.fromName || message.fromAddress)
             const subject = message.subject || '(no subject)'
             const when = formatListDate(message.date)
             const seenLabel = message.seen ? 'Mark as unread' : 'Mark as read'
             // role=button is children-presentational: nothing inside the row is exposed on its
             // own, so everything the row states visually has to be said in its name.
-            const label = `${message.seen ? '' : 'Unread. '}${from}: ${subject}`
+            const label = `${message.seen ? '' : 'Unread. '}${drafts ? 'Draft. ' : ''}${from}: ${subject}`
               + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
 
             // Cross-folder results neutralize row selection and actions: the row lives in another
@@ -406,6 +414,7 @@ export default function MessageList(
                     <>
                       {check}
                       {!message.seen && <span className="message-row-unread-dot" />}
+                      {drafts && <span className="message-row-draft">Draft</span>}
                       <span className="message-row-from">{from}</span>
                       {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                       <span className="message-row-line">
@@ -423,6 +432,7 @@ export default function MessageList(
                       {check}
                       <div className="message-row-top">
                         {!message.seen && <span className="message-row-unread-dot" />}
+                        {drafts && <span className="message-row-draft">Draft</span>}
                         <span className="message-row-from">{from}</span>
                         {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                         <span className="message-row-date">{when}</span>

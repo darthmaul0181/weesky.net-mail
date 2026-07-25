@@ -24,6 +24,8 @@ export interface MailMessageSummary {
   subject: string
   fromName: string
   fromAddress: string
+  /** Envelope recipients — the drafts folder lists "To:" instead of the sender. */
+  to: MailAddressInfo[]
   date: string
   seen: boolean
   flagged: boolean
@@ -173,4 +175,19 @@ export type QuotePurpose = 'reply' | 'forward' | 'editAsNew'
 export interface PreparedQuote {
   quotableHtml: string
   attachments: StagedAttachmentInfo[]
+}
+
+export interface SavedDraft { uid: number; folderPath: string }
+
+/** Everything the composer needs to resume a draft — the seed's raw material. */
+export interface OpenedDraft {
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  fromAddress: string | null
+  htmlBody: string
+  attachments: StagedAttachmentInfo[]
+  inReplyTo: string | null
+  references: string[]
 }

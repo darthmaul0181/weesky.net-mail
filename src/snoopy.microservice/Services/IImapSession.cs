@@ -99,6 +99,13 @@ public interface IImapSession : IAsyncDisposable
     /// <summary>Appends a message to a folder — the Sent copy after a send.</summary>
     Task<Result> AppendAsync(string folderPath, MimeMessage message, bool seen, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Appends a draft (\Draft \Seen) and, when <paramref name="replaceUid"/> is given,
+    /// expunges the version it replaces. Returns the new UID. Fails when the server lacks
+    /// UIDPLUS, since the composer would then be unable to replace this version on its next save.
+    /// </summary>
+    Task<Result<uint>> SaveDraftAsync(string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken);
+
     /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
     Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken);
 }

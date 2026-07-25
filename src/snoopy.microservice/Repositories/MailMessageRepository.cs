@@ -119,6 +119,17 @@ internal sealed class MailMessageRepository : IMailMessageRepository
         return await session.AppendAsync(folderPath, message, seen, cancellationToken);
     }
 
+    public async Task<Result<uint>> SaveDraftAsync(User user, string password, string folderPath, MimeMessage message, uint? replaceUid, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var sessionResult = await _factory.OpenAsync(user.Email, password, cancellationToken);
+        if (sessionResult.IsFailure) return Result.Failure<uint>(sessionResult.Error);
+        await using var session = sessionResult.Value;
+
+        return await session.SaveDraftAsync(folderPath, message, replaceUid, cancellationToken);
+    }
+
     public async Task<Result<MimeMessage>> GetMimeMessageAsync(User user, string password, string folderPath, uint uid, CancellationToken cancellationToken)
     {
         if (user == null) throw new ArgumentNullException(nameof(user));
