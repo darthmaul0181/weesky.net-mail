@@ -21,4 +21,10 @@ public sealed class MailAttachmentInfo
     /// hides these: they are already visible inside the message.
     /// </summary>
     public bool IsInline { get; set; }
+
+    /// <summary>
+    /// Bare Content-ID (no angle brackets) when the part declares one, else null. The HTML body
+    /// references inline parts as src="cid:{ContentId}"; this is the client's key to resolve them.
+    /// </summary>
+    public string? ContentId { get; set; }
 }

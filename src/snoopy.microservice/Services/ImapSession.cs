@@ -726,6 +726,15 @@ internal sealed class ImapSession : IImapSession
         detail.Bcc = ToAddressInfos(message.Bcc);
     }
 
+    // Servers report Content-ID with or without <>; the HTML's cid: references are always bare.
+    internal static string? TrimAngleBrackets(string? contentId)
+    {
+        if (string.IsNullOrWhiteSpace(contentId)) return null;
+        var trimmed = contentId.Trim();
+        if (trimmed.StartsWith('<') && trimmed.EndsWith('>')) trimmed = trimmed[1..^1];
+        return trimmed.Length == 0 ? null : trimmed;
+    }
+
     public async Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -785,7 +794,8 @@ internal sealed class ImapSession : IImapSession
                     FileName = string.IsNullOrEmpty(part.FileName) ? "attachment" : part.FileName,
                     ContentType = part.ContentType?.MimeType ?? "application/octet-stream",
                     Size = part.Octets,
-                    IsInline = !part.IsAttachment
+                    IsInline = !part.IsAttachment,
+                    ContentId = TrimAngleBrackets(part.ContentId)
                 });
             }
 

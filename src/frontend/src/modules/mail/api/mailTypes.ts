@@ -65,6 +65,8 @@ export interface MailAttachmentInfo {
   size: number
   /** True for a part the body references by cid:; the UI hides these. */
   isInline: boolean
+  /** Bare Content-ID the body references as cid:; the reader's key to inline it. Null when none. */
+  contentId: string | null
 }
 
 export interface MailAddressInfo {

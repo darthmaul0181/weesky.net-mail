@@ -34,6 +34,8 @@ import { isWebUnsubscribe } from './unsubscribeLink'
 import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
+import { substituteInlineImages } from './inlineImages'
+import { useInlineImages } from './useInlineImages'
 import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
@@ -97,6 +99,23 @@ export default function MessageReader(
     return () => window.removeEventListener('keydown', onKey)
   }, [onBack, picker, confirmDelete])
 
+  // The body is computed above the early returns because useInlineImages hangs off it and hooks
+  // cannot be conditional; before the detail lands it works on an empty document.
+  const inverted = isDark && !originalColours
+  const showImages = imagesShown || (!!preferences && alwaysShowImagesOf(preferences))
+  // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
+  // rest — the same reason revealBlockedImages runs on this side of it.
+  const sanitized = useMemo(() => {
+    const html = data?.htmlBody ?? ''
+    const revealed = showImages ? revealBlockedImages(html) : html
+    return sanitizeBody(inverted ? darkenColours(revealed) : revealed)
+  }, [data?.htmlBody, showImages, inverted])
+  // Inlined after sanitising, unlike the reveal: these data URIs are built from our own API's
+  // bytes rather than from message markup, so they are not what the pass exists to police.
+  const inlineImages = useInlineImages(folderPath, uid, data?.attachments, sanitized)
+  const body = useMemo(
+    () => substituteInlineImages(sanitized, inlineImages), [sanitized, inlineImages])
+
   const fallback = (message: string) => (
     <div className="reader-fallback">
       {onBack && (
@@ -126,12 +145,6 @@ export default function MessageReader(
 
   const attachments = data.attachments.filter(attachment => !attachment.isInline)
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
-  const inverted = isDark && !originalColours
-  const showImages = imagesShown || (!!preferences && alwaysShowImagesOf(preferences))
-  // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
-  // rest — the same reason revealBlockedImages runs on this side of it.
-  const revealed = showImages ? revealBlockedImages(data.htmlBody) : data.htmlBody
-  const body = sanitizeBody(inverted ? darkenColours(revealed) : revealed)
 
   async function download(part: string, fileName: string) {
     setDownloadError(null)

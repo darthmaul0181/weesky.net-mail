@@ -521,4 +521,38 @@ public sealed class ImapSessionTests
         Assert.Empty(detail.ReplyTo);
         Assert.Empty(detail.Bcc);
     }
+
+    // ── Content-Id normalisation ─────────────────────────────────────
+    //
+    // GetMessageAsync itself is not unit-testable: it drives a real MailKit ImapClient
+    // (ImapSession wraps a concrete ImapClient, not an interface) through GetFolderAsync/
+    // FetchAsync/GetMessageAsync, none of which can be produced from a fixture without a
+    // live or fake IMAP server. The transcription this task adds is the pure normalisation
+    // step, exercised here directly instead — the closest seam the rest of this suite
+    // already uses for ImapSession's other pure static helpers (ApplyThreading, ToAddressInfos, ...).
+
+    [Fact]
+    public void TrimAngleBrackets_StripsAngleBracketsFromAServerReportedContentId()
+    {
+        Assert.Equal("logo@mail", ImapSession.TrimAngleBrackets("<logo@mail>"));
+    }
+
+    [Fact]
+    public void TrimAngleBrackets_LeavesABareContentIdUnchanged()
+    {
+        Assert.Equal("logo@mail", ImapSession.TrimAngleBrackets("logo@mail"));
+    }
+
+    [Fact]
+    public void TrimAngleBrackets_ReturnsNullForNull()
+    {
+        Assert.Null(ImapSession.TrimAngleBrackets(null));
+    }
+
+    [Fact]
+    public void TrimAngleBrackets_ReturnsNullForWhitespaceOrEmpty()
+    {
+        Assert.Null(ImapSession.TrimAngleBrackets(string.Empty));
+        Assert.Null(ImapSession.TrimAngleBrackets("   "));
+    }
 }

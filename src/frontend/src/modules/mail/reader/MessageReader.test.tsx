@@ -88,7 +88,10 @@ const detail = {
   mailingList: null, sentBy: null, signedBy: null, unsubscribeUrl: null, tlsReceived: null,
   htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0,
   attachments: [
-    { part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048, isInline: false },
+    {
+      part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048,
+      isInline: false, contentId: null,
+    },
   ],
 }
 
@@ -412,13 +415,72 @@ describe('MessageReader', () => {
   it('hides inline parts from the attachment list', async () => {
     mocks.getMailMessage.mockResolvedValue({
       ...detail,
-      attachments: [{ part: '3', fileName: 'logo.png', contentType: 'image/png', size: 10, isInline: true }],
+      attachments: [{
+        part: '3', fileName: 'logo.png', contentType: 'image/png', size: 10,
+        isInline: true, contentId: null,
+      }],
     })
 
     render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
     await screen.findByText('Re: facture')
 
     expect(screen.queryByRole('button', { name: /logo\.png/ })).not.toBeInTheDocument()
+  })
+
+  // The iframe is sandboxed opaque-origin, so no authenticated URL can load in there: the SPA
+  // fetches the part itself and the body reaches the iframe with the bytes already inlined.
+  it('inlines a cid image as a data URI', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      htmlBody: '<p>Bonjour</p><img src="cid:logo@mail">',
+      attachments: [{
+        part: '3', fileName: 'logo.png', contentType: 'image/png', size: 10,
+        isInline: true, contentId: 'logo@mail',
+      }],
+    })
+    mocks.requestBlob.mockResolvedValue({
+      blob: new Blob(['x'], { type: 'image/png' }), fileName: 'logo.png',
+    })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('src="data:image/png;base64,'))
+    const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+    expect(srcdoc).not.toContain('cid:')
+    expect(srcdoc).toContain('Bonjour')
+    expect(mocks.requestBlob).toHaveBeenCalledWith(expect.stringContaining('part=3'))
+  })
+
+  // Non-fatal by design: the body still renders, the image just stays broken.
+  it('renders the body when an inline image cannot be fetched', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      htmlBody: '<p>Bonjour</p><img src="cid:logo@mail">',
+      attachments: [{
+        part: '3', fileName: 'logo.png', contentType: 'image/png', size: 10,
+        isInline: true, contentId: 'logo@mail',
+      }],
+    })
+    mocks.requestBlob.mockRejectedValue(new Error('boom'))
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+    await settle()
+
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('src="cid:logo@mail"')
+    expect(screen.queryByText(/could not load this message/i)).not.toBeInTheDocument()
+  })
+
+  it('fetches nothing for a message that references no cid', async () => {
+    mocks.getMailMessage.mockResolvedValue(detail)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+    await settle()
+
+    expect(mocks.requestBlob).not.toHaveBeenCalled()
   })
 
   describe('dark mode', () => {
