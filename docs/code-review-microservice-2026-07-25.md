@@ -5,17 +5,17 @@
 **Branche :** `webmail`
 
 > **Statut au 2026-07-26 :** les priorités **1 à 9** de la §6 ont été traitées, puis les constats
-> **2.7, 3.3, 3.4, 4.4, 4.7 et 4.9** dans une seconde passe. Build sans avertissement,
-> **1138 tests au vert** (1104 au départ, +34 nouveaux).
+> **2.7, 3.3, 3.4, 4.4, 4.7, 4.9** et enfin **1.8, 1.9, 2.5**. Build sans avertissement,
+> **1141 tests au vert** (1104 au départ, +37 nouveaux).
 
 Chaque constat porte son état, et le détail des corrections est en §6 :
 
 | | Signification | Constats |
 |---|---|---|
-| ✅ | corrigé | 1.1, 1.2, 1.3, 1.5, 1.12, 2.1, 2.3, 3.1, 3.2, 3.3, 3.4, 4.1, 4.4, 4.7, 4.8, 4.9, 5.1, 5.3 |
+| ✅ | corrigé | 1.1, 1.2, 1.3, 1.5, 1.8, 1.9, 1.12, 2.1, 2.3, 2.5, 3.1, 3.2, 3.3, 3.4, 4.1, 4.4, 4.7, 4.8, 4.9, 5.1, 5.3 |
 | 🟡 | partiellement corrigé | 2.7, 4.2, 4.3, 4.5, 4.6 |
 | ⚠️ | écarté, constat révisé | 2.4 |
-| ⬜ | ouvert | 1.4, 1.6 à 1.11, 2.2, 2.5, 2.6, 2.8, 3.5 à 3.7, 4.10, 4.11, 5.2 |
+| ⬜ | ouvert | 1.4, 1.6, 1.7, 1.10, 1.11, 2.2, 2.6, 2.8, 3.5 à 3.7, 4.10, 4.11, 5.2 |
 
 ---
 
@@ -123,13 +123,17 @@ Une policy globale par utilisateur authentifié serait la bonne granularité.
 
 ### 🟡 Faible
 
-#### ⬜ 1.8 — Comparaison de hash non constante en temps
+#### ✅ 1.8 — Comparaison de hash non constante en temps
+
+> **Corrigé** — `PasswordMatches` compare via `CryptographicOperations.FixedTimeEquals` sur les octets. Corrigé avec 1.9 : la méthode reçoit désormais le hash en paramètre plutôt que l'entité, ce qui était le geste naturel pour les deux.
 
 `Repositories/UsersRepository.cs:140` : `Crypter.Sha512.Crypt(password, hash) == hash`.
 `CryptographicOperations.FixedTimeEquals` sur les octets serait la forme correcte. Exploitation à
 distance peu réaliste, mais c'est un pattern qui ne doit pas rester dans du code d'authentification.
 
-#### ⬜ 1.9 — Énumération d'utilisateurs par timing
+#### ✅ 1.9 — Énumération d'utilisateurs par timing
+
+> **Corrigé** — `VerifyCredentialsAsync` remplace le couple lookup + vérification : une seule requête jointe, et le crypt SHA-512 payé **dans tous les cas**, contre `AbsentAccountHash` quand aucune boîte ne correspond. Mesuré avant/après sur les trois chemins : compte inconnu 0,085 ms → 2,87 ms, mot de passe faux 3,00 ms. L'écart passe d'un facteur 35 à ~4 %, sous la gigue réseau. Le motif d'échec reste distingué dans le log d'audit via `CredentialResult`, jamais dans la réponse.
 
 `AuthenticateAsync` : un email inconnu renvoie immédiatement (une requête `Domains` + une `Users`),
 un email connu paie un SHA-512 crypt (délibérément lent, 5000 rounds). L'écart est mesurable. Le rate
@@ -225,7 +229,9 @@ authentifiée (mitigé par le cache 60 s) et à chaque `Send`. Les collations My
 insensibles à la casse par défaut (`utf8mb4_general_ci`), ces `StringComparison` sont probablement
 inutiles et peuvent être retirés.
 
-### ⬜ 2.5 — 4 requêtes SQL par login
+### ✅ 2.5 — 4 requêtes SQL par login
+
+> **Corrigé** — `FindMailUserAsync` fait une seule requête jointe au lieu de deux lectures séquentielles, et le login n'en fait plus qu'un appel au lieu de deux : 4 requêtes → 1. `GetAccountInfo`, `ChangeFullName` et `ChangePassword` en profitent au passage.
 
 `FindByEmailAsync` (Domains + Users) puis `IsValidPasswordAsync` (Domains + Users à nouveau, sur le
 même utilisateur). Une seule jointure suffirait.
@@ -535,6 +541,33 @@ Voir 1.3. C'est le bug le plus visible pour un utilisateur final.
   repassent par Serilog.
 - **4.4** — une seule pile JWT désormais : `JsonWebTokenHandler` pour écrire comme pour valider, et
   `System.IdentityModel.Tokens.Jwt` est retiré du `csproj`.
+
+### Troisième passe — 1.8, 1.9, 2.5
+
+Les trois se corrigeaient dans le même geste, et séparément aucun n'aurait tenu : rendre la
+comparaison constante (1.8) ne sert à rien tant que l'existence du compte se lit sur le temps de
+réponse, et c'est la fusion des deux appels (1.9) qui fait tomber le compte de requêtes (2.5).
+
+`VerifyCredentialsAsync` remplace `FindByEmailAsync` + `IsValidPasswordAsync` sur le chemin du
+login. Elle fait une seule requête jointe, calcule le crypt **avant** de décider — contre un hash
+leurre quand aucune boîte ne correspond — et ne forme le verdict qu'une fois les deux terminés.
+
+Mesures médianes sur 25 tirages, provider en mémoire (donc l'écart mesuré est bien celui du crypt,
+pas celui de la base) :
+
+| Chemin | Avant | Après |
+|---|---|---|
+| Compte inconnu | 0,085 ms | 2,87 ms |
+| Domaine inconnu | 0,085 ms | 2,89 ms |
+| Mot de passe faux | ~3 ms | 3,00 ms |
+
+Facteur 35 avant, ~4 % après — bien en dessous de la gigue réseau.
+
+**Ce qui n'est pas testé automatiquement :** l'égalisation elle-même. Une assertion de timing serait
+instable sur une machine partagée. Ce qui est épinglé, c'est le mécanisme dont elle dépend :
+`AbsentAccountHash_IsARealSha512CryptHashOfProductionCost` vérifie que le leurre reste un vrai
+`$6$` aux mêmes paramètres de coût que les hashs stockés. Si cette propriété tombe, l'égalisation
+tombe avec, et c'est le seul endroit où elle pourrait tomber en silence.
 
 ### Non fait volontairement
 

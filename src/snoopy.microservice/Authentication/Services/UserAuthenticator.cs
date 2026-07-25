@@ -22,18 +22,15 @@ public sealed class UserAuthenticator : IUserAuthenticator
 
     public async Task<Result<AuthToken>> AuthenticateAsync(string email, string password)
     {
-        User? user = await _usersRepository.FindByEmailAsync(email);
-        if (user == null)
-        {
-            // One reason for both causes on purpose: the response must not tell an attacker
-            // whether the mailbox exists but is disabled, or never existed at all.
-            _logger.LogInformation("Audit: login email={Email} outcome=failure reason=unknown_or_inactive_user", email);
-            return Result.Failure<AuthToken>("Authentication failed");
-        }
+        var check = await _usersRepository.VerifyCredentialsAsync(email, password);
 
-        if (!await _usersRepository.IsValidPasswordAsync(user, password))
+        if (check.User is not { } user)
         {
-            _logger.LogInformation("Audit: login email={Email} outcome=failure reason=bad_password", email);
+            // The reason is logged, never answered. Every cause — no such mailbox, a deactivated
+            // one, a wrong password — gets the same message, and the check above takes the same
+            // time for all three, so neither the body nor the clock tells them apart.
+            _logger.LogInformation(
+                "Audit: login email={Email} outcome=failure reason={Reason}", email, check.Result);
             return Result.Failure<AuthToken>("Authentication failed");
         }
 

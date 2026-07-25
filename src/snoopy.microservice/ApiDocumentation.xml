@@ -993,6 +993,22 @@
         <member name="T:weesky.Snoopy.Microservice.Models.IncompatibleRule">
             <summary>A single rule the target provider cannot represent, with a human-readable reason.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.CredentialResult">
+             <summary>
+             Why a credential check failed. For the audit log only — brute-force triage needs to tell an
+             address spray apart from an attack on one known account.
+            
+             It must never reach a response body, and the login response must not vary with it: the whole
+             point of the check that produces it is that an attacker cannot learn which value came back,
+             by content or by timing.
+             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.CredentialCheck">
+            <summary>The outcome of a credential check. <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.User"/> is set only when <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.Result"/> is Ok.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.CredentialCheck.#ctor(weesky.Snoopy.Microservice.Models.CredentialResult,weesky.Snoopy.Microservice.Models.User)">
+            <summary>The outcome of a credential check. <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.User"/> is set only when <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.Result"/> is Ok.</summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Credentials.Email">
             <summary>
             The email of the user
@@ -1890,6 +1906,13 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore.SetAsync(System.Guid,System.String,System.String,System.Threading.CancellationToken)">
             <summary>Sets or corrects one preference. The pair (account, key) is the row.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IUsersRepository.VerifyCredentialsAsync(System.String,System.String)">
+            <summary>
+            Checks an email and password together. One call rather than a lookup followed by a
+            password check: splitting them made an unknown address cheaper to answer than a wrong
+            password, which is enough to enumerate the mailboxes that exist.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.RegisterLoginAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Ensures the account's row exists and stamps the login. Called once per login, never per
@@ -1959,10 +1982,46 @@
             authenticate as the master user) kept working for a disabled mailbox.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.VerifyCredentialsAsync(System.String,System.String)">
+             <summary>
+             Checks an email and password in one pass, in time that does not depend on whether the
+             mailbox exists.
+             </summary>
+             <remarks>
+             The SHA-512 crypt is deliberately slow, and it used to run only once a mailbox had been
+             found: an unknown address answered in a fraction of the time a wrong password did, so the
+             login endpoint told anyone who measured it which addresses are real. The hash therefore
+             runs on every call, against <see cref="F:weesky.Snoopy.Microservice.Repositories.UsersRepository.AbsentAccountHash"/> when there is nothing to
+             compare with, and the verdict is formed only once both the lookup and the hash are done.
+            
+             This holds only while the stored hashes and the decoy share their cost parameters. Both
+             come from CryptSharp's default <c>$6$</c> rounds, the same the MariaDB trigger writes.
+             </remarks>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Repositories.UsersRepository.AbsentAccountHash">
+            <summary>
+            The hash a login falls back on when no mailbox matches, so the crypt still runs and still
+            costs what a real one costs. Computed once: generating it per call would itself be work an
+            existing account does not do.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUserAsync(System.String,System.String)">
             <summary>
-            Resolves the domain by name then the mailbox user within it (name matched
-            case-insensitively). Returns null when either is missing.
+            The mailbox and its domain in one round trip, the user name matched case-insensitively.
+            Null when there is no such mailbox.
+            </summary>
+            <remarks>
+            One joined query rather than the two sequential reads this replaced — domain, then user.
+            Beyond the saved round trip that halves the cost of every login, a single query is what
+            makes an unknown domain cost the same as an unknown mailbox: with two, the first returning
+            nothing skipped the second, and the response time said which of the two it was.
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.PasswordMatches(System.String,System.String)">
+            <summary>
+            Verifies a password against a stored crypt hash, in time that does not depend on how much
+            of the hash matched. An ordinary string comparison returns at the first differing byte,
+            which times how far a guess got.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.RuleProviders.IRuleProvider">

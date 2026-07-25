@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using CryptSharp.Core;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -43,11 +45,41 @@ internal sealed class UsersRepository : IUsersRepository
         return new User($"{match.Value.MailUser.Name}@{match.Value.Domain.Name}");
     }
 
-    public async Task<bool> IsValidPasswordAsync(User user, string password)
+    /// <summary>
+    /// Checks an email and password in one pass, in time that does not depend on whether the
+    /// mailbox exists.
+    /// </summary>
+    /// <remarks>
+    /// The SHA-512 crypt is deliberately slow, and it used to run only once a mailbox had been
+    /// found: an unknown address answered in a fraction of the time a wrong password did, so the
+    /// login endpoint told anyone who measured it which addresses are real. The hash therefore
+    /// runs on every call, against <see cref="AbsentAccountHash"/> when there is nothing to
+    /// compare with, and the verdict is formed only once both the lookup and the hash are done.
+    ///
+    /// This holds only while the stored hashes and the decoy share their cost parameters. Both
+    /// come from CryptSharp's default <c>$6$</c> rounds, the same the MariaDB trigger writes.
+    /// </remarks>
+    public async Task<CredentialCheck> VerifyCredentialsAsync(string email, string password)
     {
-        var match = await FindMailUserAsync(user.Name, user.Domain);
-        return match != null && PasswordMatches(match.Value.MailUser, password);
+        var parts = email.Split('@');
+        var match = parts.Length == 2 ? await FindMailUserAsync(parts[0], parts[1]) : null;
+
+        var passwordMatches = PasswordMatches(match?.MailUser.Password ?? AbsentAccountHash, password);
+
+        if (match is null) return CredentialCheck.Failed(CredentialResult.UnknownAccount);
+        if (match.Value.MailUser.Active != ActiveState.Y) return CredentialCheck.Failed(CredentialResult.Deactivated);
+        if (!passwordMatches) return CredentialCheck.Failed(CredentialResult.WrongPassword);
+
+        return CredentialCheck.Success(new User($"{match.Value.MailUser.Name}@{match.Value.Domain.Name}"));
     }
+
+    /// <summary>
+    /// The hash a login falls back on when no mailbox matches, so the crypt still runs and still
+    /// costs what a real one costs. Computed once: generating it per call would itself be work an
+    /// existing account does not do.
+    /// </summary>
+    internal static readonly string AbsentAccountHash =
+        Crypter.Sha512.Crypt("no-such-account", Crypter.Sha512.GenerateSalt());
 
     public async Task<Result<AccountInfo>> GetAccountInfoAsync(User user)
     {
@@ -109,7 +141,7 @@ internal sealed class UsersRepository : IUsersRepository
 
         MailUser mailUser = match.Value.MailUser;
 
-        if (!PasswordMatches(mailUser, oldPassword))
+        if (!PasswordMatches(mailUser.Password, oldPassword))
         {
             _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
             return Result.Failure($"Invalid password");
@@ -123,28 +155,37 @@ internal sealed class UsersRepository : IUsersRepository
     }
 
     /// <summary>
-    /// Resolves the domain by name then the mailbox user within it (name matched
-    /// case-insensitively). Returns null when either is missing.
+    /// The mailbox and its domain in one round trip, the user name matched case-insensitively.
+    /// Null when there is no such mailbox.
     /// </summary>
+    /// <remarks>
+    /// One joined query rather than the two sequential reads this replaced — domain, then user.
+    /// Beyond the saved round trip that halves the cost of every login, a single query is what
+    /// makes an unknown domain cost the same as an unknown mailbox: with two, the first returning
+    /// nothing skipped the second, and the response time said which of the two it was.
+    /// </remarks>
     private async Task<(MailUser MailUser, MailDomain Domain)?> FindMailUserAsync(string name, string domainName)
     {
-        MailDomain? domain = await _context.Domains.FirstOrDefaultAsync(dom => dom.Name == domainName);
-        if (domain == null)
-        {
-            return null;
-        }
+        var row = await (from mailUser in _context.Users
+                         join domain in _context.Domains on mailUser.DomainId equals domain.Id
+                         where domain.Name == domainName
+                            && string.Equals(mailUser.Name, name, StringComparison.InvariantCultureIgnoreCase)
+                         select new { MailUser = mailUser, Domain = domain })
+            .FirstOrDefaultAsync();
 
-        MailUser? mailUser = await _context.Users.FirstOrDefaultAsync(o => string.Equals(o.Name, name, StringComparison.InvariantCultureIgnoreCase) && o.DomainId == domain.Id);
-        if (mailUser == null)
-        {
-            return null;
-        }
-
-        return (mailUser, domain);
+        return row == null ? null : (row.MailUser, row.Domain);
     }
 
-    private static bool PasswordMatches(MailUser mailUser, string password)
+    /// <summary>
+    /// Verifies a password against a stored crypt hash, in time that does not depend on how much
+    /// of the hash matched. An ordinary string comparison returns at the first differing byte,
+    /// which times how far a guess got.
+    /// </summary>
+    private static bool PasswordMatches(string storedHash, string password)
     {
-        return Crypter.Sha512.Crypt(password, mailUser.Password) == mailUser.Password;
+        var computed = Crypter.Sha512.Crypt(password, storedHash);
+
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(computed), Encoding.UTF8.GetBytes(storedHash));
     }
 }
