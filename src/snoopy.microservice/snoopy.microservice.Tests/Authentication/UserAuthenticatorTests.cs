@@ -99,6 +99,16 @@ public sealed class UserAuthenticatorTests
         _tokenManager.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
     }
 
+    // These lines get grepped: the wording is an interface, not an implementation detail.
+    [Theory]
+    [InlineData(CredentialResult.UnknownAccount, "unknown_account")]
+    [InlineData(CredentialResult.Deactivated, "deactivated")]
+    [InlineData(CredentialResult.WrongPassword, "bad_password")]
+    public void AuditReason_IsAStableSnakeCaseToken(CredentialResult result, string expected)
+    {
+        Assert.Equal(expected, UserAuthenticator.AuditReason(result));
+    }
+
     [Fact]
     public async Task Authenticate_StampsTheGuidFromRegisterLogin()
     {

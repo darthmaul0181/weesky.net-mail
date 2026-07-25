@@ -59,6 +59,13 @@
         <member name="M:weesky.Snoopy.Microservice.Authentication.Services.TokenBuilder.Build">
             <summary>The serialized token. This handler emits "iat" and "nbf" alongside "exp".</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.UserAuthenticator.AuditReason(weesky.Snoopy.Microservice.Models.CredentialResult)">
+            <summary>
+            The token written to the audit log. Spelled out here rather than letting the enum's own
+            name through: these lines get grepped, so the wording is an interface. <c>bad_password</c>
+            is the one this log has always used, and it keeps it.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Authentication.WebmailClaimTypes">
             <summary>Custom JWT claim types. Upn/Dns come from System.Security.Claims; this one is ours.</summary>
         </member>
@@ -2004,6 +2011,26 @@
             costs what a real one costs. Computed once: generating it per call would itself be work an
             existing account does not do.
             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.WarnIfUnverifiable(System.String,System.String)">
+             <summary>
+             A stored value that is not a <c>$6$</c> crypt hash cannot be verified at all: CryptSharp
+             reads the salt out of whatever it is handed, so anything else yields a digest that can
+             never match, and the account reads as "wrong password" forever.
+            
+             Nothing else about the failure distinguishes that from a genuinely wrong password, which
+             is exactly why it is worth a line of its own. It names the scheme, never the hash.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.HashScheme(System.String)">
+            <summary>
+            The scheme marker of a stored password, for diagnostics. Deliberately an allow-list rather
+            than "the text up to the second separator": the one case worth naming is a column holding
+            something that is not a hash at all, and that something must not reach the log.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.BracketedScheme(System.String)">
+            <summary>A Dovecot-style <c>{SCHEME}</c> prefix, or nothing recognisable.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUserAsync(System.String,System.String)">
             <summary>

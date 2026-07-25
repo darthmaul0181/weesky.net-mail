@@ -30,7 +30,7 @@ public sealed class UserAuthenticator : IUserAuthenticator
             // one, a wrong password — gets the same message, and the check above takes the same
             // time for all three, so neither the body nor the clock tells them apart.
             _logger.LogInformation(
-                "Audit: login email={Email} outcome=failure reason={Reason}", email, check.Result);
+                "Audit: login email={Email} outcome=failure reason={Reason}", email, AuditReason(check.Result));
             return Result.Failure<AuthToken>("Authentication failed");
         }
 
@@ -38,4 +38,17 @@ public sealed class UserAuthenticator : IUserAuthenticator
         user.WebmailUid = await _webmailUsers.RegisterLoginAsync(user.Email, CancellationToken.None);
         return Result.Success(_tokenManager.Generate(user));
     }
+
+    /// <summary>
+    /// The token written to the audit log. Spelled out here rather than letting the enum's own
+    /// name through: these lines get grepped, so the wording is an interface. <c>bad_password</c>
+    /// is the one this log has always used, and it keeps it.
+    /// </summary>
+    internal static string AuditReason(CredentialResult result) => result switch
+    {
+        CredentialResult.UnknownAccount => "unknown_account",
+        CredentialResult.Deactivated => "deactivated",
+        CredentialResult.WrongPassword => "bad_password",
+        _ => "unknown"
+    };
 }

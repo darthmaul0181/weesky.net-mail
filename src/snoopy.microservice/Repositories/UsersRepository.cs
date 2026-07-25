@@ -64,11 +64,17 @@ internal sealed class UsersRepository : IUsersRepository
         var parts = email.Split('@');
         var match = parts.Length == 2 ? await FindMailUserAsync(parts[0], parts[1]) : null;
 
-        var passwordMatches = PasswordMatches(match?.MailUser.Password ?? AbsentAccountHash, password);
+        var storedHash = match?.MailUser.Password ?? AbsentAccountHash;
+        var passwordMatches = PasswordMatches(storedHash, password);
 
         if (match is null) return CredentialCheck.Failed(CredentialResult.UnknownAccount);
         if (match.Value.MailUser.Active != ActiveState.Y) return CredentialCheck.Failed(CredentialResult.Deactivated);
-        if (!passwordMatches) return CredentialCheck.Failed(CredentialResult.WrongPassword);
+
+        if (!passwordMatches)
+        {
+            WarnIfUnverifiable(email, storedHash);
+            return CredentialCheck.Failed(CredentialResult.WrongPassword);
+        }
 
         return CredentialCheck.Success(new User($"{match.Value.MailUser.Name}@{match.Value.Domain.Name}"));
     }
@@ -80,6 +86,53 @@ internal sealed class UsersRepository : IUsersRepository
     /// </summary>
     internal static readonly string AbsentAccountHash =
         Crypter.Sha512.Crypt("no-such-account", Crypter.Sha512.GenerateSalt());
+
+    /// <summary>
+    /// A stored value that is not a <c>$6$</c> crypt hash cannot be verified at all: CryptSharp
+    /// reads the salt out of whatever it is handed, so anything else yields a digest that can
+    /// never match, and the account reads as "wrong password" forever.
+    ///
+    /// Nothing else about the failure distinguishes that from a genuinely wrong password, which
+    /// is exactly why it is worth a line of its own. It names the scheme, never the hash.
+    /// </summary>
+    private void WarnIfUnverifiable(string email, string storedHash)
+    {
+        if (storedHash.StartsWith("$6$", StringComparison.Ordinal)) return;
+
+        _logger.LogWarning(
+            "Audit: login email={Email} outcome=failure reason=unverifiable_hash scheme={Scheme}. " +
+            "The stored password is not a $6$ SHA-512 crypt hash, so no password can match it. " +
+            "Check the MariaDB INSERT_PASSWORD/UPDATE_PASSWORD trigger on the users table.",
+            email, HashScheme(storedHash));
+    }
+
+    /// <summary>
+    /// The scheme marker of a stored password, for diagnostics. Deliberately an allow-list rather
+    /// than "the text up to the second separator": the one case worth naming is a column holding
+    /// something that is not a hash at all, and that something must not reach the log.
+    /// </summary>
+    internal static string HashScheme(string? storedHash) => storedHash switch
+    {
+        null or "" => "(empty)",
+        _ when storedHash.StartsWith("$6$", StringComparison.Ordinal) => "$6$ (sha512-crypt)",
+        _ when storedHash.StartsWith("$5$", StringComparison.Ordinal) => "$5$ (sha256-crypt)",
+        _ when storedHash.StartsWith("$1$", StringComparison.Ordinal) => "$1$ (md5-crypt)",
+        _ when storedHash.StartsWith("$2", StringComparison.Ordinal) => "$2 (bcrypt)",
+        _ when storedHash.StartsWith('{') => BracketedScheme(storedHash),
+        _ => "(unrecognised)"
+    };
+
+    /// <summary>A Dovecot-style <c>{SCHEME}</c> prefix, or nothing recognisable.</summary>
+    private static string BracketedScheme(string storedHash)
+    {
+        var close = storedHash.IndexOf('}');
+        if (close <= 1) return "(unrecognised)";
+
+        var scheme = storedHash[1..close];
+        return scheme.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_')
+            ? $"{{{scheme}}}"
+            : "(unrecognised)";
+    }
 
     public async Task<Result<AccountInfo>> GetAccountInfoAsync(User user)
     {

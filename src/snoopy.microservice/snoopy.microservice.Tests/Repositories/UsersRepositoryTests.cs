@@ -180,6 +180,26 @@ public sealed class UsersRepositoryTests
                 : "$6$";
     }
 
+    // A stored value that is not a $6$ crypt makes every password wrong, and nothing else about
+    // the failure says so. The scheme names the cause; it must never carry the stored value.
+    [Theory]
+    [InlineData("$6$abc$def", "$6$ (sha512-crypt)")]
+    [InlineData("{SHA512-CRYPT}$6$abc$def", "{SHA512-CRYPT}")]
+    [InlineData("$1$abc$def", "$1$ (md5-crypt)")]
+    [InlineData("$2y$10$abc", "$2 (bcrypt)")]
+    [InlineData("", "(empty)")]
+    [InlineData(null, "(empty)")]
+    [InlineData("MyPlaintextPassword", "(unrecognised)")]
+    [InlineData("{not a scheme!}rest", "(unrecognised)")]
+    public void HashScheme_NamesTheSchemeAndNeverTheStoredValue(string? stored, string expected)
+    {
+        var scheme = UsersRepository.HashScheme(stored);
+
+        Assert.Equal(expected, scheme);
+        if (!string.IsNullOrEmpty(stored))
+            Assert.DoesNotContain("def", scheme, StringComparison.Ordinal);
+    }
+
     // --- GetAccountInfo ---
 
     [Fact]
