@@ -10,6 +10,10 @@ Commands live in `package.json` scripts. Tests use Vitest + jsdom + `@testing-li
 
 The codebase is a JS/TS mix: new code (router, layouts, contexts, `AccountPage`, `AppearancePage`, `lib/accountIdentity.ts`) is TypeScript (`.tsx`/`.ts`); older ported pages (`AliasesPage.jsx`, `RulesPage.jsx`, the admin tabs, `api.js`) remain JavaScript. Both are typechecked/linted together; there is no plan to force-convert the JS files.
 
+## Design & UX
+
+**`website-design.md` (repo `src/frontend/`) is the reference for the site's look and interaction conventions** — the token foundations, page layout, the tile layout every on-page list follows, buttons and row actions, the dialog rules (the ✕ as the only dismissal, icon continuity between a trigger and its title), and the two live-search shapes. The Administration tabs and the Identities page are its reference implementations. Read it before building or restyling any screen, and reuse its classes rather than inventing a local variation.
+
 ## Architecture
 
 **Routing** — `react-router-dom` v6, `createBrowserRouter` defined in `src/routes.tsx` (the route table lives there). `MailLayout`, `AliasesPage`, `RulesPage`, and `AdminPage` are `lazy()`-imported in `routes.tsx` and wrapped in `<Suspense fallback={null}>` at the route level, so the shell/settings chrome never waits on their bundle.
