@@ -770,12 +770,15 @@ describe('MessageList streaming', () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
   })
 
-  it('shows the counter instead of a pager', () => {
+  // There is no page to go to and no count to report: the whole band goes, and the rows get
+  // its height. A footer here would be a permanently empty strip above the list.
+  it('carries no footer at all — neither a pager nor a loaded/total counter', () => {
     mocks.useMessageList.mockReturnValue(streamingState())
-    renderList()
+    const { container } = renderList()
 
-    expect(screen.getByText('100 of 3,812')).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Pages' })).not.toBeInTheDocument()
+    expect(container.querySelector('.mail-list-footer')).toBeNull()
+    expect(screen.queryByText(/^\d[\d,]* of [\d,]+$/)).not.toBeInTheDocument()
   })
 
   it('places the sentinel 20 rows before the last', () => {
@@ -843,7 +846,7 @@ describe('MessageList streaming', () => {
     expect(container.querySelector('.message-list-sentinel')).toBeNull()
   })
 
-  it('drops the sentinel and the counter on an empty folder', () => {
+  it('drops the sentinel on an empty folder', () => {
     mocks.useMessageList.mockReturnValue({
       messages: [], total: 0, isLoading: false, isError: false, paging: null,
       streaming: { hasMore: false, isLoadingMore: false, loadMoreFailed: false, loadMore: vi.fn() },
@@ -852,7 +855,6 @@ describe('MessageList streaming', () => {
 
     expect(screen.getByText('No messages')).toBeInTheDocument()
     expect(container.querySelector('.message-list-sentinel')).toBeNull()
-    expect(container.querySelector('.mail-list-count')).toBeNull()
   })
 
   it('returns to the top when the folder changes', () => {

@@ -47,7 +47,6 @@ interface Props {
   onOpenResult?: (uid: number, folderPath: string) => void
 }
 
-const COUNT = new Intl.NumberFormat('en-US')
 const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
 const NO_JUNK = 'Assign the junk folder in Settings → Folders'
 const NO_TRASH = 'Assign the trash folder in Settings → Folders'
@@ -519,16 +518,11 @@ export default function MessageList(
 
       <div className="mail-list-scroll" ref={scrollRef}>{rows()}</div>
 
+      {/* The footer is the pager's alone. Streaming has no page to go to, so it carries no band:
+          the rows take the height back, and the loaded count is already the scrollbar's job. */}
       {paging && paging.lastPage > 0 && (
         <div className="mail-list-footer">
           <Pagination page={paging.page} lastPage={paging.lastPage} onSelect={paging.onSelect} />
-        </div>
-      )}
-
-      {/* Loaded / total. Removing this block removes the counter and nothing else. */}
-      {streaming && total > 0 && (
-        <div className="mail-list-footer">
-          <span className="mail-list-count">{COUNT.format(messages.length)} of {COUNT.format(total)}</span>
         </div>
       )}
 
