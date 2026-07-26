@@ -40,10 +40,27 @@ describe('toDarkColour', () => {
     expect(toDarkColour(colour, 'background')).toBe('#212121')
   })
 
+  // Mail is full of these: bgcolor was designed for the sixteen HTML names, and senders still use
+  // them where a hex would do.
+  it.each([
+    ['white', '#ffffff'],
+    ['black', '#000000'],
+    ['red', '#ff0000'],
+    ['silver', '#c0c0c0'],
+  ])('reads the named colour %s', (name, hex) => {
+    expect(toDarkColour(name, 'background')).toBe(toDarkColour(hex, 'background'))
+  })
+
   it.each(['transparent', 'inherit', 'currentColor', 'not-a-colour', ''])(
     'leaves %s alone rather than guessing', value => {
       expect(toDarkColour(value)).toBeNull()
     })
+
+  // A hash-less hex is legal in a presentational attribute and nowhere else, so it is rescued
+  // there and only there — see the attribute tests below.
+  it('does not read a hash-less hex as a colour', () => {
+    expect(toDarkColour('FFFFFF')).toBeNull()
+  })
 })
 
 describe('darkenColours', () => {
@@ -87,6 +104,32 @@ describe('darkenColours', () => {
     expect(slOf(background).s).toBeLessThan(slOf(text).s)
     expect(slOf(background).l).toBeLessThan(slOf(text).l)
     expect(hueOf(...rgbOf(background))).toBeCloseTo(hueOf(...rgbOf(text)), 0)
+  })
+
+  // Measured on a real message: bgcolor="FFFFFF" with no hash. The browser's legacy parsing paints
+  // it white, so leaving it unread left a white slab in the middle of dark mode.
+  it('rescues a hash-less hex in a presentational attribute', () => {
+    const html = '<table><tbody><tr><td bgcolor="FFFFFF">x</td></tr></tbody></table>'
+
+    expect(darkenColours(html)).toContain('bgcolor="#212121"')
+  })
+
+  it('reads a named colour in a presentational attribute', () => {
+    const html = '<table><tbody><tr><td bgcolor="white">x</td></tr></tbody></table>'
+
+    expect(darkenColours(html)).toContain('bgcolor="#212121"')
+  })
+
+  it('reads a named colour in a style attribute', () => {
+    expect(darkenColours('<div style="background-color: white">x</div>')).toContain('#212121')
+  })
+
+  // CSS has no hash-less hex: the browser ignores the declaration, so painting one would invent a
+  // colour the reader was never shown.
+  it('leaves a hash-less hex in a style attribute alone', () => {
+    const html = '<div style="background-color: FFFFFF">x</div>'
+
+    expect(darkenColours(html)).toBe(html)
   })
 
   it('treats a bgcolor attribute as a background', () => {

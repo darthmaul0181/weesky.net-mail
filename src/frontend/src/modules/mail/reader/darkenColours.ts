@@ -94,12 +94,21 @@ export function darkenColours(html: string): string {
 
   for (const attribute of COLOUR_ATTRIBUTES) {
     for (const element of document.body.querySelectorAll(`[${attribute}]`)) {
-      const dark = toDarkColour(element.getAttribute(attribute)!, roleOf(attribute))
+      const dark = toDarkColour(withHash(element.getAttribute(attribute)!), roleOf(attribute))
       if (dark) element.setAttribute(attribute, dark)
     }
   }
 
   return document.body.innerHTML
+}
+
+/**
+ * `bgcolor="FFFFFF"` — no hash — is legal in a presentational attribute, and the browser's legacy
+ * parsing paints it. Rescued here and nowhere else: CSS has no hash-less hex, so a style
+ * declaration carrying one is ignored by the browser and must be ignored by us too.
+ */
+function withHash(value: string): string {
+  return /^[\da-f]{3}$|^[\da-f]{6}$/i.test(value.trim()) ? `#${value.trim()}` : value
 }
 
 /** `background-color` and `bgcolor` paint a slab; everything else here paints text or a hairline. */
@@ -117,8 +126,21 @@ function hex(channel: number): string {
   return channel.toString(16).padStart(2, '0')
 }
 
+/**
+ * The sixteen names `bgcolor` was designed for, which mail still uses where a hex would do. The
+ * full CSS list is not worth carrying: everything past these is vanishingly rare in mail, and an
+ * unread colour is left alone rather than guessed at.
+ */
+const NAMED: Record<string, string> = {
+  white: '#ffffff', silver: '#c0c0c0', gray: '#808080', grey: '#808080', black: '#000000',
+  red: '#ff0000', maroon: '#800000', yellow: '#ffff00', olive: '#808000',
+  lime: '#00ff00', green: '#008000', aqua: '#00ffff', teal: '#008080',
+  blue: '#0000ff', navy: '#000080', fuchsia: '#ff00ff', purple: '#800080',
+}
+
 function parse(value: string): [number, number, number, number] | null {
-  const hex = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(value)
+  const named = NAMED[value.toLowerCase()]
+  const hex = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(named ?? value)
   if (hex) {
     const digits = hex[1].length === 3 ? [...hex[1]].map(d => d + d) : hex[1].match(/../g)!
     return [...digits.map(d => parseInt(d, 16)), 1] as [number, number, number, number]
