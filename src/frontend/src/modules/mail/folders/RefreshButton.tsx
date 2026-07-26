@@ -41,7 +41,7 @@ export default function RefreshButton({ fetching, onRefresh }: Props) {
       title="Check for new mail"
       onClick={() => { if (!spinning) onRefresh() }}>
       <span ref={iconRef} className={`mail-refresh-icon${spinning ? ' is-spinning' : ''}`}>
-        <LoaderIcon size={15} />
+        <LoaderIcon size={16} />
       </span>
     </button>
   )
