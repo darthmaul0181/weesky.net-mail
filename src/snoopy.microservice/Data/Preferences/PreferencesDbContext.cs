@@ -20,6 +20,7 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
         modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.Address });
+        modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
     }
@@ -29,6 +30,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<UserPreference> UserPreferences { get; set; }
 
     public DbSet<SendingIdentity> SendingIdentities { get; set; }
+
+    public DbSet<TrustedSender> TrustedSenders { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
 }

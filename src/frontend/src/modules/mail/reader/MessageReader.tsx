@@ -14,9 +14,11 @@ import JunkIcon from '../../../icons/JunkIcon'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
+import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import ImageOffIcon from '../../../icons/ImageOffIcon'
 import {
   useAccountId, useAliases, useDeleteMessages, useFolders, useIdentities, useMessage,
-  useMoveMessages, usePrepareQuote, useSetFlags,
+  useMoveMessages, usePrepareQuote, useSetFlags, useTrustSender, useTrustedSenders,
 } from '../queries'
 import { rolePathsOf } from '../folders/folderNodes'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
@@ -27,6 +29,7 @@ import AttachmentViewerModal from './AttachmentViewerModal'
 import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
 import { formatReaderDate } from './formatReaderDate'
+import { canonicalAddress } from './canonicalAddress'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
 import SpamGauge from './SpamGauge'
@@ -77,6 +80,8 @@ export default function MessageReader(
   const { data: identityList } = useIdentities()
   const { data: aliases } = useAliases()
   const prepare = usePrepareQuote()
+  const { data: trustedSenders } = useTrustedSenders()
+  const setTrust = useTrustSender(onNotify)
 
   useMarkSeenOnOpen(folderPath, uid, Boolean(data))
 
@@ -106,7 +111,10 @@ export default function MessageReader(
   // The body is computed above the early returns because useInlineImages hangs off it and hooks
   // cannot be conditional; before the detail lands it works on an empty document.
   const inverted = isDark && !originalColours
-  const showImages = imagesShown || (!!preferences && alwaysShowImagesOf(preferences))
+  const senderAddress = canonicalAddress(data?.fromAddress)
+  const senderTrusted = senderAddress !== '' && trustedSenders?.has(senderAddress) === true
+  const alwaysShow = !!preferences && alwaysShowImagesOf(preferences)
+  const showImages = imagesShown || alwaysShow || senderTrusted
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
   // rest — the same reason revealBlockedImages runs on this side of it.
   const sanitized = useMemo(() => {
@@ -222,6 +230,16 @@ export default function MessageReader(
     { label: 'Edit as new', icon: <PencilIcon size={18} />, onSelect: () => void openCompose('editAsNew') },
   ]
 
+  // Only for an approved sender, and only while the global setting is off: with it on, revoking
+  // changes nothing on screen, and an entry whose effect is invisible misleads.
+  if (senderTrusted && !alwaysShow) {
+    actions.push('separator', {
+      label: "Block sender's images",
+      icon: <ImageOffIcon size={18} />,
+      onSelect: () => setTrust.mutate({ address: senderAddress, trusted: false }),
+    })
+  }
+
   return (
     <article>
       <header className="reader-header">
@@ -303,7 +321,22 @@ export default function MessageReader(
             {data.blockedImageCount} remote image{data.blockedImageCount > 1 ? 's were' : ' was'} blocked.
             Loading them tells the sender you opened this message.
           </span>
-          <button type="button" className="btn" onClick={() => setImagesShown(true)}>Show images</button>
+          {/* The chevron can only ever grant: an approved sender has no banner to hang it from. */}
+          <span className="banner-split">
+            <button type="button" className="btn" onClick={() => setImagesShown(true)}>Show images</button>
+            <DropdownMenu
+              ariaLabel="More image options"
+              className="banner-split-more"
+              trigger={<ChevronDownIcon size={13} />}
+              items={[{
+                label: 'Always show images from this sender',
+                // A malformed message can carry images and no parsable sender; posting an empty
+                // address would just earn a 400 nobody surfaces.
+                disabled: senderAddress === '',
+                onSelect: () => setTrust.mutate({ address: senderAddress, trusted: true }),
+              }]}
+            />
+          </span>
         </div>
       )}
 

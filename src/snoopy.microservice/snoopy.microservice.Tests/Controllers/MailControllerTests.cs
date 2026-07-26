@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
 using MimeKit.Utils;
 using Moq;
@@ -27,6 +28,7 @@ public sealed class MailControllerTests
     private readonly Mock<IMailSender> _sender = new();
     private readonly Mock<IQuotePreparer> _quotes = new();
     private readonly Mock<IDraftSaver> _drafts = new();
+    private readonly Mock<ITrustedSenderStore> _trustedSenders = new();
 
     private MailController CreateController()
     {
@@ -35,7 +37,8 @@ public sealed class MailControllerTests
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
         return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
-                                  _staged.Object, _sender.Object, _quotes.Object, _drafts.Object)
+                                  _staged.Object, _sender.Object, _quotes.Object, _drafts.Object,
+                                  _trustedSenders.Object, NullLogger<MailController>.Instance)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
@@ -1953,6 +1956,74 @@ public sealed class MailControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
         _messages.Verify(m => m.GetMimeMessageAsync(
             It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    // The reader is already fetching this message; a dedicated client call would buy a second
+    // round trip per open for nothing.
+    [Fact]
+    public async Task GetMessage_RecordsTheSenderUse()
+    {
+        var detail = new MailMessageDetail { FromAddress = "news@example.com" };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+
+        await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        _trustedSenders.Verify(
+            s => s.TouchAsync(It.IsAny<Guid>(), "news@example.com", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // Rule 5: IMAP first, bookkeeping second. A failed write degrades, it never fails the read
+    // the caller actually asked for.
+    [Fact]
+    public async Task GetMessage_WhenRecordingTheUseThrows_StillReturnsTheMessage()
+    {
+        var detail = new MailMessageDetail { FromAddress = "news@example.com" };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+        _trustedSenders.Setup(s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+                                                It.IsAny<CancellationToken>()))
+                       .ThrowsAsync(new InvalidOperationException("database is away"));
+
+        var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(detail, ok.Value);
+    }
+
+    // Switching messages quickly aborts the detail request: a routine disconnect, not a fault.
+    [Fact]
+    public async Task GetMessage_WhenRecordingTheUseIsCancelled_StillReturnsTheMessage()
+    {
+        var detail = new MailMessageDetail { FromAddress = "news@example.com" };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+        _trustedSenders.Setup(s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+                                                It.IsAny<CancellationToken>()))
+                       .ThrowsAsync(new OperationCanceledException());
+
+        var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(detail, ok.Value);
+    }
+
+    [Fact]
+    public async Task GetMessage_WhenTheReadFails_RecordsNothing()
+    {
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailMessageDetail>(ImapSession.MessageNotFound));
+
+        await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        _trustedSenders.Verify(
+            s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

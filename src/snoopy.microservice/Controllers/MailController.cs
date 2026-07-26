@@ -32,7 +32,9 @@ public sealed class MailController(
     IStagedAttachmentStore staged,
     IMailSender sender,
     IQuotePreparer quotes,
-    IDraftSaver drafts) : ApiBaseController
+    IDraftSaver drafts,
+    ITrustedSenderStore trustedSenders,
+    ILogger<MailController> logger) : ApiBaseController
 {
     /// <summary>
     /// The caller's mail password, decrypted from the credentials cookie, or false with the
@@ -433,7 +435,35 @@ public sealed class MailController(
             return NotFoundEnveloppe(result.Error);
         }
 
+        if (result.IsSuccess)
+        {
+            await RecordSenderUseAsync(result.Value.FromAddress, cancellationToken);
+        }
+
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Keeps an approved sender's entry alive while it is still earning its place. Does nothing
+    /// for a sender nobody approved, and never fails the read: bookkeeping degrades, it does not
+    /// take the caller's message down with it.
+    /// </summary>
+    private async Task RecordSenderUseAsync(string? fromAddress, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(fromAddress)) return;
+
+        try
+        {
+            await trustedSenders.TouchAsync(AuthenticatedUser.WebmailUid, fromAddress, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Switching messages quickly aborts the read; that is routine, not a failure.
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not record the trusted-sender use for {Address}", fromAddress);
+        }
     }
 
     /// <summary>

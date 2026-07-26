@@ -142,6 +142,16 @@ export const api = {
   putIdentities: (identities) =>
     request('PUT', '/api/Identities', { identities }),
 
+  getTrustedSenders: () =>
+    request('GET', '/api/TrustedSenders'),
+
+  trustSender: (address) =>
+    request('POST', '/api/TrustedSenders', { address }),
+
+  // The address travels in the query string, so it is encoded here rather than at call sites.
+  untrustSender: (address) =>
+    request('DELETE', `/api/TrustedSenders?address=${encodeURIComponent(address)}`),
+
   createAlias: (name, domain) =>
     request('POST', '/api/Aliases', { name, domain }),
 

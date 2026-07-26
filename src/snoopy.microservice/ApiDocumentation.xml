@@ -483,7 +483,7 @@
              server refuses is 502.
              </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.#ctor(weesky.Snoopy.Microservice.Repositories.IMailFolderRepository,weesky.Snoopy.Microservice.Repositories.IMailMessageRepository,weesky.Snoopy.Microservice.Services.IMailCredentialStore,weesky.Snoopy.Microservice.Repositories.IFolderRoleStore,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,weesky.Snoopy.Microservice.Services.IMailSender,weesky.Snoopy.Microservice.Services.IQuotePreparer,weesky.Snoopy.Microservice.Services.IDraftSaver)">
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.#ctor(weesky.Snoopy.Microservice.Repositories.IMailFolderRepository,weesky.Snoopy.Microservice.Repositories.IMailMessageRepository,weesky.Snoopy.Microservice.Services.IMailCredentialStore,weesky.Snoopy.Microservice.Repositories.IFolderRoleStore,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,weesky.Snoopy.Microservice.Services.IMailSender,weesky.Snoopy.Microservice.Services.IQuotePreparer,weesky.Snoopy.Microservice.Services.IDraftSaver,weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Controllers.MailController})">
              <summary>
              Mail access over IMAP.
             
@@ -634,6 +634,13 @@
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="404">No message with that UID in that folder</response>
             <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RecordSenderUseAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Keeps an approved sender's entry alive while it is still earning its place. Does nothing
+            for a sender nobody approved, and never fails the read: bookkeeping degrades, it does not
+            take the caller's message down with it.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetAttachment(System.String,System.UInt32,System.String,System.Threading.CancellationToken)">
             <summary>
@@ -909,6 +916,46 @@
             frontend can offer format selection.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.TrustedSendersController">
+            <summary>
+            Senders whose remote images this account loads without asking — a webmail preference, not
+            mail-server data, so no IMAP session and no credentials cookie. The reader tests the list
+            itself; the sanitiser is never told about it, which is what keeps one message body good for
+            every account.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.#ctor(weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore)">
+            <summary>
+            Senders whose remote images this account loads without asking — a webmail preference, not
+            mail-server data, so no IMAP session and no credentials cookie. The reader tests the list
+            itself; the sanitiser is never told about it, which is what keeps one message body good for
+            every account.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.List(System.Threading.CancellationToken)">
+            <summary>The approved addresses, canonical and sorted.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The addresses</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.Add(weesky.Snoopy.Microservice.Models.TrustedSenderRequest,System.Threading.CancellationToken)">
+            <summary>Starts trusting one sender. Approving an address already stored is not an error.</summary>
+            <param name="request">the address to trust</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Trusted</response>
+            <response code="400">The address does not parse, or the account is at its ceiling</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.Remove(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Stops trusting one sender. Always 204, unknown address included: a 404 would confirm
+            which addresses this account has approved, and the caller gains nothing from the answer.
+            </summary>
+            <param name="address">the address to stop trusting</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">No longer trusted, whether it was or not</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride">
             <summary>
             One user-chosen folder-role assignment. Absence of a row means the role falls back to
@@ -940,6 +987,13 @@
             <summary>
             One curated sending identity. Addresses are stored canonical (trimmed, lower-case): the
             table collates in binary, so a casing difference would split one identity into two.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.TrustedSender">
+            <summary>
+            One sender whose remote images this account loads without asking. Addresses are stored
+            canonical (trimmed, lower-case): the table collates in binary, so a casing difference would
+            split one sender into two rows and the second would silently never match.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.UserPreference">
@@ -1820,6 +1874,18 @@
             (the WEESKY-RULES marker was present and valid) or must be edited as raw text.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.TrustedSenderOptions">
+            <summary>Bound from the "TrustedSenders" section of appsettings.json.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.TrustedSenderOptions.RetentionDays">
+            <summary>
+            Days an approved sender keeps its allowance without a message of theirs being opened.
+            A year: long enough that a yearly statement still finds its sender approved.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.TrustedSenderRequest">
+            <summary>One sender to start trusting. Stored canonical, so casing here is immaterial.</summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.User.Name">
             <summary>
             The name of the user (the mailbox name).
@@ -1970,6 +2036,27 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.DeleteAllRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
             <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore">
+            <summary>
+            The senders whose remote images an account loads without being asked. Addresses go in and
+            come back canonical; callers never fold them themselves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.AddAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>Adds, or refreshes an address already stored. Fails only when the cap is reached.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.RemoveAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>Removes it. An address that is not stored is not an error.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.TouchAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Marks a stored address as still in use, at most once a day. Creates nothing: this runs
+            for every message opened, approved sender or not.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.SweepExpiredAsync(System.TimeSpan,System.Threading.CancellationToken)">
+            <summary>Drops every row untouched for longer than <paramref name="retention"/>.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore">
             <summary>
             Reads and writes the rows an account has set. Knows nothing about which keys exist or what
@@ -2059,6 +2146,12 @@
             1. A script whose name matches any provider's default name (prefer the active one).
             2. Otherwise the currently active script (will be treated as Advanced if no provider matches).
             3. Otherwise null (no script at all).
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Repositories.TrustedSenderStore.MaxPerAccount">
+            <summary>
+            What actually bounds the table. The retention sweep deletes after the fact and bounds
+            nothing in the meantime; this refuses the row that would exceed the ceiling.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindByEmailAsync(System.String)">
@@ -3123,6 +3216,26 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.StagedAttachmentSweeper">
             <summary>Hourly GC over the staged store, so abandoned uploads never accumulate.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.TrustedSenderSweeper">
+            <summary>
+            Daily GC over the trusted senders, so an allowance nobody uses any more does not outlive its
+            usefulness. It is not what bounds the table — the per-account cap in
+            <see cref="T:weesky.Snoopy.Microservice.Repositories.TrustedSenderStore"/> is.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.TrustedSenderSweeper.#ctor(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory,Microsoft.Extensions.Options.IOptions{weesky.Snoopy.Microservice.Models.TrustedSenderOptions},Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.TrustedSenderSweeper})">
+            <summary>
+            Daily GC over the trusted senders, so an allowance nobody uses any more does not outlive its
+            usefulness. It is not what bounds the table — the per-account cap in
+            <see cref="T:weesky.Snoopy.Microservice.Repositories.TrustedSenderStore"/> is.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.TrustedSenderSweeper.SweepOnceAsync(System.Threading.CancellationToken)">
+            <summary>
+            One pass. Opens a scope of its own because the store and its DbContext are scoped while
+            this service is a singleton — injecting the store directly compiles and throws here.
+            </summary>
         </member>
         <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the AngleToken method.</summary>

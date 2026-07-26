@@ -17,6 +17,7 @@ internal static class ApplicationServicesConfiguration
         services.AddOptions<DovecotOptions>().Bind(configuration.GetSection("Dovecot"));
         services.AddOptions<SieveOptions>().Bind(configuration.GetSection("Sieve"));
         services.AddOptions<MailOptions>().Bind(configuration.GetSection("Mail"));
+        services.AddOptions<TrustedSenderOptions>().Bind(configuration.GetSection("TrustedSenders"));
 
         // Kept in step with the per-request cap AttachmentSizeLimitFilter applies. Left at its
         // 128 MB default it becomes the real ceiling whenever MaxMessageSizeMb is raised past it,
@@ -52,6 +53,7 @@ internal static class ApplicationServicesConfiguration
         // instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.
         services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
         services.AddHostedService<StagedAttachmentSweeper>();
+        services.AddHostedService<TrustedSenderSweeper>();
 
         services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>
         {
@@ -84,6 +86,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
+        services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();
 
         return services;
     }

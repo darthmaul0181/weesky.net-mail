@@ -21,6 +21,22 @@ const mocks = vi.hoisted(() => ({
   getIdentities: vi.fn(),
   getAliases: vi.fn(),
   prepareQuote: vi.fn(),
+  getTrustedSenders: vi.fn(),
+  trustSender: vi.fn(),
+  untrustSender: vi.fn(),
+  // The same class queries.ts imports from the mocked module, so its `instanceof ApiError`
+  // holds against what these tests throw. A locally-declared twin would fail that check and
+  // silently route every case to the generic branch.
+  ApiError: class ApiError extends Error {
+    status: number
+    code: string | null
+    constructor(message: string, status: number, code: string | null) {
+      super(message)
+      this.name = 'ApiError'
+      this.status = status
+      this.code = code
+    }
+  },
 }))
 
 vi.mock('../../../api.js', () => ({
@@ -31,7 +47,11 @@ vi.mock('../../../api.js', () => ({
     deleteMessages: mocks.deleteMessages,
     getIdentities: mocks.getIdentities, getAliases: mocks.getAliases,
     prepareQuote: mocks.prepareQuote,
+    getTrustedSenders: mocks.getTrustedSenders,
+    trustSender: mocks.trustSender,
+    untrustSender: mocks.untrustSender,
   },
+  ApiError: mocks.ApiError,
   requestBlob: mocks.requestBlob,
   mailAttachmentUrl: mocks.mailAttachmentUrl,
 }))
@@ -124,6 +144,27 @@ function renderWithCachedSummary(
   )
 }
 
+// Seeds the two inputs of the revocation gate synchronously, the way makeClient seeds the
+// folders. Neither is observable when both are on — a trusted sender under the global setting
+// shows no banner either way — so an entry absent because a query is still in flight would pass
+// for an entry absent because the gate works. Seeded, both sides of `senderTrusted && !alwaysShow`
+// are true from the first render and the gate is what the assertion is reading.
+function renderWithTrusted(
+  addresses: string[], preferences?: Record<string, string>,
+  onNotify?: (message: string) => void,
+) {
+  const client = makeClient()
+  client.setQueryData(['mail', 'primary', 'trustedSenders'], addresses)
+  if (preferences) client.setQueryData(['preferences'], preferences)
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <MessageReader folderPath="INBOX" uid={2} onNotify={onNotify} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
 describe('MessageReader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -135,6 +176,9 @@ describe('MessageReader', () => {
     mocks.deleteMessages.mockResolvedValue(undefined)
     mocks.getIdentities.mockResolvedValue({ identities: [] })
     mocks.getAliases.mockResolvedValue([])
+    mocks.getTrustedSenders.mockResolvedValue([])
+    mocks.trustSender.mockResolvedValue(undefined)
+    mocks.untrustSender.mockResolvedValue(undefined)
   })
 
   it('prompts when nothing is selected', () => {
@@ -377,6 +421,147 @@ describe('MessageReader', () => {
     await screen.findByText('Re: facture')
 
     expect(screen.queryByRole('button', { name: /show images/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the chevron beside Show images', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByRole('button', { name: 'Show images' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More image options' })).toBeInTheDocument()
+  })
+
+  // The address is folded before it leaves, so an approved sender still matches the message it
+  // was approved from whatever casing the server reported.
+  it('trusts the sender from the chevron menu, canonicalised', async () => {
+    mocks.getMailMessage.mockResolvedValue({ ...blocked, fromAddress: 'Alice@X.BE' })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    fireEvent.click(await screen.findByRole('button', { name: 'More image options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Always show images from this sender' }))
+
+    await waitFor(() => expect(mocks.trustSender).toHaveBeenCalledWith('alice@x.be'))
+  })
+
+  // The whole point: no banner, no button, and the images actually restored in the document.
+  it('shows a trusted sender images with no banner at all', async () => {
+    mocks.getTrustedSenders.mockResolvedValue(['alice@x.be'])
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Show images' })).not.toBeInTheDocument())
+    expect(screen.queryByText(/remote image/i)).not.toBeInTheDocument()
+    expect(screen.getByTitle('Message body').getAttribute('srcdoc'))
+      .toContain('src="https://t.example/p.gif"')
+  })
+
+  it('offers the revocation in the kebab for a trusted sender', async () => {
+    mocks.getTrustedSenders.mockResolvedValue(['alice@x.be'])
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Show images' })).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: "Block sender's images" }))
+
+    await waitFor(() => expect(mocks.untrustSender).toHaveBeenCalledWith('alice@x.be'))
+  })
+
+  it('keeps the revocation out of the kebab for an untrusted sender', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+    // Archive first: it proves the menu actually opened, so the absence below is the gate's
+    // doing rather than a menu that never rendered a single item.
+    expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: "Block sender's images" })).not.toBeInTheDocument()
+  })
+
+  // With the global setting on, revoking changes nothing visible. An entry whose effect cannot
+  // be seen misleads more than an absent one helps.
+  it('hides the revocation while remote images always load', async () => {
+    mocks.getPreferences.mockResolvedValue(
+      { 'mail.pageSize': '30', 'mail.alwaysShowImages': 'true' })
+    mocks.getTrustedSenders.mockResolvedValue(['alice@x.be'])
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    renderWithTrusted(['alice@x.be'], { 'mail.pageSize': '30', 'mail.alwaysShowImages': 'true' })
+    await screen.findByText('Re: facture')
+    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: "Block sender's images" })).not.toBeInTheDocument()
+  })
+
+  // useTrustSender(onNotify), not useTrustSender(): without the argument a refused grant leaves
+  // the banner up with nothing explaining the no-op, unlike every other reader mutation.
+  it('reports a failed grant through onNotify', async () => {
+    const onNotify = vi.fn()
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    mocks.trustSender.mockRejectedValue(new mocks.ApiError('Internal Server Error', 500, null))
+
+    renderWithTrusted([], undefined, onNotify)
+    fireEvent.click(await screen.findByRole('button', { name: 'More image options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Always show images from this sender' }))
+
+    await waitFor(() =>
+      expect(onNotify).toHaveBeenCalledWith("Could not allow this sender's images"))
+  })
+
+  it('reports a failed revocation with the other direction wording', async () => {
+    const onNotify = vi.fn()
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    mocks.untrustSender.mockRejectedValue(new mocks.ApiError('Internal Server Error', 500, null))
+
+    renderWithTrusted(['alice@x.be'], undefined, onNotify)
+    await screen.findByText('Re: facture')
+    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: "Block sender's images" }))
+
+    await waitFor(() =>
+      expect(onNotify).toHaveBeenCalledWith("Could not block this sender's images"))
+  })
+
+  // A 400 is the server refusing in words meant to be read — the ceiling, or an unreadable
+  // header. Swallowing it into the generic would leave the user re-clicking forever.
+  it('surfaces the server wording on a refusal rather than the generic', async () => {
+    const onNotify = vi.fn()
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    mocks.trustSender.mockRejectedValue(new mocks.ApiError(
+      'You have reached the maximum of 1000 senders whose images always load', 400, null))
+
+    renderWithTrusted([], undefined, onNotify)
+    fireEvent.click(await screen.findByRole('button', { name: 'More image options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Always show images from this sender' }))
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+      'You have reached the maximum of 1000 senders whose images always load'))
+  })
+
+  // api.js has already cleared the session and sent them to /login; a toast on top of a
+  // redirect is noise.
+  it('stays silent on a 401, which the redirect already answers', async () => {
+    const onNotify = vi.fn()
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    mocks.trustSender.mockRejectedValue(new mocks.ApiError('Unauthorized', 401, null))
+
+    renderWithTrusted([], undefined, onNotify)
+    fireEvent.click(await screen.findByRole('button', { name: 'More image options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Always show images from this sender' }))
+
+    await waitFor(() => expect(mocks.trustSender).toHaveBeenCalled())
+    await settle()
+    expect(onNotify).not.toHaveBeenCalled()
   })
 
   it('falls back to the text body when there is no HTML', async () => {
