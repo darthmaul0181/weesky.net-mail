@@ -13,7 +13,7 @@
         var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.setAttribute('data-theme',d?'dark':'light');
         var p=localStorage.getItem('appearance_palette');
-        if(['night','classic','forest','slate','plum','ink'].indexOf(p)<0)p='night';
+        if(['night','classic','forest','slate','plum','ink','azure','indigo'].indexOf(p)<0)p='night';
         document.documentElement.setAttribute('data-palette',p);
       })();
     </script>

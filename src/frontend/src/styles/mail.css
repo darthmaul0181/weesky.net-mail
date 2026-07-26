@@ -46,13 +46,14 @@
 
 .mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
 
-/* The account block, and nothing else: folder creation lives on the settings page. */
+/* The account block, and nothing else: folder creation lives on the settings page.
+   Same token as .folder-separator, for the same reason — both hairlines sit on --folders-bg. */
 .mail-folders-footer {
   flex: none;
   display: flex;
   align-items: center;
   padding: 7px 9px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--folders-item-hover);
 }
 
 .mail-list {
@@ -96,13 +97,6 @@
   background: var(--surface);
 }
 
-.mail-list-count {
-  display: block;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-}
 
 .mail-block-state {
   padding: 10px 12px;
@@ -149,12 +143,16 @@
 
 .folder-row.is-system { font-weight: 600; }
 
-/* Inset, so it reads as a divider inside the list rather than a border on the column. */
+/* Inset, so it reads as a divider inside the list rather than a border on the column.
+   --folders-item-hover, not --border: the latter is calibrated against --surface and lands on
+   --folders-bg here, where in light mode it is a warm hairline on a cool ground at 1.09:1 — the
+   wrong hue as much as the wrong value. Owner's call over the measurement, which has this token
+   slightly behind --border in dark (1.22 vs 1.33) and in classic light. Do not "fix" either way. */
 .folder-separator {
   height: 0;
   margin: 8px 10px;
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--folders-item-hover);
 }
 
 /* Background only — no accent bar. That bar is the message list's language for a row you
@@ -979,18 +977,19 @@
 }
 .reader-blocked-images .btn:hover { background: var(--action-primary-hover); }
 
-/* The banner's button splits like an attachment chip does, with one difference: both halves
-   carry the accent fill, so the seam is the readable foreground at low alpha rather than a
-   --border hairline, which would read as dirt on the blue.
+/* The banner's button and the attachment chip split the same way, and both halves of each carry
+   the accent fill — so the seam is the readable foreground at low alpha rather than a --border
+   hairline, which would read as dirt on the fill. One rule for the two, since a second dialect
+   of the same seam is how the two stop matching.
    The .btn rule is written through .reader-blocked-images so it outranks that block's
    margin-left:auto whatever the source order — the pair is what hugs the right edge now. */
 .banner-split { margin-left: auto; flex: none; display: inline-flex; align-items: stretch; }
 .reader-blocked-images .banner-split .btn { margin-left: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .banner-split .dropdown-root { display: flex; }
-.banner-split-more {
+.banner-split-more,
+.attachment-split-more {
   display: flex;
   align-items: center;
-  padding: 0 7px;
   border: none;
   border-left: 1px solid color-mix(in srgb, var(--action-primary-fg) 32%, transparent);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -998,7 +997,9 @@
   color: var(--action-primary-fg);
   cursor: pointer;
 }
-.banner-split-more:hover { background: var(--action-primary-hover); }
+.banner-split-more:hover,
+.attachment-split-more:hover { background: var(--action-primary-hover); }
+.banner-split-more { padding: 0 7px; }
 
 /* The article carries the column layout so the body can claim the leftover height. Without
    this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
@@ -1042,36 +1043,38 @@
   border-top: 1px solid var(--reader-header-border);
 }
 
+/* A tinted background behind a --border hairline made the chip read as part of the band it sits
+   on. It takes the blocked-images button's colours — not its metrics — because a file to download
+   and an offer to reveal images are the same kind of thing: one accented control the eye finds
+   without hunting. Measured 32.00x131.19px before, 36.50x152.05px after. */
 .attachment-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
+  gap: 8px;
+  padding: 8px 9px 8px 15px;
+  border: none;
   border-radius: var(--radius-sm);
-  background: var(--attachment-chip-bg);
-  color: var(--text);
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
+.attachment-chip:hover { background: var(--action-primary-hover); }
 
-.attachment-chip-size { color: var(--text-muted); }
+/* A pill, not dimmed text: --text-muted is unreadable on the fill, and dimming the foreground far
+   enough to subordinate the size costs the size its own legibility. */
+.attachment-chip-size {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--action-primary-fg) 20%, transparent);
+  font-size: 11px;
+}
 
 .attachment-split { display: inline-flex; align-items: stretch; }
 .attachment-split .attachment-chip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .attachment-split .dropdown-root { display: flex; }
-.attachment-split-more {
-  display: flex;
-  align-items: center;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-left: none;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--attachment-chip-bg);
-  color: var(--text);
-  cursor: pointer;
-}
+.attachment-split-more { padding: 0 9px; }
 
 .mail-empty {
   display: flex;
@@ -1121,7 +1124,9 @@
   color: var(--text);
   cursor: pointer;
 }
-.attachment-viewer-nav:hover:not(:disabled) { background: var(--surface-sunken); }
+/* Same hover as .dropdown-item — see the note there. Both this and .compose-tool rest on
+   --surface (the modal, and .compose-view), so one formula serves all three. */
+.attachment-viewer-nav:hover:not(:disabled) { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 .attachment-viewer-nav:disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
 .attachment-viewer-error { color: var(--danger); }
 
@@ -1360,7 +1365,7 @@
   justify-content: center;
 }
 
-.compose-tool:hover { background: var(--surface-sunken); }
+.compose-tool:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 .compose-tool.is-active { color: var(--badge-count-bg); background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent); }
 
 .compose-toolbar-rule {
@@ -1448,8 +1453,20 @@
   background: color-mix(in oklab, var(--surface) 82%, transparent);
 }
 .compose-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-.compose-header .modal-title { flex: 1; min-width: 0; }
-.compose-send { width: auto; padding: 8px 14px; }
+/* The title does not absorb the free space: the actions sit against it instead of at the far right
+   edge: 332px less pointer travel to Send, measured in a 720px composer. Only ✕ keeps that edge. The
+   rule earns its pixel — a bare gap reads as a title that overflowed, where a rule names a
+   boundary, the same job it does between the folder tree's two blocks. */
+.compose-header .modal-title { flex: none; }
+.compose-header .modal-title::after {
+  content: '';
+  width: 1px;
+  height: 20px;
+  margin-left: 14px;
+  background: var(--border);
+}
+.compose-header .modal-close { margin-left: auto; }
+.compose-send { width: auto; padding: 8px 14px; margin-left: 4px; }
 /* Save draft sits beside Send and has to match its height, not the default .btn padding. */
 .compose-header .btn-ghost { padding: 8px 14px; }
 /* Tight header: no per-row margin (the column gap spaces them) and a narrow label so From/To/

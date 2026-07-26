@@ -36,7 +36,7 @@ public sealed class PreferencesControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var values = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(ok.Value);
-        Assert.Equal("30", values[UserPreferences.MailPageSize]);
+        Assert.Equal("all", values[UserPreferences.MailPageSize]);
         Assert.Equal("true", values[UserPreferences.MailShowPreview]);
     }
 

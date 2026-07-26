@@ -156,7 +156,7 @@ body {
 
 .btn-primary {
   background: var(--action-primary);
-  color: #fff;
+  color: var(--action-primary-fg);
   width: 100%;
   padding: 10px 16px;
 }

@@ -375,7 +375,7 @@ export default function MessageReader(
                 className="attachment-chip"
                 onClick={() => download(attachment.part, attachment.fileName)}
               >
-                <PaperclipIcon size={13} />
+                <PaperclipIcon size={14} />
                 {attachment.fileName}
                 <span className="attachment-chip-size">{formatSize(attachment.size)}</span>
               </button>

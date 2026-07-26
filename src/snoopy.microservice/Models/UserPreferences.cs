@@ -26,7 +26,7 @@ public static class UserPreferences
 
     public static IReadOnlyList<PreferenceDefinition> All { get; } =
     [
-        new(MailPageSize, "30", ["10", "20", "30", "50", "100", "all"]),
+        new(MailPageSize, "all", ["10", "20", "30", "50", "100", "all"]),
         new(MailShowPreview, "true", Booleans),
         new(MailAlwaysShowImages, "false", Booleans),
         new(MailNotifySound, "false", Booleans),
