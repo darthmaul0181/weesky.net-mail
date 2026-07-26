@@ -3,8 +3,7 @@
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 export const PALETTE_IDS = [
-  'night', 'classic', 'forest', 'slate', 'plum', 'ink',
-  'olive', 'azure', 'indigo', 'jade', 'graphite', 'harbor',
+  'night', 'classic', 'forest', 'slate', 'plum', 'ink', 'azure', 'indigo',
 ] as const
 export type Palette = typeof PALETTE_IDS[number]
 

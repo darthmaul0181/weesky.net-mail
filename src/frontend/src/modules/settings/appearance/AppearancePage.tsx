@@ -15,12 +15,8 @@ const PALETTES: { value: Palette; label: string }[] = [
   { value: 'slate', label: 'Slate & teal' },
   { value: 'plum', label: 'Plum & gold' },
   { value: 'ink', label: 'Ink' },
-  { value: 'olive', label: 'Olive grove' },
   { value: 'azure', label: 'Azure' },
   { value: 'indigo', label: 'Indigo & violet' },
-  { value: 'jade', label: 'Jade & graphite' },
-  { value: 'graphite', label: 'Graphite & amber' },
-  { value: 'harbor', label: 'Harbor & ochre' },
 ]
 
 /** Renders in the palette it advertises rather than the active one: the palette selectors are
