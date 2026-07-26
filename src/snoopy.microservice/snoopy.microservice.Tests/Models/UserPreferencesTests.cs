@@ -19,7 +19,7 @@ public sealed class UserPreferencesTests
     }
 
     [Theory]
-    [InlineData(UserPreferences.MailPageSize, "30")]
+    [InlineData(UserPreferences.MailPageSize, "all")]
     [InlineData(UserPreferences.MailShowPreview, "true")]
     [InlineData(UserPreferences.MailNotifySound, "false")]
     [InlineData(UserPreferences.MailNotifyDesktop, "false")]
@@ -92,7 +92,7 @@ public sealed class UserPreferencesTests
     {
         var effective = UserPreferences.Effective([]);
 
-        Assert.Equal("30", effective[UserPreferences.MailPageSize]);
+        Assert.Equal("all", effective[UserPreferences.MailPageSize]);
         Assert.Equal("true", effective[UserPreferences.MailShowPreview]);
         Assert.Equal(UserPreferences.All.Count, effective.Count);
     }
@@ -115,7 +115,7 @@ public sealed class UserPreferencesTests
     {
         var effective = UserPreferences.Effective([Row(key, value)]);
 
-        Assert.Equal("30", effective[UserPreferences.MailPageSize]);
+        Assert.Equal("all", effective[UserPreferences.MailPageSize]);
         Assert.DoesNotContain("mail.retired", effective.Keys);
     }
 
