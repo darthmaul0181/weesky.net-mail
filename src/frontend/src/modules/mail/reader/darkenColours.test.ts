@@ -74,6 +74,60 @@ describe('darkenColours', () => {
     expect(darkenColours('<p>Bonjour</p>')).toContain('Bonjour')
   })
 
+  // A gradient is a colour wearing an image's clothes. Mail tints a background image by laying a
+  // flat gradient over it, and one such message came back white in dark mode because nothing here
+  // looked inside background-image.
+  it('darkens the colour stops of a gradient', () => {
+    const html = '<div style="background-image: linear-gradient(rgba(246, 246, 246, 1), rgba(246, 246, 246, 1))">x</div>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('linear-gradient(#282828, #282828)')
+    expect(dark).not.toContain('246')
+  })
+
+  it('darkens every stop of a multi-stop gradient', () => {
+    const html = '<div style="background-image: linear-gradient(to right, #ffffff 0%, #000000 100%)">x</div>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('#212121 0%')
+    expect(dark).toContain('#e0e0e0 100%')
+    expect(dark).toContain('to right')
+  })
+
+  it.each([
+    'repeating-linear-gradient',
+    'radial-gradient',
+    'conic-gradient',
+  ])('darkens the stops of a %s too', name => {
+    const html = `<div style="background-image: ${name}(#ffffff, #ffffff)">x</div>`
+
+    expect(darkenColours(html)).toContain(`${name}(#212121, #212121)`)
+  })
+
+  // The one thing this must never touch: a URL is not a colour, and a path can spell one.
+  it('leaves a url in the same value alone, hex in its path included', () => {
+    const html = '<div style="background-image: linear-gradient(#ffffff, #ffffff), url(&quot;https://x.test/a-ffffff.png&quot;)">x</div>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('https://x.test/a-ffffff.png')
+    expect(dark).toContain('linear-gradient(#212121, #212121)')
+  })
+
+  it('leaves a photograph background alone', () => {
+    const html = '<div style="background-image: url(&quot;https://x.test/photo.jpg&quot;)">x</div>'
+
+    expect(darkenColours(html)).toBe(html)
+  })
+
+  it('leaves a stop it cannot read alone', () => {
+    const html = '<div style="background-image: linear-gradient(transparent, currentColor)">x</div>'
+
+    expect(darkenColours(html)).toBe(html)
+  })
+
   it('returns empty for an empty body', () => {
     expect(darkenColours('')).toBe('')
   })

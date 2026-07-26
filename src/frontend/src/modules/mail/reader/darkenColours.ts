@@ -17,6 +17,19 @@ const COLOUR_ATTRIBUTES = ['bgcolor', 'color', 'bordercolor']
 /** Declarations whose value is a colour. `background` is excluded: it is a shorthand. */
 const COLOUR_PROPERTIES = /(^|[\s;])(color|background-color|border(-[a-z]+)?-color|outline-color)\s*:\s*([^;]+)/gi
 
+/**
+ * A gradient is a colour wearing an image's clothes, and mail tints a background image by laying
+ * a flat one over it — so a message can paint itself white through a property no colour rule
+ * would ever look at.
+ */
+const IMAGE_PROPERTY = /(^|[\s;])(background-image)\s*:\s*([^;]+)/gi
+
+/**
+ * A url() or a colour, url() first: matching it consumes the whole function, so a path that
+ * spells a colour can never be read as one.
+ */
+const URL_OR_COLOUR = /url\((?:"[^"]*"|'[^']*'|[^)]*)\)|#[\da-f]{3,8}\b|rgba?\([^)]*\)/gi
+
 // White lands here rather than on #000, and black lands on the top rather than #fff: the app's
 // own dark surface sits around 13% lightness, and a pure black slab beside it reads as a hole.
 const DARKEST = 0.13
@@ -48,12 +61,13 @@ export function darkenColours(html: string): string {
 
   for (const element of document.body.querySelectorAll<HTMLElement>('[style]')) {
     const style = element.getAttribute('style')!
-    element.setAttribute('style', style.replace(
-      COLOUR_PROPERTIES,
-      (whole, lead, property, _side, value) => {
+    element.setAttribute('style', style
+      .replace(COLOUR_PROPERTIES, (whole, lead, property, _side, value) => {
         const dark = toDarkColour(value)
         return dark ? `${lead}${property}: ${dark}` : whole
-      }))
+      })
+      .replace(IMAGE_PROPERTY, (_whole, lead, property, value) =>
+        `${lead}${property}: ${darkenImageColours(value)}`))
   }
 
   for (const attribute of COLOUR_ATTRIBUTES) {
@@ -64,6 +78,12 @@ export function darkenColours(html: string): string {
   }
 
   return document.body.innerHTML
+}
+
+/** Gradient stops darkened; a url() and anything unreadable are left exactly as they are. */
+function darkenImageColours(value: string): string {
+  return value.replace(URL_OR_COLOUR, token =>
+    /^url\(/i.test(token) ? token : toDarkColour(token) ?? token)
 }
 
 function hex(channel: number): string {
