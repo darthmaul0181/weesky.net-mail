@@ -216,6 +216,12 @@
 
 .dropdown-root.is-up .dropdown-menu { top: auto; bottom: calc(100% + 4px); }
 
+/* Grows rightward instead of leftward. For a trigger at the left of a wide row — the composer's
+   From line — the default right anchoring sends the menu into the column beside it: once the
+   menu sizes to its content, an identity like "Boulet Liégeoise (contact@boulet-liegeoise.be)"
+   made it 345px wide and 71px of that landed under the folder column. */
+.dropdown-root.is-left .dropdown-menu { right: auto; left: 0; }
+
 .settings-layout { display: flex; height: 100%; }
 
 .context-pane {

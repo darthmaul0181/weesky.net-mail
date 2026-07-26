@@ -19,10 +19,18 @@ interface Props {
   className?: string
   /** Which way the menu opens relative to the trigger. Defaults to 'down'. */
   direction?: 'down' | 'up'
+  /**
+   * Which edge the menu shares with its trigger, i.e. the direction it grows in. Right by
+   * default, which suits a trigger sitting against the right edge of its column — the reader
+   * kebab, the banner chevron, the account block. A trigger at the *left* of a wide row needs
+   * 'left', or the menu grows away from the space it has and slides under the column beside it.
+   */
+  align?: 'right' | 'left'
 }
 
 /** Click-toggled dropdown on the IdentityMenu pattern: outside mousedown and Escape close it. */
-export default function DropdownMenu({ ariaLabel, trigger, items, className, direction = 'down' }: Props) {
+export default function DropdownMenu(
+  { ariaLabel, trigger, items, className, direction = 'down', align = 'right' }: Props) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -37,9 +45,11 @@ export default function DropdownMenu({ ariaLabel, trigger, items, className, dir
     setFixedStyle({
       position: 'fixed',
       bottom: `${window.innerHeight - rect.top + 4}px`,
-      right: `${window.innerWidth - rect.right}px`,
+      ...(align === 'left'
+        ? { left: `${rect.left}px` }
+        : { right: `${window.innerWidth - rect.right}px` }),
     })
-  }, [open, direction])
+  }, [open, direction, align])
 
   useEffect(() => {
     if (!open) return
@@ -72,7 +82,10 @@ export default function DropdownMenu({ ariaLabel, trigger, items, className, dir
   }, [open, direction])
 
   return (
-    <div className={`dropdown-root${direction === 'up' ? ' is-up' : ''}`} ref={rootRef}>
+    <div
+      className={`dropdown-root${direction === 'up' ? ' is-up' : ''}${align === 'left' ? ' is-left' : ''}`}
+      ref={rootRef}
+    >
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
         ref={triggerRef} onClick={() => setOpen(o => !o)}>
         {trigger}
