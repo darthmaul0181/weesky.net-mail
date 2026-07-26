@@ -172,12 +172,23 @@
 
 .dropdown-root { position: relative; }
 
+/* `width: max-content` is load-bearing, not a tidy-up. The menu is absolutely positioned with
+   `right: 0` and no `left`, so its width is shrink-to-fit against the containing block — which
+   is `.dropdown-root`, the trigger button, about 26px wide. That resolves to the min-content
+   width, i.e. as wrapped as possible, and `min-width` then floors it at 180px: every label
+   whose text exceeds ~124px wrapped onto two lines while the box stayed 180px wide.
+   Sizing to content instead is also what keeps this translatable — the longest French label
+   measures 338px on one line, so width follows the language rather than the language having to
+   fit the width. The cap is the safety net for a translation longer still, and for a narrow
+   viewport; past it the label wraps, which is the right degradation, not a defect. */
 .dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 20;
   min-width: 180px;
+  width: max-content;
+  max-width: min(380px, calc(100vw - 24px));
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
