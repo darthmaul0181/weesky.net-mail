@@ -121,6 +121,12 @@ const blocked = {
   htmlBody: '<img data-blocked-src="https://t.example/p.gif">',
 }
 
+const blockedBackground = {
+  ...detail,
+  blockedImageCount: 1,
+  htmlBody: '<div data-blocked-bg="https://cdn.example/hero.png" style="background-color: #ffffff">x</div>',
+}
+
 // Seeds the list cache the reader's flag labels read at render time — findCachedSummary's
 // only source of seen/flagged, since MailMessageDetail carries neither.
 function renderWithCachedSummary(
@@ -372,6 +378,27 @@ describe('MessageReader', () => {
       .not.toContain('data-blocked-src'))
     expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
       .toContain('src="https://t.example/p.gif"')
+  })
+
+  // A withheld background travels a different road from a withheld <img src>: consent hands it
+  // to revealBlockedImages' CSSOM path, then to darkenColours, then to DOMPurify, and any of the
+  // three can drop the restored declaration. Asserted on the iframe's own document, so nothing
+  // short of the whole composition can satisfy it. Dark mode because that is the only arrangement
+  // in which darkenColours sits in the chain at all.
+  it('restores a withheld background image on consent, all the way to the iframe', async () => {
+    theme.isDark = true
+    mocks.getMailMessage.mockResolvedValue(blockedBackground)
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByText(/1 remote image was blocked/i)).toBeInTheDocument()
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc')).not.toContain('background-image')
+
+    fireEvent.click(screen.getByRole('button', { name: /show images/i }))
+
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('background-image: url(&quot;https://cdn.example/hero.png&quot;)'))
+    theme.isDark = false
   })
 
   // The whole point of the setting: no banner, no button, nothing to click per message.
@@ -688,6 +715,71 @@ describe('MessageReader', () => {
     await screen.findByText('Re: facture')
 
     expect(screen.queryByRole('button', { name: /logo\.png/ })).not.toBeInTheDocument()
+  })
+
+  // A part the body already displays is not an attachment to offer, whatever its disposition
+  // says — servers do send a cid-referenced logo as Content-Disposition: attachment.
+  it('hides a body-referenced image the disposition calls an attachment', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      htmlBody: '<p>Bonjour</p><img src="cid:logo@mail">',
+      attachments: [
+        {
+          part: '3', fileName: 'logo.png', contentType: 'IMAGE/png', size: 10,
+          isInline: false, contentId: 'logo@mail',
+        },
+        {
+          part: '4', fileName: 'joint.png', contentType: 'image/png', size: 10,
+          isInline: false, contentId: null,
+        },
+      ],
+    })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByRole('button', { name: /^joint\.png/ })
+
+    expect(screen.queryByRole('button', { name: /logo\.png/ })).not.toBeInTheDocument()
+  })
+
+  // A part used only as a CSS background is displayed by the body, so it is not a chip either —
+  // the rule the attachment row already applies to a cid image, reaching its second producer.
+  it('hides an attachment used only as a css background', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      htmlBody: '<div style="background-image: url(cid:logo@mail)">Bonjour</div>',
+      attachments: [
+        {
+          part: '3', fileName: 'logo.png', contentType: 'image/png', size: 10,
+          isInline: false, contentId: 'logo@mail',
+        },
+        {
+          part: '4', fileName: 'joint.pdf', contentType: 'application/pdf', size: 10,
+          isInline: false, contentId: null,
+        },
+      ],
+    })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByRole('button', { name: /joint\.pdf/ })
+
+    expect(screen.queryByRole('button', { name: /logo\.png/ })).not.toBeInTheDocument()
+  })
+
+  // A cid the body references but nothing can resolve stays a broken image: the file must stay
+  // reachable from the attachment row rather than disappear from both places.
+  it('keeps a body-referenced part the message does not carry as an image', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      htmlBody: '<p>Bonjour</p><img src="cid:doc@mail">',
+      attachments: [{
+        part: '3', fileName: 'doc.pdf', contentType: 'application/pdf', size: 10,
+        isInline: false, contentId: 'doc@mail',
+      }],
+    })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByRole('button', { name: /doc\.pdf/ })).toBeInTheDocument()
   })
 
   // The iframe is sandboxed opaque-origin, so no authenticated URL can load in there: the SPA

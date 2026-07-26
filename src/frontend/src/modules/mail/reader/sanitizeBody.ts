@@ -19,18 +19,75 @@ export function sanitizeBody(html: string): string {
     // data-blocked-src carries the withheld remote image URL; DOMPurify would strip an
     // unknown data attribute otherwise, and the "show images" action would have nothing left
     // to restore.
-    ADD_ATTR: ['data-blocked-src', 'target'],
+    ADD_ATTR: ['data-blocked-src', 'data-blocked-bg', 'target'],
     FORBID_TAGS,
     FORBID_ATTR,
   })
 }
 
+const BLOCKED_BACKGROUND = 'data-blocked-bg'
+
+/**
+ * What `background-image` answers when nothing survives the cull. `initial` is the common one:
+ * Blink answers it — not '' and not `none` — for a `background:` shorthand that declares no
+ * image, which is how mail is routinely written and what the backend's longhand-only rule leaves
+ * behind. A CSS-wide keyword cannot sit in a layer list, so listing one beside the restored URL
+ * voids the whole declaration and consent restores nothing at all.
+ */
+const NO_SURVIVING_LAYER = /^\s*(none|initial|inherit|unset|revert|revert-layer)\s*$/i
+
+/**
+ * A withheld URL is only ever re-entered inside url("…") after its scheme is checked and its
+ * quotes and backslashes are encoded: DOMPurify validates neither — measured, it passes
+ * url(javascript:…) straight through — so this is the only gate on the client side.
+ */
+function restorable(raw: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+  return parsed.href.replace(/["\\]/g, encodeURIComponent)
+}
+
 /**
  * Restores remote images, on explicit user consent only. Runs before sanitising, so the
  * restored URLs are subject to the same pass as everything else.
+ *
+ * A background comes back through CSSOM, never by concatenating onto the style text: an open
+ * construct already in that attribute — `a: url(` — captures appended text, and a `)` in the
+ * withheld URL closes it, after which the rest parses as declarations of the forger's choosing.
+ * Neither `)` nor `;` is percent-encoded by a URL parser, so assigning the property and letting
+ * the browser reserialise the attribute is what closes that door.
+ *
+ * The attribute records no layer position, so the layers the cull left in the CSS (a gradient, a
+ * cid: image Task 4 will resolve) are carried into the new value first and the withheld ones
+ * after: that is the order the backend's own cases have, and it is the only way consent does not
+ * make a surviving gradient disappear.
  */
 export function revealBlockedImages(html: string): string {
-  return html.replace(/data-blocked-src=/g, 'src=')
+  const revealed = html.replace(/data-blocked-src=/g, 'src=')
+  if (!revealed.includes(BLOCKED_BACKGROUND)) return revealed
+
+  const doc = new DOMParser().parseFromString(revealed, 'text/html')
+  for (const element of doc.querySelectorAll<HTMLElement>(`[${BLOCKED_BACKGROUND}]`)) {
+    const layers = (element.getAttribute(BLOCKED_BACKGROUND) ?? '')
+      .split(/\s+/)
+      .map(restorable)
+      .filter((url): url is string => url !== null)
+    if (layers.length === 0) continue
+
+    const kept = element.style.backgroundImage
+    const restored = layers.map(url => `url("${url}")`).join(', ')
+    // Removed first so the declaration is re-added last: a `background:` shorthand in the same
+    // attribute otherwise outranks the longhand once the attribute is serialised again.
+    element.style.removeProperty('background-image')
+    element.style.backgroundImage =
+      kept === '' || NO_SURVIVING_LAYER.test(kept) ? restored : `${kept}, ${restored}`
+  }
+  return doc.body.innerHTML
 }
 
 /**

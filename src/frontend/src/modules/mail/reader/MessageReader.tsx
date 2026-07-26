@@ -40,7 +40,8 @@ import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 import { substituteInlineImages } from './inlineImages'
-import { useInlineImages } from './useInlineImages'
+import { isImageType } from './mediaType'
+import { bodyInlineParts, useInlineImages } from './useInlineImages'
 import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
@@ -127,6 +128,11 @@ export default function MessageReader(
   const inlineImages = useInlineImages(folderPath, uid, data?.attachments, sanitized)
   const body = useMemo(
     () => substituteInlineImages(sanitized, inlineImages), [sanitized, inlineImages])
+  // Derived from the body rather than from what the fetch returned, so a chip cannot appear and
+  // then vanish once the bytes land.
+  const displayedParts = useMemo(
+    () => new Set(bodyInlineParts(data?.attachments, sanitized).map(p => p.part)),
+    [data?.attachments, sanitized])
 
   const fallback = (message: string) => (
     <div className="reader-fallback">
@@ -155,9 +161,12 @@ export default function MessageReader(
   const seen = summary?.seen ?? true
   const flagged = summary?.flagged ?? false
 
-  const attachments = data.attachments.filter(attachment => !attachment.isInline)
+  // Two ways a part is not an attachment to offer: the server calls it inline, or the body
+  // displays it — a cid-referenced image often arrives with an attachment disposition.
+  const attachments = data.attachments.filter(
+    attachment => !attachment.isInline && !displayedParts.has(attachment.part))
   // One list for the split chips and the viewer's navigation — the two can never disagree.
-  const imageAttachments = attachments.filter(a => a.contentType?.toLowerCase().startsWith('image/'))
+  const imageAttachments = attachments.filter(a => isImageType(a.contentType))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
 
   async function download(part: string, fileName: string) {

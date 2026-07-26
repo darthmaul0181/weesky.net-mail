@@ -116,6 +116,16 @@ describe('useInlineImages', () => {
     expect(mocks.requestBlob).not.toHaveBeenCalled()
   })
 
+  // RFC 2045 makes a MIME type case-insensitive, and this mailbox's server reports "IMAGE/jpeg".
+  it('resolves a part whose content type is upper-cased', async () => {
+    mocks.requestBlob.mockResolvedValue(png('x'))
+
+    render(<Host attachments={[part({ contentType: 'IMAGE/JPEG' })]} html='<img src="cid:logo@mail">' />,
+      { wrapper })
+
+    await waitFor(() => expect(inlined()['logo@mail']).toBeTruthy())
+  })
+
   it('never fetches an inline part the body does not reference', async () => {
     mocks.requestBlob.mockResolvedValue(png('x'))
 

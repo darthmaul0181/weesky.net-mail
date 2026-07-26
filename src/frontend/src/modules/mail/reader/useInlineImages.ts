@@ -4,6 +4,7 @@ import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import type { MailAttachmentInfo } from '../api/mailTypes'
 import { useAccountId } from '../queries'
 import { referencedCids } from './inlineImages'
+import { isImageType } from './mediaType'
 
 const NONE: Record<string, string> = {}
 
@@ -17,17 +18,20 @@ function readAsDataUri(blob: Blob): Promise<string> {
 }
 
 /**
- * The parts worth fetching: referenced by the body, listed on the detail, and an image. A cid
+ * The parts the body displays itself: referenced by it, listed on the detail, and an image. A cid
  * pointing at anything else stays a broken image, the same rule the compose side applies.
+ *
+ * Exported because the attachment row withholds exactly these — a part shown in the body is not
+ * one to offer again — and the two decisions must be one, or a file vanishes from both places.
  */
-function resolveParts(
+export function bodyInlineParts(
   attachments: MailAttachmentInfo[] | undefined, sanitizedHtml: string,
 ): { cid: string; part: string }[] {
   if (!attachments?.length) return []
 
   return referencedCids(sanitizedHtml).flatMap(cid => {
     const entry = attachments.find(attachment =>
-      attachment.contentId === cid && attachment.contentType.startsWith('image/'))
+      attachment.contentId === cid && isImageType(attachment.contentType))
     return entry ? [{ cid, part: entry.part }] : []
   })
 }
@@ -46,7 +50,8 @@ export function useInlineImages(
   sanitizedHtml: string,
 ): Record<string, string> {
   const accountId = useAccountId()
-  const parts = useMemo(() => resolveParts(attachments, sanitizedHtml), [attachments, sanitizedHtml])
+  const parts = useMemo(
+    () => bodyInlineParts(attachments, sanitizedHtml), [attachments, sanitizedHtml])
 
   // Account-scoped like every other key here, so a second linked mailbox cannot serve its own
   // images for the same folder and uid. Message parts are immutable per folder+uid, so the pair

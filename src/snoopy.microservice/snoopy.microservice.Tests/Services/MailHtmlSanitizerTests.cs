@@ -1,4 +1,5 @@
-﻿using weesky.Snoopy.Microservice.Services;
+﻿using System.Text.RegularExpressions;
+using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services;
@@ -134,17 +135,216 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains("linear-gradient", result);
     }
 
-    // A url() in CSS would fetch without consent, bypassing the image-blocking model.
+    // A url() in a property outside the withholding rule would fetch without consent.
     [Theory]
-    [InlineData("<div style=\"background: url(http://evil.example/pix.gif)\">x</div>")]
-    [InlineData("<div style=\"background-image: url(http://evil.example/pix.gif)\">x</div>")]
     [InlineData("<div style=\"border-image: url(http://evil.example/pix.gif)\">x</div>")]
+    [InlineData("<div style=\"list-style-image: url(http://evil.example/pix.gif)\">x</div>")]
     public void Sanitize_NeverKeepsACssUrl(string html)
     {
         var result = _sut.Sanitize(html).Html;
 
         Assert.DoesNotContain("evil.example", result);
         Assert.Contains("x", result);
+    }
+
+    // Withheld like an <img src>: the URL survives inert, out of the CSS, and counts toward the
+    // banner. Nothing fetches until the reader consents.
+    [Fact]
+    public void Sanitize_MovesARemoteBackgroundToDataBlockedBgAndCountsIt()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: url(https://cdn.example/logo.png); background-size: contain\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/logo.png\"", result.Html);
+        Assert.DoesNotContain("url(", result.Html);
+        Assert.Contains("background-size", result.Html);
+    }
+
+    // The shorthand reaches this pass already expanded by Ganss, so quoting is whatever it
+    // serialised; the rule must read every form it can produce.
+    [Fact]
+    public void Sanitize_WithholdsAQuotedBackgroundUrl()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background: url('https://cdn.example/logo.png') center / contain no-repeat #fff\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/logo.png\"", result.Html);
+    }
+
+    // Rule 6(a) applied to the background shorthand: AngleSharp expands `center` and `no-repeat`
+    // into -x/-y longhands, so allowing the base names alone left the restored logo painting at
+    // 0% 0% and tiling across the cell.
+    [Fact]
+    public void Sanitize_KeepsThePositionAndRepeatOfAWithheldBackground()
+    {
+        var style = StyleOf(_sut.Sanitize(
+            "<div style=\"background: url('https://cdn.example/logo.png') center / contain no-repeat #fff\">x</div>").Html);
+
+        Assert.Contains("background-position: center", style);
+        Assert.Contains("background-repeat: no-repeat", style);
+        Assert.Contains("background-size: contain", style);
+        Assert.Contains("background-color: rgba(255, 255, 255, 1)", style);
+    }
+
+    // Today the gradient dies with the image it shares a declaration with.
+    [Fact]
+    public void Sanitize_KeepsAGradientSharingTheDeclarationWithAWithheldLayer()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: linear-gradient(to right, #000, #fff), url(https://cdn.example/l.png)\">x</div>");
+
+        Assert.Contains("linear-gradient", result.Html);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/l.png\"", result.Html);
+    }
+
+    [Fact]
+    public void Sanitize_WithholdsEveryLayerInOrder()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: url(https://a.example/1.png), url(https://b.example/2.png)\">x</div>");
+
+        Assert.Equal(2, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://a.example/1.png https://b.example/2.png\"", result.Html);
+    }
+
+    // A quoted url() can carry a raw space, which the space-separated attribute would read back
+    // as two URLs.
+    [Fact]
+    public void Sanitize_EncodesASpaceInAWithheldBackgroundUrl()
+    {
+        var result = _sut.Sanitize("<div style=\"background-image: url('https://cdn.example/a b.png')\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/a%20b.png\"", result.Html);
+    }
+
+    // The bytes never leave the mailbox, so there is nothing to consent to: the client resolves it.
+    [Fact]
+    public void Sanitize_LeavesACidBackgroundInTheCss()
+    {
+        var result = _sut.Sanitize("<div style=\"background-image: url(cid:logo@mail)\">x</div>");
+
+        Assert.Equal(0, result.BlockedImageCount);
+        Assert.Contains("cid:logo@mail", result.Html);
+        Assert.DoesNotContain("data-blocked-bg", result.Html);
+    }
+
+    // An escape can spell the same function past a naive reader, so the row is not worth an exception.
+    [Fact]
+    public void Sanitize_CullsABackgroundDeclarationCarryingABackslash()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: \\75 rl(https://cdn.example/l.png)\">x</div>");
+
+        Assert.Equal(0, result.BlockedImageCount);
+        Assert.DoesNotContain("cdn.example", result.Html);
+        Assert.DoesNotContain("data-blocked-bg", result.Html);
+    }
+
+    // A `;` is legal in a URL path and in a CSS string, so splitting declarations on it blindly
+    // tore the url() in half and left the halves — a working fetch — in the CSS.
+    [Fact]
+    public void Sanitize_WithholdsABackgroundUrlCarryingASemicolon()
+    {
+        var result = _sut.Sanitize("<div style=\"background-image: url('https://evil.example/a;b.png')\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.DoesNotContain("evil.example", StyleOf(result.Html));
+    }
+
+    [Fact]
+    public void Sanitize_CountsEveryLayerWhenOneCarriesASemicolon()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: url('https://evil.example/1.png;x'), url('https://evil.example/2.png')\">x</div>");
+
+        Assert.Equal(2, result.BlockedImageCount);
+        Assert.DoesNotContain("evil.example", StyleOf(result.Html));
+    }
+
+    // A parenthesis inside a quoted cid: URL used to merge the layers, and the cid branch then
+    // whitelisted the remote one riding along in the merged layer.
+    [Theory]
+    [InlineData("cid:a)b")]
+    [InlineData("cid:a(b")]
+    public void Sanitize_DoesNotLetACidLayerShelterARemoteOne(string cid)
+    {
+        var result = _sut.Sanitize(
+            $"<div style=\"background-image: url('{cid}'), url('https://evil.example/z.png')\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.DoesNotContain("evil.example", StyleOf(result.Html));
+        Assert.Contains("data-blocked-bg=\"https://evil.example/z.png\"", result.Html);
+    }
+
+    // The parenthesis inside the quoted URL made the gradient's own commas read as layer
+    // separators, emitting CSS the browser drops.
+    [Fact]
+    public void Sanitize_KeepsAGradientBesideAUrlCarryingAParenthesis()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: url('https://evil.example/x)y.png'), linear-gradient(to right,#000,#fff)\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.DoesNotContain("evil.example", StyleOf(result.Html));
+        Assert.Contains("linear-gradient(90deg, rgba(0, 0, 0, 1), rgba(255, 255, 255, 1))", StyleOf(result.Html));
+    }
+
+    // Accepted collateral of the escape cull: this declaration used to render, because the CSS
+    // parser resolved the escape before the second pass looked.
+    [Fact]
+    public void Sanitize_LosesAnEscapedDeclarationButKeepsItsNeighbours()
+    {
+        var result = _sut.Sanitize("<div style=\"font-family: \\41 rial; color: red\">x</div>").Html;
+
+        Assert.DoesNotContain("Arial", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("color: rgba(255, 0, 0, 1)", result);
+    }
+
+    // The escape cull reads raw CSS, where a `;` inside a quoted URL would otherwise truncate the
+    // declarations around it.
+    [Fact]
+    public void Sanitize_CullsOnlyTheEscapedDeclarationAroundAQuotedSemicolon()
+    {
+        var result = _sut.Sanitize(
+            "<div style=\"background-image: url('https://cdn.example/a;b.png'); color: red; font-family: \\41 rial\">x</div>");
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/a;b.png\"", result.Html);
+        Assert.Contains("color: rgba(255, 0, 0, 1)", result.Html);
+        Assert.DoesNotContain("Arial", result.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Only our own post-Ganss pass may create the attribute; a message cannot arrive carrying one.
+    [Fact]
+    public void Sanitize_DropsADataBlockedBgTheMessageBrought()
+    {
+        var result = _sut.Sanitize("<div data-blocked-bg=\"https://evil.example/p.gif\">x</div>");
+
+        Assert.DoesNotContain("evil.example", result.Html);
+    }
+
+    // Its twin: a forged data-blocked-src would load on consent without ever being counted, so the
+    // banner's number — the only thing the reader consents against — would understate what it grants.
+    [Fact]
+    public void Sanitize_DropsADataBlockedSrcTheMessageBrought()
+    {
+        var result = _sut.Sanitize("<img data-blocked-src=\"https://evil.example/track.gif\" alt=\"x\">");
+
+        Assert.Equal(0, result.BlockedImageCount);
+        Assert.DoesNotContain("evil.example", result.Html);
+    }
+
+    // The cull targets the url( function. A declaration merely containing those three letters —
+    // a font really named Curly — is not a fetch and must survive.
+    [Fact]
+    public void Sanitize_KeepsADeclarationWhoseValueMerelyContainsTheLettersUrl()
+    {
+        var result = _sut.Sanitize("<div style=\"font-family: Curly\">x</div>").Html;
+
+        Assert.Contains("Curly", result, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -259,4 +459,9 @@ public sealed class MailHtmlSanitizerTests
         Assert.DoesNotContain("script", result, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("alert", result, StringComparison.OrdinalIgnoreCase);
     }
+
+    // A withheld URL is meant to appear in data-blocked-bg; what must never appear is the URL
+    // still inside the CSS, which is the only place a leak can fetch from.
+    private static string StyleOf(string html) =>
+        Regex.Match(html, "style=\"(?<s>[^\"]*)\"").Groups["s"].Value;
 }

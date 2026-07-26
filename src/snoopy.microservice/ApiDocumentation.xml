@@ -2963,6 +2963,21 @@
             </code>
             </remarks>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHtmlSanitizer.WithholdRemoteLayers(System.String,System.Collections.Generic.List{System.String})">
+            <summary>
+            Moves each http(s) layer of a background-image into <paramref name="withheld"/> and returns
+            what is left of the declaration — gradients and cid layers — or null when nothing remains.
+            A layer whose scheme is neither is dropped: nothing to restore is nothing to validate later.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHtmlSanitizer.TrySplitTopLevel(System.String,System.Char,System.Collections.Generic.List{System.String}@)">
+            <summary>
+            Splits on <paramref name="separator"/> at top level: one inside a CSS string, inside url(…)
+            or inside a gradient's parentheses separates nothing. Returns false when the value cannot be
+            tokenised — an unclosed string or unbalanced parentheses — which the caller must cull rather
+            than guess at, since both are how a URL smuggles a separator past a naive reader.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailSearchQueryBuilder">
             <summary>
             Compiles search criteria into a MailKit <see cref="T:MailKit.Search.SearchQuery"/>. Pure: the date is
