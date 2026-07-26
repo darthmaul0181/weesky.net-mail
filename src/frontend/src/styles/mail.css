@@ -1124,7 +1124,9 @@
   color: var(--text);
   cursor: pointer;
 }
-.attachment-viewer-nav:hover:not(:disabled) { background: var(--surface-sunken); }
+/* Same hover as .dropdown-item — see the note there. Both this and .compose-tool rest on
+   --surface (the modal, and .compose-view), so one formula serves all three. */
+.attachment-viewer-nav:hover:not(:disabled) { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 .attachment-viewer-nav:disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
 .attachment-viewer-error { color: var(--danger); }
 
@@ -1363,7 +1365,7 @@
   justify-content: center;
 }
 
-.compose-tool:hover { background: var(--surface-sunken); }
+.compose-tool:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 .compose-tool.is-active { color: var(--badge-count-bg); background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent); }
 
 .compose-toolbar-rule {

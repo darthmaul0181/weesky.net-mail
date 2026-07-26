@@ -210,7 +210,14 @@
   text-align: left;
   cursor: pointer;
 }
-.dropdown-item:hover { background: var(--surface-sunken); }
+/* Not --surface-sunken: it is *darker* than --surface, so in dark mode the hover sank into an
+   already-dark ground at 1.06:1 — the right gesture in light, the wrong one in dark. Mixed off
+   --text instead, so it darkens in light and lightens in dark by construction, with no per-mode
+   value and no new token. Written inline rather than as a :root token on purpose: a custom
+   property declared on :root resolves its var()s against :root, which would be the wrong palette
+   inside the Appearance page's previews. .compose-tool and .attachment-viewer-nav in mail.css
+   carry the same line for the same reason — keep the three in step. */
+.dropdown-item:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 
 .dropdown-rule { height: 1px; border: 0; background: var(--border); margin: 4px 6px; }
 
