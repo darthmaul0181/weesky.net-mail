@@ -1441,8 +1441,20 @@
   background: color-mix(in oklab, var(--surface) 82%, transparent);
 }
 .compose-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-.compose-header .modal-title { flex: 1; min-width: 0; }
-.compose-send { width: auto; padding: 8px 14px; }
+/* The title does not absorb the free space: the actions sit against it instead of at the far right
+   edge: 332px less pointer travel to Send, measured in a 720px composer. Only ✕ keeps that edge. The
+   rule earns its pixel — a bare gap reads as a title that overflowed, where a rule names a
+   boundary, the same job it does between the folder tree's two blocks. */
+.compose-header .modal-title { flex: none; }
+.compose-header .modal-title::after {
+  content: '';
+  width: 1px;
+  height: 20px;
+  margin-left: 14px;
+  background: var(--border);
+}
+.compose-header .modal-close { margin-left: auto; }
+.compose-send { width: auto; padding: 8px 14px; margin-left: 4px; }
 /* Save draft sits beside Send and has to match its height, not the default .btn padding. */
 .compose-header .btn-ghost { padding: 8px 14px; }
 /* Tight header: no per-row margin (the column gap spaces them) and a narrow label so From/To/
