@@ -19,19 +19,31 @@ function cidOf(src: string | null): string | null {
 
 const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html')
 
-/** Bare cid values referenced by <img src="cid:..."> in an html fragment, deduped. */
+/** `url(cid:X)` in a style attribute, quoted either way or bare. */
+const CSS_CID = /url\(\s*(?:"cid:([^"]*)"|'cid:([^']*)'|cid:([^)\s]*))\s*\)/gi
+
+const cidsInStyle = (style: string): string[] =>
+  [...style.matchAll(CSS_CID)].map(match => match[1] ?? match[2] ?? match[3]).filter(Boolean)
+
+const HAS_CID = /cid:/i
+
+/** Bare cid values referenced by <img src="cid:..."> or a css background in an html fragment, deduped. */
 export function referencedCids(html: string): string[] {
   if (!html) return []
 
+  const doc = parse(html)
   const cids = new Set<string>()
-  for (const img of parse(html).querySelectorAll('img')) {
+  for (const img of doc.querySelectorAll('img')) {
     const cid = cidOf(img.getAttribute('src'))
     if (cid) cids.add(cid)
   }
+  for (const styled of doc.querySelectorAll('[style]'))
+    for (const cid of cidsInStyle(styled.getAttribute('style') ?? '')) cids.add(cid)
+
   return [...cids]
 }
 
-/** Replaces each <img src="cid:X"> whose X is in the map with the data: URI; others untouched. */
+/** Replaces each <img src="cid:X"> or css url(cid:X) whose X is in the map with the data: URI; others untouched. */
 export function substituteInlineImages(
   html: string, dataUriByCid: Record<string, string>,
 ): string {
@@ -48,6 +60,22 @@ export function substituteInlineImages(
     // Typed, not merely truthy: a cid named `constructor` resolves to an inherited function.
     if (typeof uri !== 'string') continue
     img.setAttribute('src', uri)
+    substituted = true
+  }
+
+  for (const styled of doc.querySelectorAll('[style]')) {
+    const style = styled.getAttribute('style') ?? ''
+    if (!HAS_CID.test(style)) continue
+
+    const rewritten = style.replace(CSS_CID, (whole, quoted, single, bare) => {
+      const uri = dataUriByCid[quoted ?? single ?? bare]
+      // Quotes/backslashes escaped before re-entering CSS — an unescaped " in the uri would
+      // close the url("...") string early, same gate sanitizeBody.ts applies on its own write.
+      return typeof uri === 'string' ? `url("${uri.replace(/["\\]/g, encodeURIComponent)}")` : whole
+    })
+    if (rewritten === style) continue
+
+    styled.setAttribute('style', rewritten)
     substituted = true
   }
 

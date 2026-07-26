@@ -4,8 +4,10 @@ import { darkenColours, toDarkColour } from './darkenColours'
 describe('toDarkColour', () => {
   // Lightness is inverted; hue and saturation are left alone. That is what keeps a red button
   // red instead of turning it cyan, which is where filter-based inversion goes wrong.
+  // White is asked for as a background here, and black as text, because only the half that needs
+  // flipping is flipped: the other half is already suited to dark mode and stays put.
   it('turns white into the app\'s dark surface, not pure black', () => {
-    expect(toDarkColour('#ffffff')).toBe('#212121')
+    expect(toDarkColour('#ffffff', 'background')).toBe('#212121')
   })
 
   it('turns black into a light grey, not pure white', () => {
@@ -31,17 +33,34 @@ describe('toDarkColour', () => {
   })
 
   it('keeps the alpha channel', () => {
-    expect(toDarkColour('rgba(255, 255, 255, 0.5)')).toBe('rgba(33, 33, 33, 0.5)')
+    expect(toDarkColour('rgba(255, 255, 255, 0.5)', 'background')).toBe('rgba(33, 33, 33, 0.5)')
   })
 
   it.each(['#fff', 'rgb(255,255,255)', 'RGB(255, 255, 255)'])('parses %s', colour => {
-    expect(toDarkColour(colour)).toBe('#212121')
+    expect(toDarkColour(colour, 'background')).toBe('#212121')
+  })
+
+  // Mail is full of these: bgcolor was designed for the sixteen HTML names, and senders still use
+  // them where a hex would do.
+  it.each([
+    ['white', '#ffffff'],
+    ['black', '#000000'],
+    ['red', '#ff0000'],
+    ['silver', '#c0c0c0'],
+  ])('reads the named colour %s', (name, hex) => {
+    expect(toDarkColour(name, 'background')).toBe(toDarkColour(hex, 'background'))
   })
 
   it.each(['transparent', 'inherit', 'currentColor', 'not-a-colour', ''])(
     'leaves %s alone rather than guessing', value => {
       expect(toDarkColour(value)).toBeNull()
     })
+
+  // A hash-less hex is legal in a presentational attribute and nowhere else, so it is rescued
+  // there and only there — see the attribute tests below.
+  it('does not read a hash-less hex as a colour', () => {
+    expect(toDarkColour('FFFFFF')).toBeNull()
+  })
 })
 
 describe('darkenColours', () => {
@@ -74,10 +93,170 @@ describe('darkenColours', () => {
     expect(darkenColours('<p>Bonjour</p>')).toContain('Bonjour')
   })
 
+  // A brand colour on a slab of background is what glows on a dark canvas: an Amazon button came
+  // back a vivid gold. Text keeps its punch — a link that loses its colour stops reading as one.
+  it('damps a saturated background but not the same colour as text', () => {
+    const html = '<div style="background-color: #ffd916; color: #ffd916">x</div>'
+
+    const dark = darkenColours(html)
+    const [background, text] = [...dark.matchAll(/#[0-9a-f]{6}/gi)].map(m => m[0])
+
+    expect(slOf(background).s).toBeLessThan(slOf(text).s)
+    expect(slOf(background).l).toBeLessThan(slOf(text).l)
+    expect(hueOf(...rgbOf(background))).toBeCloseTo(hueOf(...rgbOf(text)), 0)
+  })
+
+  // Measured on a real message: bgcolor="FFFFFF" with no hash. The browser's legacy parsing paints
+  // it white, so leaving it unread left a white slab in the middle of dark mode.
+  it('rescues a hash-less hex in a presentational attribute', () => {
+    const html = '<table><tbody><tr><td bgcolor="FFFFFF">x</td></tr></tbody></table>'
+
+    expect(darkenColours(html)).toContain('bgcolor="#212121"')
+  })
+
+  it('reads a named colour in a presentational attribute', () => {
+    const html = '<table><tbody><tr><td bgcolor="white">x</td></tr></tbody></table>'
+
+    expect(darkenColours(html)).toContain('bgcolor="#212121"')
+  })
+
+  it('reads a named colour in a style attribute', () => {
+    expect(darkenColours('<div style="background-color: white">x</div>')).toContain('#212121')
+  })
+
+  // CSS has no hash-less hex: the browser ignores the declaration, so painting one would invent a
+  // colour the reader was never shown.
+  it('leaves a hash-less hex in a style attribute alone', () => {
+    const html = '<div style="background-color: FFFFFF">x</div>'
+
+    expect(darkenColours(html)).toBe(html)
+  })
+
+  it('treats a bgcolor attribute as a background', () => {
+    const damped = toDarkColour('#ffd916', 'background')!
+
+    const html = '<table><tbody><tr><td bgcolor="#ffd916">x</td></tr></tbody></table>'
+
+    expect(darkenColours(html)).toContain(damped)
+  })
+
+  it('darkens a gradient stop as a background too', () => {
+    const html = '<div style="background-image: linear-gradient(#ffd916, #ffd916)">x</div>'
+
+    expect(darkenColours(html)).toContain(toDarkColour('#ffd916', 'background')!)
+  })
+
+  // The damping is a function of saturation, so a grey is untouched by it.
+  it('leaves a mid grey where it already landed, background or not', () => {
+    expect(toDarkColour('#808080', 'background')).toBe('#808080')
+    expect(toDarkColour('#808080')).toBe('#808080')
+  })
+
+  // A colour already suited to dark mode is left alone: a section the sender drew black was drawn
+  // that way on purpose, and the white logo sitting on it does not follow when we lighten it.
+  it('never lightens a background', () => {
+    expect(toDarkColour('#000000', 'background')).toBe('#000000')
+    expect(toDarkColour('#111111', 'background')).toBe('#111111')
+  })
+
+  it('never darkens a text colour', () => {
+    expect(toDarkColour('#ffffff')).toBe('#ffffff')
+    expect(toDarkColour('#f7d6c8')).toBe('#f7d6c8')
+  })
+
+  // The other half of each pair still flips, which is what keeps every combination readable:
+  // whatever the sender wrote, the result is a dark background under light text.
+  it('still flips the half that needs it', () => {
+    expect(toDarkColour('#000000')).toBe('#e0e0e0')
+    expect(toDarkColour('#ffffff', 'background')).toBe('#212121')
+  })
+
+  // Damping exists to stop a bright slab from glowing. A dark slab never glowed, so it keeps its
+  // own colour rather than being greyed for no reason.
+  it('leaves a dark saturated background completely alone', () => {
+    expect(toDarkColour('#0a1f44', 'background')).toBe('#0a1f44')
+  })
+
+  it('keeps a black section black under its white text', () => {
+    const html = '<table><tbody><tr><td style="background-color: #000000; color: #ffffff">x</td></tr></tbody></table>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('background-color: #000000')
+    expect(dark).toContain('color: #ffffff')
+  })
+
+  // A gradient is a colour wearing an image's clothes. Mail tints a background image by laying a
+  // flat gradient over it, and one such message came back white in dark mode because nothing here
+  // looked inside background-image.
+  it('darkens the colour stops of a gradient', () => {
+    const html = '<div style="background-image: linear-gradient(rgba(246, 246, 246, 1), rgba(246, 246, 246, 1))">x</div>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('linear-gradient(#282828, #282828)')
+    expect(dark).not.toContain('246')
+  })
+
+  it('darkens every stop of a multi-stop gradient', () => {
+    const html = '<div style="background-image: linear-gradient(to right, #ffffff 0%, #000000 100%)">x</div>'
+
+    const dark = darkenColours(html)
+
+    // A stop is a background: white flips to the dark surface, black is already suited and stays.
+    expect(dark).toContain('#212121 0%')
+    expect(dark).toContain('#000000 100%')
+    expect(dark).toContain('to right')
+  })
+
+  it.each([
+    'repeating-linear-gradient',
+    'radial-gradient',
+    'conic-gradient',
+  ])('darkens the stops of a %s too', name => {
+    const html = `<div style="background-image: ${name}(#ffffff, #ffffff)">x</div>`
+
+    expect(darkenColours(html)).toContain(`${name}(#212121, #212121)`)
+  })
+
+  // The one thing this must never touch: a URL is not a colour, and a path can spell one.
+  it('leaves a url in the same value alone, hex in its path included', () => {
+    const html = '<div style="background-image: linear-gradient(#ffffff, #ffffff), url(&quot;https://x.test/a-ffffff.png&quot;)">x</div>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('https://x.test/a-ffffff.png')
+    expect(dark).toContain('linear-gradient(#212121, #212121)')
+  })
+
+  it('leaves a photograph background alone', () => {
+    const html = '<div style="background-image: url(&quot;https://x.test/photo.jpg&quot;)">x</div>'
+
+    expect(darkenColours(html)).toBe(html)
+  })
+
+  it('leaves a stop it cannot read alone', () => {
+    const html = '<div style="background-image: linear-gradient(transparent, currentColor)">x</div>'
+
+    expect(darkenColours(html)).toBe(html)
+  })
+
   it('returns empty for an empty body', () => {
     expect(darkenColours('')).toBe('')
   })
 })
+
+/** Saturation and lightness in HSL, for asserting how far a colour was damped. */
+function slOf(colour: string): { s: number; l: number } {
+  const [r, g, b] = rgbOf(colour).map(c => c / 255)
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return { s: 0, l }
+
+  const d = max - min
+  return { s: l > 0.5 ? d / (2 - max - min) : d / (max + min), l }
+}
 
 /** Reads a hex or rgb() string back into channels, for the hue assertions. */
 function rgbOf(colour: string): [number, number, number] {

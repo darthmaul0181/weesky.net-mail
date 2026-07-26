@@ -42,7 +42,10 @@ internal sealed class UsersRepository : IUsersRepository
             return null;
         }
 
-        return new User($"{match.Value.MailUser.Name}@{match.Value.Domain.Name}");
+        return new User($"{match.Value.MailUser.Name}@{match.Value.Domain.Name}")
+        {
+            FullName = match.Value.MailUser.FullName
+        };
     }
 
     /// <summary>

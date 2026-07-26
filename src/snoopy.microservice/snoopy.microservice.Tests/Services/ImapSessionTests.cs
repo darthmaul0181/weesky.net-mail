@@ -586,4 +586,46 @@ public sealed class ImapSessionTests
         Assert.Null(ImapSession.TrimAngleBrackets(string.Empty));
         Assert.Null(ImapSession.TrimAngleBrackets("   "));
     }
+
+    // ── Which body parts reach the client ────────────────────────────
+    //
+    // Same seam as above: the enumeration itself needs a live FETCH, the decision it makes does
+    // not. A Vaultwarden logo arrives inline, unnamed, with a Content-ID; dropping it left the
+    // reader holding a cid: with nothing to resolve it against.
+
+    private static BodyPartBasic Part(
+        string? contentId = null, string? fileName = null, bool attachment = false) =>
+        new(new ContentType("image", "png"), "1")
+        {
+            ContentId = contentId,
+            ContentDisposition = attachment || fileName != null
+                ? new ContentDisposition(attachment ? "attachment" : "inline") { FileName = fileName }
+                : null
+        };
+
+    [Fact]
+    public void IsListedPart_KeepsAnUnnamedInlinePartCarryingAContentId()
+    {
+        Assert.True(ImapSession.IsListedPart(Part(contentId: "<logo@mail>")));
+    }
+
+    [Fact]
+    public void IsListedPart_KeepsAnAttachmentAndANamedPart()
+    {
+        Assert.True(ImapSession.IsListedPart(Part(attachment: true)));
+        Assert.True(ImapSession.IsListedPart(Part(fileName: "photo.png")));
+    }
+
+    // The message's own text and html carry none of the three, and must not read as attachments.
+    [Fact]
+    public void IsListedPart_DropsAPartThatIsNeitherAttachedNorNamedNorReferenced()
+    {
+        Assert.False(ImapSession.IsListedPart(Part()));
+    }
+
+    [Fact]
+    public void IsListedPart_DropsAPartWhoseContentIdIsEmptyBrackets()
+    {
+        Assert.False(ImapSession.IsListedPart(Part(contentId: "<>")));
+    }
 }

@@ -37,6 +37,31 @@ describe('referencedCids', () => {
   it('reads a cid containing an ampersand as the attribute value, not as markup', () => {
     expect(referencedCids('<img src="cid:a&amp;b@x">')).toEqual(['a&b@x'])
   })
+
+  it('reports a cid referenced from a css background', () => {
+    const html = '<div style="background-image: url(cid:logo@mail)"></div>'
+
+    expect(referencedCids(html)).toEqual(['logo@mail'])
+  })
+
+  it('reports a quoted cid background', () => {
+    const html = `<div style="background-image: url('cid:logo@mail')"></div>`
+
+    expect(referencedCids(html)).toEqual(['logo@mail'])
+  })
+
+  it('deduplicates a cid referenced by both an img and a background', () => {
+    const html = '<img src="cid:logo@mail"><div style="background-image: url(cid:logo@mail)"></div>'
+
+    expect(referencedCids(html)).toEqual(['logo@mail'])
+  })
+
+  // Same reason as the img case: a body writing CID: (or Cid:) references the same part.
+  it('accepts the scheme in any case from a css background', () => {
+    const html = '<div style="background-image: url(CID:Logo@Mail)"></div>'
+
+    expect(referencedCids(html)).toEqual(['Logo@Mail'])
+  })
 })
 
 describe('substituteInlineImages', () => {
@@ -89,5 +114,68 @@ describe('substituteInlineImages', () => {
 
   it('answers an empty string for an empty body', () => {
     expect(substituteInlineImages('', { 'logo@mail': uri })).toBe('')
+  })
+
+  it('substitutes a cid background with the data uri', () => {
+    const html = '<div style="background-size: contain; background-image: url(cid:logo@mail)"></div>'
+
+    const result = substituteInlineImages(html, { 'logo@mail': 'data:image/png;base64,AAA' })
+    // The serialised string legitimately carries &quot; (a literal " inside a double-quoted
+    // HTML attribute must be entity-escaped); re-parse to assert on the decoded style instead.
+    const div = new DOMParser().parseFromString(result, 'text/html').querySelector('div')!
+
+    expect(div.style.backgroundImage).toBe('url("data:image/png;base64,AAA")')
+    expect(div.style.backgroundSize).toBe('contain')
+    expect(result).not.toContain('cid:')
+  })
+
+  it('leaves a background whose cid the map does not carry', () => {
+    const html = '<div style="background-image: url(cid:missing@mail)"></div>'
+
+    expect(substituteInlineImages(html, { 'other@mail': 'data:image/png;base64,AAA' })).toBe(html)
+  })
+
+  // Regression: the `style.includes('cid:')` fast-exit guard was case-sensitive while CSS_CID
+  // (and referencedCids) are not, so a mixed-case scheme was collected but never substituted.
+  it('substitutes a mixed-case cid scheme in a background', () => {
+    const html = '<div style="background-image: url(CID:logo@mail)"></div>'
+
+    const result = substituteInlineImages(html, { 'logo@mail': 'data:image/png;base64,AAA' })
+    const div = new DOMParser().parseFromString(result, 'text/html').querySelector('div')!
+
+    expect(div.style.backgroundImage).toBe('url("data:image/png;base64,AAA")')
+    expect(result).not.toContain('cid:')
+    expect(result).not.toContain('CID:')
+  })
+
+  // Same guard as the img path, now exercised on the background: neither an Object.prototype
+  // member name nor the prototype pointer itself may resolve to a function through the map.
+  it('ignores inherited properties of the map for a background', () => {
+    const html = substituteInlineImages(
+      '<div style="background-image: url(cid:constructor)"></div>'
+      + '<div style="background-image: url(cid:__proto__)"></div>'
+      + '<div style="background-image: url(cid:a@x)"></div>',
+      { 'a@x': uri },
+    )
+    const divs = new DOMParser().parseFromString(html, 'text/html').querySelectorAll('div')
+
+    expect(divs[0].style.backgroundImage).toBe('url("cid:constructor")')
+    expect(divs[1].style.backgroundImage).toBe('url("cid:__proto__")')
+    expect(divs[2].style.backgroundImage).toBe(`url("${uri}")`)
+  })
+
+  // A quote or backslash in the data URI must not break out of the CSS url("...") string —
+  // the same encoding sanitizeBody.ts applies on its own write into a style attribute.
+  it('escapes a quote in the data uri before writing it into css', () => {
+    const hostile = 'data:image/png;base64,AA");background-image:url(https://evil.example/beacon.png);x:url("'
+    const html = '<div style="background-image: url(cid:logo@mail)"></div>'
+
+    const result = substituteInlineImages(html, { 'logo@mail': hostile })
+    const div = new DOMParser().parseFromString(result, 'text/html').querySelector('div')!
+
+    // Pins the exact escaped form: an unescaped quote would close the url("...") string early,
+    // turning the rest into a second, overriding background-image declaration that points at
+    // evil.example instead of the data URI — this exact-string check catches that regression.
+    expect(div.style.backgroundImage).toBe(`url("${hostile.replace(/["\\]/g, encodeURIComponent)}")`)
   })
 })

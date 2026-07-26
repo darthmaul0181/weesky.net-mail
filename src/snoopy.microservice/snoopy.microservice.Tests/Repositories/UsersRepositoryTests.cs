@@ -51,6 +51,18 @@ public sealed class UsersRepositoryTests
         Assert.Equal("weesky.be", user.Domain);
     }
 
+    // The From label and the identity list both read FullName off this call; without it every
+    // outgoing message went out as a bare address.
+    [Fact]
+    public async Task FindByEmail_CarriesTheFullName()
+    {
+        var (repo, _) = CreateSut();
+
+        var user = await repo.FindByEmailAsync(TestEmail);
+
+        Assert.Equal("John Doe", user!.FullName);
+    }
+
     [Fact]
     public async Task FindByEmail_IsCaseInsensitiveForUsername()
     {

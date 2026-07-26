@@ -2720,6 +2720,16 @@
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ApplyThreading(weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail,MimeKit.MimeMessage)">
             <summary>Threading and reply-routing headers — 2c2b's transcription duty on the detail.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.IsListedPart(MailKit.BodyPartBasic)">
+            <summary>
+            Whether a body part belongs on the message's part list. Being an attachment or carrying a
+            file name is not enough to ask for: a logo embedded as <c>Content-Disposition: inline</c>
+            with no file name — how Vaultwarden and others ship theirs — is neither, and dropping it
+            left the reader with a <c>cid:</c> it had nothing to resolve against. A Content-ID is
+            exactly the marker that the body means to display the part, so it earns a place too. What
+            remains excluded is the message's own text and html, which carry none of the three.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.GetMimeMessageAsync(System.String,System.UInt32,System.Threading.CancellationToken)">
             <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
         </member>
@@ -2962,6 +2972,21 @@
             ○ Match the string "TLS".<br/>
             </code>
             </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHtmlSanitizer.WithholdRemoteLayers(System.String,System.Collections.Generic.List{System.String})">
+            <summary>
+            Moves each http(s) layer of a background-image into <paramref name="withheld"/> and returns
+            what is left of the declaration — gradients and cid layers — or null when nothing remains.
+            A layer whose scheme is neither is dropped: nothing to restore is nothing to validate later.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailHtmlSanitizer.TrySplitTopLevel(System.String,System.Char,System.Collections.Generic.List{System.String}@)">
+            <summary>
+            Splits on <paramref name="separator"/> at top level: one inside a CSS string, inside url(…)
+            or inside a gradient's parentheses separates nothing. Returns false when the value cannot be
+            tokenised — an unclosed string or unbalanced parentheses — which the caller must cull rather
+            than guess at, since both are how a URL smuggles a separator past a naive reader.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailSearchQueryBuilder">
             <summary>
