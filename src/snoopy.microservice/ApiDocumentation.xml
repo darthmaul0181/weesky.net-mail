@@ -204,10 +204,14 @@
             <summary>JWT bearer (cookie-backed), the admin policy, and the per-request session pieces.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddFrontendCors(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
-            <summary>
-            The frontend is the only origin allowed, and it must send cookies — both the JWT and the
-            credentials one — so credentials are on and the origin list can never be a wildcard.
-            </summary>
+             <summary>
+             The frontend is the only origin allowed, and it must send cookies — both the JWT and the
+             credentials one — so credentials are on and the origin list can never be a wildcard.
+            
+             The origins live in the environment, not in appsettings: the same build serves prod and
+             dev, and each gets its own list from the systemd unit's EnvironmentFile
+             (<c>Cors__AllowedOrigins__0=…</c>). Locally they come from launchSettings.json.
+             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddCredentialKeyRing(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.AspNetCore.Hosting.IWebHostEnvironment)">
             <summary>
