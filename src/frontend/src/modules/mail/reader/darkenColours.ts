@@ -1,6 +1,8 @@
 ﻿/**
  * Recolours a message for dark mode by inverting each colour's *lightness* and leaving its hue
- * and saturation alone — the approach Dark Reader takes.
+ * alone — the approach Dark Reader takes — under two bounds: a background is never lightened and
+ * a text colour never darkened, and a saturated background is damped. Every pair therefore
+ * converges on a dark background under light text, whichever half the sender declared.
  *
  * A CSS `filter: invert()` was tried first and is the cheap approximation of this. It inverts
  * in RGB, which drags hues across the wheel: a red button came back cyan until a hue-rotate was
@@ -58,8 +60,14 @@ export function toDarkColour(value: string, role: ColourRole = 'text'): string |
   const { h, s, l } = toHsl(r, g, b)
   const background = role === 'background'
   const ceiling = background ? LIGHTEST - s * (LIGHTEST - SATURATED_LIGHTEST) : LIGHTEST
+  const flipped = DARKEST + (1 - l) * (ceiling - DARKEST)
+
+  // A colour already suited to dark mode is left exactly as it is — a background is never
+  // lightened, a text colour never darkened. A section the sender drew black was drawn that way on
+  // purpose, and the white logo sitting on it cannot follow when the slab under it turns pale.
+  const suited = background ? flipped >= l : flipped <= l
   const { r: nr, g: ng, b: nb } = toRgb(
-    h, background ? s * BACKGROUND_SATURATION : s, DARKEST + (1 - l) * (ceiling - DARKEST))
+    h, background && !suited ? s * BACKGROUND_SATURATION : s, suited ? l : flipped)
 
   // Hex, not rgb(): a presentational attribute like bgcolor does not understand rgb() and the
   // browser falls back to its legacy colour parsing, which keeps the hex digits out of

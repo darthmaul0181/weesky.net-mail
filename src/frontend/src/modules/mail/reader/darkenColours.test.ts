@@ -4,8 +4,10 @@ import { darkenColours, toDarkColour } from './darkenColours'
 describe('toDarkColour', () => {
   // Lightness is inverted; hue and saturation are left alone. That is what keeps a red button
   // red instead of turning it cyan, which is where filter-based inversion goes wrong.
+  // White is asked for as a background here, and black as text, because only the half that needs
+  // flipping is flipped: the other half is already suited to dark mode and stays put.
   it('turns white into the app\'s dark surface, not pure black', () => {
-    expect(toDarkColour('#ffffff')).toBe('#212121')
+    expect(toDarkColour('#ffffff', 'background')).toBe('#212121')
   })
 
   it('turns black into a light grey, not pure white', () => {
@@ -31,11 +33,11 @@ describe('toDarkColour', () => {
   })
 
   it('keeps the alpha channel', () => {
-    expect(toDarkColour('rgba(255, 255, 255, 0.5)')).toBe('rgba(33, 33, 33, 0.5)')
+    expect(toDarkColour('rgba(255, 255, 255, 0.5)', 'background')).toBe('rgba(33, 33, 33, 0.5)')
   })
 
   it.each(['#fff', 'rgb(255,255,255)', 'RGB(255, 255, 255)'])('parses %s', colour => {
-    expect(toDarkColour(colour)).toBe('#212121')
+    expect(toDarkColour(colour, 'background')).toBe('#212121')
   })
 
   it.each(['transparent', 'inherit', 'currentColor', 'not-a-colour', ''])(
@@ -101,15 +103,44 @@ describe('darkenColours', () => {
     expect(darkenColours(html)).toContain(toDarkColour('#ffd916', 'background')!)
   })
 
-  // The damping is a function of saturation, so a grey is untouched by it: whites and blacks must
-  // land exactly where they landed before, or every ordinary message shifts.
-  it.each([
-    ['#ffffff', '#212121'],
-    ['#000000', '#e0e0e0'],
-    ['#808080', '#808080'],
-  ])('leaves %s where it already landed, background or not', (colour, expected) => {
-    expect(toDarkColour(colour, 'background')).toBe(expected)
-    expect(toDarkColour(colour)).toBe(expected)
+  // The damping is a function of saturation, so a grey is untouched by it.
+  it('leaves a mid grey where it already landed, background or not', () => {
+    expect(toDarkColour('#808080', 'background')).toBe('#808080')
+    expect(toDarkColour('#808080')).toBe('#808080')
+  })
+
+  // A colour already suited to dark mode is left alone: a section the sender drew black was drawn
+  // that way on purpose, and the white logo sitting on it does not follow when we lighten it.
+  it('never lightens a background', () => {
+    expect(toDarkColour('#000000', 'background')).toBe('#000000')
+    expect(toDarkColour('#111111', 'background')).toBe('#111111')
+  })
+
+  it('never darkens a text colour', () => {
+    expect(toDarkColour('#ffffff')).toBe('#ffffff')
+    expect(toDarkColour('#f7d6c8')).toBe('#f7d6c8')
+  })
+
+  // The other half of each pair still flips, which is what keeps every combination readable:
+  // whatever the sender wrote, the result is a dark background under light text.
+  it('still flips the half that needs it', () => {
+    expect(toDarkColour('#000000')).toBe('#e0e0e0')
+    expect(toDarkColour('#ffffff', 'background')).toBe('#212121')
+  })
+
+  // Damping exists to stop a bright slab from glowing. A dark slab never glowed, so it keeps its
+  // own colour rather than being greyed for no reason.
+  it('leaves a dark saturated background completely alone', () => {
+    expect(toDarkColour('#0a1f44', 'background')).toBe('#0a1f44')
+  })
+
+  it('keeps a black section black under its white text', () => {
+    const html = '<table><tbody><tr><td style="background-color: #000000; color: #ffffff">x</td></tr></tbody></table>'
+
+    const dark = darkenColours(html)
+
+    expect(dark).toContain('background-color: #000000')
+    expect(dark).toContain('color: #ffffff')
   })
 
   // A gradient is a colour wearing an image's clothes. Mail tints a background image by laying a
@@ -129,8 +160,9 @@ describe('darkenColours', () => {
 
     const dark = darkenColours(html)
 
+    // A stop is a background: white flips to the dark surface, black is already suited and stays.
     expect(dark).toContain('#212121 0%')
-    expect(dark).toContain('#e0e0e0 100%')
+    expect(dark).toContain('#000000 100%')
     expect(dark).toContain('to right')
   })
 
