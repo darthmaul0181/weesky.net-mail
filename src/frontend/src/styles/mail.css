@@ -46,13 +46,14 @@
 
 .mail-folders-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
 
-/* The account block, and nothing else: folder creation lives on the settings page. */
+/* The account block, and nothing else: folder creation lives on the settings page.
+   Same token as .folder-separator, for the same reason — both hairlines sit on --folders-bg. */
 .mail-folders-footer {
   flex: none;
   display: flex;
   align-items: center;
   padding: 7px 9px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--folders-item-hover);
 }
 
 .mail-list {
@@ -142,12 +143,16 @@
 
 .folder-row.is-system { font-weight: 600; }
 
-/* Inset, so it reads as a divider inside the list rather than a border on the column. */
+/* Inset, so it reads as a divider inside the list rather than a border on the column.
+   --folders-item-hover, not --border: the latter is calibrated against --surface and lands on
+   --folders-bg here, where in light mode it is a warm hairline on a cool ground at 1.09:1 — the
+   wrong hue as much as the wrong value. Owner's call over the measurement, which has this token
+   slightly behind --border in dark (1.22 vs 1.33) and in classic light. Do not "fix" either way. */
 .folder-separator {
   height: 0;
   margin: 8px 10px;
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--folders-item-hover);
 }
 
 /* Background only — no accent bar. That bar is the message list's language for a row you
