@@ -38,10 +38,27 @@ internal static class SecurityConfiguration
     /// <summary>
     /// The frontend is the only origin allowed, and it must send cookies — both the JWT and the
     /// credentials one — so credentials are on and the origin list can never be a wildcard.
+    ///
+    /// The origins live in the environment, not in appsettings: the same build serves prod and
+    /// dev, and each gets its own list from the systemd unit's EnvironmentFile
+    /// (<c>Cors__AllowedOrigins__0=…</c>). Locally they come from launchSettings.json.
     /// </summary>
     public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration)
     {
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+
+        // There is no valid configuration of this API with no origin: it exists to serve a browser
+        // frontend. Left empty, WithOrigins() refuses every cross-origin request and the webmail
+        // dies with a CORS error in the console that reads like a network fault rather than a
+        // missing variable. Refusing to start names the cause instead — same reason
+        // AddCredentialKeyRing refuses without STATE_DIRECTORY.
+        if (allowedOrigins.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "No CORS origin is configured. Set Cors__AllowedOrigins__0 in the service's " +
+                "EnvironmentFile — for example Cors__AllowedOrigins__0=https://account.mail.weesky.net. " +
+                "Additional origins are Cors__AllowedOrigins__1, __2, and so on.");
+        }
 
         return services.AddCors(options =>
         {
