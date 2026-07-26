@@ -154,11 +154,11 @@ body {
   cursor: not-allowed;
 }
 
-/* Not #fff: in dark mode --action-primary is a light accent (coral, gold, teal), where white
-   text sits at ~2.8:1. --action-primary-fg is the readable foreground each palette declares. */
+/* White, deliberately, and not --action-primary-fg: over dark mode's light accents that token
+   resolves to near-black, which was tried and rejected on look. Owner's call, do not "fix". */
 .btn-primary {
   background: var(--action-primary);
-  color: var(--action-primary-fg);
+  color: #fff;
   width: 100%;
   padding: 10px 16px;
 }
