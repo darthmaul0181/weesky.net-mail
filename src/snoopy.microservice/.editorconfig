@@ -9,16 +9,11 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-# CS8618: Non nullable field _name is not initialized. Consider declare the field as nullable type
-dotnet_diagnostic.CS8618.severity = none
-dotnet_diagnostic.CS8600.severity = none
-dotnet_diagnostic.CS8603.severity = none
-
-# CS8602: Dereference of a possibly null reference.
-dotnet_diagnostic.CS8602.severity = none
-
-# CS8625: Cannot convert null literal to non-nullable reference type.
-dotnet_diagnostic.CS8625.severity = none
-
-# CS8604: Possible null reference argument.
-dotnet_diagnostic.CS8604.severity = none
+# The nullable diagnostics were all suppressed here, which cancelled out <Nullable>enable</Nullable>
+# in the csproj: the annotations stayed, the compiler stopped checking them. They are on.
+dotnet_diagnostic.CS8618.severity = warning
+dotnet_diagnostic.CS8600.severity = warning
+dotnet_diagnostic.CS8602.severity = warning
+dotnet_diagnostic.CS8603.severity = warning
+dotnet_diagnostic.CS8604.severity = warning
+dotnet_diagnostic.CS8625.severity = warning

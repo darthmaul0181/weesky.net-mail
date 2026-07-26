@@ -1,6 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MimeKit;
+using weesky.Snoopy.Microservice.Configuration;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -22,35 +24,37 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public sealed class MailController : ApiBaseController
+public sealed class MailController(
+    IMailFolderRepository folders,
+    IMailMessageRepository messages,
+    IMailCredentialStore credentials,
+    IFolderRoleStore roleStore,
+    IStagedAttachmentStore staged,
+    IMailSender sender,
+    IQuotePreparer quotes,
+    IDraftSaver drafts,
+    ITrustedSenderStore trustedSenders,
+    ILogger<MailController> logger) : ApiBaseController
 {
-    private readonly IMailFolderRepository _folders;
-    private readonly IMailMessageRepository _messages;
-    private readonly IMailCredentialStore _credentials;
-    private readonly IFolderRoleStore _roleStore;
-    private readonly IStagedAttachmentStore _staged;
-    private readonly IMailSender _sender;
-    private readonly IQuotePreparer _quotes;
-    private readonly IDraftSaver _drafts;
-
-    public MailController(
-        IMailFolderRepository folders,
-        IMailMessageRepository messages,
-        IMailCredentialStore credentials,
-        IFolderRoleStore roleStore,
-        IStagedAttachmentStore staged,
-        IMailSender sender,
-        IQuotePreparer quotes,
-        IDraftSaver drafts)
+    /// <summary>
+    /// The caller's mail password, decrypted from the credentials cookie, or false with the
+    /// <paramref name="unauthorized"/> to answer with.
+    ///
+    /// Every mail action opens IMAP as the user, so every one of them starts here. A guard
+    /// rather than an action filter on purpose: the controller tests invoke actions directly
+    /// and no filter would run, so moving the check into the pipeline would move it out of
+    /// the tests that cover it.
+    /// </summary>
+    private bool TryMailPassword(
+        [NotNullWhen(true)] out string? password,
+        [NotNullWhen(false)] out ActionResult? unauthorized)
     {
-        _folders = folders;
-        _messages = messages;
-        _credentials = credentials;
-        _roleStore = roleStore;
-        _staged = staged;
-        _sender = sender;
-        _quotes = quotes;
-        _drafts = drafts;
+        var retrieved = credentials.Retrieve(Request);
+
+        password = retrieved.IsSuccess ? retrieved.Value : null;
+        unauthorized = retrieved.IsSuccess ? null : UnauthorizedEnveloppe(retrieved.Error);
+
+        return retrieved.IsSuccess;
     }
 
     /// <summary>
@@ -69,24 +73,24 @@ public sealed class MailController : ApiBaseController
     private async Task<ActionResult?> RefuseIfSystemFolderAsync(
         string password, string path, string verb, bool includeDescendants, CancellationToken cancellationToken)
     {
-        var tree = await _folders.GetTreeAsync(AuthenticatedUser, password, cancellationToken);
+        var tree = await folders.GetTreeAsync(AuthenticatedUser, password, cancellationToken);
         if (tree.IsFailure)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
+            return BadGatewayEnveloppe(tree.Error);
 
-        var overrides = await _roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+        var overrides = await roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var roleByPath = FolderRoleResolver.Resolve(tree.Value, overrides).RoleByPath;
 
         if (roleByPath.TryGetValue(path, out var role))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                $"This folder is the {role} folder and cannot be {verb}. Point {role} at another folder first."));
+            return BadRequestEnveloppe(
+                $"This folder is the {role} folder and cannot be {verb}. Point {role} at another folder first.");
 
         if (includeDescendants && tree.Value.FindByPath(path) is { } target)
         {
             foreach (var descendant in target.Descendants())
             {
                 if (roleByPath.TryGetValue(descendant.Path, out var childRole))
-                    return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                        $"\"{descendant.Name}\" inside this folder is the {childRole} folder, so deleting it would take {childRole} with it. Point {childRole} at another folder first."));
+                    return BadRequestEnveloppe(
+                        $"\"{descendant.Name}\" inside this folder is the {childRole} folder, so deleting it would take {childRole} with it. Point {childRole} at another folder first.");
             }
         }
 
@@ -107,17 +111,16 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<IReadOnlyList<MailFolderNode>>> GetFolders(CancellationToken cancellationToken)
     {
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _folders.GetTreeAsync(AuthenticatedUser, password.Value, cancellationToken);
+        var result = await folders.GetTreeAsync(AuthenticatedUser, password, cancellationToken);
         if (result.IsFailure)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+            return BadGatewayEnveloppe(result.Error);
 
         // The tree's SpecialUse is the resolution chain's output, not raw discovery: a
         // user override reassigns the role, and the displaced folder shows under its own
         // name (spec § 4.1).
-        var overrides = await _roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+        var overrides = await roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var resolution = FolderRoleResolver.Resolve(result.Value, overrides);
         StampRoles(result.Value, resolution.RoleByPath);
 
@@ -140,14 +143,13 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<string>> CreateFolder(CreateFolderRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
-        if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder name is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (string.IsNullOrWhiteSpace(request.Name)) return BadRequestEnveloppe("A folder name is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _folders.CreateFolderAsync(
-            AuthenticatedUser, password.Value, request.ParentPath ?? string.Empty, request.Name, cancellationToken);
+        var result = await folders.CreateFolderAsync(
+            AuthenticatedUser, password, request.ParentPath ?? string.Empty, request.Name, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
@@ -166,19 +168,18 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<string>> RenameFolder(RenameFolderRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
-        if (string.IsNullOrWhiteSpace(request.Path)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder path is required"));
-        if (string.IsNullOrWhiteSpace(request.NewName)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder name is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (string.IsNullOrWhiteSpace(request.Path)) return BadRequestEnveloppe("A folder path is required");
+        if (string.IsNullOrWhiteSpace(request.NewName)) return BadRequestEnveloppe("A folder name is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
         if (await RefuseIfSystemFolderAsync(
-                password.Value, request.Path, "renamed", includeDescendants: false, cancellationToken) is { } refusal)
+                password, request.Path, "renamed", includeDescendants: false, cancellationToken) is { } refusal)
             return refusal;
 
-        var result = await _folders.RenameFolderAsync(
-            AuthenticatedUser, password.Value, request.Path, request.NewParentPath ?? string.Empty, request.NewName, cancellationToken);
+        var result = await folders.RenameFolderAsync(
+            AuthenticatedUser, password, request.Path, request.NewParentPath ?? string.Empty, request.NewName, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
@@ -197,17 +198,16 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult> DeleteFolder(DeleteFolderRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
-        if (string.IsNullOrWhiteSpace(request.Path)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder path is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (string.IsNullOrWhiteSpace(request.Path)) return BadRequestEnveloppe("A folder path is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
         if (await RefuseIfSystemFolderAsync(
-                password.Value, request.Path, "deleted", includeDescendants: true, cancellationToken) is { } refusal)
+                password, request.Path, "deleted", includeDescendants: true, cancellationToken) is { } refusal)
             return refusal;
 
-        var result = await _folders.DeleteFolderAsync(AuthenticatedUser, password.Value, request.Path, cancellationToken);
+        var result = await folders.DeleteFolderAsync(AuthenticatedUser, password, request.Path, cancellationToken);
 
         return FromResult(result,
             errorStatusCode: StatusCodes.Status502BadGateway,
@@ -231,20 +231,19 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult> SetFolderSubscription(FolderSubscriptionRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
-        if (string.IsNullOrWhiteSpace(request.Path)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder path is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (string.IsNullOrWhiteSpace(request.Path)) return BadRequestEnveloppe("A folder path is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
         // Only hiding is refused: refusing to subscribe would leave a mailbox whose trash
         // another client hid stuck that way.
         if (!request.Subscribed && await RefuseIfSystemFolderAsync(
-                password.Value, request.Path, "hidden", includeDescendants: false, cancellationToken) is { } refusal)
+                password, request.Path, "hidden", includeDescendants: false, cancellationToken) is { } refusal)
             return refusal;
 
-        var result = await _folders.SetSubscriptionAsync(
-            AuthenticatedUser, password.Value, request.Path, request.Subscribed, cancellationToken);
+        var result = await folders.SetSubscriptionAsync(
+            AuthenticatedUser, password, request.Path, request.Subscribed, cancellationToken);
 
         return FromResult(result,
             errorStatusCode: StatusCodes.Status502BadGateway,
@@ -267,14 +266,13 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<IReadOnlyList<FolderRoleEntry>>> GetFolderRoles(CancellationToken cancellationToken)
     {
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var tree = await _folders.GetTreeAsync(AuthenticatedUser, password.Value, cancellationToken);
+        var tree = await folders.GetTreeAsync(AuthenticatedUser, password, cancellationToken);
         if (tree.IsFailure)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
+            return BadGatewayEnveloppe(tree.Error);
 
-        var overrides = await _roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+        var overrides = await roleStore.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var resolution = FolderRoleResolver.Resolve(tree.Value, overrides);
 
         return Ok(resolution.Roles);
@@ -301,44 +299,43 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult> SetFolderRole(SetFolderRoleRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
-        if (!FolderRoles.IsValid(request.Role)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Unknown folder role"));
-        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder path is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (!FolderRoles.IsValid(request.Role)) return BadRequestEnveloppe("Unknown folder role");
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder path is required");
         if (string.Equals(request.FolderPath, "INBOX", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The inbox cannot be assigned a role"));
+            return BadRequestEnveloppe("The inbox cannot be assigned a role");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var status = await _folders.GetFolderStatusAsync(AuthenticatedUser, password.Value, request.FolderPath, cancellationToken);
+        var status = await folders.GetFolderStatusAsync(AuthenticatedUser, password, request.FolderPath, cancellationToken);
         if (status.IsFailure)
         {
             return status.Error == ImapSession.FolderNotFound
-                ? NotFound(ResultEnveloppe.CreateErrorEnveloppe(status.Error))
-                : StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(status.Error));
+                ? NotFoundEnveloppe(status.Error)
+                : BadGatewayEnveloppe(status.Error);
         }
 
         if (!status.Value.Selectable)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("This folder cannot hold messages"));
+            return BadRequestEnveloppe("This folder cannot hold messages");
 
         var userId = AuthenticatedUser.WebmailUid;
-        var overrides = await _roleStore.GetAsync(userId, cancellationToken);
+        var overrides = await roleStore.GetAsync(userId, cancellationToken);
 
         // Guard against the resolver's output, not the raw rows. A stored row whose folder
         // no longer resolves holds nothing — the resolver reports it stale and the Settings
         // picker offers that folder again — so a raw-row check rejected exactly the folder
         // the UI had just offered. The two must read the same data the same way.
-        var tree = await _folders.GetTreeAsync(AuthenticatedUser, password.Value, cancellationToken);
+        var tree = await folders.GetTreeAsync(AuthenticatedUser, password, cancellationToken);
         if (tree.IsFailure)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(tree.Error));
+            return BadGatewayEnveloppe(tree.Error);
 
         var holder = FolderRoleResolver.Resolve(tree.Value, overrides).Roles.FirstOrDefault(
             e => e.Provenance == "override" && e.FolderPath == request.FolderPath && e.Role != request.Role);
         if (holder != null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                $"This folder is already assigned to {holder.Role}. Set {holder.Role} back to automatic, or point it at another folder, first."));
+            return BadRequestEnveloppe(
+                $"This folder is already assigned to {holder.Role}. Set {holder.Role} back to automatic, or point it at another folder, first.");
 
-        await _roleStore.UpsertAsync(new FolderRoleOverride
+        await roleStore.UpsertAsync(new FolderRoleOverride
         {
             UserId = userId,
             Role = request.Role!,
@@ -362,9 +359,9 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> ClearFolderRole([FromQuery] string? role, CancellationToken cancellationToken)
     {
-        if (!FolderRoles.IsValid(role)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Unknown folder role"));
+        if (!FolderRoles.IsValid(role)) return BadRequestEnveloppe("Unknown folder role");
 
-        await _roleStore.DeleteAsync(AuthenticatedUser.WebmailUid, role!, cancellationToken);
+        await roleStore.DeleteAsync(AuthenticatedUser.WebmailUid, role!, cancellationToken);
         return NoContent();
     }
 
@@ -391,16 +388,15 @@ public sealed class MailController : ApiBaseController
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(folder)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
-        if (page < 0) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Page must not be negative"));
+        if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
+        if (page < 0) return BadRequestEnveloppe("Page must not be negative");
 
         // An unbounded page size lets one request pull an entire mailbox.
-        if (pageSize is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Page size must be between 1 and 200"));
+        if (pageSize is < 1 or > 200) return BadRequestEnveloppe("Page size must be between 1 and 200");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.ListAsync(AuthenticatedUser, password.Value, folder, page, pageSize, cancellationToken);
+        var result = await messages.ListAsync(AuthenticatedUser, password, folder, page, pageSize, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
@@ -428,19 +424,46 @@ public sealed class MailController : ApiBaseController
         [FromQuery] uint uid,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(folder)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+        if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.GetAsync(AuthenticatedUser, password.Value, folder, uid, cancellationToken);
+        var result = await messages.GetAsync(AuthenticatedUser, password, folder, uid, cancellationToken);
 
         if (result.IsFailure && result.Error == ImapSession.MessageNotFound)
         {
-            return NotFound(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+            return NotFoundEnveloppe(result.Error);
+        }
+
+        if (result.IsSuccess)
+        {
+            await RecordSenderUseAsync(result.Value.FromAddress, cancellationToken);
         }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Keeps an approved sender's entry alive while it is still earning its place. Does nothing
+    /// for a sender nobody approved, and never fails the read: bookkeeping degrades, it does not
+    /// take the caller's message down with it.
+    /// </summary>
+    private async Task RecordSenderUseAsync(string? fromAddress, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(fromAddress)) return;
+
+        try
+        {
+            await trustedSenders.TouchAsync(AuthenticatedUser.WebmailUid, fromAddress, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Switching messages quickly aborts the read; that is routine, not a failure.
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not record the trusted-sender use for {Address}", fromAddress);
+        }
     }
 
     /// <summary>
@@ -468,13 +491,12 @@ public sealed class MailController : ApiBaseController
         [FromQuery] string part,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(folder)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
-        if (string.IsNullOrWhiteSpace(part)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A part is required"));
+        if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
+        if (string.IsNullOrWhiteSpace(part)) return BadRequestEnveloppe("A part is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.GetAttachmentAsync(AuthenticatedUser, password.Value, folder, uid, part, cancellationToken);
+        var result = await messages.GetAttachmentAsync(AuthenticatedUser, password, folder, uid, part, cancellationToken);
 
         if (result.IsFailure)
         {
@@ -505,14 +527,13 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult> SetMessageFlags(SetMessageFlagsRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
-        if (request.Uids.Count is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Uids must hold between 1 and 200 entries"));
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder is required");
+        if (request.Uids.Count is < 1 or > 200) return BadRequestEnveloppe("Uids must hold between 1 and 200 entries");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.SetFlagsAsync(
-            AuthenticatedUser, password.Value, request.FolderPath, request.Uids, request.Flag, request.Value, cancellationToken);
+        var result = await messages.SetFlagsAsync(
+            AuthenticatedUser, password, request.FolderPath, request.Uids, request.Flag, request.Value, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
@@ -549,20 +570,19 @@ public sealed class MailController : ApiBaseController
 
     private async Task<ActionResult> MoveOrCopy(MoveMessagesRequest request, bool copy, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
-        if (request.Uids.Count is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Uids must hold between 1 and 200 entries"));
-        if (string.IsNullOrWhiteSpace(request.TargetFolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A target folder is required"));
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder is required");
+        if (request.Uids.Count is < 1 or > 200) return BadRequestEnveloppe("Uids must hold between 1 and 200 entries");
+        if (string.IsNullOrWhiteSpace(request.TargetFolderPath)) return BadRequestEnveloppe("A target folder is required");
         if (string.Equals(request.FolderPath, request.TargetFolderPath, StringComparison.Ordinal))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder must differ from the source folder"));
+            return BadRequestEnveloppe("The target folder must differ from the source folder");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.MoveOrCopyAsync(
-            AuthenticatedUser, password.Value, request.FolderPath, request.Uids, request.TargetFolderPath, copy, cancellationToken);
+        var result = await messages.MoveOrCopyAsync(
+            AuthenticatedUser, password, request.FolderPath, request.Uids, request.TargetFolderPath, copy, cancellationToken);
 
         if (result.IsFailure && result.Error == ImapSession.TargetNotSelectable)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder cannot hold messages"));
+            return BadRequestEnveloppe("The target folder cannot hold messages");
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
@@ -583,13 +603,12 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult> DeleteMessages(DeleteMessagesRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
-        if (request.Uids.Count is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Uids must hold between 1 and 200 entries"));
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder is required");
+        if (request.Uids.Count is < 1 or > 200) return BadRequestEnveloppe("Uids must hold between 1 and 200 entries");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.DeleteAsync(AuthenticatedUser, password.Value, request.FolderPath, request.Uids, cancellationToken);
+        var result = await messages.DeleteAsync(AuthenticatedUser, password, request.FolderPath, request.Uids, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
@@ -609,19 +628,18 @@ public sealed class MailController : ApiBaseController
     public async Task<ActionResult> EmptyFolder(EmptyFolderRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.FolderPath))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+            return BadRequestEnveloppe("A folder is required");
         if (!string.IsNullOrWhiteSpace(request.TargetFolderPath)
             && string.Equals(request.FolderPath, request.TargetFolderPath, StringComparison.Ordinal))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder must differ from the source folder"));
+            return BadRequestEnveloppe("The target folder must differ from the source folder");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.EmptyAsync(
-            AuthenticatedUser, password.Value, request.FolderPath, request.TargetFolderPath, cancellationToken);
+        var result = await messages.EmptyAsync(
+            AuthenticatedUser, password, request.FolderPath, request.TargetFolderPath, cancellationToken);
 
         if (result.IsFailure && result.Error == ImapSession.TargetNotSelectable)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("The target folder cannot hold messages"));
+            return BadRequestEnveloppe("The target folder cannot hold messages");
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway, successStatusCode: StatusCodes.Status204NoContent);
     }
@@ -644,22 +662,21 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<MailSearchPage>> SearchMessages(SearchMessagesRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
-        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
-        if (request.Page < 0) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Page must not be negative"));
-        if (request.PageSize is < 1 or > 200) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Page size must be between 1 and 200"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder is required");
+        if (request.Page < 0) return BadRequestEnveloppe("Page must not be negative");
+        if (request.PageSize is < 1 or > 200) return BadRequestEnveloppe("Page size must be between 1 and 200");
 
         var criteria = new MailSearchCriteria(
             request.Quick, request.From, request.To, request.Subject, request.Text,
             request.SinceDays, request.Unread, request.Flagged, request.HasAttachment);
         if (!MailSearchQueryBuilder.HasAnyCriterion(criteria))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one search criterion is required"));
+            return BadRequestEnveloppe("At least one search criterion is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _messages.SearchAsync(
-            AuthenticatedUser, password.Value, request.FolderPath, request.AllFolders,
+        var result = await messages.SearchAsync(
+            AuthenticatedUser, password, request.FolderPath, request.AllFolders,
             criteria, request.Page, request.PageSize, cancellationToken);
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
@@ -668,26 +685,27 @@ public sealed class MailController : ApiBaseController
     /// <summary>
     /// Stages one outgoing attachment. Files upload as they are added — the Gmail/Rainloop
     /// model — and Send references the returned ids. No IMAP involved, so no credentials
-    /// cookie is read. Kestrel's body cap is disabled: the store enforces the configured
-    /// limit itself while streaming.
+    /// cookie is read. The body is capped at the configured message size before model binding
+    /// (<see cref="AttachmentSizeLimitFilter"/>), and the store re-checks it while streaming.
     /// </summary>
     /// <param name="file">the uploaded file</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">Id and metadata of the staged file</response>
     /// <response code="400">No file, file over the limit, or account staging cap reached</response>
     /// <response code="401">Not authenticated</response>
+    /// <response code="413">The request body is over the configured message size</response>
     [HttpPost("Attachments")]
-    [DisableRequestSizeLimit]
+    [ServiceFilter(typeof(AttachmentSizeLimitFilter))]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<StagedAttachmentInfo>> UploadAttachment(IFormFile? file, CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A file is required"));
+            return BadRequestEnveloppe("A file is required");
 
         await using var content = file.OpenReadStream();
-        var result = await _staged.SaveAsync(
+        var result = await staged.SaveAsync(
             AuthenticatedUser.WebmailUid.ToString(), file.FileName, file.ContentType, content, cancellationToken);
 
         return FromResult(result);
@@ -705,7 +723,7 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult DeleteAttachment(Guid id)
     {
-        _staged.Delete(AuthenticatedUser.WebmailUid.ToString(), id);
+        staged.Delete(AuthenticatedUser.WebmailUid.ToString(), id);
         return NoContent();
     }
 
@@ -725,8 +743,8 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult GetStagedAttachment(Guid id)
     {
-        var result = _staged.Open(AuthenticatedUser.WebmailUid.ToString(), id);
-        if (result.IsFailure) return NotFound(ResultEnveloppe.CreateErrorEnveloppe("Attachment not found"));
+        var result = staged.Open(AuthenticatedUser.WebmailUid.ToString(), id);
+        if (result.IsFailure) return NotFoundEnveloppe("Attachment not found");
 
         Response.Headers.XContentTypeOptions = "nosniff";
         try
@@ -737,7 +755,7 @@ public sealed class MailController : ApiBaseController
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             // Vanished between Open and read (TTL sweep / concurrent DELETE).
-            return NotFound(ResultEnveloppe.CreateErrorEnveloppe("Attachment not found"));
+            return NotFoundEnveloppe("Attachment not found");
         }
     }
 
@@ -763,16 +781,15 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SendMessageResult>> SendMessage(SendMessageRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
 
         var invalid = NormalizeOutgoing(request, requireRecipient: true, out var normalized);
         if (invalid != null) return invalid;
         request = normalized;
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _sender.SendAsync(AuthenticatedUser, password.Value, request, cancellationToken);
+        var result = await sender.SendAsync(AuthenticatedUser, password, request, cancellationToken);
 
         if (result.IsFailure)
         {
@@ -805,7 +822,7 @@ public sealed class MailController : ApiBaseController
     public async Task<ActionResult<PreparedQuote>> PrepareQuote(PrepareQuoteRequest request, CancellationToken cancellationToken)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Folder))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+            return BadRequestEnveloppe("A folder is required");
 
         QuotePurpose? purpose = request.Purpose switch
         {
@@ -815,24 +832,23 @@ public sealed class MailController : ApiBaseController
             _ => null,
         };
         if (purpose == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Purpose must be reply, forward or editAsNew"));
+            return BadRequestEnveloppe("Purpose must be reply, forward or editAsNew");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var message = await _messages.GetMimeMessageAsync(
-            AuthenticatedUser, password.Value, request.Folder, request.Uid, cancellationToken);
+        var message = await messages.GetMimeMessageAsync(
+            AuthenticatedUser, password, request.Folder, request.Uid, cancellationToken);
         if (message.IsFailure && message.Error == ImapSession.MessageNotFound)
-            return NotFound(ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+            return NotFoundEnveloppe(message.Error);
         if (message.IsFailure)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+            return BadGatewayEnveloppe(message.Error);
 
-        var prepared = await _quotes.PrepareAsync(
+        var prepared = await quotes.PrepareAsync(
             AuthenticatedUser.WebmailUid.ToString(), message.Value, purpose.Value, cancellationToken);
 
         // A failure here is the staging caps talking (file size / account quota): 400, actionable.
         if (prepared.IsFailure)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(prepared.Error));
+            return BadRequestEnveloppe(prepared.Error);
 
         return Ok(prepared.Value);
     }
@@ -857,25 +873,24 @@ public sealed class MailController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SavedDraft>> SaveDraft(SaveDraftRequest request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+        if (request == null) return BadRequestEnveloppe("Request body is required");
 
         // No recipient gate here: an empty or recipient-less draft is valid, unlike a send.
         var invalid = NormalizeOutgoing(request, requireRecipient: false, out var normalized);
         if (invalid != null) return invalid;
         request = (SaveDraftRequest)normalized;
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await _drafts.SaveAsync(AuthenticatedUser, password.Value, request, cancellationToken);
+        var result = await drafts.SaveAsync(AuthenticatedUser, password, request, cancellationToken);
 
         if (result.IsFailure)
         {
             var refused = RefusedBuild(result.Error, request.FromAddress);
             if (refused != null) return refused;
             if (result.Error == IDraftSaver.NoDraftsFolder)
-                return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(
-                    "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list."));
+                return BadGatewayEnveloppe(
+                    "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list.");
         }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
@@ -893,21 +908,28 @@ public sealed class MailController : ApiBaseController
     private ActionResult? NormalizeOutgoing(
         SendMessageRequest request, bool requireRecipient, out SendMessageRequest normalized)
     {
-        normalized = request with { To = request.To ?? [], Cc = request.Cc ?? [], Bcc = request.Bcc ?? [], References = request.References ?? [] };
+        normalized = request with
+        {
+            To = request.To ?? [],
+            Cc = request.Cc ?? [],
+            Bcc = request.Bcc ?? [],
+            References = request.References ?? [],
+            AttachmentIds = request.AttachmentIds ?? []
+        };
         if (requireRecipient && normalized.To.Count == 0)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("At least one recipient is required"));
+            return BadRequestEnveloppe("At least one recipient is required");
 
         foreach (var address in normalized.To.Concat(normalized.Cc).Concat(normalized.Bcc))
         {
             if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"\"{address}\" is not a valid email address"));
+                return BadRequestEnveloppe($"\"{address}\" is not a valid email address");
         }
 
         if (!string.IsNullOrWhiteSpace(normalized.FromAddress))
         {
             if (!MailboxAddress.TryParse(RecipientAddressParser.Options, normalized.FromAddress, out var from))
-                return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                    $"\"{normalized.FromAddress}\" is not a valid email address"));
+                return BadRequestEnveloppe(
+                    $"\"{normalized.FromAddress}\" is not a valid email address");
             normalized = normalized with { FromAddress = from.Address };
         }
 
@@ -922,11 +944,11 @@ public sealed class MailController : ApiBaseController
     private ActionResult? RefusedBuild(string error, string? fromAddress)
     {
         if (error == IOutgoingMessageFactory.UnknownAttachment)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                "An attachment is no longer available; remove it and attach it again"));
+            return BadRequestEnveloppe(
+                "An attachment is no longer available; remove it and attach it again");
         if (error == IOutgoingMessageFactory.ForbiddenFrom)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(
-                $"Sending from \"{fromAddress}\" is not allowed on this account"));
+            return BadRequestEnveloppe(
+                $"Sending from \"{fromAddress}\" is not allowed on this account");
         return null;
     }
 
@@ -953,24 +975,23 @@ public sealed class MailController : ApiBaseController
     public async Task<ActionResult<OpenedDraft>> OpenDraft(OpenDraftRequest request, CancellationToken cancellationToken)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Folder))
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("A folder is required"));
+            return BadRequestEnveloppe("A folder is required");
 
-        var password = _credentials.Retrieve(Request);
-        if (password.IsFailure) return Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(password.Error));
+        if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var message = await _messages.GetMimeMessageAsync(
-            AuthenticatedUser, password.Value, request.Folder, request.Uid, cancellationToken);
+        var message = await messages.GetMimeMessageAsync(
+            AuthenticatedUser, password, request.Folder, request.Uid, cancellationToken);
         if (message.IsFailure && message.Error == ImapSession.MessageNotFound)
-            return NotFound(ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+            return NotFoundEnveloppe(message.Error);
         if (message.IsFailure)
-            return StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message.Error));
+            return BadGatewayEnveloppe(message.Error);
 
-        var prepared = await _quotes.PrepareAsync(
+        var prepared = await quotes.PrepareAsync(
             AuthenticatedUser.WebmailUid.ToString(), message.Value, QuotePurpose.EditAsNew, cancellationToken);
 
         // A failure here is the staging caps talking (file size / account quota): 400, actionable.
         if (prepared.IsFailure)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(prepared.Error));
+            return BadRequestEnveloppe(prepared.Error);
 
         return Ok(ToOpenedDraft(message.Value, prepared.Value));
     }

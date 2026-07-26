@@ -195,6 +195,19 @@ export default function GeneralPage() {
             </p>
           )}
 
+          {/* Disabled until Contacts exists. No preference key is declared for it: nothing can
+              write one while the row is disabled, and a registry entry nothing can reach is dead
+              code with dead validation. When Contacts ships this becomes a real key. */}
+          <ToggleRow
+            id="trust-contacts"
+            label="Trust my contacts"
+            checked={false}
+            disabled
+            onChange={() => {}}
+          />
+
+          <p className="settings-note">Available once Contacts ships.</p>
+
           <ToggleRow
             id="show-spam-score"
             label="Show the spam score in the message reader"

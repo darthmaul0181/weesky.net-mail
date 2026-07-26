@@ -5,7 +5,7 @@ namespace weesky.Snoopy.Microservice.Repositories;
 
 internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailUserStore
 {
-    public async Task<Guid> RegisterLoginAsync(string email, CancellationToken cancellationToken)
+    public async Task<WebmailAccount> RegisterLoginAsync(string email, CancellationToken cancellationToken)
     {
         var canonical = Canonical(email);
         var now = DateTime.UtcNow;
@@ -16,15 +16,22 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
         {
             existing.LastLoginDate = now;
             await context.SaveChangesAsync(cancellationToken);
-            return existing.Id;
+            return Account(existing);
         }
 
-        var row = new WebmailUser { Id = Guid.NewGuid(), Email = canonical, CreationDate = now, LastLoginDate = now };
+        var row = new WebmailUser
+        {
+            Id = Guid.NewGuid(),
+            Email = canonical,
+            SecurityStamp = Guid.NewGuid(),
+            CreationDate = now,
+            LastLoginDate = now
+        };
         context.Users.Add(row);
         try
         {
             await context.SaveChangesAsync(cancellationToken);
-            return row.Id;
+            return Account(row);
         }
         catch (DbUpdateException)
         {
@@ -34,8 +41,34 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
                 .FirstAsync(u => u.Email == canonical, cancellationToken);
             winner.LastLoginDate = now;
             await context.SaveChangesAsync(cancellationToken);
-            return winner.Id;
+            return Account(winner);
         }
+    }
+
+    public async Task<WebmailAccount?> FindByEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        var canonical = Canonical(email);
+        var row = await context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Email == canonical, cancellationToken);
+
+        return row is null ? null : Account(row);
+    }
+
+    public async Task<Guid> RotateSecurityStampAsync(string email, CancellationToken cancellationToken)
+    {
+        var canonical = Canonical(email);
+        var row = await context.Users
+            .FirstOrDefaultAsync(u => u.Email == canonical, cancellationToken);
+
+        // No row means no token was ever issued for this account, so there is nothing to revoke.
+        // Answering with a fresh value anyway keeps the caller's contract simple, and one that
+        // matches nothing stored is refused on the next request rather than trusted.
+        if (row is null) return Guid.NewGuid();
+
+        row.SecurityStamp = Guid.NewGuid();
+        await context.SaveChangesAsync(cancellationToken);
+
+        return row.SecurityStamp;
     }
 
     public async Task DeleteByEmailAsync(string email, CancellationToken cancellationToken)
@@ -48,6 +81,8 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
         context.Users.Remove(existing);
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    private static WebmailAccount Account(WebmailUser row) => new(row.Id, row.SecurityStamp);
 
     private static string Canonical(string email) => email.Trim().ToLowerInvariant();
 }

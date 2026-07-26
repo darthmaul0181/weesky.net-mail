@@ -1,25 +1,25 @@
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
 namespace weesky.Snoopy.Microservice.Authentication.Services;
 
+/// <summary>
+/// Builds the signed JWT the API authenticates with.
+///
+/// On <see cref="JsonWebTokenHandler"/>, not the legacy <c>JwtSecurityTokenHandler</c>: the bearer
+/// middleware already validates with the former, so writing with the latter left two JWT stacks in
+/// one service. Claim types go out verbatim — neither handler rewrites them here — so the Upn/Dns
+/// claims the token carries are the ones validation looks for.
+/// </summary>
 public sealed class TokenBuilder
 {
-    #region Members
-    private string _issuer;
-    private string _audience;
-    private DateTime _expires;
-    private SigningCredentials _credentials;
-    private SymmetricSecurityKey _key;
-    private List<Claim> _claims;
-    #endregion
-
-    public TokenBuilder()
-    {
-        _claims = new List<Claim>();
-    }
+    private readonly List<Claim> _claims = [];
+    private string? _issuer;
+    private string? _audience;
+    private DateTime? _expires;
+    private SigningCredentials? _credentials;
 
     public TokenBuilder AddClaims(params Claim[] claims)
     {
@@ -59,20 +59,25 @@ public sealed class TokenBuilder
 
     public TokenBuilder AddKey(string key)
     {
-        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
-        _credentials = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256);
+        var material = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        _credentials = new SigningCredentials(material, SecurityAlgorithms.HmacSha256);
 
         return this;
     }
 
-    public JwtSecurityToken Build()
+    /// <summary>The serialized token. This handler emits "iat" and "nbf" alongside "exp".</summary>
+    public string Build()
     {
-        return new JwtSecurityToken(
-            issuer: _issuer,
-            audience: _audience,
-            claims: _claims,
-            expires: _expires,
-            signingCredentials: _credentials
-        );
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = _issuer,
+            Audience = _audience,
+            Subject = new ClaimsIdentity(_claims),
+            SigningCredentials = _credentials
+        };
+
+        if (_expires is { } expires) descriptor.Expires = expires;
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 }

@@ -11,7 +11,7 @@ public sealed class AdminRequirementHandlerTests
 {
     private readonly Mock<IAdminRepository> _repo = new();
 
-    private static ClaimsPrincipal CreatePrincipal(string username = null, string domain = null)
+    private static ClaimsPrincipal CreatePrincipal(string? username = null, string? domain = null)
     {
         var claims = new List<Claim>();
         if (username != null) claims.Add(new Claim(ClaimTypes.Upn, username));

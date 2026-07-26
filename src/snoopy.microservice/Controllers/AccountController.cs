@@ -1,6 +1,10 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using weesky.Snoopy.Microservice.Authentication;
+using weesky.Snoopy.Microservice.Authentication.Models;
+using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
@@ -10,16 +14,15 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public sealed class AccountController : ApiBaseController
+public sealed class AccountController(
+    IUsersRepository usersRepository,
+    IDovecotQuotaClient dovecotQuotaClient,
+    IMailCredentialStore credentials,
+    IWebmailUserStore webmailUsers,
+    ISessionGuard sessions,
+    ITokenManager tokens,
+    IOptions<TokenConstants> tokenConstants) : ApiBaseController
 {
-    private readonly IUsersRepository _usersRepository;
-    private readonly IDovecotQuotaClient _dovecotQuotaClient;
-
-    public AccountController(IUsersRepository usersRepository, IDovecotQuotaClient dovecotQuotaClient)
-    {
-        _usersRepository = usersRepository;
-        _dovecotQuotaClient = dovecotQuotaClient;
-    }
 
     /// <summary>
     /// Returns information about the authenticated user account
@@ -33,7 +36,7 @@ public sealed class AccountController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AccountInfo>> GetAccountInfo()
     {
-        Result<AccountInfo> result = await _usersRepository.GetAccountInfoAsync(AuthenticatedUser);
+        Result<AccountInfo> result = await usersRepository.GetAccountInfoAsync(AuthenticatedUser);
         return FromResult(result, errorStatusCode: StatusCodes.Status404NotFound);
     }
 
@@ -49,7 +52,7 @@ public sealed class AccountController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<Quota>> GetQuota(CancellationToken cancellationToken)
     {
-        Result<Quota> result = await _dovecotQuotaClient.GetQuotaAsync(AuthenticatedUser, cancellationToken);
+        Result<Quota> result = await dovecotQuotaClient.GetQuotaAsync(AuthenticatedUser, cancellationToken);
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
 
@@ -65,14 +68,21 @@ public sealed class AccountController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<IReadOnlyList<string>>> GetFolders(CancellationToken cancellationToken)
     {
-        Result<IReadOnlyList<string>> result = await _dovecotQuotaClient.GetMailboxesAsync(AuthenticatedUser, cancellationToken);
+        Result<IReadOnlyList<string>> result = await dovecotQuotaClient.GetMailboxesAsync(AuthenticatedUser, cancellationToken);
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
 
     /// <summary>
     /// Change the mailbox password
     /// </summary>
+    /// <remarks>
+    /// The credentials cookie carries the password every mail endpoint opens IMAP with, so it
+    /// is re-issued here. Left alone it would keep the superseded password — and the sliding
+    /// session would keep renewing it — leaving a live session whose every mail action fails
+    /// authentication for the rest of the token's lifetime.
+    /// </remarks>
     /// <param name="secretChange">the new secret</param>
+    /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Secret changed successfully</response>
     /// <response code="400">Wrong credentials</response>
     /// <response code="401">Unauthenticated user</response>
@@ -80,9 +90,32 @@ public sealed class AccountController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult> ChangePassword(SecretChange secretChange)
+    public async Task<ActionResult> ChangePassword(SecretChange secretChange, CancellationToken cancellationToken)
     {
-        Result result = await _usersRepository.ChangePasswordAsync(AuthenticatedUser, secretChange.NewPassword, secretChange.OldPassword);
+        Result result = await usersRepository.ChangePasswordAsync(AuthenticatedUser, secretChange.NewPassword, secretChange.OldPassword);
+
+        if (result.IsSuccess)
+        {
+            // Rotating cuts every session of this account, which is the point — a password is
+            // changed precisely when the other ones are no longer wanted. It also cuts this one,
+            // so the caller is handed a fresh pair of cookies in the same response; without that
+            // the user would sign themselves out by changing their password.
+            var stamp = await webmailUsers.RotateSecurityStampAsync(AuthenticatedUser.Email, cancellationToken);
+            sessions.Forget(AuthenticatedUser.Email);
+
+            var renewed = new User(AuthenticatedUser.Email)
+            {
+                WebmailUid = AuthenticatedUser.WebmailUid,
+                SecurityStamp = stamp
+            };
+            var token = tokens.Generate(renewed);
+            if (!string.IsNullOrEmpty(token.Token))
+                Response.WriteAuthCookie(tokenConstants.Value, token.Token);
+
+            credentials.Store(Response, secretChange.NewPassword,
+                TimeSpan.FromMinutes(tokenConstants.Value.ExpiryInMinutes));
+        }
+
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 
@@ -99,7 +132,7 @@ public sealed class AccountController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> ChangeFullName(FullNameChange fullNameChange)
     {
-        Result result = await _usersRepository.ChangeFullNameAsync(AuthenticatedUser, fullNameChange.FullName);
+        Result result = await usersRepository.ChangeFullNameAsync(AuthenticatedUser, fullNameChange.FullName);
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 }

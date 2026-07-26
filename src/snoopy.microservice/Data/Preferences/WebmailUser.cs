@@ -17,6 +17,14 @@ public sealed class WebmailUser
     [Column("email")]
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Rotated whenever the account's sessions must be cut. Every JWT carries the value that was
+    /// current when it was issued, so one write here revokes every token for this account at once
+    /// — which is the only way a password change can actually sign the other devices out.
+    /// </summary>
+    [Column("security_stamp")]
+    public Guid SecurityStamp { get; set; }
+
     [Column("creation_date")]
     public DateTime CreationDate { get; set; }
 

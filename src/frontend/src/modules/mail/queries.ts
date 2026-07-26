@@ -3,7 +3,7 @@ import {
   type InfiniteData, type Query, type QueryClient, type QueryKey,
 } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { api } from '../../api.js'
+import { ApiError, api } from '../../api.js'
 import { useAuth } from '../../contexts/AuthContext'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
@@ -50,6 +50,7 @@ export const mailKeys = {
     [...messageStreamIn(accountId, folder), requestSize] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
   identities: (accountId: string) => ['mail', accountId, 'identities'] as const,
+  trustedSenders: (accountId: string) => ['mail', accountId, 'trustedSenders'] as const,
   aliases: (accountId: string) => ['mail', accountId, 'aliases'] as const,
   /** Prefix for every cached search — what the idle key falls back to when no search is active. */
   searchIn,
@@ -198,6 +199,45 @@ export function useReplaceIdentities() {
       api.putIdentities(identities) as Promise<void>,
     // Settled, not success: after a refused PUT the page must fall back to the server's state.
     onSettled: () => queryClient.invalidateQueries({ queryKey: mailKeys.identities(accountId) }),
+  })
+}
+
+/** The senders whose remote images load without asking. Long staleTime: it changes only from
+    the reader, which invalidates it. The Set is built by `select` so the reader can test one
+    address per render without rebuilding it. */
+export function useTrustedSenders() {
+  const accountId = useAccountId()
+
+  return useQuery({
+    queryKey: mailKeys.trustedSenders(accountId),
+    queryFn: () => api.getTrustedSenders() as Promise<string[]>,
+    staleTime: 5 * 60_000,
+    select: (addresses): Set<string> => new Set(addresses),
+  })
+}
+
+/** One mutation for both directions — the two differ by a verb, not by a workflow. */
+export function useTrustSender(onError?: (message: string) => void) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ address, trusted }: { address: string; trusted: boolean }) =>
+      (trusted ? api.trustSender(address) : api.untrustSender(address)) as Promise<void>,
+    // A 400 is the server refusing on purpose, in words meant to be read — the account is at its
+    // ceiling, or the header carried no readable address. Anything else is infrastructure, whose
+    // statusText ("Internal Server Error") tells the reader nothing, so it gets the generic.
+    // A 401 says nothing at all: api.js has already cleared the session and sent them to /login,
+    // and a toast on top of a redirect is noise.
+    onError: (error, { trusted }) => {
+      if (error instanceof ApiError && error.status === 401) return
+      const generic = trusted
+        ? "Could not allow this sender's images"
+        : "Could not block this sender's images"
+      onError?.(error instanceof ApiError && error.status === 400 ? error.message : generic)
+    },
+    // Settled, not success: a refused call must leave the reader showing the server's state.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: mailKeys.trustedSenders(accountId) }),
   })
 }
 

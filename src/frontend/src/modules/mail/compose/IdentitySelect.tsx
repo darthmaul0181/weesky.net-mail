@@ -39,6 +39,8 @@ export default function IdentitySelect({ identities, value, onChange }: Props) {
       <DropdownMenu
         ariaLabel="From identity"
         className="compose-from-select"
+        // The trigger sits at the left of the From row, with the whole composer to its right.
+        align="left"
         trigger={<>{caption} <ChevronRightIcon size={13} /></>}
         items={usable.map(i => ({ label: i.address, node: label(i), onSelect: () => onChange(i.address) }))}
       />

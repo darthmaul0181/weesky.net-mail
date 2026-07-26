@@ -71,6 +71,21 @@ public sealed class UsersRepositoryTests
         Assert.Null(user);
     }
 
+    // Dovecot refuses IMAP for a deactivated mailbox, but everything that does not go through
+    // the mail server -- aliases, preferences, admin, and Sieve rules, which authenticate as the
+    // master user -- kept working until this filter existed.
+    [Fact]
+    public async Task FindByEmail_WhenAccountIsDeactivated_ReturnsNull()
+    {
+        var (repo, context) = CreateSut();
+        context.Users.First().Active = ActiveState.N;
+        await context.SaveChangesAsync();
+
+        var user = await repo.FindByEmailAsync(TestEmail);
+
+        Assert.Null(user);
+    }
+
     [Fact]
     public async Task FindByEmail_WhenUsernameNotFound_ReturnsNull()
     {
@@ -93,42 +108,96 @@ public sealed class UsersRepositoryTests
         Assert.Null(user);
     }
 
-    // --- IsValidPassword ---
+    // --- VerifyCredentials ---
 
     [Fact]
-    public async Task IsValidPassword_WithCorrectPassword_ReturnsTrue()
+    public async Task VerifyCredentials_WithCorrectPassword_ReturnsTheUser()
     {
         var (repo, _) = CreateSut();
-        var user = new User(TestEmail);
 
-        Assert.True(await repo.IsValidPasswordAsync(user, TestPassword));
+        var check = await repo.VerifyCredentialsAsync(TestEmail, TestPassword);
+
+        Assert.Equal(CredentialResult.Ok, check.Result);
+        Assert.Equal(TestEmail, check.User!.Email);
     }
 
     [Fact]
-    public async Task IsValidPassword_WithWrongPassword_ReturnsFalse()
+    public async Task VerifyCredentials_WithWrongPassword_Fails()
     {
         var (repo, _) = CreateSut();
-        var user = new User(TestEmail);
 
-        Assert.False(await repo.IsValidPasswordAsync(user, "WrongPassword!"));
+        var check = await repo.VerifyCredentialsAsync(TestEmail, "WrongPassword!");
+
+        Assert.Equal(CredentialResult.WrongPassword, check.Result);
+        Assert.Null(check.User);
+    }
+
+    [Theory]
+    [InlineData("john@nonexistent.com")]
+    [InlineData("nobody@weesky.be")]
+    [InlineData("notanemail")]
+    public async Task VerifyCredentials_WithoutAMatchingMailbox_Fails(string email)
+    {
+        var (repo, _) = CreateSut();
+
+        var check = await repo.VerifyCredentialsAsync(email, TestPassword);
+
+        Assert.Equal(CredentialResult.UnknownAccount, check.Result);
+        Assert.Null(check.User);
     }
 
     [Fact]
-    public async Task IsValidPassword_WhenDomainNotFound_ReturnsFalse()
+    public async Task VerifyCredentials_OnADeactivatedMailbox_FailsEvenWithTheRightPassword()
     {
-        var (repo, _) = CreateSut();
-        var user = new User("john@nonexistent.com");
+        var (repo, context) = CreateSut();
+        context.Users.First().Active = ActiveState.N;
+        await context.SaveChangesAsync();
 
-        Assert.False(await repo.IsValidPasswordAsync(user, TestPassword));
+        var check = await repo.VerifyCredentialsAsync(TestEmail, TestPassword);
+
+        Assert.Equal(CredentialResult.Deactivated, check.Result);
+        Assert.Null(check.User);
     }
 
+    // The decoy is what makes an unknown address cost what a wrong password costs. If it ever
+    // stopped being a real crypt hash of the same shape, the equalisation would quietly go with
+    // it and nothing else in the suite would notice.
     [Fact]
-    public async Task IsValidPassword_WhenUserNotFound_ReturnsFalse()
+    public void AbsentAccountHash_IsARealSha512CryptHashOfProductionCost()
     {
-        var (repo, _) = CreateSut();
-        var user = new User("nobody@weesky.be");
+        var hash = UsersRepository.AbsentAccountHash;
 
-        Assert.False(await repo.IsValidPasswordAsync(user, TestPassword));
+        Assert.StartsWith("$6$", hash);
+        Assert.Equal(Crypter.Sha512.Crypt(TestPassword, hash), Crypter.Sha512.Crypt(TestPassword, hash));
+
+        // Same cost parameters as a freshly generated salt: the prefix carries the rounds.
+        var reference = Crypter.Sha512.Crypt("x", Crypter.Sha512.GenerateSalt());
+        Assert.Equal(RoundsPrefix(reference), RoundsPrefix(hash));
+
+        static string RoundsPrefix(string crypt) =>
+            crypt.StartsWith("$6$rounds=", StringComparison.Ordinal)
+                ? crypt[..crypt.IndexOf('$', "$6$rounds=".Length)]
+                : "$6$";
+    }
+
+    // A stored value that is not a $6$ crypt makes every password wrong, and nothing else about
+    // the failure says so. The scheme names the cause; it must never carry the stored value.
+    [Theory]
+    [InlineData("$6$abc$def", "$6$ (sha512-crypt)")]
+    [InlineData("{SHA512-CRYPT}$6$abc$def", "{SHA512-CRYPT}")]
+    [InlineData("$1$abc$def", "$1$ (md5-crypt)")]
+    [InlineData("$2y$10$abc", "$2 (bcrypt)")]
+    [InlineData("", "(empty)")]
+    [InlineData(null, "(empty)")]
+    [InlineData("MyPlaintextPassword", "(unrecognised)")]
+    [InlineData("{not a scheme!}rest", "(unrecognised)")]
+    public void HashScheme_NamesTheSchemeAndNeverTheStoredValue(string? stored, string expected)
+    {
+        var scheme = UsersRepository.HashScheme(stored);
+
+        Assert.Equal(expected, scheme);
+        if (!string.IsNullOrEmpty(stored))
+            Assert.DoesNotContain("def", scheme, StringComparison.Ordinal);
     }
 
     // --- GetAccountInfo ---

@@ -14,23 +14,23 @@ public sealed class MailMessageRepositoryTests
 {
     private static readonly User Alice = new("alice@weesky.be");
 
-    private static (MailMessageRepository repo, Mock<IImapConnectionFactory> factory, Mock<IImapSession> session) CreateSut()
+    private static (MailMessageRepository repo, Mock<IImapSessionProvider> sessions, Mock<IImapSession> session) CreateSut()
     {
         var session = new Mock<IImapSession>();
         session.SetupGet(s => s.DirectorySeparator).Returns('/');
 
-        var factory = new Mock<IImapConnectionFactory>();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var sessions = new Mock<IImapSessionProvider>();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success<IImapSession>(session.Object));
 
-        var repo = new MailMessageRepository(factory.Object, Mock.Of<ILogger<MailMessageRepository>>());
-        return (repo, factory, session);
+        var repo = new MailMessageRepository(sessions.Object);
+        return (repo, sessions, session);
     }
 
     [Fact]
     public async Task ListAsync_DelegatesToTheSessionWithTheRequestedPage()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.ListMessagesAsync("INBOX", 2, 25, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderPage { FolderPath = "INBOX", Page = 2, PageSize = 25 }));
 
@@ -44,20 +44,20 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task ListAsync_OpensTheSessionForTheAuthenticatedUser()
     {
-        var (repo, factory, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.ListMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderPage()));
 
         await repo.ListAsync(Alice, "hunter2", "INBOX", 0, 50, CancellationToken.None);
 
-        factory.Verify(f => f.OpenAsync("alice@weesky.be", "hunter2", It.IsAny<CancellationToken>()), Times.Once);
+        sessions.Verify(f => f.GetAsync("alice@weesky.be", "hunter2", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task ListAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Mail authentication failed"));
 
         var result = await repo.ListAsync(Alice, "wrong", "INBOX", 0, 50, CancellationToken.None);
@@ -67,30 +67,30 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task ListAsync_DisposesTheSession()
+    public async Task ListAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.ListMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderPage()));
 
         await repo.ListAsync(Alice, "hunter2", "INBOX", 0, 50, CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task ListAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.ListAsync(null!, "hunter2", "INBOX", 0, 50, CancellationToken.None));
     }
 
     [Fact]
-    public async Task GetAsync_DelegatesToTheSessionAndDisposesIt()
+    public async Task GetAsync_DelegatesToTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.GetMessageAsync("INBOX", 42u, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailMessageDetail { Uid = 42, Subject = "Hello" }));
 
@@ -98,13 +98,13 @@ public sealed class MailMessageRepositoryTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Hello", result.Value.Subject);
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetAsync_PropagatesTheNotFoundSentinel()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.GetMessageAsync(It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<MailMessageDetail>(ImapSession.MessageNotFound));
 
@@ -117,8 +117,8 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task GetAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Unable to connect to the mail service"));
 
         var result = await repo.GetAsync(Alice, "hunter2", "INBOX", 42, CancellationToken.None);
@@ -128,13 +128,13 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task GetAttachmentAsync_DelegatesToTheSessionAndDisposesIt()
+    public async Task GetAttachmentAsync_DelegatesToTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.GetAttachmentAsync("INBOX", 42u, "2", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailAttachmentContent
                {
-                   Content = new byte[] { 1, 2, 3 },
+                   Content = new MemoryStream([1, 2, 3]),
                    FileName = "report.pdf",
                    ContentType = "application/pdf"
                }));
@@ -143,13 +143,13 @@ public sealed class MailMessageRepositoryTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("report.pdf", result.Value.FileName);
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetAttachmentAsync_PropagatesTheAttachmentNotFoundSentinel()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.GetAttachmentAsync(It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<MailAttachmentContent>(ImapSession.AttachmentNotFound));
 
@@ -162,7 +162,7 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task MessageReads_ThrowWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.GetAsync(null!, "p", "INBOX", 1, CancellationToken.None));
@@ -173,7 +173,7 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task SetFlagsAsync_DelegatesToTheSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.SetFlagsAsync("INBOX", It.IsAny<IReadOnlyList<uint>>(), MailFlag.Seen, true, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
@@ -188,8 +188,8 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task SetFlagsAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("down"));
 
         var result = await repo.SetFlagsAsync(Alice, "pw", "INBOX", [1u], MailFlag.Flagged, false, CancellationToken.None);
@@ -199,21 +199,21 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task SetFlagsAsync_DisposesTheSession()
+    public async Task SetFlagsAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.SetFlagsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<uint>>(), It.IsAny<MailFlag>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
         await repo.SetFlagsAsync(Alice, "pw", "INBOX", [1u], MailFlag.Seen, true, CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task SetFlagsAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.SetFlagsAsync(null!, "pw", "INBOX", [1u], MailFlag.Seen, true, CancellationToken.None));
@@ -224,7 +224,7 @@ public sealed class MailMessageRepositoryTests
     [InlineData(false)]
     public async Task MoveOrCopyAsync_DelegatesToTheSession(bool copy)
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.MoveOrCopyAsync("INBOX", It.IsAny<IReadOnlyList<uint>>(), "Archive", copy, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
@@ -239,8 +239,8 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task MoveOrCopyAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("down"));
 
         var result = await repo.MoveOrCopyAsync(Alice, "pw", "INBOX", [1u], "Archive", false, CancellationToken.None);
@@ -250,21 +250,21 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task MoveOrCopyAsync_DisposesTheSession()
+    public async Task MoveOrCopyAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.MoveOrCopyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
         await repo.MoveOrCopyAsync(Alice, "pw", "INBOX", [1u], "Archive", false, CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task MoveOrCopyAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.MoveOrCopyAsync(null!, "pw", "INBOX", [1u], "Archive", false, CancellationToken.None));
@@ -273,7 +273,7 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task DeleteAsync_DelegatesToTheSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.DeleteAsync("INBOX", It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
@@ -288,8 +288,8 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task DeleteAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("down"));
 
         var result = await repo.DeleteAsync(Alice, "pw", "INBOX", [1u], CancellationToken.None);
@@ -299,21 +299,21 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteAsync_DisposesTheSession()
+    public async Task DeleteAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
         await repo.DeleteAsync(Alice, "pw", "INBOX", [1u], CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task DeleteAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.DeleteAsync(null!, "pw", "INBOX", [1u], CancellationToken.None));
@@ -324,7 +324,7 @@ public sealed class MailMessageRepositoryTests
     [InlineData("Trash")]
     public async Task EmptyAsync_DelegatesToTheSession(string? target)
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.EmptyAsync("INBOX", target, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
@@ -337,8 +337,8 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task EmptyAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("down"));
 
         var result = await repo.EmptyAsync(Alice, "pw", "INBOX", null, CancellationToken.None);
@@ -348,21 +348,21 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task EmptyAsync_DisposesTheSession()
+    public async Task EmptyAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.EmptyAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success());
 
         await repo.EmptyAsync(Alice, "pw", "INBOX", "Trash", CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task EmptyAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.EmptyAsync(null!, "pw", "INBOX", null, CancellationToken.None));
@@ -371,7 +371,7 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task SearchAsync_DelegatesToTheSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
         var page = new MailSearchPage { Total = 1 };
         session.Setup(s => s.SearchAsync("INBOX", false, criteria, 0, 50, It.IsAny<CancellationToken>()))
@@ -387,9 +387,9 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task SearchAsync_PropagatesAConnectionFailure()
     {
-        var (repo, factory, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
         var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
-        factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        sessions.Setup(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("nope"));
 
         var result = await repo.SearchAsync(Alice, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None);
@@ -399,22 +399,22 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task SearchAsync_DisposesTheSession()
+    public async Task SearchAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
         session.Setup(s => s.SearchAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<MailSearchCriteria>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailSearchPage()));
 
         await repo.SearchAsync(Alice, "pw", "INBOX", false, criteria, 0, 50, CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task SearchAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
         var criteria = new MailSearchCriteria("hello", null, null, null, null, null, false, false, false);
 
         await Assert.ThrowsAsync<ArgumentNullException>(
@@ -424,7 +424,7 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task SaveDraftAsync_DelegatesToTheSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.SaveDraftAsync("Drafts", It.IsAny<MimeMessage>(), 41u, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(42u));
 
@@ -437,8 +437,8 @@ public sealed class MailMessageRepositoryTests
     [Fact]
     public async Task SaveDraftAsync_FailsWhenTheSessionCannotOpen()
     {
-        var (repo, factory, _) = CreateSut();
-        factory.Setup(f => f.OpenAsync(Alice.Email, "pw", It.IsAny<CancellationToken>()))
+        var (repo, sessions, _) = CreateSut();
+        sessions.Setup(f => f.GetAsync(Alice.Email, "pw", It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("boom"));
 
         var result = await repo.SaveDraftAsync(Alice, "pw", "Drafts", new MimeMessage(), null, CancellationToken.None);
@@ -447,21 +447,21 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
-    public async Task SaveDraftAsync_DisposesTheSession()
+    public async Task SaveDraftAsync_UsesTheRequestSession()
     {
-        var (repo, _, session) = CreateSut();
+        var (repo, sessions, session) = CreateSut();
         session.Setup(s => s.SaveDraftAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), It.IsAny<uint?>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(1u));
 
         await repo.SaveDraftAsync(Alice, "pw", "Drafts", new MimeMessage(), null, CancellationToken.None);
 
-        session.Verify(s => s.DisposeAsync(), Times.Once);
+        sessions.Verify(f => f.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task SaveDraftAsync_ThrowsWhenUserIsNull()
     {
-        var (repo, _, _) = CreateSut();
+        var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.SaveDraftAsync(null!, "pw", "Drafts", new MimeMessage(), null, CancellationToken.None));

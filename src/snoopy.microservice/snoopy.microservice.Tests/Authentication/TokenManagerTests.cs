@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Models;
@@ -44,7 +44,7 @@ public sealed class TokenManagerTests
     {
         var result = CreateSut().Generate(new User("john@example.com"));
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        var jwt = new JsonWebToken(result.Token);
         Assert.Contains(jwt.Claims, c => c.Type == ClaimTypes.Upn && c.Value == "john");
     }
 
@@ -53,7 +53,7 @@ public sealed class TokenManagerTests
     {
         var result = CreateSut().Generate(new User("john@example.com"));
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        var jwt = new JsonWebToken(result.Token);
         Assert.Contains(jwt.Claims, c => c.Type == ClaimTypes.Dns && c.Value == "example.com");
     }
 
@@ -62,7 +62,7 @@ public sealed class TokenManagerTests
     {
         var result = CreateSut().Generate(new User("john@example.com"));
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        var jwt = new JsonWebToken(result.Token);
         Assert.Equal("test-issuer", jwt.Issuer);
     }
 
@@ -71,7 +71,7 @@ public sealed class TokenManagerTests
     {
         var result = CreateSut().Generate(new User("john@example.com"));
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        var jwt = new JsonWebToken(result.Token);
         Assert.Contains("test-audience", jwt.Audiences);
     }
 
@@ -82,7 +82,7 @@ public sealed class TokenManagerTests
         var user = new User("mick@weesky.be") { WebmailUid = uid };
         var token = CreateSut().Generate(user);
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token.Token);
+        var jwt = new JsonWebToken(token.Token);
         Assert.Equal(uid.ToString(), jwt.Claims.First(c => c.Type == WebmailClaimTypes.Uid).Value);
     }
 }

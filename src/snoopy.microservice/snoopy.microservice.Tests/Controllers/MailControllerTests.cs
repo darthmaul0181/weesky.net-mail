@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
 using MimeKit.Utils;
 using Moq;
@@ -27,6 +28,7 @@ public sealed class MailControllerTests
     private readonly Mock<IMailSender> _sender = new();
     private readonly Mock<IQuotePreparer> _quotes = new();
     private readonly Mock<IDraftSaver> _drafts = new();
+    private readonly Mock<ITrustedSenderStore> _trustedSenders = new();
 
     private MailController CreateController()
     {
@@ -35,7 +37,8 @@ public sealed class MailControllerTests
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
         return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
-                                  _staged.Object, _sender.Object, _quotes.Object, _drafts.Object)
+                                  _staged.Object, _sender.Object, _quotes.Object, _drafts.Object,
+                                  _trustedSenders.Object, NullLogger<MailController>.Instance)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
@@ -423,17 +426,20 @@ public sealed class MailControllerTests
         _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, "2", It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailAttachmentContent
                  {
-                     Content = new byte[] { 1, 2, 3 },
+                     Content = new MemoryStream([1, 2, 3]),
                      FileName = "report.pdf",
                      ContentType = "application/pdf"
                  }));
 
         var result = await CreateController().GetAttachment("INBOX", 42, "2", CancellationToken.None);
 
-        var file = Assert.IsType<FileContentResult>(result);
+        var file = Assert.IsType<FileStreamResult>(result);
         Assert.Equal("application/pdf", file.ContentType);
         Assert.Equal("report.pdf", file.FileDownloadName);
-        Assert.Equal(new byte[] { 1, 2, 3 }, file.FileContents);
+
+        using var read = new MemoryStream();
+        file.FileStream.CopyTo(read);
+        Assert.Equal(new byte[] { 1, 2, 3 }, read.ToArray());
     }
 
     [Theory]
@@ -632,7 +638,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SetFolderRole_RejectsAMissingBody()
     {
-        var result = await CreateController().SetFolderRole(null, CancellationToken.None);
+        var result = await CreateController().SetFolderRole(null!, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
     }
@@ -792,6 +798,47 @@ public sealed class MailControllerTests
         _messages.Verify(m => m.SetFlagsAsync(It.IsAny<User>(), "hunter2", "INBOX",
             It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
             MailFlag.Seen, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // An initialiser only covers an *absent* property. A body carrying an explicit "uids": null
+    // overwrites it, and the count check then dereferenced null: a 500 on a malformed request.
+    [Theory]
+    [InlineData("flags")]
+    [InlineData("move")]
+    [InlineData("copy")]
+    [InlineData("delete")]
+    public async Task MessageBatch_WithExplicitlyNullUids_Returns400NotAnUnhandledException(string verb)
+    {
+        var controller = CreateController();
+
+        ActionResult result = verb switch
+        {
+            "flags" => await controller.SetMessageFlags(
+                new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = null!, Flag = MailFlag.Seen }, CancellationToken.None),
+            "move" => await controller.MoveMessages(
+                new MoveMessagesRequest { FolderPath = "INBOX", Uids = null!, TargetFolderPath = "Trash" }, CancellationToken.None),
+            "copy" => await controller.CopyMessages(
+                new MoveMessagesRequest { FolderPath = "INBOX", Uids = null!, TargetFolderPath = "Trash" }, CancellationToken.None),
+            _ => await controller.DeleteMessages(
+                new DeleteMessagesRequest { FolderPath = "INBOX", Uids = null! }, CancellationToken.None),
+        };
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SendMessage_WithExplicitlyNullAttachmentIds_DoesNotThrow()
+    {
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(new SendMessageResult(true)));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["bob@weesky.be"], AttachmentIds = null! }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _sender.Verify(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+            It.Is<SendMessageRequest>(r => r.AttachmentIds != null && r.AttachmentIds.Count == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1849,8 +1896,8 @@ public sealed class MailControllerTests
         message.Subject = "Draft subject";
         message.From.Add(MailboxAddress.Parse("Me <me@weesky.be>"));
         message.InReplyTo = MimeUtils.ParseMessageId("<parent@x.com>");
-        message.References.Add(MimeUtils.ParseMessageId("<oldest@x.com>"));
-        message.References.Add(MimeUtils.ParseMessageId("<newest@x.com>"));
+        message.References.Add(MimeUtils.ParseMessageId("<oldest@x.com>")!);
+        message.References.Add(MimeUtils.ParseMessageId("<newest@x.com>")!);
         _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), "hunter2", "Drafts", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(message));
         var stagedInfo = new StagedAttachmentInfo(Guid.NewGuid(), "logo.png", 3, "image/png", "logo@mail");
@@ -1909,6 +1956,74 @@ public sealed class MailControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
         _messages.Verify(m => m.GetMimeMessageAsync(
             It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    // The reader is already fetching this message; a dedicated client call would buy a second
+    // round trip per open for nothing.
+    [Fact]
+    public async Task GetMessage_RecordsTheSenderUse()
+    {
+        var detail = new MailMessageDetail { FromAddress = "news@example.com" };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+
+        await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        _trustedSenders.Verify(
+            s => s.TouchAsync(It.IsAny<Guid>(), "news@example.com", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // Rule 5: IMAP first, bookkeeping second. A failed write degrades, it never fails the read
+    // the caller actually asked for.
+    [Fact]
+    public async Task GetMessage_WhenRecordingTheUseThrows_StillReturnsTheMessage()
+    {
+        var detail = new MailMessageDetail { FromAddress = "news@example.com" };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+        _trustedSenders.Setup(s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+                                                It.IsAny<CancellationToken>()))
+                       .ThrowsAsync(new InvalidOperationException("database is away"));
+
+        var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(detail, ok.Value);
+    }
+
+    // Switching messages quickly aborts the detail request: a routine disconnect, not a fault.
+    [Fact]
+    public async Task GetMessage_WhenRecordingTheUseIsCancelled_StillReturnsTheMessage()
+    {
+        var detail = new MailMessageDetail { FromAddress = "news@example.com" };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+        _trustedSenders.Setup(s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+                                                It.IsAny<CancellationToken>()))
+                       .ThrowsAsync(new OperationCanceledException());
+
+        var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(detail, ok.Value);
+    }
+
+    [Fact]
+    public async Task GetMessage_WhenTheReadFails_RecordsNothing()
+    {
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+                                        It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailMessageDetail>(ImapSession.MessageNotFound));
+
+        await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
+
+        _trustedSenders.Verify(
+            s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

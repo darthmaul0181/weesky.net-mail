@@ -172,12 +172,23 @@
 
 .dropdown-root { position: relative; }
 
+/* `width: max-content` is load-bearing, not a tidy-up. The menu is absolutely positioned with
+   `right: 0` and no `left`, so its width is shrink-to-fit against the containing block — which
+   is `.dropdown-root`, the trigger button, about 26px wide. That resolves to the min-content
+   width, i.e. as wrapped as possible, and `min-width` then floors it at 180px: every label
+   whose text exceeds ~124px wrapped onto two lines while the box stayed 180px wide.
+   Sizing to content instead is also what keeps this translatable — the longest French label
+   measures 338px on one line, so width follows the language rather than the language having to
+   fit the width. The cap is the safety net for a translation longer still, and for a narrow
+   viewport; past it the label wraps, which is the right degradation, not a defect. */
 .dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 20;
   min-width: 180px;
+  width: max-content;
+  max-width: min(380px, calc(100vw - 24px));
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -204,6 +215,12 @@
 .dropdown-rule { height: 1px; border: 0; background: var(--border); margin: 4px 6px; }
 
 .dropdown-root.is-up .dropdown-menu { top: auto; bottom: calc(100% + 4px); }
+
+/* Grows rightward instead of leftward. For a trigger at the left of a wide row — the composer's
+   From line — the default right anchoring sends the menu into the column beside it: once the
+   menu sizes to its content, an identity like "Boulet Liégeoise (contact@boulet-liegeoise.be)"
+   made it 345px wide and 71px of that landed under the folder column. */
+.dropdown-root.is-left .dropdown-menu { right: auto; left: 0; }
 
 .settings-layout { display: flex; height: 100%; }
 

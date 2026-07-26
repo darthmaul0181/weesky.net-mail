@@ -979,6 +979,27 @@
 }
 .reader-blocked-images .btn:hover { background: var(--action-primary-hover); }
 
+/* The banner's button splits like an attachment chip does, with one difference: both halves
+   carry the accent fill, so the seam is the readable foreground at low alpha rather than a
+   --border hairline, which would read as dirt on the blue.
+   The .btn rule is written through .reader-blocked-images so it outranks that block's
+   margin-left:auto whatever the source order — the pair is what hugs the right edge now. */
+.banner-split { margin-left: auto; flex: none; display: inline-flex; align-items: stretch; }
+.reader-blocked-images .banner-split .btn { margin-left: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.banner-split .dropdown-root { display: flex; }
+.banner-split-more {
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--action-primary-fg) 32%, transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+  cursor: pointer;
+}
+.banner-split-more:hover { background: var(--action-primary-hover); }
+
 /* The article carries the column layout so the body can claim the leftover height. Without
    this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
    leaving the bottom of the panel empty while the message scrolls in a short window. */

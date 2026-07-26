@@ -48,7 +48,7 @@ internal sealed class AliasesRepository : IAliasesRepository
         }
 
         MailUser? mailUser = await GetMailUserByAsync(user);
-        MailDomain mailDomain = await GetDomainByAsync(alias.Domain);
+        MailDomain? mailDomain = await GetDomainByAsync(alias.Domain);
 
         if (mailUser == null || mailDomain == null)
         {
@@ -87,7 +87,7 @@ internal sealed class AliasesRepository : IAliasesRepository
         }
 
         MailUser? mailUser = await GetMailUserByAsync(user);
-        MailDomain mailDomain = await GetDomainByAsync(alias.Domain);
+        MailDomain? mailDomain = await GetDomainByAsync(alias.Domain);
 
         if (mailUser == null || mailDomain == null)
         {
@@ -95,7 +95,7 @@ internal sealed class AliasesRepository : IAliasesRepository
             return Result.Failure("Account not found");
         }
 
-        MailAlias mailAlias = await _context.Aliases.FirstOrDefaultAsync(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase) && a.DestinationUserId == mailUser.Id);
+        MailAlias? mailAlias = await _context.Aliases.FirstOrDefaultAsync(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase) && a.DestinationUserId == mailUser.Id);
         if (mailAlias == null)
         {
             _logger.LogInformation("Audit: delete_alias user={User} alias={Alias} outcome=failure reason=not_found", user.Email, $"{alias.Name}@{alias.Domain}");
@@ -145,7 +145,7 @@ internal sealed class AliasesRepository : IAliasesRepository
         return await query.FirstOrDefaultAsync();
     }
 
-    private async Task<MailDomain> GetDomainByAsync(string name)
+    private async Task<MailDomain?> GetDomainByAsync(string name)
     {
         return await _context.Domains.FirstOrDefaultAsync(domain => string.Equals(domain.Name, name, StringComparison.InvariantCultureIgnoreCase));
     }

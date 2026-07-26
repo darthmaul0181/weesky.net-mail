@@ -17,6 +17,15 @@
             lazily from the application container (no BuildServiceProvider).
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Extensions.ControllerBaseExtensions.GetUser(Microsoft.AspNetCore.Mvc.ControllerBase)">
+             <summary>
+             The caller as the JWT describes them, or null when the Upn/Dns claims are missing.
+            
+             Null is unreachable on an <c>[Authorize]</c>d action — the bearer handler fails a token
+             carrying neither claim (see AuthorizationExtension) — so the nullable return describes the
+             unauthenticated caller, not a case every action has to handle.
+             </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Authentication.Middleware.SlidingSessionMiddleware">
              <summary>
              Extends a live session in place rather than letting it expire mid-use. A webmail stays
@@ -37,6 +46,148 @@
             The Json Web Token used to authenticate the user.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard">
+             <summary>
+             Decides whether the session a bearer token describes is still live, and cuts every session of
+             an account when asked.
+            
+             A JWT is self-contained: once signed it is valid until it expires, and nothing about signing
+             out, changing a password or disabling an account reaches it. This is what closes that gap —
+             the account carries a stamp, every token carries the stamp that was current when it was
+             issued, and rotating the stored one leaves every token already out there unable to match.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard.IsCurrentAsync(System.String,System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Whether the account still exists, is usable, and has not had its sessions revoked since the
+            token was issued. Answered from a short-lived cache: this runs on every authenticated
+            request, and the TTL is the ceiling on how long a revoked session keeps working.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard.Forget(System.String)">
+            <summary>
+            Drops the cached state for an account, so a rotation takes effect immediately instead of
+            at the end of the cache window. Called by whoever rotates the stamp.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.CacheWindow">
+            <summary>
+            How long an account's state is reused across requests. It is the ceiling on how long a
+            revoked session keeps working when the rotation happened on another instance or process;
+            on this one <see cref="M:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.Forget(System.String)"/> makes it immediate.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.AccountState">
+            <summary>Null stamp means the account is gone, or was never registered in the webmail database.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.AccountState.#ctor(System.Boolean,System.Nullable{System.Guid})">
+            <summary>Null stamp means the account is gone, or was never registered in the webmail database.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.Services.TokenBuilder">
+             <summary>
+             Builds the signed JWT the API authenticates with.
+            
+             On <see cref="T:Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler"/>, not the legacy <c>JwtSecurityTokenHandler</c>: the bearer
+             middleware already validates with the former, so writing with the latter left two JWT stacks in
+             one service. Claim types go out verbatim — neither handler rewrites them here — so the Upn/Dns
+             claims the token carries are the ones validation looks for.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.TokenBuilder.Build">
+            <summary>The serialized token. This handler emits "iat" and "nbf" alongside "exp".</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Authentication.Services.UserAuthenticator.AuditReason(weesky.Snoopy.Microservice.Models.CredentialResult)">
+            <summary>
+            The token written to the audit log. Spelled out here rather than letting the enum's own
+            name through: these lines get grepped, so the wording is an interface. <c>bad_password</c>
+            is the one this log has always used, and it keeps it.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.SessionCookies">
+            <summary>
+            Writes and clears the JWT cookie. Three places issue a session — the login, the sliding
+            renewal, and a password change re-issuing its own — and the cookie's flags are a security
+            property, so they are spelled out once rather than three times.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Authentication.WebmailClaimTypes">
+            <summary>Custom JWT claim types. Upn/Dns come from System.Security.Claims; this one is ours.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Authentication.WebmailClaimTypes.Stamp">
+            <summary>The account's revocation stamp. A token without it is refused, never trusted.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApiDocumentationConfiguration.AddApiDocumentation(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>
+            The XML comments file is generated in every configuration (see the csproj) because Swagger
+            reads it at startup, not at build time.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApplicationServicesConfiguration.AddMailServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>Everything that talks to the mail server: IMAP, SMTP, ManageSieve, doveadm.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApplicationServicesConfiguration.AddRuleProviders(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>The Sieve rule formats this server can read and write.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.ApplicationServicesConfiguration.AddRepositories(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>Database-backed stores, one scope per request alongside their DbContext.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Configuration.AttachmentSizeLimitFilter">
+             <summary>
+             Caps the request body of the attachment upload at the configured message size.
+            
+             The store enforces <see cref="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.MaxMessageSizeMb"/> while streaming, but that check
+             runs inside the action — and <c>IFormFile</c> model binding has already buffered the whole body
+             (to disk past 64 KB) by then. The effective ceiling was therefore the framework's 128 MB
+             multipart default, not the configured 25 MB, and a rejected upload still cost the disk write.
+             A resource filter runs before model binding, so the cap applies to the read itself.
+            
+             It is a filter rather than <c>[RequestSizeLimit]</c> because the limit is configuration, and an
+             attribute argument must be a constant.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.AttachmentSizeLimitFilter.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions})">
+             <summary>
+             Caps the request body of the attachment upload at the configured message size.
+            
+             The store enforces <see cref="P:weesky.Snoopy.Microservice.Models.Mail.MailOptions.MaxMessageSizeMb"/> while streaming, but that check
+             runs inside the action — and <c>IFormFile</c> model binding has already buffered the whole body
+             (to disk past 64 KB) by then. The effective ceiling was therefore the framework's 128 MB
+             multipart default, not the configured 25 MB, and a rejected upload still cost the disk write.
+             A resource filter runs before model binding, so the cap applies to the read itself.
+            
+             It is a filter rather than <c>[RequestSizeLimit]</c> because the limit is configuration, and an
+             attribute argument must be a constant.
+             </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Configuration.AttachmentSizeLimitFilter.EnvelopeOverheadBytes">
+            <summary>Multipart headers and boundaries ride along with the file's own bytes.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.DatabaseConfiguration.AddSnoopyDatabases(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+             <summary>
+             The two databases this service talks to, plus the health check over the first one.
+            
+             They are separate on purpose: the dovecot schema belongs to Dovecot and can be rebuilt by
+             mail-server provisioning, which would take our preferences with it. Preferences creation is
+             manual — no EF migrations here; see docs/superpowers/mail-2a5-database-prerequisite.md — and
+             the service refuses to start without its connection string rather than run with folder roles
+             silently inert.
+             </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.RequestLoggerSource">
+            <summary>Serilog writes to this assembly's own request-logging category.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.UseSnoopyLogging(Microsoft.Extensions.Hosting.IHostBuilder)">
+            <summary>
+            Two daily files at Information — HTTP requests apart from the rest, so neither buries the
+            other. Two categories are turned down and must stay down: Microsoft.AspNetCore, and
+            EF Core's Database.Command, which logs every executed statement at Information and buried
+            the log under SQL. Warning still surfaces command failures, which EF logs at Error under
+            that same category.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.UseSnoopyRequestLogging(Microsoft.AspNetCore.Builder.IApplicationBuilder)">
+            <summary>The health probe runs constantly; at Information it is the whole HTTP log.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Configuration.MvcFormatterConfiguration">
             <summary>
             Output-formatter policy. Lives here rather than inline in Program.cs so it can be tested:
@@ -47,6 +198,34 @@
             <summary>
             Drops <see cref="T:Microsoft.AspNetCore.Mvc.Formatters.StringOutputFormatter"/>: MVC writes a bare string as
             <c>text/plain</c>, which the client's <c>res.json()</c> cannot parse.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddSnoopyAuthentication(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>JWT bearer (cookie-backed), the admin policy, and the per-request session pieces.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddFrontendCors(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+             <summary>
+             The frontend is the only origin allowed, and it must send cookies — both the JWT and the
+             credentials one — so credentials are on and the origin list can never be a wildcard.
+            
+             The origins live in the environment, not in appsettings: the same build serves prod and
+             dev, and each gets its own list from the systemd unit's EnvironmentFile
+             (<c>Cors__AllowedOrigins__0=…</c>). Locally they come from launchSettings.json.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddCredentialKeyRing(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.AspNetCore.Hosting.IWebHostEnvironment)">
+            <summary>
+            The Data Protection key ring encrypts the IMAP credentials cookie, so it must survive
+            restarts: losing it makes every live credentials cookie undecryptable and signs every user
+            out. systemd's StateDirectory= provides a directory outside the deployment path — which the
+            release chmod/chown walk recursively — and owned by the service user.
+            </summary>
+            <returns>The key ring path, for the startup log line.</returns>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.UseSecurityHeaders(Microsoft.AspNetCore.Builder.IApplicationBuilder)">
+            <summary>
+            This is an API: nothing it returns is meant to be rendered, framed or referred from. The
+            Swagger UI is the one page that is, so it gets the only policy that allows its own assets.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetAccountInfo">
@@ -73,11 +252,18 @@
             <response code="401">Unauthenticated user</response>
             <response code="502">Unable to reach Dovecot</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangePassword(weesky.Snoopy.Microservice.Models.SecretChange)">
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangePassword(weesky.Snoopy.Microservice.Models.SecretChange,System.Threading.CancellationToken)">
             <summary>
             Change the mailbox password
             </summary>
+            <remarks>
+            The credentials cookie carries the password every mail endpoint opens IMAP with, so it
+            is re-issued here. Left alone it would keep the superseded password — and the sliding
+            session would keep renewing it — leaving a live session whose every mail action fails
+            authentication for the rest of the token's lifetime.
+            </remarks>
             <param name="secretChange">the new secret</param>
+            <param name="cancellationToken">cancellation token</param>
             <response code="204">Secret changed successfully</response>
             <response code="400">Wrong credentials</response>
             <response code="401">Unauthenticated user</response>
@@ -202,16 +388,23 @@
             <summary>
             The authenticated user (JWT or Cookie authenticated).
             </summary>
+            <exception cref="T:System.InvalidOperationException">
+            The principal carries no Upn/Dns claims. Unreachable behind <c>[Authorize]</c>, since the
+            bearer handler fails such a token before an action runs — so it is a wiring mistake, and
+            saying so beats the NullReferenceException the caller used to get one dereference later.
+            </exception>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.BearerAuthenticatorController.Authenticate(weesky.Snoopy.Microservice.Models.Credentials)">
-            <summary>
-            Generates a Json Web Token (JWT) for bearer authentication.
-            </summary>
-            <param name="credentials">user credentials</param>
-            <returns></returns>
-            <response code="200">User authentication succeeded</response>
-            <response code="401">Wrong credentials</response>
-            <response code="429">Too many authentication attempts</response>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadRequestEnveloppe(System.String)">
+            <summary>400 carrying the error envelope.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.UnauthorizedEnveloppe(System.String)">
+            <summary>401 carrying the error envelope.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.NotFoundEnveloppe(System.String)">
+            <summary>404 carrying the error envelope.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadGatewayEnveloppe(System.String)">
+            <summary>502 carrying the error envelope — anything the mail server refused.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
             <summary>
@@ -268,6 +461,20 @@
             <response code="204">Logout successful</response>
             <response code="401">Try to logout an unauthenticated user</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.LoginController.LogoutEverywhere(System.Threading.CancellationToken)">
+            <summary>
+            Signs the account out everywhere, this device included.
+            </summary>
+            <remarks>
+            The ordinary logout only clears this browser's cookies; the token itself stays valid until
+            it expires, so a copy taken off the machine keeps working. This rotates the account's
+            security stamp, which leaves every token already issued unable to match — the control to
+            reach for when a session is believed to be in someone else's hands.
+            </remarks>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Every session was revoked</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.MailController">
              <summary>
              Mail access over IMAP.
@@ -278,6 +485,29 @@
              distinct: a missing or undecryptable credentials cookie is 401 with the code
              "credentials_unavailable" so the client can sign in again, while anything the mail
              server refuses is 502.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.#ctor(weesky.Snoopy.Microservice.Repositories.IMailFolderRepository,weesky.Snoopy.Microservice.Repositories.IMailMessageRepository,weesky.Snoopy.Microservice.Services.IMailCredentialStore,weesky.Snoopy.Microservice.Repositories.IFolderRoleStore,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,weesky.Snoopy.Microservice.Services.IMailSender,weesky.Snoopy.Microservice.Services.IQuotePreparer,weesky.Snoopy.Microservice.Services.IDraftSaver,weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Controllers.MailController})">
+             <summary>
+             Mail access over IMAP.
+            
+             Two conventions hold across every action. Folder paths never appear in a route
+             segment — the hierarchy separator may be '/', which would break routing — so they
+             travel in the query string or the request body. And the two failure modes are
+             distinct: a missing or undecryptable credentials cookie is 401 with the code
+             "credentials_unavailable" so the client can sign in again, while anything the mail
+             server refuses is 502.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.TryMailPassword(System.String@,Microsoft.AspNetCore.Mvc.ActionResult@)">
+             <summary>
+             The caller's mail password, decrypted from the credentials cookie, or false with the
+             <paramref name="unauthorized"/> to answer with.
+            
+             Every mail action opens IMAP as the user, so every one of them starts here. A guard
+             rather than an action filter on purpose: the controller tests invoke actions directly
+             and no filter would run, so moving the check into the pipeline would move it out of
+             the tests that cover it.
              </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RefuseIfSystemFolderAsync(System.String,System.String,System.String,System.Boolean,System.Threading.CancellationToken)">
@@ -409,6 +639,13 @@
             <response code="404">No message with that UID in that folder</response>
             <response code="502">The mail server could not be reached</response>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RecordSenderUseAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Keeps an approved sender's entry alive while it is still earning its place. Does nothing
+            for a sender nobody approved, and never fails the read: bookkeeping degrades, it does not
+            take the caller's message down with it.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetAttachment(System.String,System.UInt32,System.String,System.Threading.CancellationToken)">
             <summary>
             Downloads one attachment. Always served as an attachment disposition: message
@@ -491,14 +728,15 @@
             <summary>
             Stages one outgoing attachment. Files upload as they are added — the Gmail/Rainloop
             model — and Send references the returned ids. No IMAP involved, so no credentials
-            cookie is read. Kestrel's body cap is disabled: the store enforces the configured
-            limit itself while streaming.
+            cookie is read. The body is capped at the configured message size before model binding
+            (<see cref="T:weesky.Snoopy.Microservice.Configuration.AttachmentSizeLimitFilter"/>), and the store re-checks it while streaming.
             </summary>
             <param name="file">the uploaded file</param>
             <param name="cancellationToken">cancellation token</param>
             <response code="200">Id and metadata of the staged file</response>
             <response code="400">No file, file over the limit, or account staging cap reached</response>
             <response code="401">Not authenticated</response>
+            <response code="413">The request body is over the configured message size</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.DeleteAttachment(System.Guid)">
             <summary>
@@ -508,6 +746,18 @@
             <param name="id">staged attachment id</param>
             <response code="204">Gone, or never was</response>
             <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.GetStagedAttachment(System.Guid)">
+            <summary>
+            Serves one staged attachment back to its owner, so the composer can display the inline
+            images PrepareQuote staged. Always an attachment disposition plus nosniff: an img
+            subresource renders regardless, while navigating to the URL downloads instead of
+            rendering staged mail content on our origin.
+            </summary>
+            <param name="id">staged attachment id</param>
+            <response code="200">The staged bytes</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">Unknown id, or one staged by another account</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SendMessage(weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest,System.Threading.CancellationToken)">
             <summary>
@@ -525,6 +775,70 @@
             <response code="400">No recipient, an invalid address, a fromAddress the account does not own, or a staged id no longer available</response>
             <response code="401">Not authenticated, or the mail credentials are no longer available</response>
             <response code="502">The mail server refused the submission</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.PrepareQuote(weesky.Snoopy.Microservice.Models.Mail.PrepareQuoteRequest,System.Threading.CancellationToken)">
+            <summary>
+            Prepares quoting a message for the composer: the body re-sanitised by the outgoing policy
+            with cid images rewritten to staged-content URLs, inline parts staged, and — for forward
+            and editAsNew — the real attachments re-staged server-side. Called on the Reply / Forward
+            / Edit-as-new click, never on ordinary reading.
+            </summary>
+            <param name="request">folder, uid, and the purpose ("reply", "forward" or "editAsNew")</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The quotable body and the staged parts</response>
+            <response code="400">Missing folder, unknown purpose, or staging over the account caps</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">No message with that UID in that folder</response>
+            <response code="502">The mail server could not be reached</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.SaveDraft(weesky.Snoopy.Microservice.Models.Mail.SaveDraftRequest,System.Threading.CancellationToken)">
+            <summary>
+            Saves the composer's content as a draft in the drafts-role folder (\Draft \Seen), replacing
+            the previous version when replaceUid names one. An empty or recipient-less draft is valid;
+            the message itself is built by the same pipeline as Send, so threading and attachments
+            survive a save/resume round trip. Attachments live in the stored message — the staged
+            files remain for the still-open composer and expire on their own.
+            </summary>
+            <param name="request">the draft content, plus the UID it replaces</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Saved; the new UID and the folder it landed in</response>
+            <response code="400">An invalid address, a fromAddress the account does not own, or a staged id no longer available</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="502">No folder holds the drafts role, or the mail server refused the save</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.NormalizeOutgoing(weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest,System.Boolean,weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest@)">
+            <summary>
+            The validation Send and Drafts share. Coalesces every recipient list (an explicit
+            "to": null in the body overrides the record's [] default and would NRE downstream),
+            validates each address, and reduces the From to its bare address — a decorated
+            "Name &lt;a@b.c&gt;" would never match an alias downstream and would be refused as
+            foreign instead of accepted. Returns the 400 to answer with, or null when valid;
+            <paramref name="normalized"/> then carries the rewritten request, its runtime type
+            preserved — records clone virtually, so a SaveDraftRequest keeps its ReplaceUid.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.RefusedBuild(System.String,System.String)">
+            <summary>
+            The 400s Send and Drafts share for a refused message build: an unknown staged attachment
+            or a From the account does not own. Null for any other error — the caller keeps its own
+            mapping and its 502 fallthrough.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.MailController.OpenDraft(weesky.Snoopy.Microservice.Models.Mail.OpenDraftRequest,System.Threading.CancellationToken)">
+            <summary>
+            Reopens a saved draft for editing: envelope, outbound-sanitised body with cid images
+            rewritten to staged-content URLs, and the message's real attachments re-staged under
+            the calling account so the composer can offer them again. Uses the same GetMimeMessage +
+            PrepareAsync(EditAsNew) pipeline as PrepareQuote, so a save/resume round trip behaves the
+            same way a forward or edit-as-new does.
+            </summary>
+            <param name="request">the drafts-role folder and the UID of the stored draft</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The envelope, editable body and re-staged attachments</response>
+            <response code="400">Missing folder, or staging over the account caps</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">No message with that UID in that folder</response>
+            <response code="502">The mail server could not be reached</response>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.PreferencesController">
              <summary>
@@ -548,6 +862,13 @@
             <response code="204">Preference stored</response>
             <response code="400">Unknown key, or a value the key does not accept</response>
             <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.SieveFailure(System.String)">
+            <summary>
+            A ManageSieve outage is the service's fault, not the caller's: 502, the same split
+            MailController applies to IMAP. Anything else — an unknown provider, a rule the format
+            cannot express — really is a bad request.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.Get(System.Threading.CancellationToken)">
             <summary>
@@ -599,6 +920,46 @@
             frontend can offer format selection.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.TrustedSendersController">
+            <summary>
+            Senders whose remote images this account loads without asking — a webmail preference, not
+            mail-server data, so no IMAP session and no credentials cookie. The reader tests the list
+            itself; the sanitiser is never told about it, which is what keeps one message body good for
+            every account.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.#ctor(weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore)">
+            <summary>
+            Senders whose remote images this account loads without asking — a webmail preference, not
+            mail-server data, so no IMAP session and no credentials cookie. The reader tests the list
+            itself; the sanitiser is never told about it, which is what keeps one message body good for
+            every account.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.List(System.Threading.CancellationToken)">
+            <summary>The approved addresses, canonical and sorted.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The addresses</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.Add(weesky.Snoopy.Microservice.Models.TrustedSenderRequest,System.Threading.CancellationToken)">
+            <summary>Starts trusting one sender. Approving an address already stored is not an error.</summary>
+            <param name="request">the address to trust</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Trusted</response>
+            <response code="400">The address does not parse, or the account is at its ceiling</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.TrustedSendersController.Remove(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Stops trusting one sender. Always 204, unknown address included: a 404 would confirm
+            which addresses this account has approved, and the caller gains nothing from the answer.
+            </summary>
+            <param name="address">the address to stop trusting</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">No longer trusted, whether it was or not</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride">
             <summary>
             One user-chosen folder-role assignment. Absence of a row means the role falls back to
@@ -632,6 +993,13 @@
             table collates in binary, so a casing difference would split one identity into two.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.TrustedSender">
+            <summary>
+            One sender whose remote images this account loads without asking. Addresses are stored
+            canonical (trimmed, lower-case): the table collates in binary, so a casing difference would
+            split one sender into two rows and the second would silently never match.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.UserPreference">
              <summary>
              One preference an account has set. Key/value rather than a column per option: this project
@@ -647,6 +1015,23 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Data.Preferences.UserPreference.PreferenceValue">
             <summary>Always a string. The registry knows how to read it back.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.WebmailUser">
+            <summary>
+            One webmail account, keyed by a surrogate GUID. The three preference tables reference this
+            row (FK, ON DELETE CASCADE); email is the natural key looked up at login and refreshed on
+            rename. Never mirrors a dovecot row structurally — this table lives only in snoopy_webmail.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.WebmailUser.Email">
+            <summary>Canonical (trimmed, lower-case); the table collates in binary.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.WebmailUser.SecurityStamp">
+            <summary>
+            Rotated whenever the account's sessions must be cut. Every JWT carries the value that was
+            current when it was issued, so one write here revokes every token for this account at once
+            — which is the only way a password change can actually sign the other devices out.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AccountInfo">
             <summary>
@@ -684,10 +1069,15 @@
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.AdminUserRequest">
-            <summary>
-            Request body for POST and PUT /api/Admin/users.
-            Password is optional on PUT (null = keep unchanged); the controller enforces it on POST.
-            </summary>
+             <summary>
+             Request body for POST and PUT /api/Admin/users.
+            
+             Every optional field reads "null = keep unchanged" on PUT. They are nullable for that
+             reason alone: as plain <c>int</c>/<c>bool</c> they carried a non-null default, so a partial
+             update that simply omitted them reset the quota to 1024 and revoked admin — silently, and
+             with no way for the repository to tell "false" from "not sent". The creation defaults live
+             in <see cref="T:weesky.Snoopy.Microservice.Repositories.AdminRepository"/>, applied only when the field is absent.
+             </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Alias.Name">
             <summary>
@@ -726,6 +1116,22 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.IncompatibleRule">
             <summary>A single rule the target provider cannot represent, with a human-readable reason.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.CredentialResult">
+             <summary>
+             Why a credential check failed. For the audit log only — brute-force triage needs to tell an
+             address spray apart from an attack on one known account.
+            
+             It must never reach a response body, and the login response must not vary with it: the whole
+             point of the check that produces it is that an attacker cannot learn which value came back,
+             by content or by timing.
+             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.CredentialCheck">
+            <summary>The outcome of a credential check. <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.User"/> is set only when <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.Result"/> is Ok.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.CredentialCheck.#ctor(weesky.Snoopy.Microservice.Models.CredentialResult,weesky.Snoopy.Microservice.Models.User)">
+            <summary>The outcome of a credential check. <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.User"/> is set only when <see cref="P:weesky.Snoopy.Microservice.Models.CredentialCheck.Result"/> is Ok.</summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Credentials.Email">
             <summary>
@@ -833,7 +1239,18 @@
             <summary>One recipient. Name is empty when the message carried no display name.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent">
-            <summary>A decoded attachment, ready to stream to the client.</summary>
+            <summary>
+            A decoded attachment, ready to stream to the client. The caller owns <see cref="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent.Content"/> and
+            must dispose it — <c>FileStreamResult</c> does exactly that once the response is written.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentContent.Content">
+            <summary>
+            The decoded bytes, seekable so the response still carries a Content-Length and the browser
+            can show download progress. A stream rather than a <c>byte[]</c>: the array forced a second
+            full copy of a part that can reach the configured message size, on the large object heap,
+            for every concurrent download.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo">
             <summary>An attachment as listed on a message, without its content.</summary>
@@ -852,6 +1269,12 @@
             <summary>
             True for a part the HTML body references by cid:, not a real attachment. The UI
             hides these: they are already visible inside the message.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailAttachmentInfo.ContentId">
+            <summary>
+            Bare Content-ID (no angle brackets) when the part declares one, else null. The HTML body
+            references inline parts as src="cid:{ContentId}"; this is the client's key to resolve them.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.MailAuthentication">
@@ -960,6 +1383,21 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.UidValidity">
             <summary>Folder UID validity — see MailFolderPage for why the client needs it.</summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.MessageId">
+            <summary>RFC 5322 Message-Id, bare (no angle brackets). Null when the message carries none.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.References">
+            <summary>References chain, oldest first, bare ids. Empty when absent.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.InReplyTo">
+            <summary>In-Reply-To, bare id. Null when absent.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.ReplyTo">
+            <summary>Reply-To mailboxes — the reply target when present. Empty when absent.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.Bcc">
+            <summary>Bcc mailboxes — kept on a Sent copy; empty on received mail. Feeds Edit-as-new.</summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail.Authentication">
             <summary>SPF/DKIM verdicts from the receiving server. Null when the message carries no Authentication-Results.</summary>
         </member>
@@ -986,6 +1424,9 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.FromName">
             <summary>Display name of the first sender, falling back to the address.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.To">
+            <summary>Recipients from the envelope — the drafts folder lists "To:" instead of the sender.</summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.MailMessageSummary.Date">
             <summary>Date the message claims, falling back to the server's internal date.</summary>
@@ -1084,23 +1525,21 @@
         <member name="M:weesky.Snoopy.Microservice.Models.Mail.MailSpamScore.#ctor(System.Double,System.Double,System.String)">
             <summary>The spam filter's own verdict: score, the threshold it judges against, and the header it came from.</summary>
         </member>
-        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest">
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.MessageBatchRequest">
             <summary>
             Batch from day one — multi-select (2b3) reuses this unchanged. The folder path travels
             in the body, never in a route segment: the hierarchy separator may be '/'.
             </summary>
         </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest.Uids">
-            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MessageBatchRequest.Uids">
+            <summary>
+            1 to 200 entries — the same ceiling as pageSize. The setter coalesces because an
+            initialiser only covers an *absent* property: a body carrying <c>"uids": null</c>
+            overwrites it, and the controller's count check then threw a 500 on a bad request.
+            </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.SetMessageFlagsRequest.Value">
             <summary>True sets the flag, false clears it.</summary>
-        </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.Mail.MoveMessagesRequest.Uids">
-            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
-        </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.Mail.DeleteMessagesRequest.Uids">
-            <summary>1 to 200 entries — the same ceiling as pageSize.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.EmptyFolderRequest">
             <summary>
@@ -1121,11 +1560,38 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.SearchMessagesRequest.SinceDays">
             <summary>Compiled server-side to SINCE (today - N): the client never sends a literal date.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.OpenDraftRequest">
+            <summary>What OpenDraft resumes: the folder and UID of the stored draft.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.OpenDraftRequest.#ctor(System.String,System.UInt32)">
+            <summary>What OpenDraft resumes: the folder and UID of the stored draft.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.OpenedDraft">
+            <summary>Everything the composer needs to resume a draft: envelope, editable body, re-staged parts.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.OpenedDraft.#ctor(System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyList{System.String},System.String,System.String,System.String,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo},System.String,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>Everything the composer needs to resume a draft: envelope, editable body, re-staged parts.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.OutgoingBody">
             <summary>A composed body ready to send: sanitised HTML and its plain-text alternative.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Models.Mail.OutgoingBody.#ctor(System.String,System.String)">
             <summary>A composed body ready to send: sanitised HTML and its plain-text alternative.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.PreparedQuote">
+            <summary>The quotable body (outbound-sanitised, cid images rewritten to staged URLs) and the staged parts.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.PreparedQuote.#ctor(System.String,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo})">
+            <summary>The quotable body (outbound-sanitised, cid images rewritten to staged URLs) and the staged parts.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.PrepareQuoteRequest">
+            <summary>What PrepareQuote acts on: the message, and the intent the composer opens with.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.PrepareQuoteRequest.Purpose">
+            <summary>"reply", "forward" or "editAsNew".</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.QuotePurpose">
+            <summary>What the composer opens the prepared quote as. EditAsNew stages like Forward.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.ReplaceIdentitiesRequest">
             <summary>The full replacement set — PUT semantics, so order and default are atomic.</summary>
@@ -1139,6 +1605,12 @@
             them back in without another round trip. Loading them would tell the sender the
             message was opened, which is why they are withheld until the user asks.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Mail.SaveDraftRequest">
+            <summary>A draft save: the send shape plus the previous version this one replaces.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SaveDraftRequest.ReplaceUid">
+            <summary>UID of the superseded version — expunged once the new one is in place.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendingIdentityInfo">
             <summary>
@@ -1155,13 +1627,16 @@
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest">
-            <summary>
-            A composed message. Threading (inReplyTo/references) comes with 2c2b — absent today,
-            no dead fields in waiting.
-            </summary>
+            <summary>A composed message.</summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest.FromAddress">
             <summary>Identity to send as. Null/empty means the primary address — the 2c1 behaviour.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest.InReplyTo">
+            <summary>Message-Id being replied to, bare (no angle brackets). Absent on a fresh message.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest.References">
+            <summary>References chain for the reply, oldest first, bare ids. Empty on a fresh message.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.SendMessageResult">
             <summary>The mail is gone either way; false only means the Sent copy could not be filed.</summary>
@@ -1170,10 +1645,12 @@
             <summary>The mail is gone either way; false only means the Sent copy could not be filed.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo">
-            <summary>What the upload endpoint answers and the compose client holds on to.</summary>
+            <summary>What the upload endpoint answers and the compose client holds on to.
+            A non-null ContentId marks an inline body resource (cid part) to pack as multipart/related.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo.#ctor(System.Guid,System.String,System.Int64,System.String)">
-            <summary>What the upload endpoint answers and the compose client holds on to.</summary>
+        <member name="M:weesky.Snoopy.Microservice.Models.Mail.StagedAttachmentInfo.#ctor(System.Guid,System.String,System.Int64,System.String,System.String)">
+            <summary>What the upload endpoint answers and the compose client holds on to.
+            A non-null ContentId marks an inline body resource (cid part) to pack as multipart/related.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Mail.StagedAttachment">
             <summary>A staged file resolved for sending. The path stays inside the store's root.</summary>
@@ -1338,6 +1815,15 @@
             When true, accept any TLS certificate (development only).
             </summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.AllowCleartext">
+            <summary>
+            When true, carry on over an unencrypted socket if the server does not advertise
+            STARTTLS. Off by default, and it must stay off anywhere the link is not a loopback:
+            the SASL PLAIN payload carries the master password, and base64 is not encryption. The
+            capability banner arrives in the clear, so an attacker on the path can strip STARTTLS
+            from it — without this gate that downgrade is silent and the password goes out plain.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.SieveRawScript">
             <summary>
             Wrapper used by the raw Sieve script endpoints (<c>GET/PUT /api/Rules/raw</c>) so the
@@ -1392,6 +1878,18 @@
             (the WEESKY-RULES marker was present and valid) or must be edited as raw text.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.TrustedSenderOptions">
+            <summary>Bound from the "TrustedSenders" section of appsettings.json.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.TrustedSenderOptions.RetentionDays">
+            <summary>
+            Days an approved sender keeps its allowance without a message of theirs being opened.
+            A year: long enough that a yearly statement still finds its sender approved.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.TrustedSenderRequest">
+            <summary>One sender to start trusting. Stored canonical, so casing here is immaterial.</summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Models.User.Name">
             <summary>
             The name of the user (the mailbox name).
@@ -1405,6 +1903,16 @@
         <member name="P:weesky.Snoopy.Microservice.Models.User.FullName">
             <summary>
             The full name of the user.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.User.WebmailUid">
+            <summary>The snoopy_webmail surrogate key. Stamped into the JWT at login, read every request.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.User.SecurityStamp">
+            <summary>
+            The account's revocation stamp at the time the token was issued. Travels in the JWT the
+            same way <see cref="P:weesky.Snoopy.Microservice.Models.User.WebmailUid"/> does, and is compared against the stored one on every
+            request: a mismatch means the session was revoked.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.PreferenceDefinition">
@@ -1428,11 +1936,11 @@
             still one the registry accepts.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.FolderRoleStore.CanonicalAccountId(System.String)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.OwnersQuery(System.Linq.Expressions.Expression{System.Func{weesky.Snoopy.Microservice.Data.MailDomainOwnership,System.Boolean}})">
             <summary>
-            The table's collation is binary — IMAP paths must compare byte for byte — so the
-            account id must be written in exactly one form, or the same user splits into
-            several accounts.
+            Owners of the ownerships matching <paramref name="scope"/>, each carrying the domain it
+            belongs to. One shape for the single-domain read and the grouped listing, so the two
+            cannot report a different owner set for the same rows.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore">
@@ -1442,10 +1950,10 @@
             live folder is the caller's.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.DeleteAsync(System.String,System.String,System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.DeleteAsync(System.Guid,System.String,System.Threading.CancellationToken)">
             <summary>Idempotent: clearing an absent override is not an error.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.ApplyRenameAsync(System.String,System.String,System.String,System.Char,System.UInt64,System.String,System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.ApplyRenameAsync(System.Guid,System.String,System.String,System.Char,System.UInt64,System.String,System.Threading.CancellationToken)">
             <summary>
             After a successful IMAP rename. The exact row gets the new path and the freshly
             re-read identity; subtree rows get their prefix swapped and keep their own
@@ -1453,7 +1961,7 @@
             '/' elsewhere — never from a constant.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.RemoveSubtreeAsync(System.String,System.String,System.Char,System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore.RemoveSubtreeAsync(System.Guid,System.String,System.Char,System.Threading.CancellationToken)">
             <summary>After a successful IMAP delete: purge the folder's row and its subtree's.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailFolderRepository.GetTreeAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Threading.CancellationToken)">
@@ -1501,7 +2009,13 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.AppendAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Boolean,System.Threading.CancellationToken)">
             <summary>Appends a message to a folder, optionally marked read.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore.ReplaceAsync(System.String,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.SaveDraftAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Nullable{System.UInt32},System.Threading.CancellationToken)">
+            <summary>Appends a draft (\Draft \Seen), replacing the previous version when given. Returns the new UID.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IMailMessageRepository.GetMimeMessageAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.UInt32,System.Threading.CancellationToken)">
+            <summary>The raw MimeKit message, for quoting: unsanitised body, cid parts, attachments.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore.ReplaceAsync(System.Guid,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.Threading.CancellationToken)">
             <summary>Replaces the account's whole set in one transaction — the PUT semantics.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.ISieveRepository">
@@ -1526,19 +2040,80 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.ISieveRepository.DeleteAllRulesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
             <summary>Deactivate and delete the managed script. No-op if it does not exist.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore">
+            <summary>
+            The senders whose remote images an account loads without being asked. Addresses go in and
+            come back canonical; callers never fold them themselves.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.AddAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>Adds, or refreshes an address already stored. Fails only when the cap is reached.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.RemoveAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>Removes it. An address that is not stored is not an error.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.TouchAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Marks a stored address as still in use, at most once a day. Creates nothing: this runs
+            for every message opened, approved sender or not.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ITrustedSenderStore.SweepExpiredAsync(System.TimeSpan,System.Threading.CancellationToken)">
+            <summary>Drops every row untouched for longer than <paramref name="retention"/>.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore">
             <summary>
             Reads and writes the rows an account has set. Knows nothing about which keys exist or what
             they may hold — that is the registry's business, and the caller validates before writing.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore.SetAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore.SetAsync(System.Guid,System.String,System.String,System.Threading.CancellationToken)">
             <summary>Sets or corrects one preference. The pair (account, key) is the row.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IUsersRepository.VerifyCredentialsAsync(System.String,System.String)">
+            <summary>
+            Checks an email and password together. One call rather than a lookup followed by a
+            password check: splitting them made an unknown address cheaper to answer than a wrong
+            password, which is enough to enumerate the mailboxes that exist.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.WebmailAccount">
+            <summary>The webmail account row as the session layer needs it: its key and its revocation stamp.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.WebmailAccount.#ctor(System.Guid,System.Guid)">
+            <summary>The webmail account row as the session layer needs it: its key and its revocation stamp.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.RegisterLoginAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Ensures the account's row exists and stamps the login. Called once per login, never per
+            request. Returns the stable GUID (created if absent) and the current security stamp.
+            Email is canonicalised.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.FindByEmailAsync(System.String,System.Threading.CancellationToken)">
+            <summary>The account's key and stamp, or null when no row exists. Read on the session path.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.RotateSecurityStampAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Draws a new security stamp, which invalidates every token already issued for this account.
+            Returns it so the caller can re-issue its own session rather than sign itself out.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IWebmailUserStore.DeleteByEmailAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Removes the account's row if present (0 rows = success). The FK cascade removes preferences.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.MailFolderRepository">
             <summary>
-            Folder access over IMAP. One session per method, opened and disposed inside it — the
-            same shape as SieveRepository over ManageSieve.
+            Folder access over IMAP. Every method runs against the request's shared session, so a
+            rename — which reads the tree first to refuse a system folder — no longer opens two
+            connections to do one thing.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.MailFolderRepository.#ctor(weesky.Snoopy.Microservice.Services.IImapSessionProvider,weesky.Snoopy.Microservice.Repositories.IFolderRoleStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Repositories.MailFolderRepository})">
+            <summary>
+            Folder access over IMAP. Every method runs against the request's shared session, so a
+            rename — which reads the tree first to refuse a system folder — no longer opens two
+            connections to do one thing.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.MailFolderRepository.TryMoveOverridesAsync(weesky.Snoopy.Microservice.Services.IImapSession,weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.Threading.CancellationToken)">
@@ -1552,8 +2127,14 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.MailMessageRepository">
             <summary>
-            Message access over IMAP. One session per method, opened and disposed inside it — the
-            same shape as MailFolderRepository.
+            Message access over IMAP. Every method runs against the request's shared session — the same
+            shape as MailFolderRepository — so a request needing several operations pays one connection.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.MailMessageRepository.#ctor(weesky.Snoopy.Microservice.Services.IImapSessionProvider)">
+            <summary>
+            Message access over IMAP. Every method runs against the request's shared session — the same
+            shape as MailFolderRepository — so a request needing several operations pays one connection.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.SieveRepository.CleanupOtherManagedScriptsAsync(weesky.Snoopy.Microservice.Services.IManageSieveSession,System.String,System.Threading.CancellationToken)">
@@ -1571,10 +2152,82 @@
             3. Otherwise null (no script at all).
             </summary>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Repositories.TrustedSenderStore.MaxPerAccount">
+            <summary>
+            What actually bounds the table. The retention sweep deletes after the fact and bounds
+            nothing in the meantime; this refuses the row that would exceed the ceiling.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindByEmailAsync(System.String)">
+            <summary>
+            Resolves a *usable* account: a deactivated one (<c>active = 'N'</c>) reads as absent.
+            Both authentication paths funnel through here — the login itself and the per-request
+            existence check in <c>OnTokenValidated</c> — so filtering once closes both. Dovecot
+            already refuses IMAP for such an account; without this, everything that does not go
+            through the mail server (aliases, preferences, admin, and Sieve rules, which
+            authenticate as the master user) kept working for a disabled mailbox.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.VerifyCredentialsAsync(System.String,System.String)">
+             <summary>
+             Checks an email and password in one pass, in time that does not depend on whether the
+             mailbox exists.
+             </summary>
+             <remarks>
+             The SHA-512 crypt is deliberately slow, and it used to run only once a mailbox had been
+             found: an unknown address answered in a fraction of the time a wrong password did, so the
+             login endpoint told anyone who measured it which addresses are real. The hash therefore
+             runs on every call, against <see cref="F:weesky.Snoopy.Microservice.Repositories.UsersRepository.AbsentAccountHash"/> when there is nothing to
+             compare with, and the verdict is formed only once both the lookup and the hash are done.
+            
+             This holds only while the stored hashes and the decoy share their cost parameters. Both
+             come from CryptSharp's default <c>$6$</c> rounds, the same the MariaDB trigger writes.
+             </remarks>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Repositories.UsersRepository.AbsentAccountHash">
+            <summary>
+            The hash a login falls back on when no mailbox matches, so the crypt still runs and still
+            costs what a real one costs. Computed once: generating it per call would itself be work an
+            existing account does not do.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.WarnIfUnverifiable(System.String,System.String)">
+             <summary>
+             A stored value that is not a <c>$6$</c> crypt hash cannot be verified at all: CryptSharp
+             reads the salt out of whatever it is handed, so anything else yields a digest that can
+             never match, and the account reads as "wrong password" forever.
+            
+             Nothing else about the failure distinguishes that from a genuinely wrong password, which
+             is exactly why it is worth a line of its own. It names the scheme, never the hash.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.HashScheme(System.String)">
+            <summary>
+            The scheme marker of a stored password, for diagnostics. Deliberately an allow-list rather
+            than "the text up to the second separator": the one case worth naming is a column holding
+            something that is not a hash at all, and that something must not reach the log.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.BracketedScheme(System.String)">
+            <summary>A Dovecot-style <c>{SCHEME}</c> prefix, or nothing recognisable.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUserAsync(System.String,System.String)">
             <summary>
-            Resolves the domain by name then the mailbox user within it (name matched
-            case-insensitively). Returns null when either is missing.
+            The mailbox and its domain in one round trip, the user name matched case-insensitively.
+            Null when there is no such mailbox.
+            </summary>
+            <remarks>
+            One joined query rather than the two sequential reads this replaced — domain, then user.
+            Beyond the saved round trip that halves the cost of every login, a single query is what
+            makes an unknown domain cost the same as an unknown mailbox: with two, the first returning
+            nothing skipped the second, and the response time said which of the two it was.
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.PasswordMatches(System.String,System.String)">
+            <summary>
+            Verifies a password against a stored crypt hash, in time that does not depend on how much
+            of the hash matched. An ordinary string comparison returns at the first differing byte,
+            which times how far a guess got.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.RuleProviders.IRuleProvider">
@@ -1708,6 +2361,20 @@
             and returns the rows array.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.DraftSaver">
+            <summary>
+            Orchestrates a draft save: build the message via the shared factory, resolve the drafts-role
+            folder, then APPEND-with-replace. Unlike the best-effort Sent copy, the APPEND here is the whole
+            point of the request, so a missing drafts folder is a failure, not a degraded success.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.DraftSaver.#ctor(weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory,weesky.Snoopy.Microservice.Repositories.IMailFolderRepository,weesky.Snoopy.Microservice.Repositories.IFolderRoleStore,weesky.Snoopy.Microservice.Repositories.IMailMessageRepository,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.DraftSaver})">
+            <summary>
+            Orchestrates a draft save: build the message via the shared factory, resolve the drafts-role
+            folder, then APPEND-with-replace. Unlike the best-effort Sent copy, the APPEND here is the whole
+            point of the request, so a missing drafts folder is a failure, not a degraded success.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.FolderRoleResolver">
              <summary>
              The role resolution chain (spec § 4.1): user overrides, then SPECIAL-USE flags, then
@@ -1769,8 +2436,18 @@
             <summary>The same rule over an already-canonical set; accounts carry 100+ aliases, so a
             caller testing many addresses builds the set once with <see cref="M:weesky.Snoopy.Microservice.Services.IdentityResolver.CanonicalSet(System.Collections.Generic.IEnumerable{System.String})"/>.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.LabelFor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.String,System.String)">
-            <summary>Label precedence: the stored row, then the account's FullName, then the address.</summary>
+        <member name="M:weesky.Snoopy.Microservice.Services.IdentityResolver.LabelFor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.String,System.String,System.String)">
+            <summary>
+            The label for a send-from address. The primary always shows the account FullName — editable
+            only from the Account tab, never overridden by a stored row; an alias shows its stored row,
+            then the FullName, then the address.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IDraftSaver">
+            <summary>Files a composed message under the account's drafts role folder.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.IDraftSaver.NoDraftsFolder">
+            <summary>Returned when no folder in the tree resolves to the drafts role.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IImapConnectionFactory">
             <summary>Opens an authenticated IMAP session for one user, for one request.</summary>
@@ -1870,6 +2547,39 @@
         <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.AppendAsync(System.String,MimeKit.MimeMessage,System.Boolean,System.Threading.CancellationToken)">
             <summary>Appends a message to a folder — the Sent copy after a send.</summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.SaveDraftAsync(System.String,MimeKit.MimeMessage,System.Nullable{System.UInt32},System.Threading.CancellationToken)">
+            <summary>
+            Appends a draft (\Draft \Seen) and, when <paramref name="replaceUid"/> is given,
+            expunges the version it replaces. Returns the new UID. Fails when the server lacks
+            UIDPLUS, since the composer would then be unable to replace this version on its next save.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.GetMimeMessageAsync(System.String,System.UInt32,System.Threading.CancellationToken)">
+            <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IImapSessionProvider">
+             <summary>
+             The authenticated IMAP session for the current request.
+            
+             Distinct from <see cref="T:weesky.Snoopy.Microservice.Services.IImapConnectionFactory"/>, which opens a new connection on every
+             call: this hands back the same one for the whole request. One HTTP call routinely needs
+             several operations — a rename checks the folder tree first, a send files a Sent copy after
+             the SMTP hand-off — and each one used to pay its own TCP handshake, TLS negotiation and SASL
+             round trip against the mail server.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSessionProvider.GetAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            The request's session, opening it on first use. A failure is remembered too: one
+            refused authentication must not be retried once per operation in the same request.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ImapSessionProviderExtensions">
+            <summary>
+            Runs one operation against the request's session. The whole body of every repository method
+            on the mail path, so a caller writes the operation and nothing else.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IMailCredentialStore">
              <summary>
              Carries the user's mail password between requests, encrypted into a cookie.
@@ -1940,15 +2650,34 @@
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ImapConnectionFactory">
+            <summary>
+            The IMAP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/> — where to connect and
+            what to wrap the connection in. Everything else (timeout, certificate policy, the guard on
+            unconfigured options, the ownership hand-off) lives in the base.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapConnectionFactory.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions},weesky.Snoopy.Microservice.Services.IMailHtmlSanitizer,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.ImapConnectionFactory})">
+            <summary>
+            The IMAP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/> — where to connect and
+            what to wrap the connection in. Everything else (timeout, certificate policy, the guard on
+            unconfigured options, the ownership hand-off) lives in the base.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ExecuteAsync``1(System.Threading.CancellationToken,System.Func{System.Threading.Tasks.Task{CSharpFunctionalExtensions.Result{``0}}},System.String,System.Action{System.Exception},System.Func{System.Exception,System.String})">
              <summary>
-             Opens one IMAP connection per request — no pooling, the Rainloop model. Modelled on
-             ManageSieveClient.OpenSessionAsync: guard on unconfigured options, a generic message to
-             the client with the detail logged, and ownership of the client transferred to the
-             session on success so the finally block is a no-op on the happy path.
+             The failure contract every operation on this session shares, and the reason none of them
+             spells it out any more: a cancellation the caller asked for propagates untouched, a known
+             IMAP condition becomes the sentinel both layers agree on, and anything else is logged in
+             full while the client gets one opaque sentence — the server's own words never reach it.
             
-             Options are read through IOptionsMonitor, not IOptions, so a correction in
-             appsettings.json takes effect without restarting the service and dropping live sessions.
+             <c>sentinel</c> maps an exception to a shared sentinel, or null when it is not one this
+             operation recognises. Deliberately per-operation rather than global: the set each method
+             already translated is the set it keeps, so this stays a refactor and not a change of
+             behaviour. Unifying them is worth doing, but only once these paths have coverage.
              </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ExecuteAsync(System.Threading.CancellationToken,System.Func{System.Threading.Tasks.Task{CSharpFunctionalExtensions.Result}},System.String,System.Action{System.Exception},System.Func{System.Exception,System.String})">
+            <inheritdoc cref="M:weesky.Snoopy.Microservice.Services.ImapSession.ExecuteAsync``1(System.Threading.CancellationToken,System.Func{System.Threading.Tasks.Task{CSharpFunctionalExtensions.Result{``0}}},System.String,System.Action{System.Exception},System.Func{System.Exception,System.String})"/>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ResolveTargetOrFailAsync(System.String,System.Threading.CancellationToken)">
             <summary>
@@ -1986,7 +2715,13 @@
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.FillSummary``1(``0,MailKit.IMessageSummary)">
-            <summary>One mapping for list rows and search hits — the eleven fields cannot drift apart.</summary>
+            <summary>One mapping for list rows and search hits — the fields cannot drift apart.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.ApplyThreading(weesky.Snoopy.Microservice.Models.Mail.MailMessageDetail,MimeKit.MimeMessage)">
+            <summary>Threading and reply-routing headers — 2c2b's transcription duty on the detail.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapSession.GetMimeMessageAsync(System.String,System.UInt32,System.Threading.CancellationToken)">
+            <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.ImapSession.MessageNotFound">
             <summary>
@@ -2053,6 +2788,27 @@
             absurd on the way out.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory">
+            <summary>
+            Builds the outgoing MimeMessage Send and Drafts share: validated From, staged attachments
+            resolved, outbound-sanitised body with staged URLs rewritten to cid, safe threading headers.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory.UnknownAttachment">
+            <summary>Returned as the failure when a staged attachment id no longer resolves.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory.ForbiddenFrom">
+            <summary>Returned when the requested From is neither the primary address nor a live alias.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory.CreateAsync(weesky.Snoopy.Microservice.Models.User,weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest,System.Threading.CancellationToken)">
+            <summary>
+            Builds the complete outgoing message for the request, or fails with
+            <see cref="F:weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory.UnknownAttachment"/> / <see cref="F:weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory.ForbiddenFrom"/> — never a partial message.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.IQuotePreparer">
+            <summary>Builds the quotable body of an original and stages the parts a reply/forward carries over.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ISmtpConnectionFactory.OpenAsync(System.String,System.String,System.Threading.CancellationToken)">
             <summary>Opens an authenticated SMTP session with the user's own credentials.</summary>
         </member>
@@ -2065,8 +2821,9 @@
             by id at send time. Ids are sealed to the account that created them.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.SaveAsync(System.String,System.String,System.String,System.IO.Stream,System.Threading.CancellationToken)">
-            <summary>Streams one upload to disk. Fails when the file or the account total exceeds the caps.</summary>
+        <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.SaveAsync(System.String,System.String,System.String,System.IO.Stream,System.Threading.CancellationToken,System.String)">
+            <summary>Streams one upload to disk. Fails when the file or the account total exceeds the caps.
+            A contentId marks the file as an inline body resource rather than a plain attachment.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.IStagedAttachmentStore.Open(System.String,System.Guid)">
             <summary>Resolves one staged file. An unknown or foreign id is a plain failure.</summary>
@@ -2079,6 +2836,51 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailAuthenticationReader">
             <summary>Reads the SPF and DKIM verdicts out of the topmost Authentication-Results header (RFC 7601).</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailEndpoint">
+            <summary>
+            Where and how to reach one of the mail services, read from <see cref="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions"/>.
+            <c>Protocol</c> names it in log messages ("IMAP"), and <c>ConfigurationKey</c> is the setting
+            whose absence means "not configured", so the log line points at what to fill in.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailEndpoint.#ctor(System.String,System.String,System.String,System.Int32,MailKit.Security.SecureSocketOptions,System.Boolean)">
+            <summary>
+            Where and how to reach one of the mail services, read from <see cref="T:weesky.Snoopy.Microservice.Models.Mail.MailOptions"/>.
+            <c>Protocol</c> names it in log messages ("IMAP"), and <c>ConfigurationKey</c> is the setting
+            whose absence means "not configured", so the log line points at what to fill in.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2">
+             <summary>
+             Opens one connection per request — no pooling, the Rainloop model: guard on unconfigured
+             options, a generic message to the client with the detail logged, and ownership of the client
+             transferred to the session on success so the finally block is a no-op on the happy path.
+            
+             Shared by the IMAP and SMTP factories, which were the same file twice down to a byte-identical
+             certificate callback — including the rule that matters most here, that an authentication
+             failure must never echo the server's message back to the caller.
+            
+             Options are read through IOptionsMonitor, not IOptions, so a correction in appsettings.json
+             takes effect without restarting the service and dropping live sessions.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions},Microsoft.Extensions.Logging.ILogger)">
+             <summary>
+             Opens one connection per request — no pooling, the Rainloop model: guard on unconfigured
+             options, a generic message to the client with the detail logged, and ownership of the client
+             transferred to the session on success so the finally block is a no-op on the happy path.
+            
+             Shared by the IMAP and SMTP factories, which were the same file twice down to a byte-identical
+             certificate callback — including the rule that matters most here, that an authentication
+             failure must never echo the server's message back to the caller.
+            
+             Options are read through IOptionsMonitor, not IOptions, so a correction in appsettings.json
+             takes effect without restarting the service and dropping live sessions.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2.CreateSession(`0)">
+            <summary>Wraps the connected client. The session owns it from here, disposal included.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Services.MailCredentialStore.CookieName">
             <summary>Cookie name. Distinct from the JWT cookie so both can be cleared independently.</summary>
@@ -2170,19 +2972,19 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailSender">
             <summary>
-            The send pipeline. Order is load-bearing: the From is validated before anything reaches the
-            wire, staged ids resolve next (a desync fails the whole request, never a partial send),
-            SMTP failure keeps the staged files for a retry, and once SMTP accepted, nothing after it
-            may fail the operation — the mail is gone.
+            The send pipeline. Order is load-bearing: the message is built — and with it the From validated
+            and the staged ids resolved — before anything reaches the wire, SMTP failure keeps the staged
+            files for a retry, and once SMTP accepted, nothing after it may fail the operation — the mail is gone.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.LoadIdentitiesAsync(System.String,System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.#ctor(weesky.Snoopy.Microservice.Services.IOutgoingMessageFactory,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,weesky.Snoopy.Microservice.Services.ISmtpConnectionFactory,weesky.Snoopy.Microservice.Repositories.IMailFolderRepository,weesky.Snoopy.Microservice.Repositories.IFolderRoleStore,weesky.Snoopy.Microservice.Repositories.IMailMessageRepository,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.MailSender})">
             <summary>
-            The preferences database only carries display labels, so an outage degrades to the account's
-            own label rather than failing a send that would otherwise have gone out.
+            The send pipeline. Order is load-bearing: the message is built — and with it the From validated
+            and the staged ids resolved — before anything reaches the wire, SMTP failure keeps the staged
+            files for a retry, and once SMTP accepted, nothing after it may fail the operation — the mail is gone.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.AppendToSentAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.String,MimeKit.MimeMessage,System.Threading.CancellationToken)">
+        <member name="M:weesky.Snoopy.Microservice.Services.MailSender.AppendToSentAsync(weesky.Snoopy.Microservice.Models.User,System.String,System.Guid,MimeKit.MimeMessage,System.Threading.CancellationToken)">
             <summary>Best-effort by design: the mail is already gone, so every failure degrades to false.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.MailSpamScoreReader">
@@ -2255,6 +3057,13 @@
             authorization identity).
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ManageSieveClient.FailUnreachable(System.String,System.String)">
+            <summary>
+            A handshake step the server refused. The server's own wording goes to the log, never to the
+            client: it can disclose service state, and the caller only needs to know the rules service
+            is unavailable.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ManageSieveClient.ReadLineAsync(System.IO.Stream,System.Threading.CancellationToken)">
             <summary>
             Unbuffered line read used only during the handshake. Once the session is
@@ -2276,12 +3085,94 @@
             "(code)" prefix and unquoting the trailing quoted string if present.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory">
+            <summary>
+            The one place an outgoing message is assembled, so Send and Drafts cannot drift apart. Order is
+            load-bearing: the From is validated before anything else runs, and staged ids resolve next — a
+            desync fails the whole request rather than producing a half-built message.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.#ctor(weesky.Snoopy.Microservice.Repositories.IUsersRepository,weesky.Snoopy.Microservice.Repositories.IAliasesRepository,weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Services.IOutgoingMailSanitizer,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.OutgoingMessageFactory})">
+            <summary>
+            The one place an outgoing message is assembled, so Send and Drafts cannot drift apart. Order is
+            load-bearing: the From is validated before anything else runs, and staged ids resolve next — a
+            desync fails the whole request rather than producing a half-built message.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.ApplyThreadingHeaders(MimeKit.MimeMessage,weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest)">
+            <summary>
+            Threading is best-effort and per-id. The client controls these ids, and neither
+            <c>MessageIdList.Add</c> nor the <c>InReplyTo</c> setter rejects a CRLF-bearing one — appended
+            verbatim, it would inject a header line into a message we are about to DKIM-sign. Parsing each
+            id keeps only the msg-id itself, so a malformed one is dropped and none can ever fail a send.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.LoadIdentitiesAsync(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            The preferences database only carries display labels, so an outage degrades to the account's
+            own label rather than failing a send that would otherwise have gone out.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.QuotePreparer">
+            <summary>
+            One pass over the original: the raw body goes through the OUTGOING policy (it is about to be
+            sent again, not displayed), then every cid the body references is staged as an inline part and
+            its src rewritten to the staged-content URL. The invariant is a quotableHtml with no cid: left.
+            Forward and EditAsNew re-stage the real attachments too — server-side, never via the browser.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.QuotePreparer.#ctor(weesky.Snoopy.Microservice.Services.IOutgoingMailSanitizer,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore)">
+            <summary>
+            One pass over the original: the raw body goes through the OUTGOING policy (it is about to be
+            sent again, not displayed), then every cid the body references is staged as an inline part and
+            its src rewritten to the staged-content URL. The invariant is a quotableHtml with no cid: left.
+            Forward and EditAsNew re-stage the real attachments too — server-side, never via the browser.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.QuotePreparer.TextToHtml(System.String)">
+            <summary>Escaped text with its line structure rendered — the text-only quoting path.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.RecipientAddressParser">
             <summary>
             The address-parsing policy every literal address field on the API shares — recipients,
             fromAddress, and the identities payload — so the three cannot silently drift apart.
             MimeKit accepts a bare local part by default, so "not-an-address" would parse.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ScopedImapSessionProvider">
+             <summary>
+             Holds one IMAP session for the lifetime of the DI scope — the HTTP request.
+            
+             Registered scoped, so the container disposes it at the end of the request and the connection
+             closes with it; no caller owns the session any more, which is why no repository disposes what
+             it is handed. Kept per request rather than pooled across them on purpose: the connection is
+             authenticated as one specific user with that user's own password (the Rainloop model), so it
+             is not reusable by anybody else and must not outlive the request that carried the credentials.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ScopedImapSessionProvider.#ctor(weesky.Snoopy.Microservice.Services.IImapConnectionFactory,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.ScopedImapSessionProvider})">
+             <summary>
+             Holds one IMAP session for the lifetime of the DI scope — the HTTP request.
+            
+             Registered scoped, so the container disposes it at the end of the request and the connection
+             closes with it; no caller owns the session any more, which is why no repository disposes what
+             it is handed. Kept per request rather than pooled across them on purpose: the connection is
+             authenticated as one specific user with that user's own password (the Rainloop model), so it
+             is not reusable by anybody else and must not outlive the request that carried the credentials.
+             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SieveErrors">
+             <summary>
+             The failures the rules stack reports about the service itself rather than about the request.
+            
+             Shared constants, the same discipline <c>ImapSession.MessageNotFound</c> follows: the layer
+             that produces an error and the layer that picks a status code cannot drift apart on the exact
+             wording. Without them every ManageSieve outage — unconfigured, unreachable, refused credentials
+             — surfaced as 400, telling the client it had sent something wrong.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SieveErrors.IsServiceFailure(System.String)">
+            <summary>True when the failure is the service's and not the caller's — a 502, not a 400.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SieveScriptListEntry">
             <summary>
@@ -2295,9 +3186,14 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SmtpConnectionFactory">
             <summary>
-            Opens one SMTP connection per request, the same model as ImapConnectionFactory: the
-            user's own password from the credentials cookie, options through IOptionsMonitor so a
-            correction in appsettings.json applies without a restart.
+            The SMTP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/>. Submission uses the
+            account's own credentials, the same ones the IMAP side reads from the credentials cookie.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SmtpConnectionFactory.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{weesky.Snoopy.Microservice.Models.Mail.MailOptions},Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.SmtpConnectionFactory})">
+            <summary>
+            The SMTP half of <see cref="T:weesky.Snoopy.Microservice.Services.MailConnectionFactory`2"/>. Submission uses the
+            account's own credentials, the same ones the IMAP side reads from the credentials cookie.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.SmtpSession.DescribeFailure(System.Exception,MimeKit.MimeMessage)">
@@ -2324,6 +3220,26 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.StagedAttachmentSweeper">
             <summary>Hourly GC over the staged store, so abandoned uploads never accumulate.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.TrustedSenderSweeper">
+            <summary>
+            Daily GC over the trusted senders, so an allowance nobody uses any more does not outlive its
+            usefulness. It is not what bounds the table — the per-account cap in
+            <see cref="T:weesky.Snoopy.Microservice.Repositories.TrustedSenderStore"/> is.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.TrustedSenderSweeper.#ctor(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory,Microsoft.Extensions.Options.IOptions{weesky.Snoopy.Microservice.Models.TrustedSenderOptions},Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.TrustedSenderSweeper})">
+            <summary>
+            Daily GC over the trusted senders, so an allowance nobody uses any more does not outlive its
+            usefulness. It is not what bounds the table — the per-account cap in
+            <see cref="T:weesky.Snoopy.Microservice.Repositories.TrustedSenderStore"/> is.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.TrustedSenderSweeper.SweepOnceAsync(System.Threading.CancellationToken)">
+            <summary>
+            One pass. Opens a scope of its own because the store and its DbContext are scoped while
+            this service is a singleton — injecting the store directly compiles and throws here.
+            </summary>
         </member>
         <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the AngleToken method.</summary>

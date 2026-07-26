@@ -37,9 +37,9 @@ public sealed class UserTests
     }
 
     [Fact]
-    public void DefaultConstructor_AllowsPropertyAssignment()
+    public void PropertiesRemainAssignableAfterConstruction()
     {
-        var user = new User { Name = "alice", Domain = "test.com", FullName = "Alice Smith" };
+        var user = new User("alice@test.com") { FullName = "Alice Smith" };
 
         Assert.Equal("alice@test.com", user.Email);
         Assert.Equal("Alice Smith", user.FullName);

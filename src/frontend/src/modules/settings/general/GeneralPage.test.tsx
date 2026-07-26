@@ -131,6 +131,15 @@ describe('GeneralPage', () => {
     expect(screen.queryByText(/tells the sender you opened the message/i)).not.toBeInTheDocument()
   })
 
+  it('shows the contacts row disabled with its note', async () => {
+    renderPage()
+
+    const row = await screen.findByLabelText('Trust my contacts')
+    expect(row).toBeDisabled()
+    expect(row).not.toBeChecked()
+    expect(screen.getByText('Available once Contacts ships.')).toBeInTheDocument()
+  })
+
   it('shows the spam score toggle on by default', async () => {
     renderPage()
     expect(await screen.findByLabelText('Show the spam score in the message reader')).toBeChecked()

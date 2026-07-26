@@ -6,9 +6,9 @@ public sealed class SecretChange
 {
     [Required]
     [StringLength(256, MinimumLength = 8)]
-    public string NewPassword { get; set; }
+    public string NewPassword { get; set; } = string.Empty;
 
     [Required]
     [StringLength(256, MinimumLength = 1)]
-    public string OldPassword { get; set; }
+    public string OldPassword { get; set; } = string.Empty;
 }

@@ -6,13 +6,9 @@ namespace weesky.Snoopy.Microservice.Models;
 [DebuggerDisplay("{Email}")]
 public sealed class User
 {
-    public User()
-    { }
-
     public User(string email)
     {
-        if (email == null)
-            throw new ArgumentNullException("email");
+        ArgumentNullException.ThrowIfNull(email);
 
         string[] mailParts = email.Split('@');
 
@@ -39,8 +35,15 @@ public sealed class User
     /// <summary>
     /// The full name of the user.
     /// </summary>
-    public string FullName { get; set; }
+    public string? FullName { get; set; }
 
     /// <summary>The snoopy_webmail surrogate key. Stamped into the JWT at login, read every request.</summary>
     public Guid WebmailUid { get; set; }
+
+    /// <summary>
+    /// The account's revocation stamp at the time the token was issued. Travels in the JWT the
+    /// same way <see cref="WebmailUid"/> does, and is compared against the stored one on every
+    /// request: a mismatch means the session was revoked.
+    /// </summary>
+    public Guid SecurityStamp { get; set; }
 }

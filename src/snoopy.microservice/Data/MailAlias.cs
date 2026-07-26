@@ -16,12 +16,12 @@ public sealed class MailAlias
     [Required]
     [StringLength(30)]
     [Column("source_addr")]
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     [Required]
     [StringLength(3)]
     [Column("source_domain")]
-    public string Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
 
     [Required]
     [Column("destination_user")]

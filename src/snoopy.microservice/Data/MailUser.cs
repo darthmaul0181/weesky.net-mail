@@ -15,23 +15,23 @@ public sealed class MailUser
 
     [Required]
     [Column("username")]
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     [Required]
     [Column("password")]
-    public string Password { get; set; }
+    public string Password { get; set; } = string.Empty;
 
     [Required]
     [Column("domain")]
     [StringLength(3, ErrorMessage = "The string 'DomainId' value cannot exceed 3 characters. ")]
-    public string DomainId { get; set; }
+    public string DomainId { get; set; } = string.Empty;
 
     [Required]
     [Column("active")]
     public ActiveState Active { get; set; }
 
     [Column("fullname")]
-    public string FullName { get; set; }
+    public string? FullName { get; set; }
 
     [Required]
     [Column("admin")]

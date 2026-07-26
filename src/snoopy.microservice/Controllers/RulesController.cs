@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -22,6 +23,19 @@ public sealed class RulesController : ApiBaseController
     }
 
     /// <summary>
+    /// A ManageSieve outage is the service's fault, not the caller's: 502, the same split
+    /// MailController applies to IMAP. Anything else — an unknown provider, a rule the format
+    /// cannot express — really is a bad request.
+    /// </summary>
+    private ActionResult SieveFailure(string error) =>
+        SieveErrors.IsServiceFailure(error) ? BadGatewayEnveloppe(error) : BadRequestEnveloppe(error);
+
+    private static int SieveErrorStatus(Result result) =>
+        result.IsFailure && SieveErrors.IsServiceFailure(result.Error)
+            ? StatusCodes.Status502BadGateway
+            : StatusCodes.Status400BadRequest;
+
+    /// <summary>
     /// Returns the authenticated user's Sieve configuration: structured rules when a
     /// registered provider can decode the script, or the raw script when none matches.
     /// </summary>
@@ -34,7 +48,7 @@ public sealed class RulesController : ApiBaseController
     {
         Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
         if (result.IsSuccess) return Ok(result.Value);
-        return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+        return SieveFailure(result.Error);
     }
 
     /// <summary>
@@ -51,11 +65,11 @@ public sealed class RulesController : ApiBaseController
     public async Task<ActionResult<ResultEnveloppe>> Replace([FromBody] SaveRulesRequest request, CancellationToken cancellationToken)
     {
         if (request == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            return BadRequestEnveloppe("Request body is required");
 
         Result result = await _sieveRepository.SaveRulesAsync(
             AuthenticatedUser, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
-        return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+        return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
     /// <summary>
@@ -69,7 +83,7 @@ public sealed class RulesController : ApiBaseController
     public async Task<ActionResult<ResultEnveloppe>> DeleteAll(CancellationToken cancellationToken)
     {
         Result result = await _sieveRepository.DeleteAllRulesAsync(AuthenticatedUser, cancellationToken);
-        return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+        return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
     /// <summary>
@@ -84,7 +98,7 @@ public sealed class RulesController : ApiBaseController
     {
         Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
         if (result.IsFailure)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe(result.Error));
+            return SieveFailure(result.Error);
 
         return Ok(new SieveRawScript
         {
@@ -106,11 +120,11 @@ public sealed class RulesController : ApiBaseController
     public async Task<ActionResult<ResultEnveloppe>> PutRaw([FromBody] SieveRawScript script, CancellationToken cancellationToken)
     {
         if (script == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            return BadRequestEnveloppe("Request body is required");
 
         Result result = await _sieveRepository.SaveRawScriptAsync(
             AuthenticatedUser, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
-        return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+        return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
     /// <summary>
@@ -126,13 +140,13 @@ public sealed class RulesController : ApiBaseController
     public ActionResult<CompatibilityCheckResult> CompatibilityCheck([FromBody] CompatibilityCheckRequest request)
     {
         if (request == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe("Request body is required"));
+            return BadRequestEnveloppe("Request body is required");
 
         var provider = request.ProviderId != null
             ? _providers.GetById(request.ProviderId)
             : _providers.Default;
         if (provider == null)
-            return BadRequest(ResultEnveloppe.CreateErrorEnveloppe($"Unknown rule provider: {request.ProviderId}"));
+            return BadRequestEnveloppe($"Unknown rule provider: {request.ProviderId}");
 
         var incompatible = new List<IncompatibleRule>();
         foreach (var rule in request.Rules ?? new List<SieveRule>())

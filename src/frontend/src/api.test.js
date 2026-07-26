@@ -809,6 +809,43 @@ describe('uploadAttachment', () => {
   })
 })
 
+describe('trusted senders', () => {
+  it('getTrustedSenders reads the list', async () => {
+    mockFetch(200, { json: ['news@example.com'] })
+    const { api } = await import('./api.js')
+
+    await expect(api.getTrustedSenders()).resolves.toEqual(['news@example.com'])
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/TrustedSenders')
+    expect(options.method).toBe('GET')
+  })
+
+  it('trustSender posts the address', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.trustSender('news@example.com')
+
+    const [, options] = globalThis.fetch.mock.calls[0]
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body)).toEqual({ address: 'news@example.com' })
+  })
+
+  // A '+' is a legal local-part character and decodes to a space, so an unencoded query string
+  // would untrust a different address than the one asked for.
+  it('untrustSender encodes the address into the query string', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.untrustSender('news+weekly@example.com')
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('address=news%2Bweekly%40example.com')
+    expect(options.method).toBe('DELETE')
+  })
+})
+
 describe('preferences', () => {
   it('reads every preference in one call', async () => {
     mockFetch(200, { json: { 'mail.pageSize': '30' } })

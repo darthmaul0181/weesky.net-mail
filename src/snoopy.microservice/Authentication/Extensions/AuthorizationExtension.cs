@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using System.Text;
 using weesky.Snoopy.Microservice.Authentication.Models;
+using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Authentication.Extensions;
@@ -72,24 +73,23 @@ public static class AuthorizationExtension
                             return;
                         }
 
-                        // This runs on every authenticated request. It was cheap enough for
-                        // an alias panel; a mail client is far chattier, so the lookup is
-                        // cached briefly. The TTL bounds how long a deleted or disabled
-                        // account keeps working.
-                        var email = $"{name}@{domain}";
-                        var cache = context.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
-
-                        var exists = await cache.GetOrCreateAsync($"user-exists:{email}", async entry =>
+                        // A token with no stamp is refused rather than waved through: accepting it
+                        // would make the whole revocation check bypassable by omitting a claim.
+                        // Tokens issued before this shipped have none, so they are cut — once.
+                        var stamp = claims.FirstOrDefault(c => c.Type == WebmailClaimTypes.Stamp)?.Value;
+                        if (!Guid.TryParse(stamp, out var presented))
                         {
-                            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
+                            context.Fail("Missing session stamp");
+                            return;
+                        }
 
-                            var repo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
-                            return await repo.FindByEmailAsync(email) != null;
-                        });
+                        // This runs on every authenticated request, so the guard caches. The
+                        // window bounds how long a deleted, disabled or revoked session survives.
+                        var guard = context.HttpContext.RequestServices.GetRequiredService<ISessionGuard>();
 
-                        if (!exists)
+                        if (!await guard.IsCurrentAsync($"{name}@{domain}", presented, context.HttpContext.RequestAborted))
                         {
-                            context.Fail("User no longer exists");
+                            context.Fail("Session is no longer valid");
                         }
                     }
                 };

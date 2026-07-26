@@ -1,10 +1,12 @@
 using CSharpFunctionalExtensions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -46,16 +48,17 @@ public sealed class RulesControllerTests
     }
 
     [Fact]
-    public async Task Get_WhenRepoFails_Returns400WithErrorEnvelope()
+    public async Task Get_WhenTheRulesServiceIsDown_Returns502WithErrorEnvelope()
     {
         _repo.Setup(r => r.GetRuleSetAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(Result.Failure<SieveRuleSet>("Connection refused"));
+             .ReturnsAsync(Result.Failure<SieveRuleSet>(SieveErrors.Unreachable));
 
         var result = await CreateController().Get(CancellationToken.None);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var bad = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, bad.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(bad.Value);
-        Assert.Equal("Connection refused", envelope.Message);
+        Assert.Equal(SieveErrors.Unreachable, envelope.Message);
     }
 
     // ----- PUT /api/Rules -----
@@ -319,16 +322,42 @@ public sealed class RulesControllerTests
     // ----- GET /api/Rules/Raw (failure) -----
 
     [Fact]
-    public async Task GetRaw_WhenRepoFails_Returns400()
+    public async Task GetRaw_WhenTheRulesServiceIsDown_Returns502()
     {
         _repo.Setup(r => r.GetRuleSetAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(Result.Failure<SieveRuleSet>("no connection"));
+             .ReturnsAsync(Result.Failure<SieveRuleSet>(SieveErrors.Unreachable));
 
         var result = await CreateController().GetRaw(CancellationToken.None);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var bad = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, bad.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(bad.Value);
-        Assert.Equal("no connection", envelope.Message);
+        Assert.Equal(SieveErrors.Unreachable, envelope.Message);
+    }
+
+    // The other half of the split: a request the caller really did get wrong stays a 400.
+    [Fact]
+    public async Task Get_WhenTheScriptCannotBeParsed_StaysA400()
+    {
+        _repo.Setup(r => r.GetRuleSetAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(Result.Failure<SieveRuleSet>("Unknown rule provider: nope"));
+
+        var result = await CreateController().Get(CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Replace_WhenTheRulesServiceIsDown_Returns502()
+    {
+        _repo.Setup(r => r.SaveRulesAsync(It.IsAny<User>(), It.IsAny<IReadOnlyList<SieveRule>>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(Result.Failure(SieveErrors.NotConfigured));
+
+        var result = await CreateController().Replace(new SaveRulesRequest { Rules = [] }, CancellationToken.None);
+
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, obj.StatusCode);
     }
 
     // ----- PUT /api/Rules/Raw (failure) -----

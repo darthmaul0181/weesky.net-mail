@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Options;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Models;
@@ -21,9 +20,10 @@ public sealed class TokenManager : ITokenManager
     {
         var tokenBuilder = new TokenBuilder();
 
-        JwtSecurityToken token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
+        string token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
             .AddClaim(ClaimTypes.Dns, user.Domain)
             .AddClaim(WebmailClaimTypes.Uid, user.WebmailUid.ToString())
+            .AddClaim(WebmailClaimTypes.Stamp, user.SecurityStamp.ToString())
             .AddIssuer(TokenConstants.Value.Issuer)
             .AddAudience(TokenConstants.Value.Audience)
             .AddExpiry(TokenConstants.Value.ExpiryInMinutes)
@@ -33,7 +33,7 @@ public sealed class TokenManager : ITokenManager
         return new AuthToken
         {
             ExpiresIn = TokenConstants.Value.ExpiryInMinutes,
-            Token = token.SerializeToString()
+            Token = token
         };
     }
 }
