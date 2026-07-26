@@ -319,15 +319,52 @@
   max-width: 600px;
 }
 .palette-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  cursor: pointer;
 }
+.palette-pick { display: flex; flex-direction: column; cursor: pointer; }
 .palette-card:hover { border-color: var(--text-muted); }
 .palette-card:has(input:checked) { border-color: var(--action-primary); }
+
+/* Hover-revealed in reserved space, the mail module's convention. It wears the *active* palette's
+   surface and border rather than the previewed one's: it is a control of this page, and over
+   twelve previews of unknown lightness only a bordered opaque chip is reliably legible.
+   focus-within, not just :hover — tabbing to the radio has to bring the loupe on screen too. */
+.palette-zoom {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.palette-card:hover .palette-zoom,
+.palette-card:focus-within .palette-zoom { opacity: 1; }
+.palette-zoom:hover { background: var(--pane-item-hover); }
+
+.palette-zoom-modal { max-width: 760px; }
+.palette-zoom-pair { display: flex; gap: 14px; flex-wrap: wrap; }
+.palette-zoom-pair figure { flex: 1; min-width: 240px; margin: 0; }
+.palette-zoom-pair .palette-preview { border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.palette-zoom-pair figcaption {
+  padding-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 /* ── Reading-pane cards (General) ─────────────────────────── */
 
@@ -391,57 +428,72 @@
 }
 
 /* Every colour here is a role token read off the palette this span declares — see the
-   data-palette note in PalettePreview. Never a literal. */
+   data-palette note in PalettePreview. Never a literal.
+
+   --pp is the scale, and every length below is a multiple of it, borders included: .is-large only
+   changes that one number. Two hand-tuned size blocks would be two things to keep in step. */
 .palette-preview {
-  height: 104px;
+  --pp: 1;
+  height: calc(104px * var(--pp));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
 }
-.palette-preview .pp-bar { height: 14px; flex: none; background: var(--topbar-bg); }
+.palette-preview.is-large { --pp: 2.5; }
+
+.palette-preview .pp-bar { height: calc(14px * var(--pp)); flex: none; background: var(--topbar-bg); }
 .palette-preview .pp-body { flex: 1; display: flex; min-height: 0; }
 
 .palette-preview .pp-rail {
-  width: 18px;
+  width: calc(18px * var(--pp));
   flex: none;
   background: var(--rail-bg);
-  padding: 4px 0;
+  padding: calc(4px * var(--pp)) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--pp));
 }
 .palette-preview .pp-rail-item {
-  width: 11px;
-  height: 7px;
-  border-radius: 2px;
+  width: calc(11px * var(--pp));
+  height: calc(7px * var(--pp));
+  border-radius: calc(2px * var(--pp));
   background: var(--rail-item);
 }
 .palette-preview .pp-rail-item.is-on { background: var(--rail-item-active); }
 
+/* --folders-bg, not --surface: the folder column is the one band that is neither the dark L nor
+   the content surface, and six palettes tint it differently from both. */
 .palette-preview .pp-pane {
-  width: 46px;
+  width: calc(46px * var(--pp));
   flex: none;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  padding: 5px 4px;
+  background: var(--folders-bg);
+  border-right: calc(1px * var(--pp)) solid var(--border);
+  padding: calc(5px * var(--pp)) calc(4px * var(--pp));
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: calc(5px * var(--pp));
+}
+/* The compose button: the accent's largest single area in the running app. */
+.palette-preview .pp-compose {
+  height: calc(10px * var(--pp));
+  flex: none;
+  border-radius: calc(2px * var(--pp));
+  background: var(--action-primary);
 }
 .palette-preview .pp-folder {
-  height: 8px;
-  border-radius: 2px;
+  height: calc(8px * var(--pp));
+  border-radius: calc(2px * var(--pp));
   display: flex;
   align-items: center;
-  padding: 0 3px;
+  padding: 0 calc(3px * var(--pp));
 }
 .palette-preview .pp-folder::before {
   content: '';
-  height: 3px;
+  height: calc(3px * var(--pp));
   width: 72%;
-  border-radius: 1px;
+  border-radius: calc(1px * var(--pp));
   background: var(--text-muted);
 }
 .palette-preview .pp-folder.is-on { background: var(--pane-item-active-bg); }
@@ -449,39 +501,56 @@
 
 .palette-preview .pp-rows {
   flex: 1;
+  min-width: 0;
   background: var(--surface);
-  padding: 5px;
+  padding: calc(5px * var(--pp));
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: calc(5px * var(--pp));
 }
 /* Two lines per row — a sender and its preview — because one bar per row read as a table,
    not as a mail list. */
 .palette-preview .pp-row {
-  height: 13px;
-  border-radius: 2px;
-  padding: 0 4px;
+  height: calc(13px * var(--pp));
+  border-radius: calc(2px * var(--pp));
+  padding: 0 calc(4px * var(--pp));
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
+  gap: calc(3px * var(--pp));
 }
 .palette-preview .pp-row::before {
   content: '';
-  height: 3px;
+  height: calc(3px * var(--pp));
   width: 52%;
-  border-radius: 1px;
+  border-radius: calc(1px * var(--pp));
   background: var(--text-muted);
 }
 .palette-preview .pp-row::after {
   content: '';
-  height: 2px;
+  height: calc(2px * var(--pp));
   width: 84%;
-  border-radius: 1px;
+  border-radius: calc(1px * var(--pp));
   background: var(--list-separator);
 }
 .palette-preview .pp-row.is-unread {
   background: var(--list-row-selected-bg);
-  border-left: 2px solid var(--accent-unread);
+  border-left: calc(2px * var(--pp)) solid var(--accent-unread);
 }
 .palette-preview .pp-row.is-unread::before { background: var(--list-row-selected-fg); }
+
+/* The attachments band, pinned under the rows as it is under the reader's body, carrying the
+   accent-filled chip. Second accent area, and the one that made the reader legible. */
+.palette-preview .pp-attachments {
+  margin-top: auto;
+  flex: none;
+  padding-top: calc(4px * var(--pp));
+  border-top: calc(1px * var(--pp)) solid var(--reader-header-border);
+}
+.palette-preview .pp-chip {
+  display: block;
+  width: 44%;
+  height: calc(8px * var(--pp));
+  border-radius: calc(2px * var(--pp));
+  background: var(--action-primary);
+}

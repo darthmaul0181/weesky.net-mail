@@ -34,8 +34,11 @@ describe('the palette stylesheets', () => {
   it('reads the stylesheets, not empty mocks', () => {
     expect(reference.light).toHaveLength(36)
   })
+  // Derived, not a second hand-maintained list: what matters is that the stylesheets on disk and
+  // the ids the module offers are the same set, which is also what the two checks below assert
+  // for index.html and main.tsx. A literal here only had to be edited every time one was added.
   it('ships every palette the picker offers', () => {
-    expect(files.map(idOf).sort()).toEqual(['classic', 'forest', 'ink', 'night', 'plum', 'slate'])
+    expect(files.map(idOf).sort()).toEqual([...PALETTE_IDS].sort())
   })
 
   // A role missing from a palette falls back to whatever the cascade holds — a browser default

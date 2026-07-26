@@ -1,0 +1,82 @@
+/* Palette "azure" — Azur & céruléen. */
+[data-palette='azure'] {
+  --bg: #eef4f9;
+  --folders-bg: #dce8f0;
+  --folders-item-hover: #ccdce6;
+  --surface: #f8fcfe;
+  --surface-raised: #f8fcfe;
+  --surface-sunken: #ecf2f7;
+  --border: #d9e1e6;
+  --text: #192025;
+  --text-muted: #636a6f;
+  --topbar-bg: #002d48;
+  --topbar-fg: #ffffff;
+  --rail-bg: #002d48;
+  --rail-fg: #b5c7d3;
+  --rail-item: #09425d;
+  --rail-item-active: #0070b0;
+  --rail-item-active-fg: #ffffff;
+  --pane-item-hover: #e6eef4;
+  --pane-item-active-bg: #d9f4ff;
+  --pane-item-active-fg: #002d48;
+  --accent-unread: #0070b0;
+
+  /* Message list and reader */
+  --list-row-hover: #ecf2f7;
+  --list-row-selected-bg: #d9f4ff;
+  --list-row-selected-fg: #002d48;
+  --list-separator: #e2e9ee;
+  --badge-count-bg: #0070b0;
+  --badge-count-fg: #ffffff;
+  --reader-header-border: #e2e9ee;
+  --quote-text: #7b8186;
+
+  --action-primary: #002d48;
+  --action-primary-hover: #09425d;
+  --action-primary-fg: #ffffff;
+  --icon-hover-accent: #2eb1ef;
+  --icon-hover-danger: #f87171;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+}
+
+[data-palette='azure'][data-theme='dark'] {
+  --bg: #101316;
+  --folders-bg: #101316;
+  --folders-item-hover: #20262b;
+  --surface: #181c20;
+  --surface-raised: #202529;
+  --surface-sunken: #121619;
+  --border: #292f33;
+  --text: #dde2e5;
+  --text-muted: #8b9296;
+  --topbar-bg: #000f25;
+  --topbar-fg: #dde2e5;
+  --rail-bg: #000f25;
+  --rail-fg: #a2b4c0;
+  --rail-item: #00243e;
+  --rail-item-active: #2eb1ef;
+  --rail-item-active-fg: #ffffff;
+  --pane-item-hover: #202529;
+  --pane-item-active-bg: #07293a;
+  --pane-item-active-fg: #e8ecee;
+  --accent-unread: #2eb1ef;
+
+  /* Message list and reader */
+  --list-row-hover: #202529;
+  --list-row-selected-bg: #07293a;
+  --list-row-selected-fg: #e8ecee;
+  --list-separator: #292f33;
+  --badge-count-bg: #2eb1ef;
+  --badge-count-fg: #ffffff;
+  --reader-header-border: #292f33;
+  --quote-text: #81878c;
+
+  --action-primary: #2eb1ef;
+  --action-primary-hover: #40befd;
+  --action-primary-fg: #ffffff;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --success: #4ade80;
+}

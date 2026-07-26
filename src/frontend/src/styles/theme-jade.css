@@ -1,0 +1,82 @@
+/* Palette "jade" — Jade & graphite. */
+[data-palette='jade'] {
+  --bg: #eff5f3;
+  --folders-bg: #e0e8e4;
+  --folders-item-hover: #d1dcd7;
+  --surface: #f8fcfb;
+  --surface-raised: #f8fcfb;
+  --surface-sunken: #ecf3f1;
+  --border: #dae2e0;
+  --text: #1a211f;
+  --text-muted: #636b69;
+  --topbar-bg: #0f3023;
+  --topbar-fg: #ffffff;
+  --rail-bg: #0f3023;
+  --rail-fg: #bbc8c1;
+  --rail-item: #264437;
+  --rail-item-active: #00805f;
+  --rail-item-active-fg: #ffffff;
+  --pane-item-hover: #e7efed;
+  --pane-item-active-bg: #ddf7ec;
+  --pane-item-active-fg: #0f3023;
+  --accent-unread: #00805f;
+
+  /* Message list and reader */
+  --list-row-hover: #ecf3f1;
+  --list-row-selected-bg: #ddf7ec;
+  --list-row-selected-fg: #0f3023;
+  --list-separator: #e2eae8;
+  --badge-count-bg: #00805f;
+  --badge-count-fg: #ffffff;
+  --reader-header-border: #e2eae8;
+  --quote-text: #7b8280;
+
+  --action-primary: #0f3023;
+  --action-primary-hover: #264437;
+  --action-primary-fg: #ffffff;
+  --icon-hover-accent: #37b78a;
+  --icon-hover-danger: #f87171;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+}
+
+[data-palette='jade'][data-theme='dark'] {
+  --bg: #101413;
+  --folders-bg: #101413;
+  --folders-item-hover: #202725;
+  --surface: #181d1c;
+  --surface-raised: #202625;
+  --surface-sunken: #131716;
+  --border: #292f2e;
+  --text: #dde2e1;
+  --text-muted: #8c9291;
+  --topbar-bg: #001209;
+  --topbar-fg: #dde2e1;
+  --rail-bg: #001209;
+  --rail-fg: #a8b4ae;
+  --rail-item: #06271b;
+  --rail-item-active: #37b78a;
+  --rail-item-active-fg: #ffffff;
+  --pane-item-hover: #202625;
+  --pane-item-active-bg: #0b2c20;
+  --pane-item-active-fg: #e8eceb;
+  --accent-unread: #37b78a;
+
+  /* Message list and reader */
+  --list-row-hover: #202625;
+  --list-row-selected-bg: #0b2c20;
+  --list-row-selected-fg: #e8eceb;
+  --list-separator: #292f2e;
+  --badge-count-bg: #37b78a;
+  --badge-count-fg: #ffffff;
+  --reader-header-border: #292f2e;
+  --quote-text: #818886;
+
+  --action-primary: #37b78a;
+  --action-primary-hover: #4fcb9c;
+  --action-primary-fg: #ffffff;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --success: #4ade80;
+}
