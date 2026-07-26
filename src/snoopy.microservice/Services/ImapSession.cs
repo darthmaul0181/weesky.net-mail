@@ -1,4 +1,4 @@
-using CSharpFunctionalExtensions;
+﻿using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -691,6 +691,19 @@ internal sealed class ImapSession : IImapSession
         return trimmed.Length == 0 ? null : trimmed;
     }
 
+    /// <summary>
+    /// Whether a body part belongs on the message's part list. Being an attachment or carrying a
+    /// file name is not enough to ask for: a logo embedded as <c>Content-Disposition: inline</c>
+    /// with no file name — how Vaultwarden and others ship theirs — is neither, and dropping it
+    /// left the reader with a <c>cid:</c> it had nothing to resolve against. A Content-ID is
+    /// exactly the marker that the body means to display the part, so it earns a place too. What
+    /// remains excluded is the message's own text and html, which carry none of the three.
+    /// </summary>
+    internal static bool IsListedPart(BodyPartBasic part) =>
+        part.IsAttachment
+        || !string.IsNullOrEmpty(part.FileName)
+        || !string.IsNullOrEmpty(TrimAngleBrackets(part.ContentId));
+
     public Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
         ExecuteAsync(cancellationToken, async () =>
         {
@@ -739,7 +752,7 @@ internal sealed class ImapSession : IImapSession
 
             foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())
             {
-                if (!part.IsAttachment && string.IsNullOrEmpty(part.FileName)) continue;
+                if (!IsListedPart(part)) continue;
 
                 detail.Attachments.Add(new MailAttachmentInfo
                 {
