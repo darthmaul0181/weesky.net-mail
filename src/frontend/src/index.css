@@ -154,11 +154,9 @@ body {
   cursor: not-allowed;
 }
 
-/* White, deliberately, and not --action-primary-fg: over dark mode's light accents that token
-   resolves to near-black, which was tried and rejected on look. Owner's call, do not "fix". */
 .btn-primary {
   background: var(--action-primary);
-  color: #fff;
+  color: var(--action-primary-fg);
   width: 100%;
   padding: 10px 16px;
 }

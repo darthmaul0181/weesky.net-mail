@@ -33,7 +33,6 @@
   --badge-count-fg: #ffffff;
   --reader-header-border: #dde1e7;
   --quote-text: #7c8593;
-  --attachment-chip-bg: #f0f2f5;
 
   --action-primary: #3450a3;
   --action-primary-hover: #2a4090;
@@ -79,9 +78,8 @@
   --badge-count-fg: #12161c;
   --reader-header-border: #333b49;
   --quote-text: #828d9e;
-  --attachment-chip-bg: #2f3849;
 
   --action-primary: #84aad8;
   --action-primary-hover: #99bbdf;
-  --action-primary-fg: #12161c;
+  --action-primary-fg: #ffffff;
 }

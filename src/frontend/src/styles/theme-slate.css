@@ -8,7 +8,7 @@
   --accent-unread:#0f7d78;
   --list-row-hover:#eceff1; --list-row-selected-bg:#dcefee; --list-row-selected-fg:#0d5551;
   --list-separator:#e3e7e9; --badge-count-bg:#0f7d78; --badge-count-fg:#ffffff;
-  --reader-header-border:#e3e7e9; --quote-text:#78838a; --attachment-chip-bg:#eceff1;
+  --reader-header-border:#e3e7e9; --quote-text:#78838a;
   --action-primary:#0f7d78; --action-primary-hover:#0c6763; --action-primary-fg:#ffffff;
   --icon-hover-accent:#3fbdb4; --icon-hover-danger:#f87171;
   --danger:#dc2626; --danger-hover:#b91c1c; --success:#16a34a;
@@ -22,7 +22,7 @@
   --accent-unread:#3fbdb4;
   --list-row-hover:#232a2d; --list-row-selected-bg:#16332f; --list-row-selected-fg:#b7e6e0;
   --list-separator:#2c3438; --badge-count-bg:#3fbdb4; --badge-count-fg:#06201e;
-  --reader-header-border:#2c3438; --quote-text:#7f8a8f; --attachment-chip-bg:#232a2d;
-  --action-primary:#3fbdb4; --action-primary-hover:#58ccc3; --action-primary-fg:#06201e;
+  --reader-header-border:#2c3438; --quote-text:#7f8a8f;
+  --action-primary:#3fbdb4; --action-primary-hover:#58ccc3; --action-primary-fg:#ffffff;
   --danger:#f87171; --danger-hover:#ef4444; --success:#4ade80;
 }

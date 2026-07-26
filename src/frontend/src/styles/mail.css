@@ -972,18 +972,19 @@
 }
 .reader-blocked-images .btn:hover { background: var(--action-primary-hover); }
 
-/* The banner's button splits like an attachment chip does, with one difference: both halves
-   carry the accent fill, so the seam is the readable foreground at low alpha rather than a
-   --border hairline, which would read as dirt on the blue.
+/* The banner's button and the attachment chip split the same way, and both halves of each carry
+   the accent fill — so the seam is the readable foreground at low alpha rather than a --border
+   hairline, which would read as dirt on the fill. One rule for the two, since a second dialect
+   of the same seam is how the two stop matching.
    The .btn rule is written through .reader-blocked-images so it outranks that block's
    margin-left:auto whatever the source order — the pair is what hugs the right edge now. */
 .banner-split { margin-left: auto; flex: none; display: inline-flex; align-items: stretch; }
 .reader-blocked-images .banner-split .btn { margin-left: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .banner-split .dropdown-root { display: flex; }
-.banner-split-more {
+.banner-split-more,
+.attachment-split-more {
   display: flex;
   align-items: center;
-  padding: 0 7px;
   border: none;
   border-left: 1px solid color-mix(in srgb, var(--action-primary-fg) 32%, transparent);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -991,7 +992,9 @@
   color: var(--action-primary-fg);
   cursor: pointer;
 }
-.banner-split-more:hover { background: var(--action-primary-hover); }
+.banner-split-more:hover,
+.attachment-split-more:hover { background: var(--action-primary-hover); }
+.banner-split-more { padding: 0 7px; }
 
 /* The article carries the column layout so the body can claim the leftover height. Without
    this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
@@ -1035,36 +1038,38 @@
   border-top: 1px solid var(--reader-header-border);
 }
 
+/* A tinted background behind a --border hairline made the chip read as part of the band it sits
+   on. It takes the blocked-images button's colours — not its metrics — because a file to download
+   and an offer to reveal images are the same kind of thing: one accented control the eye finds
+   without hunting. Measured 32.00x131.19px before, 36.50x152.05px after. */
 .attachment-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
+  gap: 8px;
+  padding: 8px 9px 8px 15px;
+  border: none;
   border-radius: var(--radius-sm);
-  background: var(--attachment-chip-bg);
-  color: var(--text);
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
+.attachment-chip:hover { background: var(--action-primary-hover); }
 
-.attachment-chip-size { color: var(--text-muted); }
+/* A pill, not dimmed text: --text-muted is unreadable on the fill, and dimming the foreground far
+   enough to subordinate the size costs the size its own legibility. */
+.attachment-chip-size {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--action-primary-fg) 20%, transparent);
+  font-size: 11px;
+}
 
 .attachment-split { display: inline-flex; align-items: stretch; }
 .attachment-split .attachment-chip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .attachment-split .dropdown-root { display: flex; }
-.attachment-split-more {
-  display: flex;
-  align-items: center;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-left: none;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--attachment-chip-bg);
-  color: var(--text);
-  cursor: pointer;
-}
+.attachment-split-more { padding: 0 9px; }
 
 .mail-empty {
   display: flex;
