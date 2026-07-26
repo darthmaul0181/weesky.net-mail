@@ -74,6 +74,44 @@ describe('darkenColours', () => {
     expect(darkenColours('<p>Bonjour</p>')).toContain('Bonjour')
   })
 
+  // A brand colour on a slab of background is what glows on a dark canvas: an Amazon button came
+  // back a vivid gold. Text keeps its punch — a link that loses its colour stops reading as one.
+  it('damps a saturated background but not the same colour as text', () => {
+    const html = '<div style="background-color: #ffd916; color: #ffd916">x</div>'
+
+    const dark = darkenColours(html)
+    const [background, text] = [...dark.matchAll(/#[0-9a-f]{6}/gi)].map(m => m[0])
+
+    expect(slOf(background).s).toBeLessThan(slOf(text).s)
+    expect(slOf(background).l).toBeLessThan(slOf(text).l)
+    expect(hueOf(...rgbOf(background))).toBeCloseTo(hueOf(...rgbOf(text)), 0)
+  })
+
+  it('treats a bgcolor attribute as a background', () => {
+    const damped = toDarkColour('#ffd916', 'background')!
+
+    const html = '<table><tbody><tr><td bgcolor="#ffd916">x</td></tr></tbody></table>'
+
+    expect(darkenColours(html)).toContain(damped)
+  })
+
+  it('darkens a gradient stop as a background too', () => {
+    const html = '<div style="background-image: linear-gradient(#ffd916, #ffd916)">x</div>'
+
+    expect(darkenColours(html)).toContain(toDarkColour('#ffd916', 'background')!)
+  })
+
+  // The damping is a function of saturation, so a grey is untouched by it: whites and blacks must
+  // land exactly where they landed before, or every ordinary message shifts.
+  it.each([
+    ['#ffffff', '#212121'],
+    ['#000000', '#e0e0e0'],
+    ['#808080', '#808080'],
+  ])('leaves %s where it already landed, background or not', (colour, expected) => {
+    expect(toDarkColour(colour, 'background')).toBe(expected)
+    expect(toDarkColour(colour)).toBe(expected)
+  })
+
   // A gradient is a colour wearing an image's clothes. Mail tints a background image by laying a
   // flat gradient over it, and one such message came back white in dark mode because nothing here
   // looked inside background-image.
@@ -132,6 +170,18 @@ describe('darkenColours', () => {
     expect(darkenColours('')).toBe('')
   })
 })
+
+/** Saturation and lightness in HSL, for asserting how far a colour was damped. */
+function slOf(colour: string): { s: number; l: number } {
+  const [r, g, b] = rgbOf(colour).map(c => c / 255)
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return { s: 0, l }
+
+  const d = max - min
+  return { s: l > 0.5 ? d / (2 - max - min) : d / (max + min), l }
+}
 
 /** Reads a hex or rgb() string back into channels, for the hue assertions. */
 function rgbOf(colour: string): [number, number, number] {

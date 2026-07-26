@@ -110,6 +110,12 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
     ? { scheme: 'dark', background: '#212429', text: '#e0e0e0' }
     : { scheme: 'light', background: '#ffffff', text: '#1a1a1a' }
 
+  // An image is the one thing darkenColours cannot recolour, so a pale banner blazes on the dark
+  // canvas. The dimming is uniform because it has to be: the iframe is cross-origin and sandboxed,
+  // so no pixel can be read to tell a banner from a photograph. The reader's colour toggle undoes
+  // it for one message, which is what makes a light touch the right one.
+  const images = options.dark ? 'filter: brightness(0.85) saturate(0.9);' : ''
+
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8"><style>
@@ -126,7 +132,7 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
      otherwise scroll the body sideways. No height:auto - it recomputes every height from the
      intrinsic ratio, and a 1x1 spacer gif stretched to 154x10 by attributes became 154px tall,
      turning a newsletter button into a tower. */
-  img { max-width: 100%; }
+  img { max-width: 100%; ${images} }
   /* break-word, not anywhere: both break a long URL, but anywhere also feeds those break
      points into min-content sizing, so a table column can collapse to a single letter. */
   body { overflow-wrap: break-word; }

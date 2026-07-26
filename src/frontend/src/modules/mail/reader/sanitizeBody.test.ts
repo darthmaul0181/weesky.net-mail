@@ -72,6 +72,17 @@ describe('revealBlockedImages', () => {
   })
 })
 
+describe('renderBodyDocument — images in dark mode', () => {
+  // darkenColours cannot reach inside an image, so a pale banner blazes on the dark canvas.
+  it('dims images in dark mode', () => {
+    expect(renderBodyDocument('<p>x</p>', { dark: true })).toContain('brightness(0.85)')
+  })
+
+  it('leaves images alone in light mode', () => {
+    expect(renderBodyDocument('<p>x</p>')).not.toContain('brightness')
+  })
+})
+
 describe('revealBlockedImages — backgrounds', () => {
   // Serialised HTML spells the url()'s quotes &quot;, so the assertions read the attribute the
   // CSS parser actually sees rather than its escaped spelling.
@@ -210,10 +221,21 @@ describe('renderBodyDocument', () => {
   })
 
   describe('dark mode', () => {
-    // Colours are recoloured in the markup by darkenColours, not by a CSS filter: a filter
-    // inverts in RGB, which drags hues across the wheel and takes photographs with it.
-    it('applies no filter of its own', () => {
-      expect(renderBodyDocument('<p>x</p>', { dark: true })).not.toContain('filter:')
+    // Colours are recoloured in the markup by darkenColours, never by an inversion filter: that
+    // inverts in RGB, which drags hues across the wheel and takes photographs with it. The image
+    // dimming below is the opposite of that — it changes no hue and substitutes for nothing.
+    it('inverts nothing and rotates no hue', () => {
+      const document = renderBodyDocument('<p>x</p>', { dark: true })
+
+      expect(document).not.toContain('invert(')
+      expect(document).not.toContain('hue-rotate')
+    })
+
+    it('leaves everything but images unfiltered', () => {
+      const document = renderBodyDocument('<p>x</p>', { dark: true })
+      const filtered = [...document.matchAll(/([a-z]+)\s*\{[^}]*filter:/g)].map(match => match[1])
+
+      expect(filtered).toEqual(['img'])
     })
 
     // What the message does not declare has to come from somewhere, and in dark mode that

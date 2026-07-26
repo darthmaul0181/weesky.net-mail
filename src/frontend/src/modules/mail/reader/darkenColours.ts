@@ -36,16 +36,30 @@ const DARKEST = 0.13
 const LIGHTEST = 0.88
 
 /**
+ * A slab of brand colour is what glows on a dark canvas — an Amazon button came back a vivid
+ * gold. A background therefore keeps only part of its saturation and lands under a lower ceiling,
+ * both in proportion to how saturated it was: a grey is untouched, so ordinary mail does not move.
+ * Text is left at full strength, since a link that loses its colour stops reading as one.
+ */
+const BACKGROUND_SATURATION = 0.6
+const SATURATED_LIGHTEST = 0.55
+
+export type ColourRole = 'text' | 'background'
+
+/**
  * The dark-mode equivalent of a single colour, or null when the value is not one we can read —
  * `transparent`, `inherit`, a keyword. Null means "leave it alone", never "guess".
  */
-export function toDarkColour(value: string): string | null {
+export function toDarkColour(value: string, role: ColourRole = 'text'): string | null {
   const rgba = parse(value.trim())
   if (!rgba) return null
 
   const [r, g, b, a] = rgba
   const { h, s, l } = toHsl(r, g, b)
-  const { r: nr, g: ng, b: nb } = toRgb(h, s, DARKEST + (1 - l) * (LIGHTEST - DARKEST))
+  const background = role === 'background'
+  const ceiling = background ? LIGHTEST - s * (LIGHTEST - SATURATED_LIGHTEST) : LIGHTEST
+  const { r: nr, g: ng, b: nb } = toRgb(
+    h, background ? s * BACKGROUND_SATURATION : s, DARKEST + (1 - l) * (ceiling - DARKEST))
 
   // Hex, not rgb(): a presentational attribute like bgcolor does not understand rgb() and the
   // browser falls back to its legacy colour parsing, which keeps the hex digits out of
@@ -63,7 +77,7 @@ export function darkenColours(html: string): string {
     const style = element.getAttribute('style')!
     element.setAttribute('style', style
       .replace(COLOUR_PROPERTIES, (whole, lead, property, _side, value) => {
-        const dark = toDarkColour(value)
+        const dark = toDarkColour(value, roleOf(property))
         return dark ? `${lead}${property}: ${dark}` : whole
       })
       .replace(IMAGE_PROPERTY, (_whole, lead, property, value) =>
@@ -72,7 +86,7 @@ export function darkenColours(html: string): string {
 
   for (const attribute of COLOUR_ATTRIBUTES) {
     for (const element of document.body.querySelectorAll(`[${attribute}]`)) {
-      const dark = toDarkColour(element.getAttribute(attribute)!)
+      const dark = toDarkColour(element.getAttribute(attribute)!, roleOf(attribute))
       if (dark) element.setAttribute(attribute, dark)
     }
   }
@@ -80,10 +94,15 @@ export function darkenColours(html: string): string {
   return document.body.innerHTML
 }
 
+/** `background-color` and `bgcolor` paint a slab; everything else here paints text or a hairline. */
+function roleOf(name: string): ColourRole {
+  return /^(background-color|bgcolor)$/i.test(name) ? 'background' : 'text'
+}
+
 /** Gradient stops darkened; a url() and anything unreadable are left exactly as they are. */
 function darkenImageColours(value: string): string {
   return value.replace(URL_OR_COLOUR, token =>
-    /^url\(/i.test(token) ? token : toDarkColour(token) ?? token)
+    /^url\(/i.test(token) ? token : toDarkColour(token, 'background') ?? token)
 }
 
 function hex(channel: number): string {
