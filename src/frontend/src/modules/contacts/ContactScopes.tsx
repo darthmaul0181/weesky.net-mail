@@ -1,0 +1,41 @@
+import ContactsIcon from '../../icons/ContactsIcon'
+import StarIcon from '../../icons/StarIcon'
+
+export type ContactScope = 'all' | 'favorites'
+
+interface Props {
+  scope: ContactScope
+  total: number
+  favorites: number
+  onScope: (scope: ContactScope) => void
+}
+
+/**
+ * The module's navigation band, on the same surface as the mail folder tree and the settings
+ * context pane. It marks its active row with a fill and heavier weight and **no accent bar**: the
+ * bar belongs to content lists, and keeping the two languages apart is how a reader tells a
+ * navigation pane from a list of rows at a glance.
+ *
+ * Two scopes today. It is also where import will land in slice 3d and where CardDAV address books
+ * would go — the reason the module has a band at all rather than starting flush against the rail.
+ */
+export default function ContactScopes({ scope, total, favorites, onScope }: Props) {
+  return (
+    <nav className="contact-scopes">
+      <button type="button" className={`contact-scope${scope === 'all' ? ' is-active' : ''}`}
+        aria-current={scope === 'all' ? 'true' : undefined}
+        onClick={() => onScope('all')}>
+        <ContactsIcon size={15} />
+        <span className="contact-scope-label">All contacts</span>
+        <span className="contact-scope-count">{total}</span>
+      </button>
+      <button type="button" className={`contact-scope${scope === 'favorites' ? ' is-active' : ''}`}
+        aria-current={scope === 'favorites' ? 'true' : undefined}
+        onClick={() => onScope('favorites')}>
+        <StarIcon size={15} />
+        <span className="contact-scope-label">Favourites</span>
+        <span className="contact-scope-count">{favorites}</span>
+      </button>
+    </nav>
+  )
+}

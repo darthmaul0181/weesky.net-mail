@@ -1,0 +1,58 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '../../api.js'
+import { useAccountId } from '../../hooks/useAccountId'
+import { compareContacts } from './contactSearch'
+import type { Contact, ContactDraft, ContactListResponse } from './contactTypes'
+
+/** Scoped by account from the outset, like the mail keys: linking a second account later isolates
+    its book instead of mixing two. */
+export const contactKeys = {
+  all: (accountId: string) => ['contacts', accountId] as const,
+}
+
+/**
+ * The whole book, cached. Long staleTime: it changes only from this module, which invalidates it.
+ * Sorted in `select`, so the page and the composer read one already-ordered list rather than each
+ * sorting its own copy.
+ */
+export function useContacts() {
+  const accountId = useAccountId()
+
+  return useQuery({
+    queryKey: contactKeys.all(accountId),
+    queryFn: () => api.getContacts() as Promise<ContactListResponse>,
+    staleTime: 5 * 60_000,
+    select: (data): Contact[] => [...data.contacts].sort(compareContacts),
+  })
+}
+
+// Settled, not success: after a refused write the screen must fall back to the server's state
+// rather than keep an optimistic list nobody stored.
+function useContactMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: contactKeys.all(accountId) }),
+  })
+}
+
+export function useCreateContact() {
+  return useContactMutation((contact: ContactDraft) => api.createContact(contact))
+}
+
+export function useUpdateContact() {
+  return useContactMutation(
+    ({ id, contact }: { id: string; contact: ContactDraft }) => api.updateContact(id, contact))
+}
+
+export function useDeleteContact() {
+  return useContactMutation((id: string) => api.deleteContact(id))
+}
+
+export function useSetContactFavorite() {
+  return useContactMutation(
+    ({ id, isFavorite }: { id: string; isFavorite: boolean }) =>
+      api.setContactFavorite(id, isFavorite))
+}

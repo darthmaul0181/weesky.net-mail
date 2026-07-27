@@ -142,6 +142,24 @@ export const api = {
   putIdentities: (identities) =>
     request('PUT', '/api/Identities', { identities }),
 
+  getContacts: () =>
+    request('GET', '/api/Contacts'),
+
+  createContact: (contact) =>
+    request('POST', '/api/Contacts', contact),
+
+  // Replaces the contact whole — names, favourite flag and the entire address list.
+  updateContact: (id, contact) =>
+    request('PUT', `/api/Contacts/${id}`, contact),
+
+  deleteContact: (id) =>
+    request('DELETE', `/api/Contacts/${id}`),
+
+  // Its own route: the star is toggled from a tile holding a possibly stale copy, so a whole
+  // contact PUT from there would clobber a concurrent edit.
+  setContactFavorite: (id, isFavorite) =>
+    request('PUT', `/api/Contacts/${id}/Favorite`, { isFavorite }),
+
   getTrustedSenders: () =>
     request('GET', '/api/TrustedSenders'),
 

@@ -149,6 +149,55 @@ describe('api methods', () => {
     )
   })
 
+  it('getContacts calls GET /api/Contacts', async () => {
+    const { api } = await import('./api.js')
+    await api.getContacts()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('createContact POSTs the contact', async () => {
+    const { api } = await import('./api.js')
+    const draft = {
+      firstName: 'Bruno', lastName: 'Mertens', nickname: null,
+      isFavorite: false, addresses: ['bruno@example.com'],
+    }
+    await api.createContact(draft)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(draft) })
+    )
+  })
+
+  it('updateContact PUTs to the contact id', async () => {
+    const { api } = await import('./api.js')
+    await api.updateContact('11111111-1111-1111-1111-111111111111', { firstName: 'B' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts/11111111-1111-1111-1111-111111111111'),
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
+
+  it('deleteContact DELETEs the contact id', async () => {
+    const { api } = await import('./api.js')
+    await api.deleteContact('22222222-2222-2222-2222-222222222222')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts/22222222-2222-2222-2222-222222222222'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('setContactFavorite PUTs the flag to the Favorite sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.setContactFavorite('33333333-3333-3333-3333-333333333333', true)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts/33333333-3333-3333-3333-333333333333/Favorite'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ isFavorite: true }) })
+    )
+  })
+
   it('changePassword calls PATCH /api/Account/ChangeSecret', async () => {
     const { api } = await import('./api.js')
     await api.changePassword('old', 'new')

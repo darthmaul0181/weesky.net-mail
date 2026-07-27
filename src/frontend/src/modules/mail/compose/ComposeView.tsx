@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useContacts } from '../../contacts/queries'
 import { useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
@@ -42,6 +43,9 @@ export default function ComposeView({ onNotify }: Props) {
   const deleteDraft = useDeleteMessages(
     () => onNotify('Message sent — the draft could not be removed', 'error'))
   const { data: identityList } = useIdentities()
+  // One read for the three fields: they would share the cache anyway, but a single call site is
+  // easier to follow than three.
+  const { data: contacts } = useContacts()
   // State, not a ref: the toolbar sits above the editor, so a ref would still read null on the
   // render that mounts it and the buttons would do nothing until something else re-rendered.
   const [editor, setEditor] = useState<EditorHandle | null>(null)
@@ -230,14 +234,17 @@ export default function ComposeView({ onNotify }: Props) {
           )}
         </div>
         <div className="compose-to-row">
-          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo} autoFocus={!seed} />
+          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo}
+            autoFocus={!seed} contacts={contacts} />
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>Cc</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>Bcc</button>}
           </span>
         </div>
-        {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc} />}
-        {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc} />}
+        {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc}
+          contacts={contacts} />}
+        {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc}
+          contacts={contacts} />}
         <div className="field-h">
           <label htmlFor="compose-subject">Subject</label>
           <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />

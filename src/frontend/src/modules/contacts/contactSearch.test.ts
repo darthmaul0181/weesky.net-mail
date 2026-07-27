@@ -1,0 +1,262 @@
+import { describe, expect, it } from 'vitest'
+import { compareContacts, filterContacts, fold, matches, suggestionsFor } from './contactSearch'
+import type { Contact } from './contactTypes'
+
+function contact(fields: Partial<Contact> & { id: string }): Contact {
+  return {
+    firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+  }
+}
+
+const bruno = contact({
+  id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: 'bru',
+  addresses: ['bruno@example.com', 'b.mertens@wk.be'],
+})
+const chloe = contact({
+  id: 'c', firstName: 'Chloé', lastName: 'Vermeulen', addresses: ['chloe@example.com'],
+})
+const alice = contact({
+  id: 'a', firstName: 'Alice', lastName: 'Dupont', isFavorite: true,
+  addresses: ['alice@example.com'],
+})
+
+describe('fold', () => {
+  it('strips diacritics and lowercases', () => {
+    expect(fold('Chloé VERMEULEN')).toBe('chloe vermeulen')
+  })
+
+  it('leaves plain text alone', () => {
+    expect(fold('bruno')).toBe('bruno')
+  })
+
+  // \p{Diacritic} also covers ASCII '^' and '`', so stripping that class would delete a caret
+  // from plain text — \p{M} (combining marks) is the narrower, correct class.
+  it('does not strip ASCII characters that merely look like diacritics', () => {
+    expect(fold('a^b`c')).toBe('a^b`c')
+  })
+})
+
+describe('matches', () => {
+  it('matches on the first name', () => {
+    expect(matches(bruno, 'bru')).toBe(true)
+  })
+
+  it('matches on the last name', () => {
+    expect(matches(bruno, 'mert')).toBe(true)
+  })
+
+  // A needle no other field carries: 'bru' prefixes the first name too, so it would match with
+  // the nickname left out of the searched fields entirely.
+  it('matches on the nickname', () => {
+    expect(matches(contact({ id: 'n', firstName: 'Bruno', nickname: 'chef' }), 'chef')).toBe(true)
+  })
+
+  it('matches on any address, not only the primary', () => {
+    expect(matches(bruno, 'wk.be')).toBe(true)
+  })
+
+  // Typing without accents has to find an accented contact: nobody reaches for the é key to
+  // look somebody up. Neither fixture carries an address — chloe@example.com spells the name
+  // unaccented, so it would answer both queries with the folding stripping nothing at all.
+  it('ignores accents in both directions', () => {
+    expect(matches(contact({ id: 'x', firstName: 'Chloé' }), 'chloe')).toBe(true)
+    expect(matches(contact({ id: 'y', firstName: 'Chloe' }), 'chloé')).toBe(true)
+  })
+
+  it('ignores case', () => {
+    expect(matches(bruno, 'BRUNO')).toBe(true)
+  })
+
+  it('matches anywhere in the field, not just at the start', () => {
+    expect(matches(bruno, 'ertens')).toBe(true)
+  })
+
+  it('does not match unrelated text', () => {
+    expect(matches(bruno, 'zzz')).toBe(false)
+  })
+
+  it('matches everything on an empty query', () => {
+    expect(matches(bruno, '   ')).toBe(true)
+  })
+
+  // Regression: an over-wide diacritic class stripped '^' from the query, so 'a^b' folded down
+  // to 'ab' and wrongly matched 'ab@x.com'.
+  it('does not fold away a caret and match a caret-free address', () => {
+    expect(matches(contact({ id: 'z3', firstName: 'Zoot', addresses: ['ab@x.com'] }), 'a^b')).toBe(false)
+  })
+})
+
+describe('filterContacts', () => {
+  it('keeps only the matching contacts', () => {
+    expect(filterContacts([bruno, chloe, alice], 'chlo').map(c => c.id)).toEqual(['c'])
+  })
+
+  it('returns everything on an empty query', () => {
+    expect(filterContacts([bruno, chloe, alice], '')).toHaveLength(3)
+  })
+})
+
+describe('compareContacts', () => {
+  // The favourite is the one that sorts last by name: with Alice against Bruno the expected order
+  // is also the alphabetical one, so a comparator ignoring the flag would pass.
+  it('puts favourites first', () => {
+    const zoe = contact({ id: 'z', firstName: 'Zoé', isFavorite: true })
+
+    expect([bruno, zoe].sort(compareContacts).map(c => c.id)).toEqual(['z', 'b'])
+  })
+
+  it('sorts the rest by display name', () => {
+    expect([chloe, bruno].sort(compareContacts).map(c => c.id)).toEqual(['b', 'c'])
+  })
+
+  // A codepoint sort files every accented name after Z, and a case-sensitive one exiles
+  // 'e-commerce' past every capitalised name. localeCompare with base sensitivity is what the
+  // folder list already uses.
+  it('files an accented name where a reader expects it', () => {
+    const eric = contact({ id: 'e', firstName: 'Éric' })
+    const frank = contact({ id: 'f', firstName: 'Frank' })
+    const dora = contact({ id: 'd', firstName: 'Dora' })
+
+    expect([frank, eric, dora].sort(compareContacts).map(c => c.id)).toEqual(['d', 'e', 'f'])
+  })
+})
+
+describe('suggestionsFor', () => {
+  it('answers one row per address, not per contact', () => {
+    const rows = suggestionsFor([bruno], 'bru')
+
+    expect(rows.map(r => r.address)).toEqual(['bruno@example.com', 'b.mertens@wk.be'])
+  })
+
+  it('names each row with its contact', () => {
+    expect(suggestionsFor([chloe], 'chlo')[0].names).toEqual(['Chloé Vermeulen'])
+  })
+
+  // The decision to allow a shared address lands here: one row, every owner named. Two rows would
+  // produce the identical recipient, and picking one name would be an arbitrary arbitration.
+  it('collapses an address shared by two contacts into one row naming both', () => {
+    const shared = 'info@example.com'
+    const first = contact({ id: '1', firstName: 'Alice', lastName: 'Dupont', addresses: [shared] })
+    const second = contact({ id: '2', firstName: 'Compta', lastName: 'Weesky', addresses: [shared] })
+
+    const rows = suggestionsFor([first, second], 'info')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].address).toBe(shared)
+    expect(rows[0].names).toEqual(['Alice Dupont', 'Compta Weesky'])
+  })
+
+  // Same mailbox, different case: two rows would be the identical bug the shared-address test
+  // above rules out, just reached through case rather than through two separate contacts.
+  it('collapses an address shared with a different case into one row naming both', () => {
+    const first = contact({ id: '1', firstName: 'Alice', lastName: 'Dupont', addresses: ['Info@Example.com'] })
+    const second = contact({ id: '2', firstName: 'Compta', lastName: 'Weesky', addresses: ['info@example.com'] })
+
+    const rows = suggestionsFor([first, second], 'info')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].address).toBe('Info@Example.com')
+    expect(rows[0].names).toEqual(['Alice Dupont', 'Compta Weesky'])
+  })
+
+  // Task 14 builds `exclude` from what the user typed into the field, where case is free — an
+  // already-present token in another case must still keep its address out of the dropdown.
+  it('excludes an address regardless of the case it is spelled in', () => {
+    const emma = contact({ id: 'e2', firstName: 'Emma', addresses: ['emma@example.com'] })
+
+    const rows = suggestionsFor([emma], 'emma', { exclude: new Set(['EMMA@EXAMPLE.COM']) })
+
+    expect(rows).toEqual([])
+  })
+
+  // suggestionsFor's own matches() filter carries no coverage without a contact in the input that
+  // must not come back out: the 26 baseline tests all pass even with that filter deleted.
+  it('leaves out a contact unrelated to the query', () => {
+    const unrelated = contact({ id: 'u', firstName: 'Zach', lastName: 'Stranger', addresses: ['zach@example.com'] })
+
+    const rows = suggestionsFor([bruno, unrelated], 'bru')
+
+    expect(rows.map(r => r.address)).toEqual(['bruno@example.com', 'b.mertens@wk.be'])
+  })
+
+  // Both rows tie on favourite (neither) and on primary (a lone address is always its own
+  // contact's primary), so only the address key can decide — Zack's name sorts first, its address
+  // does not, so a comparator that drops the address key would leave insertion order untouched
+  // and answer zzz before aaa.
+  it('breaks a tie on the first two sort keys alphabetically by address', () => {
+    const zack = contact({ id: 'z2', firstName: 'Zack', addresses: ['aaa@example.com'] })
+    const amy = contact({ id: 'am', firstName: 'Amy', addresses: ['zzz@example.com'] })
+
+    const rows = suggestionsFor([zack, amy], 'example')
+
+    expect(rows.map(r => r.address)).toEqual(['aaa@example.com', 'zzz@example.com'])
+  })
+
+  // The favourite rule outranks the primary rule: a favourite's secondary address (favourite,
+  // not primary) must still beat a non-favourite's primary address (primary, not favourite) — the
+  // opposite order would come out if the two keys were compared in the other order.
+  it('puts a favourite’s secondary address before a non-favourite’s primary address', () => {
+    const favorite = contact({
+      id: 'fav', firstName: 'Nora', isFavorite: true,
+      addresses: ['nora@example.com', 'nora.secondary@example.com'],
+    })
+    const plain = contact({ id: 'plain', firstName: 'Oscar', addresses: ['oscar@example.com'] })
+
+    const rows = suggestionsFor([favorite, plain], 'example')
+    const secondary = rows.findIndex(r => r.address === 'nora.secondary@example.com')
+    const primary = rows.findIndex(r => r.address === 'oscar@example.com')
+
+    expect(secondary).toBeLessThan(primary)
+  })
+
+  // The favourite's address sorts last alphabetically and is nobody's primary but its own, so it
+  // reaches the top on the favourite rule alone — alice@example.com would have won the address
+  // tiebreak without it.
+  it('puts a favourite contact’s address first', () => {
+    const zoe = contact({
+      id: 'z', firstName: 'Zoé', isFavorite: true, addresses: ['zoe@example.com'],
+    })
+
+    const rows = suggestionsFor([bruno, zoe], 'e')
+
+    expect(rows[0].address).toBe('zoe@example.com')
+  })
+
+  it('puts a primary address before a secondary one', () => {
+    const rows = suggestionsFor([bruno], 'e')
+    const primary = rows.findIndex(r => r.address === 'bruno@example.com')
+    const secondary = rows.findIndex(r => r.address === 'b.mertens@wk.be')
+
+    expect(primary).toBeLessThan(secondary)
+  })
+
+  it('finds a contact by name and offers its addresses', () => {
+    expect(suggestionsFor([chloe], 'vermeulen').map(r => r.address)).toEqual(['chloe@example.com'])
+  })
+
+  // An excluded address must not eat a slot, or a field with nine tokens would show one option.
+  it('drops excluded addresses without spending the cap', () => {
+    const many = Array.from({ length: 12 }, (_, i) =>
+      contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
+
+    const rows = suggestionsFor(many, 'example', { exclude: new Set(['c0@example.com']), limit: 10 })
+
+    expect(rows).toHaveLength(10)
+    expect(rows.map(r => r.address)).not.toContain('c0@example.com')
+  })
+
+  it('caps the list at ten rows by default', () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
+
+    expect(suggestionsFor(many, 'example')).toHaveLength(10)
+  })
+
+  it('answers nothing on an empty query', () => {
+    expect(suggestionsFor([bruno], '   ')).toEqual([])
+  })
+
+  it('ignores a contact carrying no address', () => {
+    expect(suggestionsFor([contact({ id: 'n', firstName: 'Nobody' })], 'nobody')).toEqual([])
+  })
+})

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   uploadAttachment: vi.fn(),
   saveDraft: vi.fn(),
   deleteMessages: vi.fn(),
+  getContacts: vi.fn(),
   apiBase: 'https://api.test.example',
 }))
 // The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
@@ -23,6 +24,7 @@ vi.mock('../../../api.js', () => ({
   api: {
     sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment,
     saveDraft: mocks.saveDraft, deleteMessages: mocks.deleteMessages,
+    getContacts: mocks.getContacts,
   },
   uploadAttachment: mocks.uploadAttachment,
   API_BASE: mocks.apiBase,
@@ -97,6 +99,11 @@ function fileDragData(files: File[] = []) {
   return { dataTransfer: { types: ['Files'], files, items: files.map(() => ({ kind: 'file' })) } }
 }
 
+const bruno = {
+  id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: null, isFavorite: false,
+  addresses: ['bruno@x.be'],
+}
+
 const identityList = [
   { address: 'mick@weesky.be', displayName: 'Mick', isDefault: false, isPrimary: true, stale: false, labelIsCustom: false },
   { address: 'michel@weesky.be', displayName: 'Michel', isDefault: true, isPrimary: false, stale: false, labelIsCustom: true },
@@ -110,6 +117,7 @@ beforeEach(() => {
   mocks.deleteAttachment.mockResolvedValue(undefined)
   mocks.deleteMessages.mockResolvedValue(undefined)
   mocks.saveDraft.mockResolvedValue({ uid: 7, folderPath: 'Drafts' })
+  mocks.getContacts.mockResolvedValue({ contacts: [bruno] })
   // Default: identities still loading — every pre-existing test keeps the 2c1 plain From.
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
@@ -138,6 +146,25 @@ describe('ComposeView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Bcc' }))
     expect(screen.getByLabelText('Bcc')).toBeInTheDocument()
+  })
+
+  // The book is read here and handed to the fields, so this is the only place the wiring shows.
+  // All three, not just To: a prop dropped from one field alone is what a To-only test misses.
+  it('offers contact suggestions in To, Cc and Bcc alike', async () => {
+    renderCompose()
+    fireEvent.click(screen.getByRole('button', { name: 'Cc' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bcc' }))
+
+    for (const label of ['To', 'Cc', 'Bcc']) {
+      const input = screen.getByLabelText(label)
+      fireEvent.change(input, { target: { value: 'bru' } })
+
+      const field = within(input.closest('.recipients-field') as HTMLElement)
+      expect(await field.findByRole('option', { name: /bruno@x\.be/ })).toHaveTextContent('Bruno Mertens')
+
+      // Emptied before the next field, so each assertion sees only its own dropdown.
+      fireEvent.change(input, { target: { value: '' } })
+    }
   })
 
   it('enables Send on a valid recipient and disables it again on an invalid one', () => {

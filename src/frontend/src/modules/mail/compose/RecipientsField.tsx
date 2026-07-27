@@ -1,4 +1,6 @@
-import { useState, type ClipboardEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
+import { suggestionsFor } from '../../contacts/contactSearch'
+import type { Contact } from '../../contacts/contactTypes'
 
 /** Paint-and-gate check only; the backend's MimeKit parse is the authority. */
 export function isValidAddress(value: string): boolean {
@@ -11,21 +13,73 @@ interface Props {
   tokens: string[]
   onChange: (tokens: string[]) => void
   autoFocus?: boolean
+  /** The user's book, handed in by ComposeView. Empty by default, so the field stays fully usable
+      — and its existing behaviour unchanged — for an account with no contacts. */
+  contacts?: Contact[]
 }
 
-export default function RecipientsField({ id, label, tokens, onChange, autoFocus }: Props) {
+export default function RecipientsField({
+  id, label, tokens, onChange, autoFocus, contacts = [],
+}: Props) {
   const [draft, setDraft] = useState('')
+  const [closed, setClosed] = useState(false)
+  // -1 means "nothing highlighted", and it is the default on purpose: Enter must commit the
+  // address the user typed, not substitute a suggestion they never looked at.
+  const [active, setActive] = useState(-1)
+
+  const suggestions = useMemo(
+    () => suggestionsFor(contacts, draft, { exclude: new Set(tokens) }),
+    [contacts, draft, tokens])
+  const open = !closed && suggestions.length > 0
+  const listId = `${id}-suggestions`
+  const listRef = useRef<HTMLUListElement>(null)
+
+  useEffect(() => {
+    if (active < 0) return
+    const row = listRef.current?.children[active] as HTMLElement | undefined
+    // Optional call, not a test-time stub: jsdom implements no scrollIntoView, and bringing a row
+    // into view is decoration — it must never be the reason the field throws.
+    row?.scrollIntoView?.({ block: 'nearest' })
+  }, [active])
 
   function commit(raw: string) {
     const parts = raw.split(/[,;]/).map(p => p.trim()).filter(Boolean)
     if (parts.length > 0) onChange([...tokens, ...parts])
+    reset()
+  }
+
+  function reset() {
     setDraft('')
+    setActive(-1)
+    setClosed(false)
+  }
+
+  function type(value: string) {
+    setDraft(value)
+    setActive(-1)
+    setClosed(false)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
+    const down = event.key === 'ArrowDown'
+    if ((down || event.key === 'ArrowUp') && suggestions.length > 0) {
       event.preventDefault()
-      if (draft.trim()) commit(draft)
+      // Escape hides the list, it does not dismiss the query, so an arrow brings it back and
+      // lands on the end it came from — what the combobox pattern prescribes.
+      if (closed) {
+        setClosed(false)
+        setActive(down ? 0 : suggestions.length - 1)
+      } else {
+        setActive(previous => down
+          ? Math.min(previous + 1, suggestions.length - 1)
+          : Math.max(previous - 1, -1))
+      }
+    } else if (event.key === 'Escape') {
+      if (open) { event.preventDefault(); setClosed(true) }
+    } else if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
+      event.preventDefault()
+      if (open && active >= 0) commit(suggestions[active].address)
+      else if (draft.trim()) commit(draft)
     } else if (event.key === 'Backspace' && draft === '' && tokens.length > 0) {
       onChange(tokens.slice(0, -1))
     }
@@ -50,9 +104,33 @@ export default function RecipientsField({ id, label, tokens, onChange, autoFocus
           </span>
         ))}
         <input id={id} type="text" value={draft} autoFocus={autoFocus}
-          onChange={e => setDraft(e.target.value)}
+          role="combobox" aria-expanded={open} aria-autocomplete="list"
+          aria-controls={open ? listId : undefined}
+          // The highlight lives on a row the focus never moves to, so without this a screen
+          // reader announces nothing as the arrows walk the list.
+          aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+          onChange={e => type(e.target.value)}
           onKeyDown={onKeyDown} onPaste={onPaste}
           onBlur={() => { if (draft.trim()) commit(draft) }} />
+
+        {open && (
+          <ul ref={listRef} className="ownership-dropdown" id={listId} role="listbox"
+            aria-label={`${label} suggestions`}
+            // On the container, so it also covers the scrollbar and the padding strip: any
+            // mousedown here would blur the input, and the blur commits the half-typed draft as
+            // an invalid token. Rows rely on this too — their own handler bubbles up to it.
+            onMouseDown={event => event.preventDefault()}>
+            {suggestions.map((suggestion, index) => (
+              <li key={suggestion.address} id={`${listId}-${index}`} role="option"
+                aria-selected={index === active}
+                className={`ownership-dropdown-option${index === active ? ' is-active' : ''}`}
+                onMouseDown={() => commit(suggestion.address)}>
+                <span className="suggestion-names">{suggestion.names.join(', ')}</span>
+                <span className="suggestion-address">{suggestion.address}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

@@ -21,6 +21,9 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
         modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.Address });
         modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
+        modelBuilder.Entity<Contact>().HasKey(c => c.Id);
+        modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.Uid }).IsUnique();
+        modelBuilder.Entity<ContactEmail>().HasKey(e => new { e.ContactId, e.Address });
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
     }
@@ -32,6 +35,10 @@ public class PreferencesDbContext : DbContext
     public DbSet<SendingIdentity> SendingIdentities { get; set; }
 
     public DbSet<TrustedSender> TrustedSenders { get; set; }
+
+    public DbSet<Contact> Contacts { get; set; }
+
+    public DbSet<ContactEmail> ContactEmails { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
 }
