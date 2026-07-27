@@ -13,6 +13,10 @@ Paramètres → Général coupe le mécanisme.
 Sur une réponse, les noms portés par les en-têtes du message d'origine voyagent jusqu'à l'envoi et
 remplissent prénom et nom des fiches créées.
 
+La tranche active par ailleurs la bascule **« Trust my contacts »**, posée désactivée dans Général
+lors d'une tranche antérieure sous la note « Available once Contacts ships ». Contacts a livré ; la
+note est devenue fausse et le réglage devient réel.
+
 ## Décisions
 
 **1. La capture crée, elle n'enrichit jamais.** Une adresse déjà portée par au moins un contact ne
@@ -117,11 +121,20 @@ export function capturable(
 portées par un contact, et les doublons à l'intérieur d'un même envoi. Les survivants sortent dans
 leur ordre d'apparition (To, puis Cc, puis Bcc).
 
-**Une seule canonicalisation, celle de `contactSearch`.** C'est elle que `suggestionsFor` utilise
-déjà pour clé ses lignes. Deux normalisations différentes, et la liste déroulante proposerait un
-contact que la capture dupliquerait derrière — un défaut qu'aucun test de l'une ou l'autre moitié ne
-verrait. Un test l'énonce explicitement : une adresse que l'autocomplétion aurait proposée n'est
-jamais capturable.
+**La comparaison passe par `canonicalAddress`, pas par le `fold` de `contactSearch`.** La question
+que pose la capture est « cette ligne existe-t-elle déjà ? », et seule la règle de stockage y
+répond : `canonicalAddress` (`trim` + minuscules) est le miroir client d'`IdentityResolver.Canonical`,
+sous lequel le backend range toute adresse de contact.
+
+`fold` répond à une autre question. Il retire en plus les diacritiques, parce qu'une *recherche* doit
+trouver « José » en tapant « jose ». Employé ici il ferait passer `josé@x.be` pour déjà connue parce
+que le carnet contient `jose@x.be` — deux boîtes distinctes, une capture perdue en silence. Un test
+fixe la frontière : deux adresses ne différant que par un diacritique sont deux candidates.
+
+Conséquence de rangement : `canonicalAddress` quitte `modules/mail/reader/` pour `src/lib/`, avec son
+test. Un module Contacts qui va chercher une règle d'adresse dans le lecteur de courrier est un
+couplage que rien ne justifie — c'est le déplacement qu'a connu `useAccountId`, et pour la même
+raison.
 
 `splitFullName` :
 
@@ -207,14 +220,63 @@ lieu de l'effet, et 3d aura ses propres réglages d'import à loger.
 Sa ligne va dans Paramètres → Général avec les autres bascules. Un module Contacts n'a pas de page
 de réglages et n'en mérite pas une pour une case.
 
+## Les images des contacts — « Trust my contacts »
+
+Dans ce code, **un expéditeur de confiance est un expéditeur dont les images distantes se chargent
+sans qu'on demande** — rien d'autre. `TrustedSendersController` le dit dans son propre résumé, et
+c'est tout ce que `MessageReader` en fait. Le réglage signifie donc : *charger sans demander les
+images d'un expéditeur présent dans mon carnet.*
+
+**Il est renommé « Always show images from my contacts ».** « Trust my contacts » ne dit pas ce que
+faire confiance produit, et il se pose juste sous « Always show remote images », qui le dit. C'est la
+règle que le lecteur s'applique déjà à lui-même une ligne plus bas : une entrée dont l'effet est
+invisible induit en erreur.
+
+**Clé `mail.trustContacts`**, défaut `"false"`. Le préfixe est `mail.` et non `contacts.` par la même
+règle qui a donné `contacts.` à la capture : on nomme d'après l'effet, pas d'après le déclencheur.
+Ici l'appartenance au carnet est le déclencheur, et l'effet est le comportement du lecteur de
+courrier. Le défaut est `false` comme celui d'`alwaysShowImages` : charger une image distante
+signale à l'expéditeur que le message a été ouvert, et cela ne s'active pas dans le dos de personne.
+
+**Le lecteur tient désormais deux booléens distincts, et les confondre serait le défaut.**
+
+```
+senderApproved  — l'adresse figure sur la liste explicite des expéditeurs approuvés
+showImages      — imagesShown || alwaysShow || senderApproved || contactTrusted
+```
+
+`senderApproved` seul commande l'entrée « Block sender's images » du menu. Le lecteur la réserve déjà
+à un expéditeur approuvé *et* au cas où le réglage global est coupé, avec cette raison : le réglage
+global actif, révoquer ne change rien à l'écran. `contactTrusted` masque exactement de la même
+façon, donc il rejoint la même garde. Un expéditeur de confiance uniquement parce qu'il est dans le
+carnet n'a rien à révoquer : on le retire du carnet, ou on coupe le réglage.
+
+La bannière d'images bloquées ne se montre que si `!showImages` : le message d'un contact n'en a
+donc aucune, et l'entrée « Always show images from this sender » qu'elle porte reste hors d'atteinte
+dans ce cas. Cohérent, rien à ajouter.
+
+**L'appartenance se teste avec `canonicalAddress`**, la même règle que la capture et que la liste
+explicite — c'est celle sous laquelle les adresses de contact sont stockées.
+
+**Aucune ligne n'est écrite dans `trusted_senders`.** La confiance par le carnet est calculée, pas
+enregistrée : elle échappe donc au plafond de la table et au balayage de `TrustedSenderSweeper`, et
+retirer un contact la retire du même coup. C'est ce qui la distingue d'un clic sur « Always show
+images from this sender », qui, lui, pose une ligne.
+
+**`useContacts` gagne un paramètre `enabled` valant `true` par défaut**, sur le modèle de
+`useFolders`. Le lecteur ne demande le carnet que si le réglage est actif : sans cela, tout compte
+qui n'ouvre jamais Contacts paierait quand même une requête par session pour un réglage coupé.
+`ComposeView`, qui appelle `useContacts()` sans argument, ne change pas.
+
 ## Tests
 
 Le gros de la valeur est dans les deux fonctions pures.
 
 **`captureModel`** — adresse inconnue capturée ; adresse connue ignorée ; adresse propre ignorée ;
 même adresse deux fois dans un envoi → un seul candidat ; casse et espaces sans effet sur la
-comparaison ; l'invariant de canonicalisation partagée avec `suggestionsFor` ; les six lignes de
-`splitFullName`, dont la troncature à 100.
+comparaison ; **deux adresses ne différant que par un diacritique sont deux candidates** — la
+frontière entre `canonicalAddress` et `fold` ; les six lignes de `splitFullName`, dont la troncature
+à 100.
 
 **`buildComposeSeed`** — `nameHints` d'une réponse porte l'émetteur ; d'un *replyAll* porte aussi
 les destinataires du Cc ; d'un *forward* et d'un brouillon est vide.
@@ -227,8 +289,14 @@ autres créations.
 **`useToasts` / `Toasts`** — le bouton n'apparaît qu'avec une action ; un clic l'exécute et retire
 le toast ; un toast porteur d'action ne disparaît pas au bout de 3 s.
 
-**Backend** — le registre expose la nouvelle clé avec son défaut ; `Source` absent ou inconnu
-retombe sur `manual` ; `UpdateAsync` laisse `source` intact.
+**`MessageReader`** — réglage actif et expéditeur dans le carnet → images chargées, aucune bannière ;
+réglage coupé et même expéditeur → bannière ; expéditeur hors carnet → bannière ; l'entrée « Block
+sender's images » reste absente pour un expéditeur de confiance par le seul carnet, et présente pour
+un expéditeur explicitement approuvé ; le carnet n'est pas demandé quand le réglage est coupé.
+
+**Backend** — le registre expose les deux nouvelles clés avec leurs défauts (`contacts.captureRecipients`
+à `true`, `mail.trustContacts` à `false`) ; `Source` absent ou inconnu retombe sur `manual` ;
+`UpdateAsync` laisse `source` intact.
 
 ## Hors périmètre
 
@@ -239,3 +307,6 @@ retombe sur `manual` ; `UpdateAsync` laisse `source` intact.
 - **Capture depuis un brouillon enregistré.** Enregistrer n'est pas envoyer.
 - **Un plafond de captures par envoi.** Un envoi à trente inconnus crée trente fiches, et le toast
   le dit — `30 contacts added`, avec son Annuler.
+- **Toute autre acception de « confiance ».** Un contact ne devient ni exempt d'anti-spam, ni
+  dispensé de la jauge, ni traité à part dans une règle Sieve. La table `trusted_senders` ne
+  gouverne que les images distantes, et cette tranche ne lui en fait pas gouverner davantage.
