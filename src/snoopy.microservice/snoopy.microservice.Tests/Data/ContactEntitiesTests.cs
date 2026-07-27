@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -53,5 +54,25 @@ public sealed class ContactEntitiesTests
 
         Assert.NotNull(await context.ContactEmails.FindAsync([contact, "bruno@example.com"],
             CancellationToken.None));
+    }
+
+    // The model, not the behaviour: the InMemory provider enforces no foreign key, so no
+    // functional test here can reproduce the INSERT-order failure a real MariaDB gives. What is
+    // assertable is the edge itself — it is what makes EF write contacts before contact_emails
+    // instead of falling back to alphabetical table order.
+    [Fact]
+    public void ContactEmail_DeclaresForeignKeyToContact()
+    {
+        var context = new PreferencesTestDbContext(nameof(ContactEmail_DeclaresForeignKeyToContact));
+
+        var entity = context.Model.FindEntityType(typeof(ContactEmail));
+        Assert.NotNull(entity);
+        var foreignKey = Assert.Single(entity.GetForeignKeys());
+
+        Assert.Equal(typeof(Contact), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(nameof(ContactEmail.ContactId), Assert.Single(foreignKey.Properties).Name);
+        Assert.Equal(nameof(Contact.Id), Assert.Single(foreignKey.PrincipalKey.Properties).Name);
+        Assert.True(foreignKey.IsRequired);
+        Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 }

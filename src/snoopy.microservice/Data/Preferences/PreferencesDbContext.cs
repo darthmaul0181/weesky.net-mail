@@ -24,6 +24,15 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<Contact>().HasKey(c => c.Id);
         modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.Uid }).IsUnique();
         modelBuilder.Entity<ContactEmail>().HasKey(e => new { e.ContactId, e.Address });
+        // Without this edge EF has no dependency between the two and orders their INSERTs by table
+        // name — contact_emails before contacts — breaking fk_contact_emails_contact on any create
+        // carrying an address. Declared without navigation: the entities stay flat, the order does
+        // not stay accidental (parent first on insert, child first on delete).
+        modelBuilder.Entity<ContactEmail>()
+            .HasOne<Contact>()
+            .WithMany()
+            .HasForeignKey(e => e.ContactId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
     }
