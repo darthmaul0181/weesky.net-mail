@@ -153,16 +153,22 @@ the user tells a nav pane from a list at a glance. (Unread message rows delibera
 selected tokens, plus bold and a leading dot; the bold and dot are what set unread apart from merely
 selected — same tokens, so the two looks can never drift.)
 
-## Icon buttons: two hover languages
+## Icon buttons: one hover language
 
-- **Settings / admin icon buttons** (`.admin-icon-btn`, `.folder-action`) tint their **background** on
-  hover and colour the glyph to the accent.
-- **Mail icon buttons** (`.row-btn`, `.action-btn`, `.selection-btn`) recolour **only the glyph** — no
-  background — to `--icon-hover-accent` (the palette's vivid accent, identical in both themes), and a
-  destructive one to `--icon-hover-danger`. An "on" star sits at `--badge-count-bg`.
+**An icon button recolours its glyph on hover and nothing else** — no background tint, no transition.
+`.row-btn`, `.action-btn`, `.selection-btn` (mail) and `.admin-icon-btn` (settings, admin, identities,
+rules, contacts) all take `--icon-hover-accent` (the palette's vivid accent, identical in both themes),
+and their `.is-danger` variant takes `--icon-hover-danger`. An "on" star sits at `--badge-count-bg`.
 
-Match the surrounding surface: glyph-only recolour inside the mail columns, background tint in the
-settings/admin lists.
+The settings lists used to tint their background instead, on the reasoning that a hover language should
+match its surrounding surface. It made the same edit-and-delete pair look like two different controls
+depending on which module drew it, which is a worse cost than the surface mismatch it avoided. Reach for
+this one language for any new icon button.
+
+**The one exception is `.folder-action`**, the folder manager's row controls: it still tints its
+background (`--pane-item-hover`) and reddens to `--danger`. Those rows sit inside a navigation-styled
+pane where a bare glyph recolour is easy to miss, and the pane is the only surface where they appear —
+so it is a deliberate local exception, not a second general language to copy.
 
 ## Hover-revealed controls sit in reserved space
 

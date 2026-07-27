@@ -213,43 +213,6 @@ body {
   color: var(--danger);
 }
 
-/* ── Site header ─────────────────────────────────────────── */
-
-.site-header {
-  background: var(--action-primary);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  height: 52px;
-}
-
-.site-header-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.site-header-circle {
-  height: 34px;
-  width: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.site-header-logo {
-  height: 16px;
-  object-fit: contain;
-  filter: brightness(0) invert(1);
-}
-
-.site-header-section {
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.01em;
-}
-
 /* ── Header ──────────────────────────────────────────────── */
 
 .header {
@@ -481,12 +444,12 @@ body {
 
 .alias-tile:hover {
   border-color: var(--action-primary);
-  box-shadow: 0 0 0 3px rgba(52, 80, 163, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 15%, transparent);
 }
 
 @keyframes alias-tile-blink {
   0%, 33%, 66%, 100% { background: var(--surface); }
-  16%, 50%, 83%      { background: rgba(52, 80, 163, 0.18); }
+  16%, 50%, 83%      { background: color-mix(in oklab, var(--action-primary) 18%, transparent); }
 }
 
 .alias-tile-new {
@@ -1111,7 +1074,7 @@ body {
 .admin-tab.is-active {
   color: var(--action-primary);
   font-weight: 600;
-  background: rgba(52, 80, 163, 0.07);
+  background: color-mix(in oklab, var(--action-primary) 7%, transparent);
 }
 
 .admin-tab-content {
@@ -1196,7 +1159,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
 }
 
 .admin-icon-btn svg {
@@ -1204,14 +1166,14 @@ body {
   height: 16px;
 }
 
+/* Same hover language as the mail module's icon buttons (.row-btn, .action-btn, .selection-btn):
+   no background, only the glyph recolours, and no transition. */
 .admin-icon-btn:hover:not(:disabled) {
-  color: var(--action-primary);
-  background: rgba(52, 80, 163, 0.1);
+  color: var(--icon-hover-accent);
 }
 
 .admin-icon-btn.is-danger:hover:not(:disabled) {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.1);
+  color: var(--icon-hover-danger);
 }
 
 .admin-icon-btn:disabled {
@@ -1225,7 +1187,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(52, 80, 163, 0.08);
+  background: color-mix(in oklab, var(--action-primary) 8%, transparent);
   border-radius: var(--radius-sm);
   padding: 3px 8px;
   font-size: 13px;
@@ -1239,7 +1201,7 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  color: rgba(52, 80, 163, 0.45);
+  color: color-mix(in oklab, var(--action-primary) 45%, transparent);
   display: flex;
   align-items: center;
   padding: 0;
@@ -1401,7 +1363,7 @@ body {
 }
 
 [data-theme="dark"] .alias-tile-delete:hover:not(:disabled) {
-  background: rgba(220, 38, 38, 0.1);
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 
 [data-theme="dark"] .toast-success {
@@ -1419,10 +1381,6 @@ body {
 [data-theme="dark"] .spinner {
   border-color: rgba(255, 255, 255, 0.12);
   border-top-color: currentColor;
-}
-
-[data-theme="dark"] .site-header {
-  background: #3450a3;
 }
 
 /* ── Last connections (AddEditUserModal) ─────────────────── */
@@ -1528,20 +1486,6 @@ body {
   color: var(--action-primary);
 }
 
-/* ── Alert warn ──────────────────────────────────────────────  */
-
-.alert-warn {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
-}
-
-[data-theme="dark"] .alert-warn {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
-}
-
 /* ── Back button ─────────────────────────────────────────────  */
 
 .back-btn {
@@ -1568,8 +1512,8 @@ body {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  background: rgba(52, 80, 163, 0.09);
-  border: 1px solid rgba(52, 80, 163, 0.2);
+  background: color-mix(in oklab, var(--action-primary) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--action-primary) 20%, transparent);
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
@@ -1727,7 +1671,7 @@ body {
   font-size: 10px;
   font-weight: 600;
   color: var(--action-primary);
-  background: rgba(52, 80, 163, 0.1);
+  background: color-mix(in oklab, var(--action-primary) 10%, transparent);
   border-radius: 3px;
   padding: 1px 5px;
   vertical-align: middle;
@@ -1815,7 +1759,7 @@ body {
 
 .rule-card:hover {
   border-color: var(--action-primary);
-  box-shadow: 0 0 0 3px rgba(52, 80, 163, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 10%, transparent);
 }
 
 .rule-card-disabled {
@@ -1900,8 +1844,8 @@ body {
 }
 
 .rule-card-pill-action {
-  background: rgba(52, 80, 163, 0.07);
-  border-color: rgba(52, 80, 163, 0.2);
+  background: color-mix(in oklab, var(--action-primary) 7%, transparent);
+  border-color: color-mix(in oklab, var(--action-primary) 20%, transparent);
   color: var(--action-primary);
 }
 
@@ -2236,7 +2180,7 @@ body {
 
 .rule-card-drop-over {
   border-color: var(--action-primary);
-  box-shadow: 0 -3px 0 0 var(--action-primary), 0 0 0 1px rgba(52, 80, 163, 0.25);
+  box-shadow: 0 -3px 0 0 var(--action-primary), 0 0 0 1px color-mix(in oklab, var(--action-primary) 25%, transparent);
 }
 
 .rule-card-inline-actions,
