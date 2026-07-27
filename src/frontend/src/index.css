@@ -2330,7 +2330,8 @@ body {
 .contact-star.is-on { color: var(--badge-count-bg); }
 
 .contact-tile-address {
-  padding-left: 25px; min-height: 1.2em; color: var(--text-muted); font-size: 12px;
+  /* min-height must reserve a full line even when empty, so tiles without an address don't shrink */
+  padding-left: 25px; line-height: 1.5; min-height: 1.5em; color: var(--text-muted); font-size: 12px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .contact-tile.is-selected .contact-tile-address { color: inherit; opacity: .8; }
