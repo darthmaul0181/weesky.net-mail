@@ -35,6 +35,36 @@ public class PreferencesDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
+
+        // Same mechanism as ContactEmail -> Contact above: each of these five tables carries a real
+        // fk_..._user ON DELETE CASCADE to users(id) in the schema, but without a declared edge EF
+        // has nothing to order their INSERTs against theirs, and falls back to alphabetical table
+        // name — every one of them sorts before "users". Declared without navigation, same as above.
+        modelBuilder.Entity<Contact>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<FolderRoleOverride>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(o => o.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<UserPreference>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<SendingIdentity>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(i => i.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<TrustedSender>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }

@@ -75,4 +75,30 @@ public sealed class ContactEntitiesTests
         Assert.True(foreignKey.IsRequired);
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
+
+    // The five sibling tables (contacts, folder_role_overrides, user_preferences,
+    // sending_identities, trusted_senders) all carry the identical fk_..._user ON DELETE CASCADE
+    // shape to users(id), so one parameterised test stands in for five near-duplicates of
+    // ContactEmail_DeclaresForeignKeyToContact above rather than repeating its body five times.
+    [Theory]
+    [InlineData(typeof(Contact), nameof(Contact.UserId))]
+    [InlineData(typeof(FolderRoleOverride), nameof(FolderRoleOverride.UserId))]
+    [InlineData(typeof(UserPreference), nameof(UserPreference.UserId))]
+    [InlineData(typeof(SendingIdentity), nameof(SendingIdentity.UserId))]
+    [InlineData(typeof(TrustedSender), nameof(TrustedSender.UserId))]
+    public void Entity_DeclaresForeignKeyToWebmailUser(Type entityType, string foreignKeyPropertyName)
+    {
+        var context = new PreferencesTestDbContext(
+            $"{nameof(Entity_DeclaresForeignKeyToWebmailUser)}_{entityType.Name}");
+
+        var entity = context.Model.FindEntityType(entityType);
+        Assert.NotNull(entity);
+        var foreignKey = Assert.Single(entity.GetForeignKeys());
+
+        Assert.Equal(typeof(WebmailUser), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(foreignKeyPropertyName, Assert.Single(foreignKey.Properties).Name);
+        Assert.Equal(nameof(WebmailUser.Id), Assert.Single(foreignKey.PrincipalKey.Properties).Name);
+        Assert.True(foreignKey.IsRequired);
+        Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
+    }
 }
