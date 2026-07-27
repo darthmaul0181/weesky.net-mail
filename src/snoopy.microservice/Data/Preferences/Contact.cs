@@ -36,6 +36,13 @@ public sealed class Contact
     public bool IsFavorite { get; set; }
 
     /// <summary>
+    /// Where the card came from. Written at creation and never afterwards: editing a captured
+    /// contact must not reclassify it as one somebody typed.
+    /// </summary>
+    [Column("source")]
+    public string Source { get; set; } = "manual";
+
+    /// <summary>
     /// The source vCard verbatim, written by the import path only and never served to the UI. It
     /// is what stops a property we do not model from being destroyed on a future CardDAV sync.
     /// </summary>

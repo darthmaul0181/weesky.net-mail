@@ -26,10 +26,13 @@ import type { MailAttachmentInfo, SpecialUse } from '../api/mailTypes'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import MoveMessagesModal from '../MoveMessagesModal'
 import AttachmentViewerModal from './AttachmentViewerModal'
-import { alwaysShowImagesOf, showSpamScoreOf, usePreferences } from '../../../hooks/usePreferences'
+import {
+  alwaysShowImagesOf, showSpamScoreOf, trustContactsOf, usePreferences,
+} from '../../../hooks/usePreferences'
+import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
 import { formatReaderDate } from './formatReaderDate'
-import { canonicalAddress } from './canonicalAddress'
+import { canonicalAddress } from '../../../lib/canonicalAddress'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
 import SpamGauge from './SpamGauge'
@@ -83,6 +86,8 @@ export default function MessageReader(
   const prepare = usePrepareQuote()
   const { data: trustedSenders } = useTrustedSenders()
   const setTrust = useTrustSender(onNotify)
+  const trustContacts = !!preferences && trustContactsOf(preferences)
+  const { data: contacts } = useContacts(trustContacts)
 
   useMarkSeenOnOpen(folderPath, uid, Boolean(data))
 
@@ -113,9 +118,13 @@ export default function MessageReader(
   // cannot be conditional; before the detail lands it works on an empty document.
   const inverted = isDark && !originalColours
   const senderAddress = canonicalAddress(data?.fromAddress)
-  const senderTrusted = senderAddress !== '' && trustedSenders?.has(senderAddress) === true
+  // Two booleans, not one: senderApproved is the explicit list and is what the revoke entry acts
+  // on, while contactTrusted is computed and has nothing to revoke.
+  const senderApproved = senderAddress !== '' && trustedSenders?.has(senderAddress) === true
+  const contactTrusted = trustContacts && senderAddress !== ''
+    && (contacts ?? []).some(c => c.addresses.some(a => canonicalAddress(a) === senderAddress))
   const alwaysShow = !!preferences && alwaysShowImagesOf(preferences)
-  const showImages = imagesShown || alwaysShow || senderTrusted
+  const showImages = imagesShown || alwaysShow || senderApproved || contactTrusted
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
   // rest — the same reason revealBlockedImages runs on this side of it.
   const sanitized = useMemo(() => {
@@ -239,9 +248,10 @@ export default function MessageReader(
     { label: 'Edit as new', icon: <PencilIcon size={18} />, onSelect: () => void openCompose('editAsNew') },
   ]
 
-  // Only for an approved sender, and only while the global setting is off: with it on, revoking
-  // changes nothing on screen, and an entry whose effect is invisible misleads.
-  if (senderTrusted && !alwaysShow) {
+  // Only for an approved sender, and only while nothing else is already showing the images: with
+  // the global setting or the book doing it, revoking changes nothing on screen, and an entry
+  // whose effect is invisible misleads.
+  if (senderApproved && !alwaysShow && !contactTrusted) {
     actions.push('separator', {
       label: "Block sender's images",
       icon: <ImageOffIcon size={18} />,

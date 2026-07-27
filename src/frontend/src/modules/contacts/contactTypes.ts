@@ -21,4 +21,7 @@ export interface ContactDraft {
   nickname: string | null
   isFavorite: boolean
   addresses: string[]
+  /** Only the capture path sets this. The editor omits it and the API files the contact as
+      "manual". */
+  source?: 'captured'
 }

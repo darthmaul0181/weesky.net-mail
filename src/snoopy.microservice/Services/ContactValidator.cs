@@ -26,6 +26,8 @@ internal static class ContactValidator
 
     internal const int MaxAddressLength = 320;
 
+    private static readonly string[] KnownSources = ["manual", "captured", "imported"];
+
     internal static Result<ContactWrite> Validate(ContactRequest request)
     {
         if (request == null) return Result.Failure<ContactWrite>("Request body is required");
@@ -61,7 +63,7 @@ internal static class ContactValidator
                 return Result.Failure<ContactWrite>($"'{address}' is not a valid email address");
         }
 
-        return Result.Success(new ContactWrite(first, last, nick, request.IsFavorite, addresses));
+        return Result.Success(new ContactWrite(first, last, nick, request.IsFavorite, addresses, Source(request.Source)));
     }
 
     private static string? TooLong(string? value, string field) =>
@@ -72,6 +74,9 @@ internal static class ContactValidator
         var trimmed = value?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
+
+    private static string Source(string? raw) =>
+        raw != null && KnownSources.Contains(raw, StringComparer.Ordinal) ? raw : "manual";
 
     // MimeKit is the authority here as it is on the send path: a hand-rolled regex accepts and
     // rejects a different set than the library that will actually address the mail. Parsed with

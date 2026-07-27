@@ -68,6 +68,7 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
             LastName = contact.LastName,
             Nickname = contact.Nickname,
             IsFavorite = contact.IsFavorite,
+            Source = contact.Source,
             UpdatedAt = DateTime.UtcNow
         });
         AddAddresses(id, contact.Addresses);
@@ -87,8 +88,9 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
         row.Nickname = contact.Nickname;
         row.IsFavorite = contact.IsFavorite;
         row.UpdatedAt = DateTime.UtcNow;
-        // Uid and VCardRaw are deliberately untouched: the first is the identity a CardDAV client
-        // syncs on, the second holds properties this UI cannot show and must not erase.
+        // Uid, VCardRaw and Source are deliberately untouched: the first is the identity a CardDAV
+        // client syncs on, the second holds properties this UI cannot show and must not erase, the
+        // third records an origin that editing does not change.
 
         // Replace rather than merge: the editor submits the list it displays, so an address the
         // user removed has to go. Removed then re-added, because a position is not a key and

@@ -47,3 +47,16 @@ tard. `utf8mb4_unicode_ci` et non `utf8mb4_0900_ai_ci` : la base est MariaDB.
 À l'inverse des dates de `users`, que le code pose explicitement pour que `creation_date` ne bouge
 jamais, `contacts.updated_at` doit suivre **toute** écriture : il est la base d'un futur ETag
 CardDAV. D'où `DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`.
+
+## Ajout de la tranche 3c
+
+À rejouer sur les deux bases si les tables existent déjà ; les fiches présentes sont toutes des
+saisies manuelles, ce que le défaut leur attribue correctement.
+
+```sql
+ALTER TABLE `contacts`
+  ADD COLUMN `source` ENUM('manual','captured','imported')
+    NOT NULL DEFAULT 'manual'
+    COMMENT 'Origine de la fiche ; écrite à la création seulement'
+    AFTER `is_favorite`;
+```

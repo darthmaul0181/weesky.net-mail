@@ -14,7 +14,7 @@ public sealed class ContactStoreTests
     private static ContactWrite Write(
         string? first = "Bruno", string? last = "Mertens", string? nick = null,
         bool favorite = false, params string[] addresses) =>
-        new(first, last, nick, favorite, addresses);
+        new(first, last, nick, favorite, addresses, "manual");
 
     [Fact]
     public async Task Create_ThenList_ReturnsTheContact()
@@ -206,7 +206,7 @@ public sealed class ContactStoreTests
         var id = await Seed(db, user, "old@example.com");
 
         var result = await CreateStore(db).UpdateAsync(user, id,
-            new ContactWrite("Chloé", "Vermeulen", "chlo", true, ["new@example.com"]),
+            new ContactWrite("Chloé", "Vermeulen", "chlo", true, ["new@example.com"], "manual"),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -226,7 +226,7 @@ public sealed class ContactStoreTests
         var id = await Seed(db, user, "a@example.com", "b@example.com");
 
         await CreateStore(db).UpdateAsync(user, id,
-            new ContactWrite("Bruno", null, null, false, ["b@example.com"]), CancellationToken.None);
+            new ContactWrite("Bruno", null, null, false, ["b@example.com"], "manual"), CancellationToken.None);
 
         var stored = Assert.Single(await CreateStore(db).ListAsync(user, CancellationToken.None));
         Assert.Equal("b@example.com", Assert.Single(stored.Addresses));
@@ -240,7 +240,7 @@ public sealed class ContactStoreTests
         var id = await Seed(db, user, "a@example.com", "b@example.com");
 
         await CreateStore(db).UpdateAsync(user, id,
-            new ContactWrite("Bruno", null, null, false, ["b@example.com", "a@example.com"]),
+            new ContactWrite("Bruno", null, null, false, ["b@example.com", "a@example.com"], "manual"),
             CancellationToken.None);
 
         var stored = Assert.Single(await CreateStore(db).ListAsync(user, CancellationToken.None));
@@ -265,7 +265,7 @@ public sealed class ContactStoreTests
         var before = seeded.UpdatedAt;
 
         await CreateStore(db).UpdateAsync(user, id,
-            new ContactWrite("Bruno", null, null, false, []), CancellationToken.None);
+            new ContactWrite("Bruno", null, null, false, [], "manual"), CancellationToken.None);
 
         Assert.True(Assert.Single(new PreferencesTestDbContext(db).Contacts).UpdatedAt > before);
     }
@@ -281,7 +281,7 @@ public sealed class ContactStoreTests
         var before = Assert.Single(new PreferencesTestDbContext(db).Contacts).Uid;
 
         await CreateStore(db).UpdateAsync(user, id,
-            new ContactWrite("Bruno", null, null, false, []), CancellationToken.None);
+            new ContactWrite("Bruno", null, null, false, [], "manual"), CancellationToken.None);
 
         Assert.Equal(before, Assert.Single(new PreferencesTestDbContext(db).Contacts).Uid);
     }
@@ -293,7 +293,7 @@ public sealed class ContactStoreTests
         var id = await Seed(db, Guid.NewGuid());
 
         var result = await CreateStore(db).UpdateAsync(Guid.NewGuid(), id,
-            new ContactWrite("Hijack", null, null, false, []), CancellationToken.None);
+            new ContactWrite("Hijack", null, null, false, [], "manual"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(ContactStore.NotFound, result.Error);
@@ -350,5 +350,39 @@ public sealed class ContactStoreTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(ContactStore.NotFound, result.Error);
+    }
+
+    [Fact]
+    public async Task Create_StoresTheSource()
+    {
+        var db = nameof(Create_StoresTheSource);
+        var user = Guid.NewGuid();
+
+        var created = await CreateStore(db).CreateAsync(
+            user, new ContactWrite("Alice", null, null, false, ["alice@x.be"], "captured"),
+            CancellationToken.None);
+
+        var row = Assert.Single(new PreferencesTestDbContext(db).Contacts);
+        Assert.Equal("captured", row.Source);
+    }
+
+    // The whole point of the column: editing a captured card must not make it pass for a manual one.
+    [Fact]
+    public async Task Update_LeavesTheSourceIntact()
+    {
+        var db = nameof(Update_LeavesTheSourceIntact);
+        var user = Guid.NewGuid();
+        var created = await CreateStore(db).CreateAsync(
+            user, new ContactWrite("Alice", null, null, false, ["alice@x.be"], "captured"),
+            CancellationToken.None);
+
+        await CreateStore(db).UpdateAsync(
+            user, created.Value,
+            new ContactWrite("Alice", "Dupont", null, false, ["alice@x.be"], "manual"),
+            CancellationToken.None);
+
+        var row = Assert.Single(new PreferencesTestDbContext(db).Contacts);
+        Assert.Equal("captured", row.Source);
+        Assert.Equal("Dupont", row.LastName);
     }
 }

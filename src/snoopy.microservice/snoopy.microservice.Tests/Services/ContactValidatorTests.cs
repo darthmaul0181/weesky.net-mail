@@ -145,4 +145,39 @@ public sealed class ContactValidatorTests
     {
         Assert.True(ContactValidator.Validate(null!).IsFailure);
     }
+
+    [Fact]
+    public void Validate_DefaultsSourceToManual()
+    {
+        var result = ContactValidator.Validate(new ContactRequest { FirstName = "Alice" });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("manual", result.Value.Source);
+    }
+
+    [Theory]
+    [InlineData("captured")]
+    [InlineData("imported")]
+    [InlineData("manual")]
+    public void Validate_KeepsAKnownSource(string source)
+    {
+        var result = ContactValidator.Validate(new ContactRequest { FirstName = "Alice", Source = source });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(source, result.Value.Source);
+    }
+
+    // An unknown value is filed as manual rather than refused: the field is a hint about origin,
+    // and losing the contact over it would be a worse answer than mis-filing it.
+    [Theory]
+    [InlineData("CAPTURED")]
+    [InlineData("nonsense")]
+    [InlineData("")]
+    public void Validate_FallsBackToManualOnAnUnknownSource(string source)
+    {
+        var result = ContactValidator.Validate(new ContactRequest { FirstName = "Alice", Source = source });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("manual", result.Value.Source);
+    }
 }

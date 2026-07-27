@@ -406,6 +406,66 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadGatewayEnveloppe(System.String)">
             <summary>502 carrying the error envelope — anything the mail server refused.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.ContactsController">
+            <summary>
+            The user's contacts — webmail data, not mail-server data. No IMAP session and no credentials
+            cookie: every action is a database read or write, the same shape as IdentitiesController.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.#ctor(weesky.Snoopy.Microservice.Repositories.IContactStore)">
+            <summary>
+            The user's contacts — webmail data, not mail-server data. No IMAP session and no credentials
+            cookie: every action is a database read or write, the same shape as IdentitiesController.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.List(System.Threading.CancellationToken)">
+            <summary>
+            The whole book in one answer. Search and sort are the client's job, over this cached list.
+            </summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The contacts</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Create(weesky.Snoopy.Microservice.Models.Contacts.ContactRequest,System.Threading.CancellationToken)">
+            <summary>Creates a contact and answers it, id included.</summary>
+            <param name="request">the contact to create</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Created</response>
+            <response code="400">Neither name nor address, an unparsable address, or the cap reached</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Update(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactRequest,System.Threading.CancellationToken)">
+            <summary>Replaces the contact whole — names, favourite flag, and the entire address list.</summary>
+            <param name="id">the contact's identifier</param>
+            <param name="request">the full replacement contact</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">Neither name nor address, or an unparsable address</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such contact for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Delete(System.Guid,System.Threading.CancellationToken)">
+            <summary>Deletes the contact and its addresses.</summary>
+            <param name="id">the contact's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Deleted</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such contact for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.SetFavorite(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.FavoriteRequest,System.Threading.CancellationToken)">
+            <summary>
+            Flips the favourite flag alone. Its own route because the star is toggled from a tile
+            holding a possibly stale copy — a whole-contact PUT from there would clobber a concurrent
+            edit, the same reason message flags have their own endpoint.
+            </summary>
+            <param name="id">the contact's identifier</param>
+            <param name="request">the new favourite state</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">No body</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such contact for this user</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
             <summary>
             Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
@@ -960,6 +1020,39 @@
             <response code="204">No longer trusted, whether it was or not</response>
             <response code="401">Not authenticated</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.Contact">
+            <summary>
+            One contact of one webmail user. Flat like its sibling entities — no navigation property to
+            the addresses: the store joins them, which keeps every read one explicit query.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Uid">
+            <summary>
+            The source vCard's own UID, kept distinct from <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Id"/>: a client that PUTs UID X
+            and reads back UID Y sees a different card and duplicates it on the next sync. Set to
+            <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Id"/> for a contact born here.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Source">
+            <summary>
+            Where the card came from. Written at creation and never afterwards: editing a captured
+            contact must not reclassify it as one somebody typed.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.VCardRaw">
+            <summary>
+            The source vCard verbatim, written by the import path only and never served to the UI. It
+            is what stops a property we do not model from being destroyed on a future CardDAV sync.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail">
+            <summary>
+            One address of one contact. Stored canonical (trimmed, lower-case): the table collates in
+            binary, so a casing difference would split one address into two rows. <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail.Position"/>
+            carries the order, and position 0 is the primary address by definition — there is no flag to
+            keep in step with it.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.FolderRoleOverride">
             <summary>
             One user-chosen folder-role assignment. Absence of a row means the role falls back to
@@ -1116,6 +1209,87 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.IncompatibleRule">
             <summary>A single rule the target provider cannot represent, with a human-readable reason.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactListResponse">
+            <summary>The whole book. Wrapped in an object rather than answered as a bare array, so a later
+            field — a sync token, a count — can be added without changing the response's shape.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactListResponse.#ctor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactView})">
+            <summary>The whole book. Wrapped in an object rather than answered as a bare array, so a later
+            field — a sync token, a count — can be added without changing the response's shape.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactRequest">
+            <summary>
+            The body of POST /api/Contacts and PUT /api/Contacts/{id}. A settable class rather than a
+            record: it is bound from JSON, and every field is optional at the wire level so
+            <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> can answer one clear message instead of the binder
+            answering several unclear ones.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactRequest.Addresses">
+            <summary>Ordered; the first surviving entry becomes the primary address.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactRequest.Source">
+            <summary>Where the card came from. Absent or unknown is filed as "manual".</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactView">
+            <summary>
+            One contact as the client reads it. Carries neither <c>Uid</c> nor <c>VCardRaw</c>: no screen
+            reads either, and the raw card would multiply the payload of a list already fetched whole.
+            </summary>
+            <param name="Id">The contact's identifier.</param>
+            <param name="FirstName">The contact's first name, if any.</param>
+            <param name="LastName">The contact's last name, if any.</param>
+            <param name="Nickname">The contact's nickname, if any.</param>
+            <param name="IsFavorite">Whether the contact is starred.</param>
+            <param name="Addresses">Ordered; the first entry is the primary address.</param>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactView.#ctor(System.Guid,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            One contact as the client reads it. Carries neither <c>Uid</c> nor <c>VCardRaw</c>: no screen
+            reads either, and the raw card would multiply the payload of a list already fetched whole.
+            </summary>
+            <param name="Id">The contact's identifier.</param>
+            <param name="FirstName">The contact's first name, if any.</param>
+            <param name="LastName">The contact's last name, if any.</param>
+            <param name="Nickname">The contact's nickname, if any.</param>
+            <param name="IsFavorite">Whether the contact is starred.</param>
+            <param name="Addresses">Ordered; the first entry is the primary address.</param>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.Id">
+            <summary>The contact's identifier.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.FirstName">
+            <summary>The contact's first name, if any.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.LastName">
+            <summary>The contact's last name, if any.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.Nickname">
+            <summary>The contact's nickname, if any.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.IsFavorite">
+            <summary>Whether the contact is starred.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.Addresses">
+            <summary>Ordered; the first entry is the primary address.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactWrite">
+            <summary>
+            A validated, normalised contact on its way to the store: names trimmed and nulled when blank,
+            addresses non-blank and in the order they must be stored. Only
+            <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> produces one, so the store never re-checks the rules.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactWrite.#ctor(System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String)">
+            <summary>
+            A validated, normalised contact on its way to the store: names trimmed and nulled when blank,
+            addresses non-blank and in the order they must be stored. Only
+            <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> produces one, so the store never re-checks the rules.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.FavoriteRequest">
+            <summary>The body of PUT /api/Contacts/{id}/Favorite. A settable class, bound from JSON.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.CredentialResult">
              <summary>
@@ -1943,6 +2117,48 @@
             cannot report a different owner set for the same rows.
             </summary>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Repositories.ContactStore.MaxPerUser">
+            <summary>
+            What bounds the table, and what bounds the payload: the whole book is fetched into the
+            browser, so this is a transfer ceiling as much as a storage one. Far above real use — it
+            guards against a runaway import, not against a user.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.AddAddresses(System.Guid,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            Folds every address, drops what folds together, and numbers what survives from 0. The
+            position is reassigned here rather than taken from the caller: a gap or a repeat coming
+            off the wire would leave two rows claiming to be the primary.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.FindAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Scoped by user on purpose: a contact belonging to somebody else must be indistinguishable
+            from one that does not exist, so the controller can answer 404 without leaking it.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IContactStore">
+            <summary>
+            A user's contacts. Addresses go in as the caller typed them and come back canonical; callers
+            never fold them themselves. Every method is scoped by <c>userId</c>, so a contact
+            belonging to somebody else is simply not found.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.CreateAsync(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite,System.Threading.CancellationToken)">
+            <summary>Creates it and answers its new id. Fails only when the per-user cap is reached.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.UpdateAsync(System.Guid,System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite,System.Threading.CancellationToken)">
+            <summary>Replaces names, favourite flag and the whole address list. Fails when not found.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.DeleteAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
+            <summary>Removes it and its addresses. Fails when not found.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.SetFavoriteAsync(System.Guid,System.Guid,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Flips the favourite flag alone. Its own method because the star is toggled from a tile
+            that holds a possibly stale copy of the contact — a whole-object write would clobber it.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore">
             <summary>
             Reads and writes folder-role overrides. Knows nothing about IMAP: validity against the
@@ -2341,6 +2557,26 @@
             represent any rule that compiles. We surface compile-level validation here so a
             structurally invalid rule (e.g. missing name) is reported rather than silently
             passing a compatibility check.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ContactValidator">
+            <summary>
+            The single place the contact rules are written — the role <see cref="T:weesky.Snoopy.Microservice.Services.IdentityResolver"/> plays
+            for sending identities. Pure, no external call, so POST and PUT read the same rule instead of
+            two that could drift apart.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.ContactValidator.MaxAddressesPerContact">
+            <summary>
+            What bounds one contact's address list. The whole book is fetched into the browser, so a
+            contact carrying thousands of addresses is a payload problem, not just an odd fixture.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.ContactValidator.MaxNameLength">
+            <summary>
+            The column widths, mirrored: <c>contacts.first_name</c>, <c>last_name</c> and
+            <c>nickname</c> are VARCHAR(100), <c>contact_emails.address</c> VARCHAR(320). Unbounded
+            here, an over-long value reaches a strict-mode MariaDB and comes back as a 500.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.DovecotQuotaClient">

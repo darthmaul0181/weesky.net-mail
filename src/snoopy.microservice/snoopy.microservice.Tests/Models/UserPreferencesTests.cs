@@ -121,4 +121,32 @@ public sealed class UserPreferencesTests
 
     private static UserPreference Row(string key, string value) =>
         new() { UserId = Guid.NewGuid(), PreferenceKey = key, PreferenceValue = value };
+
+    [Fact]
+    public void Effective_CapturesRecipientsByDefault()
+    {
+        var effective = UserPreferences.Effective([]);
+
+        Assert.Equal("true", effective["contacts.captureRecipients"]);
+    }
+
+    // Off by default like alwaysShowImages, and for the same reason: loading a remote image tells the
+    // sender the message was opened, so nothing turns that on unasked.
+    [Fact]
+    public void Effective_DoesNotTrustContactsByDefault()
+    {
+        var effective = UserPreferences.Effective([]);
+
+        Assert.Equal("false", effective["mail.trustContacts"]);
+    }
+
+    [Theory]
+    [InlineData("contacts.captureRecipients")]
+    [InlineData("mail.trustContacts")]
+    public void IsValid_AcceptsBooleansOnly(string key)
+    {
+        Assert.True(UserPreferences.IsValid(key, "true"));
+        Assert.True(UserPreferences.IsValid(key, "false"));
+        Assert.False(UserPreferences.IsValid(key, "yes"));
+    }
 }

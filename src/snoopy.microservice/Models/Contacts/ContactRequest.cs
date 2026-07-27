@@ -18,4 +18,7 @@ public sealed class ContactRequest
 
     /// <summary>Ordered; the first surviving entry becomes the primary address.</summary>
     public List<string>? Addresses { get; set; }
+
+    /// <summary>Where the card came from. Absent or unknown is filed as "manual".</summary>
+    public string? Source { get; set; }
 }

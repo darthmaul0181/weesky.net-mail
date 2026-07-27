@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, notifyDesktopOf, notifySoundOf, readingPaneOf,
-  showPreviewOf, showSpamScoreOf, usePreferences, useSetPreference, type ReadingPane,
+  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, notifyDesktopOf, notifySoundOf,
+  readingPaneOf, showPreviewOf, showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
+  type ReadingPane,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -195,18 +196,23 @@ export default function GeneralPage() {
             </p>
           )}
 
-          {/* Disabled until Contacts exists. No preference key is declared for it: nothing can
-              write one while the row is disabled, and a registry entry nothing can reach is dead
-              code with dead validation. When Contacts ships this becomes a real key. */}
           <ToggleRow
             id="trust-contacts"
-            label="Trust my contacts"
-            checked={false}
-            disabled
-            onChange={() => {}}
+            label="Always show images from my contacts"
+            checked={trustContactsOf(preferences)}
+            disabled={setPreference.isPending}
+            onChange={on => save(PREFERENCE_KEYS.trustContacts, String(on),
+              on ? 'Images from your contacts will load' : 'Images from your contacts stay blocked')}
           />
 
-          <p className="settings-note">Available once Contacts ships.</p>
+          <ToggleRow
+            id="capture-recipients"
+            label="Save new recipients to my contacts"
+            checked={captureRecipientsOf(preferences)}
+            disabled={setPreference.isPending}
+            onChange={on => save(PREFERENCE_KEYS.captureRecipients, String(on),
+              on ? 'New recipients will be saved' : 'New recipients will not be saved')}
+          />
 
           <ToggleRow
             id="show-spam-score"

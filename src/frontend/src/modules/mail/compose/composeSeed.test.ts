@@ -28,6 +28,32 @@ const prepared = {
 const identities = [identity('me@weesky.be', { isDefault: true })]
 const aliases = [{ name: 'sales', domain: 'weesky.be' }]
 
+describe('nameHints', () => {
+  it('carries the sender on a reply, keyed canonically', () => {
+    const seed = buildComposeSeed(
+      'reply', detail({ fromName: 'Alice Dupont', fromAddress: 'Alice@Ext.example' }),
+      prepared, identities, aliases, 'me@weesky.be')
+
+    expect(seed.nameHints['alice@ext.example']).toBe('Alice Dupont')
+  })
+
+  it('carries the other recipients on a reply-all', () => {
+    const seed = buildComposeSeed(
+      'replyAll', detail({ cc: [{ name: 'Bob Martin', address: 'Bob@Ext.example' }] }),
+      prepared, identities, aliases, 'me@weesky.be')
+
+    expect(seed.nameHints['bob@ext.example']).toBe('Bob Martin')
+  })
+
+  it('omits an address whose header carried no name', () => {
+    const seed = buildComposeSeed(
+      'reply', detail({ fromName: '', to: [{ name: '', address: 'me@weesky.be' }] }),
+      prepared, identities, aliases, 'me@weesky.be')
+
+    expect(seed.nameHints).toEqual({})
+  })
+})
+
 describe('buildComposeSeed', () => {
   it('reply: recipients, Re: subject, quoted body, threading', () => {
     const seed = buildComposeSeed('reply', detail(), prepared, identities, aliases, 'me@weesky.be')
@@ -63,6 +89,7 @@ describe('buildComposeSeed', () => {
     expect(seed.subject).toBe('Fwd: Hello')
     expect(seed.html).toContain('---------- Forwarded message ----------')
     expect(seed.inReplyTo).toBe('m@x')
+    expect(seed.nameHints['alice@ext.example']).toBe('Alice')
   })
 
   it('editAsNew: original recipients and subject, bare body, no threading', () => {
@@ -75,6 +102,7 @@ describe('buildComposeSeed', () => {
     expect(seed.html).toBe('<p>original</p>')
     expect(seed.inReplyTo).toBeNull()
     expect(seed.references).toEqual([])
+    expect(seed.nameHints['alice@ext.example']).toBe('Alice')
   })
 })
 
@@ -114,5 +142,10 @@ describe('buildDraftSeed', () => {
     // Case differences must not lose the choice: an IMAP client may have stored it capitalised.
     expect(buildDraftSeed({ ...opened, fromAddress: 'Sales@weesky.be' }, [identity('sales@weesky.be')], ref)
       .fromAddress).toBe('sales@weesky.be')
+  })
+
+  // A draft keeps no headers from whatever it was a reply to, so there is nothing to carry.
+  it('carries no name hints', () => {
+    expect(buildDraftSeed(opened, [], ref).nameHints).toEqual({})
   })
 })

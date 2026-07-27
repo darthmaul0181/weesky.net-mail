@@ -10,4 +10,5 @@ public sealed record ContactWrite(
     string? LastName,
     string? Nickname,
     bool IsFavorite,
-    IReadOnlyList<string> Addresses);
+    IReadOnlyList<string> Addresses,
+    string Source);

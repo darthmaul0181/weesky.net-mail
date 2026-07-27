@@ -22,6 +22,14 @@ public static class UserPreferences
     public const string MailShowSpamScore = "mail.showSpamScore";
     public const string MailReadingPane = "mail.readingPane";
 
+    // contacts., not mail.: the preference governs a write to the address book. The trigger is a
+    // send; the effect is what names the key.
+    public const string ContactsCaptureRecipients = "contacts.captureRecipients";
+
+    // mail., by the same rule read the other way: the trigger is being in the book, the effect is
+    // how the mail reader treats remote images.
+    public const string MailTrustContacts = "mail.trustContacts";
+
     private static readonly string[] Booleans = ["true", "false"];
 
     public static IReadOnlyList<PreferenceDefinition> All { get; } =
@@ -33,6 +41,8 @@ public static class UserPreferences
         new(MailNotifyDesktop, "false", Booleans),
         new(MailShowSpamScore, "true", Booleans),
         new(MailReadingPane, "right", ["right", "bottom", "none"]),
+        new(ContactsCaptureRecipients, "true", Booleans),
+        new(MailTrustContacts, "false", Booleans),
     ];
 
     public static bool IsValid(string key, string value) =>

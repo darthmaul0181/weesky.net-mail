@@ -17,6 +17,8 @@ export const PREFERENCE_KEYS = {
   alwaysShowImages: 'mail.alwaysShowImages',
   showSpamScore: 'mail.showSpamScore',
   readingPane: 'mail.readingPane',
+  captureRecipients: 'contacts.captureRecipients',
+  trustContacts: 'mail.trustContacts',
 } as const
 
 export type Preferences = Record<string, string>
@@ -96,4 +98,14 @@ export function notifyDesktopOf(preferences: Preferences): boolean {
     notification hook. One predicate, so the two can never disagree about who pays. */
 export function notifiesOf(preferences: Preferences): boolean {
   return notifySoundOf(preferences) || notifyDesktopOf(preferences)
+}
+
+/** On unless explicitly off — an account whose row has never been written must capture. */
+export function captureRecipientsOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.captureRecipients] !== 'false'
+}
+
+/** Off unless explicitly on — a key the backend has not sent yet must not load remote images. */
+export function trustContactsOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.trustContacts] === 'true'
 }

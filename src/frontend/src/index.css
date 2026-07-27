@@ -990,6 +990,18 @@ body {
   opacity: 1;
 }
 
+/* Inherits the toast's own colour: the toast palette is the one thing that must not fork here. */
+.toast-action {
+  margin-left: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

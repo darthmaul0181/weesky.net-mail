@@ -131,13 +131,30 @@ describe('GeneralPage', () => {
     expect(screen.queryByText(/tells the sender you opened the message/i)).not.toBeInTheDocument()
   })
 
-  it('shows the contacts row disabled with its note', async () => {
-    renderPage()
+  it('saves the capture preference', async () => {
+    renderPage({ 'contacts.captureRecipients': 'true' })
 
-    const row = await screen.findByLabelText('Trust my contacts')
-    expect(row).toBeDisabled()
-    expect(row).not.toBeChecked()
-    expect(screen.getByText('Available once Contacts ships.')).toBeInTheDocument()
+    fireEvent.click(await screen.findByLabelText('Save new recipients to my contacts'))
+
+    await waitFor(() => expect(mocks.setPreference)
+      .toHaveBeenCalledWith('contacts.captureRecipients', 'false'))
+  })
+
+  it('saves the contact-images preference', async () => {
+    renderPage({ 'mail.trustContacts': 'false' })
+
+    fireEvent.click(await screen.findByLabelText('Always show images from my contacts'))
+
+    await waitFor(() => expect(mocks.setPreference)
+      .toHaveBeenCalledWith('mail.trustContacts', 'true'))
+  })
+
+  // It shipped disabled under "Available once Contacts ships". Contacts has shipped.
+  it('no longer says the contacts setting is unavailable', async () => {
+    renderPage({})
+
+    expect(await screen.findByLabelText('Always show images from my contacts')).toBeEnabled()
+    expect(screen.queryByText('Available once Contacts ships.')).toBeNull()
   })
 
   it('shows the spam score toggle on by default', async () => {

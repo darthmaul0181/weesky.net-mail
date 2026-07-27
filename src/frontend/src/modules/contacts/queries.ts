@@ -11,11 +11,11 @@ export const contactKeys = {
 }
 
 /**
- * The whole book, cached. Long staleTime: it changes only from this module, which invalidates it.
- * Sorted in `select`, so the page and the composer read one already-ordered list rather than each
- * sorting its own copy.
+ * The whole book, cached. Sorted in `select`, so the page and the composer read one already-
+ * ordered list rather than each sorting its own copy. The reader passes false when its
+ * contact-trust setting is off, so an account that never opens Contacts pays nothing.
  */
-export function useContacts() {
+export function useContacts(enabled = true) {
   const accountId = useAccountId()
 
   return useQuery({
@@ -23,6 +23,7 @@ export function useContacts() {
     queryFn: () => api.getContacts() as Promise<ContactListResponse>,
     staleTime: 5 * 60_000,
     select: (data): Contact[] => [...data.contacts].sort(compareContacts),
+    enabled,
   })
 }
 
