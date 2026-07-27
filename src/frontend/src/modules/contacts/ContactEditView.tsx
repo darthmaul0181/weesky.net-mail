@@ -84,7 +84,7 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
           {contact ? <PencilIcon size={16} /> : <PersonPlusIcon />}
           {contact ? 'Edit contact' : 'New contact'}
         </h2>
-        <button type="submit" className="btn btn-primary" disabled={!valid || saving}>
+        <button type="submit" className="btn btn-primary contact-save-btn" disabled={!valid || saving}>
           {saving && <span className="spinner" data-testid="editor-spinner" />}
           Save contact
         </button>
