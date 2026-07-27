@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { displayNameOf, primaryAddressOf } from './contactName'
+import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
 
 function contact(fields: Partial<Contact> = {}): Contact {
@@ -41,6 +41,20 @@ describe('displayNameOf', () => {
 
   it('returns an empty string when the contact carries nothing', () => {
     expect(displayNameOf(contact())).toBe('')
+  })
+})
+
+describe('contactNameOf', () => {
+  it('names a contact the same way displayNameOf does', () => {
+    expect(contactNameOf(contact({ firstName: 'Bruno', lastName: 'Mertens' }))).toBe('Bruno Mertens')
+    expect(contactNameOf(contact({ nickname: 'bru' }))).toBe('bru')
+  })
+
+  // The whole reason it exists: a caller showing one address must not be handed another one as a
+  // fallback. A recipient chip naming an address the message will not go to would be a lie.
+  it('answers null rather than falling back to an address', () => {
+    expect(contactNameOf(contact({ addresses: ['bruno@x.be', 'other@x.be'] }))).toBeNull()
+    expect(contactNameOf(contact())).toBeNull()
   })
 })
 

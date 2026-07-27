@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import { suggestionsFor } from '../../contacts/contactSearch'
+import { canonicalAddress } from '../../../lib/canonicalAddress'
+import { contactNameOf } from '../../contacts/contactName'
+import { compareContacts, suggestionsFor } from '../../contacts/contactSearch'
 import type { Contact } from '../../contacts/contactTypes'
 
 /** Paint-and-gate check only; the backend's MimeKit parse is the authority. */
@@ -30,6 +32,22 @@ export default function RecipientsField({
   const suggestions = useMemo(
     () => suggestionsFor(contacts, draft, { exclude: new Set(tokens) }),
     [contacts, draft, tokens])
+  // A token stays the bare address — the wire format and every reader downstream depend on it —
+  // so naming it is a rendering step: canonical address to the name its contact carries, if any.
+  const namesByAddress = useMemo(() => {
+    const names = new Map<string, string>()
+    // Sorted, and first-wins, so a shared address keeps the name the dropdown offered it under.
+    for (const contact of [...contacts].sort(compareContacts)) {
+      const name = contactNameOf(contact)
+      if (name === null) continue
+      for (const address of contact.addresses) {
+        const key = canonicalAddress(address)
+        if (!names.has(key)) names.set(key, name)
+      }
+    }
+    return names
+  }, [contacts])
+
   const open = !closed && suggestions.length > 0
   const listId = `${id}-suggestions`
   const listRef = useRef<HTMLUListElement>(null)
@@ -96,13 +114,21 @@ export default function RecipientsField({
     <div className="field-h recipients-field">
       <label htmlFor={id}>{label}</label>
       <div className="recipients-box">
-        {tokens.map((token, index) => (
-          <span key={`${token}-${index}`} className={`recipient-token${isValidAddress(token) ? '' : ' is-invalid'}`}>
-            {token}
-            <button type="button" aria-label={`Remove ${token}`}
-              onClick={() => onChange(tokens.filter((_, i) => i !== index))}>✕</button>
-          </span>
-        ))}
+        {tokens.map((token, index) => {
+          const name = namesByAddress.get(canonicalAddress(token))
+          const shown = name ?? token
+          return (
+            <span key={`${token}-${index}`}
+              className={`recipient-token${isValidAddress(token) ? '' : ' is-invalid'}`}
+              // Only when the chip is not already showing it: a bubble repeating the text under
+              // the cursor is noise, the rule AddressLabel follows in the reader.
+              title={name ? token : undefined}>
+              {shown}
+              <button type="button" aria-label={`Remove ${shown}`}
+                onClick={() => onChange(tokens.filter((_, i) => i !== index))}>✕</button>
+            </span>
+          )
+        })}
         <input id={id} type="text" value={draft} autoFocus={autoFocus}
           role="combobox" aria-expanded={open} aria-autocomplete="list"
           aria-controls={open ? listId : undefined}

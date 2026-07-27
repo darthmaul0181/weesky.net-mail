@@ -203,3 +203,62 @@ describe('RecipientsField — contact suggestions', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 })
+
+describe('RecipientsField — a token wears its contact name', () => {
+  const bruno = contact({
+    id: 'b', firstName: 'Bruno', lastName: 'Mertens', addresses: ['bruno@x.be', 'b@wk.be'],
+  })
+
+  function show(tokens: string[], contacts: Contact[]) {
+    render(<RecipientsField id="to" label="To" tokens={tokens} onChange={vi.fn()} contacts={contacts} />)
+  }
+
+  it('shows the name and keeps the address one hover away', () => {
+    show(['bruno@x.be'], [bruno])
+
+    expect(screen.getByText('Bruno Mertens')).toHaveAttribute('title', 'bruno@x.be')
+    expect(screen.queryByText('bruno@x.be')).not.toBeInTheDocument()
+  })
+
+  // The bubble must carry the address the message will go to, never the contact's primary one.
+  it('carries the matched address, not the primary one', () => {
+    show(['b@wk.be'], [bruno])
+
+    expect(screen.getByText('Bruno Mertens')).toHaveAttribute('title', 'b@wk.be')
+  })
+
+  it('resolves the address whatever its spelling', () => {
+    show(['  Bruno@X.BE '], [bruno])
+
+    expect(screen.getByText('Bruno Mertens')).toBeInTheDocument()
+  })
+
+  it('shows the address bare, with no bubble, for a contact carrying no name', () => {
+    show(['ghost@x.be'], [contact({ id: 'g', addresses: ['ghost@x.be'] })])
+
+    expect(screen.getByText('ghost@x.be')).not.toHaveAttribute('title')
+  })
+
+  it('shows the address bare, with no bubble, when the book does not hold it', () => {
+    show(['stranger@x.be'], [bruno])
+
+    expect(screen.getByText('stranger@x.be')).not.toHaveAttribute('title')
+  })
+
+  it('names the remove button after what the chip shows', () => {
+    show(['bruno@x.be'], [bruno])
+
+    expect(screen.getByRole('button', { name: 'Remove Bruno Mertens' })).toBeInTheDocument()
+  })
+
+  // One address, two contacts: the chip keeps the name the dropdown offered it under — favourites
+  // first, then alphabetical — so the two surfaces cannot name the same recipient differently.
+  it('prefers the favourite when an address is shared', () => {
+    show(['info@x.be'], [
+      contact({ id: 'o', firstName: 'Adam', addresses: ['info@x.be'] }),
+      contact({ id: 's', firstName: 'Zoe', isFavorite: true, addresses: ['info@x.be'] }),
+    ])
+
+    expect(screen.getByText('Zoe')).toBeInTheDocument()
+  })
+})
