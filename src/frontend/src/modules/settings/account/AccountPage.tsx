@@ -127,7 +127,9 @@ export default function AccountPage() {
       {identity.subDomains.length > 0 && (
         <section className="account-section">
           <h2>Other domains</h2>
-          <ul>{identity.subDomains.map(d => <li key={d.id}>{d.name}</li>)}</ul>
+          <ul className="account-domains">
+            {identity.subDomains.map(d => <li key={d.id}>{d.name}</li>)}
+          </ul>
         </section>
       )}
 

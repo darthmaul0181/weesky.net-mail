@@ -63,6 +63,24 @@ describe('AccountPage', () => {
     await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
   })
 
+  // The quota block used to print a heading of its own right under the section's.
+  it('names the storage section once', async () => {
+    renderPage()
+    await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
+
+    expect(await screen.findByText('Storage')).toBeInTheDocument()
+    expect(screen.getAllByText('Storage')).toHaveLength(1)
+  })
+
+  // jsdom applies no stylesheet, so the class carrying `list-style: none` is all this can hold
+  // on to — the domains are read-only names, not an outline.
+  it('lists the other domains without bullets', async () => {
+    const { container } = renderPage()
+    await screen.findByText('example.org')
+
+    expect(container.querySelector('.account-domains')).toBeTruthy()
+  })
+
   it('saves an edited full name', async () => {
     mocks.changeFullName.mockResolvedValue(null)
     renderPage()

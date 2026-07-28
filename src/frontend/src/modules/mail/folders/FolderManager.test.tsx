@@ -61,7 +61,7 @@ describe('the folder list', () => {
         onNotify={vi.fn()}
       />)
 
-    const rows = Array.from(container.querySelectorAll('.folder-manage-label'))
+    const rows = Array.from(container.querySelectorAll('.admin-list-item-email'))
     expect(rows.map(r => r.textContent)).toEqual(['INBOX', 'Alpha', 'Corbeille', 'Zeta'])
   })
 
@@ -90,6 +90,26 @@ describe('the folder list', () => {
       />)
 
     expect(screen.getByLabelText('Show INBOX')).toBeChecked()
+  })
+
+  // Tiles, not bare rows: every list of elements on a page wears the site's tile.
+  it('renders each folder as a tile of the shared list', () => {
+    const { container } = renderManager()
+
+    expect(container.querySelector('.admin-list.folder-list')).toBeTruthy()
+    expect(container.querySelectorAll('.admin-list-item.folder-tile')).toHaveLength(4)
+  })
+
+  // The tile steps in with the depth; the label does not, so the actions keep one column.
+  it('indents a child tile rather than its name', () => {
+    const { container } = renderManager()
+    const tiles = Array.from(container.querySelectorAll<HTMLElement>('.folder-tile'))
+
+    const alpha = tiles.find(t => t.textContent?.includes('Alpha'))!
+    const projects = tiles.find(t => t.textContent?.includes('Projects'))!
+
+    expect(projects.style.marginLeft).toBe('0px')
+    expect(alpha.style.marginLeft).toBe('18px')
   })
 
   // A switch, not a bare checkbox: the app shows every boolean this way.
@@ -127,14 +147,15 @@ describe('system folders are locked', () => {
     expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument()
   })
 
-  // The badge qualifies the folder, so it belongs against the name.
+  // Tile anatomy: the state control leads on the left, the badge qualifies the name it sits
+  // against, and the actions are the rightmost thing on the row.
   it('places the role badge next to the name, before the actions', () => {
     const { container } = renderManager()
 
-    const row = container.querySelector('.folder-manage-row.is-system')!
-    const parts = Array.from(row.children).map(c => c.className.split(' ')[0])
+    const tile = container.querySelector('.folder-tile')!
+    const parts = Array.from(tile.children).map(c => c.className.split(' ')[0])
 
-    expect(parts).toEqual(['toggle-switch', 'folder-manage-label', 'folder-manage-role', 'folder-manage-actions'])
+    expect(parts).toEqual(['toggle-switch', 'admin-list-item-email', 'row-tag', 'admin-list-item-actions'])
   })
 
   it('keeps every action live on an ordinary folder', () => {
@@ -145,11 +166,12 @@ describe('system folders are locked', () => {
     expect(screen.getByLabelText('Show Projects')).toBeEnabled()
   })
 
-  // The lock has to be visible, not only enforced: an unexplained missing control reads as a bug.
+  // The lock has to be visible, not only enforced: an unexplained missing control reads as a
+  // bug. Every tile's name is bold, so the badge is what carries it.
   it('marks the system rows so they read as different', () => {
     const { container } = renderManager()
 
-    expect(container.querySelectorAll('.folder-manage-row.is-system')).toHaveLength(2)
+    expect(container.querySelectorAll('.row-tag')).toHaveLength(2)
   })
 })
 

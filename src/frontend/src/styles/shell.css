@@ -290,6 +290,15 @@
   margin-bottom: 8px;
 }
 
+/* Read-only names under their heading, not an outline: the disc is a marker nothing else on
+   the page uses, and the indent it needs pushed the values out of line with every other row. */
+.account-domains { list-style: none; margin: 0; padding: 0; }
+.account-domains li { padding: 2px 0; }
+
+/* width:auto undoes .btn-primary's 100%, which is meant for a form filling a narrow dialog;
+   here it stretched the button across the whole settings column. */
+.change-password-form .btn { width: auto; }
+
 .radio-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
 
 /* Settings rows. `.field-h` was drawn for the admin dialogs — a narrow box with one-word

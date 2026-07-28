@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { requestBlob } from '../../../api.js'
+import LoadingBlock from '../../../components/LoadingBlock'
 import ChevronLeftIcon from '../../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { formatSize } from './formatSize'
@@ -86,7 +87,7 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
               ? <span className="attachment-viewer-error" role="alert">{error}</span>
               : objectUrl
                 ? <img src={objectUrl} alt={image.fileName} className="attachment-viewer-img" />
-                : <span>Loading…</span>}
+                : <LoadingBlock />}
           </div>
           {several && (
             <button type="button" className="attachment-viewer-nav" aria-label="Next image"

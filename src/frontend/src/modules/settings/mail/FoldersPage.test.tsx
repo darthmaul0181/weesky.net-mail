@@ -55,6 +55,15 @@ function renderPage() {
 describe('FoldersPage', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  // The house busy state is a spinner, never the bare word — and it still announces itself,
+  // which the text used to do on its own.
+  it('shows a spinner while the folders load', () => {
+    renderPage()
+
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+  })
+
   it('lists the folders once loaded', async () => {
     renderPage()
 
@@ -71,13 +80,17 @@ describe('FoldersPage', () => {
     expect(screen.getByRole('button', { name: 'System folders' })).toBeInTheDocument()
   })
 
-  // A bare `.btn` has no border or background and reads as text. jsdom applies no stylesheet,
+  // Creating is the page's primary action and wears the filled button; the other stays ghost —
+  // a bare `.btn` has no border or background and reads as text. jsdom applies no stylesheet,
   // so the variant class is all this can hold on to.
-  it.each(['New folder', 'System folders'])('gives %s a visible button style', async name => {
+  it.each([
+    ['New folder', 'btn-primary'],
+    ['System folders', 'btn-ghost'],
+  ])('gives %s the %s style', async (name, variant) => {
     renderPage()
     await screen.findByLabelText('Show Projects')
 
-    expect(screen.getByRole('button', { name })).toHaveClass('btn-ghost')
+    expect(screen.getByRole('button', { name })).toHaveClass(variant)
   })
 
   it('opens the create dialog', async () => {

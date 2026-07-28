@@ -515,7 +515,9 @@ body {
 .identity-list .admin-list-item-name { flex: none; }
 .identity-list .admin-list-item-actions { margin-left: auto; }
 
-.identity-tag {
+/* The badge qualifying a tile's row — an identity's "primary", a folder's role. Named for the
+   row rather than for the identities page, which is only where it was first needed. */
+.row-tag {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--text-muted); border: 1px solid var(--border);
   border-radius: 999px; padding: 1px 8px; flex-shrink: 0;
@@ -737,14 +739,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.panel-quota-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
 }
 
 .panel-quota-values {
@@ -1008,6 +1002,9 @@ body {
 }
 
 /* ── Loading ─────────────────────────────────────────────── */
+
+/* The house busy state (LoadingBlock): centred in whatever region is waiting. */
+.loading-block { display: flex; justify-content: center; padding: 24px 0; }
 
 .spinner {
   width: 18px;

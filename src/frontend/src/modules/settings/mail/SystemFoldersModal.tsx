@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LoadingBlock from '../../../components/LoadingBlock'
 import SlidersIcon from '../../../icons/SlidersIcon'
 import { flatten, indent, sortFolders } from '../../mail/folders/folderNodes'
 import { roleLabel } from '../../mail/roleLabel'
@@ -65,7 +66,7 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
           server declares; pick a folder only where the detection gets it wrong.
         </p>
 
-        {loading && <p>Loading…</p>}
+        {loading && <LoadingBlock />}
         {!loading && failed && <p>Could not load the folder configuration.</p>}
 
         {!loading && !failed && (

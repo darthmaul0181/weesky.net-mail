@@ -222,24 +222,6 @@
 
 /* ── Folder management ───────────────────────────────────── */
 
-/* Icon-sized hit target, used both in the column footer and in the manage rows. */
-.folder-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.folder-action:hover { background: var(--pane-item-hover); color: var(--text); }
-.folder-action.is-danger:hover { color: var(--danger); }
-
 /* The dialogs reuse the admin module's .field-h / .toggle-switch / primary-submit shape from
    index.css; only what is specific to folders lives here. */
 
@@ -264,11 +246,28 @@
 
 /* Bounded: the settings column is as wide as the window, which left a folder name and its
    actions half a screen apart. */
-.folder-manage-list {
+.folder-list {
   list-style: none;
-  margin: 0 -8px;
+  margin: 0;
   padding: 0;
-  max-width: 560px;
+  max-width: 620px;
+}
+
+/* Shrinks to its text rather than filling: .admin-list-item-email is sized for an address,
+   and its fixed 40ch would push the role badge to the far edge. */
+.folder-list .admin-list-item-email {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* margin-left:auto holds the actions right, now that the name no longer fills the tile. */
+.folder-list .admin-list-item-actions { margin-left: auto; }
+
+/* A system folder's switch is locked; without this it reads as an ordinary "on". */
+.folder-tile .toggle-switch input:disabled + .toggle-track {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .folders-page-hint {
@@ -284,10 +283,12 @@
   margin: 0 0 18px;
 }
 
+/* width:auto undoes .btn-primary's 100%, which is meant for a form's submit. */
 .folders-page-actions .btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  width: auto;
 }
 
 /* Scrolls inside .modal-folders' band stack when the role list runs long. */
@@ -302,62 +303,6 @@
   font-size: 12.5px;
   /* Under the control: .field-h puts the label in a fixed first column. */
   margin: -6px 0 12px 126px;
-}
-
-.folder-manage-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  /* padding-left comes from the depth, inline. Fixed height so the switches keep one rhythm. */
-  height: 38px;
-  padding-right: 8px;
-  border-radius: var(--radius-sm);
-  font-size: 13.5px;
-}
-
-.folder-manage-row:hover { background: var(--pane-item-hover); }
-
-/* Shrinks rather than fills, or flex:1 pushes the role badge to the far edge. */
-.folder-manage-label {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A system folder's switch is locked; without this it reads as an ordinary "on". */
-.folder-manage-row .toggle-switch input:disabled + .toggle-track {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Weight alone: the role name beside it already says which rule applies. */
-.folder-manage-row.is-system .folder-manage-label { font-weight: 600; }
-
-.folder-manage-role {
-  flex: none;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
-  background: var(--badge-count-bg);
-  color: var(--badge-count-fg);
-}
-
-/* margin-left:auto holds the actions right, now that the label no longer fills the row. */
-.folder-manage-actions { display: flex; gap: 2px; flex: none; margin-left: auto; }
-
-/* Present but unavailable: the control exists, this row cannot use it. */
-.folder-action:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.folder-action:disabled:hover {
-  background: none;
-  color: var(--text-muted);
 }
 
 /* ── Message list ────────────────────────────────────────── */
