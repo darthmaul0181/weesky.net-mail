@@ -11,6 +11,7 @@ import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
 import IdentitySelect from './IdentitySelect'
+import { mailtoSeedFrom } from './mailtoSeed'
 import RecipientsField, { isValidAddress } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
 import type { ComposeAction, ComposeSeed } from './composeSeed'
@@ -62,7 +63,10 @@ export default function ComposeView({ onNotify }: Props) {
 
   const state = location.state as { from?: string; seed?: ComposeSeed } | null
   const from = state?.from
-  const seed = state?.seed ?? null
+  // A mailto: arrives through the URL, not through the history state: the operating system opens
+  // a cold address, with no React navigation behind it.
+  const seed = useMemo(
+    () => state?.seed ?? mailtoSeedFrom(location.search), [state?.seed, location.search])
 
   const [to, setTo] = useState<string[]>(seed?.to ?? [])
   const [cc, setCc] = useState<string[]>(seed?.cc ?? [])

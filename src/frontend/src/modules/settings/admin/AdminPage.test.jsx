@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 import AdminPage from './AdminPage.jsx'
 import { AddEditUserModal } from './AddEditUserModal.jsx'
@@ -24,10 +25,19 @@ vi.mock('../../../api.js', () => ({
     adminGetVirtualDomains: vi.fn(),
     adminAddVirtualDomainOwner: vi.fn(),
     adminRemoveVirtualDomainOwner: vi.fn(),
+    getAppSettings: vi.fn(),
+    setAppSetting: vi.fn(),
   },
   clearSession: vi.fn(),
   setIsAdmin: vi.fn(),
 }))
+
+// AdminPage itself has no QueryClientProvider — ApplicationTab is the only tab that needs one,
+// but wrapping every render here is simpler than special-casing it.
+function renderAdminPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={client}><AdminPage /></QueryClientProvider>)
+}
 
 const MB = 1024 * 1024
 
@@ -40,12 +50,18 @@ const MOCK_VIRTUAL_DOMAINS = [
   { domainId: 'ORF', domainName: 'orphan.net', owners: [] },
 ]
 
+const MOCK_APP_SETTINGS = {
+  'app.installable': 'true', 'app.name': 'Weesky Mail', 'app.shortName': 'Weesky',
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   api.adminGetUsers.mockResolvedValue(MOCK_USERS)
   api.adminGetVirtualDomains.mockResolvedValue(MOCK_VIRTUAL_DOMAINS)
   api.adminGetDomains.mockResolvedValue(MOCK_DOMAINS)
   api.adminGetUserQuota.mockRejectedValue(new Error('unavailable'))
+  api.getAppSettings.mockResolvedValue(MOCK_APP_SETTINGS)
+  api.setAppSetting.mockResolvedValue(undefined)
 })
 
 // ── AddEditUserModal — create mode ────────────────────────────
@@ -642,28 +658,35 @@ describe('AddEditDomainModal — error handling', () => {
 
 describe('AdminPage', () => {
   it('shows the Accounts tab as active by default', async () => {
-    render(<AdminPage />)
+    renderAdminPage()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
     )
   })
 
   it('switches to Domains tab when clicked', async () => {
-    render(<AdminPage />)
+    renderAdminPage()
     await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
     expect(screen.getByRole('button', { name: 'Domains' })).toHaveClass('is-active')
     expect(await screen.findByText('WSY')).toBeInTheDocument()
   })
 
   it('switches to Virtual domains tab and loads alias domains', async () => {
-    render(<AdminPage />)
+    renderAdminPage()
     await userEvent.click(screen.getByRole('button', { name: 'Virtual domains' }))
     expect(screen.getByRole('button', { name: 'Virtual domains' })).toHaveClass('is-active')
     expect(await screen.findByText('extra.com')).toBeInTheDocument()
   })
 
+  it('switches to Application tab and shows the app settings', async () => {
+    renderAdminPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
+    expect(screen.getByRole('button', { name: 'Application' })).toHaveClass('is-active')
+    expect(await screen.findByLabelText('Application name')).toHaveValue('Weesky Mail')
+  })
+
   it('switches back to Accounts tab after visiting Domains', async () => {
-    render(<AdminPage />)
+    renderAdminPage()
     await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
     await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
     expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')

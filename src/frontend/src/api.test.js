@@ -971,3 +971,29 @@ describe('preferences', () => {
       }))
   })
 })
+
+describe('app settings', () => {
+  it('reads every app setting in one call', async () => {
+    mockFetch(200, { json: { 'app.name': 'Snoopy mail' } })
+    const { api } = await import('./api.js')
+
+    await expect(api.getAppSettings()).resolves.toEqual({ 'app.name': 'Snoopy mail' })
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/AppSettings'),
+      expect.objectContaining({ method: 'GET' }))
+  })
+
+  it('setAppSetting sends the key and the value in the body', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.setAppSetting('app.name', 'Snoopy mail')
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/AppSettings'),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ key: 'app.name', value: 'Snoopy mail' }),
+      }))
+  })
+})

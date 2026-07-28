@@ -406,6 +406,31 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadGatewayEnveloppe(System.String)">
             <summary>502 carrying the error envelope — anything the mail server refused.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.AppSettingsController">
+             <summary>
+             The instance's settings — today, whether the webmail advertises itself as an installable
+             application, and under what name.
+            
+             Reading is anonymous: an application name is not a secret, and the manifest must be reachable
+             from the login page, where there is no session. Writing is reserved to administrators. As with
+             the account preferences, the response always carries every known key with its default already
+             filled in, so the client keeps no copy of its own to drift from.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AppSettingsController.GetAppSettings(System.Threading.CancellationToken)">
+            <summary>Every known setting, with the stored value where one exists.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Key/value map covering every known setting</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.AppSettingsController.SetAppSetting(weesky.Snoopy.Microservice.Models.SetAppSettingRequest,System.Threading.CancellationToken)">
+            <summary>Sets one setting.</summary>
+            <param name="request">key and value, both from the registry</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Setting stored</response>
+            <response code="400">Unknown key, or a value the key does not accept</response>
+            <response code="401">Not authenticated</response>
+            <response code="403">Not an administrator</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.ContactsController">
             <summary>
             The user's contacts — webmail data, not mail-server data. No IMAP session and no credentials
@@ -1045,6 +1070,21 @@
             <response code="204">No longer trusted, whether it was or not</response>
             <response code="401">Not authenticated</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.AppSetting">
+             <summary>
+             A setting of the instance, not of an account: the table carries no user_id, and naming the
+             application is an administrator's decision, not a reader's preference.
+            
+             Key/value for the same reason that already holds for user_preferences: without EF migrations,
+             a typed column would mean a hand-run ALTER on the server for every new setting.
+             </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.AppSetting.SettingKey">
+            <summary>Dotted and stable, e.g. "app.name" — never localised, never renamed lightly.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.AppSetting.SettingValue">
+            <summary>Always a string. The registry knows how to read it back.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.Contact">
             <summary>
             One contact of one webmail user. Flat like its sibling entities — no navigation property to
@@ -1212,6 +1252,33 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Models.AliasExtensions.ToAddresses(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Models.Alias})">
             <summary>The account's alias addresses, in the shape the identity rules consume.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.AppSettingDefinition">
+            <summary>
+            One instance setting. A non-null <paramref name="Allowed"/> enumerates the accepted values;
+            null, the value is free text bounded by <paramref name="MaxLength"/>, measured trimmed.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AppSettingDefinition.#ctor(System.String,System.String,System.Int32,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            One instance setting. A non-null <paramref name="Allowed"/> enumerates the accepted values;
+            null, the value is free text bounded by <paramref name="MaxLength"/>, measured trimmed.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.AppSettings">
+             <summary>
+             The registry of instance settings: the one place any of them is declared.
+            
+             Same role as <see cref="T:weesky.Snoopy.Microservice.Models.UserPreferences"/> for account preferences — the database cannot
+             check a key or a value, so this does, and a row whose value the registry no longer accepts
+             falls back to the default rather than reaching the client.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AppSettings.Normalize(System.String,System.String)">
+            <summary>What goes to the database. A name is trimmed; an enumerated value is already exact.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.AppSettings.Effective(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Data.Preferences.AppSetting})">
+            <summary>Every default, a stored row winning wherever the registry still accepts it.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.CompatibilityCheckRequest">
             <summary>
@@ -1936,6 +2003,9 @@
         <member name="P:weesky.Snoopy.Microservice.Models.SaveRulesRequest.ScriptName">
             <summary>When null, the chosen provider's default script name is used.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.SetAppSettingRequest">
+            <summary>Body of PUT /api/AppSettings. Both fields must name an entry of the registry.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.SetPreferenceRequest">
             <summary>Body of PUT /api/Preferences. Both fields must name entries the registry knows.</summary>
         </member>
@@ -2202,6 +2272,15 @@
             Scoped by user on purpose: a contact belonging to somebody else must be indistinguishable
             from one that does not exist, so the controller can answer 404 without leaking it.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IAppSettingStore">
+            <summary>
+            Reads and writes instance settings. It knows nothing of which keys exist or what they
+            accept — that is the registry's job, and the caller validates before writing.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IAppSettingStore.SetAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Sets or corrects a setting. The key is the row.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IContactStore">
             <summary>

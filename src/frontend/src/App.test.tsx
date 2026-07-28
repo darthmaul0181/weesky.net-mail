@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { routes } from './routes'
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   markLoggedIn: vi.fn(),
   getMailFolders: vi.fn(),
+  getAppSettings: vi.fn(),
 }))
 
 vi.mock('./api.js', () => ({
@@ -25,6 +28,7 @@ vi.mock('./api.js', () => ({
     logout: mocks.logout,
     login: mocks.login,
     getMailFolders: mocks.getMailFolders,
+    getAppSettings: mocks.getAppSettings,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -58,6 +62,7 @@ describe('routing', () => {
     vi.clearAllMocks()
     mocks.getAccount.mockResolvedValue(account)
     mocks.getMailFolders.mockResolvedValue([])
+    mocks.getAppSettings.mockResolvedValue({})
   })
 
   it('redirects unauthenticated users to /login', async () => {
@@ -109,5 +114,45 @@ describe('routing', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+  })
+})
+
+// Mounts the real <App/> rather than a hand-rebuilt provider tree. Every other test in this file
+// rebuilds the composition, which is precisely how a defect in the composition itself stayed
+// invisible: InstallManifest starts the app-settings fetch, and AuthProvider's mount effect used
+// to answer a logged-out visitor by clearing the whole query cache out from under it, so the
+// manifest was never posted on the one page it exists to cover.
+describe('App composition', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getAccount.mockResolvedValue(account)
+    mocks.getMailFolders.mockResolvedValue([])
+    mocks.getAppSettings.mockResolvedValue({
+      'app.installable': 'true',
+      'app.name': 'Snoopy mail',
+      'app.shortName': 'Snoopy',
+    })
+    URL.createObjectURL = vi.fn(() => 'blob:mock')
+    URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    document.head.querySelector('link[rel="manifest"]')?.remove()
+    delete (URL as Partial<typeof URL>).createObjectURL
+    delete (URL as Partial<typeof URL>).revokeObjectURL
+  })
+
+  // Logged out on purpose: /login is the first page a new user sees, so it is where installation
+  // has to be offered. Waiting for the login form first proves the visitor really is on it.
+  // Wrapped in StrictMode as main.tsx wraps it, so the double-invoked mount effects are part of
+  // what is under test — the guard added to AuthProvider is spent on a transition rather than on a
+  // first run precisely so the second pass cannot clear the cache for real.
+  it('posts the manifest link for a logged-out visitor', async () => {
+    mocks.hasSession.mockReturnValue(false)
+
+    render(<StrictMode><App /></StrictMode>)
+
+    expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(document.head.querySelector('link[rel="manifest"]')).not.toBeNull())
   })
 })
