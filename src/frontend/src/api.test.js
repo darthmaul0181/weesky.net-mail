@@ -149,6 +149,55 @@ describe('api methods', () => {
     )
   })
 
+  it('getContacts calls GET /api/Contacts', async () => {
+    const { api } = await import('./api.js')
+    await api.getContacts()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('createContact POSTs the contact', async () => {
+    const { api } = await import('./api.js')
+    const draft = {
+      firstName: 'Bruno', lastName: 'Mertens', nickname: null,
+      isFavorite: false, addresses: ['bruno@example.com'],
+    }
+    await api.createContact(draft)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(draft) })
+    )
+  })
+
+  it('updateContact PUTs to the contact id', async () => {
+    const { api } = await import('./api.js')
+    await api.updateContact('11111111-1111-1111-1111-111111111111', { firstName: 'B' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts/11111111-1111-1111-1111-111111111111'),
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
+
+  it('deleteContact DELETEs the contact id', async () => {
+    const { api } = await import('./api.js')
+    await api.deleteContact('22222222-2222-2222-2222-222222222222')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts/22222222-2222-2222-2222-222222222222'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('setContactFavorite PUTs the flag to the Favorite sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.setContactFavorite('33333333-3333-3333-3333-333333333333', true)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Contacts/33333333-3333-3333-3333-333333333333/Favorite'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ isFavorite: true }) })
+    )
+  })
+
   it('changePassword calls PATCH /api/Account/ChangeSecret', async () => {
     const { api } = await import('./api.js')
     await api.changePassword('old', 'new')
@@ -183,6 +232,39 @@ describe('api methods', () => {
       expect.stringContaining('/api/Account/FullName'),
       expect.objectContaining({ method: 'POST' })
     )
+  })
+
+  it('posts an imported CSV as multipart without a JSON content type', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ created: 1, merged: 0, skipped: 0, failed: 0, totalErrors: 0, errors: [] }),
+    })
+
+    const file = new File(['First Name\r\nBruno'], 'contacts.csv', { type: 'text/csv' })
+    const { api } = await import('./api.js')
+    const report = await api.importContacts(file)
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Contacts/Import')
+    expect(options.body).toBeInstanceOf(FormData)
+    expect(options.body.get('file')).toBe(file)
+    // The browser has to set the multipart boundary itself; naming a type here breaks the parse.
+    expect(options.headers['Content-Type']).toBeUndefined()
+    expect(report.created).toBe(1)
+  })
+
+  it('fetches the export as a blob with the served file name', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'attachment; filename="contacts-2026-07-27.csv"' },
+      blob: async () => new Blob(['x']),
+    })
+
+    const { api } = await import('./api.js')
+    const result = await api.exportContacts()
+
+    expect(globalThis.fetch.mock.calls[0][0]).toContain('/api/Contacts/Export')
+    expect(result.fileName).toBe('contacts-2026-07-27.csv')
   })
 })
 

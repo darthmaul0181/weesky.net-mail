@@ -5,6 +5,7 @@ import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'r
 import type { ReactNode } from 'react'
 import { settle } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
+import type { Contact } from '../../contacts/contactTypes'
 import MessageReader from './MessageReader'
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   getTrustedSenders: vi.fn(),
   trustSender: vi.fn(),
   untrustSender: vi.fn(),
+  getContacts: vi.fn(),
   // The same class queries.ts imports from the mocked module, so its `instanceof ApiError`
   // holds against what these tests throw. A locally-declared twin would fail that check and
   // silently route every case to the generic branch.
@@ -50,6 +52,7 @@ vi.mock('../../../api.js', () => ({
     getTrustedSenders: mocks.getTrustedSenders,
     trustSender: mocks.trustSender,
     untrustSender: mocks.untrustSender,
+    getContacts: mocks.getContacts,
   },
   ApiError: mocks.ApiError,
   requestBlob: mocks.requestBlob,
@@ -150,18 +153,19 @@ function renderWithCachedSummary(
   )
 }
 
-// Seeds the two inputs of the revocation gate synchronously, the way makeClient seeds the
-// folders. Neither is observable when both are on — a trusted sender under the global setting
-// shows no banner either way — so an entry absent because a query is still in flight would pass
-// for an entry absent because the gate works. Seeded, both sides of `senderTrusted && !alwaysShow`
-// are true from the first render and the gate is what the assertion is reading.
+// Seeds the inputs of the revocation gate synchronously, the way makeClient seeds the folders.
+// None is observable when several are on — a trusted sender under the global setting shows no
+// banner either way — so an entry absent because a query is still in flight would pass for an
+// entry absent because the gate works. Seeded, every side of the guard holds from the first
+// render and the gate is what the assertion is reading.
 function renderWithTrusted(
   addresses: string[], preferences?: Record<string, string>,
-  onNotify?: (message: string) => void,
+  onNotify?: (message: string) => void, contacts?: Contact[],
 ) {
   const client = makeClient()
   client.setQueryData(['mail', 'primary', 'trustedSenders'], addresses)
   if (preferences) client.setQueryData(['preferences'], preferences)
+  if (contacts) client.setQueryData(['contacts', 'primary'], { contacts })
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -185,6 +189,7 @@ describe('MessageReader', () => {
     mocks.getTrustedSenders.mockResolvedValue([])
     mocks.trustSender.mockResolvedValue(undefined)
     mocks.untrustSender.mockResolvedValue(undefined)
+    mocks.getContacts.mockResolvedValue({ contacts: [] })
   })
 
   it('prompts when nothing is selected', () => {
@@ -589,6 +594,76 @@ describe('MessageReader', () => {
     await waitFor(() => expect(mocks.trustSender).toHaveBeenCalled())
     await settle()
     expect(onNotify).not.toHaveBeenCalled()
+  })
+
+  describe('images of a contact', () => {
+    // Seeded uncanonical on purpose: the API answers canonical addresses, so the membership test
+    // has to canonicalise what it reads rather than trust the cache to hold that form.
+    const inBook: Contact[] = [{
+      id: 'c1', firstName: 'Alice', lastName: null, nickname: null,
+      isFavorite: false, addresses: [detail.fromAddress.toUpperCase()],
+    }]
+
+    beforeEach(() => { mocks.getMailMessage.mockResolvedValue(blocked) })
+
+    it('shows their images when the setting is on', async () => {
+      renderWithTrusted([], { 'mail.trustContacts': 'true' }, undefined, inBook)
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText(/blocked/)).toBeNull()
+      expect(screen.getByTitle('Message body').getAttribute('srcdoc'))
+        .toContain('src="https://t.example/p.gif"')
+    })
+
+    it('blocks the same sender when the setting is off', async () => {
+      renderWithTrusted([], { 'mail.trustContacts': 'false' }, undefined, inBook)
+
+      expect(await screen.findByText(/blocked/)).toBeInTheDocument()
+    })
+
+    it('blocks a sender the book does not hold', async () => {
+      renderWithTrusted([], { 'mail.trustContacts': 'true' }, undefined, [])
+
+      expect(await screen.findByText(/blocked/)).toBeInTheDocument()
+    })
+
+    // Revoking changes nothing on screen while the book is trusting, and the reader already
+    // withholds this entry whenever something else is doing the trusting.
+    it("offers no \"Block sender's images\" for a sender trusted only by the book", async () => {
+      renderWithTrusted([], { 'mail.trustContacts': 'true' }, undefined, inBook)
+      await screen.findByText('Re: facture')
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+      expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: "Block sender's images" })).toBeNull()
+    })
+
+    // What the guard actually decides: the entry acts on the approval, which is there to revoke,
+    // but the book is already showing the images so revoking would change nothing on screen.
+    it('withholds it from an approved sender the book also holds', async () => {
+      renderWithTrusted([detail.fromAddress], { 'mail.trustContacts': 'true' }, undefined, inBook)
+      await screen.findByText('Re: facture')
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+      expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: "Block sender's images" })).toBeNull()
+    })
+
+    it('still offers it for an explicitly approved sender', async () => {
+      renderWithTrusted([detail.fromAddress], { 'mail.trustContacts': 'false' }, undefined, [])
+      await screen.findByText('Re: facture')
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+      expect(screen.getByRole('menuitem', { name: "Block sender's images" })).toBeInTheDocument()
+    })
+
+    // No book seeded on purpose: `enabled: false` stops the fetch, not a cache read.
+    it('does not fetch the book when the setting is off', async () => {
+      renderWithTrusted([], { 'mail.trustContacts': 'false' })
+
+      expect(await screen.findByText(/blocked/)).toBeInTheDocument()
+      expect(mocks.getContacts).not.toHaveBeenCalled()
+    })
   })
 
   it('falls back to the text body when there is no HTML', async () => {

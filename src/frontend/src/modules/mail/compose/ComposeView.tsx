@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useContacts } from '../../contacts/queries'
+import { capturable } from '../../contacts/captureModel'
+import { useCaptureContacts } from '../../contacts/useCaptureContacts'
+import { displayNameOf } from '../../contacts/contactName'
+import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
 import { useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
@@ -22,7 +27,10 @@ const TITLES: Record<ComposeAction, string> = {
   reply: 'Reply', replyAll: 'Reply', forward: 'Forward', editAsNew: 'New message', draft: 'Draft',
 }
 
-interface Props { onNotify: (message: string, kind?: string) => void }
+interface Props {
+  onNotify: (
+    message: string, kind?: string, action?: { label: string; onClick: () => void }) => void
+}
 
 /**
  * The compose surface, replacing list+reader inside the mail module. Leaving with unsaved
@@ -42,6 +50,11 @@ export default function ComposeView({ onNotify }: Props) {
   const deleteDraft = useDeleteMessages(
     () => onNotify('Message sent — the draft could not be removed', 'error'))
   const { data: identityList } = useIdentities()
+  // One read for the three fields: they would share the cache anyway, but a single call site is
+  // easier to follow than three.
+  const { data: contacts } = useContacts()
+  const { data: preferences } = usePreferences()
+  const capture = useCaptureContacts()
   // State, not a ref: the toolbar sits above the editor, so a ref would still read null on the
   // render that mounts it and the buttons would do nothing until something else re-rendered.
   const [editor, setEditor] = useState<EditorHandle | null>(null)
@@ -166,12 +179,39 @@ export default function ComposeView({ onNotify }: Props) {
     references: seed?.references && seed.references.length > 0 ? seed.references : undefined,
   })
 
+  // A stale identity is still an address that was yours. A live alias carrying no identity is not
+  // in this set and would be captured; the undo covers that rather than a second query.
+  const mine = useMemo(() => new Set([
+    ...(identity ? [identity.email] : []),
+    ...(identityList ?? []).map(i => i.address),
+  ]), [identity, identityList])
+
+  function captureNewRecipients() {
+    if (!preferences || !captureRecipientsOf(preferences) || !contacts) return
+
+    const candidates = capturable(contacts, [...to, ...cc, ...bcc], seed?.nameHints ?? {}, mine)
+    if (candidates.length === 0) return
+
+    void capture.create(candidates).then(created => {
+      if (created.length === 0) return
+      const message = created.length === 1
+        ? `${displayNameOf(created[0])} added to contacts`
+        : `${created.length} contacts added`
+      onNotify(message, 'success', {
+        label: 'Undo',
+        onClick: () => void capture.remove(created.map(c => c.id))
+          .then(ok => { if (!ok) onNotify('Could not undo', 'error') }),
+      })
+    })
+  }
+
   function submit() {
     send.mutate(buildPayload(), {
       onSuccess: (result) => {
         onNotify(result.appendedToSent ? 'Message sent' : 'Message sent — no Sent copy could be filed')
         // The draft is now a duplicate of a message that already left.
         if (draftRef) deleteDraft.mutate({ folderPath: draftRef.folderPath, uids: [draftRef.uid] })
+        captureNewRecipients()
         leave()
       },
       onError: (error: Error) => onNotify(error.message || 'Could not send the message', 'error'),
@@ -230,14 +270,17 @@ export default function ComposeView({ onNotify }: Props) {
           )}
         </div>
         <div className="compose-to-row">
-          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo} autoFocus={!seed} />
+          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo}
+            autoFocus={!seed} contacts={contacts} />
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>Cc</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>Bcc</button>}
           </span>
         </div>
-        {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc} />}
-        {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc} />}
+        {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc}
+          contacts={contacts} />}
+        {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc}
+          contacts={contacts} />}
         <div className="field-h">
           <label htmlFor="compose-subject">Subject</label>
           <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />

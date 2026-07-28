@@ -48,6 +48,18 @@ When a rule is ambiguous, copy what those screens do.
   4. optional **metadata** (e.g. a quota mini-gauge);
   5. the **action icons** (`.admin-list-item-actions`), pinned to the far right.
 - The star always leads on the far left; the action icons are always the rightmost thing on the row.
+- **A tile may run to two lines when its column is too narrow for one.** The contacts list
+  (`.contact-tile`) is the first: the top line keeps the anatomy above unchanged — star far left,
+  name taking the slack, action icons pinned far right — and the second line carries the primary
+  address, muted and indented under the name, with a `· +N` suffix when the contact holds further
+  addresses. Two lines are a response to width, never a licence to reorder: nothing moves out of the
+  first line but the secondary text. **The second line is rendered even when it is empty**, so a
+  contact with no address is not a shorter tile than its neighbours — the same reason the message
+  list always renders its preview element.
+- A tiled list carries **one** skin unless several layouts actually exist for it. The message list
+  has a wide single-line row and a narrow two-line row because three reading-pane arrangements exist
+  there; the contacts list always sits beside the contact card, so a second skin would be code
+  nothing could reach.
 - An empty list shows a centred muted line ("No virtual alias domains"), not a blank area.
 - **This tile pattern is for management / settings lists.** A dense content list — the mail message
   list — is *not* tiled: it uses edge-to-edge rows divided by hairline separators (see *The mail
@@ -141,16 +153,22 @@ the user tells a nav pane from a list at a glance. (Unread message rows delibera
 selected tokens, plus bold and a leading dot; the bold and dot are what set unread apart from merely
 selected — same tokens, so the two looks can never drift.)
 
-## Icon buttons: two hover languages
+## Icon buttons: one hover language
 
-- **Settings / admin icon buttons** (`.admin-icon-btn`, `.folder-action`) tint their **background** on
-  hover and colour the glyph to the accent.
-- **Mail icon buttons** (`.row-btn`, `.action-btn`, `.selection-btn`) recolour **only the glyph** — no
-  background — to `--icon-hover-accent` (the palette's vivid accent, identical in both themes), and a
-  destructive one to `--icon-hover-danger`. An "on" star sits at `--badge-count-bg`.
+**An icon button recolours its glyph on hover and nothing else** — no background tint, no transition.
+`.row-btn`, `.action-btn`, `.selection-btn` (mail) and `.admin-icon-btn` (settings, admin, identities,
+rules, contacts) all take `--icon-hover-accent` (the palette's vivid accent, identical in both themes),
+and their `.is-danger` variant takes `--icon-hover-danger`. An "on" star sits at `--badge-count-bg`.
 
-Match the surrounding surface: glyph-only recolour inside the mail columns, background tint in the
-settings/admin lists.
+The settings lists used to tint their background instead, on the reasoning that a hover language should
+match its surrounding surface. It made the same edit-and-delete pair look like two different controls
+depending on which module drew it, which is a worse cost than the surface mismatch it avoided. Reach for
+this one language for any new icon button.
+
+**The one exception is `.folder-action`**, the folder manager's row controls: it still tints its
+background (`--pane-item-hover`) and reddens to `--danger`. Those rows sit inside a navigation-styled
+pane where a bare glyph recolour is easy to miss, and the pane is the only surface where they appear —
+so it is a deliberate local exception, not a second general language to copy.
 
 ## Hover-revealed controls sit in reserved space
 

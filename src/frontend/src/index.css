@@ -213,43 +213,6 @@ body {
   color: var(--danger);
 }
 
-/* ── Site header ─────────────────────────────────────────── */
-
-.site-header {
-  background: var(--action-primary);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  height: 52px;
-}
-
-.site-header-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.site-header-circle {
-  height: 34px;
-  width: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.site-header-logo {
-  height: 16px;
-  object-fit: contain;
-  filter: brightness(0) invert(1);
-}
-
-.site-header-section {
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.01em;
-}
-
 /* ── Header ──────────────────────────────────────────────── */
 
 .header {
@@ -481,12 +444,12 @@ body {
 
 .alias-tile:hover {
   border-color: var(--action-primary);
-  box-shadow: 0 0 0 3px rgba(52, 80, 163, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 15%, transparent);
 }
 
 @keyframes alias-tile-blink {
   0%, 33%, 66%, 100% { background: var(--surface); }
-  16%, 50%, 83%      { background: rgba(52, 80, 163, 0.18); }
+  16%, 50%, 83%      { background: color-mix(in oklab, var(--action-primary) 18%, transparent); }
 }
 
 .alias-tile-new {
@@ -1027,6 +990,18 @@ body {
   opacity: 1;
 }
 
+/* Inherits the toast's own colour: the toast palette is the one thing that must not fork here. */
+.toast-action {
+  margin-left: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -1111,7 +1086,7 @@ body {
 .admin-tab.is-active {
   color: var(--action-primary);
   font-weight: 600;
-  background: rgba(52, 80, 163, 0.07);
+  background: color-mix(in oklab, var(--action-primary) 7%, transparent);
 }
 
 .admin-tab-content {
@@ -1154,7 +1129,7 @@ body {
 
 .admin-list-item:hover {
   border-color: var(--action-primary);
-  box-shadow: 0 0 0 3px rgba(52, 80, 163, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 15%, transparent);
 }
 
 .admin-list-item-email {
@@ -1196,7 +1171,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
 }
 
 .admin-icon-btn svg {
@@ -1204,14 +1178,14 @@ body {
   height: 16px;
 }
 
+/* Same hover language as the mail module's icon buttons (.row-btn, .action-btn, .selection-btn):
+   no background, only the glyph recolours, and no transition. */
 .admin-icon-btn:hover:not(:disabled) {
-  color: var(--action-primary);
-  background: rgba(52, 80, 163, 0.1);
+  color: var(--icon-hover-accent);
 }
 
 .admin-icon-btn.is-danger:hover:not(:disabled) {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.1);
+  color: var(--icon-hover-danger);
 }
 
 .admin-icon-btn:disabled {
@@ -1225,7 +1199,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(52, 80, 163, 0.08);
+  background: color-mix(in oklab, var(--action-primary) 8%, transparent);
   border-radius: var(--radius-sm);
   padding: 3px 8px;
   font-size: 13px;
@@ -1239,7 +1213,7 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  color: rgba(52, 80, 163, 0.45);
+  color: color-mix(in oklab, var(--action-primary) 45%, transparent);
   display: flex;
   align-items: center;
   padding: 0;
@@ -1286,7 +1260,10 @@ body {
   cursor: pointer;
 }
 
-.ownership-dropdown-option:hover {
+/* .is-active is the keyboard's pointer: it reads as the same state as a hover, so it is the same
+   rule rather than a copy of it. */
+.ownership-dropdown-option:hover,
+.ownership-dropdown-option.is-active {
   background: var(--bg);
   color: var(--action-primary);
 }
@@ -1312,6 +1289,7 @@ body {
 
 .field-h input[type="text"],
 .field-h input[type="password"],
+.field-h input[type="email"],
 .field-h select {
   flex: 1;
   border: 1px solid var(--border);
@@ -1327,6 +1305,7 @@ body {
 
 .field-h input[type="text"]:focus,
 .field-h input[type="password"]:focus,
+.field-h input[type="email"]:focus,
 .field-h select:focus {
   border-color: var(--action-primary);
 }
@@ -1396,7 +1375,7 @@ body {
 }
 
 [data-theme="dark"] .alias-tile-delete:hover:not(:disabled) {
-  background: rgba(220, 38, 38, 0.1);
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 
 [data-theme="dark"] .toast-success {
@@ -1414,10 +1393,6 @@ body {
 [data-theme="dark"] .spinner {
   border-color: rgba(255, 255, 255, 0.12);
   border-top-color: currentColor;
-}
-
-[data-theme="dark"] .site-header {
-  background: #3450a3;
 }
 
 /* ── Last connections (AddEditUserModal) ─────────────────── */
@@ -1523,20 +1498,6 @@ body {
   color: var(--action-primary);
 }
 
-/* ── Alert warn ──────────────────────────────────────────────  */
-
-.alert-warn {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
-}
-
-[data-theme="dark"] .alert-warn {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
-}
-
 /* ── Back button ─────────────────────────────────────────────  */
 
 .back-btn {
@@ -1563,8 +1524,8 @@ body {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  background: rgba(52, 80, 163, 0.09);
-  border: 1px solid rgba(52, 80, 163, 0.2);
+  background: color-mix(in oklab, var(--action-primary) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--action-primary) 20%, transparent);
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
@@ -1722,7 +1683,7 @@ body {
   font-size: 10px;
   font-weight: 600;
   color: var(--action-primary);
-  background: rgba(52, 80, 163, 0.1);
+  background: color-mix(in oklab, var(--action-primary) 10%, transparent);
   border-radius: 3px;
   padding: 1px 5px;
   vertical-align: middle;
@@ -1810,7 +1771,7 @@ body {
 
 .rule-card:hover {
   border-color: var(--action-primary);
-  box-shadow: 0 0 0 3px rgba(52, 80, 163, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 10%, transparent);
 }
 
 .rule-card-disabled {
@@ -1895,8 +1856,8 @@ body {
 }
 
 .rule-card-pill-action {
-  background: rgba(52, 80, 163, 0.07);
-  border-color: rgba(52, 80, 163, 0.2);
+  background: color-mix(in oklab, var(--action-primary) 7%, transparent);
+  border-color: color-mix(in oklab, var(--action-primary) 20%, transparent);
   color: var(--action-primary);
 }
 
@@ -2231,7 +2192,7 @@ body {
 
 .rule-card-drop-over {
   border-color: var(--action-primary);
-  box-shadow: 0 -3px 0 0 var(--action-primary), 0 0 0 1px rgba(52, 80, 163, 0.25);
+  box-shadow: 0 -3px 0 0 var(--action-primary), 0 0 0 1px color-mix(in oklab, var(--action-primary) 25%, transparent);
 }
 
 .rule-card-inline-actions,
@@ -2245,3 +2206,215 @@ body {
   flex: 1;
   min-width: 0;
 }
+
+/* ── Contacts module ───────────────────────────────────────────────────────────
+   Three band-stack columns inside the shell's single content area, the same
+   arrangement the mail module uses. min-height: 0 on the scrolling band is what
+   keeps the pinned heading pinned. */
+.contacts-layout { display: flex; height: 100%; min-height: 0; overflow: hidden; }
+
+.contacts-scopes-column {
+  width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0;
+  overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
+}
+.contacts-scopes-add { flex: none; padding: 12px; }
+.contacts-add-btn { width: 100%; justify-content: center; }
+.contacts-scopes-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
+
+/* The band's footer, the shape the mail column's account block wears: a flat strip separated by a
+   rule, never a second block of navigation. */
+.contacts-transfer {
+  position: relative;
+  flex: none; display: flex; gap: 8px; padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+/* static, not the tooltip.css default relative: Import's own 104px-wide wrap sits left of centre,
+   so its bubble's right: 0 must resolve against this full-width footer, not against that wrap —
+   otherwise only Export's bubble (flush with the footer's own right edge) would ever fit. */
+.contacts-transfer .tooltip-wrap { position: static; flex: 1; min-width: 0; }
+.contacts-transfer .btn { width: 100%; justify-content: center; }
+
+/* The column is 240px and overflow: hidden — .tooltip-bubble's 280px is-top-right width runs off
+   its left edge. Shrink to fit inside the footer's 12px side padding and wrap instead of clipping.
+   The extra .tooltip-wrap ancestor lifts specificity above .tooltip-bubble.is-top-right's own.
+   The positioned ancestor above is the footer's *padding* box (240px, not its 216px content box),
+   so right: 0 would sit flush with the column's clipped edge instead of the footer's own inset —
+   right: 12px restores it. bottom's +8px is trimmed to -2px by the footer's 10px top padding,
+   which the old per-wrap anchor didn't have, so the gap above the button stays the same 8px. */
+.contacts-transfer .tooltip-wrap .tooltip-bubble {
+  right: 12px;
+  bottom: calc(100% - 2px);
+  width: 216px;
+  white-space: normal;
+}
+
+.contact-scopes { display: flex; flex-direction: column; gap: 2px; }
+.contact-scope {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer;
+  color: var(--text); font: inherit; font-size: 13px; text-align: left;
+}
+.contact-scope:hover { background: var(--folders-item-hover); }
+/* Fill and weight, no accent bar: the navigation language. */
+.contact-scope.is-active {
+  background: var(--pane-item-active-bg); color: var(--pane-item-active-fg); font-weight: 600;
+}
+.contact-scope-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
+.contact-scope.is-active .contact-scope-count { color: inherit; }
+
+.contacts-row { flex: 1; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+.contacts-list, .contacts-card, .contacts-editor {
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
+}
+.contacts-list { flex: none; }
+.contacts-card { flex: 1; min-width: 0; }
+.contacts-editor { flex: 1; min-width: 0; }
+.contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
+
+.contacts-list-heading {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.contacts-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.contacts-search .search-input { flex: 1; min-width: 0; }
+.contacts-search svg { flex: none; color: var(--text-muted); }
+.contacts-count { flex: none; color: var(--text-muted); font-size: 12px; }
+
+.contacts-list-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
+.contact-tiles { display: flex; flex-direction: column; gap: 6px; }
+
+.contact-tile {
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  padding: 7px 9px; cursor: pointer;
+}
+.contact-tile:hover { border-color: var(--action-primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 15%, transparent); }
+/* Content-row language: selected fill plus an inset accent bar. Never a bare fill — that is what
+   a navigation pane wears. */
+.contact-tile.is-selected {
+  background: var(--list-row-selected-bg); color: var(--list-row-selected-fg);
+  border-color: var(--action-primary); box-shadow: inset 3px 0 0 var(--accent-unread);
+}
+.contact-tile-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.contact-tile-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 700; font-size: 13px;
+}
+/* Reserved, not conjured: revealing the cluster on hover must not shove the name sideways. */
+.contact-tile-actions { flex: none; display: flex; gap: 2px; visibility: hidden; }
+.contact-tile:hover .contact-tile-actions,
+.contact-tile:focus-within .contact-tile-actions { visibility: visible; }
+
+.contact-star {
+  flex: none; display: inline-flex; padding: 2px; border: 0; background: transparent;
+  cursor: pointer; color: var(--text-muted);
+}
+.contact-star:hover { color: var(--icon-hover-accent); }
+.contact-star.is-on { color: var(--badge-count-bg); }
+
+.contact-tile-address {
+  /* min-height must reserve a full line even when empty, so tiles without an address don't shrink */
+  padding-left: 25px; line-height: 1.5; min-height: 1.5em; color: var(--text-muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.contact-tile.is-selected .contact-tile-address { color: inherit; opacity: .8; }
+
+.contact-card { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.contacts-card-invite { margin: auto; }
+.contact-card-head { flex: none; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+.contact-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
+
+.contact-card-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px; }
+.contact-card-row { display: flex; gap: 14px; margin-bottom: 14px; }
+.contact-card-label {
+  flex: none; width: 96px; color: var(--text-muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .04em; padding-top: 2px;
+}
+.contact-card-values { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.contact-card-value { font-size: 13px; color: var(--text); min-width: 0; overflow-wrap: break-word; }
+.contact-card-value a { color: var(--action-primary); text-decoration: none; }
+.contact-card-value a:hover { text-decoration: underline; }
+.contact-card-primary {
+  margin-left: 8px; color: var(--text-muted); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.contact-card-actions {
+  flex: none; display: flex; align-items: center; gap: 6px; justify-content: flex-end;
+  padding: 12px 18px; border-top: 1px solid var(--border);
+}
+.contact-card-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.contact-card-btn.is-danger { color: var(--danger); }
+
+.contact-editor-form { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.contact-editor-head {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.contact-editor-title {
+  margin: 0; flex: none; display: flex; align-items: center; gap: 8px; font-size: 16px;
+  font-weight: 700; color: var(--text);
+}
+/* Actions sit against the title rather than at the header's far edge, the same reasoning as the
+   composer's header (see mail.css .compose-header .modal-title::after); only ✕ keeps that edge. */
+.contact-editor-title::after {
+  content: '';
+  width: 1px;
+  height: 20px;
+  margin-left: 14px;
+  background: var(--border);
+}
+.contact-editor-head .modal-close { margin-left: auto; }
+/* .btn-primary's 100% width is right inside a dialog, where it is the form's only control; a
+   header button has to size to its label instead, like the composer's Send. */
+.contact-save-btn { width: auto; padding: 8px 14px; margin-left: 4px; }
+/* The form is bounded rather than full-bleed: four fields spread across a 900px column read as a
+   page that failed to load, not as a form. */
+.contact-editor-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; max-width: 560px; }
+.contact-editor-addresses { align-items: flex-start; }
+.contact-editor-addresses .field-h-label {
+  width: 110px; flex: none; color: var(--text-muted); font-size: 13px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: .04em; padding-top: 8px;
+}
+.contact-address-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.contact-address-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.contact-address-row input { flex: 1; min-width: 0; }
+.contact-address-primary {
+  flex: none; color: var(--action-primary); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.contact-address-add {
+  align-self: flex-start; border: 0; background: transparent; padding: 2px 0; cursor: pointer;
+  color: var(--action-primary); font: inherit; font-size: 12px;
+}
+.contact-address-add:hover { text-decoration: underline; }
+
+/* The dropdown is anchored beneath the box, the shape website-design.md prescribes for a
+   combobox. The tokens stay inline in the box rather than becoming chips above it: that is what
+   this field already did, and what every mail client does. The list resets are this field's
+   alone: .ownership-dropdown's other users are <div>s, so it never had to undo the ul defaults. */
+.recipients-field .recipients-box { position: relative; }
+.recipients-field .ownership-dropdown {
+  max-height: 260px; overflow-y: auto; list-style: none; padding: 4px 0;
+}
+.ownership-dropdown-option .suggestion-names { font-weight: 600; }
+.ownership-dropdown-option .suggestion-address {
+  margin-left: 8px; color: var(--text-muted); font-size: 12px;
+}
+
+.import-counters { display: flex; gap: 8px; margin-bottom: 16px; }
+.import-counter {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.import-counter-value { font-size: 18px; font-weight: 600; }
+.import-counter-label { color: var(--text-muted); font-size: 12px; }
+
+.import-errors {
+  max-height: 220px; overflow-y: auto; margin: 0 0 20px; padding: 0 0 0 4px;
+  list-style: none; font-size: 13px;
+}
+.import-errors li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.import-errors li:last-child { border-bottom: 0; }
+.import-error-line { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.import-errors-more { color: var(--text-muted); }

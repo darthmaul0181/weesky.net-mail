@@ -87,6 +87,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
         services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();
+        services.AddScoped<IContactStore, ContactStore>();
 
         return services;
     }

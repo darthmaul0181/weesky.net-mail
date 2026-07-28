@@ -6,6 +6,7 @@ import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
+import { settle } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
@@ -13,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   uploadAttachment: vi.fn(),
   saveDraft: vi.fn(),
   deleteMessages: vi.fn(),
+  getContacts: vi.fn(),
+  getPreferences: vi.fn(),
+  createContact: vi.fn(),
+  deleteContact: vi.fn(),
   apiBase: 'https://api.test.example',
 }))
 // The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
@@ -23,6 +28,8 @@ vi.mock('../../../api.js', () => ({
   api: {
     sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment,
     saveDraft: mocks.saveDraft, deleteMessages: mocks.deleteMessages,
+    getContacts: mocks.getContacts, getPreferences: mocks.getPreferences,
+    createContact: mocks.createContact, deleteContact: mocks.deleteContact,
   },
   uploadAttachment: mocks.uploadAttachment,
   API_BASE: mocks.apiBase,
@@ -97,6 +104,11 @@ function fileDragData(files: File[] = []) {
   return { dataTransfer: { types: ['Files'], files, items: files.map(() => ({ kind: 'file' })) } }
 }
 
+const bruno = {
+  id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: null, isFavorite: false,
+  addresses: ['bruno@x.be'],
+}
+
 const identityList = [
   { address: 'mick@weesky.be', displayName: 'Mick', isDefault: false, isPrimary: true, stale: false, labelIsCustom: false },
   { address: 'michel@weesky.be', displayName: 'Michel', isDefault: true, isPrimary: false, stale: false, labelIsCustom: true },
@@ -110,6 +122,10 @@ beforeEach(() => {
   mocks.deleteAttachment.mockResolvedValue(undefined)
   mocks.deleteMessages.mockResolvedValue(undefined)
   mocks.saveDraft.mockResolvedValue({ uid: 7, folderPath: 'Drafts' })
+  mocks.getContacts.mockResolvedValue({ contacts: [bruno] })
+  // Capture off by default: every test outside its own describe sends to addresses the book does
+  // not hold, and would otherwise assert against a composer quietly creating contacts.
+  mocks.getPreferences.mockResolvedValue({ 'contacts.captureRecipients': 'false' })
   // Default: identities still loading — every pre-existing test keeps the 2c1 plain From.
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
@@ -138,6 +154,25 @@ describe('ComposeView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Bcc' }))
     expect(screen.getByLabelText('Bcc')).toBeInTheDocument()
+  })
+
+  // The book is read here and handed to the fields, so this is the only place the wiring shows.
+  // All three, not just To: a prop dropped from one field alone is what a To-only test misses.
+  it('offers contact suggestions in To, Cc and Bcc alike', async () => {
+    renderCompose()
+    fireEvent.click(screen.getByRole('button', { name: 'Cc' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bcc' }))
+
+    for (const label of ['To', 'Cc', 'Bcc']) {
+      const input = screen.getByLabelText(label)
+      fireEvent.change(input, { target: { value: 'bru' } })
+
+      const field = within(input.closest('.recipients-field') as HTMLElement)
+      expect(await field.findByRole('option', { name: /bruno@x\.be/ })).toHaveTextContent('Bruno Mertens')
+
+      // Emptied before the next field, so each assertion sees only its own dropdown.
+      fireEvent.change(input, { target: { value: '' } })
+    }
   })
 
   it('enables Send on a valid recipient and disables it again on an invalid one', () => {
@@ -324,7 +359,7 @@ describe('a seeded ComposeView', () => {
       { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
     ],
     inReplyTo: 'm@x', references: ['m@x'],
-    draftRef: null,
+    draftRef: null, nameHints: {},
   }
 
   it('prefills the form', () => {
@@ -546,7 +581,7 @@ describe('drafts in the composer', () => {
     subject: 'Half written', html: '<p>later</p>',
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
-    draftRef: { folderPath: 'Drafts', uid: 41 },
+    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {},
   }
   const withParts: ComposeSeed = {
     ...draftSeed,
@@ -739,5 +774,178 @@ describe('drafts in the composer', () => {
 
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalled())
     expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ replaceUid: 41 })
+  })
+})
+
+describe('capturing new recipients', () => {
+  const created = {
+    id: 'c1', firstName: 'Alice', lastName: 'Dupont', nickname: null,
+    isFavorite: false, addresses: ['alice@x.be'],
+  }
+  const hintedSeed: ComposeSeed = {
+    action: 'reply',
+    to: ['alice@x.be'], cc: [], bcc: [],
+    subject: 'Re: Hello', html: '<p>later</p>',
+    fromAddress: null, attachments: [],
+    inReplyTo: null, references: [],
+    draftRef: null, nameHints: { 'alice@x.be': 'Alice Dupont' },
+  }
+
+  beforeEach(() => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    mocks.getPreferences.mockResolvedValue({ 'contacts.captureRecipients': 'true' })
+    mocks.createContact.mockResolvedValue(created)
+    mocks.deleteContact.mockResolvedValue(undefined)
+  })
+
+  // The capture reads the book and the preferences at send time, so sending on the mounting render
+  // would skip it on the loading guard and every "creates nothing" case below would pass blind.
+  // Two boundaries because the two queries answer one notification batch apart.
+  async function openCompose(seed?: ComposeSeed) {
+    const view = renderCompose('INBOX', seed)
+    await settle()
+    await settle()
+    return view
+  }
+
+  it('creates a contact for a recipient the book does not hold', async () => {
+    const { onNotify } = await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.createContact).toHaveBeenCalledWith(
+      expect.objectContaining({ addresses: ['alice@x.be'], source: 'captured' })))
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+      'Alice Dupont added to contacts', 'success', expect.objectContaining({ label: 'Undo' })))
+  })
+
+  it('creates nothing for a recipient already in the book', async () => {
+    await openCompose()
+
+    addRecipient('To', 'bruno@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.createContact).not.toHaveBeenCalled()
+  })
+
+  it('creates nothing when the preference is off', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'contacts.captureRecipients': 'false' })
+    await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.createContact).not.toHaveBeenCalled()
+  })
+
+  // Not knowing what the book holds means duplicating all of it. The send has already succeeded,
+  // so a missed capture costs nothing and a wrong one is on screen forever.
+  it('creates nothing while the book is still loading', async () => {
+    mocks.getContacts.mockReturnValue(new Promise(() => {}))
+    await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.createContact).not.toHaveBeenCalled()
+  })
+
+  it('names the contact from the seed name hints', async () => {
+    await openCompose(hintedSeed)
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.createContact).toHaveBeenCalledWith(
+      expect.objectContaining({ firstName: 'Alice', lastName: 'Dupont' })))
+  })
+
+  type Notify = ReturnType<typeof renderCompose>['onNotify']
+  const undoAction = (onNotify: Notify) => {
+    const calls = onNotify.mock.calls
+    return calls[calls.length - 1][2] as { onClick: () => void }
+  }
+  const undoOffered = (onNotify: Notify) => waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+    expect.any(String), 'success', expect.objectContaining({ label: 'Undo' })))
+
+  it('offers an undo that deletes exactly what it created', async () => {
+    const { onNotify } = await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    fireEvent.click(sendButton())
+
+    await undoOffered(onNotify)
+    undoAction(onNotify).onClick()
+
+    await waitFor(() => expect(mocks.deleteContact).toHaveBeenCalledWith('c1'))
+    expect(mocks.deleteContact).toHaveBeenCalledTimes(1)
+  })
+
+  // Undoing an id the create never returned deletes nothing and hides that the other one survived.
+  it('undoes the contact that was created and not the one that was refused', async () => {
+    mocks.createContact
+      .mockResolvedValueOnce(created)
+      .mockRejectedValueOnce(new Error('at the ceiling'))
+    const { onNotify } = await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    addRecipient('To', 'carla@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.createContact).toHaveBeenCalledTimes(2))
+    await undoOffered(onNotify)
+    undoAction(onNotify).onClick()
+
+    await waitFor(() => expect(mocks.deleteContact).toHaveBeenCalledWith('c1'))
+    expect(mocks.deleteContact).toHaveBeenCalledTimes(1)
+  })
+
+  it('counts the contacts in one toast and undoes all of them at once', async () => {
+    const carla = { ...created, id: 'c2', firstName: 'Carla', addresses: ['carla@x.be'] }
+    mocks.createContact.mockResolvedValueOnce(created).mockResolvedValueOnce(carla)
+    const { onNotify } = await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    addRecipient('To', 'carla@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+      '2 contacts added', 'success', expect.objectContaining({ label: 'Undo' })))
+    undoAction(onNotify).onClick()
+
+    await waitFor(() => expect(mocks.deleteContact).toHaveBeenCalledTimes(2))
+    expect(mocks.deleteContact.mock.calls.flat()).toEqual(['c1', 'c2'])
+  })
+
+  // The undo was explicitly asked for, so unlike a refused capture its failure has to be spoken.
+  it('says so when the undo cannot be carried out', async () => {
+    mocks.deleteContact.mockRejectedValue(new Error('Address book is down'))
+    const { onNotify } = await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    fireEvent.click(sendButton())
+
+    await undoOffered(onNotify)
+    undoAction(onNotify).onClick()
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not undo', 'error'))
+  })
+
+  // The message already left; a refused address book must not turn that into an error on screen.
+  // The whole log, not an exclusion per shape: the two-argument error toast every other failure
+  // here raises can never match a three-argument expectation.
+  it('says nothing when a capture is refused', async () => {
+    mocks.createContact.mockRejectedValue(new Error('at the ceiling'))
+    const { onNotify } = await openCompose()
+
+    addRecipient('To', 'alice@x.be')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.createContact).toHaveBeenCalled())
+    await settle()
+    expect(onNotify.mock.calls).toEqual([['Message sent']])
   })
 })

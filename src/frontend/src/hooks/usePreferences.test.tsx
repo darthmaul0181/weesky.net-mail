@@ -3,8 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, isStreaming, notifiesOf, notifyDesktopOf, notifySoundOf,
-  readingPaneOf, requestSizeOf, showPreviewOf, usePreferences, useSetPreference,
+  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, isStreaming, notifiesOf, notifyDesktopOf,
+  notifySoundOf, readingPaneOf, requestSizeOf, showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -158,5 +158,25 @@ describe('the accessors', () => {
       stored === undefined ? {} : { [PREFERENCE_KEYS.readingPane]: stored }
 
     expect(readingPaneOf(preferences)).toBe(expected)
+  })
+})
+
+describe('captureRecipientsOf', () => {
+  // On unless explicitly off, like showPreviewOf: the default is true, so an account whose row
+  // has never been written must capture.
+  it('is on by default and off only for an explicit false', () => {
+    expect(captureRecipientsOf({})).toBe(true)
+    expect(captureRecipientsOf({ 'contacts.captureRecipients': 'true' })).toBe(true)
+    expect(captureRecipientsOf({ 'contacts.captureRecipients': 'false' })).toBe(false)
+  })
+})
+
+describe('trustContactsOf', () => {
+  // Off unless explicitly on, like alwaysShowImagesOf: a key the backend has not sent yet must
+  // not load remote images.
+  it('is off by default and on only for an explicit true', () => {
+    expect(trustContactsOf({})).toBe(false)
+    expect(trustContactsOf({ 'mail.trustContacts': 'true' })).toBe(true)
+    expect(trustContactsOf({ 'mail.trustContacts': 'garbage' })).toBe(false)
   })
 })

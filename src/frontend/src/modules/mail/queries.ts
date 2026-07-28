@@ -4,7 +4,7 @@ import {
 } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { ApiError, api } from '../../api.js'
-import { useAuth } from '../../contexts/AuthContext'
+import { useAccountId } from '../../hooks/useAccountId'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, MailSearchPage,
@@ -62,9 +62,9 @@ export const mailKeys = {
   writes: (accountId: string) => ['mail', accountId, 'writes'] as const,
 }
 
-export function useAccountId(): string {
-  return useAuth().activeAccount?.id ?? 'primary'
-}
+// Moved to src/hooks: contacts scope their keys on it too. Re-exported so the mail module's own
+// importers keep working from here.
+export { useAccountId }
 
 /** One cheap LIST+STATUS across all folders. Internal, like BLOCK_SIZE: not a setting. */
 export const POLL_INTERVAL = 60_000
