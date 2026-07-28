@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { api } from '../../../api.js'
+import { settle } from '../../../test-utils'
 import AdminPage from './AdminPage.jsx'
 import { AddEditUserModal } from './AddEditUserModal.jsx'
 import { AddEditDomainModal } from './AddEditDomainModal.jsx'
@@ -275,6 +276,21 @@ describe('AccountsTab', () => {
     expect(api.adminGetDomains).toHaveBeenCalledOnce()
   })
 
+  // `load` is a useCallback and an effect dependency now: were its identity to move per render —
+  // an inline arrow passed as addToast would do it — the effect would refire and the tab would
+  // hammer the admin API. settle() is the right tool here, the assertion is that nothing more ran.
+  it('loads once and does not reload on a re-render', async () => {
+    const addToast = vi.fn()
+    const { rerender } = render(<AccountsTab addToast={addToast} />)
+    await screen.findByText('alice@weesky.be')
+
+    rerender(<AccountsTab addToast={addToast} />)
+    await settle()
+
+    expect(api.adminGetUsers).toHaveBeenCalledOnce()
+    expect(api.adminGetDomains).toHaveBeenCalledOnce()
+  })
+
   it('renders the user list after loading', async () => {
     render(<AccountsTab addToast={vi.fn()} />)
     expect(await screen.findByText('alice@weesky.be')).toBeInTheDocument()
@@ -425,6 +441,17 @@ describe('DomainsTab', () => {
   it('fetches domains on mount', async () => {
     render(<DomainsTab addToast={vi.fn()} />)
     await waitFor(() => expect(api.adminGetDomains).toHaveBeenCalledOnce())
+  })
+
+  it('loads once and does not reload on a re-render', async () => {
+    const addToast = vi.fn()
+    const { rerender } = render(<DomainsTab addToast={addToast} />)
+    await screen.findByText('WSY')
+
+    rerender(<DomainsTab addToast={addToast} />)
+    await settle()
+
+    expect(api.adminGetDomains).toHaveBeenCalledOnce()
   })
 
   it('renders the domain list', async () => {
@@ -700,6 +727,17 @@ describe('VirtualDomainsTab', () => {
     render(<VirtualDomainsTab addToast={vi.fn()} />)
     await waitFor(() => expect(api.adminGetVirtualDomains).toHaveBeenCalledOnce())
     expect(api.adminGetUsers).toHaveBeenCalledOnce()
+  })
+
+  it('loads once and does not reload on a re-render', async () => {
+    const addToast = vi.fn()
+    const { rerender } = render(<VirtualDomainsTab addToast={addToast} />)
+    await screen.findByText('extra.com')
+
+    rerender(<VirtualDomainsTab addToast={addToast} />)
+    await settle()
+
+    expect(api.adminGetVirtualDomains).toHaveBeenCalledOnce()
   })
 
   it('renders domain names after loading', async () => {

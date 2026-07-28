@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../../api.js'
 import { QuotaMini } from '../../../components/QuotaBlock.jsx'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
@@ -18,7 +18,8 @@ export function AccountsTab({ addToast }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  async function load() {
+  // useCallback so the effect can depend on it: addToast is memoised, so load keeps one identity.
+  const load = useCallback(async () => {
     setLoading(true)
     setQuotas({})
     try {
@@ -37,9 +38,9 @@ export function AccountsTab({ addToast }) {
       addToast('Failed to load accounts', 'error')
       setLoading(false)
     }
-  }
+  }, [addToast])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   async function handleDelete() {
     setDeleting(true)

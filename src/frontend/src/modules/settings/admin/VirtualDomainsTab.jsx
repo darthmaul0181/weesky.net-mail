@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../../../api.js'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
@@ -12,7 +12,8 @@ export function VirtualDomainsTab({ addToast }) {
   const [saving, setSaving] = useState(false)
   const editRef = useRef(null)
 
-  async function load() {
+  // useCallback so the effect can depend on it: addToast is memoised, so load keeps one identity.
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const [o, u] = await Promise.all([api.adminGetVirtualDomains(), api.adminGetUsers()])
@@ -23,9 +24,9 @@ export function VirtualDomainsTab({ addToast }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [addToast])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   useEffect(() => {
     if (!editingDomainId) return
