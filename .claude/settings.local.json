@@ -21,7 +21,8 @@
       "Bash(powershell *)",
       "Bash(dotnet clean *)",
       "PowerShell(dotnet build *)",
-      "PowerShell(Set-Content *)"
+      "PowerShell(Set-Content *)",
+      "Bash(git fetch *)"
     ]
   }
 }
