@@ -47,8 +47,13 @@ function parseErrorEnvelope(text, fallbackMessage) {
   if (!text) return { message: fallbackMessage ?? '', code: null }
   try {
     const parsed = JSON.parse(text)
-    const message = parsed?.message ?? parsed?.Message ?? text
-    return { message, code: typeof message === 'string' ? message : null }
+    const message = parsed?.message ?? parsed?.Message
+    if (typeof message === 'string') return { message, code: message }
+
+    // A model-validation refusal answers ProblemDetails, not our envelope. Its title is the
+    // only readable line in it, and it carries no stable code — falling through to the raw
+    // text printed the whole JSON blob on screen.
+    return { message: parsed?.title ?? fallbackMessage ?? text, code: null }
   } catch {
     return { message: text, code: null }
   }

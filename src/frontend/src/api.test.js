@@ -79,6 +79,23 @@ describe('request — response handling', () => {
     await expect(api.getAliases()).rejects.toThrow('Bad Request')
   })
 
+  it('throws with the ProblemDetails title rather than the raw JSON body', async () => {
+    mockFetch(400, {
+      ok: false,
+      text: JSON.stringify({
+        title: 'One or more validation errors occurred.',
+        status: 400,
+        errors: { part: ['The part field is required.'] },
+      }),
+    })
+    const { api } = await import('./api.js')
+
+    await expect(api.getAliases()).rejects.toMatchObject({
+      message: 'One or more validation errors occurred.',
+      code: null,
+    })
+  })
+
   it('sends credentials: include on every request', async () => {
     mockFetch(200)
     const { api } = await import('./api.js')

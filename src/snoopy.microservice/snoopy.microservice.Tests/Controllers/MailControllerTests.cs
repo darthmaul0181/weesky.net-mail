@@ -442,12 +442,31 @@ public sealed class MailControllerTests
         Assert.Equal(new byte[] { 1, 2, 3 }, read.ToArray());
     }
 
+    // A message whose whole body is the attachment has no multipart wrapper to number, so its
+    // specifier is empty — refusing it as blank made every such attachment undownloadable.
     [Theory]
     [InlineData("")]
-    [InlineData("   ")]
-    public async Task GetAttachment_Returns400ForABlankPart(string part)
+    [InlineData(null)]
+    public async Task GetAttachment_ServesTheRootPartForAnEmptySpecifier(string? part)
     {
+        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, "", It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(new MailAttachmentContent
+                 {
+                     Content = new MemoryStream([1]),
+                     FileName = "report.zip",
+                     ContentType = "application/zip"
+                 }));
+
         var result = await CreateController().GetAttachment("INBOX", 42, part, CancellationToken.None);
+
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("report.zip", file.FileDownloadName);
+    }
+
+    [Fact]
+    public async Task GetAttachment_Returns400ForABlankFolder()
+    {
+        var result = await CreateController().GetAttachment("", 42, "2", CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
     }
