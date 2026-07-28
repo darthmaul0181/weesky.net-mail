@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, KeyboardEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from 'react'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
 } from '../../../hooks/usePreferences'
@@ -422,8 +422,12 @@ export default function MessageList(
               ),
             }
 
-            const cluster = crossFolder || rowActions.length === 0 ? null : (
-              <div className="message-row-cluster">{rowActions.map(action => buttons[action])}</div>
+            // One value behind both the cluster and the width the row reserves for it: the reserve
+            // is what ends the line above in an ellipsis, and a count it derived on its own could
+            // disagree with what is actually drawn.
+            const shownActions = crossFolder ? [] : rowActions
+            const cluster = shownActions.length === 0 ? null : (
+              <div className="message-row-cluster">{shownActions.map(action => buttons[action])}</div>
             )
 
             return (
@@ -434,6 +438,7 @@ export default function MessageList(
                   tabIndex={0}
                   aria-label={label}
                   className={classes.join(' ')}
+                  style={{ '--row-actions': shownActions.length } as CSSProperties}
                   draggable={!crossFolder}
                   onClick={() => openRow(message)}
                   onKeyDown={event => onRowKey(event, message)}

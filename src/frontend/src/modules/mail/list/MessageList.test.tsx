@@ -1177,6 +1177,9 @@ describe('MessageList searching', () => {
     expect(screen.getByText('From archive').closest('.message-row')).toHaveAttribute('draggable', 'false')
     // The reader is told nothing is navigable in these rows.
     expect(onRows).toHaveBeenLastCalledWith([])
+    // No cluster here either, so nothing may be reserved for one.
+    expect(screen.getByText('From archive').closest('.message-row')!
+      .getAttribute('style')).toContain('--row-actions: 0')
 
     fireEvent.click(screen.getByText('From archive'))
     expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
@@ -1397,6 +1400,31 @@ describe('choosable row actions', () => {
       expect([...cluster.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
         .toEqual(['Mark as unread', 'Report as junk', 'Delete'])
     })
+  })
+
+  // The width the row reserves to end the line above in an ellipsis is computed from this number
+  // (mail.css, --row-actions). jsdom has no layout, so what is testable here is the invariant the
+  // geometry rests on: the count the row advertises is the count it actually draws. It was a
+  // constant 88px sized for three buttons, and the subject ran 22px under the fourth.
+  it('advertises the drawn button count to the width reserve', async () => {
+    renderList({}, { 'mail.rowActions': 'seen,archive,junk,delete' })
+
+    await waitFor(() => {
+      const row = rowOf(/bob@x\.be/i)
+      const drawn = row.querySelectorAll('.message-row-cluster .row-btn').length
+      expect(drawn).toBe(4)
+      expect(row.style.getPropertyValue('--row-actions')).toBe(String(drawn))
+    })
+  })
+
+  // Nothing drawn must reserve nothing: with no cluster the reserve lands on whatever element is
+  // second-to-last instead — the subject, or the sender line when previews are off.
+  it('advertises zero when every icon is off', async () => {
+    renderList({}, { 'mail.rowActions': '' })
+
+    await waitFor(() =>
+      expect(rowOf(/bob@x\.be/i).style.getPropertyValue('--row-actions')).toBe('0'))
+    expect(rowOf(/bob@x\.be/i).querySelector('.message-row-cluster')).toBeNull()
   })
 
   // Zero is a real choice, so the cluster goes rather than collapsing to an empty box that would
