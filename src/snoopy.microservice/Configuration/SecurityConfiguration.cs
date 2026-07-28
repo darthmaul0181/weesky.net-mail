@@ -66,6 +66,10 @@ internal static class SecurityConfiguration
                 .WithOrigins(allowedOrigins)
                 .WithMethods("GET", "POST", "PATCH", "DELETE", "PUT")
                 .WithHeaders("Authorization", "Content-Type")
+                // Content-Disposition is not CORS-safelisted, so a browser hides it from
+                // JavaScript unless the server exposes it explicitly — without this, the
+                // client's filename extraction silently falls back and every download is named "attachment".
+                .WithExposedHeaders("Content-Disposition")
                 .AllowCredentials()
                 .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
         });

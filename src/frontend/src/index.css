@@ -2224,11 +2224,29 @@ body {
 /* The band's footer, the shape the mail column's account block wears: a flat strip separated by a
    rule, never a second block of navigation. */
 .contacts-transfer {
+  position: relative;
   flex: none; display: flex; gap: 8px; padding: 10px 12px;
   border-top: 1px solid var(--border);
 }
-.contacts-transfer .tooltip-wrap { flex: 1; min-width: 0; }
+/* static, not the tooltip.css default relative: Import's own 104px-wide wrap sits left of centre,
+   so its bubble's right: 0 must resolve against this full-width footer, not against that wrap —
+   otherwise only Export's bubble (flush with the footer's own right edge) would ever fit. */
+.contacts-transfer .tooltip-wrap { position: static; flex: 1; min-width: 0; }
 .contacts-transfer .btn { width: 100%; justify-content: center; }
+
+/* The column is 240px and overflow: hidden — .tooltip-bubble's 280px is-top-right width runs off
+   its left edge. Shrink to fit inside the footer's 12px side padding and wrap instead of clipping.
+   The extra .tooltip-wrap ancestor lifts specificity above .tooltip-bubble.is-top-right's own.
+   The positioned ancestor above is the footer's *padding* box (240px, not its 216px content box),
+   so right: 0 would sit flush with the column's clipped edge instead of the footer's own inset —
+   right: 12px restores it. bottom's +8px is trimmed to -2px by the footer's 10px top padding,
+   which the old per-wrap anchor didn't have, so the gap above the button stays the same 8px. */
+.contacts-transfer .tooltip-wrap .tooltip-bubble {
+  right: 12px;
+  bottom: calc(100% - 2px);
+  width: 216px;
+  white-space: normal;
+}
 
 .contact-scopes { display: flex; flex-direction: column; gap: 2px; }
 .contact-scope {

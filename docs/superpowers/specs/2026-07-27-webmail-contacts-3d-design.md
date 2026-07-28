@@ -110,10 +110,24 @@ First Name,Last Name,Nick Name,Display Name,E-mail Address,E-mail 2 Address,…,
   celui-ci est une primitive CSV générale, ceci est une politique de contacts. L'import retire
   exactement une apostrophe de tête, donc la fidélité est entière ; **l'apostrophe est elle-même
   déclencheuse**, sans quoi un nom qui commence vraiment par une apostrophe sortirait nu et
-  reviendrait amputé d'un caractère. Les colonnes d'adresse ne sont pas concernées : une adresse
-  valable ne peut pas épeler une formule dangereuse — il y faut une espace, une parenthèse ou un
-  guillemet qu'elle ne porte pas — et retirer une apostrophe de tête à une adresse venue d'ailleurs
-  réécrirait l'adresse de quelqu'un.
+  reviendrait amputé d'un caractère. Les colonnes d'adresse ne sont pas concernées, pour une raison
+  différente de celle qu'on pourrait croire : `'`, `|` et `!` sont tous les trois de l'`atext` RFC
+  5322 et survivent tels quels dans une partie locale non guillemetée, donc une adresse commençant
+  par un déclencheur reste syntaxiquement valable — la partie locale n'a pas besoin d'espace, de
+  parenthèse ni de guillemet pour porter une charge. Ce qui rend la charge inoffensive, c'est
+  `ContactValidator.IsValidAddress` : il exige une correspondance **ordinale** avec ce que MimeKit
+  reparse, et `RecipientAddressParser.Options` refuse une adresse sans domaine
+  (`AllowAddressesWithoutDomain = false`). Un caractère déclencheur en tête force donc une partie
+  locale non guillemetée — qui n'admet ni espace, ni `(`, ni `)`, ni `"` : un commentaire `(…)` est
+  retiré par MimeKit, ce qui romprait l'égalité ordinale, et une partie locale guillemetée met un
+  `"` en premier caractère, qui n'est pas un déclencheur et que l'écrivain CSV échapperait de toute
+  façon. Les charges `HYPERLINK`, `WEBSERVICE` et les DDE à espace sont donc inatteignables. Il
+  reste alors une adresse de la forme `<charge>@<domaine>`, avec un `@` obligatoire suivi d'un
+  domaine non vide — et `@` n'est un opérateur infixe ni dans Excel (l'intersection implicite y est
+  un opérateur de préfixe ; dans les versions historiques, un simple marqueur de fonction Lotus en
+  tête) ni dans LibreOffice Calc. `<charge>@<domaine>` n'est donc jamais une formule analysable : au
+  pire la cellule est refusée et gardée en texte, ou affiche `#NAME?`. Retirer une apostrophe de
+  tête à une adresse venue d'ailleurs réécrirait de toute façon l'adresse de quelqu'un.
 - Nom du fichier : `contacts-AAAA-MM-JJ.csv`, via `Content-Disposition: attachment`.
 
 ### Conséquence assumée : l'aller-retour CSV n'est pas complet

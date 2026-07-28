@@ -48,8 +48,9 @@ internal static class ContactCsvExporter
     /// A leading apostrophe, which a spreadsheet eats on read, so a crafted name lands as text
     /// rather than as a formula. The apostrophe is a trigger itself, so
     /// <see cref="ContactCsvMapper"/>'s strip is symmetric and a name really beginning with one
-    /// survives the round trip. Names only: an address cannot spell a dangerous formula, and a
-    /// foreign file's apostrophe in an address is part of the address.
+    /// survives the round trip. Names only: a trigger-led address is forced into an unquoted
+    /// local part, which always carries a mandatory <c>@</c> and non-empty domain — never a
+    /// parseable formula in Excel or LibreOffice. The design doc carries the full argument.
     /// </summary>
     private static string Neutralise(string field) =>
         field.Length > 0 && FormulaStarts.Contains(field[0]) ? $"'{field}" : field;
