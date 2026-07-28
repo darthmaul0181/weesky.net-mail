@@ -115,20 +115,43 @@ describe('GeneralPage', () => {
     expect(await screen.findByText(/remote images will always load/i)).toBeInTheDocument()
   })
 
-  // The warning the banner used to carry has to survive somewhere, and the moment of choosing
-  // is the one place it is useful.
-  it('carries the privacy note only while it is on', async () => {
+  // It used to appear only while the setting was on, so the page shifted by its height under the
+  // finger that had just flipped the switch. It is the row's description now, on in both states —
+  // and what it warns about is what the switch is for, so it is needed before the choice, not after.
+  it('carries the privacy note while the setting is off', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()
+    expect(screen.getByText(/tells the sender you opened the message/i)).toBeInTheDocument()
+  })
+
+  it('keeps the privacy note once the setting is on', async () => {
     renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.alwaysShowImages': 'true' })
 
     expect(await screen.findByLabelText('Always show remote images')).toBeChecked()
     expect(screen.getByText(/tells the sender you opened the message/i)).toBeInTheDocument()
   })
 
-  it('hides the privacy note when the setting is off', async () => {
-    renderPage()
+  // Left live it contradicts the row above: every remote image already loads, so a switch about
+  // some of them is a control that changes nothing.
+  it('disables the contacts row and says why while all remote images load', async () => {
+    renderPage({ 'mail.alwaysShowImages': 'true', 'mail.trustContacts': 'true' })
 
-    expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()
-    expect(screen.queryByText(/tells the sender you opened the message/i)).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('Always show images from my contacts')).toBeDisabled()
+    expect(screen.getByText('Already covered by the setting above.')).toBeInTheDocument()
+  })
+
+  // Greyed, not withheld: the stored value is what comes back when the parent goes off again.
+  it('keeps the covered row checked so its value is still visible', async () => {
+    renderPage({ 'mail.alwaysShowImages': 'true', 'mail.trustContacts': 'true' })
+
+    expect(await screen.findByLabelText('Always show images from my contacts')).toBeChecked()
+  })
+
+  it('leaves the contacts row live while remote images stay blocked', async () => {
+    renderPage({ 'mail.alwaysShowImages': 'false' })
+
+    expect(await screen.findByLabelText('Always show images from my contacts')).toBeEnabled()
   })
 
   it('saves the capture preference', async () => {
@@ -201,6 +224,25 @@ describe('GeneralPage', () => {
 
     const rows = container.querySelectorAll('.field-h')
     rows.forEach(row => expect(row).toHaveClass('is-setting'))
+  })
+
+  // Nine rows in a row read as a wall. The headings are the ones Appearance already uses, so the
+  // two settings pages group the same way rather than in two dialects.
+  it('groups the settings under section headings', async () => {
+    renderPage()
+    await screen.findByLabelText('Messages per page')
+
+    expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent))
+      .toEqual(['Layout', 'Privacy & security', 'Composing', 'Notifications'])
+  })
+
+  // The description belongs to the row, not to the control: inside the htmlFor label it joins the
+  // accessible name, and the switch stops being called what the page calls it.
+  it('keeps the hint out of the control name', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Sound on new mail')).toBeInTheDocument()
+    expect(screen.getByText('Plays a short chime when mail reaches the inbox.')).toBeInTheDocument()
   })
 })
 
