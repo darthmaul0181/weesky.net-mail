@@ -10,6 +10,7 @@ import ContactEditView from './ContactEditView'
 import ContactList from './ContactList'
 import { displayNameOf } from './contactName'
 import ContactScopes, { type ContactScope } from './ContactScopes'
+import ContactsTransfer from './ContactsTransfer'
 import type { Contact, ContactDraft } from './contactTypes'
 import {
   useContacts, useCreateContact, useDeleteContact, useSetContactFavorite, useUpdateContact,
@@ -133,6 +134,8 @@ export default function ContactsLayout() {
         <div className="contacts-scopes-scroll">
           <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope} />
         </div>
+        <ContactsTransfer contacts={contacts}
+          onError={message => addToast(message, 'error')} />
       </div>
 
       {inEditor ? (

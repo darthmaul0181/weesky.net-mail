@@ -63,14 +63,17 @@ async function readError(res) {
 }
 
 async function request(method, path, body, options = {}) {
+  // FormData carries its own multipart boundary; naming a content type here breaks the parse on
+  // the server side.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData
   const headers = {}
-  if (body) headers['Content-Type'] = 'application/json'
+  if (body && !isForm) headers['Content-Type'] = 'application/json'
 
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
     credentials: 'include',
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
     signal: options.signal,
   })
 
@@ -159,6 +162,14 @@ export const api = {
   // contact PUT from there would clobber a concurrent edit.
   setContactFavorite: (id, isFavorite) =>
     request('PUT', `/api/Contacts/${id}/Favorite`, { isFavorite }),
+
+  importContacts: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request('POST', '/api/Contacts/Import', form)
+  },
+
+  exportContacts: () => requestBlob('/api/Contacts/Export'),
 
   getTrustedSenders: () =>
     request('GET', '/api/TrustedSenders'),

@@ -59,7 +59,7 @@ internal static class ContactValidator
             if (address.Length > MaxAddressLength)
                 return Result.Failure<ContactWrite>(
                     $"An address must be at most {MaxAddressLength} characters");
-            if (!Parses(address))
+            if (!IsValidAddress(address))
                 return Result.Failure<ContactWrite>($"'{address}' is not a valid email address");
         }
 
@@ -82,7 +82,7 @@ internal static class ContactValidator
     // rejects a different set than the library that will actually address the mail. Parsed with
     // RecipientAddressParser.Options — the shared policy every address field uses — because the
     // default options accept a bare local part with no domain (see its own doc comment).
-    private static bool Parses(string address) =>
+    internal static bool IsValidAddress(string address) =>
         MailboxAddress.TryParse(RecipientAddressParser.Options, address, out var parsed) &&
         parsed.Address == address;
 }

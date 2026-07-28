@@ -466,6 +466,29 @@
             <response code="401">Not authenticated</response>
             <response code="404">No such contact for this user</response>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxImportBytes">
+            <summary>
+            What bounds the request. A constant rather than configuration, so the attribute can carry
+            it and the read is capped before model binding buffers the body to disk.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Import(Microsoft.AspNetCore.Http.IFormFile,System.Threading.CancellationToken)">
+            <summary>
+            Merges a CSV file into the book and answers what it did. Nothing is overwritten and a row
+            whose address is already on two contacts is skipped rather than filed at random.
+            </summary>
+            <param name="file">the CSV file</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The report</response>
+            <response code="400">No file, an empty file, or no recognised column</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Export(System.Threading.CancellationToken)">
+            <summary>The whole book as a CSV file, in the columns other clients read.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The file</response>
+            <response code="401">Not authenticated</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
             <summary>
             Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
@@ -1209,6 +1232,40 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.IncompatibleRule">
             <summary>A single rule the target provider cannot represent, with a human-readable reason.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactImportOutcome">
+            <summary>What the store did. Its error list is unbounded — the controller caps it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportOutcome.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactImportError})">
+            <summary>What the store did. Its error list is unbounded — the controller caps it.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactImportReport">
+            <summary>
+            What the client reads. The four counters count rows and add up to the file's data rows;
+            <paramref name="TotalErrors"/> counts every reason, including the ones past the cap on
+            <paramref name="Errors"/> — a wholly bad file must not answer ten thousand messages.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportReport.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactImportError})">
+            <summary>
+            What the client reads. The four counters count rows and add up to the file's data rows;
+            <paramref name="TotalErrors"/> counts every reason, including the ones past the cap on
+            <paramref name="Errors"/> — a wholly bad file must not answer ten thousand messages.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow">
+            <summary>
+            One row on its way into the book. Free of any notion of CSV, so the vCard import of the next
+            slice feeds the same merge rather than a second one. <c>Line</c> is the line in the source
+            file, header included — what the user reads.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow.#ctor(System.Int32,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String)">
+            <summary>
+            One row on its way into the book. Free of any notion of CSV, so the vCard import of the next
+            slice feeds the same merge rather than a second one. <c>Line</c> is the line in the source
+            file, header included — what the user reads.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactListResponse">
             <summary>The whole book. Wrapped in an object rather than answered as a bare array, so a later
@@ -2124,7 +2181,14 @@
             guards against a runaway import, not against a user.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.AddAddresses(System.Guid,System.Collections.Generic.IReadOnlyList{System.String})">
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.NameKey(System.String,System.String,System.String)">
+            <summary>
+            The three name parts as one key, trimmed and lower-cased invariantly and joined on a
+            character no name can carry. Deliberately not <see cref="M:weesky.Snoopy.Microservice.Services.IdentityResolver.Canonical(System.String)"/>:
+            that one folds addresses, and borrowing it here would blur what either of them means.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.AddAddresses(System.Guid,System.Collections.Generic.IReadOnlyList{System.String},System.Int32)">
             <summary>
             Folds every address, drops what folds together, and numbers what survives from 0. The
             position is reassigned here rather than taken from the caller: a gap or a repeat coming
@@ -2157,6 +2221,12 @@
             <summary>
             Flips the favourite flag alone. Its own method because the star is toggled from a tile
             that holds a possibly stale copy of the contact — a whole-object write would clobber it.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.ImportAsync(System.Guid,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow},System.Threading.CancellationToken)">
+            <summary>
+            Merges a whole file into the book in one transaction. Never fails as a whole: a row that
+            cannot be filed comes back in the outcome rather than as an error status.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IFolderRoleStore">
@@ -2559,6 +2629,84 @@
             passing a compatibility check.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter">
+            <summary>
+            The book as a file. The first address goes in the column Rainloop and Outlook understand, the
+            rest in columns only we read back — so the export is complete here and usable elsewhere rather
+            than truncated on both sides.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.Neutralise(System.String)">
+            <summary>
+            A leading apostrophe, which a spreadsheet eats on read, so a crafted name lands as text
+            rather than as a formula. The apostrophe is a trigger itself, so
+            <see cref="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper"/>'s strip is symmetric and a name really beginning with one
+            survives the round trip. Names only: an address cannot spell a dangerous formula, and a
+            foreign file's apostrophe in an address is part of the address.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.NameOf(weesky.Snoopy.Microservice.Models.Contacts.ContactView)">
+            <summary>
+            Mirrors the frontend's displayNameOf, minus its address fallback: written verbatim, an
+            address would come back as a nickname on the next import — a name nobody typed.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvRow">
+            <summary>
+            One CSV row understood. <paramref name="Extras"/> is keyed by the normalised header, not the
+            spelling in the file: its only reader is the vCard writer, which recognises names rather than
+            prints them.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvRow.#ctor(System.Int32,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
+            <summary>
+            One CSV row understood. <paramref name="Extras"/> is keyed by the normalised header, not the
+            spelling in the file: its only reader is the vCard writer, which recognises names rather than
+            prints them.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper">
+            <summary>
+            The header table. Knows nothing about the database: it turns a parsed file into rows, and the
+            store turns rows into contacts.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper.NumberedAddressKey">
+            <remarks>
+            Pattern:<br/>
+            <code>^email\\d+(address|value)$</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at the beginning of the string.<br/>
+            ○ Match the string "email".<br/>
+            ○ Match a Unicode digit atomically at least once.<br/>
+            ○ 1st capture group.<br/>
+                ○ Match with 2 alternative expressions.<br/>
+                    ○ Match the string "address".<br/>
+                    ○ Match the string "value".<br/>
+            ○ Match if at the end of the string or if before an ending newline.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper.Normalise(System.String)">
+            <summary>
+            Lower-cased with every separator dropped, so "E-mail 1 - Value", "e_mail_1_value" and
+            "E-Mail 1 Value" are one key. Accents are kept — they are what tells "Prénom" apart.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper.Unescaped(System.String)">
+            <summary>
+            Undoes <see cref="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter"/>'s spreadsheet guard — exactly one apostrophe, and
+            never on an address, where one may be part of the address itself.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactVCardWriter">
+            <summary>
+            Turns the columns the tables do not model into a vCard 3.0, stored verbatim in
+            <c>contacts.vcard_raw</c>. Nothing reads it yet: it is what stops a phone number from being
+            destroyed by an import, per the slice 3a rule that an unstored property is found nowhere.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ContactValidator">
             <summary>
             The single place the contact rules are written — the role <see cref="T:weesky.Snoopy.Microservice.Services.IdentityResolver"/> plays
@@ -2577,6 +2725,30 @@
             The column widths, mirrored: <c>contacts.first_name</c>, <c>last_name</c> and
             <c>nickname</c> are VARCHAR(100), <c>contact_emails.address</c> VARCHAR(320). Unbounded
             here, an over-long value reaches a strict-mode MariaDB and comes back as a 500.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Csv.CsvRecord">
+            <summary>One record, carrying the file line it started on.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Csv.CsvRecord.#ctor(System.Int32,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>One record, carrying the file line it started on.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Csv.CsvReader">
+            <summary>
+            RFC 4180 with the three things a real file needs beyond it: a byte-order mark, an encoding that
+            may not be UTF-8, and a delimiter that may not be a comma.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Csv.CsvReader.Decode(System.Byte[])">
+            <summary>
+            UTF-8 when the bytes decode strictly, Latin-1 otherwise. Latin-1 differs from Windows-1252
+            only over 0x80–0x9F — typographic quotes and the euro sign, never a letter in a name.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Csv.CsvWriter.Write(System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IEnumerable{System.Collections.Generic.IReadOnlyList{System.String}})">
+            <summary>
+            UTF-8 with a byte-order mark: without it Excel reads the file in the system code page and
+            mangles every accent. <see cref="T:weesky.Snoopy.Microservice.Services.Csv.CsvReader"/> strips it, so a round trip never sees it.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.DovecotQuotaClient">
@@ -3502,226 +3674,258 @@
             this service is a singleton — injecting the store directly compiles and throws here.
             </summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0">
+        <member name="T:System.Text.RegularExpressions.Generated.NumberedAddressKey_0">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the NumberedAddressKey method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NumberedAddressKey_0.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_1">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the AngleToken method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.AngleToken_0.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.AngleToken_1.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_1.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_1.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_1.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.AngleToken_1.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_1.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_1.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_0.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.AngleToken_1.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_1">
+        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_2">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the LocalDelivery method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.LocalDelivery_1.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.LocalDelivery_2.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_2.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_2.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_2.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.LocalDelivery_2.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_2.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_2.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_1.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.LocalDelivery_2.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_2">
+        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_3">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the EsmtpsToken method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.EsmtpsToken_2.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.EsmtpsToken_3.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_3.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_3.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_3.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.EsmtpsToken_3.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_3.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_3.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_2.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.EsmtpsToken_3.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_3">
+        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_4">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the TlsToken method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.TlsToken_3.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.TlsToken_4.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_4.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_4.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_4.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.TlsToken_4.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_4.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_4.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_3.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.TlsToken_4.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_4">
+        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_5">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the RspamdScore method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.RspamdScore_4.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.RspamdScore_5.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_5.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_5.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_5.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.RspamdScore_5.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_5.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_5.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_4.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.RspamdScore_5.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_5">
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_6">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SpamAssassinScore method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_5.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinScore_6.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6">
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7">
             <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SpamAssassinRequired method.</summary>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.#ctor">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_6.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SpamAssassinRequired_7.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>

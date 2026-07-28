@@ -1,6 +1,8 @@
 using CSharpFunctionalExtensions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using System.Text;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Contacts;
@@ -186,5 +188,214 @@ public sealed class ContactsControllerTests
         var result = await CreateController().SetFavorite(Guid.NewGuid(), null!, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    private static IFormFile FileOf(string csv)
+    {
+        var bytes = new UTF8Encoding(false).GetBytes(csv);
+        return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "contacts.csv");
+    }
+
+    [Fact]
+    public async Task Import_Returns200WithTheReport()
+    {
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new ContactImportOutcome(2, 1, 0, 0, []));
+
+        var result = await CreateController().Import(
+            FileOf("First Name,E-mail Address\r\nBruno,bruno@example.com"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var report = Assert.IsType<ContactImportReport>(ok.Value);
+        Assert.Equal(2, report.Created);
+        Assert.Equal(1, report.Merged);
+    }
+
+    [Fact]
+    public async Task Import_HandsTheStoreTheMappedRowsAndTheirVCard()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        await CreateController().Import(
+            FileOf("First Name,E-mail Address,Mobile Phone\r\nBruno,bruno@example.com,+32470000000"),
+            CancellationToken.None);
+
+        var row = Assert.Single(seen!);
+        Assert.Equal("Bruno", row.FirstName);
+        Assert.Equal(2, row.Line);
+        Assert.Contains("TEL;TYPE=CELL:+32470000000", row.VCard);
+    }
+
+    // An address the file spelled wrong is dropped, not fatal — and the report has to say so.
+    [Fact]
+    public async Task Import_ReportsADroppedAddressWithoutFailingItsRow()
+    {
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            FileOf("First Name,E-mail Address,Other Email\r\nBruno,n/a,bruno@example.com"),
+            CancellationToken.None);
+
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, report.Created);
+        Assert.Equal(0, report.Failed);
+        Assert.Contains("n/a", Assert.Single(report.Errors).Reason);
+    }
+
+    // The same filler in two e-mail columns is one problem to the reader — and two identical entries
+    // would also collide on the report list's React key.
+    [Fact]
+    public async Task Import_ReportsTheSameFillerInTwoColumnsOnce()
+    {
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            FileOf("First Name,E-mail Address,Other Email\r\nBruno,n/a,n/a"), CancellationToken.None);
+
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, report.TotalErrors);
+        Assert.Contains("n/a", Assert.Single(report.Errors).Reason);
+    }
+
+    // An over-long name is dropped, not truncated: truncating would store a fragment of whatever a
+    // column shift spilled into it, which is exactly the scenario that produces the over-long value.
+    [Fact]
+    public async Task Import_DropsAnOverLongNameButStillImportsTheRow()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            FileOf($"First Name,E-mail Address\r\n{new string('x', 150)},bruno@example.com"),
+            CancellationToken.None);
+
+        Assert.Null(Assert.Single(seen!).FirstName);
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, report.Created);
+        var error = Assert.Single(report.Errors);
+        Assert.Equal(2, error.Line);
+        Assert.Contains("first name", error.Reason);
+    }
+
+    [Fact]
+    public async Task Import_DropsAnOverLongAddressAndReportsIt()
+    {
+        var tooLong = new string('a', 400) + "@example.com";
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            FileOf($"First Name,E-mail Address\r\nBruno,{tooLong}"), CancellationToken.None);
+
+        Assert.Empty(Assert.Single(seen!).Addresses);
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, report.Created);
+        Assert.Contains("is not a valid e-mail address", Assert.Single(report.Errors).Reason);
+    }
+
+    // The clean failure this closes: the row's only content was an over-long name, so nothing
+    // over-long ever reaches ImportAsync — what a real store would otherwise fail on with a 500.
+    [Fact]
+    public async Task Import_FailsCleanlyWhenTheOnlyContentIsAnOverLongName()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(0, 0, 0, 1, [new ContactImportError(2, "Neither a name nor a valid e-mail address")]));
+
+        var result = await CreateController().Import(
+            FileOf($"First Name\r\n{new string('x', 150)}"), CancellationToken.None);
+
+        var row = Assert.Single(seen!);
+        Assert.Null(row.FirstName);
+        Assert.Empty(row.Addresses);
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, report.Failed);
+        Assert.Equal(2, report.TotalErrors);
+        Assert.Contains(report.Errors, e => e.Reason == "Neither a name nor a valid e-mail address");
+        Assert.Contains(report.Errors, e => e.Reason.Contains("first name"));
+    }
+
+    // The report's whole point: three different contributors — the store, a rejected address, and
+    // an over-long name — land in one list, ordered by line, with the cap never hiding the total.
+    [Fact]
+    public async Task Import_MergesStoreMapperAndOverLongErrorsSortedByLine()
+    {
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new ContactImportOutcome(3, 0, 0, 0, [new ContactImportError(2, "store issue")]));
+
+        var result = await CreateController().Import(
+            FileOf(
+                "First Name,E-mail Address,Other Email\r\n" +
+                "Alice,alice@example.com,\r\n" +
+                "Bob,bob@example.com,not-an-address\r\n" +
+                $"{new string('x', 150)},carol@example.com,"),
+            CancellationToken.None);
+
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(3, report.TotalErrors);
+        Assert.Collection(report.Errors,
+            e => { Assert.Equal(2, e.Line); Assert.Equal("store issue", e.Reason); },
+            e => { Assert.Equal(3, e.Line); Assert.Contains("not-an-address", e.Reason); },
+            e => { Assert.Equal(4, e.Line); Assert.Contains("first name", e.Reason); });
+    }
+
+    [Fact]
+    public async Task Import_CapsTheErrorListAndCountsThemAll()
+    {
+        var many = Enumerable.Range(0, 60)
+            .Select(i => new ContactImportError(i + 2, "bad")).ToList();
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new ContactImportOutcome(0, 0, 0, 60, many));
+
+        var result = await CreateController().Import(
+            FileOf("First Name\r\nBruno"), CancellationToken.None);
+
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(60, report.TotalErrors);
+        Assert.Equal(50, report.Errors.Count);
+    }
+
+    [Fact]
+    public async Task Import_Returns400WithoutAFile()
+    {
+        var result = await CreateController().Import(null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    // What catches the file read with the wrong delimiter and the one that is not a CSV at all.
+    [Fact]
+    public async Task Import_Returns400WhenNoColumnIsRecognised()
+    {
+        var result = await CreateController().Import(FileOf("Alpha,Beta\r\n1,2"), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _store.Verify(s => s.ImportAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<ContactImportRow>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Export_AnswersACsvAttachment()
+    {
+        _store.Setup(s => s.ListAsync(Uid, It.IsAny<CancellationToken>()))
+              .ReturnsAsync([new ContactView(Guid.NewGuid(), "Bruno", "Mertens", null, false, ["bruno@example.com"])]);
+
+        var result = await CreateController().Export(CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("text/csv", file.ContentType);
+        Assert.StartsWith("contacts-", file.FileDownloadName);
+        Assert.EndsWith(".csv", file.FileDownloadName);
+        Assert.Contains("bruno@example.com", Encoding.UTF8.GetString(file.FileContents));
     }
 }

@@ -26,4 +26,11 @@ public interface IContactStore
     /// that holds a possibly stale copy of the contact — a whole-object write would clobber it.
     /// </summary>
     Task<Result> SetFavoriteAsync(Guid userId, Guid contactId, bool isFavorite, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Merges a whole file into the book in one transaction. Never fails as a whole: a row that
+    /// cannot be filed comes back in the outcome rather than as an error status.
+    /// </summary>
+    Task<ContactImportOutcome> ImportAsync(
+        Guid userId, IReadOnlyList<ContactImportRow> rows, CancellationToken cancellationToken);
 }

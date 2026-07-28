@@ -2,6 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
+import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
@@ -182,13 +183,7 @@ export default function MessageReader(
     setDownloadError(null)
     try {
       const result = await requestBlob(mailAttachmentUrl(folderPath!, uid!, part))
-
-      const url = URL.createObjectURL(result.blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = result.fileName || fileName
-      link.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(result.blob, result.fileName || fileName)
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : 'Could not download the attachment')
     }

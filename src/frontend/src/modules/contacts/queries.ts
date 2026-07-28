@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import { compareContacts } from './contactSearch'
-import type { Contact, ContactDraft, ContactListResponse } from './contactTypes'
+import type { Contact, ContactDraft, ContactImportReport, ContactListResponse } from './contactTypes'
 
 /** Scoped by account from the outset, like the mail keys: linking a second account later isolates
     its book instead of mixing two. */
@@ -29,7 +29,7 @@ export function useContacts(enabled = true) {
 
 // Settled, not success: after a refused write the screen must fall back to the server's state
 // rather than keep an optimistic list nobody stored.
-function useContactMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
+function useContactMutation<TArgs, TResult = unknown>(mutationFn: (args: TArgs) => Promise<TResult>) {
   const accountId = useAccountId()
   const queryClient = useQueryClient()
 
@@ -56,4 +56,8 @@ export function useSetContactFavorite() {
   return useContactMutation(
     ({ id, isFavorite }: { id: string; isFavorite: boolean }) =>
       api.setContactFavorite(id, isFavorite))
+}
+
+export function useImportContacts() {
+  return useContactMutation((file: File) => api.importContacts(file) as Promise<ContactImportReport>)
 }

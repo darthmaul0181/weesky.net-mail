@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -10,6 +10,7 @@ vi.mock('../../api.js', () => ({
   api: {
     getContacts: vi.fn(), createContact: vi.fn(), updateContact: vi.fn(),
     deleteContact: vi.fn(), setContactFavorite: vi.fn(),
+    importContacts: vi.fn(), exportContacts: vi.fn(),
   },
   ApiError: class extends Error {},
 }))
@@ -17,7 +18,7 @@ vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getContacts' | 'createContact' | 'updateContact' | 'deleteContact'
-    | 'setContactFavorite', ReturnType<typeof vi.fn>>
+    | 'setContactFavorite' | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
 }
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
@@ -284,5 +285,51 @@ describe('ContactsLayout', () => {
 
     expect(screen.queryByRole('heading', { name: 'Bruno' })).not.toBeInTheDocument()
     expect(screen.getByText(/select a contact/i)).toBeInTheDocument()
+  })
+})
+
+describe('the transfer footer', () => {
+  it('offers import and export under the scopes', async () => {
+    api.getContacts.mockResolvedValue({ contacts: [contact({ id: '1', firstName: 'Bruno' })] })
+    renderAt('/contacts')
+
+    expect(await screen.findByRole('button', { name: 'Import…' })).toBeInTheDocument()
+    // Export starts disabled: it depends on the same book, which the footer does not wait for.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled())
+  })
+
+  // The editor takes the two content columns and leaves the band standing, footer included — the
+  // same rule the scopes follow.
+  it('keeps the footer while the editor is open', async () => {
+    api.getContacts.mockResolvedValue({ contacts: [] })
+    renderAt('/contacts/new')
+
+    expect(await screen.findByRole('button', { name: 'Import…' })).toBeInTheDocument()
+  })
+
+  it('surfaces an import failure as a toast', async () => {
+    api.getContacts.mockResolvedValue({ contacts: [] })
+    api.importContacts.mockRejectedValue(new Error('No recognised column in this file.'))
+    renderAt('/contacts')
+
+    await screen.findByRole('button', { name: 'Import…' })
+    fireEvent.change(screen.getByTestId('contacts-import-input'),
+      { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
+
+    expect(await screen.findByText('No recognised column in this file.')).toBeInTheDocument()
+  })
+
+  // Settled, not success: a refused import must leave the screen on the server's book.
+  it('refetches the book after an import, refused or not', async () => {
+    api.getContacts.mockResolvedValue({ contacts: [] })
+    api.importContacts.mockRejectedValue(new Error('nope'))
+    renderAt('/contacts')
+
+    await screen.findByRole('button', { name: 'Import…' })
+    api.getContacts.mockClear()
+    fireEvent.change(screen.getByTestId('contacts-import-input'),
+      { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
+
+    await waitFor(() => expect(api.getContacts).toHaveBeenCalled())
   })
 })

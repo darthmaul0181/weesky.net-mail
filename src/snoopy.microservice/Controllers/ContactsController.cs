@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Contacts;
+using weesky.Snoopy.Microservice.Services.Csv;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -122,5 +124,95 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
         var saved = await store.SetFavoriteAsync(
             AuthenticatedUser.WebmailUid, id, request.IsFavorite, cancellationToken);
         return saved.IsSuccess ? NoContent() : NotFoundEnveloppe(saved.Error);
+    }
+
+    /// <summary>
+    /// What bounds the request. A constant rather than configuration, so the attribute can carry
+    /// it and the read is capped before model binding buffers the body to disk.
+    /// </summary>
+    private const int MaxImportBytes = 5 * 1024 * 1024;
+
+    private const int MaxReportedErrors = 50;
+
+    // What a pending error still needs to become a sentence, so none is written before the cap.
+    private enum ErrorKind { Store, Address, OverLong }
+
+    /// <summary>
+    /// Merges a CSV file into the book and answers what it did. Nothing is overwritten and a row
+    /// whose address is already on two contacts is skipped rather than filed at random.
+    /// </summary>
+    /// <param name="file">the CSV file</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The report</response>
+    /// <response code="400">No file, an empty file, or no recognised column</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpPost("Import")]
+    [RequestSizeLimit(MaxImportBytes)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ContactImportReport>> Import(
+        IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0) return BadRequestEnveloppe("A file is required");
+
+        // Sized up front: the default capacity of 0 doubles its way to 8 MB on a 5 MB file, then
+        // ToArray copies another 5 MB out. The length is already trusted one line above.
+        using var buffer = new MemoryStream((int)file.Length);
+        await file.CopyToAsync(buffer, cancellationToken);
+
+        var document = CsvReader.Read(buffer.ToArray());
+        if (document.Header.Count == 0) return BadRequestEnveloppe("The file is empty");
+
+        var mapped = ContactCsvMapper.Map(document);
+        if (mapped.IsFailure) return BadRequestEnveloppe(mapped.Error);
+
+        var rows = mapped.Value;
+        var outcome = await store.ImportAsync(
+            AuthenticatedUser.WebmailUid,
+            [.. rows.Select(r => new ContactImportRow(
+                r.Line, r.FirstName, r.LastName, r.Nickname, r.IsFavorite, r.Addresses,
+                ContactVCardWriter.Write(r)))],
+            cancellationToken);
+
+        // The store's reasons, the mapper's dropped addresses, and its over-long names are one list
+        // to the reader: all three name a line in the file they can go and look at. Deduplicated,
+        // because the same filler in two e-mail columns is one problem, not two.
+        List<(int Line, ErrorKind Kind, string Value)> pending =
+        [
+            .. outcome.Errors.Select(e => (e.Line, ErrorKind.Store, e.Reason)),
+            .. rows.SelectMany(r => r.RejectedAddresses.Select(a => (r.Line, ErrorKind.Address, a))),
+            .. rows.SelectMany(r => r.OverLongFields.Select(f => (r.Line, ErrorKind.OverLong, f))),
+        ];
+        var distinct = pending.Distinct().ToList();
+
+        // Sorted and capped before a single sentence is interpolated: an adversarial 5 MB file is
+        // some 870 000 rows, and formatting all of them to answer fifty is tens of megabytes.
+        var reported = distinct.OrderBy(e => e.Line).Take(MaxReportedErrors)
+            .Select(e => new ContactImportError(e.Line, e.Kind switch
+            {
+                ErrorKind.Address => $"'{e.Value}' is not a valid e-mail address and was ignored",
+                ErrorKind.OverLong => $"The {e.Value} on this row was too long and was left out",
+                _ => e.Value,
+            }));
+
+        return Ok(new ContactImportReport(
+            outcome.Created, outcome.Merged, outcome.Skipped, outcome.Failed,
+            distinct.Count, [.. reported]));
+    }
+
+    /// <summary>The whole book as a CSV file, in the columns other clients read.</summary>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The file</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpGet("Export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> Export(CancellationToken cancellationToken)
+    {
+        var contacts = await store.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+
+        return File(ContactCsvExporter.Write(contacts), "text/csv",
+            $"contacts-{DateTime.UtcNow:yyyy-MM-dd}.csv");
     }
 }

@@ -16,8 +16,9 @@ interface Props {
  * bar belongs to content lists, and keeping the two languages apart is how a reader tells a
  * navigation pane from a list of rows at a glance.
  *
- * Two scopes today. It is also where import will land in slice 3d and where CardDAV address books
- * would go — the reason the module has a band at all rather than starting flush against the rail.
+ * Two scopes today, with import and export in the column's footer below and CardDAV address books
+ * the next thing to land here — the reason the module has a band at all rather than starting flush
+ * against the rail.
  */
 export default function ContactScopes({ scope, total, favorites, onScope }: Props) {
   return (

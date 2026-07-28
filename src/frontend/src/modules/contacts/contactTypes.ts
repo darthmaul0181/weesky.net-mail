@@ -25,3 +25,20 @@ export interface ContactDraft {
       "manual". */
   source?: 'captured'
 }
+
+export interface ContactImportError {
+  /** The line in the file, header included — what the user reads in their spreadsheet. */
+  line: number
+  reason: string
+}
+
+/** The four counters count rows and add up to the file's data rows; `totalErrors` counts every
+    reason, including those past the server's cap on `errors`. */
+export interface ContactImportReport {
+  created: number
+  merged: number
+  skipped: number
+  failed: number
+  totalErrors: number
+  errors: ContactImportError[]
+}

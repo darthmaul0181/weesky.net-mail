@@ -233,6 +233,39 @@ describe('api methods', () => {
       expect.objectContaining({ method: 'POST' })
     )
   })
+
+  it('posts an imported CSV as multipart without a JSON content type', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ created: 1, merged: 0, skipped: 0, failed: 0, totalErrors: 0, errors: [] }),
+    })
+
+    const file = new File(['First Name\r\nBruno'], 'contacts.csv', { type: 'text/csv' })
+    const { api } = await import('./api.js')
+    const report = await api.importContacts(file)
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Contacts/Import')
+    expect(options.body).toBeInstanceOf(FormData)
+    expect(options.body.get('file')).toBe(file)
+    // The browser has to set the multipart boundary itself; naming a type here breaks the parse.
+    expect(options.headers['Content-Type']).toBeUndefined()
+    expect(report.created).toBe(1)
+  })
+
+  it('fetches the export as a blob with the served file name', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'attachment; filename="contacts-2026-07-27.csv"' },
+      blob: async () => new Blob(['x']),
+    })
+
+    const { api } = await import('./api.js')
+    const result = await api.exportContacts()
+
+    expect(globalThis.fetch.mock.calls[0][0]).toContain('/api/Contacts/Export')
+    expect(result.fileName).toBe('contacts-2026-07-27.csv')
+  })
 })
 
 describe('admin api methods', () => {
