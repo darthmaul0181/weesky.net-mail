@@ -68,3 +68,16 @@ export function claimNotification(uidValidity: number, uidNext: number): boolean
   }
   return true
 }
+
+/**
+ * Dropped when a session ends: the claim is one mailbox's counter, and uidValidity is unique per
+ * mailbox, not across accounts. Two that share one would leave the second signed-in account
+ * gagged until its own uidNext climbed past what the first banked.
+ */
+export function forgetNotificationClaim(): void {
+  try {
+    localStorage.removeItem(CLAIM_KEY)
+  } catch {
+    // Storage denied: nothing was banked to begin with.
+  }
+}

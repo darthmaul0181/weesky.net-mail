@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../../contexts/AuthContext'
 import AccountPage from './AccountPage'
 
@@ -32,9 +33,11 @@ vi.mock('../../../api.js', () => ({
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <AuthProvider><AccountPage /></AuthProvider>
-    </MemoryRouter>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <AuthProvider><AccountPage /></AuthProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 
@@ -58,6 +61,24 @@ describe('AccountPage', () => {
     expect(await screen.findByText('mick@weesky.be')).toBeInTheDocument()
     expect(screen.getByText('example.org')).toBeInTheDocument()
     await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
+  })
+
+  // The quota block used to print a heading of its own right under the section's.
+  it('names the storage section once', async () => {
+    renderPage()
+    await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
+
+    expect(await screen.findByText('Storage')).toBeInTheDocument()
+    expect(screen.getAllByText('Storage')).toHaveLength(1)
+  })
+
+  // jsdom applies no stylesheet, so the class carrying `list-style: none` is all this can hold
+  // on to — the domains are read-only names, not an outline.
+  it('lists the other domains without bullets', async () => {
+    const { container } = renderPage()
+    await screen.findByText('example.org')
+
+    expect(container.querySelector('.account-domains')).toBeTruthy()
   })
 
   it('saves an edited full name', async () => {

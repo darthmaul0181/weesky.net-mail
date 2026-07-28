@@ -14,8 +14,9 @@ export function QuotaBlock({ quota }) {
   const levelClass = percent >= 90 ? 'is-danger' : percent >= 75 ? 'is-warn' : ''
 
   return (
+    // No heading of its own: the only consumer already puts one above it, and the block
+    // printed a second "Storage" right under it.
     <div className="panel-quota">
-      <div className="panel-quota-label">Storage</div>
       <div className="panel-quota-values">
         <span className="panel-quota-used">{format(used)} {unit}</span>
         <span className="panel-quota-sep"> / </span>

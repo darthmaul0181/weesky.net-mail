@@ -25,7 +25,7 @@ export default function IdentitySelect({ identities, value, onChange }: Props) {
   const current = identities.find(i => i.address === value)
   const caption = current ? label(current) : value
   const tag = !current || current.stale
-    ? <span className="identity-tag">unavailable</span>
+    ? <span className="row-tag">unavailable</span>
     : null
 
   // A menu wherever it can change something, the stale case included: its usable rows are the

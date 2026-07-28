@@ -13,7 +13,7 @@ interface Props {
 }
 
 /**
- * Every folder in one flat, indented list. A folder holding a role keeps its controls
+ * Every folder as one tile, indented by depth. A folder holding a role keeps its controls
  * disabled rather than losing them: withheld, those rows are a different shape from the rest
  * and read as a rendering fault. Its role is changed in the system-folders dialog.
  */
@@ -39,16 +39,18 @@ export default function FolderManager({ folders, onNotify }: Props) {
 
   return (
     <>
-      <ul className="folder-manage-list">
+      <ul className="admin-list folder-list">
         {flatten(sortFolders(folders)).map(({ node, depth }) => {
           const isInbox = node.specialUse === 'inbox'
           const isSystem = isSystemFolder(node)
 
           return (
+            // The tile steps in with the depth; its right edge does not move, so the actions
+            // keep one column whatever the nesting.
             <li
               key={node.path}
-              className={`folder-manage-row${isSystem ? ' is-system' : ''}`}
-              style={{ paddingLeft: 8 + depth * 18 }}
+              className="admin-list-item folder-tile"
+              style={{ marginLeft: depth * 18 }}
             >
               <label className="toggle-switch">
                 <input
@@ -66,35 +68,36 @@ export default function FolderManager({ folders, onNotify }: Props) {
                 <span className="toggle-track" />
               </label>
 
-              <span className="folder-manage-label">{node.name}</span>
+              <span className="admin-list-item-email">{node.name}</span>
 
-              {/* Beside the name: parked in its own column it reads as a row status. */}
+              {/* Beside the name: parked in its own column it reads as a row status. Now that
+                  every tile's name is bold, this badge alone says a folder holds a role. */}
               {isSystem && (
-                <span className="folder-manage-role">{roleLabel(node.specialUse!)}</span>
+                <span className="row-tag">{roleLabel(node.specialUse!)}</span>
               )}
 
               {/* `disabled`, so no click or key reaches the handler. The API refuses these
                   three regardless of what this list offers. */}
-              <div className="folder-manage-actions">
+              <div className="admin-list-item-actions">
                 <button
                   type="button"
-                  className="folder-action"
+                  className="admin-icon-btn"
                   aria-label={`Rename ${node.name}`}
                   title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be renamed` : 'Rename'}
                   disabled={isSystem}
                   onClick={() => { setRenaming(node); setRenameValue(node.name) }}
                 >
-                  <PencilIcon size={15} />
+                  <PencilIcon />
                 </button>
                 <button
                   type="button"
-                  className="folder-action is-danger"
+                  className="admin-icon-btn is-danger"
                   aria-label={`Delete ${node.name}`}
                   title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be deleted` : 'Delete'}
                   disabled={isSystem}
                   onClick={() => setPendingDelete(node)}
                 >
-                  <TrashIcon size={15} />
+                  <TrashIcon />
                 </button>
               </div>
             </li>

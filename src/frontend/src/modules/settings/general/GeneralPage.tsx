@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
@@ -131,7 +132,7 @@ export default function GeneralPage() {
     <div className="settings-page">
       <h1>General</h1>
 
-      {isLoading && <p>Loading…</p>}
+      {isLoading && <LoadingBlock />}
       {!isLoading && (isError || !preferences) && <p>Could not load the settings.</p>}
 
       {!isLoading && !isError && preferences && (

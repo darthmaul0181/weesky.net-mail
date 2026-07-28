@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
-  claimNotification, desktopPermission, playNewMailSound,
+  claimNotification, desktopPermission, forgetNotificationClaim, playNewMailSound,
   requestDesktopPermission, showDesktopNotification,
 } from './channels'
 
@@ -144,4 +144,24 @@ describe('claimNotification', () => {
 
       expect(claimNotification(100, 42)).toBe(true)
     })
+})
+
+describe('forgetNotificationClaim', () => {
+  beforeEach(() => localStorage.clear())
+
+  // The claim is one mailbox's counter. Two accounts sharing a uidValidity — the number is
+  // per-mailbox, nothing makes it unique across servers — would leave the second one gagged
+  // until its own uidNext climbed past the first's.
+  it('drops the claim so the next account starts unbanked', () => {
+    claimNotification(100, 30000)
+
+    forgetNotificationClaim()
+
+    expect(claimNotification(100, 2)).toBe(true)
+  })
+
+  it('is a no-op with nothing banked', () => {
+    expect(() => forgetNotificationClaim()).not.toThrow()
+    expect(localStorage.getItem('mail.lastNotifiedUidNext')).toBeNull()
+  })
 })

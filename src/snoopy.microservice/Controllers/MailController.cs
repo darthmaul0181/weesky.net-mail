@@ -472,10 +472,12 @@ public sealed class MailController(
     /// </summary>
     /// <param name="folder">full folder path</param>
     /// <param name="uid">message UID</param>
-    /// <param name="part">MIME part specifier, taken from the message's attachment list</param>
+    /// <param name="part">MIME part specifier, taken from the message's attachment list. Empty
+    /// is a real specifier — a message whose whole body is the attachment has no multipart
+    /// wrapper to number, so it must not be validated away</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">The attachment bytes</response>
-    /// <response code="400">The folder or the part is missing</response>
+    /// <response code="400">The folder is missing</response>
     /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
     /// <response code="404">No such message, or no such part on it</response>
     /// <response code="502">The mail server could not be reached</response>
@@ -488,15 +490,15 @@ public sealed class MailController(
     public async Task<ActionResult> GetAttachment(
         [FromQuery] string folder,
         [FromQuery] uint uid,
-        [FromQuery] string part,
+        [FromQuery] string? part,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
-        if (string.IsNullOrWhiteSpace(part)) return BadRequestEnveloppe("A part is required");
 
         if (!TryMailPassword(out var password, out var unauthorized)) return unauthorized;
 
-        var result = await messages.GetAttachmentAsync(AuthenticatedUser, password, folder, uid, part, cancellationToken);
+        var result = await messages.GetAttachmentAsync(
+            AuthenticatedUser, password, folder, uid, part ?? string.Empty, cancellationToken);
 
         if (result.IsFailure)
         {

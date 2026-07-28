@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
@@ -28,16 +29,16 @@ export default function FoldersPage() {
       </p>
 
       <div className="folders-page-actions">
-        {/* btn-ghost: a bare `.btn` has no border and no background, and reads as text. */}
-        <button type="button" className="btn btn-ghost" onClick={() => setCreating(true)}>
+        <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
           <FolderPlusIcon size={15} />New folder
         </button>
+        {/* btn-ghost: a bare `.btn` has no border and no background, and reads as text. */}
         <button type="button" className="btn btn-ghost" onClick={() => setAssigningRoles(true)}>
           <SlidersIcon size={15} />System folders
         </button>
       </div>
 
-      {isLoading && <p>Loading…</p>}
+      {isLoading && <LoadingBlock />}
       {!isLoading && (isError || !folders) && <p>Could not load the folders.</p>}
       {!isLoading && !isError && folders && (
         <FolderManager folders={folders} onNotify={addToast} />

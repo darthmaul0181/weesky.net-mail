@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -76,7 +77,7 @@ export default function IdentitiesPage() {
         Your primary identity cannot be deleted. Its name can be changed via the ‘Account’ page.
       </p>
 
-      {isLoading && <p>Loading…</p>}
+      {isLoading && <LoadingBlock />}
       {/* Only when there is nothing to show: a failed background refetch must not blank a list that
           is already on screen and still perfectly usable. */}
       {!isLoading && !shown && <p>Could not load your identities.</p>}
@@ -116,8 +117,8 @@ export default function IdentitiesPage() {
                 </span>
                 <span className="admin-list-item-email">{i.displayName}</span>
                 <span className="admin-list-item-name">{i.address}</span>
-                {i.isPrimary && <span className="identity-tag">primary</span>}
-                {i.stale && <span className="identity-tag">unavailable</span>}
+                {i.isPrimary && <span className="row-tag">primary</span>}
+                {i.stale && <span className="row-tag">unavailable</span>}
                 <div className="admin-list-item-actions">
                   {/* The primary's name comes from the Account tab, so it is not editable here. */}
                   {!i.stale && !i.isPrimary && (

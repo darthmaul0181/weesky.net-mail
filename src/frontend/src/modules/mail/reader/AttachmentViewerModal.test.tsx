@@ -35,7 +35,7 @@ function renderModal(props: Partial<React.ComponentProps<typeof AttachmentViewer
 describe('AttachmentViewerModal', () => {
   it('shows the image once the blob arrives', async () => {
     renderModal()
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
     const img = await screen.findByRole('img', { name: 'photo.png' })
     expect(img).toHaveAttribute('src', 'blob:mock-url')
     expect(screen.getByText('photo.png')).toBeInTheDocument()
