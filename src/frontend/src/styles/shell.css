@@ -283,8 +283,10 @@
 /* The last row's 12px bottom margin collapses into this one, so this value IS the gap between
    two groups — 26px against the 12px between rows was too close to read as a break. */
 .account-section { margin-bottom: 38px; max-width: 560px; }
+/* 13px, not more: at 14px the caps stand optically taller than the 14px row labels and the
+   heading stops reading as their heading. The muted colour is what keeps it subordinate. */
 .account-section h2 {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
