@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../../api.js'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
@@ -14,7 +14,8 @@ export function DomainsTab({ addToast }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  async function load() {
+  // useCallback so the effect can depend on it: addToast is memoised, so load keeps one identity.
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       setDomains(await api.adminGetDomains() ?? [])
@@ -23,9 +24,9 @@ export function DomainsTab({ addToast }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [addToast])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   async function handleDelete() {
     setDeleting(true)

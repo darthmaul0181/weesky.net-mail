@@ -17,6 +17,7 @@ export const PREFERENCE_KEYS = {
   alwaysShowImages: 'mail.alwaysShowImages',
   showSpamScore: 'mail.showSpamScore',
   readingPane: 'mail.readingPane',
+  rowActions: 'mail.rowActions',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
 } as const
@@ -78,6 +79,28 @@ export type ReadingPane = 'right' | 'bottom' | 'none'
 export function readingPaneOf(preferences: Preferences): ReadingPane {
   const stored = preferences[PREFERENCE_KEYS.readingPane]
   return stored === 'bottom' || stored === 'none' ? stored : 'right'
+}
+
+export type RowAction = 'seen' | 'archive' | 'junk' | 'delete'
+
+/** The order the icons are drawn in, whatever order they were stored in — the setting chooses
+    which, never where. Delete stays last: it is the one a misplaced click cannot take back. */
+export const ROW_ACTIONS: readonly RowAction[] = ['seen', 'archive', 'junk', 'delete']
+
+/** What the row carried before the setting existed. */
+export const DEFAULT_ROW_ACTIONS: readonly RowAction[] = ['seen', 'archive', 'delete']
+
+/**
+ * An absent key is an older backend; the empty string is an account that switched every icon
+ * off. Collapsing the two would strip the row bare on the first render against a build that
+ * does not know the key yet, so only `undefined` falls back.
+ */
+export function rowActionsOf(preferences: Preferences): RowAction[] {
+  const stored = preferences[PREFERENCE_KEYS.rowActions]
+  if (stored === undefined) return [...DEFAULT_ROW_ACTIONS]
+
+  const chosen = new Set(stored.split(','))
+  return ROW_ACTIONS.filter(action => chosen.has(action))
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */

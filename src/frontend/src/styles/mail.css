@@ -632,9 +632,18 @@
 
 /* The cluster is always the last child, so the line before it is the one it would cover — the
    preview, or the subject when previews are off. Reserving its width there ends that line in an
-   ellipsis instead of running it under the buttons. 3 × 26 + 2 × 2 gaps, plus 6px of air. */
-.message-row:not(.is-line):hover > :nth-last-child(2),
-.message-row:not(.is-line):focus-within > :nth-last-child(2) { padding-right: 88px; }
+   ellipsis instead of running it under the buttons.
+
+   The width follows the button count, which the account chooses: n × 26 plus (n − 1) × 2 of gap
+   is 28n − 2, plus 6px of air. This was the constant 88px, correct for the three buttons the row
+   used to carry and 22px short of the four it can carry now — the subject ran under the icons.
+   `:has` is load-bearing rather than tidy: with no cluster (every icon switched off, or a
+   cross-folder result) :nth-last-child(2) is a different element, and it was being padded for a
+   cluster that is not there. */
+.message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
+.message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
+  padding-right: calc(var(--row-actions) * 28px + 4px);
+}
 
 /* Wide skin has no "bottom": the cluster replaces the date, the star stays at the end. */
 /* align-self, like the buttons': left in the baseline group its baseline is its button's, 21px

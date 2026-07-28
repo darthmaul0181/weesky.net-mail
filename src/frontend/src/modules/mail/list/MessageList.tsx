@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, KeyboardEvent } from 'react'
-import { requestSizeOf, showPreviewOf, usePreferences } from '../../../hooks/usePreferences'
+import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from 'react'
+import {
+  DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
+} from '../../../hooks/usePreferences'
+import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
+import JunkIcon from '../../../icons/JunkIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
@@ -61,6 +65,7 @@ export default function MessageList(
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
+  const rowActions: readonly RowAction[] = preferences ? rowActionsOf(preferences) : DEFAULT_ROW_ACTIONS
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [advanced, setAdvanced] = useState<{ subject: string } | null>(null)
@@ -356,9 +361,13 @@ export default function MessageList(
               </button>
             )
 
-            const cluster = crossFolder ? null : (
-              <div className="message-row-cluster">
+            {/* Withheld here is the user's own choice, made in Settings. A button whose role no
+                folder holds is still drawn, disabled, with its reason: that absence would read as
+                a bug, this one was asked for. */}
+            const buttons: Record<RowAction, ReactNode> = {
+              seen: (
                 <button
+                  key="seen"
                   type="button"
                   className="row-btn"
                   aria-label={seenLabel}
@@ -367,8 +376,10 @@ export default function MessageList(
                 >
                   {message.seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />}
                 </button>
-                {/* Disabled with its reason, never withheld: a missing button reads as a bug. */}
+              ),
+              archive: (
                 <button
+                  key="archive"
                   type="button"
                   className="row-btn"
                   aria-label="Archive"
@@ -378,7 +389,23 @@ export default function MessageList(
                 >
                   <ArchiveIcon size={18} />
                 </button>
+              ),
+              junk: (
                 <button
+                  key="junk"
+                  type="button"
+                  className="row-btn"
+                  aria-label="Report as junk"
+                  disabled={junkOff}
+                  title={junkOff ? junkReason : 'Report as junk'}
+                  onClick={event => { event.stopPropagation(); moveTo(roles.junk, message.uid) }}
+                >
+                  <JunkIcon size={18} />
+                </button>
+              ),
+              delete: (
+                <button
+                  key="delete"
                   type="button"
                   className="row-btn is-danger"
                   aria-label={deleteLabel}
@@ -392,7 +419,15 @@ export default function MessageList(
                 >
                   <TrashIcon size={18} />
                 </button>
-              </div>
+              ),
+            }
+
+            // One value behind both the cluster and the width the row reserves for it: the reserve
+            // is what ends the line above in an ellipsis, and a count it derived on its own could
+            // disagree with what is actually drawn.
+            const shownActions = crossFolder ? [] : rowActions
+            const cluster = shownActions.length === 0 ? null : (
+              <div className="message-row-cluster">{shownActions.map(action => buttons[action])}</div>
             )
 
             return (
@@ -403,6 +438,7 @@ export default function MessageList(
                   tabIndex={0}
                   aria-label={label}
                   className={classes.join(' ')}
+                  style={{ '--row-actions': shownActions.length } as CSSProperties}
                   draggable={!crossFolder}
                   onClick={() => openRow(message)}
                   onKeyDown={event => onRowKey(event, message)}

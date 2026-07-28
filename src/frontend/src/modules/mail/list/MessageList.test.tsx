@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
@@ -1177,6 +1177,9 @@ describe('MessageList searching', () => {
     expect(screen.getByText('From archive').closest('.message-row')).toHaveAttribute('draggable', 'false')
     // The reader is told nothing is navigable in these rows.
     expect(onRows).toHaveBeenLastCalledWith([])
+    // No cluster here either, so nothing may be reserved for one.
+    expect(screen.getByText('From archive').closest('.message-row')!
+      .getAttribute('style')).toContain('--row-actions: 0')
 
     fireEvent.click(screen.getByText('From archive'))
     expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
@@ -1316,5 +1319,120 @@ describe('MessageList starred filter', () => {
     renderList({ search: { ...starred, quick: 'x' }, folderName: 'Inbox' })
 
     expect(screen.getByText('2 results for “x”')).toBeInTheDocument()
+  })
+})
+
+describe('choosable row actions', () => {
+  const junkTree: MailFolderNode[] = [
+    ...roleTree,
+    folderNode({ path: 'Indesirables', name: 'Indesirables', specialUse: 'junk' }),
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = junkTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
+
+  // An older backend answers without the key at all. Reading that as "nothing chosen" would
+  // strip every icon off every row on the first render after a deploy.
+  it('draws the three icons it always had when the key is absent', () => {
+    renderList()
+
+    const row = rowOf(/bob@x\.be/i)
+    expect(within(row).getByRole('button', { name: 'Mark as unread' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Report as junk' })).toBeNull()
+  })
+
+  it('adds junk to the row once it is chosen', async () => {
+    renderList({}, { 'mail.rowActions': 'seen,archive,junk,delete' })
+
+    expect(await within(rowOf(/bob@x\.be/i)).findByRole('button', { name: 'Report as junk' }))
+      .toBeInTheDocument()
+  })
+
+  it('reports to the folder holding the junk role', async () => {
+    renderList({}, { 'mail.rowActions': 'junk' })
+
+    const junk = await within(rowOf(/alice martin/i)).findByRole('button', { name: 'Report as junk' })
+    expect(junk).toBeEnabled()
+    fireEvent.click(junk)
+
+    expect(mocks.move).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], targetFolderPath: 'Indesirables', copy: false })
+  })
+
+  // Same rule the other role-backed buttons follow: disabled with its reason, never withheld,
+  // because a button that vanishes on some folders reads as a rendering fault.
+  it('disables junk with its reason where no folder holds the role', async () => {
+    mocks.folders = roleTree
+    renderList({}, { 'mail.rowActions': 'junk' })
+
+    const junk = await within(rowOf(/alice martin/i)).findByRole('button', { name: 'Report as junk' })
+    expect(junk).toBeDisabled()
+    expect(junk).toHaveAttribute('title', 'Assign the junk folder in Settings → Folders')
+  })
+
+  // waitFor, not settle(): these assert a transition — the preference arrives and the cluster
+  // is rebuilt — where settle() is the tool for asserting that nothing happened. One macrotask
+  // was enough on a developer's machine and not on CI, which is what a one-tick wait buys you.
+  it('drops an icon the account switched off', async () => {
+    renderList({}, { 'mail.rowActions': 'seen,archive' })
+
+    await waitFor(() =>
+      expect(within(rowOf(/bob@x\.be/i)).queryByRole('button', { name: 'Delete' })).toBeNull())
+    expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+
+  // The row is re-queried inside the wait on purpose, and the cluster read from it rather than
+  // from the document: the selection toolbar carries a "Report as junk" of its own, so an
+  // unscoped query answers from it while the row still shows the default three.
+  it('renders in the canonical order whatever order it was stored in', async () => {
+    renderList({}, { 'mail.rowActions': 'delete,junk,seen' })
+
+    await waitFor(() => {
+      const cluster = rowOf(/bob@x\.be/i).querySelector('.message-row-cluster') as HTMLElement
+      expect([...cluster.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
+        .toEqual(['Mark as unread', 'Report as junk', 'Delete'])
+    })
+  })
+
+  // The width the row reserves to end the line above in an ellipsis is computed from this number
+  // (mail.css, --row-actions). jsdom has no layout, so what is testable here is the invariant the
+  // geometry rests on: the count the row advertises is the count it actually draws. It was a
+  // constant 88px sized for three buttons, and the subject ran 22px under the fourth.
+  it('advertises the drawn button count to the width reserve', async () => {
+    renderList({}, { 'mail.rowActions': 'seen,archive,junk,delete' })
+
+    await waitFor(() => {
+      const row = rowOf(/bob@x\.be/i)
+      const drawn = row.querySelectorAll('.message-row-cluster .row-btn').length
+      expect(drawn).toBe(4)
+      expect(row.style.getPropertyValue('--row-actions')).toBe(String(drawn))
+    })
+  })
+
+  // Nothing drawn must reserve nothing: with no cluster the reserve lands on whatever element is
+  // second-to-last instead — the subject, or the sender line when previews are off.
+  it('advertises zero when every icon is off', async () => {
+    renderList({}, { 'mail.rowActions': '' })
+
+    await waitFor(() =>
+      expect(rowOf(/bob@x\.be/i).style.getPropertyValue('--row-actions')).toBe('0'))
+    expect(rowOf(/bob@x\.be/i).querySelector('.message-row-cluster')).toBeNull()
+  })
+
+  // Zero is a real choice, so the cluster goes rather than collapsing to an empty box that would
+  // still eat its reserved width. The star is a flag, not an action, and stays.
+  it('drops the cluster entirely when every icon is off', async () => {
+    renderList({}, { 'mail.rowActions': '' })
+
+    await waitFor(() => expect(document.querySelector('.message-row-cluster')).toBeNull())
+    expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Star' })).toBeInTheDocument()
   })
 })

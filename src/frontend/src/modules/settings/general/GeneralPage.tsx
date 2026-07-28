@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react'
+import type { ComponentType } from 'react'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, notifyDesktopOf, notifySoundOf,
-  readingPaneOf, showPreviewOf, showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
-  type ReadingPane,
+  ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, notifyDesktopOf,
+  notifySoundOf, readingPaneOf, rowActionsOf, showPreviewOf, showSpamScoreOf, trustContactsOf,
+  usePreferences, useSetPreference,
+  type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
 } from '../../mail/notify/channels'
+import ArchiveIcon from '../../../icons/ArchiveIcon'
+import JunkIcon from '../../../icons/JunkIcon'
+import MailOpenIcon from '../../../icons/MailOpenIcon'
+import TrashIcon from '../../../icons/TrashIcon'
 
 const PAGE_SIZE_OPTIONS = [
   { value: '10', label: '10' },
@@ -25,6 +31,15 @@ function pageSizeToast(value: string): string {
     ? 'The message list now shows every message'
     : `The message list now shows ${value} per page`
 }
+
+/** Listed in ROW_ACTIONS order, which is the order the row draws them — the page has to show
+    the arrangement it is configuring. */
+const ROW_ACTION_CHOICES: { value: RowAction; label: string; Icon: ComponentType<{ size?: number }> }[] = [
+  { value: 'seen', label: 'Read / unread', Icon: MailOpenIcon },
+  { value: 'archive', label: 'Archive', Icon: ArchiveIcon },
+  { value: 'junk', label: 'Report as junk', Icon: JunkIcon },
+  { value: 'delete', label: 'Delete', Icon: TrashIcon },
+]
 
 const READING_PANES: { value: ReadingPane; label: string; toast: string }[] = [
   { value: 'right', label: 'Right', toast: 'The reader sits beside the message list' },
@@ -46,17 +61,26 @@ function PaneGlyph({ variant }: { variant: ReadingPane }) {
 type ToggleRowProps = {
   id: string
   label: string
+  hint: string
   checked: boolean
   disabled: boolean
   onChange: (on: boolean) => void
+  /** Indented under the row it depends on, and greyed while that row makes it moot. */
+  nested?: boolean
+  covered?: boolean
 }
 
 /** The label and the input are siblings under .field-h, so the htmlFor/id pair is the only
-    thing naming the control. */
-function ToggleRow({ id, label, checked, disabled, onChange }: ToggleRowProps) {
+    thing naming the control — and the hint stays outside it, or it joins that name. */
+function ToggleRow(
+  { id, label, hint, checked, disabled, onChange, nested, covered }: ToggleRowProps,
+) {
   return (
-    <div className="field-h is-setting">
-      <label htmlFor={id}>{label}</label>
+    <div className={`field-h is-setting${nested ? ' is-child' : ''}${covered ? ' is-covered' : ''}`}>
+      <span className="setting-label">
+        <label htmlFor={id}>{label}</label>
+        <span className="setting-hint">{hint}</span>
+      </span>
       <label className="toggle-switch">
         <input
           id={id}
@@ -79,6 +103,8 @@ export default function GeneralPage() {
   const { data: preferences, isLoading, isError } = usePreferences()
   const setPreference = useSetPreference()
   const { toasts, addToast, removeToast } = useToasts()
+
+  const chosenActions = preferences ? rowActionsOf(preferences) : []
 
   const [permission, setPermission] = useState(desktopPermission)
   const blocked = permission === 'denied'
@@ -137,129 +163,193 @@ export default function GeneralPage() {
 
       {!isLoading && !isError && preferences && (
         <>
-          <div className="field-h is-setting">
-            <label htmlFor="page-size">Messages per page</label>
-            <select
-              id="page-size"
-              value={preferences[PREFERENCE_KEYS.pageSize]}
-              disabled={setPreference.isPending}
-              onChange={event =>
-                save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value))}
-            >
-              {PAGE_SIZE_OPTIONS.map(option =>
-                <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </div>
+          <section className="account-section">
+            <h2>Layout</h2>
 
-          <div className="field-h is-setting">
-            <span id="reading-pane-label">Reading pane</span>
-            <div className="layout-cards" role="radiogroup" aria-labelledby="reading-pane-label">
-              {READING_PANES.map(({ value, label, toast }) => (
-                <label key={value} className="layout-card">
-                  <PaneGlyph variant={value} />
-                  <span className="layout-card-name">
-                    <input
-                      type="radio"
-                      name="reading-pane"
-                      value={value}
-                      checked={readingPaneOf(preferences) === value}
-                      disabled={setPreference.isPending}
-                      onChange={() => save(PREFERENCE_KEYS.readingPane, value, toast)}
-                    />
-                    {label}
-                  </span>
-                </label>
-              ))}
+            <div className="field-h is-setting is-stacked">
+              <span className="setting-label">
+                <span id="reading-pane-label">Reading pane</span>
+                <span className="setting-hint">
+                  Where a message opens — beside the list, under it, or full width.
+                </span>
+              </span>
+              <div className="layout-cards" role="radiogroup" aria-labelledby="reading-pane-label">
+                {READING_PANES.map(({ value, label, toast }) => (
+                  <label key={value} className="layout-card">
+                    <PaneGlyph variant={value} />
+                    <span className="layout-card-name">
+                      <input
+                        type="radio"
+                        name="reading-pane"
+                        value={value}
+                        checked={readingPaneOf(preferences) === value}
+                        disabled={setPreference.isPending}
+                        onChange={() => save(PREFERENCE_KEYS.readingPane, value, toast)}
+                      />
+                      {label}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <ToggleRow
-            id="show-preview"
-            label="Preview in the message list"
-            checked={showPreviewOf(preferences)}
-            disabled={setPreference.isPending}
-            onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
-              on ? 'Previews are shown' : 'Previews are hidden')}
-          />
+            <div className="field-h is-setting">
+              <span className="setting-label">
+                <label htmlFor="page-size">Messages per page</label>
+                <span className="setting-hint">How many rows the list loads at a time.</span>
+              </span>
+              <select
+                id="page-size"
+                value={preferences[PREFERENCE_KEYS.pageSize]}
+                disabled={setPreference.isPending}
+                onChange={event =>
+                  save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value))}
+              >
+                {PAGE_SIZE_OPTIONS.map(option =>
+                  <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
 
-          <ToggleRow
-            id="always-show-images"
-            label="Always show remote images"
-            checked={alwaysShowImagesOf(preferences)}
-            disabled={setPreference.isPending}
-            onChange={on => save(PREFERENCE_KEYS.alwaysShowImages, String(on),
-              on ? 'Remote images will always load' : 'Remote images stay blocked until you ask')}
-          />
+            <ToggleRow
+              id="show-preview"
+              label="Preview in the message list"
+              hint="Show the first line of each message under its subject."
+              checked={showPreviewOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
+                on ? 'Previews are shown' : 'Previews are hidden')}
+            />
 
-          {alwaysShowImagesOf(preferences) && (
-            <p className="settings-note">
-              Loading them tells the sender you opened the message.
-            </p>
-          )}
+            <div className="field-h is-setting is-stacked">
+              <span className="setting-label">
+                <span id="row-actions-label">Quick actions on a message</span>
+                <span className="setting-hint">
+                  The icons a message row offers on hover. Everything here stays available from the
+                  toolbar once messages are selected.
+                </span>
+              </span>
+              {/* The fill is the state, so there is no box to tick: aria-pressed is what carries
+                  that to anything not looking at the colour. */}
+              <div className="action-chips" role="group" aria-labelledby="row-actions-label">
+                {ROW_ACTION_CHOICES.map(({ value, label, Icon }) => {
+                  const on = chosenActions.includes(value)
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`action-chip${on ? ' is-on' : ''}`}
+                      aria-pressed={on}
+                      disabled={setPreference.isPending}
+                      onClick={() => save(
+                        PREFERENCE_KEYS.rowActions,
+                        // Rebuilt from the canonical order, never from click order, so the stored
+                        // string is the one the list already renders.
+                        ROW_ACTIONS.filter(a => a === value ? !on : chosenActions.includes(a)).join(','),
+                        on ? `${label} is no longer a quick action` : `${label} is now a quick action`)}
+                    >
+                      <Icon size={16} />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </section>
 
-          <ToggleRow
-            id="trust-contacts"
-            label="Always show images from my contacts"
-            checked={trustContactsOf(preferences)}
-            disabled={setPreference.isPending}
-            onChange={on => save(PREFERENCE_KEYS.trustContacts, String(on),
-              on ? 'Images from your contacts will load' : 'Images from your contacts stay blocked')}
-          />
+          <section className="account-section">
+            <h2>Privacy &amp; security</h2>
 
-          <ToggleRow
-            id="capture-recipients"
-            label="Save new recipients to my contacts"
-            checked={captureRecipientsOf(preferences)}
-            disabled={setPreference.isPending}
-            onChange={on => save(PREFERENCE_KEYS.captureRecipients, String(on),
-              on ? 'New recipients will be saved' : 'New recipients will not be saved')}
-          />
+            <ToggleRow
+              id="always-show-images"
+              label="Always show remote images"
+              hint="Loading them tells the sender you opened the message."
+              checked={alwaysShowImagesOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.alwaysShowImages, String(on),
+                on ? 'Remote images will always load' : 'Remote images stay blocked until you ask')}
+            />
 
-          <ToggleRow
-            id="show-spam-score"
-            label="Show the spam score in the message reader"
-            checked={showSpamScoreOf(preferences)}
-            disabled={setPreference.isPending}
-            onChange={on => save(PREFERENCE_KEYS.showSpamScore, String(on),
-              on ? 'The spam score is shown' : 'The spam score is hidden')}
-          />
+            <ToggleRow
+              id="trust-contacts"
+              label="Always show images from my contacts"
+              hint={alwaysShowImagesOf(preferences)
+                ? 'Already covered by the setting above.'
+                : 'Images load without asking when the sender is in your address book.'}
+              nested
+              covered={alwaysShowImagesOf(preferences)}
+              checked={trustContactsOf(preferences)}
+              disabled={setPreference.isPending || alwaysShowImagesOf(preferences)}
+              onChange={on => save(PREFERENCE_KEYS.trustContacts, String(on),
+                on ? 'Images from your contacts will load' : 'Images from your contacts stay blocked')}
+            />
 
-          <ToggleRow
-            id="notify-sound"
-            label="Sound on new mail"
-            checked={notifySoundOf(preferences)}
-            disabled={setPreference.isPending}
-            onChange={toggleSound}
-          />
+            <ToggleRow
+              id="show-spam-score"
+              label="Show the spam score in the message reader"
+              hint="Adds a score bar under the recipients when the server sends one."
+              checked={showSpamScoreOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.showSpamScore, String(on),
+                on ? 'The spam score is shown' : 'The spam score is hidden')}
+            />
+          </section>
 
-          {/* Blocked disables it: a denied origin is never re-prompted, so a click would be a
-              no-op. The visibility refresh above is what makes it reachable again. */}
-          <ToggleRow
-            id="notify-desktop"
-            label="Desktop notification on new mail"
-            checked={notifyDesktopOf(preferences) && permission === 'granted'}
-            disabled={setPreference.isPending || blocked || unsupported || insecure}
-            onChange={toggleDesktop}
-          />
+          <section className="account-section">
+            <h2>Composing</h2>
 
-          {blocked && (
-            <p className="settings-note">
-              Notifications are blocked by your browser for this site. Allow them in its site
-              settings, then switch this back on.
-            </p>
-          )}
-          {insecure && (
-            <p className="settings-note">
-              Desktop notifications need a secure connection. Open this site over HTTPS to switch
-              them on.
-            </p>
-          )}
-          {unsupported && (
-            <p className="settings-note">
-              This browser does not support desktop notifications. On iPhone and iPad they work
-              only once the site is added to the home screen.
-            </p>
-          )}
+            <ToggleRow
+              id="capture-recipients"
+              label="Save new recipients to my contacts"
+              hint="Anyone you write to for the first time joins your address book."
+              checked={captureRecipientsOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.captureRecipients, String(on),
+                on ? 'New recipients will be saved' : 'New recipients will not be saved')}
+            />
+          </section>
+
+          <section className="account-section">
+            <h2>Notifications</h2>
+
+            <ToggleRow
+              id="notify-sound"
+              label="Sound on new mail"
+              hint="Plays a short chime when mail reaches the inbox."
+              checked={notifySoundOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={toggleSound}
+            />
+
+            {/* Blocked disables it: a denied origin is never re-prompted, so a click would be a
+                no-op. The visibility refresh above is what makes it reachable again. */}
+            <ToggleRow
+              id="notify-desktop"
+              label="Desktop notification on new mail"
+              hint="Your browser will ask for permission the first time."
+              checked={notifyDesktopOf(preferences) && permission === 'granted'}
+              disabled={setPreference.isPending || blocked || unsupported || insecure}
+              onChange={toggleDesktop}
+            />
+
+            {blocked && (
+              <p className="settings-note">
+                Notifications are blocked by your browser for this site. Allow them in its site
+                settings, then switch this back on.
+              </p>
+            )}
+            {insecure && (
+              <p className="settings-note">
+                Desktop notifications need a secure connection. Open this site over HTTPS to switch
+                them on.
+              </p>
+            )}
+            {unsupported && (
+              <p className="settings-note">
+                This browser does not support desktop notifications. On iPhone and iPad they work
+                only once the site is added to the home screen.
+              </p>
+            )}
+          </section>
         </>
       )}
 

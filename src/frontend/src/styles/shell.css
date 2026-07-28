@@ -280,9 +280,13 @@
 }
 
 .settings-page h1 { font-size: 20px; margin-bottom: 18px; }
-.account-section { margin-bottom: 26px; max-width: 560px; }
+/* The last row's 12px bottom margin collapses into this one, so this value IS the gap between
+   two groups — 26px against the 12px between rows was too close to read as a break. */
+.account-section { margin-bottom: 38px; max-width: 560px; }
+/* 13px, not more: at 14px the caps stand optically taller than the 14px row labels and the
+   heading stops reading as their heading. The muted colour is what keeps it subordinate. */
 .account-section h2 {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -307,6 +311,63 @@
 .field-h.is-setting > label:first-child {
   width: 260px;
 }
+
+/* The name in full ink with its explanation under it, so the row reads top-down. It wraps the
+   real <label> rather than being one: a description inside the htmlFor label joins the control's
+   accessible name, and "Sound on new mail Plays a short chime…" is not what the switch is called. */
+.field-h.is-setting > .setting-label {
+  width: 300px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.setting-label > label { cursor: pointer; }
+
+/* Measured: the three reading-pane cards need 293px, and the label column leaves 244px inside
+   the 560px section — they overran its right edge by 49px. A control that wide takes the row. */
+.field-h.is-stacked { display: block; }
+
+.field-h.is-stacked > .setting-label {
+  display: block;
+  width: auto;
+  margin-bottom: 8px;
+}
+
+.setting-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* A setting that only means something while its parent is off. Greyed rather than withheld:
+   its stored value is what comes back when the parent is switched off again.
+
+   The indent lives on the label, and its rule is an absolute pseudo-element rather than a border:
+   indenting the row itself pushed the label column 34px right and took the switch out of the
+   column every other switch stands in — measured, not assumed. */
+.field-h.is-child > .setting-label {
+  position: relative;
+  padding-left: 32px;
+}
+
+.field-h.is-child > .setting-label::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--border);
+}
+
+.field-h.is-covered { opacity: 0.55; }
 
 /* The control takes the width its own content needs, not the width of the page: a page-size
    picker stretched across the column reads as a text field and hides how few values it offers. */
@@ -383,6 +444,44 @@
 }
 
 /* ── Reading-pane cards (General) ─────────────────────────── */
+
+/* A multi-select must not wear the radio group's dress. The reading-pane cards sit two rows
+   above this one, and a control taking several answers that is drawn exactly like one taking a
+   single answer is separated from it by a 12px box against a 12px disc. The accent fill is the
+   state here — the same "this one is live" language the attachment chips already carry. */
+.action-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.action-chip:hover:not(:disabled) { border-color: var(--text-muted); color: var(--text); }
+
+.action-chip.is-on {
+  border-color: transparent;
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+  font-weight: 500;
+}
+
+/* Specificity, not decoration: the plain hover above would otherwise repaint a lit chip's
+   foreground and it would read as switching off under the pointer. */
+.action-chip.is-on:hover:not(:disabled) {
+  background: var(--action-primary-hover);
+  color: var(--action-primary-fg);
+}
+
+.action-chip:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .layout-cards { display: flex; gap: 12px; }
 
