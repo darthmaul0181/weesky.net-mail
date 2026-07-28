@@ -333,6 +333,15 @@ export const api = {
 
   setPreference: (key, value) =>
     request('PUT', '/api/Preferences', { key, value }),
+
+  // ── App settings ──────────────────────────────────────────────────────────
+  // Instance-wide, not account-scoped: readable anonymously since the login page needs them too.
+
+  getAppSettings: (options) =>
+    request('GET', '/api/AppSettings', undefined, options),
+
+  setAppSetting: (key, value) =>
+    request('PUT', '/api/AppSettings', { key, value }),
 }
 
 /** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */

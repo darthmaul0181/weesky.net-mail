@@ -84,6 +84,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IMailMessageRepository, MailMessageRepository>();
         services.AddScoped<IFolderRoleStore, FolderRoleStore>();
         services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
+        services.AddScoped<IAppSettingStore, AppSettingStore>();
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
         services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();

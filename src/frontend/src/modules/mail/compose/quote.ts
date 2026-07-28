@@ -1,5 +1,4 @@
-const escapeHtml = (text: string) =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+import { escapeHtml } from '../../../lib/escapeHtml'
 
 const who = (name: string, address: string) =>
   name ? `${escapeHtml(name)} &lt;${escapeHtml(address)}&gt;` : escapeHtml(address)

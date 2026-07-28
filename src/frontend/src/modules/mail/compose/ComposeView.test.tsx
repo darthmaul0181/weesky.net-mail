@@ -68,7 +68,7 @@ vi.mock('./SquireEditor', async () => {
   return { default: Stub }
 })
 
-function renderCompose(from = 'INBOX', seed?: ComposeSeed) {
+function renderCompose(from = 'INBOX', seed?: ComposeSeed, search = '') {
   const onNotify = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -78,7 +78,7 @@ function renderCompose(from = 'INBOX', seed?: ComposeSeed) {
       { path: '/mail', element: <span data-testid="mail-view">mail</span> },
       { path: '/mail/compose', element: <ComposeView onNotify={onNotify} /> },
     ],
-    { initialEntries: ['/mail', { pathname: '/mail/compose', state: { from, seed } }], initialIndex: 1 },
+    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed } }], initialIndex: 1 },
   )
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return { onNotify, router }
@@ -436,6 +436,24 @@ describe('a seeded ComposeView', () => {
 
     expect(await discardModal()).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  it('opens prefilled from a mailto url carrying no seed', async () => {
+    renderCompose('INBOX', undefined,
+      '?mailto=' + encodeURIComponent('mailto:alice@weesky.be?subject=Hello'))
+
+    expect(await screen.findByDisplayValue('Hello')).toBeInTheDocument()
+    expect(screen.getByText('alice@weesky.be')).toBeInTheDocument()
+  })
+
+  // The parser escapes, but nothing else on this road does: the editor is handed the seed's html
+  // verbatim, so this is where an escaping that never reached it would show.
+  it('hands the editor the mailto body escaped', async () => {
+    renderCompose('INBOX', undefined,
+      '?mailto=' + encodeURIComponent('mailto:alice@weesky.be?body=<img src=x onerror=alert(1)>'))
+
+    const editor = await screen.findByTestId('compose-editor')
+    expect(editor).toHaveValue('<div>&lt;img src=x onerror=alert(1)&gt;</div>')
   })
 
   it('releases the inline resources too when the message is discarded', async () => {
