@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './AuthContext'
 
 const mocks = vi.hoisted(() => ({
@@ -38,15 +39,26 @@ const account = {
 }
 
 describe('AuthContext', () => {
+  let client: QueryClient
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getAccount.mockResolvedValue(account)
     mocks.logout.mockResolvedValue(null)
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   })
+
+  function renderProbe() {
+    return render(
+      <QueryClientProvider client={client}>
+        <AuthProvider><Probe /></AuthProvider>
+      </QueryClientProvider>,
+    )
+  }
 
   it('loads the account when a session exists', async () => {
     mocks.hasSession.mockReturnValue(true)
-    render(<AuthProvider><Probe /></AuthProvider>)
+    renderProbe()
     expect(screen.getByTestId('logged')).toHaveTextContent('true')
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
     expect(screen.getByTestId('admin')).toHaveTextContent('true')
@@ -56,14 +68,14 @@ describe('AuthContext', () => {
 
   it('does not load the account without a session', () => {
     mocks.hasSession.mockReturnValue(false)
-    render(<AuthProvider><Probe /></AuthProvider>)
+    renderProbe()
     expect(screen.getByTestId('logged')).toHaveTextContent('false')
     expect(mocks.getAccount).not.toHaveBeenCalled()
   })
 
   it('registers an unauthorized handler that logs out the UI', async () => {
     mocks.hasSession.mockReturnValue(true)
-    render(<AuthProvider><Probe /></AuthProvider>)
+    renderProbe()
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
     const handler = mocks.setUnauthorizedHandler.mock.calls[0][0]
     expect(typeof handler).toBe('function')
@@ -76,11 +88,53 @@ describe('AuthContext', () => {
 
   it('logout calls the API, clears the session, resets state', async () => {
     mocks.hasSession.mockReturnValue(true)
-    render(<AuthProvider><Probe /></AuthProvider>)
+    renderProbe()
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
     fireEvent.click(screen.getByText('out'))
     await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
     expect(mocks.logout).toHaveBeenCalled()
     expect(mocks.clearSession).toHaveBeenCalled()
+  })
+
+  // The keys are account-scoped in shape only — the id is the constant 'primary' until linked
+  // accounts ship — so anything left behind is served to whoever signs in next.
+  it('empties the query cache on logout', async () => {
+    mocks.hasSession.mockReturnValue(true)
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
+    client.setQueryData(['mail', 'primary', 'folders'], [{ path: 'INBOX' }])
+    client.setQueryData(['contacts', 'primary'], [{ id: 'c1' }])
+    client.setQueryData(['preferences'], { 'mail.pageSize': '50' })
+
+    fireEvent.click(screen.getByText('out'))
+
+    await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
+    expect(client.getQueryData(['mail', 'primary', 'folders'])).toBeUndefined()
+    expect(client.getQueryData(['contacts', 'primary'])).toBeUndefined()
+    expect(client.getQueryData(['preferences'])).toBeUndefined()
+  })
+
+  // localStorage outlives the tab, so this one is not covered by clearing the query cache.
+  it('forgets the new-mail claim on logout', async () => {
+    mocks.hasSession.mockReturnValue(true)
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
+    localStorage.setItem('mail.lastNotifiedUidNext', JSON.stringify({ uidValidity: 1, uidNext: 9 }))
+
+    fireEvent.click(screen.getByText('out'))
+
+    await waitFor(() => expect(localStorage.getItem('mail.lastNotifiedUidNext')).toBeNull())
+  })
+
+  it('empties the query cache when a 401 ends the session', async () => {
+    mocks.hasSession.mockReturnValue(true)
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
+    client.setQueryData(['mail', 'primary', 'folders'], [{ path: 'INBOX' }])
+    const handler = mocks.setUnauthorizedHandler.mock.calls[0][0]
+
+    act(() => { handler() })
+
+    await waitFor(() => expect(client.getQueryData(['mail', 'primary', 'folders'])).toBeUndefined())
   })
 })

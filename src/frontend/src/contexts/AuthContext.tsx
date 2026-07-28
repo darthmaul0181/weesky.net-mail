@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, hasSession, clearSession, setUnauthorizedHandler, setIsAdmin } from '../api.js'
 import { deriveIdentity, type Account, type AccountIdentity } from '../lib/accountIdentity'
+import { forgetNotificationClaim } from '../modules/mail/notify/channels'
 
 export interface ActiveAccount {
   id: 'primary'
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(hasSession())
   const [account, setAccount] = useState<Account | null>(null)
   const [accountLoaded, setAccountLoaded] = useState(false)
+  const queryClient = useQueryClient()
 
   const refreshAccount = useCallback(async () => {
     try {
@@ -59,8 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setAccount(null)
       setAccountLoaded(false)
+      // The query keys are account-scoped in shape only — the id is the constant 'primary' until
+      // linked accounts ship — so folders, messages, contacts and preferences left in the cache
+      // are served to whoever signs in next. It runs here, not in logout(), so the 401 path is
+      // covered too and so RequireAuth has already unmounted the readers of what is being dropped.
+      queryClient.clear()
+      forgetNotificationClaim()
     }
-  }, [isLoggedIn, refreshAccount])
+  }, [isLoggedIn, refreshAccount, queryClient])
 
   function syncFromSession() {
     setIsLoggedIn(hasSession())
