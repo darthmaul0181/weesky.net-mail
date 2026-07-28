@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
@@ -1355,9 +1355,8 @@ describe('choosable row actions', () => {
 
   it('reports to the folder holding the junk role', async () => {
     renderList({}, { 'mail.rowActions': 'junk' })
-    await settle()
 
-    const junk = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Report as junk' })
+    const junk = await within(rowOf(/alice martin/i)).findByRole('button', { name: 'Report as junk' })
     expect(junk).toBeEnabled()
     fireEvent.click(junk)
 
@@ -1376,33 +1375,36 @@ describe('choosable row actions', () => {
     expect(junk).toHaveAttribute('title', 'Assign the junk folder in Settings → Folders')
   })
 
+  // waitFor, not settle(): these assert a transition — the preference arrives and the cluster
+  // is rebuilt — where settle() is the tool for asserting that nothing happened. One macrotask
+  // was enough on a developer's machine and not on CI, which is what a one-tick wait buys you.
   it('drops an icon the account switched off', async () => {
     renderList({}, { 'mail.rowActions': 'seen,archive' })
-    await settle()
 
-    const row = rowOf(/bob@x\.be/i)
-    expect(within(row).queryByRole('button', { name: 'Delete' })).toBeNull()
-    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(rowOf(/bob@x\.be/i)).queryByRole('button', { name: 'Delete' })).toBeNull())
+    expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
   })
 
-  // Scoped to the row on purpose: the selection toolbar carries a "Report as junk" of its own,
-  // and an unscoped query answers from it before the preference has even arrived.
+  // The row is re-queried inside the wait on purpose, and the cluster read from it rather than
+  // from the document: the selection toolbar carries a "Report as junk" of its own, so an
+  // unscoped query answers from it while the row still shows the default three.
   it('renders in the canonical order whatever order it was stored in', async () => {
     renderList({}, { 'mail.rowActions': 'delete,junk,seen' })
-    await settle()
 
-    const cluster = rowOf(/bob@x\.be/i).querySelector('.message-row-cluster') as HTMLElement
-    expect([...cluster.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
-      .toEqual(['Mark as unread', 'Report as junk', 'Delete'])
+    await waitFor(() => {
+      const cluster = rowOf(/bob@x\.be/i).querySelector('.message-row-cluster') as HTMLElement
+      expect([...cluster.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
+        .toEqual(['Mark as unread', 'Report as junk', 'Delete'])
+    })
   })
 
   // Zero is a real choice, so the cluster goes rather than collapsing to an empty box that would
   // still eat its reserved width. The star is a flag, not an action, and stays.
   it('drops the cluster entirely when every icon is off', async () => {
     renderList({}, { 'mail.rowActions': '' })
-    await settle()
 
-    expect(document.querySelector('.message-row-cluster')).toBeNull()
+    await waitFor(() => expect(document.querySelector('.message-row-cluster')).toBeNull())
     expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Star' })).toBeInTheDocument()
   })
 })
