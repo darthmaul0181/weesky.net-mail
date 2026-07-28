@@ -2219,10 +2219,22 @@
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.PreferenceDefinition">
-            <summary>One preference the client may set, with the values it may take.</summary>
+             <summary>
+             One preference the client may set, with the values it may take.
+            
+             <paramref name="IsSet"/> reads <paramref name="Allowed"/> as the members a comma-separated
+             subset may draw from rather than as the whole values the key accepts: four choosable icons
+             are sixteen combinations, and enumerating those would hide the rule inside its own expansion.
+             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Models.PreferenceDefinition.#ctor(System.String,System.String,System.Collections.Generic.IReadOnlyList{System.String})">
-            <summary>One preference the client may set, with the values it may take.</summary>
+        <member name="M:weesky.Snoopy.Microservice.Models.PreferenceDefinition.#ctor(System.String,System.String,System.Collections.Generic.IReadOnlyList{System.String},System.Boolean)">
+             <summary>
+             One preference the client may set, with the values it may take.
+            
+             <paramref name="IsSet"/> reads <paramref name="Allowed"/> as the members a comma-separated
+             subset may draw from rather than as the whole values the key accepts: four choosable icons
+             are sixteen combinations, and enumerating those would hide the rule inside its own expansion.
+             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.UserPreferences">
              <summary>
@@ -2232,6 +2244,13 @@
              this does — an unknown key never reaches it, and a row whose value the registry no longer
              accepts falls back to the default rather than reaching the client.
              </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.UserPreferences.IsValidSubset(weesky.Snoopy.Microservice.Models.PreferenceDefinition,System.String)">
+            <summary>
+            Empty is a real answer — every icon switched off — so it is the one value accepted without
+            a member. A repeated member is refused rather than folded: it is a set, and tolerating it
+            would make the stored string and what the client renders two different things.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Models.UserPreferences.Effective(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Data.Preferences.UserPreference})">
             <summary>

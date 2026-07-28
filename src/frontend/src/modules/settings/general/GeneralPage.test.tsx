@@ -236,6 +236,69 @@ describe('GeneralPage', () => {
       .toEqual(['Layout', 'Privacy & security', 'Composing', 'Notifications'])
   })
 
+  // A pressed button, not a ticked box: the multi-select must not be drawn like the reading-pane
+  // radio group two rows above it.
+  const chip = (name: string) => screen.getByRole('button', { name })
+
+  it('shows the three icons the row carries by default', async () => {
+    renderPage()
+    await screen.findByLabelText('Messages per page')
+
+    expect(chip('Read / unread')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip('Archive')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip('Delete')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip('Report as junk')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('names the group so the chips are not four loose buttons', async () => {
+    renderPage()
+    await screen.findByLabelText('Messages per page')
+
+    expect(screen.getByRole('group', { name: 'Quick actions on a message' })).toBeInTheDocument()
+  })
+
+  it('reads the stored selection', async () => {
+    renderPage({ 'mail.rowActions': 'junk' })
+    await screen.findByLabelText('Messages per page')
+
+    expect(chip('Report as junk')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip('Archive')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  // Rebuilt from the canonical order rather than from click order, so the stored string is the
+  // one the message list already renders and the two can never disagree.
+  it('adds an icon in canonical order, not at the end', async () => {
+    renderPage({ 'mail.rowActions': 'seen,archive,delete' })
+    await screen.findByLabelText('Messages per page')
+
+    fireEvent.click(chip('Report as junk'))
+
+    await waitFor(() => expect(mocks.setPreference)
+      .toHaveBeenCalledWith('mail.rowActions', 'seen,archive,junk,delete'))
+  })
+
+  it('removes an icon without disturbing the rest', async () => {
+    renderPage({ 'mail.rowActions': 'seen,archive,delete' })
+    await screen.findByLabelText('Messages per page')
+
+    fireEvent.click(chip('Archive'))
+
+    await waitFor(() => expect(mocks.setPreference)
+      .toHaveBeenCalledWith('mail.rowActions', 'seen,delete'))
+  })
+
+  // Zero icons is a choice the user is allowed to make, so the last chip does not lock itself.
+  it('lets the last icon be switched off', async () => {
+    renderPage({ 'mail.rowActions': 'delete' })
+    await screen.findByLabelText('Messages per page')
+
+    const last = chip('Delete')
+    expect(last).toBeEnabled()
+    fireEvent.click(last)
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('mail.rowActions', ''))
+  })
+
   // The description belongs to the row, not to the control: inside the htmlFor label it joins the
   // accessible name, and the switch stops being called what the page calls it.
   it('keeps the hint out of the control name', async () => {

@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react'
+import type { ComponentType } from 'react'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, notifyDesktopOf, notifySoundOf,
-  readingPaneOf, showPreviewOf, showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
-  type ReadingPane,
+  ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, notifyDesktopOf,
+  notifySoundOf, readingPaneOf, rowActionsOf, showPreviewOf, showSpamScoreOf, trustContactsOf,
+  usePreferences, useSetPreference,
+  type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
 } from '../../mail/notify/channels'
+import ArchiveIcon from '../../../icons/ArchiveIcon'
+import JunkIcon from '../../../icons/JunkIcon'
+import MailOpenIcon from '../../../icons/MailOpenIcon'
+import TrashIcon from '../../../icons/TrashIcon'
 
 const PAGE_SIZE_OPTIONS = [
   { value: '10', label: '10' },
@@ -25,6 +31,15 @@ function pageSizeToast(value: string): string {
     ? 'The message list now shows every message'
     : `The message list now shows ${value} per page`
 }
+
+/** Listed in ROW_ACTIONS order, which is the order the row draws them — the page has to show
+    the arrangement it is configuring. */
+const ROW_ACTION_CHOICES: { value: RowAction; label: string; Icon: ComponentType<{ size?: number }> }[] = [
+  { value: 'seen', label: 'Read / unread', Icon: MailOpenIcon },
+  { value: 'archive', label: 'Archive', Icon: ArchiveIcon },
+  { value: 'junk', label: 'Report as junk', Icon: JunkIcon },
+  { value: 'delete', label: 'Delete', Icon: TrashIcon },
+]
 
 const READING_PANES: { value: ReadingPane; label: string; toast: string }[] = [
   { value: 'right', label: 'Right', toast: 'The reader sits beside the message list' },
@@ -88,6 +103,8 @@ export default function GeneralPage() {
   const { data: preferences, isLoading, isError } = usePreferences()
   const setPreference = useSetPreference()
   const { toasts, addToast, removeToast } = useToasts()
+
+  const chosenActions = preferences ? rowActionsOf(preferences) : []
 
   const [permission, setPermission] = useState(desktopPermission)
   const blocked = permission === 'denied'
@@ -202,6 +219,41 @@ export default function GeneralPage() {
               onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
                 on ? 'Previews are shown' : 'Previews are hidden')}
             />
+
+            <div className="field-h is-setting is-stacked">
+              <span className="setting-label">
+                <span id="row-actions-label">Quick actions on a message</span>
+                <span className="setting-hint">
+                  The icons a message row offers on hover. Everything here stays available from the
+                  toolbar once messages are selected.
+                </span>
+              </span>
+              {/* The fill is the state, so there is no box to tick: aria-pressed is what carries
+                  that to anything not looking at the colour. */}
+              <div className="action-chips" role="group" aria-labelledby="row-actions-label">
+                {ROW_ACTION_CHOICES.map(({ value, label, Icon }) => {
+                  const on = chosenActions.includes(value)
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`action-chip${on ? ' is-on' : ''}`}
+                      aria-pressed={on}
+                      disabled={setPreference.isPending}
+                      onClick={() => save(
+                        PREFERENCE_KEYS.rowActions,
+                        // Rebuilt from the canonical order, never from click order, so the stored
+                        // string is the one the list already renders.
+                        ROW_ACTIONS.filter(a => a === value ? !on : chosenActions.includes(a)).join(','),
+                        on ? `${label} is no longer a quick action` : `${label} is now a quick action`)}
+                    >
+                      <Icon size={16} />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </section>
 
           <section className="account-section">

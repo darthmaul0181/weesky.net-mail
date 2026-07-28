@@ -149,4 +149,40 @@ public sealed class UserPreferencesTests
         Assert.True(UserPreferences.IsValid(key, "false"));
         Assert.False(UserPreferences.IsValid(key, "yes"));
     }
+
+    // The row carried these three before the setting existed, so an account that never opens it
+    // must see exactly what it saw yesterday.
+    [Fact]
+    public void Effective_KeepsTodaysRowIconsByDefault()
+    {
+        var effective = UserPreferences.Effective([]);
+
+        Assert.Equal("seen,archive,delete", effective[UserPreferences.MailRowActions]);
+    }
+
+    [Theory]
+    [InlineData("", true)]                          // every icon off is a real answer, not a blank
+    [InlineData("seen", true)]
+    [InlineData("seen,archive,junk,delete", true)]
+    [InlineData("delete,seen", true)]                // order is the client's to render, not to store
+    [InlineData("seen,seen", false)]                 // a set, so a repeat is a malformed value
+    [InlineData("seen,", false)]                     // a trailing separator leaves an empty member
+    [InlineData(",", false)]
+    [InlineData("seen, archive", false)]             // the space makes " archive" an unknown member
+    [InlineData("seen,star", false)]                 // the star is not one of the choosable icons
+    [InlineData("Seen", false)]                      // the value is a symbol, not prose
+    public void IsValid_ReadsRowActionsAsASubset(string value, bool expected)
+    {
+        Assert.Equal(expected, UserPreferences.IsValid(UserPreferences.MailRowActions, value));
+    }
+
+    // A member retired from a later build must not strand the whole row: the value stops being
+    // one the registry accepts, so the account falls back to the default set.
+    [Fact]
+    public void Effective_FallsBackWhenAStoredIconIsNoLongerOffered()
+    {
+        var effective = UserPreferences.Effective([Row(UserPreferences.MailRowActions, "seen,snooze")]);
+
+        Assert.Equal("seen,archive,delete", effective[UserPreferences.MailRowActions]);
+    }
 }

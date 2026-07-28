@@ -1318,3 +1318,91 @@ describe('MessageList starred filter', () => {
     expect(screen.getByText('2 results for “x”')).toBeInTheDocument()
   })
 })
+
+describe('choosable row actions', () => {
+  const junkTree: MailFolderNode[] = [
+    ...roleTree,
+    folderNode({ path: 'Indesirables', name: 'Indesirables', specialUse: 'junk' }),
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = junkTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
+
+  // An older backend answers without the key at all. Reading that as "nothing chosen" would
+  // strip every icon off every row on the first render after a deploy.
+  it('draws the three icons it always had when the key is absent', () => {
+    renderList()
+
+    const row = rowOf(/bob@x\.be/i)
+    expect(within(row).getByRole('button', { name: 'Mark as unread' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Report as junk' })).toBeNull()
+  })
+
+  it('adds junk to the row once it is chosen', async () => {
+    renderList({}, { 'mail.rowActions': 'seen,archive,junk,delete' })
+
+    expect(await within(rowOf(/bob@x\.be/i)).findByRole('button', { name: 'Report as junk' }))
+      .toBeInTheDocument()
+  })
+
+  it('reports to the folder holding the junk role', async () => {
+    renderList({}, { 'mail.rowActions': 'junk' })
+    await settle()
+
+    const junk = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Report as junk' })
+    expect(junk).toBeEnabled()
+    fireEvent.click(junk)
+
+    expect(mocks.move).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [2], targetFolderPath: 'Indesirables', copy: false })
+  })
+
+  // Same rule the other role-backed buttons follow: disabled with its reason, never withheld,
+  // because a button that vanishes on some folders reads as a rendering fault.
+  it('disables junk with its reason where no folder holds the role', async () => {
+    mocks.folders = roleTree
+    renderList({}, { 'mail.rowActions': 'junk' })
+
+    const junk = await within(rowOf(/alice martin/i)).findByRole('button', { name: 'Report as junk' })
+    expect(junk).toBeDisabled()
+    expect(junk).toHaveAttribute('title', 'Assign the junk folder in Settings → Folders')
+  })
+
+  it('drops an icon the account switched off', async () => {
+    renderList({}, { 'mail.rowActions': 'seen,archive' })
+    await settle()
+
+    const row = rowOf(/bob@x\.be/i)
+    expect(within(row).queryByRole('button', { name: 'Delete' })).toBeNull()
+    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+
+  // Scoped to the row on purpose: the selection toolbar carries a "Report as junk" of its own,
+  // and an unscoped query answers from it before the preference has even arrived.
+  it('renders in the canonical order whatever order it was stored in', async () => {
+    renderList({}, { 'mail.rowActions': 'delete,junk,seen' })
+    await settle()
+
+    const cluster = rowOf(/bob@x\.be/i).querySelector('.message-row-cluster') as HTMLElement
+    expect([...cluster.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
+      .toEqual(['Mark as unread', 'Report as junk', 'Delete'])
+  })
+
+  // Zero is a real choice, so the cluster goes rather than collapsing to an empty box that would
+  // still eat its reserved width. The star is a flag, not an action, and stays.
+  it('drops the cluster entirely when every icon is off', async () => {
+    renderList({}, { 'mail.rowActions': '' })
+    await settle()
+
+    expect(document.querySelector('.message-row-cluster')).toBeNull()
+    expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Star' })).toBeInTheDocument()
+  })
+})
