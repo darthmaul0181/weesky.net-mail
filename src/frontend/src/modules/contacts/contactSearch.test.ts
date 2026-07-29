@@ -146,6 +146,22 @@ describe('suggestionsFor', () => {
     expect(rows[0].names).toEqual(['Alice Dupont', 'Compta Weesky'])
   })
 
+  // A nameless card names nobody: printing its address as its own name put the same string twice
+  // on one row, and beside a real contact's row it read as a second person.
+  it('leaves a row unnamed when the contact carries no name of its own', () => {
+    const shadow = contact({ id: 's', nickname: 'ghost@example.com', addresses: ['ghost@example.com'] })
+
+    expect(suggestionsFor([shadow], 'ghost')[0].names).toEqual([])
+  })
+
+  it('names a shared address after the contact that has a name', () => {
+    const shared = 'info@example.com'
+    const shadow = contact({ id: 's', nickname: shared, addresses: [shared] })
+    const named = contact({ id: 'n', firstName: 'Compta', lastName: 'Weesky', addresses: [shared] })
+
+    expect(suggestionsFor([shadow, named], 'info')[0].names).toEqual(['Compta Weesky'])
+  })
+
   // Same mailbox, different case: two rows would be the identical bug the shared-address test
   // above rules out, just reached through case rather than through two separate contacts.
   it('collapses an address shared with a different case into one row naming both', () => {

@@ -2434,9 +2434,10 @@ body {
   max-height: 260px; overflow-y: auto; list-style: none; padding: 4px 0;
 }
 .ownership-dropdown-option .suggestion-names { font-weight: 600; }
-.ownership-dropdown-option .suggestion-address {
-  margin-left: 8px; color: var(--text-muted); font-size: 12px;
-}
+.ownership-dropdown-option .suggestion-address { color: var(--text-muted); font-size: 12px; }
+/* The gap belongs between the two, not to the address: a nameless contact's row carries the
+   address alone, and an unconditional margin indented it 8px past every other row. */
+.ownership-dropdown-option .suggestion-names + .suggestion-address { margin-left: 8px; }
 
 .import-counters { display: flex; gap: 8px; margin-bottom: 16px; }
 .import-counter {

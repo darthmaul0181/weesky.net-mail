@@ -151,7 +151,8 @@ export default function RecipientsField({
                 aria-selected={index === active}
                 className={`ownership-dropdown-option${index === active ? ' is-active' : ''}`}
                 onMouseDown={() => commit(suggestion.address)}>
-                <span className="suggestion-names">{suggestion.names.join(', ')}</span>
+                {suggestion.names.length > 0
+                  && <span className="suggestion-names">{suggestion.names.join(', ')}</span>}
                 <span className="suggestion-address">{suggestion.address}</span>
               </li>
             ))}

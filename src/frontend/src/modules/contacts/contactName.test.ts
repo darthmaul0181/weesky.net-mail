@@ -56,6 +56,26 @@ describe('contactNameOf', () => {
     expect(contactNameOf(contact({ addresses: ['bruno@x.be', 'other@x.be'] }))).toBeNull()
     expect(contactNameOf(contact())).toBeNull()
   })
+
+  // An address in a name column is what an Outlook/Rainloop export writes for a nameless card, and
+  // it is not a name: unchecked, such a contact out-names the one holding the real name for the
+  // same address, and the chip shows an address it claims is a name.
+  it('answers null when the name it found is one of the contact’s own addresses', () => {
+    expect(contactNameOf(contact({
+      nickname: 'bruno@x.be', addresses: ['bruno@x.be'],
+    }))).toBeNull()
+    expect(contactNameOf(contact({
+      firstName: 'Bruno@X.BE ', addresses: ['bruno@x.be'],
+    }))).toBeNull()
+    expect(contactNameOf(contact({
+      nickname: 'other@x.be', addresses: ['bruno@x.be', 'other@x.be'],
+    }))).toBeNull()
+  })
+
+  it('keeps a name that merely looks like an address the contact does not hold', () => {
+    expect(contactNameOf(contact({ nickname: 'info@shop', addresses: ['bruno@x.be'] })))
+      .toBe('info@shop')
+  })
 })
 
 describe('primaryAddressOf', () => {
