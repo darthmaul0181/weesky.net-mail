@@ -180,7 +180,19 @@
 .identity-account-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity-account-sub { font-size: 11px; font-weight: 400; color: var(--text-muted); }
 .identity-account.is-active .identity-account-sub { color: inherit; }
-.identity-check { flex: none; font-size: 12px; }
+/* Geometry deliberately identical to .message-row-unread-dot (mail.css): the account you are
+   reading is marked in the language the list already uses for a message worth opening. Copied
+   rather than shared, because that class is named for "unread" and this is not that. */
+.identity-active-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-unread);
+  flex: none;
+}
+
+/* The same width, empty: the labels stay in one column across the rows. */
+.identity-dot-slot { width: 7px; flex: none; }
 
 /* One skin for the two entries under the accounts; the border is the separator above each. */
 .identity-action {

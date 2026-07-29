@@ -107,8 +107,14 @@ export default function IdentityMenu() {
                 type="button"
                 role="menuitem"
                 className={isActive ? 'identity-account is-active' : 'identity-account'}
+                aria-current={isActive || undefined}
                 onClick={() => pickAccount(acc)}
               >
+                {/* The dot is the only thing saying "you are here" to anything not reading the
+                    fill, so the inactive rows hold its width rather than closing the gap. */}
+                {isActive
+                  ? <span className="identity-active-dot" aria-hidden="true" />
+                  : <span className="identity-dot-slot" aria-hidden="true" />}
                 <span className="identity-account-text">
                   <span>{label}</span>
                   {label !== acc.email && <span className="identity-account-sub">{acc.email}</span>}
@@ -116,7 +122,6 @@ export default function IdentityMenu() {
                 {/* The row is a dead end until the password is re-entered: without the chip the
                     click looks like a switch that silently did nothing. */}
                 {!acc.credentialsValid && <span className="row-tag is-warn">Password needed</span>}
-                {isActive && <span className="identity-check" aria-hidden="true">✓</span>}
               </button>
             )
           })}

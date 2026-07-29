@@ -145,6 +145,21 @@ describe('IdentityMenu', () => {
     expect(rows[1].className).not.toContain('is-active')
   })
 
+  // The mail list's own unread marker, in the place it sits there. The inactive rows keep the
+  // gutter so the labels stay in one column instead of stepping in under the active one.
+  it('marks the active account with a dot and keeps the other rows aligned', async () => {
+    mocks.getConnectedAccounts.mockResolvedValue([connected()])
+    renderMenu()
+    await openMenu()
+
+    const rows = await screen.findAllByRole('menuitem', { name: /@/ })
+    expect(rows[0].querySelector('.identity-active-dot')).toBeInTheDocument()
+    expect(rows[0]).toHaveAttribute('aria-current', 'true')
+    expect(rows[1].querySelector('.identity-active-dot')).toBeNull()
+    expect(rows[1].querySelector('.identity-dot-slot')).toBeInTheDocument()
+    expect(rows[1]).not.toHaveAttribute('aria-current')
+  })
+
   it('switches to the account clicked and closes the menu', async () => {
     mocks.getConnectedAccounts.mockResolvedValue([connected()])
     renderMenu()
