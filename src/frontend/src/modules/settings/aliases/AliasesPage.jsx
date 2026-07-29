@@ -6,6 +6,7 @@ import { useToasts } from '../../../hooks/useToasts.js'
 import Toasts from '../../../components/Toasts.jsx'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
+import AtSignIcon from '../../../icons/AtSignIcon'
 
 export default function AliasesPage() {
   const { toasts, addToast, removeToast } = useToasts()
@@ -146,7 +147,7 @@ export default function AliasesPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <span className="settings-page-title">Aliases</span>
+        <h1 className="settings-page-title"><AtSignIcon size={17} />Aliases</h1>
       </div>
 
       <div className="domain-toolbar">

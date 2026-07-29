@@ -19,7 +19,7 @@ export default function SettingsLayout() {
         <NavLink to="/settings/general" className={paneClass}>General</NavLink>
         <NavLink to="/settings/accounts" className={paneClass}>Connected accounts</NavLink>
         <NavLink to="/settings/appearance" className={paneClass}>Appearance</NavLink>
-        <NavLink to="/settings/folders" className={paneClass}>Folders list</NavLink>
+        <NavLink to="/settings/folders" className={paneClass}>Folders</NavLink>
         {isPrimary && <NavLink to="/settings/aliases" className={paneClass}>Aliases</NavLink>}
         <NavLink to="/settings/identities" className={paneClass}>Identities</NavLink>
         {rulesAvailable && <NavLink to="/settings/rules" className={paneClass}>Rules</NavLink>}

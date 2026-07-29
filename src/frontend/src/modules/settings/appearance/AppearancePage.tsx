@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTheme, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
+import DropletIcon from '../../../icons/DropletIcon'
 import SearchIcon from '../../../icons/SearchIcon'
 
 const THEMES: { value: ThemePreference; label: string }[] = [
@@ -97,7 +98,9 @@ export default function AppearancePage() {
 
   return (
     <div className="settings-page">
-      <h1>Appearance</h1>
+      <div className="settings-page-header">
+        <h1 className="settings-page-title"><DropletIcon size={17} />Appearance</h1>
+      </div>
 
       <section className="account-section">
         <h2>Theme</h2>

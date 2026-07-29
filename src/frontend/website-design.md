@@ -26,7 +26,14 @@ When a rule is ambiguous, copy what those screens do.
 
 - A settings/admin page is a `.settings-page`. Its heading is a `.settings-page-header` holding a
   `.settings-page-title` that **pairs a leading icon with the title text** (e.g. shield +
-  "Administration").
+  "Administration"). The title is the page's `<h1>`, and the icon is a 17px sibling of the text
+  inside it — the gap is the title's own `flex` `gap`, never the whitespace between two JSX
+  children, which JSX drops entirely across a line break. `SettingsLayout.test.tsx` walks every
+  settings route and asserts the pairing; a new page that forgets its icon fails there.
+- **An icon's meaning is exclusive within a module.** Two settings pages must not wear glyphs of the
+  same construction: sliders read as "adjust these things" on General, so Rules cannot also be
+  stacked bars with tick marks — at 17px the difference was 2px, and the two pages sit three rows
+  apart in the nav. Check a new glyph against its neighbours at final size, not enlarged.
 - A busy/loading region shows a centred `.spinner`, never a bare "Loading…" where a spinner fits.
 - Feedback is a toast: `useToasts()` + `<Toasts>`, green for success, red for error, short-lived.
   Success and failure of an action both speak; silence reads as a hang.

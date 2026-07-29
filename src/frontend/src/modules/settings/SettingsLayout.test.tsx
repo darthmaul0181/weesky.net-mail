@@ -96,12 +96,34 @@ describe('settings section', () => {
     expect(nav.getByText('General')).toBeInTheDocument()
     expect(nav.getByText('Connected accounts')).toBeInTheDocument()
     expect(nav.getByText('Appearance')).toBeInTheDocument()
-    expect(nav.getByText('Folders list')).toBeInTheDocument()
+    expect(nav.getByText('Folders')).toBeInTheDocument()
     expect(nav.getByText('Aliases')).toBeInTheDocument()
     expect(nav.getByText('Identities')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
     await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(false))
     expect(nav.queryByText('Administration')).not.toBeInTheDocument()
+  })
+
+  // website-design.md, § Page layout: a settings page's title pairs a leading icon with the text.
+  // Walked route by route rather than asserted per page, because the five pages that had drifted
+  // each looked perfectly fine on their own — only the set showed the rule was not being kept.
+  it.each([
+    ['/settings/account', 'Account'],
+    ['/settings/general', 'General'],
+    ['/settings/accounts', 'Connected accounts'],
+    ['/settings/appearance', 'Appearance'],
+    ['/settings/folders', 'Folders'],
+    ['/settings/aliases', 'Aliases'],
+    ['/settings/identities', 'Identities'],
+    ['/settings/rules', 'Rules'],
+    ['/settings/admin', 'Administration'],
+  ])('%s pairs an icon with its <h1> title', async (path, title) => {
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+    renderAt(path)
+
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading.textContent).toContain(title)
+    expect(heading.querySelector('svg')).toBeInTheDocument()
   })
 
   it('shows Administration for admins', async () => {

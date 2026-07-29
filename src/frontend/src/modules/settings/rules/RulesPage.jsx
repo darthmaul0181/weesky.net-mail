@@ -8,6 +8,7 @@ import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import HelpTooltip from '../../../components/HelpTooltip.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
+import FunnelIcon from '../../../icons/FunnelIcon'
 
 // ── Icons ─────────────────────────────────────────────────────
 
@@ -65,25 +66,6 @@ function GripIcon() {
       <circle cx="8"  cy="6"  r="2" /><circle cx="16" cy="6"  r="2" />
       <circle cx="8"  cy="12" r="2" /><circle cx="16" cy="12" r="2" />
       <circle cx="8"  cy="18" r="2" /><circle cx="16" cy="18" r="2" />
-    </svg>
-  )
-}
-
-// Sliders icon — the conventional "filters / rules" control (used in the side
-// menu and next to the Rules popup title). Exported so AliasesPage can reuse it.
-export function RulesIcon({ size = 15 }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="21" y1="4"  x2="14" y2="4" />
-      <line x1="10" y1="4"  x2="3"  y2="4" />
-      <line x1="21" y1="12" x2="12" y2="12" />
-      <line x1="8"  y1="12" x2="3"  y2="12" />
-      <line x1="21" y1="20" x2="16" y2="20" />
-      <line x1="12" y1="20" x2="3"  y2="20" />
-      <line x1="14" y1="2"  x2="14" y2="6" />
-      <line x1="8"  y1="10" x2="8"  y2="14" />
-      <line x1="16" y1="18" x2="16" y2="22" />
     </svg>
   )
 }
@@ -1001,11 +983,11 @@ export default function RulesPage() {
     <>
       <div className="settings-page">
         <div className="settings-page-header">
-          <span className="settings-page-title">
-            <RulesIcon size={17} />
+          <h1 className="settings-page-title">
+            <FunnelIcon size={17} />
             Rules
-            {providerLabel && <span className="provider-badge" style={{ marginLeft: '8px' }}>{providerLabel}</span>}
-          </span>
+            {providerLabel && <span className="provider-badge">{providerLabel}</span>}
+          </h1>
         </div>
         <div className="rules-modal-body">
             <p className="rules-modal-desc">

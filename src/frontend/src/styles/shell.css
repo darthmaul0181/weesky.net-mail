@@ -325,13 +325,19 @@
   margin-bottom: 18px;
 }
 
+/* The title is the page's <h1>, not a <span>: the icon and the structural landmark for the same
+   rule. The icon/text gap is flex's, never the whitespace between two JSX children — JSX drops
+   that entirely across a line break, which is why Rules used to render its glyph glued to the
+   word while its neighbours got a space. */
 .settings-page-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
   font-size: 20px;
   font-weight: 600;
   color: var(--text);
 }
-
-.settings-page h1 { font-size: 20px; margin-bottom: 18px; }
 /* The last row's 12px bottom margin collapses into this one, so this value IS the gap between
    two groups — 26px against the 12px between rows was too close to read as a break. */
 .account-section { margin-bottom: 38px; max-width: 560px; }

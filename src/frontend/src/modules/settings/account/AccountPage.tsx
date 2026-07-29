@@ -5,6 +5,7 @@ import QuotaBlock from '../../../components/QuotaBlock.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import Toasts from '../../../components/Toasts.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
+import UserIcon from '../../../icons/UserIcon'
 import ChangePasswordSection from './ChangePasswordSection'
 
 interface Quota {
@@ -70,7 +71,9 @@ export default function AccountPage() {
 
   return (
     <div className="settings-page account-page">
-      <h1>Account</h1>
+      <div className="settings-page-header">
+        <h1 className="settings-page-title"><UserIcon size={17} />Account</h1>
+      </div>
 
       <section className="account-section">
         <h2>Identity</h2>

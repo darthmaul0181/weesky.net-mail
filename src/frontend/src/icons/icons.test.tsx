@@ -23,6 +23,12 @@ import ShieldAlertIcon from './ShieldAlertIcon'
 import RocketIcon from './RocketIcon'
 import SignOutIcon from './SignOutIcon'
 import KeyIcon from './KeyIcon'
+import UserIcon from './UserIcon'
+import DropletIcon from './DropletIcon'
+import AtSignIcon from './AtSignIcon'
+import FunnelIcon from './FunnelIcon'
+import PersonPlusIcon from './PersonPlusIcon'
+import ShieldIcon from './ShieldIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -48,6 +54,12 @@ const icons = [
   { name: 'RocketIcon', Icon: RocketIcon, defaultSize: '15' },
   { name: 'SignOutIcon', Icon: SignOutIcon, defaultSize: '15' },
   { name: 'KeyIcon', Icon: KeyIcon, defaultSize: '16' },
+  { name: 'UserIcon', Icon: UserIcon, defaultSize: '16' },
+  { name: 'DropletIcon', Icon: DropletIcon, defaultSize: '16' },
+  { name: 'AtSignIcon', Icon: AtSignIcon, defaultSize: '16' },
+  { name: 'FunnelIcon', Icon: FunnelIcon, defaultSize: '16' },
+  { name: 'PersonPlusIcon', Icon: PersonPlusIcon, defaultSize: '15' },
+  { name: 'ShieldIcon', Icon: ShieldIcon, defaultSize: '15' },
 ]
 
 describe('icons', () => {

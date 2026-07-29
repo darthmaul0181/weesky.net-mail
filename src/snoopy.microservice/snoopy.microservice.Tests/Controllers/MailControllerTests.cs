@@ -1995,7 +1995,7 @@ public sealed class MailControllerTests
         Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(status.Value);
         Assert.Equal(
-            "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list.",
+            "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders.",
             envelope.Message);
     }
 

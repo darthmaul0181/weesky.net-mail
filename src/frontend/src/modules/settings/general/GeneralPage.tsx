@@ -15,6 +15,7 @@ import {
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
+import SlidersIcon from '../../../icons/SlidersIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 
 const PAGE_SIZE_OPTIONS = [
@@ -156,7 +157,9 @@ export default function GeneralPage() {
 
   return (
     <div className="settings-page">
-      <h1>General</h1>
+      <div className="settings-page-header">
+        <h1 className="settings-page-title"><SlidersIcon size={17} />General</h1>
+      </div>
 
       {isLoading && <LoadingBlock />}
       {!isLoading && (isError || !preferences) && <p>Could not load the settings.</p>}

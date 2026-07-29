@@ -2,6 +2,7 @@ import { useState } from 'react'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
+import FolderIcon from '../../../icons/FolderIcon'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
 import SlidersIcon from '../../../icons/SlidersIcon'
 import CreateFolderModal from '../../mail/folders/CreateFolderModal'
@@ -21,7 +22,9 @@ export default function FoldersPage() {
 
   return (
     <div className="settings-page">
-      <h1>Folders</h1>
+      <div className="settings-page-header">
+        <h1 className="settings-page-title"><FolderIcon size={17} />Folders</h1>
+      </div>
       <p className="folders-page-hint">
         Turning a folder off hides it from the mail view. Nothing in it is deleted. Folders
         holding a system role are locked here — use System folders to change which folder plays
