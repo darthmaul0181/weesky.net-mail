@@ -66,7 +66,9 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
 
     expect(await screen.findByText(/work@acme\.com · Acme · connected on/)).toBeInTheDocument()
-    expect(screen.getByText(/shared@weesky\.net · Weesky \(shared mailbox\) · connected on/))
+    // A mailbox on our own server is named by its own domain, not marked out as a special kind
+    // of account: the tile says the same sort of thing for both.
+    expect(screen.getByText(/shared@weesky\.net · weesky\.net · connected on/))
       .toBeInTheDocument()
   })
 

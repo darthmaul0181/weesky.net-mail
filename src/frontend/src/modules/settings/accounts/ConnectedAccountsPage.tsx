@@ -13,10 +13,15 @@ import {
   useUpdateConnectedAccountPassword, type ConnectedAccount,
 } from './useConnectedAccounts'
 
-const LOCAL_SERVER = 'Weesky (shared mailbox)'
+/** An account on our own server has no external domain row to name, so the tile names the
+ *  mailbox's own domain — the same kind of thing an external tile shows, spelled the same way. */
+function domainOf(email: string): string {
+  const at = email.lastIndexOf('@')
+  return at === -1 ? email : email.slice(at + 1)
+}
 
 function subtitleOf(account: ConnectedAccount): string {
-  const parts = [account.email, account.domainName ?? LOCAL_SERVER]
+  const parts = [account.email, account.domainName ?? domainOf(account.email)]
   const date = new Date(account.creationDate)
   if (!Number.isNaN(date.getTime())) {
     parts.push(`connected on ${date.toLocaleDateString(undefined, {
