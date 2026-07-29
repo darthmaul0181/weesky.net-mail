@@ -6,6 +6,7 @@ import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
+import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
@@ -157,6 +158,17 @@ export default function ComposeView({ onNotify }: Props) {
 
   const blocker = useBlocker(useCallback(() => dirtyRef.current && !leavingRef.current, []))
 
+  // The same question, asked by something the router cannot see — today, the mailbox switch in
+  // the identity menu. It resolves on the dialog's buttons, so both roads end in one prompt.
+  const [leaveAsk, setLeaveAsk] = useState<((ok: boolean) => void) | null>(null)
+
+  useEffect(() => {
+    registerLeaveGuard(() => dirtyRef.current && !leavingRef.current
+      ? new Promise<boolean>(resolve => setLeaveAsk(() => resolve))
+      : Promise.resolve(true))
+    return () => registerLeaveGuard(null)
+  }, [])
+
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
       if (dirtyRef.current && !leavingRef.current) event.preventDefault()
@@ -171,6 +183,19 @@ export default function ComposeView({ onNotify }: Props) {
     leavingRef.current = true
     navigate(backTarget)
   }, [navigate, backTarget])
+
+  // The dialog serves two callers, so its buttons answer whichever one opened it: the blocker
+  // holds a navigation to release, the guard holds a promise to settle.
+  function keepEditing() {
+    if (leaveAsk) { setLeaveAsk(null); leaveAsk(false); return }
+    blocker.reset?.()
+  }
+
+  function leaveBehind() {
+    leavingRef.current = true
+    if (leaveAsk) { setLeaveAsk(null); leaveAsk(true); navigate(backTarget); return }
+    blocker.proceed?.()
+  }
 
   // SquireEditor binds onChange once at mount, so the callback has to be stable.
   const touchBody = useCallback(() => { markDirty(); setBodyTouched(true) }, [markDirty])
@@ -303,7 +328,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={removeFile} />
 
-      {blocker.state === 'blocked' && (
+      {(blocker.state === 'blocked' || leaveAsk !== null) && (
         <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: '420px' }}>
             <div className="modal-header">
@@ -311,14 +336,13 @@ export default function ComposeView({ onNotify }: Props) {
             </div>
             <p>Your message has unsaved changes.</p>
             <div className="folder-pick-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => blocker.reset?.()}>Keep editing</button>
+              <button type="button" className="btn btn-ghost" onClick={keepEditing}>Keep editing</button>
               {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
               <button type="button" className="btn btn-ghost" disabled={busy}
                 onClick={() => {
                   // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
                   attachments.discardAll()
-                  leavingRef.current = true
-                  blocker.proceed?.()
+                  leaveBehind()
                 }}>
                 Discard
               </button>
@@ -327,8 +351,7 @@ export default function ComposeView({ onNotify }: Props) {
                 title={allValid ? undefined : 'Fix the invalid address first'}
                 onClick={() => saveDraft(() => {
                   attachments.discardAll()
-                  leavingRef.current = true
-                  blocker.proceed?.()
+                  leaveBehind()
                 })}>
                 Save draft
               </button>

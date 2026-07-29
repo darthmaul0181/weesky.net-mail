@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../contexts/AuthContext'
+import { registerLeaveGuard } from '../lib/leaveGuard'
 import IdentityMenu from './IdentityMenu'
 
 const mocks = vi.hoisted(() => ({
@@ -62,6 +63,7 @@ describe('IdentityMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    registerLeaveGuard(null)
     mocks.hasSession.mockReturnValue(true)
     mocks.logout.mockResolvedValue(null)
     mocks.getConnectedAccounts.mockResolvedValue([])
@@ -152,10 +154,38 @@ describe('IdentityMenu', () => {
 
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
     // The band follows the switch: name, initials and the connected account's second line.
-    expect(screen.getByText('Support')).toBeInTheDocument()
+    // Awaited because the menu asks the leave guard first, which settles a microtask later.
+    await waitFor(() => expect(screen.getByText('Support')).toBeInTheDocument())
     expect(screen.getByText('support@acme.com · acme.com')).toBeInTheDocument()
     expect(screen.getByText('S')).toBeInTheDocument()
     expect(localStorage.getItem('mail.activeAccount')).toBe('g1')
+  })
+
+  // Switching mailbox is a state change, not a navigation, so the composer's router blocker
+  // never sees it: an open draft would be left behind silently. The guard is what the menu asks
+  // before it changes anything.
+  it('leaves the account alone when the leave guard refuses', async () => {
+    mocks.getConnectedAccounts.mockResolvedValue([connected()])
+    registerLeaveGuard(() => Promise.resolve(false))
+    renderMenu()
+    await openMenu()
+
+    fireEvent.click(await screen.findByRole('menuitem', { name: /support@acme\.com/ }))
+
+    await waitFor(() => expect(screen.queryByText('Sign out')).not.toBeInTheDocument())
+    expect(screen.queryByText('support@acme.com · acme.com')).not.toBeInTheDocument()
+    expect(localStorage.getItem('mail.activeAccount')).toBeNull()
+  })
+
+  it('switches once the leave guard allows it', async () => {
+    mocks.getConnectedAccounts.mockResolvedValue([connected()])
+    registerLeaveGuard(() => Promise.resolve(true))
+    renderMenu()
+    await openMenu()
+
+    fireEvent.click(await screen.findByRole('menuitem', { name: /support@acme\.com/ }))
+
+    await waitFor(() => expect(localStorage.getItem('mail.activeAccount')).toBe('g1'))
   })
 
   // A shared mailbox carries no external domain; the band still has to say where it lives.
@@ -166,7 +196,7 @@ describe('IdentityMenu', () => {
 
     fireEvent.click(await screen.findByRole('menuitem', { name: /support@acme\.com/ }))
 
-    expect(screen.getByText('support@acme.com · Weesky')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('support@acme.com · Weesky')).toBeInTheDocument())
   })
 
   // switchAccount refuses such a target, so a row that looked like a switch would do nothing.

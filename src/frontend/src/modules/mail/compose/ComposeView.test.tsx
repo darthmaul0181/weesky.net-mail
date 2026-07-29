@@ -7,6 +7,7 @@ import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
 import { settle } from '../../../test-utils'
+import { confirmLeave } from '../../../lib/leaveGuard'
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
@@ -387,6 +388,29 @@ describe('ComposeView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+  })
+
+  // Switching mailbox is a state change, not a navigation, so the router blocker cannot see it.
+  // Without the guard the identity menu carried the draft away in silence.
+  it('asks before a mailbox switch takes an unsaved draft away', async () => {
+    renderCompose()
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'draft' } })
+
+    let decision!: Promise<boolean>
+    act(() => { decision = confirmLeave() })
+
+    expect(await discardModal()).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+
+    await expect(decision).resolves.toBe(false)
+    expect(screen.getByLabelText('Subject')).toHaveValue('draft')
+  })
+
+  it('lets a mailbox switch through when the composer has nothing to lose', async () => {
+    renderCompose()
+
+    await expect(confirmLeave()).resolves.toBe(true)
     expect(screen.queryByText('Save this draft?')).toBeNull()
   })
 })

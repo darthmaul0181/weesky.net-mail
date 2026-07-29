@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, type ActiveAccount } from '../contexts/AuthContext'
+import { confirmLeave } from '../lib/leaveGuard'
 import ChevronRightIcon from '../icons/ChevronRightIcon'
 import PersonPlusIcon from '../icons/PersonPlusIcon.jsx'
 import SignOutIcon from '../icons/SignOutIcon'
@@ -58,9 +59,13 @@ export default function IdentityMenu() {
 
   // switchAccount refuses a target whose password no longer decrypts, so that row leads to the
   // page where it is re-entered rather than pretending to be a switch.
-  function pickAccount(acc: ActiveAccount) {
+  //
+  // The guard is asked before anything changes: a switch is a state change, not a navigation, so
+  // the composer's router blocker cannot see it and an open draft would be left behind in silence.
+  async function pickAccount(acc: ActiveAccount) {
     if (!acc.credentialsValid) return goToLinkedAccounts()
     setOpen(false)
+    if (!(await confirmLeave())) return
     switchAccount(acc.id)
   }
 
