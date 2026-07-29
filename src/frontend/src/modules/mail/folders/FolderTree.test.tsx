@@ -179,13 +179,33 @@ describe('FolderTree', () => {
   it('still hides an ordinary unsubscribed folder', () => {
     const folders = [
       node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
-      node({ path: 'Archive', name: 'Archive', specialUse: 'archive', subscribed: false }),
+      node({ path: 'Projects', name: 'Projects', subscribed: false }),
     ]
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
 
     expect(screen.getByText('Inbox')).toBeInTheDocument()
-    expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+    expect(screen.queryByText('Projects')).not.toBeInTheDocument()
+  })
+
+  // Regression, found on a connected Proximus account: that server keeps no subscriptions at
+  // all, so every folder came back subscribed=false and the tree showed the inbox alone. A
+  // folder holding a role can never be hidden — FolderManager greys its switch off for exactly
+  // that reason — so filtering it on subscription contradicted a rule the product already made.
+  it('shows a role-holding folder the server reports unsubscribed', () => {
+    const asProximusReportsIt = [
+      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
+      node({ path: 'SentMail', name: 'SentMail', specialUse: 'sent', subscribed: false }),
+      node({ path: 'Trash', name: 'Trash', specialUse: 'trash', subscribed: false }),
+      node({ path: 'Junk Mail', name: 'Junk Mail', specialUse: 'junk', subscribed: false }),
+    ]
+
+    render(<FolderTree folders={asProximusReportsIt} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
+    expect(screen.getByText('Sent')).toBeInTheDocument()
+    expect(screen.getByText('Trash')).toBeInTheDocument()
+    expect(screen.getByText('Junk')).toBeInTheDocument()
   })
 
   // An unread badge asks the user to go and read something. Deleted mail and filtered spam are

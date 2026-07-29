@@ -41,7 +41,6 @@ export default function FolderManager({ folders, onNotify }: Props) {
     <>
       <ul className="admin-list folder-list">
         {flatten(sortFolders(folders)).map(({ node, depth }) => {
-          const isInbox = node.specialUse === 'inbox'
           const isSystem = isSystemFolder(node)
 
           return (
@@ -55,9 +54,10 @@ export default function FolderManager({ folders, onNotify }: Props) {
               <label className="toggle-switch">
                 <input
                   type="checkbox"
-                  // Dovecot leaves INBOX unsubscribed; showing it off would invite "showing" a
-                  // folder that is always shown.
-                  checked={isInbox ? true : node.subscribed}
+                  // The switch below is disabled for these, so off is the one state it must
+                  // never show: Proximus subscribes nothing, which drew every system folder
+                  // as hidden with no way to show it.
+                  checked={isSystem ? true : node.subscribed}
                   disabled={isSystem}
                   aria-label={`Show ${node.name}`}
                   onChange={e => run(
