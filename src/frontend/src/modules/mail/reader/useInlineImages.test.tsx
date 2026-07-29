@@ -16,9 +16,16 @@ vi.mock('../../../api.js', () => ({
   api: {}, requestBlob: mocks.requestBlob, mailAttachmentUrl: mocks.mailAttachmentUrl,
 }))
 
+// Mutable so a test can render the hook under a connected account.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary' }))
+
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({
+    activeAccount: { id: auth.activeAccountId }, activeAccountId: auth.activeAccountId,
+  }),
 }))
+
+beforeEach(() => { auth.activeAccountId = 'primary' })
 
 let client: QueryClient
 function wrapper({ children }: { children: ReactNode }) {
@@ -166,6 +173,19 @@ describe('useInlineImages', () => {
     expect(mocks.requestBlob).toHaveBeenCalledTimes(1)
     // Account-scoped like every other key in the module: a second mailbox must not read this one.
     expect(client.getQueryData(['mail', 'primary', 'inline', 'INBOX', 2])).toBeTruthy()
+  })
+
+  // A cid part is fetched from the mailbox the reader is showing. Without the account the URL
+  // resolves against the primary, and a connected account's inline images 404 or, worse, come
+  // back from a mailbox the user was not looking at.
+  it('builds the part URL for the account the reader is rendered under', async () => {
+    auth.activeAccountId = 'linked-1'
+    mocks.requestBlob.mockResolvedValue(png('x'))
+
+    render(<Host attachments={[part()]} html='<img src="cid:logo@mail">' />, { wrapper })
+
+    await waitFor(() =>
+      expect(mocks.mailAttachmentUrl).toHaveBeenCalledWith('INBOX', 2, '2', 'linked-1'))
   })
 
   // Message parts are immutable per folder+uid, and the app refetches on focus by default: a

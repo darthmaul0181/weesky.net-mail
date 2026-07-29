@@ -6,7 +6,8 @@ import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
-import { useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
+import { registerLeaveGuard } from '../../../lib/leaveGuard'
+import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
@@ -43,14 +44,21 @@ export default function ComposeView({ onNotify }: Props) {
   const { identity } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const send = useSendMessage()
-  const saveDraftMutation = useSaveDraft()
+  // Pinned at mount: this draft belongs to the mailbox it was opened in. Its staged files live in
+  // that account's namespace, so a switch under an open composer would send ids the new account
+  // has never heard of — a message out with its attachments silently missing.
+  const activeAccountId = useAccountId()
+  const [accountId] = useState(activeAccountId)
+  const send = useSendMessage(accountId)
+  const saveDraftMutation = useSaveDraft(accountId)
   // The mutation's own callback, not a per-call one: the send navigates away first, and TanStack
   // drops per-call callbacks once the observer unmounts. A silent failure would leave a
   // re-sendable draft of a message that has already gone out.
   const deleteDraft = useDeleteMessages(
-    () => onNotify('Message sent — the draft could not be removed', 'error'))
-  const { data: identityList } = useIdentities()
+    () => onNotify('Message sent — the draft could not be removed', 'error'), accountId)
+  // Pinned like the send: an address only the newly active account owns would be refused by the
+  // one this draft is bound to, leaving it neither sendable nor savable.
+  const { data: identityList } = useIdentities(accountId)
   // One read for the three fields: they would share the cache anyway, but a single call site is
   // easier to follow than three.
   const { data: contacts } = useContacts()
@@ -81,7 +89,7 @@ export default function ComposeView({ onNotify }: Props) {
   const seedTray = useMemo(() => (seed?.attachments ?? []).filter(a => !a.contentId), [seed])
   const inlineIds = useMemo(
     () => (seed?.attachments ?? []).filter(a => a.contentId).map(a => a.id), [seed])
-  const attachments = useStagedAttachments(seedTray, inlineIds)
+  const attachments = useStagedAttachments(accountId, seedTray, inlineIds)
   const [draftRef, setDraftRef] = useState(seed?.draftRef ?? null)
 
   const usableIdentities = (identityList ?? []).filter(i => !i.stale)
@@ -150,6 +158,17 @@ export default function ComposeView({ onNotify }: Props) {
 
   const blocker = useBlocker(useCallback(() => dirtyRef.current && !leavingRef.current, []))
 
+  // The same question, asked by something the router cannot see — today, the mailbox switch in
+  // the identity menu. It resolves on the dialog's buttons, so both roads end in one prompt.
+  const [leaveAsk, setLeaveAsk] = useState<((ok: boolean) => void) | null>(null)
+
+  useEffect(() => {
+    registerLeaveGuard(() => dirtyRef.current && !leavingRef.current
+      ? new Promise<boolean>(resolve => setLeaveAsk(() => resolve))
+      : Promise.resolve(true))
+    return () => registerLeaveGuard(null)
+  }, [])
+
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
       if (dirtyRef.current && !leavingRef.current) event.preventDefault()
@@ -164,6 +183,19 @@ export default function ComposeView({ onNotify }: Props) {
     leavingRef.current = true
     navigate(backTarget)
   }, [navigate, backTarget])
+
+  // The dialog serves two callers, so its buttons answer whichever one opened it: the blocker
+  // holds a navigation to release, the guard holds a promise to settle.
+  function keepEditing() {
+    if (leaveAsk) { setLeaveAsk(null); leaveAsk(false); return }
+    blocker.reset?.()
+  }
+
+  function leaveBehind() {
+    leavingRef.current = true
+    if (leaveAsk) { setLeaveAsk(null); leaveAsk(true); navigate(backTarget); return }
+    blocker.proceed?.()
+  }
 
   // SquireEditor binds onChange once at mount, so the callback has to be stable.
   const touchBody = useCallback(() => { markDirty(); setBodyTouched(true) }, [markDirty])
@@ -296,7 +328,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={removeFile} />
 
-      {blocker.state === 'blocked' && (
+      {(blocker.state === 'blocked' || leaveAsk !== null) && (
         <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: '420px' }}>
             <div className="modal-header">
@@ -304,14 +336,13 @@ export default function ComposeView({ onNotify }: Props) {
             </div>
             <p>Your message has unsaved changes.</p>
             <div className="folder-pick-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => blocker.reset?.()}>Keep editing</button>
+              <button type="button" className="btn btn-ghost" onClick={keepEditing}>Keep editing</button>
               {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
               <button type="button" className="btn btn-ghost" disabled={busy}
                 onClick={() => {
                   // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
                   attachments.discardAll()
-                  leavingRef.current = true
-                  blocker.proceed?.()
+                  leaveBehind()
                 }}>
                 Discard
               </button>
@@ -320,8 +351,7 @@ export default function ComposeView({ onNotify }: Props) {
                 title={allValid ? undefined : 'Fix the invalid address first'}
                 onClick={() => saveDraft(() => {
                   attachments.discardAll()
-                  leavingRef.current = true
-                  blocker.proceed?.()
+                  leaveBehind()
                 })}>
                 Save draft
               </button>

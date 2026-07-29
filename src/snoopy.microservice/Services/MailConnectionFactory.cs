@@ -1,5 +1,4 @@
 using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
 using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Security;
@@ -9,24 +8,26 @@ using weesky.Snoopy.Microservice.Models.Mail;
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
-/// Where and how to reach one of the mail services, read from <see cref="MailOptions"/>.
-/// <c>Protocol</c> names it in log messages ("IMAP"), and <c>ConfigurationKey</c> is the setting
-/// whose absence means "not configured", so the log line points at what to fill in.
+/// Where and how to reach one of the mail services, read from the account's
+/// <see cref="MailAccountConnection"/>. <c>Protocol</c> names it in log messages ("IMAP"), and
+/// <c>ConfigurationKey</c> is the setting whose absence means "not configured", so the log line
+/// points at what to fill in.
 /// </summary>
 internal readonly record struct MailEndpoint(
     string Protocol, string ConfigurationKey, string Host, int Port, SecureSocketOptions Security, bool IsConfigured);
 
 /// <summary>
-/// Opens one connection per request — no pooling, the Rainloop model: guard on unconfigured
-/// options, a generic message to the client with the detail logged, and ownership of the client
+/// Opens one connection per request — no pooling, the Rainloop model: guard on an unconfigured
+/// endpoint, a generic message to the client with the detail logged, and ownership of the client
 /// transferred to the session on success so the finally block is a no-op on the happy path.
 ///
 /// Shared by the IMAP and SMTP factories, which were the same file twice down to a byte-identical
 /// certificate callback — including the rule that matters most here, that an authentication
 /// failure must never echo the server's message back to the caller.
 ///
-/// Options are read through IOptionsMonitor, not IOptions, so a correction in appsettings.json
-/// takes effect without restarting the service and dropping live sessions.
+/// Endpoints come from the connection record; the options only supply what stays global to the
+/// service (timeout, certificate policy), through IOptionsMonitor so a correction in
+/// appsettings.json takes effect without restarting and dropping live sessions.
 /// </summary>
 internal abstract class MailConnectionFactory<TClient, TSession>(
     IOptionsMonitor<MailOptions> options, ILogger logger)
@@ -34,18 +35,20 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
 {
     protected ILogger Logger { get; } = logger;
 
-    protected abstract MailEndpoint Endpoint(MailOptions options);
+    protected abstract MailEndpoint Endpoint(MailAccountConnection connection);
 
     protected abstract TClient CreateClient();
 
     /// <summary>Wraps the connected client. The session owns it from here, disposal included.</summary>
     protected abstract TSession CreateSession(TClient client);
 
-    public async Task<Result<TSession>> OpenAsync(string email, string password, CancellationToken cancellationToken)
+    public async Task<Result<TSession>> OpenAsync(MailAccountConnection connection, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("Email is required", nameof(email));
+        ArgumentNullException.ThrowIfNull(connection);
+        if (string.IsNullOrWhiteSpace(connection.Username))
+            throw new ArgumentException("Username is required", nameof(connection));
 
-        var endpoint = Endpoint(options.CurrentValue);
+        var endpoint = Endpoint(connection);
 
         if (!endpoint.IsConfigured)
         {
@@ -59,14 +62,15 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         try
         {
             client = CreateClient();
-            client.ServerCertificateValidationCallback = ValidateCertificate;
+            client.ServerCertificateValidationCallback =
+                (_, _, _, errors) => ValidateCertificate(endpoint.Protocol, errors);
             client.Timeout = options.CurrentValue.TimeoutSeconds * 1000;
 
             using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
                 connectCts.CancelAfter(TimeSpan.FromSeconds(options.CurrentValue.TimeoutSeconds));
                 await client.ConnectAsync(endpoint.Host, endpoint.Port, endpoint.Security, connectCts.Token);
-                await client.AuthenticateAsync(email, password, connectCts.Token);
+                await client.AuthenticateAsync(connection.Username, connection.Password, connectCts.Token);
             }
 
             var session = CreateSession(client);
@@ -80,7 +84,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         catch (AuthenticationException)
         {
             // Never echo the server's message: it can disclose account state.
-            Logger.LogWarning("{Protocol} authentication failed for {Email}", endpoint.Protocol, email);
+            Logger.LogWarning("{Protocol} authentication failed for {Username}", endpoint.Protocol, connection.Username);
             return Result.Failure<TSession>("Mail authentication failed");
         }
         catch (Exception ex)
@@ -95,11 +99,9 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         }
     }
 
-    private bool ValidateCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
+    private bool ValidateCertificate(string protocol, SslPolicyErrors errors)
     {
         if (errors == SslPolicyErrors.None) return true;
-
-        var protocol = Endpoint(options.CurrentValue).Protocol;
 
         if (options.CurrentValue.AllowInvalidCertificate)
         {

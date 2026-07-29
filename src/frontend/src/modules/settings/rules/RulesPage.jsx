@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../../../api.js'
+import { useAccountId } from '../../../hooks/useAccountId'
 import { useToasts } from '../../../hooks/useToasts.js'
+import { flatten } from '../../mail/folders/folderNodes'
 import Toasts from '../../../components/Toasts.jsx'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import HelpTooltip from '../../../components/HelpTooltip.jsx'
@@ -538,6 +540,7 @@ function RuleHelpModal({ onClose }) {
 
 export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended = false }) {
   const isNew = !initialRule
+  const accountId = useAccountId()
   const [rule, setRule] = useState(() => {
     const base = initialRule ? JSON.parse(JSON.stringify(initialRule)) : makeEmptyRule()
     return { ...base, actions: base.actions.filter(a => a.type !== 'SetFlag') }
@@ -566,9 +569,15 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
     return 'rule-wizard-circle'
   }
 
+  // The rule is filed into the active mailbox, so the picker must offer that mailbox's folders:
+  // /api/Account/Folders answers the primary's whatever the header says. Containers cannot hold
+  // mail, so a rule naming one would file nowhere.
   useEffect(() => {
-    api.getFolders().then(data => { if (Array.isArray(data)) setFolders(data) }).catch(() => {})
-  }, [])
+    api.getMailFolders({ accountId })
+      .then(tree => setFolders(
+        Array.isArray(tree) ? flatten(tree).filter(f => f.node.selectable).map(f => f.node.path) : []))
+      .catch(() => {})
+  }, [accountId])
 
   function setField(key, value) {
     setRule(r => ({ ...r, [key]: value }))
@@ -804,9 +813,14 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
 
 export default function RulesPage() {
   const { toasts, addToast, removeToast } = useToasts()
+  // The script belongs to the active mailbox: the backend swaps the ManageSieve target on it.
+  const accountId = useAccountId()
 
   const [ruleSet, setRuleSet] = useState(null)
   const [rules, setRules] = useState([])
+  // The account the two above were loaded under. Null until a load succeeds, so a failed one
+  // leaves nothing writable rather than the previous account's set.
+  const [loadedFor, setLoadedFor] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -822,23 +836,38 @@ export default function RulesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Dropped before the fetch, not after it: a load that fails would otherwise leave the previous
+    // account's rules on screen and clickable, and one toggle PUTs them into this account's script.
+    setRuleSet(null)
+    setRules([])
+    setLoadedFor(null)
     try {
-      const data = await api.getRules()
+      const data = await api.getRules({ accountId })
       setRuleSet(data)
       setRules(data.rules ?? [])
+      setLoadedFor(accountId)
     } catch (err) {
       addToast(extractError(err) || 'Failed to load rules', 'error')
     } finally {
       setLoading(false)
     }
-  }, [addToast])
+  }, [addToast, accountId])
 
   useEffect(() => { load() }, [load])
 
+  // Clearing alone still leaves a window: between the switch and the arriving load the old set is
+  // on screen for a render. A write refuses whenever it no longer belongs to the active account.
+  function belongsToActiveAccount() {
+    if (loadedFor === accountId) return true
+    addToast('These rules are not the selected account’s — reload the page', 'error')
+    return false
+  }
+
   async function persistRules(updatedRules) {
+    if (!belongsToActiveAccount()) return
     setSaving(true)
     try {
-      await api.saveRules(updatedRules, ruleSet?.providerId, ruleSet?.scriptName)
+      await api.saveRules(updatedRules, ruleSet?.providerId, ruleSet?.scriptName, { accountId })
       setRules(updatedRules)
       addToast('Rules saved')
     } catch (err) {
@@ -849,9 +878,10 @@ export default function RulesPage() {
   }
 
   async function handleDeleteAll() {
+    if (!belongsToActiveAccount()) return
     setDeleting(true)
     try {
-      await api.deleteRules()
+      await api.deleteRules({ accountId })
       setRules([])
       setRuleSet(prev => prev ? { ...prev, kind: 'Structured', rules: [] } : prev)
       setConfirmDeleteAll(false)
@@ -867,9 +897,10 @@ export default function RulesPage() {
   // script name so the backend writes to the target provider's default script (and cleans up
   // the old one). Then we reflect the new providerId locally so the slider/editor track it.
   async function switchToProvider(targetProviderId, rulesToSave) {
+    if (!belongsToActiveAccount()) return
     setSwitching(true)
     try {
-      await api.saveRules(rulesToSave, targetProviderId, null)
+      await api.saveRules(rulesToSave, targetProviderId, null, { accountId })
       setRules(rulesToSave)
       setRuleSet(prev => prev ? { ...prev, providerId: targetProviderId, scriptName: null } : prev)
       addToast(targetProviderId === 'weesky' ? 'Extended rules enabled' : 'Switched to Rainloop')
@@ -890,7 +921,7 @@ export default function RulesPage() {
     // weesky → rainloop: preview which rules the Rainloop format can't keep.
     setSwitching(true)
     try {
-      const res = await api.checkCompatibility('rainloop', rules)
+      const res = await api.checkCompatibility('rainloop', rules, { accountId })
       if (res?.compatible) {
         setSwitching(false)
         await switchToProvider('rainloop', rules)

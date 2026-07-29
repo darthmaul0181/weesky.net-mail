@@ -7,7 +7,9 @@ import { settle } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({ emptyFolder: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ activeAccount: { id: 'primary' } }) }))
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
+}))
 vi.mock('../../hooks/usePreferences', () => ({
   usePreferences: () => ({ data: {} }), notifiesOf: () => false,
 }))
@@ -40,7 +42,7 @@ describe('useEmptyFolder', () => {
 
     await act(async () => { result.current.mutate({ folderPath: 'Trash' }); await settle() })
 
-    expect(mocks.emptyFolder).toHaveBeenCalledWith('Trash', null)
+    expect(mocks.emptyFolder).toHaveBeenCalledWith('Trash', null, { accountId: 'primary' })
     // Emptied in place, not removed: the folder on screen shows empty at once, instead of
     // refetching the rows the server has not expunged yet and racing them back till the poll.
     const source = client.getQueryData(mailKeys.messages(ACC, 'Trash', 0, 50)) as { messages: unknown[]; total: number } | undefined
@@ -62,7 +64,7 @@ describe('useEmptyFolder', () => {
 
     await act(async () => { result.current.mutate({ folderPath: 'Projects', targetFolderPath: 'Trash' }); await settle() })
 
-    expect(mocks.emptyFolder).toHaveBeenCalledWith('Projects', 'Trash')
+    expect(mocks.emptyFolder).toHaveBeenCalledWith('Projects', 'Trash', { accountId: 'primary' })
     const tree = client.getQueryData(mailKeys.folders(ACC)) as { path: string; total: number; unread: number }[]
     expect(tree.find(n => n.path === 'Projects')!.total).toBe(0)
     expect(tree.find(n => n.path === 'Trash')!.total).toBe(5) // 2 + 3

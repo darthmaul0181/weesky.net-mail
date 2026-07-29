@@ -19,10 +19,17 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 public sealed class MailControllerTests
 {
     private static readonly Guid WebmailUid = Guid.NewGuid();
+    private static readonly MailAccountConnection Conn = TestConnections.Primary("alice@weesky.be", "hunter2");
+    private static readonly string StagedScope = MailAccountConnection.StagedScope(
+        new User("alice@weesky.be") { WebmailUid = WebmailUid }, MailAccountConnection.Primary);
+
+    private static readonly string ConnectedId = Guid.NewGuid().ToString();
+    private static readonly MailAccountConnection ConnectedConn =
+        TestConnections.Connected(ConnectedId, "alice@external.test", "other-secret");
 
     private readonly Mock<IMailFolderRepository> _folders = new();
     private readonly Mock<IMailMessageRepository> _messages = new();
-    private readonly Mock<IMailCredentialStore> _credentials = new();
+    private readonly Mock<IAccountConnectionResolver> _connections = new();
     private readonly Mock<IFolderRoleStore> _roleStore = new();
     private readonly Mock<IStagedAttachmentStore> _staged = new();
     private readonly Mock<IMailSender> _sender = new();
@@ -32,11 +39,11 @@ public sealed class MailControllerTests
 
     private MailController CreateController()
     {
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success("hunter2"));
-        _roleStore.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        ResolveTo(Conn);
+        _roleStore.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(new List<FolderRoleOverride>());
 
-        return new MailController(_folders.Object, _messages.Object, _credentials.Object, _roleStore.Object,
+        return new MailController(_folders.Object, _messages.Object, _connections.Object, _roleStore.Object,
                                   _staged.Object, _sender.Object, _quotes.Object, _drafts.Object,
                                   _trustedSenders.Object, NullLogger<MailController>.Instance)
         {
@@ -44,8 +51,17 @@ public sealed class MailControllerTests
         };
     }
 
+    /// <summary>Moq resolves overlapping setups by recency: call after <c>CreateController()</c>.</summary>
+    private void ResolveTo(MailAccountConnection connection)
+        => _connections.Setup(c => c.ResolveAsync(It.IsAny<User>(), It.IsAny<HttpRequest>(), It.IsAny<CancellationToken>()))
+                       .ReturnsAsync(Result.Success(connection));
+
+    private void FailResolution(string error)
+        => _connections.Setup(c => c.ResolveAsync(It.IsAny<User>(), It.IsAny<HttpRequest>(), It.IsAny<CancellationToken>()))
+                       .ReturnsAsync(Result.Failure<MailAccountConnection>(error));
+
     private void SetupTree(params MailFolderNode[] nodes)
-        => _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        => _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success<IReadOnlyList<MailFolderNode>>(nodes.ToList()));
 
     [Fact]
@@ -67,15 +83,14 @@ public sealed class MailControllerTests
 
         await CreateController().GetFolders(CancellationToken.None);
 
-        _folders.Verify(f => f.GetTreeAsync(It.IsAny<User>(), "hunter2", It.IsAny<CancellationToken>()), Times.Once);
+        _folders.Verify(f => f.GetTreeAsync(It.IsAny<User>(), Conn, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetFolders_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.GetFolders(CancellationToken.None);
 
@@ -88,20 +103,19 @@ public sealed class MailControllerTests
     public async Task GetFolders_DoesNotReachTheRepositoryWithoutCredentials()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         await controller.GetFolders(CancellationToken.None);
 
         _folders.Verify(
-            f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
     [Fact]
     public async Task GetFolders_Returns502WhenImapFails()
     {
-        _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<IReadOnlyList<MailFolderNode>>("Unable to connect to the mail service"));
 
         var result = await CreateController().GetFolders(CancellationToken.None);
@@ -122,12 +136,117 @@ public sealed class MailControllerTests
         Assert.DoesNotContain("hunter2", payload);
     }
 
+    // ── The active account ──────────────────────────────────────────────
+    // A connected account whose stored secret no longer decrypts must not answer 401: the
+    // client's global 401 handler signs the user out, and the main session is perfectly valid.
+
+    [Fact]
+    public async Task GetFolders_AnswersConflictWhenTheConnectedCredentialsAreInvalid()
+    {
+        var controller = CreateController();
+        FailResolution(ConnectedAccountErrors.CredentialsInvalid);
+
+        var result = await controller.GetFolders(CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(ConnectedAccountErrors.CredentialsInvalid, Assert.IsType<ResultEnveloppe>(conflict.Value).Message);
+        _folders.Verify(f => f.GetTreeAsync(
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // An unknown id and another user's id are the same answer, by design.
+    [Fact]
+    public async Task GetFolders_AnswersNotFoundForAForeignAccount()
+    {
+        var controller = CreateController();
+        FailResolution(ConnectedAccountErrors.AccountNotFound);
+
+        var result = await controller.GetFolders(CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal(ConnectedAccountErrors.AccountNotFound, Assert.IsType<ResultEnveloppe>(notFound.Value).Message);
+    }
+
+    [Fact]
+    public async Task GetFolders_ScopesTheRoleOverridesToTheAccount()
+    {
+        var controller = CreateController();
+        SetupTree(RoleNode("INBOX", attributeRole: "inbox"));
+        ResolveTo(ConnectedConn);
+
+        await controller.GetFolders(CancellationToken.None);
+
+        _roleStore.Verify(s => s.GetAsync(WebmailUid, ConnectedId, It.IsAny<CancellationToken>()), Times.Once);
+        _roleStore.Verify(s => s.GetAsync(It.IsAny<Guid>(), AccountScope.Primary, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetFolderRole_StoresTheOverrideUnderTheAccount()
+    {
+        var controller = CreateController();
+        SetupStatus("Corbeille", uidValidity: 3);
+        SetupTree(RoleNode("Corbeille", uidValidity: 3));
+        ResolveTo(ConnectedConn);
+
+        var result = await controller.SetFolderRole(
+            new SetFolderRoleRequest { Role = "trash", FolderPath = "Corbeille" }, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        _roleStore.Verify(s => s.UpsertAsync(
+            It.Is<FolderRoleOverride>(o => o.UserId == WebmailUid && o.AccountId == ConnectedId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClearFolderRole_ScopesTheDeletionToTheAccount()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+
+        var result = await controller.ClearFolderRole("trash", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        _roleStore.Verify(s => s.DeleteAsync(WebmailUid, ConnectedId, "trash", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // The composer stages under the account it is composing for, or Send — which reads the
+    // account's own namespace — would never find the file again.
+    [Fact]
+    public async Task UploadAttachment_StagesUnderTheActiveAccount()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+        _staged.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new StagedAttachmentInfo(Guid.NewGuid(), "a.txt", 4, "text/plain")));
+        var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.txt")
+        { Headers = new HeaderDictionary(), ContentType = "text/plain" };
+
+        await controller.UploadAttachment(file, CancellationToken.None);
+
+        _staged.Verify(s => s.SaveAsync(ConnectedConn.StagedScope(controller.AuthenticatedUser),
+            "a.txt", "text/plain", It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAttachment_ScopesTheDeletionToTheActiveAccount()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+        var id = Guid.NewGuid();
+
+        var result = await controller.DeleteAttachment(id, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        _staged.Verify(s => s.Delete(ConnectedConn.StagedScope(controller.AuthenticatedUser), id), Times.Once);
+    }
+
     // ── Create ──────────────────────────────────────────────────────────
 
     [Fact]
     public async Task CreateFolder_ReturnsTheNewPath()
     {
-        _folders.Setup(f => f.CreateFolderAsync(It.IsAny<User>(), "hunter2", "INBOX", "Projects", It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.CreateFolderAsync(It.IsAny<User>(), Conn, "INBOX", "Projects", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success("INBOX/Projects"));
 
         var result = await CreateController().CreateFolder(
@@ -145,7 +264,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         _folders.Verify(f => f.CreateFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -153,8 +272,7 @@ public sealed class MailControllerTests
     public async Task CreateFolder_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.CreateFolder(
             new CreateFolderRequest { Name = "Projects" }, CancellationToken.None);
@@ -165,7 +283,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task CreateFolder_Returns502WhenImapFails()
     {
-        _folders.Setup(f => f.CreateFolderAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.CreateFolderAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<string>("Unable to create the folder"));
 
         var result = await CreateController().CreateFolder(
@@ -181,7 +299,7 @@ public sealed class MailControllerTests
     public async Task RenameFolder_ReturnsThePath()
     {
         SetupTree(RoleNode("Old"));
-        _folders.Setup(f => f.RenameFolderAsync(It.IsAny<User>(), "hunter2", "Old", "INBOX", "New", It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.RenameFolderAsync(It.IsAny<User>(), Conn, "Old", "INBOX", "New", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success("INBOX/New"));
 
         var result = await CreateController().RenameFolder(
@@ -202,7 +320,7 @@ public sealed class MailControllerTests
             (await controller.RenameFolder(new RenameFolderRequest { Path = "Old", NewName = " " }, CancellationToken.None)).Result);
 
         _folders.Verify(f => f.RenameFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -212,7 +330,7 @@ public sealed class MailControllerTests
     public async Task DeleteFolder_Returns204OnSuccess()
     {
         SetupTree(RoleNode("Projects"));
-        _folders.Setup(f => f.DeleteFolderAsync(It.IsAny<User>(), "hunter2", "Projects", It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.DeleteFolderAsync(It.IsAny<User>(), Conn, "Projects", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success());
 
         var result = await CreateController().DeleteFolder(
@@ -230,7 +348,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result);
         _folders.Verify(f => f.DeleteFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -238,7 +356,7 @@ public sealed class MailControllerTests
     public async Task DeleteFolder_Returns502WhenTheServerRefuses()
     {
         SetupTree(RoleNode("Projects"));
-        _folders.Setup(f => f.DeleteFolderAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.DeleteFolderAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure("The mail server refused the operation"));
 
         var result = await CreateController().DeleteFolder(
@@ -256,7 +374,7 @@ public sealed class MailControllerTests
     public async Task SetFolderSubscription_Returns204AndPassesTheState(bool subscribed)
     {
         SetupTree(RoleNode("Projects"));
-        _folders.Setup(f => f.SetSubscriptionAsync(It.IsAny<User>(), "hunter2", "Projects", subscribed, It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.SetSubscriptionAsync(It.IsAny<User>(), Conn, "Projects", subscribed, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success());
 
         var result = await CreateController().SetFolderSubscription(
@@ -265,15 +383,14 @@ public sealed class MailControllerTests
         var status = Assert.IsType<StatusCodeResult>(result);
         Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
         _folders.Verify(f => f.SetSubscriptionAsync(
-            It.IsAny<User>(), "hunter2", "Projects", subscribed, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<User>(), Conn, "Projects", subscribed, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task SetFolderSubscription_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.SetFolderSubscription(
             new FolderSubscriptionRequest { Path = "Projects", Subscribed = true }, CancellationToken.None);
@@ -286,7 +403,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetMessages_ReturnsThePage()
     {
-        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), "hunter2", "INBOX", 0, 50, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "INBOX", 0, 50, It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailFolderPage
                  {
                      FolderPath = "INBOX",
@@ -336,8 +453,7 @@ public sealed class MailControllerTests
     public async Task GetMessages_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.GetMessages("INBOX", 0, 50, CancellationToken.None);
 
@@ -347,7 +463,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetMessages_Returns502WhenImapFails()
     {
-        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailFolderPage>("Unable to read the messages"));
 
         var result = await CreateController().GetMessages("INBOX", 0, 50, CancellationToken.None);
@@ -358,7 +474,7 @@ public sealed class MailControllerTests
 
     private void VerifyMessagesNeverCalled()
         => _messages.Verify(m => m.ListAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     // ── Message detail ──────────────────────────────────────────────────
@@ -366,7 +482,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetMessage_ReturnsTheDetail()
     {
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), Conn, "INBOX", 42u, It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailMessageDetail { Uid = 42, Subject = "Re: facture" }));
 
         var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
@@ -378,7 +494,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetMessage_Returns404WhenTheUidDoesNotResolve()
     {
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailMessageDetail>(ImapSession.MessageNotFound));
 
         var result = await CreateController().GetMessage("INBOX", 999, CancellationToken.None);
@@ -389,7 +505,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetMessage_Returns502ForAnyOtherFailure()
     {
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailMessageDetail>("Unable to read the message"));
 
         var result = await CreateController().GetMessage("INBOX", 42, CancellationToken.None);
@@ -410,8 +526,7 @@ public sealed class MailControllerTests
     public async Task GetMessage_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.GetMessage("INBOX", 42, CancellationToken.None);
 
@@ -423,7 +538,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetAttachment_ReturnsTheFileWithAnAttachmentDisposition()
     {
-        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, "2", It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), Conn, "INBOX", 42u, "2", It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailAttachmentContent
                  {
                      Content = new MemoryStream([1, 2, 3]),
@@ -449,7 +564,7 @@ public sealed class MailControllerTests
     [InlineData(null)]
     public async Task GetAttachment_ServesTheRootPartForAnEmptySpecifier(string? part)
     {
-        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), "hunter2", "INBOX", 42u, "", It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), Conn, "INBOX", 42u, "", It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailAttachmentContent
                  {
                      Content = new MemoryStream([1]),
@@ -474,7 +589,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetAttachment_Returns404WhenThePartDoesNotResolve()
     {
-        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailAttachmentContent>(ImapSession.AttachmentNotFound));
 
         var result = await CreateController().GetAttachment("INBOX", 42, "99", CancellationToken.None);
@@ -486,7 +601,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetAttachment_Returns502ForAnyOtherFailure()
     {
-        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetAttachmentAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailAttachmentContent>("Unable to read the attachment"));
 
         var result = await CreateController().GetAttachment("INBOX", 42, "2", CancellationToken.None);
@@ -511,7 +626,7 @@ public sealed class MailControllerTests
         // The message must name the role, or the user cannot tell what to change.
         Assert.Contains("trash", Assert.IsType<ResultEnveloppe>(bad.Value).Message);
         _folders.Verify(f => f.RenameFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -525,7 +640,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result);
         _folders.Verify(f => f.DeleteFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // Deleting a parent takes its children with it.
@@ -541,7 +656,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result);
         _folders.Verify(f => f.DeleteFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -554,7 +669,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result);
         _folders.Verify(f => f.DeleteFolderAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The guard reads the resolution chain, not the SPECIAL-USE flags alone.
@@ -586,7 +701,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result);
         _folders.Verify(f => f.SetSubscriptionAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -595,7 +710,7 @@ public sealed class MailControllerTests
     public async Task SetFolderSubscription_AllowsShowingAFolderHoldingARole()
     {
         SetupTree(RoleNode("Corbeille", attributeRole: "trash"));
-        _folders.Setup(f => f.SetSubscriptionAsync(It.IsAny<User>(), It.IsAny<string>(), "Corbeille", true, It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.SetSubscriptionAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "Corbeille", true, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success());
 
         var result = await CreateController().SetFolderSubscription(
@@ -611,11 +726,11 @@ public sealed class MailControllerTests
         new() { Path = path, Name = path, AttributeRole = attributeRole, UidValidity = uidValidity };
 
     private void SetupOverrides(params FolderRoleOverride[] rows)
-        => _roleStore.Setup(s => s.GetAsync(WebmailUid, It.IsAny<CancellationToken>()))
+        => _roleStore.Setup(s => s.GetAsync(WebmailUid, AccountScope.Primary, It.IsAny<CancellationToken>()))
                      .ReturnsAsync(rows.ToList());
 
     private void SetupStatus(string path, uint uidValidity = 1, string? mailboxId = null, bool selectable = true)
-        => _folders.Setup(f => f.GetFolderStatusAsync(It.IsAny<User>(), It.IsAny<string>(), path, It.IsAny<CancellationToken>()))
+        => _folders.Setup(f => f.GetFolderStatusAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), path, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Result.Success(new MailFolderStatus
                    { Path = path, UidValidity = uidValidity, MailboxId = mailboxId, Selectable = selectable }));
 
@@ -688,7 +803,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SetFolderRole_Returns404WhenTheFolderIsGone()
     {
-        _folders.Setup(f => f.GetFolderStatusAsync(It.IsAny<User>(), It.IsAny<string>(), "Gone", It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.GetFolderStatusAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "Gone", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<MailFolderStatus>(ImapSession.FolderNotFound));
 
         var result = await CreateController().SetFolderRole(
@@ -749,7 +864,8 @@ public sealed class MailControllerTests
 
         Assert.IsType<NoContentResult>(result);
         _roleStore.Verify(s => s.UpsertAsync(It.Is<FolderRoleOverride>(o =>
-            o.Role == "junk" && o.FolderPath == "Corbeille"), It.IsAny<CancellationToken>()), Times.Once);
+            o.AccountId == AccountScope.Primary && o.Role == "junk" && o.FolderPath == "Corbeille"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -757,7 +873,7 @@ public sealed class MailControllerTests
     {
         var controller = CreateController();
         SetupStatus("X");
-        _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _folders.Setup(f => f.GetTreeAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<IReadOnlyList<MailFolderNode>>("Unable to read the mailbox folders"));
 
         var result = await controller.SetFolderRole(
@@ -780,7 +896,8 @@ public sealed class MailControllerTests
 
         Assert.IsType<NoContentResult>(result);
         _roleStore.Verify(s => s.UpsertAsync(It.Is<FolderRoleOverride>(o =>
-            o.UserId == WebmailUid && o.Role == "trash" && o.FolderPath == "Corbeille"
+            o.UserId == WebmailUid && o.AccountId == AccountScope.Primary
+            && o.Role == "trash" && o.FolderPath == "Corbeille"
             && o.UidValidity == 77UL && o.MailboxId == "M1"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -798,13 +915,13 @@ public sealed class MailControllerTests
         var result = await CreateController().ClearFolderRole("trash", CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        _roleStore.Verify(s => s.DeleteAsync(WebmailUid, "trash", It.IsAny<CancellationToken>()), Times.Once);
+        _roleStore.Verify(s => s.DeleteAsync(WebmailUid, AccountScope.Primary, "trash", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task SetMessageFlags_Returns204AndDelegates()
     {
-        _messages.Setup(m => m.SetFlagsAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Setup(m => m.SetFlagsAsync(It.IsAny<User>(), Conn, "INBOX",
                 It.IsAny<IReadOnlyList<uint>>(), MailFlag.Seen, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
@@ -814,7 +931,7 @@ public sealed class MailControllerTests
 
         var status = Assert.IsType<StatusCodeResult>(result);
         Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
-        _messages.Verify(m => m.SetFlagsAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Verify(m => m.SetFlagsAsync(It.IsAny<User>(), Conn, "INBOX",
             It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
             MailFlag.Seen, true, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -848,14 +965,14 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SendMessage_WithExplicitlyNullAttachmentIds_DoesNotThrow()
     {
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new SendMessageResult(true)));
 
         var result = await CreateController().SendMessage(
             new SendMessageRequest { To = ["bob@weesky.be"], AttachmentIds = null! }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        _sender.Verify(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+        _sender.Verify(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
             It.Is<SendMessageRequest>(r => r.AttachmentIds != null && r.AttachmentIds.Count == 0),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -896,8 +1013,7 @@ public sealed class MailControllerTests
     public async Task SetMessageFlags_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.SetMessageFlags(
             new SetMessageFlagsRequest { FolderPath = "INBOX", Uids = [1u], Flag = MailFlag.Seen, Value = true },
@@ -909,7 +1025,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SetMessageFlags_Returns502WhenTheServerRefuses()
     {
-        _messages.Setup(m => m.SetFlagsAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+        _messages.Setup(m => m.SetFlagsAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<MailFlag>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Unable to update the messages"));
 
@@ -924,7 +1040,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Move_Returns204AndDelegates()
     {
-        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), Conn, "INBOX",
                 It.IsAny<IReadOnlyList<uint>>(), "Archive", false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
@@ -934,7 +1050,7 @@ public sealed class MailControllerTests
 
         var status = Assert.IsType<StatusCodeResult>(result);
         Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
-        _messages.Verify(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Verify(m => m.MoveOrCopyAsync(It.IsAny<User>(), Conn, "INBOX",
             It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
             "Archive", false, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -1013,8 +1129,7 @@ public sealed class MailControllerTests
     public async Task Move_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.MoveMessages(
             new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Archive" },
@@ -1026,7 +1141,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Move_Returns502WhenTheServerRefuses()
     {
-        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Unable to move the messages"));
 
@@ -1041,7 +1156,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Move_Returns400WhenTheTargetIsNotSelectable()
     {
-        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure(ImapSession.TargetNotSelectable));
 
@@ -1057,7 +1172,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Copy_Returns204AndDelegates()
     {
-        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), Conn, "INBOX",
                 It.IsAny<IReadOnlyList<uint>>(), "Archive", true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
@@ -1067,7 +1182,7 @@ public sealed class MailControllerTests
 
         var status = Assert.IsType<StatusCodeResult>(result);
         Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
-        _messages.Verify(m => m.MoveOrCopyAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Verify(m => m.MoveOrCopyAsync(It.IsAny<User>(), Conn, "INBOX",
             It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })),
             "Archive", true, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -1146,8 +1261,7 @@ public sealed class MailControllerTests
     public async Task Copy_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.CopyMessages(
             new MoveMessagesRequest { FolderPath = "INBOX", Uids = [1u], TargetFolderPath = "Archive" },
@@ -1159,7 +1273,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Copy_Returns502WhenTheServerRefuses()
     {
-        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+        _messages.Setup(m => m.MoveOrCopyAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<string>(), true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Unable to copy the messages"));
 
@@ -1174,7 +1288,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Delete_Returns204AndDelegates()
     {
-        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), Conn, "INBOX",
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
@@ -1184,7 +1298,7 @@ public sealed class MailControllerTests
 
         var status = Assert.IsType<StatusCodeResult>(result);
         Assert.Equal(StatusCodes.Status204NoContent, status.StatusCode);
-        _messages.Verify(m => m.DeleteAsync(It.IsAny<User>(), "hunter2", "INBOX",
+        _messages.Verify(m => m.DeleteAsync(It.IsAny<User>(), Conn, "INBOX",
             It.Is<IReadOnlyList<uint>>(u => u.SequenceEqual(new uint[] { 42 })), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -1227,8 +1341,7 @@ public sealed class MailControllerTests
     public async Task Delete_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.DeleteMessages(
             new DeleteMessagesRequest { FolderPath = "INBOX", Uids = [1u] },
@@ -1240,7 +1353,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Delete_Returns502WhenTheServerRefuses()
     {
-        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Unable to delete the messages"));
 
@@ -1255,7 +1368,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task Delete_Returns502WithTheUidplusMessage()
     {
-        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(),
+        _messages.Setup(m => m.DeleteAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<uint>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("The mail server cannot delete single messages (no UIDPLUS)"));
 
@@ -1272,27 +1385,27 @@ public sealed class MailControllerTests
     [Fact]
     public async Task EmptyFolder_Returns204AndDelegatesPurgeWhenNoTarget()
     {
-        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Trash", null, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), Conn, "Trash", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
         var result = await CreateController().EmptyFolder(
             new EmptyFolderRequest { FolderPath = "Trash", TargetFolderPath = null }, CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
-        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Trash", null, It.IsAny<CancellationToken>()), Times.Once);
+        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), Conn, "Trash", null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task EmptyFolder_DelegatesMoveWhenTargetGiven()
     {
-        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Projects", "Trash", It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), Conn, "Projects", "Trash", It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
         var result = await CreateController().EmptyFolder(
             new EmptyFolderRequest { FolderPath = "Projects", TargetFolderPath = "Trash" }, CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
-        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), "hunter2", "Projects", "Trash", It.IsAny<CancellationToken>()), Times.Once);
+        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), Conn, "Projects", "Trash", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1302,7 +1415,7 @@ public sealed class MailControllerTests
             new EmptyFolderRequest { FolderPath = " ", TargetFolderPath = null }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
-        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _messages.Verify(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1319,8 +1432,7 @@ public sealed class MailControllerTests
     public async Task EmptyFolder_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-            .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.EmptyFolder(
             new EmptyFolderRequest { FolderPath = "Trash", TargetFolderPath = null }, CancellationToken.None);
@@ -1331,7 +1443,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task EmptyFolder_Returns400WhenTargetIsNotSelectable()
     {
-        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure(ImapSession.TargetNotSelectable));
 
         var result = await CreateController().EmptyFolder(
@@ -1343,7 +1455,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task EmptyFolder_Returns502WhenTheServerRefuses()
     {
-        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.EmptyAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Unable to empty the folder"));
 
         var result = await CreateController().EmptyFolder(
@@ -1396,8 +1508,7 @@ public sealed class MailControllerTests
     public async Task SearchMessages_answers_401_without_credentials()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-            .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.SearchMessages(
             new SearchMessagesRequest { FolderPath = "INBOX", Quick = "x" }, CancellationToken.None);
@@ -1409,7 +1520,7 @@ public sealed class MailControllerTests
     public async Task SearchMessages_returns_the_page()
     {
         _messages.Setup(m => m.SearchAsync(
-                It.IsAny<User>(), "hunter2", "INBOX", true,
+                It.IsAny<User>(), Conn, "INBOX", true,
                 It.Is<MailSearchCriteria>(c => c.Quick == "hello"), 2, 25, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new MailSearchPage { Total = 2 }));
 
@@ -1421,7 +1532,7 @@ public sealed class MailControllerTests
         var page = Assert.IsType<MailSearchPage>(ok.Value);
         Assert.Equal(2, page.Total);
         _messages.Verify(m => m.SearchAsync(
-            It.IsAny<User>(), "hunter2", "INBOX", true,
+            It.IsAny<User>(), Conn, "INBOX", true,
             It.Is<MailSearchCriteria>(c => c.Quick == "hello"), 2, 25, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -1429,7 +1540,7 @@ public sealed class MailControllerTests
     public async Task SearchMessages_maps_server_failure_to_502()
     {
         _messages.Setup(m => m.SearchAsync(
-                It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<MailSearchCriteria>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<MailSearchPage>("boom"));
 
@@ -1454,7 +1565,7 @@ public sealed class MailControllerTests
     {
         var info = new StagedAttachmentInfo(Guid.NewGuid(), "a.txt", 4, "text/plain");
         _staged.Setup(s => s.SaveAsync(
-                WebmailUid.ToString(), "a.txt", "text/plain",
+                StagedScope, "a.txt", "text/plain",
                 It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(info));
 
@@ -1483,30 +1594,30 @@ public sealed class MailControllerTests
     }
 
     [Fact]
-    public void DeleteAttachment_IsIdempotentAndScoped()
+    public async Task DeleteAttachment_IsIdempotentAndScoped()
     {
         var id = Guid.NewGuid();
 
-        var result = CreateController().DeleteAttachment(id);
+        var result = await CreateController().DeleteAttachment(id, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        _staged.Verify(s => s.Delete(WebmailUid.ToString(), id), Times.Once);
+        _staged.Verify(s => s.Delete(StagedScope, id), Times.Once);
     }
 
     [Fact]
-    public void GetStagedAttachment_ServesTheOwnersFile()
+    public async Task GetStagedAttachment_ServesTheOwnersFile()
     {
         var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        File.WriteAllBytes(path, new byte[] { 1, 2, 3 });
+        await File.WriteAllBytesAsync(path, new byte[] { 1, 2, 3 });
         try
         {
             var id = Guid.NewGuid();
             var info = new StagedAttachmentInfo(id, "logo.png", 3, "image/png", "logo@mail");
-            _staged.Setup(s => s.Open(It.IsAny<string>(), id))
+            _staged.Setup(s => s.Open(StagedScope, id))
                 .Returns(Result.Success(new StagedAttachment(info, path)));
 
             var controller = CreateController();
-            var result = controller.GetStagedAttachment(id);
+            var result = await controller.GetStagedAttachment(id, CancellationToken.None);
 
             var file = Assert.IsType<FileStreamResult>(result);
             Assert.Equal("image/png", file.ContentType);
@@ -1517,12 +1628,12 @@ public sealed class MailControllerTests
     }
 
     [Fact]
-    public void GetStagedAttachment_AnswersNotFoundForAForeignId()
+    public async Task GetStagedAttachment_AnswersNotFoundForAForeignId()
     {
         _staged.Setup(s => s.Open(It.IsAny<string>(), It.IsAny<Guid>()))
             .Returns(Result.Failure<StagedAttachment>("unknown_attachment"));
 
-        var result = CreateController().GetStagedAttachment(Guid.NewGuid());
+        var result = await CreateController().GetStagedAttachment(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result);
     }
@@ -1562,7 +1673,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SendMessage_NamesTheForbiddenFrom()
     {
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), "hunter2", It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), Conn, It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<SendMessageResult>(IMailSender.ForbiddenFrom));
         var request = new SendMessageRequest { To = ["ok@example.com"], FromAddress = "other@weesky.be" };
 
@@ -1576,9 +1687,9 @@ public sealed class MailControllerTests
     public async Task SendMessage_PassesADecoratedFromAddressDownAsTheBareAddress()
     {
         SendMessageRequest? captured = null;
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
                 It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<User, string, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .Callback<User, MailAccountConnection, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
             .ReturnsAsync(Result.Success(new SendMessageResult(true)));
         var request = new SendMessageRequest
         {
@@ -1605,9 +1716,9 @@ public sealed class MailControllerTests
     public async Task SendMessage_TreatsANullReferencesListAsNoThreading()
     {
         SendMessageRequest? captured = null;
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
                 It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<User, string, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .Callback<User, MailAccountConnection, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
             .ReturnsAsync(Result.Success(new SendMessageResult(true)));
         var request = new SendMessageRequest { To = ["ok@example.com"], References = null! };
 
@@ -1631,8 +1742,7 @@ public sealed class MailControllerTests
     public async Task SendMessage_AnswersUnauthorizedWithoutCredentials()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.SendMessage(
             new SendMessageRequest { To = ["a@example.com"] }, CancellationToken.None);
@@ -1643,7 +1753,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SendMessage_MapsUnknownAttachmentToBadRequest()
     {
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
                 It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<SendMessageResult>(IMailSender.UnknownAttachment));
 
@@ -1656,7 +1766,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SendMessage_MapsAServerRefusalTo502()
     {
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
                 It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<SendMessageResult>("The mail server refused the message"));
 
@@ -1670,7 +1780,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SendMessage_AnswersTheSendersResult()
     {
-        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<string>(),
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
                 It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new SendMessageResult(false)));
 
@@ -1704,7 +1814,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task PrepareQuote_MapsMessageNotFoundTo404()
     {
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<MimeMessage>(ImapSession.MessageNotFound));
 
         var result = await CreateController().PrepareQuote(
@@ -1716,7 +1826,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task PrepareQuote_AnswersThePreparedQuote()
     {
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new MimeMessage()));
         var prepared = new PreparedQuote("<p>q</p>", []);
         _quotes.Setup(q => q.PrepareAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), QuotePurpose.Forward, It.IsAny<CancellationToken>()))
@@ -1732,7 +1842,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task PrepareQuote_MapsAStagingRefusalTo400()
     {
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new MimeMessage()));
         _quotes.Setup(q => q.PrepareAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), It.IsAny<QuotePurpose>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<PreparedQuote>("The attachment exceeds the 25 MB limit"));
@@ -1747,8 +1857,7 @@ public sealed class MailControllerTests
     public async Task PrepareQuote_Returns401WhenCredentialsAreUnavailable()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.PrepareQuote(
             new PrepareQuoteRequest { Folder = "INBOX", Uid = 7, Purpose = "reply" }, CancellationToken.None);
@@ -1759,7 +1868,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task PrepareQuote_Returns502WhenImapFails()
     {
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<MimeMessage>("Unable to read the message"));
 
         var result = await CreateController().PrepareQuote(
@@ -1774,7 +1883,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SaveDraft_Returns200WithTheSavedLocation()
     {
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), "hunter2", It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), Conn, It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new SavedDraft(7, "Drafts")));
 
         var result = await CreateController().SaveDraft(new SaveDraftRequest(), CancellationToken.None);
@@ -1788,14 +1897,14 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SaveDraft_AcceptsNoRecipient()
     {
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), "hunter2", It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), Conn, It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new SavedDraft(1, "Drafts")));
 
         var result = await CreateController().SaveDraft(
             new SaveDraftRequest { To = [], Cc = [], Bcc = [] }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), "hunter2", It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), Conn, It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1805,13 +1914,13 @@ public sealed class MailControllerTests
             new SaveDraftRequest { To = ["not an address"] }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
-        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task SaveDraft_RejectsAForeignFrom()
     {
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<SavedDraft>(IOutgoingMessageFactory.ForbiddenFrom));
 
         var result = await CreateController().SaveDraft(
@@ -1828,15 +1937,15 @@ public sealed class MailControllerTests
             new SaveDraftRequest { FromAddress = "not an address" }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
-        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task SaveDraft_BaresADecoratedFromBeforeTheSaver()
     {
         SaveDraftRequest? captured = null;
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<User, string, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, MailAccountConnection, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
             .ReturnsAsync(Result.Success(new SavedDraft(1, "Drafts")));
 
         var result = await CreateController().SaveDraft(
@@ -1852,8 +1961,8 @@ public sealed class MailControllerTests
         // The normalisation rewrites the request with `with` on the base record type; the virtual
         // clone must preserve the derived SaveDraftRequest and its ReplaceUid, not slice it away.
         SaveDraftRequest? captured = null;
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<User, string, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, MailAccountConnection, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
             .ReturnsAsync(Result.Success(new SavedDraft(42, "Drafts")));
 
         var result = await CreateController().SaveDraft(
@@ -1866,7 +1975,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SaveDraft_RejectsAnUnknownStagedId()
     {
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<SavedDraft>(IOutgoingMessageFactory.UnknownAttachment));
 
         var result = await CreateController().SaveDraft(new SaveDraftRequest(), CancellationToken.None);
@@ -1877,7 +1986,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task SaveDraft_Returns502WithoutADraftsFolder()
     {
-        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<SavedDraft>(IDraftSaver.NoDraftsFolder));
 
         var result = await CreateController().SaveDraft(new SaveDraftRequest(), CancellationToken.None);
@@ -1894,13 +2003,12 @@ public sealed class MailControllerTests
     public async Task SaveDraft_Returns401WithoutCredentials()
     {
         var controller = CreateController();
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+        FailResolution("credentials_unavailable");
 
         var result = await controller.SaveDraft(new SaveDraftRequest(), CancellationToken.None);
 
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
-        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── OpenDraft ───────────────────────────────────────────────────────
@@ -1917,11 +2025,11 @@ public sealed class MailControllerTests
         message.InReplyTo = MimeUtils.ParseMessageId("<parent@x.com>");
         message.References.Add(MimeUtils.ParseMessageId("<oldest@x.com>")!);
         message.References.Add(MimeUtils.ParseMessageId("<newest@x.com>")!);
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), "hunter2", "Drafts", 7u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(message));
         var stagedInfo = new StagedAttachmentInfo(Guid.NewGuid(), "logo.png", 3, "image/png", "logo@mail");
         var prepared = new PreparedQuote("<p>Hi</p>", [stagedInfo]);
-        _quotes.Setup(q => q.PrepareAsync(WebmailUid.ToString(), message, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, message, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(prepared));
 
         var result = await CreateController().OpenDraft(
@@ -1943,7 +2051,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task OpenDraft_Returns404ForAMissingUid()
     {
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "Drafts", 9u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "Drafts", 9u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<MimeMessage>(ImapSession.MessageNotFound));
 
         var result = await CreateController().OpenDraft(
@@ -1955,7 +2063,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task OpenDraft_Returns400WhenStagingFails()
     {
-        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<string>(), "Drafts", 7u, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "Drafts", 7u, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new MimeMessage()));
         _quotes.Setup(q => q.PrepareAsync(It.IsAny<string>(), It.IsAny<MimeMessage>(), QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<PreparedQuote>("cap"));
@@ -1974,7 +2082,7 @@ public sealed class MailControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         _messages.Verify(m => m.GetMimeMessageAsync(
-            It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -1984,7 +2092,7 @@ public sealed class MailControllerTests
     public async Task GetMessage_RecordsTheSenderUse()
     {
         var detail = new MailMessageDetail { FromAddress = "news@example.com" };
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 42u,
                                         It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(detail));
 
@@ -2001,7 +2109,7 @@ public sealed class MailControllerTests
     public async Task GetMessage_WhenRecordingTheUseThrows_StillReturnsTheMessage()
     {
         var detail = new MailMessageDetail { FromAddress = "news@example.com" };
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 42u,
                                         It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(detail));
         _trustedSenders.Setup(s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(),
@@ -2019,7 +2127,7 @@ public sealed class MailControllerTests
     public async Task GetMessage_WhenRecordingTheUseIsCancelled_StillReturnsTheMessage()
     {
         var detail = new MailMessageDetail { FromAddress = "news@example.com" };
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 42u,
                                         It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(detail));
         _trustedSenders.Setup(s => s.TouchAsync(It.IsAny<Guid>(), It.IsAny<string>(),
@@ -2035,7 +2143,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task GetMessage_WhenTheReadFails_RecordsNothing()
     {
-        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<string>(), "INBOX", 42u,
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), "INBOX", 42u,
                                         It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailMessageDetail>(ImapSession.MessageNotFound));
 

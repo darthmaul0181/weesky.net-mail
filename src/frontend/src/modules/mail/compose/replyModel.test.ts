@@ -19,11 +19,28 @@ const identity = (address: string, overrides: Partial<SendingIdentity> = {}): Se
   ...overrides,
 })
 
-const mine = myAddresses('me@weesky.be', [{ name: 'sales', domain: 'weesky.be' }])
+const mine = myAddresses(['me@weesky.be'], [{ name: 'sales', domain: 'weesky.be' }])
 
 describe('myAddresses', () => {
   it('collects the primary and the aliases, lowercased', () => {
     expect(mine).toEqual(new Set(['me@weesky.be', 'sales@weesky.be']))
+  })
+
+  // The primary address is in no alias list — the backend tests it with its own `||` — so on a
+  // connected account it is only in the set if it is handed over explicitly.
+  it('collects every mailbox owned outright, skipping the ones there are none of', () => {
+    expect(myAddresses(['Shared@Ext.example', null, 'mick@weesky.be'], []))
+      .toEqual(new Set(['shared@ext.example', 'mick@weesky.be']))
+  })
+
+  // A connected mailbox has no alias list at all: its identities are the only source there.
+  it('counts the usable identities, and only those', () => {
+    const set = myAddresses(['shared@ext.example'], [], [
+      identity('Shared@Ext.example', { isPrimary: true, isDefault: true }),
+      identity('team@ext.example'),
+      identity('gone@ext.example', { stale: true }),
+    ])
+    expect(set).toEqual(new Set(['shared@ext.example', 'team@ext.example']))
   })
 })
 

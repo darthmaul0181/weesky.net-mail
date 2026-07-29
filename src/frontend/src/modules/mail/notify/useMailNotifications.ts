@@ -30,10 +30,11 @@ interface Baseline {
     count is already known; a failure falls back to counting, and announces rather than guessing
     at flags it could not read. */
 async function describeArrivals(
-  folder: string, size: number, sinceUid: number, count: number, signal: AbortSignal,
+  accountId: string, folder: string, size: number, sinceUid: number, count: number,
+  signal: AbortSignal,
 ): Promise<Described> {
   try {
-    const page = await api.getMailMessages(folder, 0, size, { signal })
+    const page = await api.getMailMessages(folder, 0, size, { signal, accountId })
     const arrivals = newSince(page.messages, sinceUid)
     return {
       body: notifyBody(arrivals, count),
@@ -60,6 +61,11 @@ export function useMailNotifications(): void {
   const { data: folders } = useFolders(preferences ? notifiesOf(preferences) : false)
   const baseline = useRef<Baseline | null>(null)
   const mounted = useRef(true)
+  // A raised bubble outlives the effect that raised it, so its handler cannot read the account id
+  // from its own closure: it needs whichever one is active at the moment of the click.
+  const liveAccountId = useRef(accountId)
+
+  useEffect(() => { liveAccountId.current = accountId }, [accountId])
 
   useEffect(() => {
     // Set on mount, not only cleared on unmount: StrictMode's double-invoke runs
@@ -99,11 +105,12 @@ export function useMailNotifications(): void {
 
     // Both tabs decided to notify; only one may. The bubble would dedupe itself through its
     // tag, the sound would not.
-    if (!claimNotification(inbox.uidValidity, arrivedAt)) return
+    if (!claimNotification(accountId, inbox.uidValidity, arrivedAt)) return
 
     const controller = new AbortController()
     void describeArrivals(
-      inbox.path, requestSizeOf(preferences), decision.sinceUid, decision.count, controller.signal,
+      accountId, inbox.path, requestSizeOf(preferences), decision.sinceUid, decision.count,
+      controller.signal,
     ).then(({ body, uid, silent }) => {
       // Two reasons to hold back: the hook is gone, or the batch turned out to be mail moved in
       // rather than delivered. An aborted fetch still announces, with the count fallback.
@@ -115,7 +122,10 @@ export function useMailNotifications(): void {
 
       showDesktopNotification(body, `weesky-mail-${arrivedAt}`, () => {
         window.focus()
-        if (uid !== null) {
+        // The uid and the folder both belong to the account this bubble was raised for. Switched
+        // away since, they name nothing here — that uid is another mailbox's message — so the
+        // click only raises the window rather than opening the wrong mail under the live account.
+        if (uid !== null && accountId === liveAccountId.current) {
           navigate(`/mail?folder=${encodeURIComponent(inbox.path)}&uid=${uid}`)
         }
       })

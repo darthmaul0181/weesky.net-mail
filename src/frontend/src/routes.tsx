@@ -2,11 +2,14 @@ import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 import RequireAuth from './layouts/RequireAuth'
 import RequireAdmin from './layouts/RequireAdmin'
+import RequirePrimary from './layouts/RequirePrimary'
+import RequireSieve from './layouts/RequireSieve'
 import AppShell from './layouts/AppShell'
 import LoginRoute from './pages/LoginRoute'
 import ComingSoon from './components/ComingSoon'
 import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
+import ConnectedAccountsPage from './modules/settings/accounts/ConnectedAccountsPage'
 import AppearancePage from './modules/settings/appearance/AppearancePage'
 import FoldersPage from './modules/settings/mail/FoldersPage'
 import GeneralPage from './modules/settings/general/GeneralPage'
@@ -41,16 +44,24 @@ export const routes: RouteObject[] = [
             element: <SettingsLayout />,
             children: [
               { index: true, element: <Navigate to="/settings/account" replace /> },
-              { path: 'account', element: <AccountPage /> },
+              {
+                element: <RequirePrimary />,
+                children: [
+                  { path: 'account', element: <AccountPage /> },
+                  { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
+                ],
+              },
               { path: 'general', element: <GeneralPage /> },
-              { path: 'accounts', element: <ComingSoon module="Linked accounts" /> }, // sub-project 2
+              { path: 'accounts', element: <ConnectedAccountsPage /> },
               { path: 'appearance', element: <AppearancePage /> },
               { path: 'folders', element: <FoldersPage /> },
               // The folders page grew out of the old system-folders one; keep its URL working.
               { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
-              { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
               { path: 'identities', element: <Suspense fallback={null}><IdentitiesPage /></Suspense> },
-              { path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> },
+              {
+                element: <RequireSieve />,
+                children: [{ path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> }],
+              },
               {
                 element: <RequireAdmin />,
                 children: [{ path: 'admin', element: <Suspense fallback={null}><AdminPage /></Suspense> }],

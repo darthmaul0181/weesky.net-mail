@@ -32,7 +32,7 @@ public sealed class SlidingSessionMiddlewareTests
     public SlidingSessionMiddlewareTests()
     {
         _tokens.Setup(t => t.Generate(It.IsAny<User>())).Returns(new AuthToken { ExpiresIn = 30, Token = "fresh" });
-        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success("hunter2"));
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success(new MailCredentialPayload("hunter2", null)));
     }
 
     /// <summary>
@@ -76,7 +76,25 @@ public sealed class SlidingSessionMiddlewareTests
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         Assert.Contains("BearerAuth=fresh", string.Join(";", context.Response.Headers["Set-Cookie"].ToArray()));
-        _credentials.Verify(c => c.Store(It.IsAny<HttpResponse>(), "hunter2", TimeSpan.FromMinutes(30)), Times.Once);
+        _credentials.Verify(
+            c => c.Store(It.IsAny<HttpResponse>(), It.Is<MailCredentialPayload>(p => p.Password == "hunter2"),
+                TimeSpan.FromMinutes(30)),
+            Times.Once);
+    }
+
+    // The renewal must not re-derive anything: a v1 cookie is re-issued exactly as it came in,
+    // and upgrading it is the resolver's job, on a path that already has the password to hand.
+    [Fact]
+    public async Task Invoke_ReissuesThePayloadUntouched()
+    {
+        var kek = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var payload = new MailCredentialPayload("hunter2", kek);
+        _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>())).Returns(Result.Success(payload));
+        var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10));
+
+        await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
+
+        _credentials.Verify(c => c.Store(It.IsAny<HttpResponse>(), payload, TimeSpan.FromMinutes(30)), Times.Once);
     }
 
     [Fact]
@@ -98,7 +116,7 @@ public sealed class SlidingSessionMiddlewareTests
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);
 
         _tokens.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
-        _credentials.Verify(c => c.Store(It.IsAny<HttpResponse>(), It.IsAny<string>(), It.IsAny<TimeSpan>()), Times.Never);
+        _credentials.Verify(c => c.Store(It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()), Times.Never);
     }
 
     [Fact]
@@ -115,7 +133,7 @@ public sealed class SlidingSessionMiddlewareTests
     public async Task Invoke_DoesNotRenewWhenCredentialsAreGone()
     {
         _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
-                    .Returns(Result.Failure<string>("credentials_unavailable"));
+                    .Returns(Result.Failure<MailCredentialPayload>("credentials_unavailable"));
         var context = CreateContext(authenticated: true, stamp: Stamp, remaining: TimeSpan.FromMinutes(10));
 
         await CreateSut().InvokeAsync(context, _tokens.Object, _credentials.Object, NullLogger<SlidingSessionMiddleware>.Instance);

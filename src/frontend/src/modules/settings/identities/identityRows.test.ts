@@ -26,6 +26,15 @@ describe('toRows', () => {
       { address: 'michel@x.be', displayName: 'Michel', isDefault: false },
     ])
   })
+
+  // A connected account's own row carries an editable label and the server refuses a set without
+  // it — the exact opposite of the primary, whose label is the account FullName.
+  it('keeps the account address when asked, label and default included', () => {
+    expect(toRows([{ ...primary, displayName: 'Le Boss' }, alias], true)).toEqual([
+      { address: 'mick@x.be', displayName: 'Le Boss', isDefault: true },
+      { address: 'michel@x.be', displayName: 'Michel', isDefault: false },
+    ])
+  })
 })
 
 describe('applyDefault', () => {

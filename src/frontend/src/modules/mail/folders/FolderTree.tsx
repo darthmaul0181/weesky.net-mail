@@ -4,6 +4,7 @@ import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
 import { DRAG_MIME, canDropInto, parseDrag, type DragPayload } from '../list/dragMessages'
+import { isSystemFolder } from './folderNodes'
 
 interface Props {
   folders: MailFolderNode[]
@@ -47,12 +48,14 @@ export function sortChildren(folders: MailFolderNode[]): MailFolderNode[] {
 }
 
 /**
- * The inbox is always shown, subscribed or not. Dovecot does not mark INBOX as subscribed —
- * it is implicitly always available, so the subscription flag is meaningless for it — and
- * filtering on subscription alone would hide the one folder that can never be hidden.
+ * A folder holding a role is always shown, subscribed or not: it is one the user cannot hide
+ * anyway — FolderManager greys its switch off and the API refuses the call — so filtering it
+ * on subscription would contradict a rule the product already makes. Dovecot leaves INBOX
+ * unsubscribed and Proximus subscribes nothing at all; on both, the flag says nothing about a
+ * folder mail is filed into by role.
  */
 export function isVisible(folder: MailFolderNode): boolean {
-  return folder.subscribed || folder.specialUse === 'inbox'
+  return folder.subscribed || isSystemFolder(folder)
 }
 
 /**

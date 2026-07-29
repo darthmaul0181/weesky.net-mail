@@ -1,5 +1,4 @@
 using CSharpFunctionalExtensions;
-using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.Services;
@@ -10,26 +9,23 @@ internal sealed class SieveRepository : ISieveRepository
 {
     private readonly IManageSieveClient _client;
     private readonly IRuleProviderRegistry _registry;
-    private readonly SieveOptions _options;
     private readonly ILogger<SieveRepository> _logger;
 
     public SieveRepository(
         IManageSieveClient client,
         IRuleProviderRegistry registry,
-        IOptions<SieveOptions> options,
         ILogger<SieveRepository> logger)
     {
         _client = client;
         _registry = registry;
-        _options = options.Value;
         _logger = logger;
     }
 
-    public async Task<Result<SieveRuleSet>> GetRuleSetAsync(User user, CancellationToken cancellationToken = default)
+    public async Task<Result<SieveRuleSet>> GetRuleSetAsync(SieveConnection connection, CancellationToken cancellationToken = default)
     {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+        ArgumentNullException.ThrowIfNull(connection);
 
-        var sessionResult = await _client.OpenSessionAsync(user.Email, cancellationToken);
+        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure<SieveRuleSet>(sessionResult.Error);
         await using var session = sessionResult.Value;
 
@@ -55,17 +51,17 @@ internal sealed class SieveRepository : ISieveRepository
         return DecodeScript(script.Value, scriptName);
     }
 
-    public async Task<Result<string>> GetRawScriptAsync(User user, CancellationToken cancellationToken = default)
+    public async Task<Result<string>> GetRawScriptAsync(SieveConnection connection, CancellationToken cancellationToken = default)
     {
-        var ruleSet = await GetRuleSetAsync(user, cancellationToken);
+        var ruleSet = await GetRuleSetAsync(connection, cancellationToken);
         return ruleSet.IsFailure
             ? Result.Failure<string>(ruleSet.Error)
             : Result.Success(ruleSet.Value.RawScript);
     }
 
-    public async Task<Result> SaveRulesAsync(User user, IReadOnlyList<SieveRule> rules, string? providerId, string? scriptName, CancellationToken cancellationToken = default)
+    public async Task<Result> SaveRulesAsync(SieveConnection connection, IReadOnlyList<SieveRule> rules, string? providerId, string? scriptName, CancellationToken cancellationToken = default)
     {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+        ArgumentNullException.ThrowIfNull(connection);
         if (rules == null) return Result.Failure("Rules collection is required");
 
         var provider = providerId != null
@@ -78,21 +74,21 @@ internal sealed class SieveRepository : ISieveRepository
 
         var targetName = string.IsNullOrEmpty(scriptName) ? provider.DefaultScriptName : scriptName;
 
-        var sessionResult = await _client.OpenSessionAsync(user.Email, cancellationToken);
+        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
         await using var session = sessionResult.Value;
 
         var put = await session.PutScriptAsync(targetName, compiled.Value, cancellationToken);
         if (put.IsFailure)
         {
-            _logger.LogWarning("PUTSCRIPT rejected for user={User} script={Script}: {Error}", user.Email, targetName, put.Error);
+            _logger.LogWarning("PUTSCRIPT rejected for {Connection} script={Script}: {Error}", connection, targetName, put.Error);
             return put;
         }
 
         var activate = await session.SetActiveAsync(targetName, cancellationToken);
         if (activate.IsFailure)
         {
-            _logger.LogWarning("SETACTIVE failed for user={User} script={Script}: {Error}", user.Email, targetName, activate.Error);
+            _logger.LogWarning("SETACTIVE failed for {Connection} script={Script}: {Error}", connection, targetName, activate.Error);
             return activate;
         }
 
@@ -129,18 +125,18 @@ internal sealed class SieveRepository : ISieveRepository
         }
     }
 
-    public Task<Result> SaveRawScriptAsync(User user, string content, string? scriptName, CancellationToken cancellationToken = default)
+    public Task<Result> SaveRawScriptAsync(SieveConnection connection, string content, string? scriptName, CancellationToken cancellationToken = default)
     {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+        ArgumentNullException.ThrowIfNull(connection);
         var targetName = string.IsNullOrEmpty(scriptName) ? _registry.Default.DefaultScriptName : scriptName;
-        return PutAndActivateAsync(user, targetName, content ?? string.Empty, cancellationToken);
+        return PutAndActivateAsync(connection, targetName, content ?? string.Empty, cancellationToken);
     }
 
-    public async Task<Result> DeleteAllRulesAsync(User user, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteAllRulesAsync(SieveConnection connection, CancellationToken cancellationToken = default)
     {
-        if (user == null) throw new ArgumentNullException(nameof(user));
+        ArgumentNullException.ThrowIfNull(connection);
 
-        var sessionResult = await _client.OpenSessionAsync(user.Email, cancellationToken);
+        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
         await using var session = sessionResult.Value;
 
@@ -216,23 +212,23 @@ internal sealed class SieveRepository : ISieveRepository
         };
     }
 
-    private async Task<Result> PutAndActivateAsync(User user, string scriptName, string scriptContent, CancellationToken cancellationToken)
+    private async Task<Result> PutAndActivateAsync(SieveConnection connection, string scriptName, string scriptContent, CancellationToken cancellationToken)
     {
-        var sessionResult = await _client.OpenSessionAsync(user.Email, cancellationToken);
+        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
         await using var session = sessionResult.Value;
 
         var put = await session.PutScriptAsync(scriptName, scriptContent, cancellationToken);
         if (put.IsFailure)
         {
-            _logger.LogWarning("PUTSCRIPT rejected for user={User} script={Script}: {Error}", user.Email, scriptName, put.Error);
+            _logger.LogWarning("PUTSCRIPT rejected for {Connection} script={Script}: {Error}", connection, scriptName, put.Error);
             return put;
         }
 
         var activate = await session.SetActiveAsync(scriptName, cancellationToken);
         if (activate.IsFailure)
         {
-            _logger.LogWarning("SETACTIVE failed for user={User} script={Script}: {Error}", user.Email, scriptName, activate.Error);
+            _logger.LogWarning("SETACTIVE failed for {Connection} script={Script}: {Error}", connection, scriptName, activate.Error);
         }
         return activate;
     }

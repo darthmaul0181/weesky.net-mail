@@ -61,7 +61,7 @@ export function useInlineImages(
     queryKey: ['mail', accountId, 'inline', folder ?? '', uid ?? 0],
     queryFn: async () => {
       const settled = await Promise.allSettled(parts.map(async ({ cid, part }) => {
-        const { blob } = await requestBlob(mailAttachmentUrl(folder!, uid!, part))
+        const { blob } = await requestBlob(mailAttachmentUrl(folder!, uid!, part, accountId))
         return [cid, await readAsDataUri(blob)] as const
       }))
 

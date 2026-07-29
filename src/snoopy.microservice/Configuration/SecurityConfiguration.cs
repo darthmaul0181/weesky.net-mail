@@ -65,7 +65,9 @@ internal static class SecurityConfiguration
             options.AddPolicy(CorsPolicy, policy => policy
                 .WithOrigins(allowedOrigins)
                 .WithMethods("GET", "POST", "PATCH", "DELETE", "PUT")
-                .WithHeaders("Authorization", "Content-Type")
+                // The account header must pass preflight, or every mail request carrying it
+                // dies on a CORS error before the server ever sees the account id.
+                .WithHeaders("Authorization", "Content-Type", IAccountConnectionResolver.HeaderName)
                 // Content-Disposition is not CORS-safelisted, so a browser hides it from
                 // JavaScript unless the server exposes it explicitly — without this, the
                 // client's filename extraction silently falls back and every download is named "attachment".

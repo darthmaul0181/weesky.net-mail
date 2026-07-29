@@ -81,7 +81,7 @@ export default function MessageReader(
   const deleteMessages = useDeleteMessages(onNotify)
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
   const navigate = useNavigate()
-  const { identity } = useAuth()
+  const { identity, activeAccount } = useAuth()
   const { data: identityList } = useIdentities()
   const { data: aliases } = useAliases()
   const prepare = usePrepareQuote()
@@ -182,7 +182,7 @@ export default function MessageReader(
   async function download(part: string, fileName: string) {
     setDownloadError(null)
     try {
-      const result = await requestBlob(mailAttachmentUrl(folderPath!, uid!, part))
+      const result = await requestBlob(mailAttachmentUrl(folderPath!, uid!, part, accountId))
       downloadBlob(result.blob, result.fileName || fileName)
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : 'Could not download the attachment')
@@ -219,8 +219,11 @@ export default function MessageReader(
     try {
       const purpose = action === 'editAsNew' ? 'editAsNew' : action === 'forward' ? 'forward' : 'reply'
       const prepared = await prepare.mutateAsync({ folder: folderPath!, uid: uid!, purpose })
+      // Both mailboxes: the active account's address is the one a reply-all keeps mailing back,
+      // and the primary's is in no alias list, so neither is covered by the other.
       const seed = buildComposeSeed(
-        action, data!, prepared, identityList ?? [], aliases ?? [], identity?.email ?? null)
+        action, data!, prepared, identityList ?? [], aliases ?? [],
+        [activeAccount?.email ?? null, identity?.email ?? null], accountId)
       navigate('/mail/compose', { state: { from: folderPath, seed } })
     } catch (error) {
       onNotify?.(error instanceof Error ? error.message : 'Could not prepare the message')
@@ -420,7 +423,7 @@ export default function MessageReader(
         <AttachmentViewerModal
           images={imageAttachments.map(a => ({
             part: a.part,
-            src: mailAttachmentUrl(folderPath!, uid!, a.part),
+            src: mailAttachmentUrl(folderPath!, uid!, a.part, accountId),
             fileName: a.fileName,
             size: a.size,
           }))}

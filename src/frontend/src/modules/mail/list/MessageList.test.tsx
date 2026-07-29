@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 // A plain function, not a vi.fn: the suites clear mocks between tests and the flag hook has
 // to keep answering a mutation afterwards.

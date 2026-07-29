@@ -523,6 +523,17 @@ body {
   border-radius: 999px; padding: 1px 8px; flex-shrink: 0;
 }
 
+/* The row cannot be acted on until something is fixed — an account whose password no longer
+   decrypts. Not uppercased like the plain tag: "PASSWORD NEEDED" is far wider than the identity
+   menu, which is only as wide as the column it hangs under. */
+.row-tag.is-warn {
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 /* A stale identity (its alias is gone) is kept but de-emphasised. */
 .admin-list-item.is-stale .admin-list-item-email,
 .admin-list-item.is-stale .admin-list-item-name { color: var(--text-muted); }
@@ -536,6 +547,30 @@ body {
 .identity-combo input { width: 100%; box-sizing: border-box; }
 .identity-combo-hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px 126px; }
 .identity-modal-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+
+
+/* ── Connected accounts page ─────────────────────────────── */
+
+.connected-accounts { max-width: 620px; }
+
+/* The tile stacks where the admin list runs one row: an address, a server name and a date do
+   not fit beside the 40ch name column, so the name sizes to its own text and the line under it
+   takes the ellipsis rather than pushing the action icons off the tile. */
+.connected-account-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.connected-account-text .admin-list-item-email { width: auto; max-width: 100%; }
+.connected-account-text .admin-list-item-name {
+  flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.connected-account-warn { font-size: 12px; color: var(--danger); }
+
+/* The connect form is revealed in place, so it is boxed like a tile — otherwise three field
+   rows appear to belong to the list under them. */
+.connect-account-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px;
+}
+.connect-account-panel .admin-list-header { margin-bottom: 12px; }
+.connect-account-panel .field-h select { flex: 0 0 auto; }
 
 
 /* ── Avatar & account panel ──────────────────────────────── */
@@ -1284,9 +1319,12 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* A number field is in this list for the same reason the others are: left out, it fell through
+   to the browser's own box and sat a different height and border beside the host above it. */
 .field-h input[type="text"],
 .field-h input[type="password"],
 .field-h input[type="email"],
+.field-h input[type="number"],
 .field-h select {
   flex: 1;
   border: 1px solid var(--border);
@@ -1303,6 +1341,7 @@ body {
 .field-h input[type="text"]:focus,
 .field-h input[type="password"]:focus,
 .field-h input[type="email"]:focus,
+.field-h input[type="number"]:focus,
 .field-h select:focus {
   border-color: var(--action-primary);
 }

@@ -92,6 +92,21 @@ describe('the folder list', () => {
     expect(screen.getByLabelText('Show INBOX')).toBeChecked()
   })
 
+  // Regression, found on a connected Proximus account: that server keeps no subscriptions, so
+  // every role-holding folder rendered its switch off *and* disabled — hidden, with no way to
+  // show it. The switch is disabled because such a folder can never be hidden, so off is the
+  // one state it must never display.
+  it('shows a role-holding folder as always visible', () => {
+    render(
+      <FolderManager
+        folders={[node({ path: 'SentMail', name: 'SentMail', specialUse: 'sent', subscribed: false })]}
+        onNotify={vi.fn()}
+      />)
+
+    expect(screen.getByLabelText('Show SentMail')).toBeChecked()
+    expect(screen.getByLabelText('Show SentMail')).toBeDisabled()
+  })
+
   // Tiles, not bare rows: every list of elements on a page wears the site's tile.
   it('renders each folder as a tile of the shared list', () => {
     const { container } = renderManager()

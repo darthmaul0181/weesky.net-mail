@@ -67,12 +67,19 @@ async function readError(res) {
   return parseErrorEnvelope(text, res.statusText ?? '')
 }
 
+// 'primary' means the same as no id at all — the backend defaults there — so only a genuinely
+// connected account changes what travels over the wire. The one place this is decided.
+function carriesAccount(accountId) {
+  return Boolean(accountId) && accountId !== 'primary'
+}
+
 async function request(method, path, body, options = {}) {
   // FormData carries its own multipart boundary; naming a content type here breaks the parse on
   // the server side.
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData
   const headers = {}
   if (body && !isForm) headers['Content-Type'] = 'application/json'
+  if (carriesAccount(options.accountId)) headers['X-Account-Id'] = options.accountId
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -104,8 +111,12 @@ async function request(method, path, body, options = {}) {
  * parses JSON.
  */
 export async function requestBlob(path, options = {}) {
+  const headers = {}
+  if (carriesAccount(options.accountId)) headers['X-Account-Id'] = options.accountId
+
   const res = await fetch(`${BASE}${path}`, {
     method: 'GET',
+    headers,
     credentials: 'include',
     signal: options.signal,
   })
@@ -143,12 +154,12 @@ export const api = {
   getAliases: () =>
     request('GET', '/api/Aliases'),
 
-  getIdentities: () =>
-    request('GET', '/api/Identities'),
+  getIdentities: (options) =>
+    request('GET', '/api/Identities', undefined, options),
 
   // Replaces the whole set: the payload is the list, not a delta.
-  putIdentities: (identities) =>
-    request('PUT', '/api/Identities', { identities }),
+  putIdentities: (identities, options) =>
+    request('PUT', '/api/Identities', { identities }, options),
 
   getContacts: () =>
     request('GET', '/api/Contacts'),
@@ -234,29 +245,26 @@ export const api = {
   adminRemoveVirtualDomainOwner: (domainId, userId) =>
     request('DELETE', `/api/Admin/domains/virtuals/${domainId}/${userId}`),
 
-  getFolders: () =>
-    request('GET', '/api/Account/Folders'),
+  getRuleProviders: (options) =>
+    request('GET', '/api/Rules/Providers', undefined, options),
 
-  getRuleProviders: () =>
-    request('GET', '/api/Rules/Providers'),
+  getRules: (options) =>
+    request('GET', '/api/Rules', undefined, options),
 
-  getRules: () =>
-    request('GET', '/api/Rules'),
+  saveRules: (rules, providerId, scriptName, options) =>
+    request('PUT', '/api/Rules', { rules, providerId, scriptName }, options),
 
-  saveRules: (rules, providerId, scriptName) =>
-    request('PUT', '/api/Rules', { rules, providerId, scriptName }),
+  deleteRules: (options) =>
+    request('DELETE', '/api/Rules', undefined, options),
 
-  deleteRules: () =>
-    request('DELETE', '/api/Rules'),
+  checkCompatibility: (providerId, rules, options) =>
+    request('POST', '/api/Rules/CompatibilityCheck', { providerId, rules }, options),
 
-  checkCompatibility: (providerId, rules) =>
-    request('POST', '/api/Rules/CompatibilityCheck', { providerId, rules }),
+  getRawScript: (options) =>
+    request('GET', '/api/Rules/Raw', undefined, options),
 
-  getRawScript: () =>
-    request('GET', '/api/Rules/Raw'),
-
-  saveRawScript: (content, scriptName) =>
-    request('PUT', '/api/Rules/Raw', { content, scriptName }),
+  saveRawScript: (content, scriptName, options) =>
+    request('PUT', '/api/Rules/Raw', { content, scriptName }, options),
 
   // ── Mail ──────────────────────────────────────────────────────────────────
   // Folder paths are encoded: they may contain '/', '&' or '#'.
@@ -264,17 +272,17 @@ export const api = {
   getMailFolders: (options) =>
     request('GET', '/api/Mail/Folders', undefined, options),
 
-  createMailFolder: (parentPath, name) =>
-    request('POST', '/api/Mail/Folders', { parentPath, name }),
+  createMailFolder: (parentPath, name, options) =>
+    request('POST', '/api/Mail/Folders', { parentPath, name }, options),
 
-  renameMailFolder: (path, newParentPath, newName) =>
-    request('PUT', '/api/Mail/Folders', { path, newParentPath, newName }),
+  renameMailFolder: (path, newParentPath, newName, options) =>
+    request('PUT', '/api/Mail/Folders', { path, newParentPath, newName }, options),
 
-  deleteMailFolder: (path) =>
-    request('DELETE', '/api/Mail/Folders', { path }),
+  deleteMailFolder: (path, options) =>
+    request('DELETE', '/api/Mail/Folders', { path }, options),
 
-  setMailFolderSubscription: (path, subscribed) =>
-    request('PUT', '/api/Mail/Folders/Subscription', { path, subscribed }),
+  setMailFolderSubscription: (path, subscribed, options) =>
+    request('PUT', '/api/Mail/Folders/Subscription', { path, subscribed }, options),
 
   getMailMessages: (folder, page, pageSize, options) =>
     request('GET', `/api/Mail/Messages?folder=${encodeURIComponent(folder)}&page=${page}&pageSize=${pageSize}`, undefined, options),
@@ -282,20 +290,20 @@ export const api = {
   getMailMessage: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
 
-  setMessageFlags: (folder, uids, flag, value) =>
-    request('PUT', '/api/Mail/Messages/Flags', { folderPath: folder, uids, flag, value }),
+  setMessageFlags: (folder, uids, flag, value, options) =>
+    request('PUT', '/api/Mail/Messages/Flags', { folderPath: folder, uids, flag, value }, options),
 
-  moveMessages: (folder, uids, targetFolder) =>
-    request('POST', '/api/Mail/Messages/Move', { folderPath: folder, uids, targetFolderPath: targetFolder }),
+  moveMessages: (folder, uids, targetFolder, options) =>
+    request('POST', '/api/Mail/Messages/Move', { folderPath: folder, uids, targetFolderPath: targetFolder }, options),
 
-  copyMessages: (folder, uids, targetFolder) =>
-    request('POST', '/api/Mail/Messages/Copy', { folderPath: folder, uids, targetFolderPath: targetFolder }),
+  copyMessages: (folder, uids, targetFolder, options) =>
+    request('POST', '/api/Mail/Messages/Copy', { folderPath: folder, uids, targetFolderPath: targetFolder }, options),
 
-  deleteMessages: (folder, uids) =>
-    request('DELETE', '/api/Mail/Messages', { folderPath: folder, uids }),
+  deleteMessages: (folder, uids, options) =>
+    request('DELETE', '/api/Mail/Messages', { folderPath: folder, uids }, options),
 
-  emptyFolder: (folder, targetFolder) =>
-    request('POST', '/api/Mail/Folders/Empty', { folderPath: folder, targetFolderPath: targetFolder ?? null }),
+  emptyFolder: (folder, targetFolder, options) =>
+    request('POST', '/api/Mail/Folders/Empty', { folderPath: folder, targetFolderPath: targetFolder ?? null }, options),
 
   searchMessages: (criteria, page, pageSize, options) =>
     request('POST', '/api/Mail/Messages/Search', { ...criteria, page, pageSize }, options),
@@ -303,26 +311,55 @@ export const api = {
   getFolderRoles: (options) =>
     request('GET', '/api/Mail/FolderRoles', undefined, options),
 
-  setFolderRole: (role, folderPath) =>
-    request('PUT', '/api/Mail/FolderRoles', { role, folderPath }),
+  setFolderRole: (role, folderPath, options) =>
+    request('PUT', '/api/Mail/FolderRoles', { role, folderPath }, options),
 
-  clearFolderRole: (role) =>
-    request('DELETE', `/api/Mail/FolderRoles?role=${encodeURIComponent(role)}`),
+  clearFolderRole: (role, options) =>
+    request('DELETE', `/api/Mail/FolderRoles?role=${encodeURIComponent(role)}`, undefined, options),
 
-  sendMessage: (payload) =>
-    request('POST', '/api/Mail/Send', payload),
+  sendMessage: (payload, options) =>
+    request('POST', '/api/Mail/Send', payload, options),
 
-  deleteAttachment: (id) =>
-    request('DELETE', `/api/Mail/Attachments/${id}`),
+  deleteAttachment: (id, options) =>
+    request('DELETE', `/api/Mail/Attachments/${id}`, undefined, options),
 
-  prepareQuote: (folder, uid, purpose) =>
-    request('POST', '/api/Mail/Messages/PrepareQuote', { folder, uid, purpose }),
+  prepareQuote: (folder, uid, purpose, options) =>
+    request('POST', '/api/Mail/Messages/PrepareQuote', { folder, uid, purpose }, options),
 
-  saveDraft: (payload) =>
-    request('POST', '/api/Mail/Drafts', payload),
+  saveDraft: (payload, options) =>
+    request('POST', '/api/Mail/Drafts', payload, options),
 
-  openDraft: (folder, uid) =>
-    request('POST', '/api/Mail/Drafts/Open', { folder, uid }),
+  openDraft: (folder, uid, options) =>
+    request('POST', '/api/Mail/Drafts/Open', { folder, uid }, options),
+
+  // ── Connected accounts ───────────────────────────────────────────────────
+
+  getConnectedAccounts: () =>
+    request('GET', '/api/ConnectedAccounts'),
+
+  connectAccount: (domainId, email, password) =>
+    request('POST', '/api/ConnectedAccounts', { domainId, email, password }),
+
+  updateConnectedAccountPassword: (id, password) =>
+    request('PUT', `/api/ConnectedAccounts/${id}/Password`, { password }),
+
+  deleteConnectedAccount: (id) =>
+    request('DELETE', `/api/ConnectedAccounts/${id}`),
+
+  getConnectableDomains: () =>
+    request('GET', '/api/ConnectedAccounts/Domains'),
+
+  adminGetExternalDomains: () =>
+    request('GET', '/api/Admin/domains/external'),
+
+  adminCreateExternalDomain: (domain) =>
+    request('POST', '/api/Admin/domains/external', domain),
+
+  adminUpdateExternalDomain: (id, domain) =>
+    request('PUT', `/api/Admin/domains/external/${id}`, domain),
+
+  adminDeleteExternalDomain: (id) =>
+    request('DELETE', `/api/Admin/domains/external/${id}`),
 
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second
@@ -344,9 +381,13 @@ export const api = {
     request('PUT', '/api/AppSettings', { key, value }),
 }
 
-/** Builds the attachment download URL. Kept beside the api object so encoding stays in one place. */
-export function mailAttachmentUrl(folder, uid, part) {
-  return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}`
+/**
+ * Builds the attachment download URL. Kept beside the api object so encoding stays in one place.
+ * A subresource fetch cannot carry a header, so a connected account rides along as `?account=`.
+ */
+export function mailAttachmentUrl(folder, uid, part, accountId) {
+  const account = carriesAccount(accountId) ? `&account=${encodeURIComponent(accountId)}` : ''
+  return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}${account}`
 }
 
 /** The API origin. Exported so the composer can undo an absolute staged URL before sending. */
@@ -356,20 +397,24 @@ export const API_BASE = BASE
  * Builds a staged attachment's content URL — the src the composer shows inline images through.
  * Absolute, unlike mailAttachmentUrl: that one is a request path handed to requestBlob, which
  * prefixes BASE itself, while an <img> subresource would resolve against the SPA's own origin.
+ * Staged files are namespaced by account on the backend, so a connected account must carry
+ * `?account=` here too or its inline images 404.
  */
-export function stagedAttachmentUrl(id) {
-  return `${BASE}/api/Mail/Attachments/${id}/content`
+export function stagedAttachmentUrl(id, accountId) {
+  const account = carriesAccount(accountId) ? `?account=${encodeURIComponent(accountId)}` : ''
+  return `${BASE}/api/Mail/Attachments/${id}/content${account}`
 }
 
 /**
  * Uploads one outgoing attachment. XMLHttpRequest, not fetch: only XHR exposes upload
  * progress, and a 25 MB file without a bar reads as a hang.
  */
-export function uploadAttachment(file, { onProgress, signal } = {}) {
+export function uploadAttachment(file, { onProgress, signal, accountId } = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${BASE}/api/Mail/Attachments`)
     xhr.withCredentials = true
+    if (carriesAccount(accountId)) xhr.setRequestHeader('X-Account-Id', accountId)
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total)
     }

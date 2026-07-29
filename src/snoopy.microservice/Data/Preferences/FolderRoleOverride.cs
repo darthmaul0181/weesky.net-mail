@@ -13,6 +13,10 @@ public sealed class FolderRoleOverride
     [Column("user_id")]
     public Guid UserId { get; set; }
 
+    /// <summary>Empty = the primary mailbox, otherwise a connected_accounts id.</summary>
+    [Column("account_id")]
+    public string AccountId { get; set; } = string.Empty;
+
     /// <summary>Stable enum value ("trash", never a localised word). See FolderRoles.All.</summary>
     [Column("role")]
     public string Role { get; set; } = string.Empty;

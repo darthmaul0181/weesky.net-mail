@@ -148,4 +148,21 @@ public sealed class WebmailUserStoreTests
 
         Assert.Null(await CreateStore(db).FindByEmailAsync("ghost@weesky.be", CancellationToken.None));
     }
+
+    // Every connected-account cipher hangs off the key this salt derives: a second value would
+    // leave the first login's ciphers undecryptable for good.
+    [Fact]
+    public async Task GetOrCreateKdfSaltAsync_GeneratesOnceAndReturnsTheSameSaltAfter()
+    {
+        var db = nameof(GetOrCreateKdfSaltAsync_GeneratesOnceAndReturnsTheSameSaltAfter);
+        await CreateStore(db).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
+
+        var first = await CreateStore(db).GetOrCreateKdfSaltAsync("mick@weesky.be", CancellationToken.None);
+        var second = await CreateStore(db).GetOrCreateKdfSaltAsync("  Mick@WEESKY.be ", CancellationToken.None);
+
+        Assert.Equal(16, first.Length);
+        Assert.Equal<byte[]>(first, second);
+        using var ctx = new PreferencesTestDbContext(db);
+        Assert.Equal<byte[]>(first, ctx.Users.Single().KdfSalt!);
+    }
 }

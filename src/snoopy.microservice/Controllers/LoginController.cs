@@ -49,6 +49,7 @@ public sealed class LoginController : ApiBaseController
     /// can be captured.
     /// </remarks>
     /// <param name="credentials">user credentials</param>
+    /// <param name="cancellationToken">cancellation token</param>
     /// <returns></returns>
     /// <response code="200">Login successful</response>
     /// <response code="401">Invalid credentials</response>
@@ -58,7 +59,7 @@ public sealed class LoginController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-    public async Task<ActionResult<AuthToken>> Login(Credentials credentials)
+    public async Task<ActionResult<AuthToken>> Login(Credentials credentials, CancellationToken cancellationToken)
     {
         Result<AuthToken> result = await _authenticator.AuthenticateAsync(credentials.Email, credentials.Password);
 
@@ -66,9 +67,14 @@ public sealed class LoginController : ApiBaseController
         {
             HttpContext.Response.WriteAuthCookie(_tokenConstants.Value, result.Value.Token);
 
+            // The only moment the 600k-iteration key derivation is affordable: the cookie carries
+            // the result so no later request has to pay it again.
+            var salt = await _webmailUsers.GetOrCreateKdfSaltAsync(credentials.Email, cancellationToken);
+            var kek = ConnectedAccountCipher.DeriveKek(credentials.Password, salt);
+
             _credentialStore.Store(
                 HttpContext.Response,
-                credentials.Password,
+                new MailCredentialPayload(credentials.Password, kek),
                 TimeSpan.FromMinutes(_tokenConstants.Value.ExpiryInMinutes));
         }
 

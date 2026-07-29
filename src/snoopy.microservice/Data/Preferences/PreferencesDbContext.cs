@@ -17,12 +17,12 @@ public class PreferencesDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.Role });
+        modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.AccountId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
         // No relation edge here, unlike the five per-account tables below: this setting belongs
         // to no one, so there is nothing to order ahead of users.
         modelBuilder.Entity<AppSetting>().HasKey(s => s.SettingKey);
-        modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.Address });
+        modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.AccountId, i.Address });
         modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
         modelBuilder.Entity<Contact>().HasKey(c => c.Id);
         modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.Uid }).IsUnique();
@@ -68,6 +68,22 @@ public class PreferencesDbContext : DbContext
             .WithMany()
             .HasForeignKey(t => t.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExternalDomain>().HasKey(d => d.Id);
+        modelBuilder.Entity<ExternalDomain>().HasIndex(d => d.Name).IsUnique();
+        modelBuilder.Entity<ConnectedAccount>().HasKey(a => a.Id);
+        modelBuilder.Entity<ConnectedAccount>().HasIndex(a => new { a.UserId, a.DomainId, a.Email }).IsUnique();
+        // Same mechanism again: "connected_accounts" sorts before both parents.
+        modelBuilder.Entity<ConnectedAccount>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(a => a.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ConnectedAccount>()
+            .HasOne<ExternalDomain>()
+            .WithMany()
+            .HasForeignKey(a => a.DomainId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
@@ -85,4 +101,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<ContactEmail> ContactEmails { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
+
+    public DbSet<ExternalDomain> ExternalDomains { get; set; }
+
+    public DbSet<ConnectedAccount> ConnectedAccounts { get; set; }
 }

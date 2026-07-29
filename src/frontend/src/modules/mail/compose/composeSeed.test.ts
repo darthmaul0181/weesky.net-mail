@@ -28,11 +28,36 @@ const prepared = {
 const identities = [identity('me@weesky.be', { isDefault: true })]
 const aliases = [{ name: 'sales', domain: 'weesky.be' }]
 
+// A quoted body's inline parts are staged files, namespaced by account on the backend. The
+// composer shows them as <img> subresources, which cannot carry the X-Account-Id header.
+describe('staged inline images in a seed', () => {
+  it('names the active account in a quote seed', () => {
+    const seed = buildComposeSeed(
+      'forward', detail(), { ...prepared, quotableHtml: '<img src="/api/Mail/Attachments/i1/content">' },
+      identities, aliases, ['me@weesky.be'], 'linked-1')
+
+    expect(seed.html).toContain(stagedAttachmentUrl('i1', 'linked-1'))
+  })
+
+  it('names the active account in a draft seed', () => {
+    const opened: OpenedDraft = {
+      to: [], cc: [], bcc: [], subject: 's', fromAddress: null,
+      htmlBody: '<img src="/api/Mail/Attachments/i1/content">',
+      attachments: [{ id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' }],
+      inReplyTo: null, references: [],
+    }
+
+    const seed = buildDraftSeed(opened, [], { folderPath: 'Drafts', uid: 9 }, 'linked-1')
+
+    expect(seed.html).toContain(stagedAttachmentUrl('i1', 'linked-1'))
+  })
+})
+
 describe('nameHints', () => {
   it('carries the sender on a reply, keyed canonically', () => {
     const seed = buildComposeSeed(
       'reply', detail({ fromName: 'Alice Dupont', fromAddress: 'Alice@Ext.example' }),
-      prepared, identities, aliases, 'me@weesky.be')
+      prepared, identities, aliases, ['me@weesky.be'], 'primary')
 
     expect(seed.nameHints['alice@ext.example']).toBe('Alice Dupont')
   })
@@ -40,7 +65,7 @@ describe('nameHints', () => {
   it('carries the other recipients on a reply-all', () => {
     const seed = buildComposeSeed(
       'replyAll', detail({ cc: [{ name: 'Bob Martin', address: 'Bob@Ext.example' }] }),
-      prepared, identities, aliases, 'me@weesky.be')
+      prepared, identities, aliases, ['me@weesky.be'], 'primary')
 
     expect(seed.nameHints['bob@ext.example']).toBe('Bob Martin')
   })
@@ -48,7 +73,7 @@ describe('nameHints', () => {
   it('omits an address whose header carried no name', () => {
     const seed = buildComposeSeed(
       'reply', detail({ fromName: '', to: [{ name: '', address: 'me@weesky.be' }] }),
-      prepared, identities, aliases, 'me@weesky.be')
+      prepared, identities, aliases, ['me@weesky.be'], 'primary')
 
     expect(seed.nameHints).toEqual({})
   })
@@ -56,7 +81,7 @@ describe('nameHints', () => {
 
 describe('buildComposeSeed', () => {
   it('reply: recipients, Re: subject, quoted body, threading', () => {
-    const seed = buildComposeSeed('reply', detail(), prepared, identities, aliases, 'me@weesky.be')
+    const seed = buildComposeSeed('reply', detail(), prepared, identities, aliases, ['me@weesky.be'], 'primary')
     expect(seed.action).toBe('reply')
     expect(seed.to).toEqual(['alice@ext.example'])
     expect(seed.subject).toBe('Re: Hello')
@@ -65,8 +90,24 @@ describe('buildComposeSeed', () => {
     expect(seed.references).toEqual(['m@x'])
     expect(seed.fromAddress).toBe('me@weesky.be')
     expect(seed.attachments).toEqual(prepared.attachments)
-    expect(buildComposeSeed('replyAll', detail(), prepared, identities, aliases, 'me@weesky.be').action)
+    expect(buildComposeSeed('replyAll', detail(), prepared, identities, aliases, ['me@weesky.be'], 'primary').action)
       .toBe('replyAll')
+  })
+
+  // Three ways to be the user on a connected account: its own address, an identity on it, and the
+  // primary mailbox — which no alias list carries. Keeping any of them mails the user themselves.
+  it('reply-all drops the active account, its identities and the primary alike', () => {
+    const own = [identity('shared@ext.example', { isPrimary: true, isDefault: true }), identity('team@ext.example')]
+    const d = detail({
+      to: [{ name: '', address: 'shared@ext.example' }, { name: '', address: 'Mick@weesky.be' },
+        { name: '', address: 'bob@ext.example' }],
+      cc: [{ name: '', address: 'Team@ext.example' }, { name: '', address: 'carol@ext.example' }],
+    })
+
+    const seed = buildComposeSeed('replyAll', d, prepared, own, [], ['shared@ext.example', 'mick@weesky.be'], 'linked-1')
+
+    expect(seed.to).toEqual(['alice@ext.example', 'bob@ext.example'])
+    expect(seed.cc).toEqual(['carol@ext.example'])
   })
 
   // The composer shows these as <img src>, which resolves against the SPA origin, not the API's.
@@ -76,14 +117,14 @@ describe('buildComposeSeed', () => {
       attachments: prepared.attachments,
     }
     for (const action of ['reply', 'replyAll', 'forward', 'editAsNew'] as const) {
-      const seed = buildComposeSeed(action, detail(), inline, identities, aliases, 'me@weesky.be')
+      const seed = buildComposeSeed(action, detail(), inline, identities, aliases, ['me@weesky.be'], 'primary')
       expect(seed.html).toContain(`src="${stagedAttachmentUrl('i1')}"`)
       expect(seed.html).not.toContain('src="/api/Mail/Attachments/i1/content"')
     }
   })
 
   it('forward: empty recipients, Fwd: subject, banner body, threading', () => {
-    const seed = buildComposeSeed('forward', detail(), prepared, identities, aliases, 'me@weesky.be')
+    const seed = buildComposeSeed('forward', detail(), prepared, identities, aliases, ['me@weesky.be'], 'primary')
     expect(seed.action).toBe('forward')
     expect(seed.to).toEqual([])
     expect(seed.subject).toBe('Fwd: Hello')
@@ -94,7 +135,7 @@ describe('buildComposeSeed', () => {
 
   it('editAsNew: original recipients and subject, bare body, no threading', () => {
     const d = detail({ bcc: [{ name: '', address: 'hidden@ext.example' }] })
-    const seed = buildComposeSeed('editAsNew', d, prepared, identities, aliases, 'me@weesky.be')
+    const seed = buildComposeSeed('editAsNew', d, prepared, identities, aliases, ['me@weesky.be'], 'primary')
     expect(seed.action).toBe('editAsNew')
     expect(seed.to).toEqual(['me@weesky.be'])
     expect(seed.bcc).toEqual(['hidden@ext.example'])
@@ -120,7 +161,7 @@ describe('buildDraftSeed', () => {
   const ref = { folderPath: 'Drafts', uid: 41 }
 
   it('carries the envelope, threading and draftRef', () => {
-    const seed = buildDraftSeed(opened, [identity('sales@weesky.be')], ref)
+    const seed = buildDraftSeed(opened, [identity('sales@weesky.be')], ref, 'primary')
     expect(seed.action).toBe('draft')
     expect(seed.to).toEqual(['bob@ext.example'])
     expect(seed.subject).toBe('WIP')
@@ -131,21 +172,21 @@ describe('buildDraftSeed', () => {
   })
 
   it('absolutizes the staged URLs in the body', () => {
-    const seed = buildDraftSeed(opened, [], ref)
+    const seed = buildDraftSeed(opened, [], ref, 'primary')
     expect(seed.html).toContain(stagedAttachmentUrl('a1'))
   })
 
   it('keeps the draft From only when a usable identity owns it', () => {
-    expect(buildDraftSeed(opened, [identity('sales@weesky.be')], ref).fromAddress).toBe('sales@weesky.be')
-    expect(buildDraftSeed(opened, [identity('sales@weesky.be', { stale: true })], ref).fromAddress).toBeNull()
-    expect(buildDraftSeed(opened, [identity('other@weesky.be')], ref).fromAddress).toBeNull()
+    expect(buildDraftSeed(opened, [identity('sales@weesky.be')], ref, 'primary').fromAddress).toBe('sales@weesky.be')
+    expect(buildDraftSeed(opened, [identity('sales@weesky.be', { stale: true })], ref, 'primary').fromAddress).toBeNull()
+    expect(buildDraftSeed(opened, [identity('other@weesky.be')], ref, 'primary').fromAddress).toBeNull()
     // Case differences must not lose the choice: an IMAP client may have stored it capitalised.
-    expect(buildDraftSeed({ ...opened, fromAddress: 'Sales@weesky.be' }, [identity('sales@weesky.be')], ref)
+    expect(buildDraftSeed({ ...opened, fromAddress: 'Sales@weesky.be' }, [identity('sales@weesky.be')], ref, 'primary')
       .fromAddress).toBe('sales@weesky.be')
   })
 
   // A draft keeps no headers from whatever it was a reply to, so there is nothing to carry.
   it('carries no name hints', () => {
-    expect(buildDraftSeed(opened, [], ref).nameHints).toEqual({})
+    expect(buildDraftSeed(opened, [], ref, 'primary').nameHints).toEqual({})
   })
 })

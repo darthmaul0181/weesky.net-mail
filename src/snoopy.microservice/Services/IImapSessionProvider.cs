@@ -1,5 +1,5 @@
 using CSharpFunctionalExtensions;
-using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
 
@@ -18,7 +18,7 @@ public interface IImapSessionProvider
     /// The request's session, opening it on first use. A failure is remembered too: one
     /// refused authentication must not be retried once per operation in the same request.
     /// </summary>
-    Task<Result<IImapSession>> GetAsync(string email, string password, CancellationToken cancellationToken);
+    Task<Result<IImapSession>> GetAsync(MailAccountConnection connection, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -28,24 +28,20 @@ public interface IImapSessionProvider
 internal static class ImapSessionProviderExtensions
 {
     public static async Task<Result<T>> WithSessionAsync<T>(
-        this IImapSessionProvider provider, User user, string password,
+        this IImapSessionProvider provider, MailAccountConnection connection,
         Func<IImapSession, Task<Result<T>>> operation, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(user);
-
-        var session = await provider.GetAsync(user.Email, password, cancellationToken);
+        var session = await provider.GetAsync(connection, cancellationToken);
         return session.IsFailure
             ? Result.Failure<T>(session.Error)
             : await operation(session.Value);
     }
 
     public static async Task<Result> WithSessionAsync(
-        this IImapSessionProvider provider, User user, string password,
+        this IImapSessionProvider provider, MailAccountConnection connection,
         Func<IImapSession, Task<Result>> operation, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(user);
-
-        var session = await provider.GetAsync(user.Email, password, cancellationToken);
+        var session = await provider.GetAsync(connection, cancellationToken);
         return session.IsFailure
             ? Result.Failure(session.Error)
             : await operation(session.Value);

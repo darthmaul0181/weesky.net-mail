@@ -16,13 +16,13 @@ public sealed class SieveRepositoryTests
     private const string WeeskyScriptName = "weesky-rules";
     private const string RainloopScriptName = "rainloop.user";
 
-    private static User Alice => new("alice@weesky.be");
+    private static SieveConnection Alice => new("sieve.home.test", 4190, "alice@weesky.be", "master", "master-secret");
 
     private static (SieveRepository repo, Mock<IManageSieveClient> client, Mock<IManageSieveSession> session) CreateSut()
     {
         var session = new Mock<IManageSieveSession>();
         var client = new Mock<IManageSieveClient>();
-        client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.OpenSessionAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(Result.Success<IManageSieveSession>(session.Object));
 
         // Default so SaveRulesAsync's post-activation cleanup finds nothing to remove.
@@ -35,8 +35,7 @@ public sealed class SieveRepositoryTests
             new WeeskyRuleProvider(),
             new RainloopRuleProvider()
         });
-        var options = Options.Create(new SieveOptions());
-        var repo = new SieveRepository(client.Object, registry, options, Mock.Of<ILogger<SieveRepository>>());
+        var repo = new SieveRepository(client.Object, registry, Mock.Of<ILogger<SieveRepository>>());
         return (repo, client, session);
     }
 
@@ -46,14 +45,28 @@ public sealed class SieveRepositoryTests
 
     // ----- GetRuleSetAsync -----
 
+    // The repository no longer derives a target from options or from the signed-in user: it opens
+    // the session on exactly the connection the controller built.
+    [Fact]
+    public async Task GetRuleSetAsync_OpensTheSessionOnTheSuppliedConnection()
+    {
+        var (repo, client, session) = CreateSut();
+        SetupList(session);
+        var connection = new SieveConnection("sieve.external.test", 4190, "", "bob@external.test", "bob-secret");
+
+        await repo.GetRuleSetAsync(connection);
+
+        client.Verify(c => c.OpenSessionAsync(connection, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task GetRuleSetAsync_WhenSessionFails_ReturnsFailure()
     {
         var client = new Mock<IManageSieveClient>();
-        client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.OpenSessionAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(Result.Failure<IManageSieveSession>("Connection refused"));
         var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider() });
-        var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+        var repo = new SieveRepository(client.Object, registry, Mock.Of<ILogger<SieveRepository>>());
 
         var result = await repo.GetRuleSetAsync(Alice);
 
@@ -503,10 +516,10 @@ public sealed class SieveRepositoryTests
     public async Task GetRawScriptAsync_WhenFails_PropagatesError()
     {
         var client = new Mock<IManageSieveClient>();
-        client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.OpenSessionAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(Result.Failure<IManageSieveSession>("Connection refused"));
         var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider() });
-        var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+        var repo = new SieveRepository(client.Object, registry, Mock.Of<ILogger<SieveRepository>>());
 
         var result = await repo.GetRawScriptAsync(Alice);
 
@@ -519,10 +532,10 @@ public sealed class SieveRepositoryTests
     public async Task SaveRulesAsync_WhenSessionFails_ReturnsFailure()
     {
         var client = new Mock<IManageSieveClient>();
-        client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.OpenSessionAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(Result.Failure<IManageSieveSession>("refused"));
         var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider(), new RainloopRuleProvider() });
-        var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+        var repo = new SieveRepository(client.Object, registry, Mock.Of<ILogger<SieveRepository>>());
 
         var rules = new[]
         {
@@ -595,10 +608,10 @@ public sealed class SieveRepositoryTests
     public async Task SaveRawScriptAsync_WhenSessionFails_ReturnsFailure()
     {
         var client = new Mock<IManageSieveClient>();
-        client.Setup(c => c.OpenSessionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.OpenSessionAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(Result.Failure<IManageSieveSession>("refused"));
         var registry = new RuleProviderRegistry(new IRuleProvider[] { new WeeskyRuleProvider(), new RainloopRuleProvider() });
-        var repo = new SieveRepository(client.Object, registry, Options.Create(new SieveOptions()), Mock.Of<ILogger<SieveRepository>>());
+        var repo = new SieveRepository(client.Object, registry, Mock.Of<ILogger<SieveRepository>>());
 
         var result = await repo.SaveRawScriptAsync(Alice, "stop;", null);
 

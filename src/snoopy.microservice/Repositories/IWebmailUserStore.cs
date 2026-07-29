@@ -21,6 +21,12 @@ public interface IWebmailUserStore
     /// </summary>
     Task<Guid> RotateSecurityStampAsync(string email, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The user's KDF salt, generated and persisted on first need. Every connected-account cipher
+    /// hangs off the key this salt derives, so the value is written once and never rotated.
+    /// </summary>
+    Task<byte[]> GetOrCreateKdfSaltAsync(string email, CancellationToken cancellationToken);
+
     /// <summary>Removes the account's row if present (0 rows = success). The FK cascade removes preferences.</summary>
     Task DeleteByEmailAsync(string email, CancellationToken cancellationToken);
 }

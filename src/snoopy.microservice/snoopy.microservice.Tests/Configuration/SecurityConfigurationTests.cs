@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Configuration;
+using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Configuration;
@@ -33,5 +34,15 @@ public sealed class SecurityConfigurationTests
         // Content-Disposition is not CORS-safelisted, so without this the browser hides it from
         // the client's fetch response and every download's filename extraction falls back silently.
         Assert.Contains("Content-Disposition", policy.ExposedHeaders);
+    }
+
+    [Fact]
+    public void AddFrontendCors_AllowsTheAccountHeaderThroughPreflight()
+    {
+        var policy = BuildFrontendPolicy();
+
+        // Without this entry the browser refuses every mail request carrying the account id
+        // outright — the query fallback never runs because the header was already attached.
+        Assert.Contains(IAccountConnectionResolver.HeaderName, policy.Headers);
     }
 }

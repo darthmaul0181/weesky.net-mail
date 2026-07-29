@@ -24,6 +24,7 @@ vi.mock('../../../api.js', () => ({
     changeFullName: mocks.changeFullName,
     changePassword: mocks.changePassword,
     logout: mocks.logout,
+    getConnectedAccounts: vi.fn().mockResolvedValue([]),
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,

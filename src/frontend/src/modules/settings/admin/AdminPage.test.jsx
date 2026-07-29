@@ -26,6 +26,7 @@ vi.mock('../../../api.js', () => ({
     adminGetVirtualDomains: vi.fn(),
     adminAddVirtualDomainOwner: vi.fn(),
     adminRemoveVirtualDomainOwner: vi.fn(),
+    adminGetExternalDomains: vi.fn(),
     getAppSettings: vi.fn(),
     setAppSetting: vi.fn(),
   },
@@ -60,6 +61,7 @@ beforeEach(() => {
   api.adminGetUsers.mockResolvedValue(MOCK_USERS)
   api.adminGetVirtualDomains.mockResolvedValue(MOCK_VIRTUAL_DOMAINS)
   api.adminGetDomains.mockResolvedValue(MOCK_DOMAINS)
+  api.adminGetExternalDomains.mockResolvedValue([])
   api.adminGetUserQuota.mockRejectedValue(new Error('unavailable'))
   api.getAppSettings.mockResolvedValue(MOCK_APP_SETTINGS)
   api.setAppSetting.mockResolvedValue(undefined)
@@ -703,6 +705,17 @@ describe('AdminPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Virtual domains' }))
     expect(screen.getByRole('button', { name: 'Virtual domains' })).toHaveClass('is-active')
     expect(await screen.findByText('extra.com')).toBeInTheDocument()
+  })
+
+  it('switches to External domains tab and loads external domains', async () => {
+    api.adminGetExternalDomains.mockResolvedValue([{
+      id: '1', name: 'Gmail', imapHost: 'imap.gmail.com', imapPort: 993, imapSecurity: 'SslOnConnect',
+      smtpHost: 'smtp.gmail.com', smtpPort: 587, smtpSecurity: 'StartTls', sieveHost: null, sievePort: null,
+    }])
+    renderAdminPage()
+    await userEvent.click(screen.getByRole('button', { name: 'External domains' }))
+    expect(screen.getByRole('button', { name: 'External domains' })).toHaveClass('is-active')
+    expect(await screen.findByText('Gmail')).toBeInTheDocument()
   })
 
   it('switches to Application tab and shows the app settings', async () => {

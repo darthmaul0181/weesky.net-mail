@@ -7,25 +7,25 @@ namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
 /// The SMTP half of <see cref="MailConnectionFactory{TClient,TSession}"/>. Submission uses the
-/// account's own credentials, the same ones the IMAP side reads from the credentials cookie.
+/// account's own credentials, the same ones the IMAP side reads from the connection record.
 /// </summary>
 internal sealed class SmtpConnectionFactory(
     IOptionsMonitor<MailOptions> options, ILogger<SmtpConnectionFactory> logger)
     : MailConnectionFactory<SmtpClient, ISmtpSession>(options, logger), ISmtpConnectionFactory
 {
-    protected override MailEndpoint Endpoint(MailOptions options) => new(
+    protected override MailEndpoint Endpoint(MailAccountConnection connection) => new(
         Protocol: "SMTP",
         ConfigurationKey: "Mail:SmtpHost",
-        Host: options.SmtpHost,
-        Port: options.SmtpPort,
-        Security: options.SmtpSecurity,
-        IsConfigured: options.IsSmtpConfigured);
+        Host: connection.SmtpHost,
+        Port: connection.SmtpPort,
+        Security: connection.SmtpSecurity,
+        IsConfigured: !string.IsNullOrWhiteSpace(connection.SmtpHost));
 
     protected override SmtpClient CreateClient() => new();
 
     protected override ISmtpSession CreateSession(SmtpClient client) => new SmtpSession(client, Logger);
 
     Task<Result<ISmtpSession>> ISmtpConnectionFactory.OpenAsync(
-        string email, string password, CancellationToken cancellationToken) =>
-        OpenAsync(email, password, cancellationToken);
+        MailAccountConnection connection, CancellationToken cancellationToken) =>
+        OpenAsync(connection, cancellationToken);
 }

@@ -286,4 +286,137 @@ public sealed class IdentityResolverTests
         Assert.Equal("alias@weesky.be", row.Address);
         Assert.Equal("Michel", row.DisplayName);
     }
+
+    // ── ResolveConnected ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveConnected_AccountAddressIsAlwaysFirstAndDefault()
+    {
+        var list = IdentityResolver.ResolveConnected(
+            [Row("me@remote.com", "Me", isDefault: true), Row("zeta@remote.com", "Zeta")], "me@remote.com");
+
+        var account = list[0];
+        Assert.Equal("me@remote.com", account.Address);
+        Assert.True(account.IsPrimary);
+        Assert.True(account.IsDefault);
+        Assert.False(account.Stale);
+    }
+
+    [Fact]
+    public void ResolveConnected_ExtraRowsAreSortedByLabelAfterTheAccountRow()
+    {
+        var list = IdentityResolver.ResolveConnected(
+            [Row("me@remote.com", "Me", isDefault: true), Row("zeta@remote.com", "Zeta"), Row("alpha@remote.com", "Alpha")],
+            "me@remote.com");
+
+        Assert.Equal(["me@remote.com", "alpha@remote.com", "zeta@remote.com"], list.Select(i => i.Address).ToArray());
+        Assert.All(list.Skip(1), i => Assert.False(i.IsDefault));
+        Assert.All(list.Skip(1), i => Assert.False(i.IsPrimary));
+    }
+
+    [Fact]
+    public void ResolveConnected_AnEmptyLabelFallsBackToTheAddressAndIsNotCustom()
+    {
+        var list = IdentityResolver.ResolveConnected(
+            [Row("me@remote.com", "", isDefault: true), Row("extra@remote.com", "")], "me@remote.com");
+
+        Assert.All(list, i =>
+        {
+            Assert.Equal(i.Address, i.DisplayName);
+            Assert.False(i.LabelIsCustom);
+        });
+    }
+
+    [Fact]
+    public void ResolveConnected_AStoredLabelIsCustom()
+    {
+        var list = IdentityResolver.ResolveConnected(
+            [Row("me@remote.com", "My Name", isDefault: true)], "me@remote.com");
+
+        var account = Assert.Single(list);
+        Assert.Equal("My Name", account.DisplayName);
+        Assert.True(account.LabelIsCustom);
+    }
+
+    [Fact]
+    public void ResolveConnected_StaleIsAlwaysFalse()
+    {
+        var list = IdentityResolver.ResolveConnected(
+            [Row("me@remote.com", "Me", isDefault: true), Row("extra@remote.com", "Extra")], "me@remote.com");
+
+        Assert.All(list, i => Assert.False(i.Stale));
+    }
+
+    [Fact]
+    public void ResolveConnected_ComparesTheAccountAddressCanonically()
+    {
+        var list = IdentityResolver.ResolveConnected([Row("ME@Remote.COM", "Me", isDefault: true)], " me@remote.com ");
+
+        var account = Assert.Single(list);
+        Assert.Equal("me@remote.com", account.Address);
+        Assert.True(account.IsPrimary);
+    }
+
+    // ── ValidateConnected ───────────────────────────────────────────────────
+
+    [Fact]
+    public void ValidateConnected_AcceptsAnyParseableAddressWithNoAliasList()
+    {
+        var result = IdentityResolver.ValidateConnected(
+            [Entry("me@remote.com", "Me", isDefault: true), Entry("anything@elsewhere.com", "Other")], "me@remote.com");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, result.Value.Count);
+    }
+
+    [Fact]
+    public void ValidateConnected_ForcesDefaultOntoTheAccountAddressRegardlessOfTheRequest()
+    {
+        var result = IdentityResolver.ValidateConnected(
+            [Entry("me@remote.com", "Me", isDefault: false), Entry("other@remote.com", "Other", isDefault: true)],
+            "me@remote.com");
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.Single(r => r.Address == "me@remote.com").IsDefault);
+        Assert.False(result.Value.Single(r => r.Address == "other@remote.com").IsDefault);
+    }
+
+    [Fact]
+    public void ValidateConnected_RefusesASetMissingTheAccountAddress()
+    {
+        var result = IdentityResolver.ValidateConnected([Entry("other@remote.com", "Other")], "me@remote.com");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("me@remote.com", result.Error);
+    }
+
+    [Fact]
+    public void ValidateConnected_RefusesADuplicate()
+    {
+        var result = IdentityResolver.ValidateConnected(
+            [Entry("Me@Remote.com", "Me"), Entry("me@remote.com", "Me Again")], "me@remote.com");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("twice", result.Error);
+    }
+
+    [Fact]
+    public void ValidateConnected_RefusesAnUnparsableAddress()
+    {
+        var result = IdentityResolver.ValidateConnected([Entry("not an address")], "me@remote.com");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("valid email address", result.Error);
+    }
+
+    [Fact]
+    public void ValidateConnected_CanonicalisesAndTrimsOutput()
+    {
+        var result = IdentityResolver.ValidateConnected(
+            [Entry("  ME@Remote.COM  ", "  My Name  ")], "me@remote.com");
+
+        var row = Assert.Single(result.Value);
+        Assert.Equal("me@remote.com", row.Address);
+        Assert.Equal("My Name", row.DisplayName);
+    }
 }

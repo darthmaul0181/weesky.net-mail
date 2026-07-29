@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Services;
 
@@ -12,15 +13,15 @@ namespace weesky.Snoopy.Microservice.Services;
 /// </summary>
 public interface IMailCredentialStore
 {
-    /// <summary>Encrypts the password into the credentials cookie.</summary>
-    void Store(HttpResponse response, string password, TimeSpan lifetime);
+    /// <summary>Encrypts the payload into the credentials cookie.</summary>
+    void Store(HttpResponse response, MailCredentialPayload payload, TimeSpan lifetime);
 
     /// <summary>
     /// Decrypts the credentials cookie. Fails with "credentials_unavailable" when the
     /// cookie is absent or no longer decryptable, which the caller must surface as a 401
     /// so the client can sign in again rather than show an opaque IMAP error.
     /// </summary>
-    Result<string> Retrieve(HttpRequest request);
+    Result<MailCredentialPayload> Retrieve(HttpRequest request);
 
     /// <summary>Expires the credentials cookie.</summary>
     void Clear(HttpResponse response);

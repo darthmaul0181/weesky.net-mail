@@ -102,27 +102,113 @@ internal static class IdentityResolver
         var rows = new List<SendingIdentity>();
         foreach (var entry in entries)
         {
-            // The field is a bare address, DisplayName is separate — a decorated "Name <a@b.c>"
-            // is a format error here, not silently unwrapped the way Send's fromAddress is.
-            if (string.IsNullOrWhiteSpace(entry.Address) ||
-                !MailboxAddress.TryParse(RecipientAddressParser.Options, entry.Address, out var mailbox) ||
-                !string.Equals(mailbox.Address, entry.Address.Trim(), StringComparison.OrdinalIgnoreCase))
-                return Fail($"\"{entry.Address}\" is not a valid email address");
+            var parsedAddress = ParseAddress(entry);
+            if (parsedAddress.IsFailure) return Fail(parsedAddress.Error);
+            var address = parsedAddress.Value;
 
-            var address = Canonical(mailbox.Address);
             if (!allowed.Contains(address)) return Fail($"\"{entry.Address}\" is not one of your addresses");
             if (!seen.Add(address)) return Fail($"\"{entry.Address}\" appears twice");
 
-            var name = entry.DisplayName?.Trim() ?? string.Empty;
-            if (name.Length is < 1 or > MaxDisplayNameLength)
-                return Fail($"The display name for \"{entry.Address}\" must be 1 to {MaxDisplayNameLength} characters");
-            if (name.Contains('\r') || name.Contains('\n'))
-                return Fail($"The display name for \"{entry.Address}\" must not contain line breaks");
+            var parsedName = ParseDisplayName(entry);
+            if (parsedName.IsFailure) return Fail(parsedName.Error);
 
             if (entry.IsDefault && ++defaults > 1) return Fail("Only one identity can be the default");
 
-            rows.Add(new SendingIdentity { Address = address, DisplayName = name, IsDefault = entry.IsDefault });
+            rows.Add(new SendingIdentity { Address = address, DisplayName = parsedName.Value, IsDefault = entry.IsDefault });
         }
+        return Result.Success<IReadOnlyList<SendingIdentity>>(rows);
+
+        static Result<IReadOnlyList<SendingIdentity>> Fail(string error) =>
+            Result.Failure<IReadOnlyList<SendingIdentity>>(error);
+    }
+
+    /// <summary>The bare-address parse every entry validator needs: a decorated "Name &lt;a@b.c&gt;"
+    /// is a format error here, DisplayName being a separate field — not silently unwrapped the way
+    /// Send's fromAddress is.</summary>
+    private static Result<string> ParseAddress(IdentityEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Address) ||
+            !MailboxAddress.TryParse(RecipientAddressParser.Options, entry.Address, out var mailbox) ||
+            !string.Equals(mailbox.Address, entry.Address.Trim(), StringComparison.OrdinalIgnoreCase))
+            return Result.Failure<string>($"\"{entry.Address}\" is not a valid email address");
+
+        return Result.Success(Canonical(mailbox.Address));
+    }
+
+    /// <summary>The display-name shape every entry validator needs: trimmed, 1 to
+    /// <see cref="MaxDisplayNameLength"/> characters, no line breaks.</summary>
+    private static Result<string> ParseDisplayName(IdentityEntry entry)
+    {
+        var name = entry.DisplayName?.Trim() ?? string.Empty;
+        if (name.Length is < 1 or > MaxDisplayNameLength)
+            return Result.Failure<string>($"The display name for \"{entry.Address}\" must be 1 to {MaxDisplayNameLength} characters");
+        if (name.Contains('\r') || name.Contains('\n'))
+            return Result.Failure<string>($"The display name for \"{entry.Address}\" must not contain line breaks");
+
+        return Result.Success(name);
+    }
+
+    /// <summary>
+    /// Connected-account list: the account address first (isPrimary, isDefault, label from its
+    /// stored row), then the extra rows sorted by label. There is no alias list to consult, so
+    /// stale is always false.
+    /// </summary>
+    internal static IReadOnlyList<SendingIdentityInfo> ResolveConnected(
+        IReadOnlyList<SendingIdentity> stored, string accountEmail)
+    {
+        var account = Canonical(accountEmail);
+        var accountRow = stored.FirstOrDefault(r => Canonical(r.Address) == account);
+        var accountEntry = new SendingIdentityInfo(
+            account, ConnectedLabel(accountRow?.DisplayName, account), IsDefault: true,
+            IsPrimary: true, Stale: false, LabelIsCustom: !string.IsNullOrEmpty(accountRow?.DisplayName));
+
+        var extras = stored
+            .Where(r => Canonical(r.Address) != account)
+            .Select(r =>
+            {
+                var address = Canonical(r.Address);
+                return new SendingIdentityInfo(address, ConnectedLabel(r.DisplayName, address), IsDefault: false,
+                    IsPrimary: false, Stale: false, LabelIsCustom: !string.IsNullOrEmpty(r.DisplayName));
+            })
+            .OrderBy(i => i.DisplayName, StringComparer.OrdinalIgnoreCase);
+
+        return new List<SendingIdentityInfo> { accountEntry }.Concat(extras).ToList();
+    }
+
+    private static string ConnectedLabel(string? stored, string address) =>
+        string.IsNullOrEmpty(stored) ? address : stored;
+
+    /// <summary>
+    /// Connected-account save: parseable addresses, no duplicates, must contain the account
+    /// address; isDefault is forced onto that row whatever the request said. No alias list exists
+    /// for a remote server, so any parseable address is otherwise accepted as-is.
+    /// </summary>
+    internal static Result<IReadOnlyList<SendingIdentity>> ValidateConnected(
+        IReadOnlyList<IdentityEntry> entries, string accountEmail)
+    {
+        var account = Canonical(accountEmail);
+        var seen = new HashSet<string>();
+        var rows = new List<SendingIdentity>();
+        var containsAccount = false;
+
+        foreach (var entry in entries)
+        {
+            var parsedAddress = ParseAddress(entry);
+            if (parsedAddress.IsFailure) return Fail(parsedAddress.Error);
+            var address = parsedAddress.Value;
+
+            if (!seen.Add(address)) return Fail($"\"{entry.Address}\" appears twice");
+
+            var parsedName = ParseDisplayName(entry);
+            if (parsedName.IsFailure) return Fail(parsedName.Error);
+
+            var isAccountAddress = address == account;
+            containsAccount |= isAccountAddress;
+            rows.Add(new SendingIdentity { Address = address, DisplayName = parsedName.Value, IsDefault = isAccountAddress });
+        }
+
+        if (!containsAccount) return Fail($"The identity list must contain \"{accountEmail}\"");
+
         return Result.Success<IReadOnlyList<SendingIdentity>>(rows);
 
         static Result<IReadOnlyList<SendingIdentity>> Fail(string error) =>

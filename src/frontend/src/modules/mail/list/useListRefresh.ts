@@ -13,7 +13,7 @@ import { dedupeByUid } from './messageStream'
 async function refreshFirstBlock(client: QueryClient, accountId: string, folder: string) {
   const key = mailKeys.messageStream(accountId, folder, BLOCK_SIZE)
   try {
-    const fresh: MailFolderPage = await api.getMailMessages(folder, 0, BLOCK_SIZE)
+    const fresh: MailFolderPage = await api.getMailMessages(folder, 0, BLOCK_SIZE, { accountId })
     client.setQueryData<InfiniteData<MailFolderPage>>(key, old =>
       old
         ? {
@@ -35,10 +35,10 @@ async function refreshFirstBlock(client: QueryClient, accountId: string, folder:
  * Watches the polled folder listing and refreshes the displayed list when its folder moved.
  * The first observation of a folder is the baseline and never triggers.
  */
-export function useListRefresh(folderPath: string | null): void {
+export function useListRefresh(folderPath: string | null, enabled = true): void {
   const accountId = useAccountId()
   const client = useQueryClient()
-  const { data: folders } = useFolders()
+  const { data: folders } = useFolders(enabled)
   const { data: preferences } = usePreferences()
   const previous = useRef<{ path: string; snapshot: FolderSnapshot } | null>(null)
 

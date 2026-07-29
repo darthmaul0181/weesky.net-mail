@@ -13,5 +13,5 @@ public interface IMailSender
     const string ForbiddenFrom = IOutgoingMessageFactory.ForbiddenFrom;
 
     /// <summary>Builds, submits over SMTP, files the Sent copy and purges the staged files.</summary>
-    Task<Result<SendMessageResult>> SendAsync(User user, string password, SendMessageRequest request, CancellationToken cancellationToken);
+    Task<Result<SendMessageResult>> SendAsync(User user, MailAccountConnection connection, SendMessageRequest request, CancellationToken cancellationToken);
 }
