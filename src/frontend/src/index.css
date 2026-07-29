@@ -1319,9 +1319,12 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* A number field is in this list for the same reason the others are: left out, it fell through
+   to the browser's own box and sat a different height and border beside the host above it. */
 .field-h input[type="text"],
 .field-h input[type="password"],
 .field-h input[type="email"],
+.field-h input[type="number"],
 .field-h select {
   flex: 1;
   border: 1px solid var(--border);
@@ -1338,6 +1341,7 @@ body {
 .field-h input[type="text"]:focus,
 .field-h input[type="password"]:focus,
 .field-h input[type="email"]:focus,
+.field-h input[type="number"]:focus,
 .field-h select:focus {
   border-color: var(--action-primary);
 }
