@@ -39,12 +39,18 @@ vi.mock('../queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../queries')>()
   return { ...actual, useIdentities: vi.fn() }
 })
+// Mutable so a test can switch accounts under an open composer.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary' }))
+
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
-    activeAccount: { id: 'primary' },
+    activeAccount: { id: auth.activeAccountId },
+    activeAccountId: auth.activeAccountId,
     identity: { displayName: 'Mick Weesky', email: 'mick@weesky.be' },
   }),
 }))
+
+beforeEach(() => { auth.activeAccountId = 'primary' })
 vi.mock('./SquireEditor', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   const Stub = forwardRef<EditorHandle, { onChange: () => void; initialHtml?: string }>(
@@ -130,6 +136,44 @@ beforeEach(() => {
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
 
+// A draft belongs to the mailbox it was started in: its staged files live in that account's
+// namespace, so a switch under an open composer must not redirect the send that consumes them.
+describe('a composer opened under a connected account', () => {
+  it('sends, stages and releases against the account it opened under, never the newly active one', async () => {
+    auth.activeAccountId = 'linked-1'
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    mocks.uploadAttachment.mockResolvedValue({ id: 'id-1', fileName: 'a.txt', size: 4, contentType: 'text/plain' })
+    renderCompose()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'staged here' } })
+    await waitFor(() =>
+      expect(mocks.uploadAttachment).not.toHaveBeenCalled())
+
+    // The user switches mailboxes while the draft is open; the composer must not follow.
+    auth.activeAccountId = 'primary'
+    addRecipient('To', 'a@b.c')
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'staged here' }), { accountId: 'linked-1' }))
+  })
+
+  // The From list has to be the bound account's: an address only the newly active account owns
+  // is refused by the backend on both Send and Save draft, and the draft becomes unusable.
+  it('reads the From list from the account it opened under, not the newly active one', () => {
+    auth.activeAccountId = 'linked-1'
+    renderCompose()
+
+    expect(vi.mocked(useIdentities)).toHaveBeenCalledWith('linked-1')
+
+    auth.activeAccountId = 'primary'
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'switched under me' } })
+
+    expect(vi.mocked(useIdentities)).toHaveBeenLastCalledWith('linked-1')
+  })
+})
+
 describe('ComposeView', () => {
   it('shows the identity as plain-text From, focuses To and refuses to send with no recipient', () => {
     renderCompose()
@@ -198,7 +242,7 @@ describe('ComposeView', () => {
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith({
       to: ['a@b.c'], cc: ['c@b.c'], bcc: [], subject: 'Hello', htmlBody: '<p>Hi</p>', attachmentIds: [],
-    }))
+    }, { accountId: 'primary' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
     expect(router.state.location.search).toBe('?folder=Projects')
     expect(onNotify).toHaveBeenCalledWith('Message sent')
@@ -281,7 +325,7 @@ describe('ComposeView', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ fromAddress: 'michel@weesky.be' })))
+      expect.objectContaining({ fromAddress: 'michel@weesky.be' }), { accountId: 'primary' }))
   })
 
   // ComposeView is the only owner of the resolution now, so the address on the trigger and the
@@ -299,7 +343,7 @@ describe('ComposeView', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ fromAddress: 'mick@weesky.be' })))
+      expect.objectContaining({ fromAddress: 'mick@weesky.be' }), { accountId: 'primary' }))
   })
 
   // A poll can mark the pick stale under an open composer. The payload still carries it — the
@@ -405,7 +449,7 @@ describe('a seeded ComposeView', () => {
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       inReplyTo: 'm@x', references: ['m@x'], attachmentIds: expect.arrayContaining(['i1', 'a1']),
-    })))
+    }), { accountId: 'primary' }))
   })
 
   // The composer displays staged images absolute, but MailSender swaps a staged URL for a cid by
@@ -463,8 +507,8 @@ describe('a seeded ComposeView', () => {
     const modal = await discardModal()
     fireEvent.click(within(modal).getByRole('button', { name: 'Discard' }))
 
-    await waitFor(() => expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1'))
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+    await waitFor(() => expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' }))
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
   })
 })
 
@@ -505,7 +549,7 @@ describe('leaving a dirty composer', () => {
     fireEvent.click(within(modal).getByRole('button', { name: 'Discard' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('att-1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('att-1', { accountId: 'primary' })
   })
 
   it('leaves straight away when the form is clean', async () => {
@@ -696,8 +740,8 @@ describe('drafts in the composer', () => {
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalled())
     await waitFor(() => expect(kept.router.state.location.pathname).toBe('/mail'))
     // The saved draft holds its own bytes in IMAP, so the staged copies go on this path too.
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1')
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
     cleanup()
     mocks.deleteAttachment.mockClear()
 
@@ -708,8 +752,8 @@ describe('drafts in the composer', () => {
     fireEvent.click(within(modal).getByRole('button', { name: 'Discard' }))
 
     await waitFor(() => expect(discarded.router.state.location.pathname).toBe('/mail'))
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1')
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
   })
 
   // Discard deletes the staged ids the save in flight may still be uploading from.
@@ -744,8 +788,8 @@ describe('drafts in the composer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1')
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1')
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
   })
 
   // The sent copy makes the stored draft a duplicate of a message that already left.
@@ -755,7 +799,7 @@ describe('drafts in the composer', () => {
 
     fireEvent.click(sendButton())
 
-    await waitFor(() => expect(mocks.deleteMessages).toHaveBeenCalledWith('Drafts', [41]))
+    await waitFor(() => expect(mocks.deleteMessages).toHaveBeenCalledWith('Drafts', [41], { accountId: 'primary' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
   })
 

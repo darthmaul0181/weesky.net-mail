@@ -9,9 +9,9 @@ using weesky.Snoopy.Microservice.Models;
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
-/// Opens ManageSieve (RFC 5804) sessions over TCP+STARTTLS, authenticating with
-/// the configured master credentials (SASL PLAIN with the target user as
-/// authorization identity).
+/// Opens ManageSieve (RFC 5804) sessions over TCP+STARTTLS. The SASL PLAIN identities come from
+/// the <see cref="SieveConnection"/>; everything else — timeouts, TLS policy — from
+/// <see cref="SieveOptions"/>, which is a client policy rather than a per-target setting.
 /// </summary>
 internal sealed class ManageSieveClient : IManageSieveClient
 {
@@ -27,16 +27,14 @@ internal sealed class ManageSieveClient : IManageSieveClient
         _logger = logger;
     }
 
-    public async Task<Result<IManageSieveSession>> OpenSessionAsync(string targetUser, CancellationToken cancellationToken = default)
+    public async Task<Result<IManageSieveSession>> OpenSessionAsync(SieveConnection connection, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(targetUser))
-            return Result.Failure<IManageSieveSession>("Target user is required");
+        ArgumentNullException.ThrowIfNull(connection);
 
-        if (string.IsNullOrWhiteSpace(_options.Host) ||
-            string.IsNullOrWhiteSpace(_options.MasterUser) ||
-            string.IsNullOrWhiteSpace(_options.MasterPassword))
+        // The authorization identity may legitimately be empty — that is the own-credentials shape.
+        if (string.IsNullOrWhiteSpace(connection.Host) || string.IsNullOrWhiteSpace(connection.AuthenticationIdentity))
         {
-            _logger.LogError("ManageSieve is not configured (Host/MasterUser/MasterPassword missing)");
+            _logger.LogError("ManageSieve target is incomplete: {Connection}", connection);
             return Result.Failure<IManageSieveSession>(SieveErrors.NotConfigured);
         }
 
@@ -53,51 +51,53 @@ internal sealed class ManageSieveClient : IManageSieveClient
             using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
                 connectCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
-                await tcp.ConnectAsync(_options.Host, _options.Port, connectCts.Token);
+                await tcp.ConnectAsync(connection.Host, connection.Port, connectCts.Token);
             }
 
             stream = tcp.GetStream();
 
             var (capabilities, status) = await ReadCapabilitiesAsync(stream, cancellationToken);
             if (!status.IsOk)
-                return FailUnreachable("greeting", status.Message);
+                return FailUnreachable("greeting", connection.Host, status.Message);
 
             if (HasCapability(capabilities, "STARTTLS"))
             {
                 await WriteLineAsync(stream, "STARTTLS", cancellationToken);
                 var tlsStatus = await ReadSimpleStatusAsync(stream, cancellationToken);
                 if (!tlsStatus.IsOk)
-                    return FailUnreachable("STARTTLS", tlsStatus.Message);
+                    return FailUnreachable("STARTTLS", connection.Host, tlsStatus.Message);
 
-                var ssl = new SslStream(stream, leaveInnerStreamOpen: false, CertificateValidationCallback);
-                await ssl.AuthenticateAsClientAsync(_options.Host);
+                var ssl = new SslStream(stream, leaveInnerStreamOpen: false,
+                    (_, certificate, chain, errors) => ValidateCertificate(connection.Host, certificate, chain, errors));
+                await ssl.AuthenticateAsClientAsync(connection.Host);
                 stream = ssl;
 
                 // Server re-sends capabilities over the encrypted channel.
                 var (_, postTlsStatus) = await ReadCapabilitiesAsync(stream, cancellationToken);
                 if (!postTlsStatus.IsOk)
-                    return FailUnreachable("post-STARTTLS handshake", postTlsStatus.Message);
+                    return FailUnreachable("post-STARTTLS handshake", connection.Host, postTlsStatus.Message);
             }
             else if (!_options.AllowCleartext)
             {
-                // The next thing on this socket is the master password inside a SASL PLAIN
-                // payload. The banner that advertises STARTTLS arrives unencrypted, so a
-                // missing capability is indistinguishable from one an attacker stripped:
-                // refuse rather than downgrade silently.
+                // The next thing on this socket is a password inside a SASL PLAIN payload. The
+                // banner that advertises STARTTLS arrives unencrypted, so a missing capability is
+                // indistinguishable from one an attacker stripped: refuse rather than downgrade.
                 _logger.LogError(
-                    "ManageSieve host={Host} does not advertise STARTTLS. Refusing to send the master " +
+                    "ManageSieve host={Host} does not advertise STARTTLS. Refusing to send the " +
                     "credentials in the clear. Set Sieve:AllowCleartext only if the link is trusted.",
-                    _options.Host);
+                    connection.Host);
                 return Fail(SieveErrors.NotSecure);
             }
 
-            var saslPayload = $"{targetUser}\0{_options.MasterUser}\0{_options.MasterPassword}";
+            // authzid \0 authcid \0 password: an authzid is impersonation (our own server, master
+            // account), an empty one means we are authenticating as the mailbox itself.
+            var saslPayload = $"{connection.AuthorizationIdentity}\0{connection.AuthenticationIdentity}\0{connection.Password}";
             var b64 = Convert.ToBase64String(Utf8.GetBytes(saslPayload));
             await WriteLineAsync(stream, $"AUTHENTICATE \"PLAIN\" \"{b64}\"", cancellationToken);
             var authStatus = await ReadSimpleStatusAsync(stream, cancellationToken);
             if (!authStatus.IsOk)
             {
-                _logger.LogWarning("ManageSieve auth failed for target={Target}: {Message}", targetUser, authStatus.Message);
+                _logger.LogWarning("ManageSieve auth failed for {Connection}: {Message}", connection, authStatus.Message);
                 return Fail(SieveErrors.AuthenticationFailed);
             }
 
@@ -119,7 +119,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unable to open ManageSieve session for target={Target}", targetUser);
+            _logger.LogError(ex, "Unable to open ManageSieve session for {Connection}", connection);
             return Result.Failure<IManageSieveSession>(SieveErrors.Unreachable);
         }
         finally
@@ -129,15 +129,15 @@ internal sealed class ManageSieveClient : IManageSieveClient
         }
     }
 
-    private bool CertificateValidationCallback(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
+    private bool ValidateCertificate(string host, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
     {
         if (sslPolicyErrors == SslPolicyErrors.None) return true;
         if (_options.AllowInvalidCertificate)
         {
-            _logger.LogWarning("Ignoring TLS certificate error for ManageSieve host={Host}: {Errors}", _options.Host, sslPolicyErrors);
+            _logger.LogWarning("Ignoring TLS certificate error for ManageSieve host={Host}: {Errors}", host, sslPolicyErrors);
             return true;
         }
-        _logger.LogError("TLS certificate validation failed for ManageSieve host={Host}: {Errors}", _options.Host, sslPolicyErrors);
+        _logger.LogError("TLS certificate validation failed for ManageSieve host={Host}: {Errors}", host, sslPolicyErrors);
         return false;
     }
 
@@ -148,9 +148,9 @@ internal sealed class ManageSieveClient : IManageSieveClient
     /// client: it can disclose service state, and the caller only needs to know the rules service
     /// is unavailable.
     /// </summary>
-    private Result<IManageSieveSession> FailUnreachable(string step, string? detail)
+    private Result<IManageSieveSession> FailUnreachable(string step, string host, string? detail)
     {
-        _logger.LogWarning("ManageSieve {Step} failed on host={Host}: {Detail}", step, _options.Host, detail);
+        _logger.LogWarning("ManageSieve {Step} failed on host={Host}: {Detail}", step, host, detail);
         return Fail(SieveErrors.Unreachable);
     }
 

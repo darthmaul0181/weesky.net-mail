@@ -11,5 +11,5 @@ public interface IDraftSaver
     const string NoDraftsFolder = "no_drafts_folder";
 
     Task<Result<SavedDraft>> SaveAsync(
-        User user, string password, SaveDraftRequest request, CancellationToken cancellationToken);
+        User user, MailAccountConnection connection, SaveDraftRequest request, CancellationToken cancellationToken);
 }

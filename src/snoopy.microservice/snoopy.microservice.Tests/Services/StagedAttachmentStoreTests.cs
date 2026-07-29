@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -114,6 +115,29 @@ public sealed class StagedAttachmentStoreTests : IDisposable
             Bytes(1), CancellationToken.None);
 
         Assert.True(fifth.IsFailure);
+    }
+
+    // The scope carries the user as well as the account: one user filling their primary
+    // account's ceiling must never consume another user's quota (nor reach their files).
+    [Fact]
+    public async Task SaveAsync_OneUsersFullCeiling_DoesNotConsumeAnotherUsersQuota()
+    {
+        var userA = new User("alice@weesky.be") { WebmailUid = Guid.NewGuid() };
+        var userB = new User("bob@weesky.be") { WebmailUid = Guid.NewGuid() };
+        var scopeA = MailAccountConnection.StagedScope(userA, MailAccountConnection.Primary);
+        var scopeB = MailAccountConnection.StagedScope(userB, MailAccountConnection.Primary);
+
+        for (var i = 0; i < 4; i++)
+            Assert.True((await _store.SaveAsync(scopeA, $"a{i}.bin", "application/octet-stream",
+                Bytes(1024 * 1024), CancellationToken.None)).IsSuccess);
+        Assert.True((await _store.SaveAsync(scopeA, "a5.bin", "application/octet-stream",
+            Bytes(1), CancellationToken.None)).IsFailure);
+
+        var other = await _store.SaveAsync(scopeB, "b.bin", "application/octet-stream",
+            Bytes(1), CancellationToken.None);
+
+        Assert.True(other.IsSuccess);
+        Assert.True(_store.Open(scopeA, other.Value.Id).IsFailure);
     }
 
     [Fact]

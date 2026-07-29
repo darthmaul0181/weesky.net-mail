@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('../../api.js', () => ({ api: mocks }))
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 let client: QueryClient
@@ -122,7 +122,7 @@ describe('useMoveMessages', () => {
     expect(targetStream()).toBeUndefined()
     expect(folder('Archive').total).toBe(5)
     expect(folder('Archive').unread).toBe(2)
-    expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [1, 2], 'Archive')
+    expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [1, 2], 'Archive', { accountId: 'primary' })
 
     await act(async () => { pending.resolve() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
@@ -206,7 +206,7 @@ describe('useMoveMessages', () => {
     // Unread is unknowable without a removal, so the badge waits for the poll.
     expect(folder('Archive').total).toBe(5)
     expect(folder('Archive').unread).toBe(1)
-    expect(mocks.copyMessages).toHaveBeenCalledWith('INBOX', [1, 2], 'Archive')
+    expect(mocks.copyMessages).toHaveBeenCalledWith('INBOX', [1, 2], 'Archive', { accountId: 'primary' })
   })
 
   it('restores every cache, dropped target included, when the move fails', async () => {
@@ -441,7 +441,7 @@ describe('useDeleteMessages', () => {
     expect(targetStream()).toBe(seeded.targetBlocks)
     expect(folder('Archive').total).toBe(3)
     expect(folder('Archive').unread).toBe(1)
-    expect(mocks.deleteMessages).toHaveBeenCalledWith('INBOX', [1, 2])
+    expect(mocks.deleteMessages).toHaveBeenCalledWith('INBOX', [1, 2], { accountId: 'primary' })
   })
 
   it('rolls the source caches back and says so', async () => {

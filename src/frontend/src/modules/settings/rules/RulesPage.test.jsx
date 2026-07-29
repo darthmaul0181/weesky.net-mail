@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api } from '../../../api.js'
@@ -16,8 +16,15 @@ vi.mock('../../../api.js', () => ({
     saveRules: vi.fn(),
     deleteRules: vi.fn(),
     checkCompatibility: vi.fn(),
-    getFolders: vi.fn(),
+    getMailFolders: vi.fn(),
   },
+}))
+
+// Mutable so a test can render the page under a connected account.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary' }))
+
+vi.mock('../../../contexts/AuthContext', () => ({
+  useAuth: () => ({ activeAccountId: auth.activeAccountId }),
 }))
 
 function fileIntoRule(id, name) {
@@ -38,7 +45,8 @@ function ruleSet(providerId, rules) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  api.getFolders.mockResolvedValue([])
+  auth.activeAccountId = 'primary'
+  api.getMailFolders.mockResolvedValue([])
   api.saveRules.mockResolvedValue(null)
   api.deleteRules.mockResolvedValue(null)
 })
@@ -72,7 +80,7 @@ describe('Extended rules slider', () => {
     fireEvent.click(toggle.querySelector('input[type="checkbox"]'))
 
     await waitFor(() =>
-      expect(api.saveRules).toHaveBeenCalledWith(expect.any(Array), 'weesky', null))
+      expect(api.saveRules).toHaveBeenCalledWith(expect.any(Array), 'weesky', null, { accountId: 'primary' }))
     expect(api.checkCompatibility).not.toHaveBeenCalled()
   })
 
@@ -85,9 +93,9 @@ describe('Extended rules slider', () => {
     fireEvent.click(toggle.querySelector('input[type="checkbox"]'))
 
     await waitFor(() =>
-      expect(api.checkCompatibility).toHaveBeenCalledWith('rainloop', expect.any(Array)))
+      expect(api.checkCompatibility).toHaveBeenCalledWith('rainloop', expect.any(Array), { accountId: 'primary' }))
     await waitFor(() =>
-      expect(api.saveRules).toHaveBeenCalledWith(expect.any(Array), 'rainloop', null))
+      expect(api.saveRules).toHaveBeenCalledWith(expect.any(Array), 'rainloop', null, { accountId: 'primary' }))
   })
 
   it('turning OFF with incompatible rules shows the conversion modal and drops them on confirm', async () => {
@@ -109,7 +117,7 @@ describe('Extended rules slider', () => {
 
     await waitFor(() =>
       expect(api.saveRules).toHaveBeenCalledWith(
-        [expect.objectContaining({ id: 'keep-me' })], 'rainloop', null))
+        [expect.objectContaining({ id: 'keep-me' })], 'rainloop', null, { accountId: 'primary' }))
   })
 
   it('cancelling the conversion modal keeps the provider unchanged', async () => {
@@ -128,6 +136,30 @@ describe('Extended rules slider', () => {
     await waitFor(() =>
       expect(screen.queryByText('Turn off extended rules?')).not.toBeInTheDocument())
     expect(api.saveRules).not.toHaveBeenCalled()
+  })
+})
+
+// ── Editor folder picker ───────────────────────────
+
+describe('RuleEditorModal folder picker', () => {
+  const tree = [
+    { path: 'Archive', name: 'Archive', selectable: true, children: [
+      { path: 'Archive/2026', name: '2026', selectable: true, children: [] },
+    ] },
+    { path: 'Containers', name: 'Containers', selectable: false, children: [] },
+  ]
+
+  // The rule is written to the active mailbox's script: a picker listing another mailbox's
+  // folders files mail into a folder that may not exist there, and nothing errors.
+  it('offers the active account folders, containers excluded', async () => {
+    auth.activeAccountId = 'linked-1'
+    api.getMailFolders.mockResolvedValue(tree)
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
+
+    await waitFor(() => expect(api.getMailFolders).toHaveBeenCalledWith({ accountId: 'linked-1' }))
+    await waitFor(() => expect(document.querySelector('#rule-editor-folders')).toBeInTheDocument())
+    const offered = [...document.querySelectorAll('#rule-editor-folders option')].map(o => o.value)
+    expect(offered).toEqual(['Archive', 'Archive/2026'])
   })
 })
 
@@ -946,6 +978,58 @@ describe('RulesPage — initial load', () => {
     await screen.findByText(/cannot be parsed/)
   })
 
+  // The script is the active mailbox's: without the id every read and write would land on the
+  // primary's ManageSieve target.
+  it('names the active account on the read and on the save', async () => {
+    auth.activeAccountId = 'linked-1'
+    api.getRules.mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'Existing Rule')]))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Existing Rule')
+
+    expect(api.getRules).toHaveBeenCalledWith({ accountId: 'linked-1' })
+    fireEvent.click(screen.getByTitle('Disable').querySelector('input[type="checkbox"]'))
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
+      expect.any(Array), 'weesky', null, { accountId: 'linked-1' }))
+  })
+
+  // One Sieve script per mailbox: rules left on screen from another account are one toggle away
+  // from being PUT over this account's script, destroying filters nobody asked to touch.
+  it('drops the previous account’s rules when the new account’s load fails', async () => {
+    api.getRules.mockResolvedValueOnce(ruleSet('weesky', [fileIntoRule('a', 'Primary Rule')]))
+    const { rerender } = render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('Primary Rule')
+
+    auth.activeAccountId = 'linked-1'
+    api.getRules.mockRejectedValueOnce(new Error('timeout'))
+    rerender(<RulesPage onClose={() => {}} />)
+
+    await screen.findByText(/Failed to load rules|timeout/)
+    expect(screen.queryByText('Primary Rule')).not.toBeInTheDocument()
+  })
+
+  // Clearing alone leaves a window: two loads in flight can land out of order, so the account the
+  // rules were loaded under is recorded and a write refuses when it no longer matches.
+  it('refuses a save when the rules on screen belong to another account', async () => {
+    let releasePrimary
+    api.getRules
+      .mockImplementationOnce(() => new Promise(resolve => { releasePrimary = resolve }))
+      .mockResolvedValueOnce(ruleSet('weesky', []))
+
+    const { rerender } = render(<RulesPage onClose={() => {}} />)
+    auth.activeAccountId = 'linked-1'
+    rerender(<RulesPage onClose={() => {}} />)
+    await waitFor(() => expect(api.getRules).toHaveBeenCalledWith({ accountId: 'linked-1' }))
+
+    // The primary's slow answer lands last and paints its rules under the connected account.
+    await act(async () => { releasePrimary(ruleSet('weesky', [fileIntoRule('a', 'Primary Rule')])) })
+    await screen.findByText('Primary Rule')
+
+    fireEvent.click(screen.getByTitle('Disable').querySelector('input[type="checkbox"]'))
+
+    await screen.findByText(/not the selected account/)
+    expect(api.saveRules).not.toHaveBeenCalled()
+  })
+
   it('shows provider badge for weesky', async () => {
     api.getRules.mockResolvedValue(ruleSet('weesky', []))
     render(<RulesPage onClose={() => {}} />)
@@ -985,7 +1069,7 @@ describe('RulesPage — CRUD', () => {
         expect.objectContaining({ name: 'Existing Rule' }),
         expect.objectContaining({ name: 'New Test Rule' }),
       ]),
-      'weesky', null
+      'weesky', null, { accountId: 'primary' }
     ))
   })
 
@@ -1009,7 +1093,7 @@ describe('RulesPage — CRUD', () => {
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'Renamed Rule' })],
-      'weesky', null
+      'weesky', null, { accountId: 'primary' }
     ))
   })
 
@@ -1028,7 +1112,7 @@ describe('RulesPage — CRUD', () => {
     await userEvent.click(screen.getByTitle('Delete'))
     await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
 
-    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith([], 'weesky', null))
+    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith([], 'weesky', null, { accountId: 'primary' }))
   })
 
   it('toggle enabled calls saveRules with updated enabled flag', async () => {
@@ -1039,7 +1123,7 @@ describe('RulesPage — CRUD', () => {
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'Existing Rule', enabled: false })],
-      'weesky', null
+      'weesky', null, { accountId: 'primary' }
     ))
   })
 
@@ -1074,7 +1158,7 @@ describe('RulesPage — reordering', () => {
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'Second' }), expect.objectContaining({ name: 'First' })],
-      'weesky', null
+      'weesky', null, { accountId: 'primary' }
     ))
   })
 
@@ -1087,7 +1171,7 @@ describe('RulesPage — reordering', () => {
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'Second' }), expect.objectContaining({ name: 'First' })],
-      'weesky', null
+      'weesky', null, { accountId: 'primary' }
     ))
   })
 })
@@ -1116,7 +1200,7 @@ describe('RulesPage — delete all script', () => {
     await userEvent.click(screen.getByText('Delete script'))
     await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
 
-    await waitFor(() => expect(api.deleteRules).toHaveBeenCalled())
+    await waitFor(() => expect(api.deleteRules).toHaveBeenCalledWith({ accountId: 'primary' }))
     await screen.findByText('Script deleted')
     expect(document.querySelector('.rules-toolbar')).toBeInTheDocument()
   })

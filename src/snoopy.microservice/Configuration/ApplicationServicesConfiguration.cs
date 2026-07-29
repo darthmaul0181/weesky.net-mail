@@ -45,6 +45,7 @@ internal static class ApplicationServicesConfiguration
         // Scoped, so the whole request shares one authenticated IMAP connection and the container
         // closes it when the request ends. See ScopedImapSessionProvider.
         services.AddScoped<IImapSessionProvider, ScopedImapSessionProvider>();
+        services.AddScoped<IAccountConnectionResolver, AccountConnectionResolver>();
         services.AddScoped<IOutgoingMessageFactory, OutgoingMessageFactory>();
         services.AddScoped<IMailSender, MailSender>();
         services.AddScoped<IDraftSaver, DraftSaver>();
@@ -89,6 +90,8 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
         services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();
         services.AddScoped<IContactStore, ContactStore>();
+        services.AddScoped<IExternalDomainStore, ExternalDomainStore>();
+        services.AddScoped<IConnectedAccountStore, ConnectedAccountStore>();
 
         return services;
     }

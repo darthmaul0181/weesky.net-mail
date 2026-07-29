@@ -19,9 +19,11 @@ public sealed class AccountController(
     IDovecotQuotaClient dovecotQuotaClient,
     IMailCredentialStore credentials,
     IWebmailUserStore webmailUsers,
+    IConnectedAccountStore connectedAccounts,
     ISessionGuard sessions,
     ITokenManager tokens,
-    IOptions<TokenConstants> tokenConstants) : ApiBaseController
+    IOptions<TokenConstants> tokenConstants,
+    ILogger<AccountController> logger) : ApiBaseController
 {
 
     /// <summary>
@@ -80,6 +82,9 @@ public sealed class AccountController(
     /// is re-issued here. Left alone it would keep the superseded password — and the sliding
     /// session would keep renewing it — leaving a live session whose every mail action fails
     /// authentication for the rest of the token's lifetime.
+    ///
+    /// The connected-account passwords are encrypted under a key the main password derives, so
+    /// they are re-keyed in the same breath, before the new cookie is written.
     /// </remarks>
     /// <param name="secretChange">the new secret</param>
     /// <param name="cancellationToken">cancellation token</param>
@@ -96,6 +101,9 @@ public sealed class AccountController(
 
         if (result.IsSuccess)
         {
+            // Before the cookie writes: the old key still has to be read off the incoming one.
+            var newKek = await ReKeyConnectedAccountsAsync(secretChange, cancellationToken);
+
             // Rotating cuts every session of this account, which is the point — a password is
             // changed precisely when the other ones are no longer wanted. It also cuts this one,
             // so the caller is handed a fresh pair of cookies in the same response; without that
@@ -112,11 +120,51 @@ public sealed class AccountController(
             if (!string.IsNullOrEmpty(token.Token))
                 Response.WriteAuthCookie(tokenConstants.Value, token.Token);
 
-            credentials.Store(Response, secretChange.NewPassword,
+            credentials.Store(Response, new MailCredentialPayload(secretChange.NewPassword, newKek),
                 TimeSpan.FromMinutes(tokenConstants.Value.ExpiryInMinutes));
         }
 
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
+    }
+
+    /// <summary>
+    /// Re-encrypts every connected-account password under the key the new main password derives,
+    /// and returns that key for the cookie. A row that will not decrypt was already orphaned by an
+    /// out-of-band password change: it is left exactly as it is, so the user can re-enter it.
+    /// </summary>
+    private async Task<byte[]> ReKeyConnectedAccountsAsync(
+        SecretChange secretChange, CancellationToken cancellationToken)
+    {
+        var salt = await webmailUsers.GetOrCreateKdfSaltAsync(AuthenticatedUser.Email, cancellationToken);
+        var newKek = ConnectedAccountCipher.DeriveKek(secretChange.NewPassword, salt);
+
+        var accounts = await connectedAccounts.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+        if (accounts.Count == 0) return newKek;
+
+        // A v1 cookie carries no key; the old password the request supplies derives it instead.
+        var retrieved = credentials.Retrieve(Request);
+        var oldKek = retrieved.IsSuccess && retrieved.Value.Kek is { } carried
+            ? carried
+            : ConnectedAccountCipher.DeriveKek(secretChange.OldPassword, salt);
+
+        var reKeyed = new Dictionary<Guid, byte[]>(accounts.Count);
+        foreach (var account in accounts)
+        {
+            var secret = ConnectedAccountCipher.Decrypt(oldKek, account.Cipher);
+            if (secret.IsSuccess)
+                reKeyed[account.Id] = ConnectedAccountCipher.Encrypt(newKek, secret.Value);
+        }
+
+        if (reKeyed.Count > 0)
+            await connectedAccounts.ReplaceCiphersAsync(AuthenticatedUser.WebmailUid, reKeyed, cancellationToken);
+
+        var orphaned = accounts.Count - reKeyed.Count;
+        if (orphaned > 0)
+            logger.LogWarning(
+                "ChangeSecret left {OrphanedCount} connected accounts un-rekeyed: their cipher no longer decrypts",
+                orphaned);
+
+        return newKek;
     }
 
     /// <summary>

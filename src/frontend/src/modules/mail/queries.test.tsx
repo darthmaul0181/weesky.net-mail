@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { settle } from '../../test-utils'
-import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useSearchMessages, useSendMessage } from './queries'
+import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSearchMessages, useSendMessage, useSetFlags } from './queries'
 import type { MailFolderNode } from './api/mailTypes'
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
   searchMessages: vi.fn(),
   sendMessage: vi.fn(),
+  setMessageFlags: vi.fn(),
+  putIdentities: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -25,12 +27,22 @@ vi.mock('../../api.js', () => ({
     getPreferences: mocks.getPreferences,
     searchMessages: mocks.searchMessages,
     sendMessage: mocks.sendMessage,
+    setMessageFlags: mocks.setMessageFlags,
+    putIdentities: mocks.putIdentities,
   },
 }))
 
+// Mutable so a test can switch accounts mid-flight, the way the account menu does.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary' }))
+
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary', email: 'alice@weesky.be' } }),
+  useAuth: () => ({
+    activeAccount: { id: auth.activeAccountId, email: 'alice@weesky.be' },
+    activeAccountId: auth.activeAccountId,
+  }),
 }))
+
+beforeEach(() => { auth.activeAccountId = 'primary' })
 
 function pageOf(uids: number[], total: number) {
   return {
@@ -179,6 +191,61 @@ describe('useFolders', () => {
     expect((client.getQueryCache().find({ queryKey: mailKeys.folders('primary') })!
       .options as { refetchIntervalInBackground?: boolean }).refetchIntervalInBackground)
       .toBe(expected)
+  })
+})
+
+// Every request names the mailbox it is for: without the header the backend answers from the
+// primary account, so a switched-to mailbox would fill its own cache with somebody else's mail.
+describe('account scoping on the wire', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
+  })
+
+  it('carries the active account on a read', async () => {
+    mocks.getMailFolders.mockResolvedValue([])
+    auth.activeAccountId = 'linked-1'
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useFolders(), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mocks.getMailFolders).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: 'linked-1' }))
+  })
+
+  it('carries the active account on a paged read', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    auth.activeAccountId = 'linked-1'
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessages('INBOX', 0, 30), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 30,
+      expect.objectContaining({ accountId: 'linked-1' }))
+  })
+
+  // The subtle one: a write is aimed at the mailbox it was fired from. Switching while it is in
+  // flight must not redirect a STORE already on the wire into the other account's folder.
+  it('fires useSetFlags with the account it was rendered under, even after a switch', async () => {
+    let land!: () => void
+    mocks.setMessageFlags.mockImplementation(
+      () => new Promise<void>(resolve => { land = () => resolve() }))
+    const { wrapper } = createWrapper()
+
+    const { result, rerender } = renderHook(() => useSetFlags(), { wrapper })
+    act(() => result.current.mutate({ folderPath: 'INBOX', uids: [7], flag: 'seen', value: true }))
+    await waitFor(() => expect(mocks.setMessageFlags).toHaveBeenCalled())
+
+    auth.activeAccountId = 'linked-1'
+    rerender()
+    await act(async () => { land() })
+
+    // Neither replayed against the new mailbox nor redirected into it.
+    expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
+    expect(mocks.setMessageFlags).toHaveBeenCalledWith(
+      'INBOX', [7], 'seen', true, { accountId: 'primary' })
   })
 })
 
@@ -357,7 +424,7 @@ describe('useSendMessage', () => {
     const { result } = renderHook(() => useSendMessage(), { wrapper })
     await result.current.mutateAsync(sendArgs)
 
-    expect(mocks.sendMessage).toHaveBeenCalledWith(sendArgs)
+    expect(mocks.sendMessage).toHaveBeenCalledWith(sendArgs, { accountId: 'primary' })
   })
 
   it('invalidates the folders and the sent folder lists when the tree has a sent node', async () => {
@@ -397,5 +464,25 @@ describe('useSendMessage', () => {
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
     expect(invalidate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useReplaceIdentities', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // The set is per mailbox: without the header the connected account's identities would be
+  // written over the primary's.
+  it('names the active account on the PUT and invalidates its own key', async () => {
+    auth.activeAccountId = 'linked-1'
+    mocks.putIdentities.mockResolvedValue(undefined)
+    const { client, wrapper } = createWrapper()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const rows = [{ address: 'shared@ext.example', displayName: 'Shared', isDefault: true }]
+
+    const { result } = renderHook(() => useReplaceIdentities(), { wrapper })
+    await result.current.mutateAsync(rows)
+
+    expect(mocks.putIdentities).toHaveBeenCalledWith(rows, { accountId: 'linked-1' })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('linked-1') })
   })
 })

@@ -55,9 +55,10 @@ public sealed class SlidingSessionMiddleware
         var remaining = DateTimeOffset.FromUnixTimeSeconds(expiryUnix) - DateTimeOffset.UtcNow;
         if (remaining > lifetime / 2) return;
 
-        // Renew both or neither.
-        var password = credentials.Retrieve(context.Request);
-        if (password.IsFailure) return;
+        // Renew both or neither. The payload is re-issued exactly as it came in: a v1 cookie stays
+        // v1 here, since upgrading it needs a key derivation this path must not pay.
+        var payload = credentials.Retrieve(context.Request);
+        if (payload.IsFailure) return;
 
         // Carried from the principal, not re-read from the database: the renewal must stay free
         // of a query, and a renewed token that dropped the stamp would be refused on its next use
@@ -72,7 +73,7 @@ public sealed class SlidingSessionMiddleware
 
         context.Response.WriteAuthCookie(_tokenConstants.Value, token.Token);
 
-        credentials.Store(context.Response, password.Value, lifetime);
+        credentials.Store(context.Response, payload.Value, lifetime);
         logger.LogInformation("Sliding session renewed for {User}: {RemainingMinutes} min remained of {LifetimeMinutes}",
             renewed.Email, (int)remaining.TotalMinutes, (int)lifetime.TotalMinutes);
     }

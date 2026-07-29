@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Controllers;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
@@ -16,13 +17,38 @@ public sealed class AdminControllerTests
 {
     private readonly Mock<IAdminRepository> _repo = new();
     private readonly Mock<IDovecotQuotaClient> _dovecot = new();
+    private readonly Mock<IExternalDomainStore> _externalDomains = new();
 
     private AdminController CreateController()
     {
-        var controller = new AdminController(_repo.Object, _dovecot.Object);
+        var controller = new AdminController(_repo.Object, _dovecot.Object, _externalDomains.Object);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
         return controller;
     }
+
+    private static ExternalDomain Domain(
+        Guid? id = null, string name = "Gmail",
+        string imapHost = "imap.gmail.com", int imapPort = 993, string imapSecurity = "SslOnConnect",
+        string smtpHost = "smtp.gmail.com", int smtpPort = 587, string smtpSecurity = "StartTls",
+        string? sieveHost = null, int? sievePort = null) => new()
+    {
+        Id = id ?? Guid.NewGuid(),
+        Name = name,
+        ImapHost = imapHost,
+        ImapPort = imapPort,
+        ImapSecurity = imapSecurity,
+        SmtpHost = smtpHost,
+        SmtpPort = smtpPort,
+        SmtpSecurity = smtpSecurity,
+        SieveHost = sieveHost,
+        SievePort = sievePort
+    };
+
+    private static ExternalDomainRequest ValidRequest(
+        string name = "Gmail", string imapHost = "imap.gmail.com", int imapPort = 993, string imapSecurity = "SslOnConnect",
+        string smtpHost = "smtp.gmail.com", int smtpPort = 587, string smtpSecurity = "StartTls",
+        string? sieveHost = null, int? sievePort = null) =>
+        new(name, imapHost, imapPort, imapSecurity, smtpHost, smtpPort, smtpSecurity, sieveHost, sievePort);
 
     // ── Authorization ─────────────────────────────────────
 
@@ -319,5 +345,259 @@ public sealed class AdminControllerTests
         _repo.Setup(r => r.RemoveVirtualDomainOwnerAsync("EXT", 1)).ReturnsAsync(Result.Success());
         var status = Assert.IsType<StatusCodeResult>(await CreateController().RemoveVirtualDomainOwner("EXT", 1));
         Assert.Equal(204, status.StatusCode);
+    }
+
+    // ── GetExternalDomains ─────────────────────────────────
+
+    [Fact]
+    public async Task GetExternalDomains_Returns200WithList()
+    {
+        var domain = Domain();
+        _externalDomains.Setup(s => s.ListAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { domain });
+
+        var ok = Assert.IsType<OkObjectResult>(
+            (await CreateController().GetExternalDomains(CancellationToken.None)).Result);
+
+        var list = Assert.IsAssignableFrom<IEnumerable<ExternalDomainResponse>>(ok.Value).ToList();
+        var response = Assert.Single(list);
+        Assert.Equal(domain.Id, response.Id);
+        Assert.Equal(domain.Name, response.Name);
+        Assert.Equal(domain.ImapHost, response.ImapHost);
+        Assert.Equal(domain.SmtpSecurity, response.SmtpSecurity);
+    }
+
+    // ── CreateExternalDomain ───────────────────────────────
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenValid_Returns200WithDomain()
+    {
+        var created = Domain();
+        _externalDomains.Setup(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(created));
+
+        var ok = Assert.IsType<OkObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(), CancellationToken.None)).Result);
+
+        var response = Assert.IsType<ExternalDomainResponse>(ok.Value);
+        Assert.Equal(created.Id, response.Id);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenStoreFails_Returns400WithEnvelope()
+    {
+        _externalDomains.Setup(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<ExternalDomain>(ExternalDomainStore.NameTaken));
+
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(), CancellationToken.None)).Result);
+
+        Assert.Equal(400, obj.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+        Assert.Equal(ExternalDomainStore.NameTaken, envelope.Message);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenNameEmpty_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(name: ""), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+        _externalDomains.Verify(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenNameTooLong_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(name: new string('a', 101)), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenImapHostEmpty_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(imapHost: ""), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenImapHostNotAHostname_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(imapHost: "http://evil.com/"), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenImapHostTooLong_Returns400()
+    {
+        var host = new string('a', 250) + ".com";
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(imapHost: host), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenImapPortZero_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(imapPort: 0), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenSmtpPortTooLarge_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(smtpPort: 65536), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenImapSecurityUnknown_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(imapSecurity: "Bogus"), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    /// <summary>Enum.TryParse is case-insensitive-averse only by convention; the resolver used to
+    /// accept this and brick the domain. Validation must refuse it outright, never normalise it.</summary>
+    [Fact]
+    public async Task CreateExternalDomain_WhenSecurityLowercase_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(imapSecurity: "starttls"), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+        _externalDomains.Verify(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>Enum.TryParse also accepts the underlying numeric value; "3" must be refused too.</summary>
+    [Fact]
+    public async Task CreateExternalDomain_WhenSecurityNumeric_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(ValidRequest(smtpSecurity: "3"), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+        _externalDomains.Verify(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenSieveHostWithoutPort_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(
+                ValidRequest(sieveHost: "sieve.gmail.com", sievePort: null), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenSievePortWithoutHost_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(
+                ValidRequest(sieveHost: null, sievePort: 4190), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenSievePortOutOfRange_Returns400()
+    {
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(
+                ValidRequest(sieveHost: "sieve.gmail.com", sievePort: 0), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenSieveBothPresent_Succeeds()
+    {
+        _externalDomains.Setup(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(Domain(sieveHost: "sieve.gmail.com", sievePort: 4190)));
+
+        var ok = Assert.IsType<OkObjectResult>((await CreateController().CreateExternalDomain(
+            ValidRequest(sieveHost: "sieve.gmail.com", sievePort: 4190), CancellationToken.None)).Result);
+
+        Assert.IsType<ExternalDomainResponse>(ok.Value);
+    }
+
+    // ── UpdateExternalDomain ───────────────────────────────
+
+    [Fact]
+    public async Task UpdateExternalDomain_WhenValid_Returns204()
+    {
+        var id = Guid.NewGuid();
+        _externalDomains.Setup(s => s.UpdateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().UpdateExternalDomain(id, ValidRequest(), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateExternalDomain_WhenInvalid_Returns400()
+    {
+        var result = await CreateController().UpdateExternalDomain(
+            Guid.NewGuid(), ValidRequest(imapPort: 0), CancellationToken.None);
+
+        var obj = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(400, obj.StatusCode);
+        _externalDomains.Verify(s => s.UpdateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateExternalDomain_WhenNotFound_Returns404()
+    {
+        _externalDomains.Setup(s => s.UpdateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(ExternalDomainStore.NotFound));
+
+        var result = await CreateController().UpdateExternalDomain(Guid.NewGuid(), ValidRequest(), CancellationToken.None);
+
+        var obj = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal(404, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateExternalDomain_WhenNameTaken_Returns400WithEnvelope()
+    {
+        _externalDomains.Setup(s => s.UpdateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(ExternalDomainStore.NameTaken));
+
+        var result = await CreateController().UpdateExternalDomain(Guid.NewGuid(), ValidRequest(), CancellationToken.None);
+
+        var obj = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(400, obj.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+        Assert.Equal(ExternalDomainStore.NameTaken, envelope.Message);
+    }
+
+    // ── DeleteExternalDomain ───────────────────────────────
+
+    [Fact]
+    public async Task DeleteExternalDomain_WhenSuccess_Returns204()
+    {
+        _externalDomains.Setup(s => s.DeleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var result = await CreateController().DeleteExternalDomain(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteExternalDomain_WhenInUse_Returns400WithEnvelope()
+    {
+        _externalDomains.Setup(s => s.DeleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(ExternalDomainStore.InUse));
+
+        var result = await CreateController().DeleteExternalDomain(Guid.NewGuid(), CancellationToken.None);
+
+        var obj = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(400, obj.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+        Assert.Contains("connected", envelope.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -1,16 +1,37 @@
 import {
   createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, hasSession, clearSession, setUnauthorizedHandler, setIsAdmin } from '../api.js'
 import { deriveIdentity, type Account, type AccountIdentity } from '../lib/accountIdentity'
 import { forgetNotificationClaim } from '../modules/mail/notify/channels'
 
+const ACTIVE_ACCOUNT_KEY = 'mail.activeAccount'
+/** The account every session starts on; the one id that can never turn out to be stale. */
+export const PRIMARY_ACCOUNT_ID = 'primary'
+
 export interface ActiveAccount {
-  id: 'primary'
+  /** 'primary' or the connected account's GUID. */
+  id: string
   email: string
   displayName: string
-  isPrimary: true
+  isPrimary: boolean
+  /** null for the primary account and for local shared mailboxes. */
+  domainName: string | null
+  /** false → the stored password no longer decrypts: shown as "Password needed", not switchable. */
+  credentialsValid: boolean
+  sieveSupported: boolean
+}
+
+interface ConnectedAccountRow {
+  id: string
+  email: string
+  displayName: string
+  domainId: string | null
+  domainName: string | null
+  sieveSupported: boolean
+  credentialsValid: boolean
+  creationDate: string
 }
 
 interface AuthContextValue {
@@ -19,14 +40,32 @@ interface AuthContextValue {
   account: Account | null
   accountLoaded: boolean
   identity: AccountIdentity | null
-  /** The account whose mail context is active. Primary only until sub-project 2. */
+  /** The active account's metadata, absent until the list holding it has loaded. */
   activeAccount: ActiveAccount | null
-  /** All linked accounts. Length 1 until sub-project 2. */
+  /** The id every query key is scoped by. Known from storage before the list loads. */
+  activeAccountId: string
+  /** The primary account followed by the connected ones. */
   accounts: ActiveAccount[]
+  /** The list is still in flight: `activeAccountId` may yet turn out to be stale. */
+  accountsLoading: boolean
+  /** No-op on the current id, an unknown one, or a target whose credentials no longer work. */
+  switchAccount: (id: string) => void
   /** Re-read the session flag after LoginPage completed api.login(). */
   syncFromSession: () => void
   logout: () => Promise<void>
   refreshAccount: () => Promise<void>
+}
+
+function mapRow(row: ConnectedAccountRow): ActiveAccount {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName || row.email,
+    isPrimary: false,
+    domainName: row.domainName,
+    credentialsValid: row.credentialsValid,
+    sieveSupported: row.sieveSupported,
+  }
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -35,7 +74,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(hasSession())
   const [account, setAccount] = useState<Account | null>(null)
   const [accountLoaded, setAccountLoaded] = useState(false)
+  const [activeAccountId, setActiveAccountId] = useState<string>(
+    () => localStorage.getItem(ACTIVE_ACCOUNT_KEY) ?? PRIMARY_ACCOUNT_ID)
   const queryClient = useQueryClient()
+
+  // The key is shared with the Connected accounts settings page, whose mutations invalidate it —
+  // which is what refreshes this list when an account is added, repaired or removed.
+  const { data: connectedRows, isLoading: accountsLoading } = useQuery<ConnectedAccountRow[]>({
+    queryKey: ['connectedAccounts'],
+    queryFn: () => api.getConnectedAccounts(),
+    enabled: isLoggedIn,
+    staleTime: 60_000,
+  })
 
   const refreshAccount = useCallback(async () => {
     try {
@@ -94,6 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.resetQueries()
         queryClient.getMutationCache().clear()
         forgetNotificationClaim()
+        localStorage.removeItem(ACTIVE_ACCOUNT_KEY)
+        setActiveAccountId(PRIMARY_ACCOUNT_ID)
       }
       wasLoggedIn.current = false
     }
@@ -115,9 +167,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const identity = account ? deriveIdentity(account) : null
-  const activeAccount: ActiveAccount | null = identity
-    ? { id: 'primary', email: identity.email, displayName: identity.displayName, isPrimary: true }
+  const primaryAccount: ActiveAccount | null = identity
+    ? {
+      id: PRIMARY_ACCOUNT_ID, email: identity.email, displayName: identity.displayName, isPrimary: true,
+      domainName: null, credentialsValid: true, sieveSupported: true,
+    }
     : null
+  const accounts: ActiveAccount[] = primaryAccount
+    ? [primaryAccount, ...(connectedRows ?? []).map(mapRow)]
+    : []
+  // Unresolved rather than the primary while the list loads: the stored id is most likely valid,
+  // and naming the primary as active marks its row as the one in use — a click on the row shown
+  // as current would then move the user off their own mailbox.
+  const activeAccount = accounts.find(a => a.id === activeAccountId)
+    ?? (accountsLoading ? null : primaryAccount)
+
+  // Only once the list is in hand: run while the query is in flight and a reload on a connected
+  // account clears the stored id and flashes the primary mailbox before jumping back. Invalid
+  // credentials fall back too — the reload path would otherwise reach the broken mailbox that
+  // switchAccount refuses to open, and answer every folder and message request with a failure.
+  useEffect(() => {
+    if (!connectedRows || activeAccountId === PRIMARY_ACCOUNT_ID) return
+    if (connectedRows.find(row => row.id === activeAccountId)?.credentialsValid) return
+    localStorage.removeItem(ACTIVE_ACCOUNT_KEY)
+    setActiveAccountId(PRIMARY_ACCOUNT_ID)
+  }, [connectedRows, activeAccountId])
+
+  function switchAccount(id: string) {
+    if (id === activeAccountId) return
+    const target = accounts.find(a => a.id === id)
+    if (!target?.credentialsValid) return
+    // The new account refetches under its own keys regardless; this is about not keeping the
+    // previous mailbox's folders and messages in the cache behind it.
+    queryClient.removeQueries({ queryKey: ['mail', activeAccountId] })
+    setActiveAccountId(id)
+    localStorage.setItem(ACTIVE_ACCOUNT_KEY, id)
+  }
 
   return (
     <AuthContext.Provider value={{
@@ -127,7 +212,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountLoaded,
       identity,
       activeAccount,
-      accounts: activeAccount ? [activeAccount] : [],
+      activeAccountId,
+      accounts,
+      accountsLoading,
+      switchAccount,
       syncFromSession,
       logout,
       refreshAccount,

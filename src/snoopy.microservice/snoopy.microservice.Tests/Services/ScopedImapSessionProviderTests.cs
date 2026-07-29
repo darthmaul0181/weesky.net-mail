@@ -1,7 +1,9 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services;
@@ -13,12 +15,15 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 /// </summary>
 public sealed class ScopedImapSessionProviderTests
 {
+    private static readonly MailAccountConnection Alice = TestConnections.Primary("alice@weesky.be", "hunter2");
+    private static readonly MailAccountConnection Bob = TestConnections.Primary("bob@weesky.be", "swordfish");
+
     private readonly Mock<IImapConnectionFactory> _factory = new();
     private readonly Mock<IImapSession> _session = new();
 
     private ScopedImapSessionProvider CreateSut()
     {
-        _factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _factory.Setup(f => f.OpenAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success<IImapSession>(_session.Object));
         return new ScopedImapSessionProvider(_factory.Object, Mock.Of<ILogger<ScopedImapSessionProvider>>());
     }
@@ -28,11 +33,11 @@ public sealed class ScopedImapSessionProviderTests
     {
         await using var sut = CreateSut();
 
-        var first = await sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None);
-        var second = await sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None);
+        var first = await sut.GetAsync(Alice, CancellationToken.None);
+        var second = await sut.GetAsync(Alice, CancellationToken.None);
 
         Assert.Same(first.Value, second.Value);
-        _factory.Verify(f => f.OpenAsync("alice@weesky.be", "hunter2", It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Verify(f => f.OpenAsync(Alice, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -41,16 +46,16 @@ public sealed class ScopedImapSessionProviderTests
         await using var sut = CreateSut();
 
         await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
-            sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None)));
+            sut.GetAsync(Alice, CancellationToken.None)));
 
-        _factory.Verify(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Verify(f => f.OpenAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task DisposeAsync_ClosesTheSession()
     {
         var sut = CreateSut();
-        await sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None);
+        await sut.GetAsync(Alice, CancellationToken.None);
 
         await sut.DisposeAsync();
 
@@ -61,7 +66,7 @@ public sealed class ScopedImapSessionProviderTests
     public async Task DisposeAsync_IsIdempotent()
     {
         var sut = CreateSut();
-        await sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None);
+        await sut.GetAsync(Alice, CancellationToken.None);
 
         await sut.DisposeAsync();
         await sut.DisposeAsync();
@@ -76,7 +81,7 @@ public sealed class ScopedImapSessionProviderTests
 
         await sut.DisposeAsync();
 
-        _factory.Verify(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _factory.Verify(f => f.OpenAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The request is over either way: a teardown that throws must not become its outcome.
@@ -85,7 +90,7 @@ public sealed class ScopedImapSessionProviderTests
     {
         var sut = CreateSut();
         _session.Setup(s => s.DisposeAsync()).Throws(new IOException("connection already gone"));
-        await sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None);
+        await sut.GetAsync(Alice, CancellationToken.None);
 
         await sut.DisposeAsync();
     }
@@ -94,30 +99,31 @@ public sealed class ScopedImapSessionProviderTests
     [Fact]
     public async Task GetAsync_RemembersAFailureInsteadOfReconnecting()
     {
-        _factory.Setup(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _factory.Setup(f => f.OpenAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Failure<IImapSession>("Mail authentication failed"));
         await using var sut = new ScopedImapSessionProvider(
             _factory.Object, Mock.Of<ILogger<ScopedImapSessionProvider>>());
 
-        var first = await sut.GetAsync("alice@weesky.be", "wrong", CancellationToken.None);
-        var second = await sut.GetAsync("alice@weesky.be", "wrong", CancellationToken.None);
+        var wrong = TestConnections.Primary("alice@weesky.be", "wrong");
+        var first = await sut.GetAsync(wrong, CancellationToken.None);
+        var second = await sut.GetAsync(wrong, CancellationToken.None);
 
         Assert.True(first.IsFailure);
         Assert.Equal("Mail authentication failed", second.Error);
-        _factory.Verify(f => f.OpenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Verify(f => f.OpenAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // A cached session authenticates as one specific user; different credentials must never reuse it.
+    // A cached session authenticates as one specific account; a different one must never reuse it.
     [Fact]
-    public async Task GetAsync_WithDifferentCredentials_ReplacesAndClosesThePreviousSession()
+    public async Task GetAsync_WithADifferentAccount_ReplacesAndClosesThePreviousSession()
     {
         await using var sut = CreateSut();
-        await sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None);
+        await sut.GetAsync(Alice, CancellationToken.None);
 
-        await sut.GetAsync("bob@weesky.be", "swordfish", CancellationToken.None);
+        await sut.GetAsync(Bob, CancellationToken.None);
 
         _session.Verify(s => s.DisposeAsync(), Times.Once);
-        _factory.Verify(f => f.OpenAsync("bob@weesky.be", "swordfish", It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Verify(f => f.OpenAsync(Bob, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -127,6 +133,6 @@ public sealed class ScopedImapSessionProviderTests
         await sut.DisposeAsync();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => sut.GetAsync("alice@weesky.be", "hunter2", CancellationToken.None));
+            () => sut.GetAsync(Alice, CancellationToken.None));
     }
 }

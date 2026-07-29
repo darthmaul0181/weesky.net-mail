@@ -66,6 +66,9 @@ export const mailKeys = {
 // importers keep working from here.
 export { useAccountId }
 
+// Every call below carries `{ accountId }`, read at render rather than at fire time: a write
+// started under one mailbox lands there even if the user switches while it is in flight.
+
 /** One cheap LIST+STATUS across all folders. Internal, like BLOCK_SIZE: not a setting. */
 export const POLL_INTERVAL = 60_000
 
@@ -80,7 +83,7 @@ export function useFolders(enabled = true) {
 
   return useQuery<MailFolderNode[]>({
     queryKey: mailKeys.folders(accountId),
-    queryFn: ({ signal }) => api.getMailFolders({ signal }),
+    queryFn: ({ signal }) => api.getMailFolders({ signal, accountId }),
     enabled,
     refetchInterval: POLL_INTERVAL,
     refetchIntervalInBackground: notifies,
@@ -111,7 +114,7 @@ export function useMessages(
 
   return useQuery<MailFolderPage>({
     queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize),
-    queryFn: ({ signal }) => api.getMailMessages(folderPath, page, pageSize, { signal }),
+    queryFn: ({ signal }) => api.getMailMessages(folderPath, page, pageSize, { signal, accountId }),
     enabled: enabled && folderPath !== null,
     // Keeps the current page on screen while the next one loads, instead of flashing empty.
     placeholderData: (previous) => previous,
@@ -124,7 +127,8 @@ export function useMessageStream(folderPath: string | null, requestSize: number,
   return useInfiniteQuery({
     queryKey: mailKeys.messageStream(accountId, folderPath ?? '', requestSize),
     queryFn: ({ pageParam, signal }) =>
-      api.getMailMessages(folderPath, pageParam, requestSize, { signal }) as Promise<MailFolderPage>,
+      api.getMailMessages(folderPath, pageParam, requestSize,
+        { signal, accountId }) as Promise<MailFolderPage>,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       nextBlockIndex(lastPage, allPages.length, requestSize),
@@ -140,7 +144,7 @@ export function useMessage(folderPath: string | null, uid: number | null) {
 
   return useQuery<MailMessageDetail>({
     queryKey: mailKeys.message(accountId, folderPath ?? '', uid ?? 0),
-    queryFn: ({ signal }) => api.getMailMessage(folderPath, uid, { signal }),
+    queryFn: ({ signal }) => api.getMailMessage(folderPath, uid, { signal, accountId }),
     enabled: folderPath !== null && uid !== null,
   })
 }
@@ -156,7 +160,7 @@ export function useSearchMessages(criteria: SearchCriteria | null, page: number,
     queryKey: criteria
       ? mailKeys.search(accountId, criteria, page, pageSize)
       : [...mailKeys.searchIn(accountId), 'idle'],
-    queryFn: ({ signal }) => api.searchMessages(criteria, page, pageSize, { signal }),
+    queryFn: ({ signal }) => api.searchMessages(criteria, page, pageSize, { signal, accountId }),
     enabled: criteria !== null && pageSize > 0,
     refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
@@ -168,7 +172,7 @@ export function useFolderRoles() {
 
   return useQuery<FolderRoleEntry[]>({
     queryKey: mailKeys.folderRoles(accountId),
-    queryFn: ({ signal }) => api.getFolderRoles({ signal }),
+    queryFn: ({ signal }) => api.getFolderRoles({ signal, accountId }),
   })
 }
 
@@ -177,12 +181,15 @@ export function useFolderRoles() {
     `select` stays on the hook, since `ensureQueryData` answers the raw response either way. */
 export const identitiesQueryOptions = (accountId: string) => ({
   queryKey: mailKeys.identities(accountId),
-  queryFn: () => api.getIdentities() as Promise<IdentityListResponse>,
+  queryFn: () => api.getIdentities({ accountId }) as Promise<IdentityListResponse>,
   staleTime: 5 * 60_000,
 })
 
-export function useIdentities() {
-  const accountId = useAccountId()
+/** `pinnedAccountId` is the composer's — the From list has to be the bound account's, or the
+    picker offers an address the send's account does not own and every attempt is refused. */
+export function useIdentities(pinnedAccountId?: string) {
+  const activeAccountId = useAccountId()
+  const accountId = pinnedAccountId ?? activeAccountId
 
   return useQuery({
     ...identitiesQueryOptions(accountId),
@@ -196,7 +203,7 @@ export function useReplaceIdentities() {
 
   return useMutation({
     mutationFn: (identities: { address: string; displayName: string; isDefault: boolean }[]) =>
-      api.putIdentities(identities) as Promise<void>,
+      api.putIdentities(identities, { accountId }) as Promise<void>,
     // Settled, not success: after a refused PUT the page must fall back to the server's state.
     onSettled: () => queryClient.invalidateQueries({ queryKey: mailKeys.identities(accountId) }),
   })
@@ -256,12 +263,14 @@ export function useAliases(enabled = true) {
  * Role mutations invalidate the roles AND the folder tree: the tree's labels are the chain's
  * output, so changing a role changes what the tree displays.
  */
-function useRoleMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
+function useRoleMutation<TArgs>(
+  mutationFn: (args: TArgs, options: { accountId: string }) => Promise<unknown>,
+) {
   const accountId = useAccountId()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn,
+    mutationFn: (args: TArgs) => mutationFn(args, { accountId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mailKeys.folderRoles(accountId) })
       queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
@@ -271,39 +280,43 @@ function useRoleMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
 
 export const useSetFolderRole = () =>
   useRoleMutation<{ role: string; folderPath: string }>(
-    ({ role, folderPath }) => api.setFolderRole(role, folderPath))
+    ({ role, folderPath }, options) => api.setFolderRole(role, folderPath, options))
 
 export const useClearFolderRole = () =>
-  useRoleMutation<{ role: string }>(({ role }) => api.clearFolderRole(role))
+  useRoleMutation<{ role: string }>(({ role }, options) => api.clearFolderRole(role, options))
 
 /**
  * Folder mutations all invalidate the tree: creating, renaming, deleting and subscribing each
  * change the hierarchy or the counts the tree displays.
  */
-function useFolderMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
+function useFolderMutation<TArgs>(
+  mutationFn: (args: TArgs, options: { accountId: string }) => Promise<unknown>,
+) {
   const accountId = useAccountId()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn,
+    mutationFn: (args: TArgs) => mutationFn(args, { accountId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) }),
   })
 }
 
 export const useCreateFolder = () =>
   useFolderMutation<{ parentPath: string; name: string }>(
-    ({ parentPath, name }) => api.createMailFolder(parentPath, name))
+    ({ parentPath, name }, options) => api.createMailFolder(parentPath, name, options))
 
 export const useRenameFolder = () =>
   useFolderMutation<{ path: string; newParentPath: string; newName: string }>(
-    ({ path, newParentPath, newName }) => api.renameMailFolder(path, newParentPath, newName))
+    ({ path, newParentPath, newName }, options) =>
+      api.renameMailFolder(path, newParentPath, newName, options))
 
 export const useDeleteFolder = () =>
-  useFolderMutation<{ path: string }>(({ path }) => api.deleteMailFolder(path))
+  useFolderMutation<{ path: string }>(({ path }, options) => api.deleteMailFolder(path, options))
 
 export const useSetFolderSubscription = () =>
   useFolderMutation<{ path: string; subscribed: boolean }>(
-    ({ path, subscribed }) => api.setMailFolderSubscription(path, subscribed))
+    ({ path, subscribed }, options) =>
+      api.setMailFolderSubscription(path, subscribed, options))
 
 export interface SetFlagsArgs {
   folderPath: string
@@ -357,7 +370,7 @@ export function useSetFlags(onError?: (message: string) => void) {
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
     mutationFn: ({ folderPath, uids, flag, value }: SetFlagsArgs) =>
-      api.setMessageFlags(folderPath, uids, flag, value),
+      api.setMessageFlags(folderPath, uids, flag, value, { accountId }),
 
     onMutate: async ({ folderPath, uids, flag, value }: SetFlagsArgs) => {
       const pagesKey = mailKeys.messagesIn(accountId, folderPath)
@@ -595,8 +608,8 @@ export function useMoveMessages(onError?: (message: string) => void) {
     mutationKey: mailKeys.writes(accountId),
     mutationFn: ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) =>
       copy
-        ? api.copyMessages(folderPath, uids, targetFolderPath)
-        : api.moveMessages(folderPath, uids, targetFolderPath),
+        ? api.copyMessages(folderPath, uids, targetFolderPath, { accountId })
+        : api.moveMessages(folderPath, uids, targetFolderPath, { accountId }),
 
     onMutate: async ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
@@ -651,15 +664,21 @@ export interface DeleteMessagesArgs {
   uids: number[]
 }
 
-/** The source half of a move: the rows are gone and no folder receives them. */
-export function useDeleteMessages(onError?: (message: string) => void) {
-  const accountId = useAccountId()
+/**
+ * The source half of a move: the rows are gone and no folder receives them.
+ * `pinnedAccountId` is the composer's: a draft belongs to the mailbox it was written in, and a
+ * switch under an open composer must not send its staged ids somewhere else. Every other caller
+ * omits it and follows the active account. Same for useSendMessage and useSaveDraft below.
+ */
+export function useDeleteMessages(onError?: (message: string) => void, pinnedAccountId?: string) {
+  const activeAccountId = useAccountId()
+  const accountId = pinnedAccountId ?? activeAccountId
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
     mutationFn: ({ folderPath, uids }: DeleteMessagesArgs) =>
-      api.deleteMessages(folderPath, uids),
+      api.deleteMessages(folderPath, uids, { accountId }),
 
     onMutate: async ({ folderPath, uids }: DeleteMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
@@ -706,13 +725,15 @@ export interface SendMessageResult { appendedToSent: boolean }
  * Sends a composed message. On success invalidates the folder tree (the Sent copy changes its
  * counts) plus the Sent folder's own message queries, found in the cached tree by specialUse.
  */
-export function useSendMessage() {
-  const accountId = useAccountId()
+export function useSendMessage(pinnedAccountId?: string) {
+  const activeAccountId = useAccountId()
+  const accountId = pinnedAccountId ?? activeAccountId
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
-    mutationFn: (args: SendMessageArgs) => api.sendMessage(args) as Promise<SendMessageResult>,
+    mutationFn: (args: SendMessageArgs) =>
+      api.sendMessage(args, { accountId }) as Promise<SendMessageResult>,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
       const folders = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
@@ -730,22 +751,25 @@ export function useSendMessage() {
  * (a side effect with a TTL), so the result must never be cached or replayed.
  */
 export function usePrepareQuote() {
+  const accountId = useAccountId()
+
   return useMutation({
     mutationFn: (args: { folder: string; uid: number; purpose: QuotePurpose }) =>
-      api.prepareQuote(args.folder, args.uid, args.purpose) as Promise<PreparedQuote>,
+      api.prepareQuote(args.folder, args.uid, args.purpose, { accountId }) as Promise<PreparedQuote>,
   })
 }
 
 export type SaveDraftArgs = SendMessageArgs & { replaceUid?: number }
 
 /** Files the draft under the drafts role; each success replaces the version before it. */
-export function useSaveDraft() {
-  const accountId = useAccountId()
+export function useSaveDraft(pinnedAccountId?: string) {
+  const activeAccountId = useAccountId()
+  const accountId = pinnedAccountId ?? activeAccountId
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
-    mutationFn: (args: SaveDraftArgs) => api.saveDraft(args) as Promise<SavedDraft>,
+    mutationFn: (args: SaveDraftArgs) => api.saveDraft(args, { accountId }) as Promise<SavedDraft>,
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
       queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, saved.folderPath) })
@@ -759,9 +783,11 @@ export function useSaveDraft() {
  * parts (a side effect with a TTL), so the result must never be cached or replayed.
  */
 export function useOpenDraft() {
+  const accountId = useAccountId()
+
   return useMutation({
     mutationFn: (args: { folder: string; uid: number }) =>
-      api.openDraft(args.folder, args.uid) as Promise<OpenedDraft>,
+      api.openDraft(args.folder, args.uid, { accountId }) as Promise<OpenedDraft>,
   })
 }
 
@@ -783,7 +809,7 @@ export function useEmptyFolder(onError?: (message: string) => void) {
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
     mutationFn: ({ folderPath, targetFolderPath }: EmptyFolderArgs) =>
-      api.emptyFolder(folderPath, targetFolderPath ?? null),
+      api.emptyFolder(folderPath, targetFolderPath ?? null, { accountId }),
 
     onMutate: async ({ folderPath, targetFolderPath }: EmptyFolderArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)

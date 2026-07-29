@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
+// Mutable so a test can switch mailboxes while a bubble is on screen.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary' }))
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: auth.activeAccountId }, activeAccountId: auth.activeAccountId }),
 }))
 vi.mock('./channels', () => ({
   playNewMailSound: mocks.playNewMailSound,
@@ -104,6 +106,7 @@ const bothOff = { 'mail.notifySound': 'false', 'mail.notifyDesktop': 'false' }
 describe('useMailNotifications', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.activeAccountId = 'primary'
     mocks.claimNotification.mockReturnValue(true)
     mocks.getMailMessages.mockResolvedValue(pageOf([11, 9]))
     // staleTime keeps the seeded tree from being refetched behind a tick and put back.
@@ -233,7 +236,7 @@ describe('useMailNotifications', () => {
     await tick(inbox({ uidNext: 12 }))
     await settle()
 
-    expect(mocks.claimNotification).toHaveBeenCalledWith(100, 12)
+    expect(mocks.claimNotification).toHaveBeenCalledWith('primary', 100, 12)
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
     expect(mocks.getMailMessages).not.toHaveBeenCalled()
@@ -269,7 +272,7 @@ describe('useMailNotifications', () => {
 
     await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1))
     // Claimed under the new numbering, so the entry banked before the break cannot gag it.
-    expect(mocks.claimNotification).toHaveBeenCalledWith(200, 4784)
+    expect(mocks.claimNotification).toHaveBeenCalledWith('primary', 200, 4784)
   })
 
   // The role moved to another folder: its uidNext has nothing to do with the old one's.
@@ -299,6 +302,22 @@ describe('useMailNotifications', () => {
     onClick()
 
     expect(mocks.navigate).toHaveBeenCalledWith('/mail?folder=INBOX&uid=11')
+  })
+
+  // The bubble carries the folder and uid of the account it was raised for. Switched away since,
+  // that uid names another mailbox's message — opening it here shows the wrong mail or an error.
+  it('only raises the window when the account changed after the bubble was raised', async () => {
+    const { tick, rerender } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ uidNext: 11 }))
+    await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalled())
+    const onClick = mocks.showDesktopNotification.mock.calls[0][2] as () => void
+
+    auth.activeAccountId = 'linked-1'
+    rerender()
+    onClick()
+
+    expect(mocks.navigate).not.toHaveBeenCalled()
   })
 
   it('only raises the window when several arrived', async () => {
@@ -379,7 +398,7 @@ describe('useMailNotifications', () => {
 
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
       '1 new message', expect.any(String), expect.any(Function)))
-    expect(mocks.claimNotification).toHaveBeenCalledWith(100, 501)
+    expect(mocks.claimNotification).toHaveBeenCalledWith('primary', 100, 501)
   })
 })
 
@@ -388,6 +407,7 @@ describe('useMailNotifications', () => {
 describe('useMailNotifications, from the shell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.activeAccountId = 'primary'
     mocks.claimNotification.mockReturnValue(true)
     mocks.getMailFolders.mockResolvedValue([inbox()])
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

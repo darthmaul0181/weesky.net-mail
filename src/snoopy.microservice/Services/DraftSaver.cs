@@ -19,21 +19,21 @@ internal sealed class DraftSaver(
     ILogger<DraftSaver> logger) : IDraftSaver
 {
     public async Task<Result<SavedDraft>> SaveAsync(
-        User user, string password, SaveDraftRequest request, CancellationToken cancellationToken)
+        User user, MailAccountConnection connection, SaveDraftRequest request, CancellationToken cancellationToken)
     {
         if (user == null) throw new ArgumentNullException(nameof(user));
 
-        var built = await factory.CreateAsync(user, request, cancellationToken);
+        var built = await factory.CreateAsync(user, connection, request, cancellationToken);
         if (built.IsFailure) return Result.Failure<SavedDraft>(built.Error);
 
-        var tree = await folders.GetTreeAsync(user, password, cancellationToken);
+        var tree = await folders.GetTreeAsync(user, connection, cancellationToken);
         if (tree.IsFailure) return Result.Failure<SavedDraft>(tree.Error);
 
         // A preferences outage must not block a save the SPECIAL-USE flags can already place.
         IReadOnlyList<FolderRoleOverride> overrides;
         try
         {
-            overrides = await roles.GetAsync(user.WebmailUid, cancellationToken);
+            overrides = await roles.GetAsync(user.WebmailUid, connection.StorageAccountId, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -55,7 +55,7 @@ internal sealed class DraftSaver(
         }
 
         var saved = await messages.SaveDraftAsync(
-            user, password, drafts.FolderPath!, built.Value, request.ReplaceUid, cancellationToken);
+            user, connection, drafts.FolderPath!, built.Value, request.ReplaceUid, cancellationToken);
         if (saved.IsFailure) return Result.Failure<SavedDraft>(saved.Error);
 
         // Staged files stay: the composer is still open on them for the next save or the send.

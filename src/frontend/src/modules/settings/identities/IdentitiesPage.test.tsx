@@ -158,6 +158,27 @@ describe('IdentitiesPage', () => {
       expect.anything())
   })
 
+  // A pending replace blocks the reset the arriving server data would have done, so the optimistic
+  // list built from account A used to survive the switch and be PUT over account B's own set.
+  it('drops the optimistic list when the account changes under a pending save', () => {
+    const authFor = (activeAccountId: string) => ({
+      activeAccountId,
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+    })
+    vi.mocked(useReplaceIdentities).mockReturnValue({ mutate, isPending: true } as never)
+    vi.mocked(useAuth).mockReturnValue(authFor('primary') as never)
+    const { rerender } = render(<IdentitiesPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove michel@weesky.be' }))
+    vi.mocked(useAuth).mockReturnValue(authFor('linked-1') as never)
+    rerender(<IdentitiesPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove gone@weesky.be' }))
+    expect(mutate).toHaveBeenLastCalledWith(
+      [{ address: 'michel@weesky.be', displayName: 'Michel', isDefault: false }],
+      expect.anything())
+  })
+
   it('a refused save shows the message and puts the server state back on screen', () => {
     mutate.mockImplementation((_rows, options) => options.onError(new Error('gone@weesky.be is not yours')))
     render(<IdentitiesPage />)
@@ -200,5 +221,91 @@ describe('IdentitiesPage', () => {
     vi.mocked(useIdentities).mockReturnValue({ data: undefined, isLoading: false, isError: true } as never)
     render(<IdentitiesPage />)
     expect(screen.getByText('Could not load your identities.')).toBeInTheDocument()
+  })
+
+  // The identities below already answer under the stored account id while the account list is
+  // still in flight, so the variant on screen is a guess — and a save built on the wrong one is
+  // refused with a 400.
+  it('locks every action while the account list is still loading', () => {
+    vi.mocked(useAliases).mockReturnValue({
+      data: [{ name: 'support', domain: 'weesky.be' }], isLoading: false,
+    } as never)
+    vi.mocked(useAuth).mockReturnValue({
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+      activeAccount: null, accountsLoading: true,
+    } as never)
+    render(<IdentitiesPage />)
+    expect(screen.getByRole('button', { name: 'Add identity' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Make michel@weesky.be the default' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit michel@weesky.be' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Remove michel@weesky.be' })).toBeDisabled()
+  })
+
+  // A connected mailbox: same wire shape, but its own address is the default the server forces
+  // and there is no alias list to pick an identity from.
+  describe('on a connected account', () => {
+    const connected: SendingIdentity[] = [
+      { address: 'shared@ext.example', displayName: 'Shared box', isDefault: true, isPrimary: true, stale: false, labelIsCustom: true },
+      { address: 'team@ext.example', displayName: 'Team', isDefault: false, isPrimary: false, stale: false, labelIsCustom: true },
+    ]
+
+    beforeEach(() => {
+      vi.mocked(useIdentities).mockReturnValue({ data: connected, isLoading: false, isError: false } as never)
+      vi.mocked(useAuth).mockReturnValue({
+        identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+        activeAccount: { id: 'linked-1', email: 'shared@ext.example', displayName: 'Shared box', isPrimary: false },
+      } as never)
+    })
+
+    it('tags the account address, which can be renamed but not removed or unstarred', () => {
+      render(<IdentitiesPage />)
+      expect(screen.getByText('Account address')).toBeInTheDocument()
+      expect(screen.queryByText('primary')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Edit shared@ext.example' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Remove shared@ext.example' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Make shared@ext.example the default' })).toBeNull()
+      expect(screen.queryByText('shared@ext.example is the default')).toBeNull()
+    })
+
+    it('an added identity offers edit and delete, and no star either', () => {
+      render(<IdentitiesPage />)
+      expect(screen.getByRole('button', { name: 'Edit team@ext.example' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Remove team@ext.example' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Make team@ext.example the default' })).toBeNull()
+    })
+
+    // The label is the account's own, not the primary account's FullName, and the server refuses
+    // a set that does not carry the account address.
+    it('renames the account address and sends it back in the set', () => {
+      render(<IdentitiesPage />)
+      expect(screen.getByText('Shared box')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Edit shared@ext.example' }))
+      fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Support' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      expect(mutate).toHaveBeenCalledWith(
+        [{ address: 'shared@ext.example', displayName: 'Support', isDefault: true },
+         { address: 'team@ext.example', displayName: 'Team', isDefault: false }],
+        expect.anything())
+    })
+
+    it('adds a freely typed address, with no alias to own it', () => {
+      render(<IdentitiesPage />)
+      const add = screen.getByRole('button', { name: 'Add identity' })
+      expect(add).toBeEnabled()
+      fireEvent.click(add)
+      fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'sales@ext.example' } })
+      fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Sales' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+      expect(mutate).toHaveBeenCalledWith(
+        [{ address: 'shared@ext.example', displayName: 'Shared box', isDefault: true },
+         { address: 'team@ext.example', displayName: 'Team', isDefault: false },
+         { address: 'sales@ext.example', displayName: 'Sales', isDefault: false }],
+        expect.anything())
+    })
+
+    it('drops the alias wording, which names nothing here', () => {
+      render(<IdentitiesPage />)
+      expect(screen.queryByText(/linked to one of your aliases/)).toBeNull()
+    })
   })
 })

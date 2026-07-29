@@ -2,11 +2,20 @@ import type { AliasInfo, MailAddressInfo, MailMessageDetail, SendingIdentity } f
 
 export interface Recipients { to: string[]; cc: string[] }
 
-/** Canonical set of the account's own addresses: primary + live aliases, lowercased. */
-export function myAddresses(primary: string | null | undefined, aliases: AliasInfo[]): Set<string> {
+/** Canonical set of every address that is the user, lowercased. `own` holds the mailboxes owned
+    outright — the active account's address *and* the primary one, which no alias list ever carries
+    (`IdentityResolver.OwnsCanonical` tests it with its own `||` for that reason). The identities
+    are the only source a connected mailbox has, there being no alias list for a server we do not
+    administer, and two identities on one account are both the user: a reply-all drops them all
+    rather than mail the user back. */
+export function myAddresses(
+  own: readonly (string | null | undefined)[], aliases: AliasInfo[],
+  identities: SendingIdentity[] = [],
+): Set<string> {
   const mine = new Set<string>()
-  if (primary) mine.add(primary.toLowerCase())
+  for (const address of own) if (address) mine.add(address.toLowerCase())
   for (const alias of aliases) mine.add(`${alias.name}@${alias.domain}`.toLowerCase())
+  for (const identity of identities) if (!identity.stale) mine.add(identity.address.toLowerCase())
   return mine
 }
 

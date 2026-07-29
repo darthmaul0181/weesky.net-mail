@@ -6,7 +6,7 @@ import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
-import { useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
+import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import RocketIcon from '../../../icons/RocketIcon'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
@@ -43,14 +43,21 @@ export default function ComposeView({ onNotify }: Props) {
   const { identity } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const send = useSendMessage()
-  const saveDraftMutation = useSaveDraft()
+  // Pinned at mount: this draft belongs to the mailbox it was opened in. Its staged files live in
+  // that account's namespace, so a switch under an open composer would send ids the new account
+  // has never heard of — a message out with its attachments silently missing.
+  const activeAccountId = useAccountId()
+  const [accountId] = useState(activeAccountId)
+  const send = useSendMessage(accountId)
+  const saveDraftMutation = useSaveDraft(accountId)
   // The mutation's own callback, not a per-call one: the send navigates away first, and TanStack
   // drops per-call callbacks once the observer unmounts. A silent failure would leave a
   // re-sendable draft of a message that has already gone out.
   const deleteDraft = useDeleteMessages(
-    () => onNotify('Message sent — the draft could not be removed', 'error'))
-  const { data: identityList } = useIdentities()
+    () => onNotify('Message sent — the draft could not be removed', 'error'), accountId)
+  // Pinned like the send: an address only the newly active account owns would be refused by the
+  // one this draft is bound to, leaving it neither sendable nor savable.
+  const { data: identityList } = useIdentities(accountId)
   // One read for the three fields: they would share the cache anyway, but a single call site is
   // easier to follow than three.
   const { data: contacts } = useContacts()
@@ -81,7 +88,7 @@ export default function ComposeView({ onNotify }: Props) {
   const seedTray = useMemo(() => (seed?.attachments ?? []).filter(a => !a.contentId), [seed])
   const inlineIds = useMemo(
     () => (seed?.attachments ?? []).filter(a => a.contentId).map(a => a.id), [seed])
-  const attachments = useStagedAttachments(seedTray, inlineIds)
+  const attachments = useStagedAttachments(accountId, seedTray, inlineIds)
   const [draftRef, setDraftRef] = useState(seed?.draftRef ?? null)
 
   const usableIdentities = (identityList ?? []).filter(i => !i.stale)

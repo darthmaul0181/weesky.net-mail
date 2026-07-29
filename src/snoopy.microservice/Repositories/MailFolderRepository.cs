@@ -15,25 +15,35 @@ internal sealed class MailFolderRepository(
     : IMailFolderRepository
 {
     public Task<Result<IReadOnlyList<MailFolderNode>>> GetTreeAsync(
-        User user, string password, CancellationToken cancellationToken) =>
-        sessions.WithSessionAsync(user, password,
+        User user, MailAccountConnection connection, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection,
             session => session.ListFoldersAsync(cancellationToken), cancellationToken);
+    }
 
     public Task<Result<string>> CreateFolderAsync(
-        User user, string password, string parentPath, string name, CancellationToken cancellationToken) =>
-        sessions.WithSessionAsync(user, password,
+        User user, MailAccountConnection connection, string parentPath, string name, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection,
             session => session.CreateFolderAsync(parentPath, name, cancellationToken), cancellationToken);
+    }
 
     public Task<Result<string>> RenameFolderAsync(
-        User user, string password, string path, string newParentPath, string newName, CancellationToken cancellationToken) =>
-        sessions.WithSessionAsync(user, password, async session =>
+        User user, MailAccountConnection connection, string path, string newParentPath, string newName,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection, async session =>
         {
             var renamed = await session.RenameFolderAsync(path, newParentPath, newName, cancellationToken);
             if (renamed.IsFailure) return renamed;
 
-            await TryMoveOverridesAsync(session, user, path, renamed.Value, cancellationToken);
+            await TryMoveOverridesAsync(session, user, connection.StorageAccountId, path, renamed.Value, cancellationToken);
             return renamed;
         }, cancellationToken);
+    }
 
     /// <summary>
     /// IMAP first, database second. If this bookkeeping fails, the stored overrides go
@@ -43,7 +53,8 @@ internal sealed class MailFolderRepository(
     /// carrying the old value would make our own rename trip our own guard.
     /// </summary>
     private async Task TryMoveOverridesAsync(
-        IImapSession session, User user, string oldPath, string newPath, CancellationToken cancellationToken)
+        IImapSession session, User user, string accountId, string oldPath, string newPath,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -57,7 +68,7 @@ internal sealed class MailFolderRepository(
             }
 
             await roleStore.ApplyRenameAsync(
-                user.WebmailUid, oldPath, newPath, session.DirectorySeparator,
+                user.WebmailUid, accountId, oldPath, newPath, session.DirectorySeparator,
                 status.Value.UidValidity, status.Value.MailboxId, cancellationToken);
         }
         catch (Exception ex)
@@ -66,8 +77,11 @@ internal sealed class MailFolderRepository(
         }
     }
 
-    public Task<Result> DeleteFolderAsync(User user, string password, string path, CancellationToken cancellationToken) =>
-        sessions.WithSessionAsync(user, password, async session =>
+    public Task<Result> DeleteFolderAsync(
+        User user, MailAccountConnection connection, string path, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection, async session =>
         {
             var result = await session.DeleteFolderAsync(path, cancellationToken);
             if (result.IsFailure) return result;
@@ -75,7 +89,7 @@ internal sealed class MailFolderRepository(
             try
             {
                 await roleStore.RemoveSubtreeAsync(
-                    user.WebmailUid, path, session.DirectorySeparator, cancellationToken);
+                    user.WebmailUid, connection.StorageAccountId, path, session.DirectorySeparator, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -84,14 +98,21 @@ internal sealed class MailFolderRepository(
 
             return result;
         }, cancellationToken);
+    }
 
     public Task<Result> SetSubscriptionAsync(
-        User user, string password, string path, bool subscribed, CancellationToken cancellationToken) =>
-        sessions.WithSessionAsync(user, password,
+        User user, MailAccountConnection connection, string path, bool subscribed, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection,
             session => session.SetSubscriptionAsync(path, subscribed, cancellationToken), cancellationToken);
+    }
 
     public Task<Result<MailFolderStatus>> GetFolderStatusAsync(
-        User user, string password, string path, CancellationToken cancellationToken) =>
-        sessions.WithSessionAsync(user, password,
+        User user, MailAccountConnection connection, string path, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection,
             session => session.GetFolderStatusAsync(path, cancellationToken), cancellationToken);
+    }
 }

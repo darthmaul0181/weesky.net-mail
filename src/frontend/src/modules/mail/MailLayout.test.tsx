@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
+import { ApiError } from '../../api.js'
 import type { MailFolderNode } from './api/mailTypes'
 import { settle } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
@@ -22,21 +23,39 @@ const mocks = vi.hoisted(() => ({
   getIdentities: vi.fn(),
 }))
 
-vi.mock('../../api.js', () => ({
+// Actual first: ApiError is a real class the layout tests with `instanceof`, so a stub of it
+// would prove nothing about the 409 the backend actually raises.
+vi.mock('../../api.js', async () => ({
+  ...await vi.importActual<object>('../../api.js'),
   api: mocks,
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn(),
 }))
 vi.mock('./list/useListRefresh', () => ({ useListRefresh: mocks.useListRefresh }))
+
+// Mutable so a test can switch accounts the way the account menu does.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary', accountsLoading: false }))
+
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  PRIMARY_ACCOUNT_ID: 'primary',
+  useAuth: () => ({
+    activeAccount: { id: auth.activeAccountId },
+    activeAccountId: auth.activeAccountId,
+    accountsLoading: auth.accountsLoading,
+  }),
 }))
+
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ isDark: false }) }))
 // The composer owns a router blocker, which needs a data router; this file's harness is a plain
 // MemoryRouter, so what is under test here is the layout's compose mode, not the composer.
 vi.mock('./compose/ComposeView', () => ({
   default: () => <div data-testid="compose-view">compose</div>,
 }))
+
+beforeEach(() => {
+  auth.activeAccountId = 'primary'
+  auth.accountsLoading = false
+})
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
@@ -54,6 +73,7 @@ const folders = [
 
 function Where() {
   const location = useLocation()
+  const navigate = useNavigate()
   return (
     <>
       <span data-testid="search">{location.search}</span>
@@ -61,16 +81,23 @@ function Where() {
       {/* Echoes the navigation state so a test can check what a `navigate(..., { state })`
           call actually carried, not just that some navigation happened. */}
       <span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
+      {/* Stands in for the composer's own exit, which goes back to the folder it was opened
+          from. ComposeView is mocked here, so the layout has no ✕ of its own to click. */}
+      <button data-testid="leave-compose" onClick={() => navigate('/mail?folder=Projects')}>
+        leave
+      </button>
     </>
   )
 }
 
 function renderAt(
-  initial: string, tree: MailFolderNode[] = folders, pane = 'right', messages: object[] = [],
+  // An Error stands for a tree the server refused to answer with.
+  initial: string, tree: MailFolderNode[] | Error = folders, pane = 'right', messages: object[] = [],
   // A promise a test resolves itself is what lets it act while the identities are still in flight.
   identities: object | Promise<object> = { identities: [] },
 ) {
-  mocks.getMailFolders.mockResolvedValue(tree)
+  if (tree instanceof Error) mocks.getMailFolders.mockRejectedValue(tree)
+  else mocks.getMailFolders.mockResolvedValue(tree)
   mocks.getMailMessages.mockResolvedValue({
     folderPath: 'INBOX', uidValidity: 1, total: messages.length, page: 0, pageSize: 30, messages,
   })
@@ -85,6 +112,7 @@ function renderAt(
   )
   return render(<MailLayout />, { wrapper })
 }
+
 
 describe('MailLayout', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -131,7 +159,7 @@ describe('MailLayout', () => {
   it('watches the displayed folder for remote changes', async () => {
     renderAt('/mail')
 
-    await waitFor(() => expect(mocks.useListRefresh).toHaveBeenCalledWith('INBOX'))
+    await waitFor(() => expect(mocks.useListRefresh).toHaveBeenCalledWith('INBOX', true))
   })
 
   // The manual face of the poll: the click forces the same folders refetch the tick drives.
@@ -161,6 +189,178 @@ describe('MailLayout', () => {
   })
 })
 
+// A folder and a uid belong to the mailbox they were read in: carried into the next one they
+// point at nothing. The URL winds back to /mail and the inbox resolution takes it from there.
+describe('following an account switch', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('drops the previous mailbox\'s folder and message when the account changes', async () => {
+    const { rerender } = renderAt('/mail?folder=Projects&uid=7')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects'))
+
+    auth.activeAccountId = 'linked-1'
+    rerender(<MailLayout />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
+    expect(screen.getByTestId('search')).not.toHaveTextContent('uid=7')
+  })
+
+  // A reset on mount would throw away a deep link, which is a real entry path.
+  it('leaves a deep link alone on mount', async () => {
+    renderAt('/mail?folder=Projects&uid=7')
+
+    await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
+    await settle()
+    expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects')
+    expect(screen.getByTestId('search')).toHaveTextContent('uid=7')
+  })
+
+  // The composer owns every exit from itself: its leave guard turns a navigation into the
+  // save-or-discard question, and a reset fired into that guard can be refused and then never
+  // retried — leaving the URL on A while the module has moved to B.
+  it('holds the reset while composing and fires it when the composer exits on its own', async () => {
+    const { rerender } = renderAt('/mail/compose')
+    await screen.findByTestId('compose-view')
+
+    auth.activeAccountId = 'linked-1'
+    rerender(<MailLayout />)
+    await settle()
+    expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose')
+
+    // The composer goes back to the folder it was opened from — the previous account's.
+    fireEvent.click(screen.getByTestId('leave-compose'))
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
+  })
+
+  // The same exit URL, reached by a click in the *new* account's tree: that is the user naming a
+  // folder this mailbox has, so the held reset has nothing left to drop and must not override it.
+  it('keeps a folder picked in the new tree on the way out of the composer', async () => {
+    const { rerender } = renderAt('/mail/compose')
+    await screen.findByTestId('compose-view')
+
+    auth.activeAccountId = 'linked-1'
+    rerender(<MailLayout />)
+    await settle()
+
+    const tree = document.querySelector('nav[aria-label="Folders"]') as HTMLElement
+    fireEvent.click(within(tree).getByRole('button', { name: 'Projects' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects'))
+    await settle()
+    expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects')
+  })
+
+  // The recorded pick discriminates one transition and no other. Left standing it would spare a
+  // later switch the reset it needs: same folder, same account, and the *other* mailbox's uid
+  // rides back in. No composer anywhere in this — the ref needs none.
+  it('drops the uid coming back to an account whose folder was picked before', async () => {
+    const row = {
+      uid: 42, subject: 'over there', fromName: 'A', fromAddress: 'a@b.c',
+      date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 1, preview: '',
+    }
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 42, folderPath: 'INBOX', uidValidity: 1, subject: 'over there', fromName: '',
+      fromAddress: 'a@b.c', to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '',
+      textBody: 'x', blockedImageCount: 0, attachments: [],
+    })
+    const { rerender } = renderAt('/mail', folders, 'right', [row])
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
+
+    // A deliberate pick under the first account.
+    const tree = document.querySelector('nav[aria-label="Folders"]') as HTMLElement
+    fireEvent.click(within(tree).getByRole('button', { name: 'Inbox' }))
+
+    auth.activeAccountId = 'linked-1'
+    rerender(<MailLayout />)
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
+
+    // A message of the second mailbox, whose uid means nothing in the first.
+    fireEvent.click(await screen.findByRole('button', { name: /over there/i }))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=42'))
+
+    auth.activeAccountId = 'primary'
+    rerender(<MailLayout />)
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+  })
+
+  // A reload persisted onto a connected account: the stored id may still turn out to be stale,
+  // so nothing is fetched and no mailbox is drawn until the account list has settled.
+  it('holds the mailbox while the account list is still loading', async () => {
+    auth.activeAccountId = 'linked-1'
+    auth.accountsLoading = true
+    renderAt('/mail')
+
+    await settle()
+    expect(mocks.getMailFolders).not.toHaveBeenCalled()
+    expect(document.querySelector('nav[aria-label="Folders"]')).toBeNull()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+  })
+
+  // The overwhelmingly common case: the primary can never be stale, so it never waits.
+  it('does not hold the primary account for the same list', async () => {
+    auth.accountsLoading = true
+    renderAt('/mail')
+
+    await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
+    expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull()
+  })
+})
+
+// The stored password of a connected account no longer decrypts. Every mail request would fail,
+// so the three columns are replaced by the one thing that can be done about it.
+describe('an account whose stored password no longer decrypts', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const refused = () =>
+    new ApiError('connected_credentials_invalid', 409, 'connected_credentials_invalid')
+
+  it('replaces the three columns with the password prompt', async () => {
+    renderAt('/mail?folder=INBOX', refused())
+
+    expect(await screen.findByText('Password needed')).toBeInTheDocument()
+    expect(screen.getByText(
+      "Your main password changed, so this account's password must be entered again.",
+    )).toBeInTheDocument()
+    expect(document.querySelector('nav[aria-label="Folders"]')).toBeNull()
+    expect(screen.queryByText(/select a message/i)).toBeNull()
+  })
+
+  it('offers the way to enter it again', async () => {
+    renderAt('/mail?folder=INBOX', refused())
+
+    const link = await screen.findByRole('link', { name: 'Enter the password' })
+    expect(link).toHaveAttribute('href', '/settings/accounts')
+    expect(link).toHaveClass('btn-primary')
+  })
+
+  // The pane replaces the subtree by re-render, which no leave guard can see: a background poll
+  // answering 409 while a draft is open would discard it without ever asking.
+  it('does not take the composer out from under an open draft', async () => {
+    renderAt('/mail/compose', refused())
+
+    expect(await screen.findByTestId('compose-view')).toBeInTheDocument()
+    await settle()
+    expect(screen.queryByText('Password needed')).toBeNull()
+  })
+
+  // Not a catch-all: an ordinary failure is a folder tree that did not load, not a broken account.
+  it('keeps the columns for an ordinary folder failure', async () => {
+    renderAt('/mail?folder=INBOX', new Error('boom'))
+
+    expect(await screen.findByText('Could not load folders.')).toBeInTheDocument()
+    expect(screen.queryByText('Password needed')).toBeNull()
+  })
+})
+
 // A deep link races the listing against the detail, and the detail can win: the reader marks a
 // not-yet-cached message seen, and that mutation used to cancel the list fetch in flight —
 // which TanStack reverts to pending with no data and never retries. See cancelLoaded.
@@ -186,7 +386,7 @@ describe('a message detail arriving before the folder listing', () => {
 
     const row = await screen.findByRole('button', { name: /first/i })
     // The race is only armed if the mark-seen mutation actually fired against the pending list.
-    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [7], 'seen', true)
+    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [7], 'seen', true, { accountId: 'primary' })
     // And the row the listing brought back unread is reconciled to what the STORE already did.
     expect(await within(row).findByRole('button', { name: 'Mark as unread' })).toBeInTheDocument()
   })
@@ -337,7 +537,7 @@ describe('dropping a dragged message onto a folder', () => {
     await screen.findByRole('button', { name: /first/i })
     dropOn('Archive', [7])
 
-    await waitFor(() => expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [7], 'Archives'))
+    await waitFor(() => expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [7], 'Archives', { accountId: 'primary' }))
   })
 
   it('advances the reader when the open message is one of them', async () => {
@@ -451,7 +651,7 @@ describe('opening a draft from the drafts folder', () => {
     fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
 
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
-    expect(mocks.openDraft).toHaveBeenCalledWith('Drafts', 9)
+    expect(mocks.openDraft).toHaveBeenCalledWith('Drafts', 9, { accountId: 'primary' })
     expect(screen.getByTestId('search')).not.toHaveTextContent('uid')
     expect(mocks.getMailMessage).not.toHaveBeenCalled()
 

@@ -1,7 +1,9 @@
 ﻿import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMatch, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import type { SearchCriteria } from './list/searchCriteria'
+import { PRIMARY_ACCOUNT_ID, useAuth } from '../../contexts/AuthContext'
+import LoadingBlock from '../../components/LoadingBlock'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
 import { flatten } from './folders/folderNodes'
@@ -27,6 +29,14 @@ import { usePaneSize } from './split/usePaneSize'
 // Lazy: pulls in squire-rte, which every /mail visitor would otherwise download unread.
 const ComposeView = lazy(() => import('./compose/ComposeView'))
 
+/** A connected account whose stored password no longer decrypts. The backend answers 409 and
+    not 401 on purpose: the global 401 handler signs the whole session out, which is the wrong
+    answer to one account's problem. */
+function needsAccountPassword(error: unknown): boolean {
+  const failure = error as { status?: number; code?: string } | null
+  return failure?.status === 409 && failure.code === 'connected_credentials_invalid'
+}
+
 /**
  * The mail module's three columns. The shell provides a single outlet, so a module builds its
  * own columns inside it — the same way the settings section does.
@@ -39,14 +49,18 @@ export default function MailLayout() {
   const [params, setParams] = useSearchParams()
   const composing = useMatch('/mail/compose') != null
   const navigate = useNavigate()
-  const { data: folders, isLoading, isError } = useFolders()
+  const accountId = useAccountId()
+  const { accountsLoading } = useAuth()
+  // Until the list lands, a stored connected id may yet turn out to be stale, and a mailbox drawn
+  // from it would be the wrong one. The primary can never be stale, so it never waits.
+  const settling = accountsLoading && accountId !== PRIMARY_ACCOUNT_ID
+  const { data: folders, isLoading, isError, error } = useFolders(!settling)
   const { refresh, fetching: refreshFetching } = useMailRefresh()
   const { toasts, addToast, removeToast } = useToasts()
   const moveMessages = useMoveMessages(addToast)
   const openDraft = useOpenDraft()
   const { data: identityList } = useIdentities()
   const queryClient = useQueryClient()
-  const accountId = useAccountId()
 
   const folder = params.get('folder')
   const uidParam = params.get('uid')
@@ -68,7 +82,33 @@ export default function MailLayout() {
   // survive to relabel the next open.
   if (uid === null && resultFolder !== null) setResultFolder(null)
 
-  useListRefresh(folder)
+  useListRefresh(folder, !settling)
+
+  // The folder the user last named in the tree, with the account whose tree it came from. It
+  // discriminates one account change and is consumed by it: the difference between an exit that
+  // carries the previous account's folder and one the user just chose in this account's.
+  const picked = useRef<{ path: string; accountId: string } | null>(null)
+
+  // On a change, never on mount: the previous mailbox's folder and uid name nothing in the new
+  // one, while a deep link into a folder is a legitimate way in. The inbox redirect takes over.
+  // Held while composing, ref included: the composer's leave guard blocks this navigation and can
+  // refuse it, and a ref advanced by then would swallow a reset that never happened. `composing`
+  // is a dependency, so leaving the composer is what fires the held reset.
+  const lastAccount = useRef(accountId)
+  useEffect(() => {
+    if (composing || lastAccount.current === accountId) return
+    lastAccount.current = accountId
+    // Consumed, not merely read: a pick left standing would spare a later switch the reset it
+    // needs — same folder, same account, and the other mailbox's uid rides back in.
+    const pick = picked.current
+    picked.current = null
+    // A folder the user picked in *this* account's tree already names something it has: the URL
+    // no longer points at the previous mailbox, and resetting would throw the click away. A uid
+    // never survives either way — a message id means nothing in another mailbox.
+    if (uid === null && folder !== null
+      && pick?.accountId === accountId && pick.path === folder) return
+    navigate('/mail', { replace: true })
+  }, [accountId, composing, folder, uid, navigate])
 
   // The list heading shows the same label as the tree: the role label when the folder has a
   // role, the leaf name otherwise — never the full path, which reads "INBOX.Linux server"
@@ -94,6 +134,10 @@ export default function MailLayout() {
   }, [composing, folder, folders, setParams])
 
   function selectFolder(path: string) {
+    // Recorded with the tree it came from, not acted on here: the blocker may refuse this
+    // navigation, and only the URL that actually lands tells the reset whether it still has
+    // something to drop.
+    picked.current = { path, accountId }
     // While composing this is a navigation out of /mail/compose; the ComposeView blocker owns
     // the "discard?" question. Otherwise it drops uid: a message id means nothing elsewhere.
     if (composing) navigate(`/mail?folder=${encodeURIComponent(path)}`)
@@ -122,7 +166,8 @@ export default function MailLayout() {
       const identities = identityList ?? await queryClient
         .ensureQueryData(identitiesQueryOptions(accountId))
         .then(list => list.identities, () => [])
-      const seed = buildDraftSeed(opened, identities, { folderPath: folder!, uid: draftUid })
+      const seed = buildDraftSeed(
+        opened, identities, { folderPath: folder!, uid: draftUid }, accountId)
       navigate('/mail/compose', { state: { from: folder, seed } })
     } catch (error) {
       addToast((error as Error).message || 'Could not open the draft', 'error')
@@ -211,6 +256,22 @@ export default function MailLayout() {
   const readerNode = folders && readerFolder
     ? flatten(folders).find(entry => entry.node.path === readerFolder)?.node
     : undefined
+
+  if (settling) return <div className="mail-full-pane"><LoadingBlock /></div>
+
+  // Not a column that failed to load but a mailbox that cannot be opened at all, so the three
+  // columns would only frame three copies of the same failure. Never over an open composer: this
+  // replaces the subtree by re-render, which no leave guard can see, so a poll answering 409
+  // would discard an unsaved draft without asking. It waits until the composer is left.
+  if (!composing && needsAccountPassword(error)) {
+    return (
+      <div className="mail-full-pane">
+        <h2>Password needed</h2>
+        <p>Your main password changed, so this account&apos;s password must be entered again.</p>
+        <Link className="btn btn-primary" to="/settings/accounts">Enter the password</Link>
+      </div>
+    )
+  }
 
   return (
     <div className={`mail-layout is-${pane}`}>

@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 let client: QueryClient
@@ -111,7 +111,7 @@ describe('useListRefresh', () => {
     await tick(inbox({ uidNext: 12 }))
 
     await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalledTimes(1))
-    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100)
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100, { accountId: 'primary' })
     expect(spy).not.toHaveBeenCalled()
 
     const data = client.getQueryData<InfiniteData<MailFolderPage>>(key)!

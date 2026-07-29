@@ -59,12 +59,21 @@ vi.mock('../../../api.js', () => ({
   mailAttachmentUrl: mocks.mailAttachmentUrl,
 }))
 
+// Mutable so a test can render the reader under a connected account.
+const auth = vi.hoisted(() => ({ activeAccountId: 'primary', activeEmail: 'mick@weesky.be' }))
+
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
-    activeAccount: { id: 'primary' },
+    activeAccount: { id: auth.activeAccountId, email: auth.activeEmail },
+    activeAccountId: auth.activeAccountId,
     identity: { displayName: 'Mick Weesky', email: 'mick@weesky.be' },
   }),
 }))
+
+beforeEach(() => {
+  auth.activeAccountId = 'primary'
+  auth.activeEmail = 'mick@weesky.be'
+})
 
 const theme = vi.hoisted(() => ({ isDark: false }))
 vi.mock('../../../contexts/ThemeContext', () => ({ useTheme: () => theme }))
@@ -689,6 +698,22 @@ describe('MessageReader', () => {
       expect(mocks.requestBlob).toHaveBeenCalledWith(expect.stringContaining('part=2')))
   })
 
+  // An attachment belongs to the mailbox on screen. Unscoped, the URL resolves against the
+  // primary: a 404, or a file out of a mailbox the user was not looking at.
+  it('builds the download URL for the account the reader is rendered under', async () => {
+    auth.activeAccountId = 'linked-1'
+    mocks.getMailMessage.mockResolvedValue(detail)
+    mocks.requestBlob.mockResolvedValue({ blob: new Blob(['x']), fileName: 'report.pdf' })
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:x')
+    globalThis.URL.revokeObjectURL = vi.fn()
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    fireEvent.click(await screen.findByRole('button', { name: /report\.pdf/ }))
+
+    await waitFor(() =>
+      expect(mocks.mailAttachmentUrl).toHaveBeenCalledWith('INBOX', 2, '2', 'linked-1'))
+  })
+
   it('surfaces a download failure instead of failing silently', async () => {
     mocks.getMailMessage.mockResolvedValue(detail)
     mocks.requestBlob.mockRejectedValue(new Error('Attachment not found'))
@@ -732,6 +757,24 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'More actions for photo.png' }))
       expect(screen.getByRole('menuitem', { name: 'Download' })).toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: 'View' })).toBeInTheDocument()
+    })
+
+    // The viewer fetches the caller's src, so the account has to be in the URL the reader built.
+    it('builds the viewer src for the account the reader is rendered under', async () => {
+      auth.activeAccountId = 'linked-1'
+      mocks.getMailMessage.mockResolvedValue(imageAttachment)
+      mocks.requestBlob.mockResolvedValue({ blob: new Blob(['x'], { type: 'image/png' }), fileName: 'photo.png' })
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:x')
+      globalThis.URL.revokeObjectURL = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByRole('button', { name: /^photo\.png/ })
+
+      fireEvent.click(screen.getByRole('button', { name: 'More actions for photo.png' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+
+      await screen.findByRole('img', { name: 'photo.png' })
+      expect(mocks.mailAttachmentUrl).toHaveBeenCalledWith('INBOX', 2, '4', 'linked-1')
     })
 
     it('opens the viewer from the menu and closes it with the cross', async () => {
@@ -1080,7 +1123,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as unread' }))
 
       await waitFor(() =>
-        expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'seen', false))
+        expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'seen', false, { accountId: 'primary' }))
     })
 
     // No cached summary at all (a deep link): read and unstarred, since the opening itself
@@ -1130,7 +1173,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Star' }))
 
       await waitFor(() =>
-        expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'flagged', true))
+        expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'flagged', true, { accountId: 'primary' }))
     })
 
     // useSetFlags(onNotify), not useSetFlags(): without the argument, onError never reaches
@@ -1369,7 +1412,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
       await waitFor(() =>
-        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Corbeille'))
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Corbeille', { accountId: 'primary' }))
       expect(onDeparted).toHaveBeenCalledWith(2)
       await settle()
       expect(screen.queryByText(/confirm deletion/i)).not.toBeInTheDocument()
@@ -1400,7 +1443,7 @@ describe('MessageReader', () => {
       fireEvent.click(modal().getByRole('button', { name: 'Delete' }))
 
       await waitFor(() =>
-        expect(mocks.deleteMessages).toHaveBeenCalledWith('Corbeille', [2]))
+        expect(mocks.deleteMessages).toHaveBeenCalledWith('Corbeille', [2], { accountId: 'primary' }))
       expect(onDeparted).toHaveBeenCalledWith(2)
     })
 
@@ -1427,7 +1470,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Archive' }))
 
       await waitFor(() =>
-        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives'))
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives', { accountId: 'primary' }))
       expect(onDeparted).toHaveBeenCalledWith(2)
     })
 
@@ -1452,7 +1495,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Report as junk' }))
 
       await waitFor(() =>
-        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Spam'))
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Spam', { accountId: 'primary' }))
       expect(onDeparted).toHaveBeenCalledWith(2)
     })
 
@@ -1468,7 +1511,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Move' }))
 
       await waitFor(() =>
-        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives'))
+        expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives', { accountId: 'primary' }))
       expect(onDeparted).toHaveBeenCalledWith(2)
     })
 
@@ -1485,7 +1528,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
 
       await waitFor(() =>
-        expect(mocks.copyMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives'))
+        expect(mocks.copyMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives', { accountId: 'primary' }))
       await settle()
       expect(onDeparted).not.toHaveBeenCalled()
       expect(mocks.moveMessages).not.toHaveBeenCalled()
@@ -1531,10 +1574,35 @@ describe('MessageReader', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
 
-      await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'reply'))
+      await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'reply', { accountId: 'primary' }))
       const state = await screen.findByTestId('compose-state')
       const parsed = JSON.parse(state.textContent ?? '{}')
       expect(parsed.seed.subject).toMatch(/^Re:/)
+    })
+
+    // "My addresses" is the active mailbox's *and* the primary's: on a connected account a
+    // reply-all was leaving the connected address in, and dropping the primary would only move
+    // the same defect one address along — both mail the user themselves.
+    it('leaves the active account and the primary out of a reply-all', async () => {
+      auth.activeAccountId = 'linked-1'
+      auth.activeEmail = 'shared@ext.example'
+      mocks.getMailMessage.mockResolvedValue({
+        ...detail,
+        to: [{ name: '', address: 'shared@ext.example' }, { name: '', address: 'mick@weesky.be' },
+          { name: '', address: 'bob@x.be' }],
+        cc: [{ name: '', address: 'carol@x.be' }],
+      })
+      mocks.prepareQuote.mockResolvedValue({ quotableHtml: '<p>o</p>', attachments: [] })
+
+      renderWithRouter()
+      await screen.findByText('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reply all' }))
+
+      const state = await screen.findByTestId('compose-state')
+      const seed = JSON.parse(state.textContent ?? '{}').seed
+      expect(seed.to).toEqual(['alice@x.be', 'bob@x.be'])
+      expect(seed.cc).toEqual(['carol@x.be'])
     })
 
     it('lets "Edit as new" live in the kebab', async () => {
@@ -1547,7 +1615,7 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
       fireEvent.click(screen.getByRole('menuitem', { name: 'Edit as new' }))
 
-      await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'editAsNew'))
+      await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'editAsNew', { accountId: 'primary' }))
     })
 
     it('notifies and stays when a preparation fails', async () => {

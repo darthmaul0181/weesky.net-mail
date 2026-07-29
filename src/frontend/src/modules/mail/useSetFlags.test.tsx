@@ -11,7 +11,7 @@ import { settle } from '../../test-utils'
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn(), searchMessages: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 let client: QueryClient
@@ -93,7 +93,7 @@ describe('useSetFlags', () => {
     expect(pageIn()!.messages[0].seen).toBe(true)
     expect(streamIn()!.pages[0].messages[0].seen).toBe(true)
     expect(treeIn()![0].unread).toBe(4)
-    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [1], 'seen', true)
+    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [1], 'seen', true, { accountId: 'primary' })
     // Copied, never mutated in place: the snapshot is the rollback.
     expect(seeded.page.messages[0].seen).toBe(false)
 

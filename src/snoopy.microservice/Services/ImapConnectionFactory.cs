@@ -8,7 +8,7 @@ namespace weesky.Snoopy.Microservice.Services;
 /// <summary>
 /// The IMAP half of <see cref="MailConnectionFactory{TClient,TSession}"/> — where to connect and
 /// what to wrap the connection in. Everything else (timeout, certificate policy, the guard on
-/// unconfigured options, the ownership hand-off) lives in the base.
+/// an unconfigured endpoint, the ownership hand-off) lives in the base.
 /// </summary>
 internal sealed class ImapConnectionFactory(
     IOptionsMonitor<MailOptions> options,
@@ -16,19 +16,19 @@ internal sealed class ImapConnectionFactory(
     ILogger<ImapConnectionFactory> logger)
     : MailConnectionFactory<ImapClient, IImapSession>(options, logger), IImapConnectionFactory
 {
-    protected override MailEndpoint Endpoint(MailOptions options) => new(
+    protected override MailEndpoint Endpoint(MailAccountConnection connection) => new(
         Protocol: "IMAP",
         ConfigurationKey: "Mail:ImapHost",
-        Host: options.ImapHost,
-        Port: options.ImapPort,
-        Security: options.ImapSecurity,
-        IsConfigured: options.IsImapConfigured);
+        Host: connection.ImapHost,
+        Port: connection.ImapPort,
+        Security: connection.ImapSecurity,
+        IsConfigured: !string.IsNullOrWhiteSpace(connection.ImapHost));
 
     protected override ImapClient CreateClient() => new();
 
     protected override IImapSession CreateSession(ImapClient client) => new ImapSession(client, sanitizer, Logger);
 
     Task<Result<IImapSession>> IImapConnectionFactory.OpenAsync(
-        string email, string password, CancellationToken cancellationToken) =>
-        OpenAsync(email, password, cancellationToken);
+        MailAccountConnection connection, CancellationToken cancellationToken) =>
+        OpenAsync(connection, cancellationToken);
 }

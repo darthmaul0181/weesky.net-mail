@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
@@ -69,6 +70,24 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
         await context.SaveChangesAsync(cancellationToken);
 
         return row.SecurityStamp;
+    }
+
+    public async Task<byte[]> GetOrCreateKdfSaltAsync(string email, CancellationToken cancellationToken)
+    {
+        var canonical = Canonical(email);
+        var row = await context.Users
+            .FirstOrDefaultAsync(u => u.Email == canonical, cancellationToken);
+
+        // No row means no connected account can exist either — the FK forbids one — so a value
+        // that goes nowhere is harmless, and the caller still gets a usable salt.
+        if (row is null) return ConnectedAccountCipher.NewSalt();
+
+        if (row.KdfSalt is { Length: ConnectedAccountCipher.SaltLength }) return row.KdfSalt;
+
+        row.KdfSalt = ConnectedAccountCipher.NewSalt();
+        await context.SaveChangesAsync(cancellationToken);
+
+        return row.KdfSalt;
     }
 
     public async Task DeleteByEmailAsync(string email, CancellationToken cancellationToken)

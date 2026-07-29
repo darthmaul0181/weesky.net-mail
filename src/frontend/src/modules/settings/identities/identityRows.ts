@@ -8,10 +8,12 @@ export const MAX_DISPLAY_NAME_LENGTH = 100
 
 /** The PUT payload from the displayed list. The primary is never sent — its label always follows
     the account FullName (set from the Account tab), and absence of any marked row is what "the
-    primary is the default" looks like on the wire. */
-export function toRows(identities: SendingIdentity[]): IdentityRow[] {
+    primary is the default" looks like on the wire. A connected account's own address is the
+    opposite: `keepAccountAddress` sends it, since it carries an editable label and the server
+    refuses a set that does not name it. */
+export function toRows(identities: SendingIdentity[], keepAccountAddress = false): IdentityRow[] {
   return identities
-    .filter(i => !i.isPrimary)
+    .filter(i => keepAccountAddress || !i.isPrimary)
     .map(i => ({ address: i.address, displayName: i.displayName, isDefault: i.isDefault }))
 }
 

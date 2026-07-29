@@ -110,6 +110,13 @@
   font-weight: 700;
 }
 
+/* A linked mailbox is not the user's own: the pill changes colour rather than gaining a marker,
+   so the band says which mailbox is open before a word is read. */
+.identity-pill.is-connected { background: var(--badge-count-bg); color: var(--badge-count-fg); }
+/* The active account is unknown until its list lands; an accent disc holding nothing reads as a
+   rendering fault, so the pill waits in the border grey. */
+.identity-pill.is-pending { background: var(--border); }
+
 .identity-text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .identity-name,
 .identity-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -146,14 +153,37 @@
   overflow: hidden;
 }
 
-.identity-account { padding: 7px 12px; font-size: 12.5px; color: var(--text); }
+/* The rows are buttons, not decorated divs: choosing the session's mailbox has to be reachable
+   from the keyboard like every other menu. */
+.identity-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.identity-account:hover { background: var(--pane-item-hover); }
 .identity-account.is-active {
   font-weight: 650;
   background: var(--pane-item-active-bg);
   color: var(--pane-item-active-fg);
 }
 
-.identity-signout {
+.identity-account-text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.identity-account-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-account-sub { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+.identity-account.is-active .identity-account-sub { color: inherit; }
+.identity-check { flex: none; font-size: 12px; }
+
+/* One skin for the two entries under the accounts; the border is the separator above each. */
+.identity-action {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -168,7 +198,7 @@
   text-align: left;
   cursor: pointer;
 }
-.identity-signout:hover { background: var(--pane-item-hover); }
+.identity-action:hover { background: var(--pane-item-hover); }
 
 .dropdown-root { position: relative; }
 
@@ -257,6 +287,16 @@
   background: var(--pane-item-active-bg);
   color: var(--pane-item-active-fg);
   font-weight: 600;
+}
+
+/* The account block again at the foot of its column, so a user deep in settings can change
+   mailbox without going back to the mail view. */
+.settings-nav-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .settings-content {

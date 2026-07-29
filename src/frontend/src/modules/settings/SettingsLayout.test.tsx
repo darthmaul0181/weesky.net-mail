@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   adminGetDomains: vi.fn(),
   getMailFolders: vi.fn(),
   getPreferences: vi.fn(),
+  getConnectedAccounts: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -29,6 +30,7 @@ vi.mock('../../api.js', () => ({
     adminGetDomains: mocks.adminGetDomains,
     getMailFolders: mocks.getMailFolders,
     getPreferences: mocks.getPreferences,
+    getConnectedAccounts: mocks.getConnectedAccounts,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -54,13 +56,21 @@ const baseAccount = {
   domains: [{ id: 'WSY', name: 'weesky.be' }],
 }
 
+const connectedRow = (over: Record<string, unknown> = {}) => ({
+  id: 'g1', email: 'support@acme.com', displayName: 'Support', domainId: 'd1', domainName: 'acme.com',
+  sieveSupported: true, credentialsValid: true, creationDate: '2026-07-01',
+  ...over,
+})
+
 describe('settings section', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     mocks.hasSession.mockReturnValue(true)
     mocks.getQuota.mockResolvedValue(null)
     mocks.adminGetUsers.mockResolvedValue([])
     mocks.adminGetDomains.mockResolvedValue([])
+    mocks.getConnectedAccounts.mockResolvedValue([])
     // The shell now watches the inbox app-wide, so every route mounts these two.
     mocks.getMailFolders.mockResolvedValue([])
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
@@ -84,7 +94,7 @@ describe('settings section', () => {
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     expect(nav.getByText('Account')).toBeInTheDocument()
     expect(nav.getByText('General')).toBeInTheDocument()
-    expect(nav.getByText('Linked accounts')).toBeInTheDocument()
+    expect(nav.getByText('Connected accounts')).toBeInTheDocument()
     expect(nav.getByText('Appearance')).toBeInTheDocument()
     expect(nav.getByText('Folders list')).toBeInTheDocument()
     expect(nav.getByText('Aliases')).toBeInTheDocument()
@@ -115,5 +125,58 @@ describe('settings section', () => {
     expect(screen.getByRole('button', { name: 'Virtual domains' })).toBeInTheDocument()
     expect(await screen.findByText('Accounts (0)')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/settings/admin')
+  })
+
+  it('hides Account, Aliases and Administration for a connected account, keeps Identities and Rules', async () => {
+    localStorage.setItem('mail.activeAccount', 'g1')
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+    mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
+    renderAt('/settings/general')
+    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
+    expect(nav.queryByText('Aliases')).not.toBeInTheDocument()
+    expect(nav.queryByText('Administration')).not.toBeInTheDocument()
+    expect(nav.getByText('Identities')).toBeInTheDocument()
+    expect(nav.getByText('Rules')).toBeInTheDocument()
+  })
+
+  it('hides Rules when the connected account does not support Sieve', async () => {
+    localStorage.setItem('mail.activeAccount', 'g1')
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+    mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: false })])
+    renderAt('/settings/general')
+    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
+    expect(nav.queryByText('Rules')).not.toBeInTheDocument()
+  })
+
+  // The loading pin: activeAccount is null until the connected-accounts query resolves, and the
+  // gate must read that as "show everything", not as "hide everything until proven primary".
+  it('shows the full primary nav while the account list is still loading', async () => {
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+    mocks.getConnectedAccounts.mockReturnValue(new Promise(() => {}))
+    renderAt('/settings/general')
+    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(true))
+    expect(nav.getByText('Account')).toBeInTheDocument()
+    expect(nav.getByText('Aliases')).toBeInTheDocument()
+    expect(nav.getByText('Rules')).toBeInTheDocument()
+    expect(nav.getByText('Administration')).toBeInTheDocument()
+  })
+
+  it('deep-links to /settings/account under a connected account and redirects to General', async () => {
+    localStorage.setItem('mail.activeAccount', 'g1')
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+    mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
+    const router = renderAt('/settings/account')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+  })
+
+  it('deep-links to /settings/rules under a non-Sieve connected account and redirects to General', async () => {
+    localStorage.setItem('mail.activeAccount', 'g1')
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+    mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: false })])
+    const router = renderAt('/settings/rules')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
   })
 })

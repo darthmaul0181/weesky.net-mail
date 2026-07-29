@@ -1,18 +1,20 @@
 using CSharpFunctionalExtensions;
+using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
-/// Opens authenticated ManageSieve sessions on behalf of any mailbox user, using the
-/// master credentials configured in <c>SieveOptions</c>.
+/// Opens authenticated ManageSieve sessions against the target a <see cref="SieveConnection"/>
+/// describes — our own server through master impersonation, or another provider's server as the
+/// mailbox itself.
 /// </summary>
 public interface IManageSieveClient
 {
     /// <summary>
-    /// Opens a TLS-protected ManageSieve session authenticated as <paramref name="targetUser"/>
-    /// via SASL PLAIN master impersonation. The returned session must be disposed.
+    /// Opens a TLS-protected ManageSieve session on <paramref name="connection"/>, authenticating
+    /// with SASL PLAIN. The returned session must be disposed.
     /// </summary>
-    /// <param name="targetUser">Full mailbox address (e.g. <c>alice@weesky.be</c>).</param>
+    /// <param name="connection">Host, port and the two SASL identities plus their password.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<Result<IManageSieveSession>> OpenSessionAsync(string targetUser, CancellationToken cancellationToken = default);
+    Task<Result<IManageSieveSession>> OpenSessionAsync(SieveConnection connection, CancellationToken cancellationToken = default);
 }

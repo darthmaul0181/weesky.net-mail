@@ -10,7 +10,7 @@ import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn() }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 let client: QueryClient
@@ -91,7 +91,7 @@ describe('useMarkSeenOnOpen', () => {
     await host.rerender({ detailLoaded: true })
 
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
-    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'seen', true)
+    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [2], 'seen', true, { accountId: 'primary' })
 
     // A plain re-render is not a second opening.
     await host.rerender({ detailLoaded: true })
@@ -171,7 +171,7 @@ describe('useMarkSeenOnOpen', () => {
 
     await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
 
-    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [42], 'seen', true)
+    expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [42], 'seen', true, { accountId: 'primary' })
   })
 
   // A deep link races the listing against the detail. When the detail wins, the STORE goes out
@@ -186,7 +186,7 @@ describe('useMarkSeenOnOpen', () => {
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
-      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', true)
+      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', true, { accountId: 'primary' })
       expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
       // The row that was never ours is left exactly as the server sent it.
       expect(findCachedSummary(client, 'primary', 'INBOX', 43)?.seen).toBe(false)
@@ -238,7 +238,7 @@ describe('useMarkSeenOnOpen', () => {
       await act(async () => { seedPage([summary(42)]) })
       await settle()
 
-      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', false)
+      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', false, { accountId: 'primary' })
       expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(false)
     })
 
@@ -258,7 +258,7 @@ describe('useMarkSeenOnOpen', () => {
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(3)
-      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', true)
+      expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', true, { accountId: 'primary' })
       expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
     })
   })
@@ -271,7 +271,7 @@ describe('useMarkSeenOnOpen', () => {
 
     await host.rerender({ uid: 2, detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
-    expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [2], 'seen', true)
+    expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [2], 'seen', true, { accountId: 'primary' })
 
     // Returning to a message opened earlier this session re-arms: marked unread meanwhile, it
     // is marked read again.
@@ -280,7 +280,7 @@ describe('useMarkSeenOnOpen', () => {
     })
     await host.rerender({ uid: 1, detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(3)
-    expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [1], 'seen', true)
+    expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [1], 'seen', true, { accountId: 'primary' })
   })
 
   it('stays silent on failure', async () => {

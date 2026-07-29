@@ -26,10 +26,18 @@ public sealed class LoginControllerTests
         AuthCookieName = "BearerAuth"
     };
 
+    // Derived once for the whole class: 600k PBKDF2 iterations are not free.
+    private static readonly byte[] TestSalt = ConnectedAccountCipher.NewSalt();
+    private static readonly byte[] ExpectedKek = ConnectedAccountCipher.DeriveKek("hunter2", TestSalt);
+
     private readonly Mock<IUserAuthenticator> _authenticator = new();
     private readonly Mock<IMailCredentialStore> _credentialStore = new();
     private readonly Mock<IWebmailUserStore> _webmailUsers = new();
     private readonly Mock<ISessionGuard> _sessions = new();
+
+    public LoginControllerTests()
+        => _webmailUsers.Setup(s => s.GetOrCreateKdfSaltAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                        .ReturnsAsync(TestSalt);
 
     private LoginController CreateController(DefaultHttpContext? httpContext = null)
     {
@@ -50,7 +58,7 @@ public sealed class LoginControllerTests
         _authenticator.Setup(a => a.AuthenticateAsync("user@domain.com", "pass"))
             .ReturnsAsync(Result.Success(token));
 
-        var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" });
+        var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(token, ok.Value);
@@ -64,7 +72,7 @@ public sealed class LoginControllerTests
             .ReturnsAsync(Result.Success(token));
         var httpContext = new DefaultHttpContext();
 
-        await CreateController(httpContext).Login(new Credentials { Email = "user@domain.com", Password = "pass" });
+        await CreateController(httpContext).Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
 
         Assert.True(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
     }
@@ -77,7 +85,7 @@ public sealed class LoginControllerTests
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
 
-        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" });
+        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
 
         _authenticator.Verify(a => a.AuthenticateAsync("user@domain.com", "pass"), Times.Once);
     }
@@ -88,7 +96,7 @@ public sealed class LoginControllerTests
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
 
-        var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" });
+        var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" }, CancellationToken.None);
 
         var obj = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(401, obj.StatusCode);
@@ -103,7 +111,7 @@ public sealed class LoginControllerTests
             .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
         var httpContext = new DefaultHttpContext();
 
-        await CreateController(httpContext).Login(new Credentials { Email = "user@domain.com", Password = "wrong" });
+        await CreateController(httpContext).Login(new Credentials { Email = "user@domain.com", Password = "wrong" }, CancellationToken.None);
 
         Assert.False(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
     }
@@ -127,11 +135,31 @@ public sealed class LoginControllerTests
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
 
-        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "hunter2" });
+        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "hunter2" }, CancellationToken.None);
 
         _credentialStore.Verify(
-            s => s.Store(It.IsAny<HttpResponse>(), "hunter2", TimeSpan.FromMinutes(30)),
+            s => s.Store(It.IsAny<HttpResponse>(), It.Is<MailCredentialPayload>(p => p.Password == "hunter2"),
+                TimeSpan.FromMinutes(30)),
             Times.Once);
+    }
+
+    // The KEK costs 600k PBKDF2 iterations, far too much to pay per request, so login is the one
+    // moment it is derived — the cookie carries it for the rest of the session.
+    [Fact]
+    public async Task Login_StoresTheKekAlongsideThePassword()
+    {
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
+        MailCredentialPayload? stored = null;
+        _credentialStore.Setup(s => s.Store(It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()))
+                        .Callback<HttpResponse, MailCredentialPayload, TimeSpan>((_, p, _) => stored = p);
+
+        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "hunter2" }, CancellationToken.None);
+
+        _webmailUsers.Verify(s => s.GetOrCreateKdfSaltAsync("user@domain.com", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.NotNull(stored);
+        Assert.Equal("hunter2", stored.Password);
+        Assert.Equal<byte[]>(ExpectedKek, stored.Kek!);
     }
 
     [Fact]
@@ -140,10 +168,10 @@ public sealed class LoginControllerTests
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Invalid credentials"));
 
-        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" });
+        await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" }, CancellationToken.None);
 
         _credentialStore.Verify(
-            s => s.Store(It.IsAny<HttpResponse>(), It.IsAny<string>(), It.IsAny<TimeSpan>()),
+            s => s.Store(It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()),
             Times.Never);
     }
 

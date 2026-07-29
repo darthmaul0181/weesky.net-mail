@@ -48,6 +48,14 @@ public abstract class ApiBaseController : ControllerBase
     protected ActionResult NotFoundEnveloppe(string message) =>
         NotFound(ResultEnveloppe.CreateErrorEnveloppe(message));
 
+    /// <summary>
+    /// 409 carrying the error envelope — a connected account whose stored credentials no longer
+    /// decrypt. Deliberately not a 401: the client signs the user out on that status, and the
+    /// session itself is valid, only that one account's secret is not.
+    /// </summary>
+    protected ActionResult ConflictEnveloppe(string message) =>
+        Conflict(ResultEnveloppe.CreateErrorEnveloppe(message));
+
     /// <summary>502 carrying the error envelope — anything the mail server refused.</summary>
     protected ActionResult BadGatewayEnveloppe(string message) =>
         StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message));

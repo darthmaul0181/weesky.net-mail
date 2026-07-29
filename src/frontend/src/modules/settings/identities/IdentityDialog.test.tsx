@@ -89,6 +89,56 @@ describe('IdentityDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
+  // A connected mailbox has no alias list on our server: the remote server is the sole authority,
+  // so the address is typed and only checked for shape and duplication.
+  describe('freeAddress', () => {
+    function renderFree(over: Partial<Parameters<typeof IdentityDialog>[0]> = {}) {
+      const onSubmit = vi.fn()
+      render(<IdentityDialog mode="add" freeAddress taken={['taken@ext.example']}
+        initialName="Mick Dubois" onSubmit={onSubmit} onClose={vi.fn()} {...over} />)
+      return { onSubmit }
+    }
+
+    it('offers a plain address field with its warning, and no alias picker', () => {
+      renderFree()
+      expect(screen.getByLabelText('Address')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Alias')).toBeNull()
+      expect(screen.getByText(/The server has the final say/)).toBeInTheDocument()
+    })
+
+    it('submits a freely typed address, lowercased', () => {
+      const { onSubmit } = renderFree()
+      fireEvent.change(screen.getByLabelText('Address'), { target: { value: ' Sales@Ext.example ' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+      expect(onSubmit).toHaveBeenCalledWith('sales@ext.example', 'Mick Dubois')
+    })
+
+    it('refuses a malformed address and one the list already holds', () => {
+      renderFree()
+      const address = screen.getByLabelText('Address')
+      expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+      fireEvent.change(address, { target: { value: 'not-an-address' } })
+      expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+      fireEvent.change(address, { target: { value: 'TAKEN@ext.example' } })
+      expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+      fireEvent.change(address, { target: { value: 'sales@ext.example' } })
+      expect(screen.getByRole('button', { name: 'Add' })).toBeEnabled()
+    })
+
+    it('edit mode locks the address to the row being renamed', () => {
+      const { onSubmit } = renderFree({
+        mode: 'edit', editAddress: 'shared@ext.example', initialName: 'Shared',
+        taken: ['shared@ext.example', 'taken@ext.example'],
+      })
+      const address = screen.getByLabelText('Address')
+      expect(address).toHaveValue('shared@ext.example')
+      expect(address).toBeDisabled()
+      fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Support' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      expect(onSubmit).toHaveBeenCalledWith('shared@ext.example', 'Support')
+    })
+  })
+
   it('edit mode fixes the alias, prefills the name, and keeps the alias on save', () => {
     const onSubmit = vi.fn()
     render(<IdentityDialog mode="edit" taken={[]} editAddress="michel@weesky.be"

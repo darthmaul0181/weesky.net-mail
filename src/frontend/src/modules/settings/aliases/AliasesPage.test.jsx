@@ -18,7 +18,7 @@ vi.mock('../../../api.js', () => ({
 // The page reads the active account through useAccountId, which is the real hook here — only
 // its auth source is stubbed, so the cache keys under test are the ones the app really uses.
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 const ACCOUNT = {

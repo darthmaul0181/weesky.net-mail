@@ -1,7 +1,9 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.Services;
@@ -11,15 +13,56 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public sealed class RulesController : ApiBaseController
+public sealed class RulesController(
+    ISieveRepository sieveRepository,
+    IRuleProviderRegistry providers,
+    IAccountConnectionResolver connections,
+    IOptions<SieveOptions> sieveOptions) : ApiBaseController
 {
-    private readonly ISieveRepository _sieveRepository;
-    private readonly IRuleProviderRegistry _providers;
-
-    public RulesController(ISieveRepository sieveRepository, IRuleProviderRegistry providers)
+    /// <summary>
+    /// The ManageSieve target for the active account, or the error to answer with. The only place
+    /// a <see cref="SieveConnection"/> is built, and the only place the SASL shape is chosen. Master
+    /// impersonation is the primary account's alone; a connected mailbox authenticates with the
+    /// credentials we hold for it, so revoking its password revokes its filters in the same move.
+    /// </summary>
+    private async Task<(SieveConnection? Connection, ActionResult? Error)> TryResolveAsync(
+        CancellationToken cancellationToken)
     {
-        _sieveRepository = sieveRepository;
-        _providers = providers;
+        var resolved = await connections.ResolveAsync(AuthenticatedUser, Request, cancellationToken);
+        if (resolved.IsFailure)
+            return (null, resolved.Error switch
+            {
+                ConnectedAccountErrors.AccountNotFound => NotFoundEnveloppe(resolved.Error),
+                ConnectedAccountErrors.CredentialsInvalid => ConflictEnveloppe(resolved.Error),
+                _ => UnauthorizedEnveloppe(resolved.Error),
+            });
+
+        var account = resolved.Value;
+        var sieve = sieveOptions.Value;
+
+        if (account.AccountId == MailAccountConnection.Primary)
+        {
+            // A blank master password would still open a session and offer the mailbox with an
+            // empty credential — a stream of failed master logins against our own Dovecot, and a
+            // 502 blaming the server. Fail here instead. Host and MasterUser the client guards.
+            if (string.IsNullOrWhiteSpace(sieve.MasterPassword))
+                return (null, SieveFailure(SieveErrors.NotConfigured));
+
+            return (new SieveConnection(
+                sieve.Host, sieve.Port, account.Username, sieve.MasterUser, sieve.MasterPassword), null);
+        }
+
+        // A connected mailbox on our own server: its own login, but the house endpoint — the
+        // resolver leaves SieveHost null for home connections, since there is nothing to store.
+        if (account.IsHomeServer)
+            return (new SieveConnection(
+                sieve.Host, sieve.Port, string.Empty, account.Username, account.Password), null);
+
+        if (account.SieveHost == null || account.SievePort == null)
+            return (null, NotFoundEnveloppe(SieveErrors.Unsupported));
+
+        return (new SieveConnection(
+            account.SieveHost, account.SievePort.Value, string.Empty, account.Username, account.Password), null);
     }
 
     /// <summary>
@@ -36,39 +79,55 @@ public sealed class RulesController : ApiBaseController
             : StatusCodes.Status400BadRequest;
 
     /// <summary>
-    /// Returns the authenticated user's Sieve configuration: structured rules when a
+    /// Returns the active account's Sieve configuration: structured rules when a
     /// registered provider can decode the script, or the raw script when none matches.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <response code="404">No such account, or its domain has no Sieve endpoint</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SieveRuleSet>> Get(CancellationToken cancellationToken)
     {
-        Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
+        var (connection, error) = await TryResolveAsync(cancellationToken);
+        if (error != null) return error;
+
+        Result<SieveRuleSet> result = await sieveRepository.GetRuleSetAsync(connection!, cancellationToken);
         if (result.IsSuccess) return Ok(result.Value);
         return SieveFailure(result.Error);
     }
 
     /// <summary>
-    /// Replaces all of the authenticated user's structured rules. The body may specify
+    /// Replaces all of the active account's structured rules. The body may specify
     /// which provider to compile with and which script to write to; otherwise the
     /// default provider and its default script name are used.
     /// </summary>
     /// <param name="request">Rules + optional provider/script hints.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <response code="404">No such account, or its domain has no Sieve endpoint</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
     [HttpPut]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<ResultEnveloppe>> Replace([FromBody] SaveRulesRequest request, CancellationToken cancellationToken)
     {
         if (request == null)
             return BadRequestEnveloppe("Request body is required");
 
-        Result result = await _sieveRepository.SaveRulesAsync(
-            AuthenticatedUser, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
+        var (connection, error) = await TryResolveAsync(cancellationToken);
+        if (error != null) return error;
+
+        Result result = await sieveRepository.SaveRulesAsync(
+            connection!, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
         return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
@@ -76,13 +135,21 @@ public sealed class RulesController : ApiBaseController
     /// Deletes the active managed Sieve script (deactivating it first).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <response code="404">No such account, or its domain has no Sieve endpoint</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
     [HttpDelete]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<ResultEnveloppe>> DeleteAll(CancellationToken cancellationToken)
     {
-        Result result = await _sieveRepository.DeleteAllRulesAsync(AuthenticatedUser, cancellationToken);
+        var (connection, error) = await TryResolveAsync(cancellationToken);
+        if (error != null) return error;
+
+        Result result = await sieveRepository.DeleteAllRulesAsync(connection!, cancellationToken);
         return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
@@ -90,13 +157,21 @@ public sealed class RulesController : ApiBaseController
     /// Returns the raw Sieve text currently stored on the server.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <response code="404">No such account, or its domain has no Sieve endpoint</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
     [HttpGet("Raw")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SieveRawScript>> GetRaw(CancellationToken cancellationToken)
     {
-        Result<SieveRuleSet> result = await _sieveRepository.GetRuleSetAsync(AuthenticatedUser, cancellationToken);
+        var (connection, error) = await TryResolveAsync(cancellationToken);
+        if (error != null) return error;
+
+        Result<SieveRuleSet> result = await sieveRepository.GetRuleSetAsync(connection!, cancellationToken);
         if (result.IsFailure)
             return SieveFailure(result.Error);
 
@@ -113,17 +188,25 @@ public sealed class RulesController : ApiBaseController
     /// </summary>
     /// <param name="script">The raw script content and optional script name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <response code="404">No such account, or its domain has no Sieve endpoint</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
     [HttpPut("Raw")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<ResultEnveloppe>> PutRaw([FromBody] SieveRawScript script, CancellationToken cancellationToken)
     {
         if (script == null)
             return BadRequestEnveloppe("Request body is required");
 
-        Result result = await _sieveRepository.SaveRawScriptAsync(
-            AuthenticatedUser, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
+        var (connection, error) = await TryResolveAsync(cancellationToken);
+        if (error != null) return error;
+
+        Result result = await sieveRepository.SaveRawScriptAsync(
+            connection!, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
         return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
@@ -143,8 +226,8 @@ public sealed class RulesController : ApiBaseController
             return BadRequestEnveloppe("Request body is required");
 
         var provider = request.ProviderId != null
-            ? _providers.GetById(request.ProviderId)
-            : _providers.Default;
+            ? providers.GetById(request.ProviderId)
+            : providers.Default;
         if (provider == null)
             return BadRequestEnveloppe($"Unknown rule provider: {request.ProviderId}");
 
@@ -172,8 +255,8 @@ public sealed class RulesController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<IEnumerable<RuleProviderInfo>> ListProviders()
     {
-        var defaultId = _providers.Default.Id;
-        var infos = _providers.All
+        var defaultId = providers.Default.Id;
+        var infos = providers.All
             .Select(p => new RuleProviderInfo
             {
                 Id = p.Id,

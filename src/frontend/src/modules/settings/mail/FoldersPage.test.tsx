@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 function wrapper({ children }: { children: ReactNode }) {

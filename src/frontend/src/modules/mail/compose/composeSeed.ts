@@ -59,10 +59,14 @@ export function buildComposeSeed(
   prepared: PreparedQuote,
   identities: SendingIdentity[],
   aliases: AliasInfo[],
-  primaryAddress: string | null,
+  /** The mailboxes the user owns outright: the *active* account's address and the primary one.
+      Both, always — a reply-all from a connected account must mail neither. */
+  ownAddresses: readonly (string | null)[],
+  accountId: string,
 ): ComposeSeed {
   const dateText = formatReaderDate(detail.date)
-  const quotable = absolutizeStagedUrls(prepared.quotableHtml, prepared.attachments.map(a => a.id))
+  const quotable = absolutizeStagedUrls(
+    prepared.quotableHtml, prepared.attachments.map(a => a.id), accountId)
   const nameHints = nameHintsFrom(detail)
 
   if (action === 'editAsNew') {
@@ -103,7 +107,7 @@ export function buildComposeSeed(
     }
   }
 
-  const mine = myAddresses(primaryAddress, aliases)
+  const mine = myAddresses(ownAddresses, aliases, identities)
   const recipients = action === 'reply' ? replyRecipients(detail, mine) : replyAllRecipients(detail, mine)
   return {
     action,
@@ -121,7 +125,7 @@ export function buildComposeSeed(
 
 /** Turns an opened draft into a composer seed. Pure. */
 export function buildDraftSeed(
-  opened: OpenedDraft, identities: SendingIdentity[], ref: DraftRef,
+  opened: OpenedDraft, identities: SendingIdentity[], ref: DraftRef, accountId: string,
 ): ComposeSeed {
   const usable = identities.filter(i => !i.stale)
   const owned = opened.fromAddress
@@ -131,7 +135,7 @@ export function buildDraftSeed(
     action: 'draft',
     to: opened.to, cc: opened.cc, bcc: opened.bcc,
     subject: opened.subject,
-    html: absolutizeStagedUrls(opened.htmlBody, opened.attachments.map(a => a.id)),
+    html: absolutizeStagedUrls(opened.htmlBody, opened.attachments.map(a => a.id), accountId),
     fromAddress: owned?.address ?? null,
     attachments: opened.attachments,
     inReplyTo: opened.inReplyTo,

@@ -25,6 +25,13 @@ public sealed class WebmailUser
     [Column("security_stamp")]
     public Guid SecurityStamp { get; set; }
 
+    /// <summary>
+    /// PBKDF2 salt of the key encrypting this user's connected-account passwords. Null until the
+    /// first login after the migration generates one; never leaves the backend.
+    /// </summary>
+    [Column("kdf_salt")]
+    public byte[]? KdfSalt { get; set; }
+
     [Column("creation_date")]
     public DateTime CreationDate { get; set; }
 

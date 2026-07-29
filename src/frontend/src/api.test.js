@@ -409,15 +409,6 @@ describe('rules api methods', () => {
     markLoggedIn()
   })
 
-  it('getFolders calls GET /api/Account/Folders', async () => {
-    const { api } = await import('./api.js')
-    await api.getFolders()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Account/Folders'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
   it('getRuleProviders calls GET /api/Rules/Providers', async () => {
     const { api } = await import('./api.js')
     await api.getRuleProviders()
@@ -568,6 +559,159 @@ describe('abort support', () => {
   })
 })
 
+describe('account transport', () => {
+  it('sends X-Account-Id for a connected account', async () => {
+    mockFetch(200, { json: [] })
+    const { api } = await import('./api.js')
+
+    await api.getMailFolders({ accountId: '11111111-1111-1111-1111-111111111111' })
+
+    expect(globalThis.fetch.mock.calls[0][1].headers['X-Account-Id']).toBe('11111111-1111-1111-1111-111111111111')
+  })
+
+  it('sends no X-Account-Id header for the primary account', async () => {
+    mockFetch(200, { json: [] })
+    const { api } = await import('./api.js')
+
+    await api.getMailFolders({ accountId: 'primary' })
+
+    expect(globalThis.fetch.mock.calls[0][1].headers['X-Account-Id']).toBeUndefined()
+  })
+
+  it('sends no X-Account-Id header when unset', async () => {
+    mockFetch(200, { json: [] })
+    const { api } = await import('./api.js')
+
+    await api.getMailFolders()
+
+    expect(globalThis.fetch.mock.calls[0][1].headers['X-Account-Id']).toBeUndefined()
+  })
+
+  it('requestBlob sends X-Account-Id for a connected account', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      blob: () => Promise.resolve(new Blob(['x'])),
+      text: () => Promise.resolve(''),
+    }))
+    const { requestBlob } = await import('./api.js')
+
+    await requestBlob('/api/Mail/Messages/Attachment?folder=INBOX&uid=1&part=1', { accountId: 'acct-2' })
+
+    expect(globalThis.fetch.mock.calls[0][1].headers['X-Account-Id']).toBe('acct-2')
+  })
+
+  it('requestBlob sends no header for the primary account', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      blob: () => Promise.resolve(new Blob(['x'])),
+      text: () => Promise.resolve(''),
+    }))
+    const { requestBlob } = await import('./api.js')
+
+    await requestBlob('/api/Mail/Messages/Attachment?folder=INBOX&uid=1&part=1', { accountId: 'primary' })
+
+    expect(globalThis.fetch.mock.calls[0][1].headers['X-Account-Id']).toBeUndefined()
+  })
+})
+
+describe('connected accounts', () => {
+  beforeEach(() => mockFetch(200))
+
+  it('getConnectedAccounts calls GET /api/ConnectedAccounts', async () => {
+    const { api } = await import('./api.js')
+    await api.getConnectedAccounts()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('connectAccount POSTs to /api/ConnectedAccounts', async () => {
+    const { api } = await import('./api.js')
+    await api.connectAccount('dom-1', 'a@b.c', 'secret')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ domainId: 'dom-1', email: 'a@b.c', password: 'secret' }),
+      })
+    )
+  })
+
+  it('updateConnectedAccountPassword PUTs to the Password sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.updateConnectedAccountPassword('acct-1', 'newpass')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/acct-1/Password'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ password: 'newpass' }) })
+    )
+  })
+
+  it('deleteConnectedAccount DELETEs the account id', async () => {
+    const { api } = await import('./api.js')
+    await api.deleteConnectedAccount('acct-1')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/acct-1'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('getConnectableDomains calls GET /api/ConnectedAccounts/Domains', async () => {
+    const { api } = await import('./api.js')
+    await api.getConnectableDomains()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/Domains'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+})
+
+describe('admin external domains', () => {
+  beforeEach(() => mockFetch(200))
+
+  it('adminGetExternalDomains calls GET /api/Admin/domains/external', async () => {
+    const { api } = await import('./api.js')
+    await api.adminGetExternalDomains()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/external'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('adminCreateExternalDomain POSTs the domain', async () => {
+    const { api } = await import('./api.js')
+    const domain = { name: 'example.com' }
+    await api.adminCreateExternalDomain(domain)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/external'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(domain) })
+    )
+  })
+
+  it('adminUpdateExternalDomain PUTs to the domain id', async () => {
+    const { api } = await import('./api.js')
+    const domain = { name: 'example.com' }
+    await api.adminUpdateExternalDomain('dom-1', domain)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/external/dom-1'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(domain) })
+    )
+  })
+
+  it('adminDeleteExternalDomain DELETEs the domain id', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteExternalDomain('dom-1')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/external/dom-1'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+})
+
 describe('mail endpoints', () => {
   it('encodes folder paths, which may contain a slash', async () => {
     mockFetch(200, { json: {} })
@@ -711,6 +855,21 @@ describe('mailAttachmentUrl', () => {
     expect(url).toContain('uid=42')
     expect(url).toContain('part=2.1')
   })
+
+  it('carries no account param when unset or primary', async () => {
+    const { mailAttachmentUrl } = await import('./api.js')
+
+    expect(mailAttachmentUrl('INBOX', 1, '1')).not.toContain('account=')
+    expect(mailAttachmentUrl('INBOX', 1, '1', 'primary')).not.toContain('account=')
+  })
+
+  it('carries &account= for a connected account', async () => {
+    const { mailAttachmentUrl } = await import('./api.js')
+
+    const url = mailAttachmentUrl('INBOX', 1, '1', 'acct-2')
+
+    expect(url).toContain('&account=acct-2')
+  })
 })
 
 // Unlike mailAttachmentUrl, this one is an <img src>, not a request path: a relative URL would
@@ -723,6 +882,21 @@ describe('stagedAttachmentUrl', () => {
 
     expect(url).toBe(`${API_BASE}/api/Mail/Attachments/abc/content`)
     expect(url).toMatch(/^https?:\/\//)
+  })
+
+  it('carries no account param when unset or primary', async () => {
+    const { stagedAttachmentUrl } = await import('./api.js')
+
+    expect(stagedAttachmentUrl('abc')).not.toContain('account=')
+    expect(stagedAttachmentUrl('abc', 'primary')).not.toContain('account=')
+  })
+
+  it('carries ?account= for a connected account, since it is composer <img src>', async () => {
+    const { stagedAttachmentUrl, API_BASE } = await import('./api.js')
+
+    const url = stagedAttachmentUrl('abc', 'acct-2')
+
+    expect(url).toBe(`${API_BASE}/api/Mail/Attachments/abc/content?account=acct-2`)
   })
 })
 
@@ -837,6 +1011,7 @@ describe('uploadAttachment', () => {
   class FakeXhr {
     upload = {}
     open(method, url) { this.method = method; this.url = url }
+    setRequestHeader(name, value) { this.headers = { ...this.headers, [name]: value } }
     send(form) { sent = { xhr: this, form } }
     abort() {}
   }
@@ -905,6 +1080,26 @@ describe('uploadAttachment', () => {
     controller.abort()
     await expect(uploadAttachment(new File(['x'], 'a.txt'), { signal: controller.signal })).rejects.toThrow('Aborted')
     expect(sent).toBeUndefined()
+  })
+
+  it('sets the X-Account-Id header for a connected account', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), { accountId: 'acct-2' })
+    sent.xhr.status = 200
+    sent.xhr.responseText = '{"id":"i"}'
+    sent.xhr.onload()
+    await done
+    expect(sent.xhr.headers['X-Account-Id']).toBe('acct-2')
+  })
+
+  it('sets no header for the primary account', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), { accountId: 'primary' })
+    sent.xhr.status = 200
+    sent.xhr.responseText = '{"id":"i"}'
+    sent.xhr.onload()
+    await done
+    expect(sent.xhr.headers).toBeUndefined()
   })
 })
 

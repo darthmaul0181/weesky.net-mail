@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -10,13 +11,15 @@ public sealed class MailCredentialStoreTests
     private static MailCredentialStore CreateSut(IDataProtectionProvider? provider = null)
         => new(provider ?? new EphemeralDataProtectionProvider());
 
+    private static MailCredentialPayload V1(string password) => new(password, null);
+
     [Fact]
     public void Store_WritesAnHttpOnlySecureStrictCookie()
     {
         var sut = CreateSut();
         var context = new DefaultHttpContext();
 
-        sut.Store(context.Response, "hunter2", TimeSpan.FromMinutes(30));
+        sut.Store(context.Response, V1("hunter2"), TimeSpan.FromMinutes(30));
 
         var setCookie = string.Join(";", context.Response.Headers["Set-Cookie"].ToArray());
         Assert.Contains("MailCredentials=", setCookie);
@@ -31,7 +34,7 @@ public sealed class MailCredentialStoreTests
         var sut = CreateSut();
         var context = new DefaultHttpContext();
 
-        sut.Store(context.Response, "hunter2", TimeSpan.FromMinutes(30));
+        sut.Store(context.Response, V1("hunter2"), TimeSpan.FromMinutes(30));
 
         var setCookie = string.Join(";", context.Response.Headers["Set-Cookie"].ToArray());
         Assert.DoesNotContain("hunter2", setCookie);
@@ -42,7 +45,7 @@ public sealed class MailCredentialStoreTests
     {
         var provider = new EphemeralDataProtectionProvider();
         var response = new DefaultHttpContext().Response;
-        CreateSut(provider).Store(response, "hunter2", TimeSpan.FromMinutes(30));
+        CreateSut(provider).Store(response, V1("hunter2"), TimeSpan.FromMinutes(30));
 
         var request = new DefaultHttpContext().Request;
         request.Headers["Cookie"] = $"MailCredentials={ExtractCookieValue(response)}";
@@ -50,7 +53,115 @@ public sealed class MailCredentialStoreTests
         var result = CreateSut(provider).Retrieve(request);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("hunter2", result.Value);
+        Assert.Equal("hunter2", result.Value.Password);
+    }
+
+    [Fact]
+    public void Retrieve_ReadsBackTheV2Payload()
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var kek = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var response = new DefaultHttpContext().Response;
+        CreateSut(provider).Store(response, new MailCredentialPayload("hunter2", kek), TimeSpan.FromMinutes(30));
+
+        var request = new DefaultHttpContext().Request;
+        request.Headers["Cookie"] = $"MailCredentials={ExtractCookieValue(response)}";
+
+        var result = CreateSut(provider).Retrieve(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hunter2", result.Value.Password);
+        Assert.Equal<byte[]>(kek, result.Value.Kek!);
+    }
+
+    // A cookie issued before the KEK existed carries the bare password and must keep working:
+    // signing every open session out on deploy is exactly what the v1 branch exists to avoid.
+    [Fact]
+    public void Retrieve_TreatsALegacyValueAsV1()
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var legacy = provider.CreateProtector("weesky.imap.credentials").Protect("hunter2");
+
+        var request = new DefaultHttpContext().Request;
+        request.Headers["Cookie"] = $"MailCredentials={legacy}";
+
+        var result = CreateSut(provider).Retrieve(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hunter2", result.Value.Password);
+        Assert.Null(result.Value.Kek);
+    }
+
+    // The marker is not a reserved prefix: a password that opens with it but whose parts are not
+    // base64 is still a v1 value, and its whole text is the password.
+    [Fact]
+    public void Retrieve_TreatsAPasswordStartingLikeTheMarkerAsV1()
+    {
+        const string password = "wm2|not|base64!";
+        var provider = new EphemeralDataProtectionProvider();
+        var response = new DefaultHttpContext().Response;
+        CreateSut(provider).Store(response, V1(password), TimeSpan.FromMinutes(30));
+
+        var request = new DefaultHttpContext().Request;
+        request.Headers["Cookie"] = $"MailCredentials={ExtractCookieValue(response)}";
+
+        var result = CreateSut(provider).Retrieve(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(password, result.Value.Password);
+        Assert.Null(result.Value.Kek);
+    }
+
+    // Empty base64 parses to an empty array instead of throwing. Accepted as a KEK, this password
+    // would come back empty and the sliding renewal would re-issue the loss as a genuine v2 cookie.
+    [Theory]
+    [InlineData("wm2||")]
+    [InlineData("wm2|abcd|efgh")]
+    public void Retrieve_TreatsAWrongLengthKekAsV1(string password)
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var response = new DefaultHttpContext().Response;
+        CreateSut(provider).Store(response, V1(password), TimeSpan.FromMinutes(30));
+
+        var request = new DefaultHttpContext().Request;
+        request.Headers["Cookie"] = $"MailCredentials={ExtractCookieValue(response)}";
+
+        var result = CreateSut(provider).Retrieve(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(password, result.Value.Password);
+        Assert.Null(result.Value.Kek);
+    }
+
+    [Fact]
+    public void Retrieve_TreatsAHalfLengthKekAsV1()
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var password = "wm2|" + Convert.ToBase64String("hunter2"u8.ToArray())
+                              + "|" + Convert.ToBase64String(new byte[16]);
+        var response = new DefaultHttpContext().Response;
+        CreateSut(provider).Store(response, V1(password), TimeSpan.FromMinutes(30));
+
+        var request = new DefaultHttpContext().Request;
+        request.Headers["Cookie"] = $"MailCredentials={ExtractCookieValue(response)}";
+
+        var result = CreateSut(provider).Retrieve(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(password, result.Value.Password);
+        Assert.Null(result.Value.Kek);
+    }
+
+    [Fact]
+    public void Store_DoesNotWriteTheKekInClear()
+    {
+        var kek = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var context = new DefaultHttpContext();
+
+        CreateSut().Store(context.Response, new MailCredentialPayload("hunter2", kek), TimeSpan.FromMinutes(30));
+
+        var setCookie = string.Join(";", context.Response.Headers["Set-Cookie"].ToArray());
+        Assert.DoesNotContain(Convert.ToBase64String(kek), setCookie);
     }
 
     [Fact]
@@ -66,7 +177,7 @@ public sealed class MailCredentialStoreTests
     public void Retrieve_FailsWhenTheKeyRingChanged()
     {
         var response = new DefaultHttpContext().Response;
-        CreateSut(new EphemeralDataProtectionProvider()).Store(response, "hunter2", TimeSpan.FromMinutes(30));
+        CreateSut(new EphemeralDataProtectionProvider()).Store(response, V1("hunter2"), TimeSpan.FromMinutes(30));
 
         var request = new DefaultHttpContext().Request;
         request.Headers["Cookie"] = $"MailCredentials={ExtractCookieValue(response)}";
@@ -92,7 +203,7 @@ public sealed class MailCredentialStoreTests
 
     [Fact]
     public void Store_ThrowsWhenResponseIsNull()
-        => Assert.Throws<ArgumentNullException>(() => CreateSut().Store(null!, "x", TimeSpan.FromMinutes(1)));
+        => Assert.Throws<ArgumentNullException>(() => CreateSut().Store(null!, V1("x"), TimeSpan.FromMinutes(1)));
 
     [Fact]
     public void Retrieve_ThrowsWhenRequestIsNull()

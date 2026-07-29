@@ -19,7 +19,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
     private readonly HtmlParser _parser = new();
 
     public async Task<Result<PreparedQuote>> PrepareAsync(
-        string accountId, MimeMessage message, QuotePurpose purpose, CancellationToken cancellationToken)
+        string stagedScope, MimeMessage message, QuotePurpose purpose, CancellationToken cancellationToken)
     {
         List<StagedAttachmentInfo> attachments = [];
         // MimeMessage.BodyParts and .Attachments overlap: an Outlook inline image carries an
@@ -49,7 +49,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
                 {
                     var part = FindImagePart(message, contentId);
                     if (part == null) { img.Remove(); continue; } // dangling or non-image cid
-                    var inline = await StagePartAsync(accountId, part, contentId, cancellationToken);
+                    var inline = await StagePartAsync(stagedScope, part, contentId, cancellationToken);
                     if (inline.IsFailure) return Result.Failure<PreparedQuote>(inline.Error);
                     info = inline.Value;
                     stagedByCid[contentId] = info;
@@ -57,7 +57,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
                     attachments.Add(info);
                 }
 
-                img.SetAttribute("src", $"/api/Mail/Attachments/{info.Id}/content");
+                img.SetAttribute("src", StagedContentUrl.For(info.Id));
             }
 
             // Same re-serialisation as the sanitizer: Ganss's formatter keeps attribute escaping.
@@ -70,7 +70,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
             {
                 if (inlined.Contains(entity)) continue;
 
-                var attachment = await StageAttachmentAsync(accountId, entity, cancellationToken);
+                var attachment = await StageAttachmentAsync(stagedScope, entity, cancellationToken);
                 if (attachment.IsFailure) return Result.Failure<PreparedQuote>(attachment.Error);
                 attachments.Add(attachment.Value);
             }
@@ -86,7 +86,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
             && p.ContentType.IsMimeType("image", "*"));
 
     private async Task<Result<StagedAttachmentInfo>> StagePartAsync(
-        string accountId, MimePart part, string? contentId, CancellationToken cancellationToken)
+        string stagedScope, MimePart part, string? contentId, CancellationToken cancellationToken)
     {
         // Content.Open() decodes on the fly — no in-memory buffering of a possibly large part.
         if (part.Content == null)
@@ -94,13 +94,13 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
 
         await using var content = part.Content.Open();
         return await staged.SaveAsync(
-            accountId, part.FileName ?? "inline", part.ContentType.MimeType, content, cancellationToken, contentId);
+            stagedScope, part.FileName ?? "inline", part.ContentType.MimeType, content, cancellationToken, contentId);
     }
 
     private async Task<Result<StagedAttachmentInfo>> StageAttachmentAsync(
-        string accountId, MimeEntity entity, CancellationToken cancellationToken)
+        string stagedScope, MimeEntity entity, CancellationToken cancellationToken)
     {
-        if (entity is MimePart part) return await StagePartAsync(accountId, part, null, cancellationToken);
+        if (entity is MimePart part) return await StagePartAsync(stagedScope, part, null, cancellationToken);
 
         // An attached message has no decodable content; the INNER message alone is the .eml. Writing
         // the entity would prepend the part's own message/rfc822 headers, so the staged file would
@@ -110,7 +110,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
         else await entity.WriteToAsync(buffer, cancellationToken);
         buffer.Position = 0;
         var name = entity.ContentDisposition?.FileName ?? "attached-message.eml";
-        return await staged.SaveAsync(accountId, name, entity.ContentType.MimeType, buffer, cancellationToken);
+        return await staged.SaveAsync(stagedScope, name, entity.ContentType.MimeType, buffer, cancellationToken);
     }
 
     /// <summary>Escaped text with its line structure rendered — the text-only quoting path.</summary>

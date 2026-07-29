@@ -8,10 +8,12 @@ const swap = (html: string, from: string, to: string) => html.split(from).join(t
  * The backend quotes inline images as request-relative srcs. The SPA and the API are separate
  * origins, so the composer has to show them absolute. Only the ids staged with this quote are
  * rewritten — the quoted body is untrusted text and may spell that path itself.
+ * The account rides in the query: an <img> subresource cannot carry the X-Account-Id header,
+ * and staged files are namespaced by account.
  */
-export function absolutizeStagedUrls(html: string, ids: string[]): string {
+export function absolutizeStagedUrls(html: string, ids: string[], accountId: string): string {
   return ids.reduce(
-    (acc, id) => swap(acc, `${RELATIVE}${id}/content`, stagedAttachmentUrl(id)), html)
+    (acc, id) => swap(acc, `${RELATIVE}${id}/content`, stagedAttachmentUrl(id, accountId)), html)
 }
 
 /**

@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' } }),
+  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
 }))
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -96,7 +96,7 @@ describe('SystemFoldersModal', () => {
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: 'Corbeille' } })
 
-    await waitFor(() => expect(mocks.setFolderRole).toHaveBeenCalledWith('trash', 'Corbeille'))
+    await waitFor(() => expect(mocks.setFolderRole).toHaveBeenCalledWith('trash', 'Corbeille', { accountId: 'primary' }))
   })
 
   it('clears a role when Automatic is chosen', async () => {
@@ -110,7 +110,7 @@ describe('SystemFoldersModal', () => {
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
 
-    await waitFor(() => expect(mocks.clearFolderRole).toHaveBeenCalledWith('trash'))
+    await waitFor(() => expect(mocks.clearFolderRole).toHaveBeenCalledWith('trash', { accountId: 'primary' }))
   })
 
   it('surfaces the backend message when the assignment fails', async () => {
