@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { flatten, indent, sortFolders } from './folders/folderNodes'
 import { folderMatches } from './folders/folderFilter'
 import { roleLabel } from './roleLabel'
+import FolderMoveIcon from '../../icons/FolderMoveIcon'
+import CopyIcon from '../../icons/CopyIcon'
 import type { MailFolderNode } from './api/mailTypes'
 
 interface Props {
@@ -15,6 +17,10 @@ interface Props {
 /**
  * The picker behind "Move to…" and "Copy to…". Unusable rows stay listed and disabled: a list
  * where an expected folder is simply missing reads as a bug rather than as a rule.
+ *
+ * Shaped as the site's list filter (website-design.md, search shape 1): the .search-input sits in
+ * the .admin-list-header carrying the matching/total count, the way Administration and the
+ * contacts list do it. The ✕ is the only way out, and the body is a form so Enter commits.
  */
 export default function MoveMessagesModal(
   { mode, folders, currentFolderPath, onPick, onClose }: Props) {
@@ -42,32 +48,48 @@ export default function MoveMessagesModal(
   const verb = mode === 'move' ? 'Move' : 'Copy'
   // A selection filtered off-screen or since disabled (e.g. it became the current folder)
   // must not stay armed: acting on it would file the mail somewhere it can't be picked from.
-  const target = enabled.some(row => row.node.path === selected) ? selected : null
+  const target = enabled.find(row => row.node.path === selected)?.node ?? null
+
+  // The picked folder, or else the single row the query has left standing.
+  function commit() {
+    const pick = target ?? (enabled.length === 1 ? enabled[0].node : null)
+    if (pick) onPick(pick.path)
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '460px' }} onClick={e => e.stopPropagation()}>
+      <form
+        className="modal folder-pick-modal"
+        onClick={e => e.stopPropagation()}
+        onSubmit={e => { e.preventDefault(); commit() }}
+      >
         <div className="modal-header">
-          <span className="modal-title">{verb} to folder</span>
-          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <span className="modal-title">
+            {mode === 'move' ? <FolderMoveIcon size={17} /> : <CopyIcon size={17} />}
+            {verb} to folder
+          </span>
+          <button type="button" className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
         </div>
 
-        <label className="folder-pick-label" htmlFor="move-folder-search">Search folders</label>
-        <input
-          id="move-folder-search"
-          className="folder-pick-search"
-          type="text"
-          value={query}
-          placeholder="Search folders…"
-          autoFocus
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && enabled.length === 1) onPick(enabled[0].node.path)
-          }}
-        />
-
-        <div className="folder-pick-count">
-          {query ? `${rows.length} of ${all.length} folders` : `${all.length} folders`}
+        <div className="admin-list-header">
+          <span className="admin-list-title">
+            Destination
+            <span className="folder-pick-count">
+              {query ? `${rows.length} of ${all.length} folders` : `${all.length} folders`}
+            </span>
+          </span>
+          <input
+            className="search-input folder-pick-filter"
+            type="search"
+            aria-label="Search folders"
+            placeholder="Search folders…"
+            value={query}
+            autoFocus
+            onChange={e => setQuery(e.target.value)}
+            // preventDefault, so the implicit submission this keystroke would also trigger
+            // cannot commit the same pick twice.
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+          />
         </div>
 
         <div className="folder-pick-list">
@@ -85,7 +107,7 @@ export default function MoveMessagesModal(
               <span className="folder-pick-indent">{indent(depth)}</span>
               <span className="folder-pick-name">{node.name}</span>
               {(disabledAs ?? (node.specialUse && roleLabel(node.specialUse))) && (
-                <span className="folder-pick-badge">
+                <span className="row-tag">
                   {disabledAs ?? roleLabel(node.specialUse!)}
                 </span>
               )}
@@ -93,18 +115,12 @@ export default function MoveMessagesModal(
           ))}
         </div>
 
-        <div className="folder-pick-actions">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className="btn btn-primary"
-            style={{ width: 'auto' }}
-            disabled={!target}
-            onClick={() => target && onPick(target)}
-          >
-            {verb}
+        <div className="folder-pick-submit">
+          <button className="btn btn-primary" type="submit" disabled={!target}>
+            {target ? `${verb} to ${target.name}` : verb}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
