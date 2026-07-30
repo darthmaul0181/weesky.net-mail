@@ -29,6 +29,7 @@ import AtSignIcon from './AtSignIcon'
 import FunnelIcon from './FunnelIcon'
 import PersonPlusIcon from './PersonPlusIcon'
 import ShieldIcon from './ShieldIcon'
+import CodeIcon from './CodeIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -60,6 +61,7 @@ const icons = [
   { name: 'FunnelIcon', Icon: FunnelIcon, defaultSize: '16' },
   { name: 'PersonPlusIcon', Icon: PersonPlusIcon, defaultSize: '15' },
   { name: 'ShieldIcon', Icon: ShieldIcon, defaultSize: '15' },
+  { name: 'CodeIcon', Icon: CodeIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

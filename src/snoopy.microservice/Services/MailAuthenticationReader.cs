@@ -15,8 +15,12 @@ internal static class MailAuthenticationReader
         if (header is null) return null;
 
         return AuthenticationResults.TryParse(header.RawValue, out var parsed)
-            ? new MailAuthentication(Verdict(parsed.Results, "spf"), Verdict(parsed.Results, "dkim"), header.Value)
-            : new MailAuthentication(null, null, header.Value);
+            ? new MailAuthentication(
+                Verdict(parsed.Results, "spf"),
+                Verdict(parsed.Results, "dkim"),
+                Verdict(parsed.Results, "dmarc"),
+                header.Value)
+            : new MailAuthentication(null, null, null, header.Value);
     }
 
     // A method can appear more than once (e.g. two DKIM signatures). If any occurrence

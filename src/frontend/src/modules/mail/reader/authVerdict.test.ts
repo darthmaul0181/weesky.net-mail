@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { authVerdict } from './authVerdict'
 
-const auth = (spf: string | null, dkim: string | null) => ({ spf, dkim, raw: 'mx.weesky.net; …' })
+const auth = (spf: string | null, dkim: string | null) =>
+  ({ spf, dkim, dmarc: null, raw: 'mx.weesky.net; …' })
 
 describe('authVerdict', () => {
   it('passes only when both methods passed', () => {

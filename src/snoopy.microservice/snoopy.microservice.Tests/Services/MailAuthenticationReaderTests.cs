@@ -26,7 +26,27 @@ public sealed class MailAuthenticationReaderTests
         Assert.NotNull(result);
         Assert.Equal("pass", result!.Spf);
         Assert.Equal("pass", result.Dkim);
+        Assert.Equal("pass", result.Dmarc);
         Assert.Equal(header, result.Raw);
+    }
+
+    [Fact]
+    public void Parse_ReadsTheDmarcVerdict()
+    {
+        const string header = "mx.google.com; spf=pass smtp.mailfrom=a@b.test; " +
+                              "dkim=pass header.i=@b.test; dmarc=fail header.from=b.test";
+
+        var result = MailAuthenticationReader.Parse(Headers(header));
+
+        Assert.Equal("fail", result!.Dmarc);
+    }
+
+    [Fact]
+    public void Parse_LeavesDmarcNullWhenTheHeaderCarriesNone()
+    {
+        var result = MailAuthenticationReader.Parse(Headers("mx.google.com; spf=pass smtp.mailfrom=a@b.test"));
+
+        Assert.Null(result!.Dmarc);
     }
 
     [Fact]

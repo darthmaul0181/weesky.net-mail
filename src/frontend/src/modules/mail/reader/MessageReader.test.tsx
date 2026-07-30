@@ -255,7 +255,7 @@ describe('MessageReader', () => {
   describe('the authentication badge', () => {
     const authenticated = (spf: string | null, dkim: string | null) => ({
       ...detail,
-      authentication: { spf, dkim, raw: 'mx.weesky.net; spf=x; dkim=y' },
+      authentication: { spf, dkim, dmarc: null, raw: 'mx.weesky.net; spf=x; dkim=y' },
     })
 
     it('vouches for a message that passed both checks', async () => {
@@ -310,7 +310,7 @@ describe('MessageReader', () => {
     it('says nothing when the header parsed but named neither method', async () => {
       mocks.getMailMessage.mockResolvedValue({
         ...detail,
-        authentication: { spf: null, dkim: null, raw: 'mx.weesky.net; dmarc=pass' },
+        authentication: { spf: null, dkim: null, dmarc: null, raw: 'mx.weesky.net; dmarc=pass' },
       })
 
       const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
@@ -513,6 +513,29 @@ describe('MessageReader', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: "Block sender's images" }))
 
     await waitFor(() => expect(mocks.untrustSender).toHaveBeenCalledWith('alice@x.be'))
+  })
+
+  it('offers View source as a link to the message on its own tab', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+    const link = screen.getByRole('menuitem', { name: 'View source' })
+    expect(link).toHaveAttribute('href', '/mail/source?folder=INBOX&uid=2')
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('percent-encodes a folder path carrying the hierarchy separator', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    render(<MessageReader folderPath="INBOX/Ops & Co" uid={7} />, { wrapper })
+    await screen.findByText('Re: facture')
+    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+    expect(screen.getByRole('menuitem', { name: 'View source' }))
+      .toHaveAttribute('href', '/mail/source?folder=INBOX%2FOps%20%26%20Co&uid=7')
   })
 
   it('keeps the revocation out of the kebab for an untrusted sender', async () => {

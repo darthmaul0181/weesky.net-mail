@@ -1,4 +1,5 @@
-﻿using CSharpFunctionalExtensions;
+﻿using System.Text;
+using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -781,6 +782,74 @@ internal sealed class ImapSession : IImapSession
         },
             "Unable to read the message",
             ex => _logger.LogError(ex, "Failed to read raw message {Uid} in {Folder}", uid, folderPath),
+            MessageSentinel);
+
+    /// <summary>
+    /// Two IMAP round trips: an envelope-plus-size fetch that also pulls the
+    /// Authentication-Results header, then a BODY[]&lt;0.N&gt; partial fetch for the bytes.
+    /// </summary>
+    public Task<Result<MailMessageSource>> GetMessageSourceAsync(
+        string folderPath, uint uid, int maxBytes, CancellationToken cancellationToken) =>
+        ExecuteAsync(cancellationToken, async () =>
+        {
+            var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+            var uniqueId = new UniqueId(folder.UidValidity, uid);
+
+            var summaries = await folder.FetchAsync(
+                new[] { uniqueId },
+                MessageSummaryItems.Envelope | MessageSummaryItems.Size,
+                new[] { HeaderId.AuthenticationResults },
+                cancellationToken);
+
+            var summary = summaries.FirstOrDefault();
+            if (summary?.Envelope == null) return Result.Failure<MailMessageSource>(MessageNotFound);
+
+            using var stream = await folder.GetStreamAsync(uniqueId, 0, maxBytes, cancellationToken);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer, cancellationToken);
+            var bytes = buffer.ToArray();
+
+            // UTF-8 with .NET's replacing decoder: headers are ASCII either way, and a modern
+            // 8-bit body is UTF-8 far more often than it is anything else. A sequence cut in
+            // half by the cap costs one replacement character at the very tail.
+            var source = Encoding.UTF8.GetString(bytes);
+
+            var envelope = summary.Envelope;
+            var from = envelope.From.Mailboxes.FirstOrDefault();
+
+            // bytes.LongLength can never exceed maxBytes (the stream itself is capped there), so
+            // when the server omits RFC822.SIZE there is no ground truth to compare against and
+            // IsTruncated's ">" would always read false. Erring toward "there may be more": a
+            // full-cap read is treated as truncated rather than trusted as the whole message.
+            long total;
+            bool truncated;
+            if (summary.Size.HasValue)
+            {
+                total = (long)summary.Size.Value;
+                truncated = MailMessageSource.IsTruncated(total, maxBytes);
+            }
+            else
+            {
+                total = bytes.LongLength;
+                truncated = bytes.LongLength >= maxBytes;
+            }
+
+            return Result.Success(new MailMessageSource(
+                Subject: envelope.Subject ?? string.Empty,
+                MessageId: TrimAngleBrackets(envelope.MessageId),
+                Date: envelope.Date ?? DateTimeOffset.MinValue,
+                FromName: from?.Name ?? string.Empty,
+                FromAddress: from?.Address ?? string.Empty,
+                To: ToAddressInfos(envelope.To),
+                Authentication: MailAuthenticationReader.Parse(summary.Headers ?? []),
+                Source: source,
+                TotalBytes: total,
+                Truncated: truncated));
+        },
+            "Unable to read the message source",
+            ex => _logger.LogError(ex, "Failed to read the source of {Uid} in {Folder}", uid, folderPath),
             MessageSentinel);
 
     public Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken) =>

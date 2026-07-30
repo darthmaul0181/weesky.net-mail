@@ -2,11 +2,15 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import DropdownMenu, { type MenuItem, type MenuEntry } from './DropdownMenu'
 
-function items(overrides?: Partial<MenuItem>[]): MenuItem[] {
+function items(overrides?: Partial<{ onSelect: () => void; disabled: boolean; title: string }>[]): MenuItem[] {
   return [
     { label: 'Mark as read', onSelect: vi.fn(), ...(overrides?.[0] ?? {}) },
     { label: 'Star', onSelect: vi.fn(), ...(overrides?.[1] ?? {}) },
   ]
+}
+
+function open() {
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
 }
 
 describe('DropdownMenu', () => {
@@ -186,5 +190,53 @@ describe('DropdownMenu', () => {
 
     fireEvent.scroll(window)
     expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('renders an item carrying href as a link opening in a new tab', () => {
+    render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
+      items={[{ label: 'View source', href: '/mail/source?folder=INBOX&uid=42' }]} />)
+    open()
+
+    const link = screen.getByRole('menuitem', { name: 'View source' })
+    expect(link.tagName).toBe('A')
+    expect(link).toHaveAttribute('href', '/mail/source?folder=INBOX&uid=42')
+    expect(link).toHaveAttribute('target', '_blank')
+    // Without it the opened tab gets a handle on window.opener.
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
+  it('closes the menu when a link item is activated', () => {
+    render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
+      items={[{ label: 'View source', href: '/mail/source' }]} />)
+    open()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View source' }))
+
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
+  })
+
+  it('closes the menu when a link item is middle-clicked', () => {
+    render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
+      items={[{ label: 'View source', href: '/mail/source' }]} />)
+    open()
+
+    // testing-library's fireEvent has no auxClick alias (unlike click); dispatch the native
+    // event directly, the same one a real middle-click raises instead of onClick.
+    fireEvent(screen.getByRole('menuitem', { name: 'View source' }),
+      new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }))
+
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
+  })
+
+  it('still renders an item carrying onSelect as a button', () => {
+    const onSelect = vi.fn()
+    render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={[{ label: 'Archive', onSelect }]} />)
+    open()
+
+    const item = screen.getByRole('menuitem', { name: 'Archive' })
+    expect(item.tagName).toBe('BUTTON')
+
+    fireEvent.click(item)
+    expect(onSelect).toHaveBeenCalledOnce()
   })
 })

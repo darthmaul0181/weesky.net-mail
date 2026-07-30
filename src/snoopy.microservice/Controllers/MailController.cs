@@ -38,6 +38,14 @@ public sealed class MailController(
     ILogger<MailController> logger) : ApiBaseController
 {
     /// <summary>
+    /// How much of a message the source view may carry. Internal, never a setting: headers sit
+    /// at the head of the file, so what a cap drops is the tail of the base64 — and a message
+    /// may legitimately weigh MailOptions.MaxMessageSizeMb (25 MB), which no browser wants
+    /// dropped into a &lt;pre&gt;.
+    /// </summary>
+    private const int MaxSourceBytes = 1024 * 1024;
+
+    /// <summary>
     /// The active account's connection — endpoints plus credentials — or the error to answer
     /// with. Every mail action reads a mailbox as the user, so every one of them starts here.
     /// A guard rather than an action filter on purpose: the controller tests invoke actions
@@ -565,6 +573,47 @@ public sealed class MailController(
         }
 
         return File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+    }
+
+    /// <summary>
+    /// The message as it arrived: the headers worth distilling plus the verbatim RFC822 bytes,
+    /// capped at one megabyte.
+    /// </summary>
+    /// <param name="folder">full folder path</param>
+    /// <param name="uid">message UID, valid only for the folder's current UidValidity</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The source</response>
+    /// <response code="400">The folder is missing</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="404">No message with that UID in that folder</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpGet("Messages/Source")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<MailMessageSource>> GetMessageSource(
+        [FromQuery] string folder,
+        [FromQuery] uint uid,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
+
+        var (connection, error) = await TryResolveAsync(cancellationToken);
+        if (connection is null) return error!;
+
+        var result = await messages.GetSourceAsync(
+            AuthenticatedUser, connection, folder, uid, MaxSourceBytes, cancellationToken);
+
+        if (result.IsFailure && result.Error == ImapSession.MessageNotFound)
+        {
+            return NotFoundEnveloppe(result.Error);
+        }
+
+        return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
 
     /// <summary>

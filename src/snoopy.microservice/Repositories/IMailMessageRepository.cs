@@ -39,4 +39,7 @@ public interface IMailMessageRepository
 
     /// <summary>The raw MimeKit message, for quoting: unsanitised body, cid parts, attachments.</summary>
     Task<Result<MimeMessage>> GetMimeMessageAsync(User user, MailAccountConnection connection, string folderPath, uint uid, CancellationToken cancellationToken);
+
+    /// <summary>The message as it arrived, capped at <paramref name="maxBytes"/> octets.</summary>
+    Task<Result<MailMessageSource>> GetSourceAsync(User user, MailAccountConnection connection, string folderPath, uint uid, int maxBytes, CancellationToken cancellationToken);
 }
