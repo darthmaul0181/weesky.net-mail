@@ -287,8 +287,8 @@ export default function MessageReader(
               <Tooltip
                 placement="bottom-left"
                 content={data.priority === 'high'
-                  ? 'The sender marked this message X-Priority: 1 (Highest)'
-                  : 'The sender marked this message X-Priority: 5 (Lowest)'}
+                  ? 'The sender marked this message high priority'
+                  : 'The sender marked this message low priority'}
               >
                 <span className={`reader-priority is-${data.priority}`}>
                   {data.priority === 'high' ? 'High priority' : 'Low priority'}

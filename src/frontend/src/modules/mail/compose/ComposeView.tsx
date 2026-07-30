@@ -344,7 +344,8 @@ export default function ComposeView({ onNotify }: Props) {
               ariaLabel="Priority"
               className="compose-priority-select"
               align="left"
-              trigger={<>{PRIORITIES.find(p => p.value === priority)!.label} <ChevronDownIcon size={13} /></>}
+              // Fallback guards a render-time throw: an out-of-union value would blank the whole app.
+              trigger={<>{PRIORITIES.find(p => p.value === priority)?.label ?? 'Normal'} <ChevronDownIcon size={13} /></>}
               items={PRIORITIES.map(p => ({ label: p.label, onSelect: () => changePriority(p.value) }))}
             />
           </div>
