@@ -1,5 +1,6 @@
 import type {
-  AliasInfo, MailMessageDetail, OpenedDraft, PreparedQuote, SendingIdentity, StagedAttachmentInfo,
+  AliasInfo, MailMessageDetail, MailPriority, OpenedDraft, PreparedQuote, SendingIdentity,
+  StagedAttachmentInfo,
 } from '../api/mailTypes'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { formatReaderDate } from '../reader/formatReaderDate'
@@ -28,6 +29,8 @@ export interface ComposeSeed {
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]
+  /** Resumed from a saved draft; every other action opens at 'normal'. */
+  priority: MailPriority
   /** Set when the composer is editing an existing draft — the version a save replaces. */
   draftRef: DraftRef | null
   /** Canonical address → the display name the original's headers carried. Feeds contact capture
@@ -81,6 +84,7 @@ export function buildComposeSeed(
       attachments: prepared.attachments,
       inReplyTo: null,
       references: [],
+      priority: 'normal',
       draftRef: null,
       nameHints,
     }
@@ -102,6 +106,7 @@ export function buildComposeSeed(
       attachments: prepared.attachments,
       inReplyTo: threading.inReplyTo,
       references: threading.references,
+      priority: 'normal',
       draftRef: null,
       nameHints,
     }
@@ -118,6 +123,7 @@ export function buildComposeSeed(
     attachments: prepared.attachments,
     inReplyTo: threading.inReplyTo,
     references: threading.references,
+    priority: 'normal',
     draftRef: null,
     nameHints,
   }
@@ -140,6 +146,7 @@ export function buildDraftSeed(
     attachments: opened.attachments,
     inReplyTo: opened.inReplyTo,
     references: opened.references,
+    priority: opened.priority,
     draftRef: ref,
     nameHints: {},
   }

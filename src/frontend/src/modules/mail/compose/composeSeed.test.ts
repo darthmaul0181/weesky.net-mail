@@ -10,6 +10,7 @@ const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail =
   authentication: null, spamScore: null, mailingList: null, sentBy: null, signedBy: null,
   unsubscribeUrl: null, tlsReceived: null, htmlBody: '', textBody: '', blockedImageCount: 0,
   attachments: [], messageId: 'm@x', references: [], inReplyTo: null, replyTo: [], bcc: [],
+  priority: 'normal',
   ...overrides,
 })
 
@@ -44,7 +45,7 @@ describe('staged inline images in a seed', () => {
       to: [], cc: [], bcc: [], subject: 's', fromAddress: null,
       htmlBody: '<img src="/api/Mail/Attachments/i1/content">',
       attachments: [{ id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' }],
-      inReplyTo: null, references: [],
+      inReplyTo: null, references: [], priority: 'normal',
     }
 
     const seed = buildDraftSeed(opened, [], { folderPath: 'Drafts', uid: 9 }, 'linked-1')
@@ -123,6 +124,16 @@ describe('buildComposeSeed', () => {
     }
   })
 
+  /** A reply to an urgent message is not itself urgent, and edit-as-new starts a message of its
+      own — the priority is the sender's fresh choice on all four. */
+  it.each(['reply', 'replyAll', 'forward', 'editAsNew'] as const)(
+    'opens a %s at normal whatever the quoted message declared', (action) => {
+      const seed = buildComposeSeed(
+        action, detail({ priority: 'high' }), prepared, identities, aliases, ['me@weesky.be'], 'primary')
+
+      expect(seed.priority).toBe('normal')
+    })
+
   it('forward: empty recipients, Fwd: subject, banner body, threading', () => {
     const seed = buildComposeSeed('forward', detail(), prepared, identities, aliases, ['me@weesky.be'], 'primary')
     expect(seed.action).toBe('forward')
@@ -157,6 +168,7 @@ describe('buildDraftSeed', () => {
       { id: 'a2', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
     ],
     inReplyTo: 'msg1@ext.example', references: ['msg0@ext.example', 'msg1@ext.example'],
+    priority: 'normal',
   }
   const ref = { folderPath: 'Drafts', uid: 41 }
 
@@ -183,6 +195,10 @@ describe('buildDraftSeed', () => {
     // Case differences must not lose the choice: an IMAP client may have stored it capitalised.
     expect(buildDraftSeed({ ...opened, fromAddress: 'Sales@weesky.be' }, [identity('sales@weesky.be')], ref, 'primary')
       .fromAddress).toBe('sales@weesky.be')
+  })
+
+  it('carries a saved draft priority into the seed', () => {
+    expect(buildDraftSeed({ ...opened, priority: 'high' }, [], ref, 'primary').priority).toBe('high')
   })
 
   // A draft keeps no headers from whatever it was a reply to, so there is nothing to carry.

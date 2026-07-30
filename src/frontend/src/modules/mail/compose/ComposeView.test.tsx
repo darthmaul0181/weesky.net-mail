@@ -243,6 +243,7 @@ describe('ComposeView', () => {
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith({
       to: ['a@b.c'], cc: ['c@b.c'], bcc: [], subject: 'Hello', htmlBody: '<p>Hi</p>', attachmentIds: [],
+      priority: 'normal',
     }, { accountId: 'primary' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
     expect(router.state.location.search).toBe('?folder=Projects')
@@ -415,6 +416,113 @@ describe('ComposeView', () => {
   })
 })
 
+describe('the priority row', () => {
+  const trigger = () => screen.getByRole('button', { name: 'Priority' })
+  const pick = (label: string) => {
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: label }))
+  }
+  const draftSeed: ComposeSeed = {
+    action: 'draft', to: ['alice@ext.example'], cc: [], bcc: [],
+    subject: 'Half written', html: '<p>later</p>', fromAddress: null, attachments: [],
+    inReplyTo: null, references: [], draftRef: { folderPath: 'Drafts', uid: 41 },
+    nameHints: {}, priority: 'normal',
+  }
+
+  it('reveals the priority row from the link beside Cc and Bcc', () => {
+    renderCompose()
+    expect(screen.queryByText('Priority', { selector: '.compose-priority-label' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Priority'))
+
+    expect(trigger()).toHaveTextContent('Normal')
+  })
+
+  it('sends the chosen priority', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    addRecipient('To', 'a@b.c')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: 'high' }), { accountId: 'primary' }))
+  })
+
+  it('sends normal when the row was never opened', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+
+    addRecipient('To', 'a@b.c')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: 'normal' }), { accountId: 'primary' }))
+  })
+
+  /** Folding the row away would take a live setting off the screen while it still rides the mail. */
+  it('keeps the priority row open while the value is not normal', () => {
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('Low')
+
+    expect(screen.queryByText('Priority', { selector: '.compose-link-btn' })).not.toBeInTheDocument()
+    expect(trigger()).toHaveTextContent('Low')
+  })
+
+  // Back at Normal there is nothing left to keep on screen, so the row folds into its link again.
+  it('folds the row away once the value returns to normal', () => {
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    pick('Normal')
+
+    expect(screen.getByText('Priority', { selector: '.compose-link-btn' })).toBeInTheDocument()
+  })
+
+  /** Same rule as a From-only edit: on a resumed draft the priority is the only change there is,
+      and leaving without the guard would silently drop it. */
+  it('arms the leave guard on a priority-only change to a resumed draft', async () => {
+    const { router } = renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  // The other half of the From rule: there is no message here to attach the setting to, so the
+  // prompt would offer to file a draft holding nothing but a priority header.
+  it('leaves an otherwise-empty composer clean', async () => {
+    const { router } = renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+  })
+
+  // The whole point of storing it on the draft: the resumed composer has to open on it and save
+  // it back, or the setting is lost on the first round trip.
+  it('opens a resumed draft on its stored priority and saves it back', async () => {
+    renderCompose('INBOX', { ...draftSeed, priority: 'high' })
+
+    expect(trigger()).toHaveTextContent('High')
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: 'high' }), { accountId: 'primary' }))
+  })
+})
+
 // A reply/forward arrives as router state; the composer opens on it instead of on a blank form.
 describe('a seeded ComposeView', () => {
   const seed: ComposeSeed = {
@@ -427,7 +535,7 @@ describe('a seeded ComposeView', () => {
       { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
     ],
     inReplyTo: 'm@x', references: ['m@x'],
-    draftRef: null, nameHints: {},
+    draftRef: null, nameHints: {}, priority: 'normal',
   }
 
   it('prefills the form', () => {
@@ -667,7 +775,7 @@ describe('drafts in the composer', () => {
     subject: 'Half written', html: '<p>later</p>',
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
-    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {},
+    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {}, priority: 'normal',
   }
   const withParts: ComposeSeed = {
     ...draftSeed,
@@ -874,7 +982,7 @@ describe('capturing new recipients', () => {
     subject: 'Re: Hello', html: '<p>later</p>',
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
-    draftRef: null, nameHints: { 'alice@x.be': 'Alice Dupont' },
+    draftRef: null, nameHints: { 'alice@x.be': 'Alice Dupont' }, priority: 'normal',
   }
 
   beforeEach(() => {

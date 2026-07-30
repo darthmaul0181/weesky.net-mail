@@ -76,6 +76,7 @@ export function mailtoSeedFrom(search: string): ComposeSeed | null {
     subject: decode(fields.get('subject') ?? ''),
     html: body ? `<div>${escapeHtml(body).replace(/\r?\n/g, '<br>')}</div>` : '',
     fromAddress: null,
+    priority: 'normal',
     attachments: [],
     inReplyTo: null,
     references: [],

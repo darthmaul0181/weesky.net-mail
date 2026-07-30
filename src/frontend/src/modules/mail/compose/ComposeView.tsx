@@ -8,7 +8,10 @@ import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
+import DropdownMenu from '../../../components/DropdownMenu'
+import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import RocketIcon from '../../../icons/RocketIcon'
+import type { MailPriority } from '../api/mailTypes'
 import AttachmentTray from './AttachmentTray'
 import EditorToolbar from './EditorToolbar'
 import IdentitySelect from './IdentitySelect'
@@ -28,6 +31,12 @@ const NO_FORMATS: ActiveFormats = {
 const TITLES: Record<ComposeAction, string> = {
   reply: 'Reply', replyAll: 'Reply', forward: 'Forward', editAsNew: 'New message', draft: 'Draft',
 }
+
+const PRIORITIES: { value: MailPriority; label: string }[] = [
+  { value: 'high', label: 'High' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Low' },
+]
 
 interface Props {
   onNotify: (
@@ -81,6 +90,8 @@ export default function ComposeView({ onNotify }: Props) {
   const [bcc, setBcc] = useState<string[]>(seed?.bcc ?? [])
   const [showCc, setShowCc] = useState((seed?.cc.length ?? 0) > 0)
   const [showBcc, setShowBcc] = useState((seed?.bcc.length ?? 0) > 0)
+  const [priority, setPriority] = useState<MailPriority>(seed?.priority ?? 'normal')
+  const [showPriority, setShowPriority] = useState((seed?.priority ?? 'normal') !== 'normal')
   const [subject, setSubject] = useState(seed?.subject ?? '')
   // A seeded body is content the user can lose — dirty from the first render.
   const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html))
@@ -119,6 +130,8 @@ export default function ComposeView({ onNotify }: Props) {
   const changeCc = useCallback((v: string[]) => { markDirty(); setCc(v) }, [markDirty])
   const changeBcc = useCallback((v: string[]) => { markDirty(); setBcc(v) }, [markDirty])
   const changeSubject = useCallback((v: string) => { markDirty(); setSubject(v) }, [markDirty])
+  const changePriority = useCallback((v: MailPriority) => { markDirty(); setPriority(v) }, [markDirty])
+  useEffect(() => { if (priority === 'normal') setShowPriority(false) }, [priority])
   const stageFiles = attachments.addFiles
   const removeStaged = attachments.remove
   const addFiles = useCallback((files: File[]) => { markDirty(); stageFiles(files) }, [markDirty, stageFiles])
@@ -213,6 +226,7 @@ export default function ComposeView({ onNotify }: Props) {
     fromAddress: effectiveFrom ?? undefined,
     inReplyTo: seed?.inReplyTo ?? undefined,
     references: seed?.references && seed.references.length > 0 ? seed.references : undefined,
+    priority,
   })
 
   // A stale identity is still an address that was yours. A live alias carrying no identity is not
@@ -311,12 +325,30 @@ export default function ComposeView({ onNotify }: Props) {
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>Cc</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>Bcc</button>}
+            {!showPriority && (
+              <button type="button" className="compose-link-btn" onClick={() => setShowPriority(true)}>Priority</button>
+            )}
           </span>
         </div>
         {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc}
           contacts={contacts} />}
         {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc}
           contacts={contacts} />}
+        {/* Stays open while the value is not Normal: folding it would take a live setting off the
+            screen while it kept riding on the message. Cc and Bcc are safe to fold — their tokens
+            stay visible either way. */}
+        {(showPriority || priority !== 'normal') && (
+          <div className="compose-priority">
+            <span className="compose-priority-label">Priority</span>
+            <DropdownMenu
+              ariaLabel="Priority"
+              className="compose-priority-select"
+              align="left"
+              trigger={<>{PRIORITIES.find(p => p.value === priority)!.label} <ChevronDownIcon size={13} /></>}
+              items={PRIORITIES.map(p => ({ label: p.label, onSelect: () => changePriority(p.value) }))}
+            />
+          </div>
+        )}
         <div className="field-h">
           <label htmlFor="compose-subject">Subject</label>
           <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />

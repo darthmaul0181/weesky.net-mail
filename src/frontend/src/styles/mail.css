@@ -1467,18 +1467,19 @@
 .compose-link-btn { background: none; border: none; color: var(--action-primary); cursor: pointer; padding: 0; font-size: 13px; }
 
 /* From is plain text, aligned on the same column as the To/Subject boxes. */
-.compose-from { display: flex; align-items: center; gap: 10px; }
-.compose-from-label {
+.compose-from, .compose-priority { display: flex; align-items: center; gap: 10px; }
+.compose-from-label, .compose-priority-label {
   width: 66px; flex-shrink: 0; font-size: 13px; font-weight: 500; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .compose-from-value { font-size: 14px; color: var(--text); }
-.compose-from-select {
+.compose-from-select, .compose-priority-select {
   background: none; border: none; padding: 2px 6px; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
   font: inherit; color: var(--text); border-radius: 6px;
 }
-.compose-from-select:hover { background: var(--pane-item-hover); }
+.compose-from-select:hover, .compose-priority-select:hover { background: var(--pane-item-hover); }
+/* The From trigger uses a right chevron turned down; this one already points down. */
 .compose-from-select svg { transform: rotate(90deg); }
 
 /* ── Compose: attachments ────────────────────────────────────────────────── */
