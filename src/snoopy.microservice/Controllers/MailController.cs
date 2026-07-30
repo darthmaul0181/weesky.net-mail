@@ -1015,7 +1015,7 @@ public sealed class MailController(
             if (refused != null) return refused;
             if (result.Error == IDraftSaver.NoDraftsFolder)
                 return BadGatewayEnveloppe(
-                    "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders list.");
+                    "This mailbox has no drafts folder. Assign the drafts role in Settings > Folders.");
         }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);

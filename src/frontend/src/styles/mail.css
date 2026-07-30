@@ -1121,25 +1121,25 @@
 
 /* ── Move/Copy folder picker ─────────────────────────────── */
 
-.folder-pick-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
+/* max-height, because .modal-overlay centres its child: a dialog taller than the viewport
+   overflows both ends and its own top becomes unreachable, with nothing to scroll. Scoped here
+   rather than put on .modal — a scroll container clips absolutely positioned descendants, and
+   the other dialogs hang an .ownership-dropdown out of their own box. */
+.modal.folder-pick-modal { max-width: 460px; max-height: 100%; overflow-y: auto; }
+
+/* Title, count and filter on one row; the filter drops to its own line when the dialog is
+   narrower than the three of them, which is the whole point of it being last. */
+.folder-pick-modal .admin-list-header { flex-wrap: wrap; gap: 8px 12px; }
+.folder-pick-modal .admin-list-title { display: inline-flex; align-items: baseline; gap: 8px; }
+
+.folder-pick-filter { flex: 0 1 200px; min-width: 150px; padding: 6px 10px; font-size: 13px; }
+
+.folder-pick-count {
+  font-size: 11px;
+  font-weight: 400;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
-
-.folder-pick-search {
-  width: 100%;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-}
-
-.folder-pick-count { margin: 8px 2px 4px; font-size: 11px; color: var(--text-muted); }
 
 .folder-pick-list {
   max-height: 240px;
@@ -1168,37 +1168,38 @@
 .folder-pick-row:hover { background: var(--list-row-hover); }
 .folder-pick-row:disabled { background: none; color: var(--text-muted); cursor: not-allowed; }
 
+/* The picker is a content list, so a picked row wears the selected fill AND the inset accent
+   bar — the message rows' language. A bare fill would read as a navigation pane. */
 .folder-pick-row.is-selected {
   background: var(--list-row-selected-bg);
   color: var(--list-row-selected-fg);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent-unread);
 }
 
 /* indent() writes spaces, which only survive under pre. */
 .folder-pick-indent { white-space: pre; }
 
-.folder-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.folder-pick-badge {
-  margin-left: auto;
-  flex: none;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  color: var(--text-muted);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+/* Takes the slack so the row tag lands at the far right on its own, and the ellipsis has
+   somewhere to happen. */
+.folder-pick-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .folder-pick-empty { padding: 18px 10px; text-align: center; color: var(--text-muted); }
 
-.folder-pick-actions {
+.folder-pick-submit {
   display: flex;
-  gap: 8px;
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+/* .btn-primary is full-width by default, which is the login form's shape, not a dialog's. */
+.folder-pick-submit .btn-primary { width: auto; }
 
 /* ── Advanced search modal ───────────────────────────────── */
 

@@ -82,7 +82,7 @@ function IdentitiesPanel() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <span className="settings-page-title"><MailIcon size={17} /> Identities</span>
+        <h1 className="settings-page-title"><MailIcon size={17} />Identities</h1>
       </div>
       <p className="identities-hint">
         An identity is an address from which you can send emails.<br />

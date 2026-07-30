@@ -1,4 +1,4 @@
-import { displayNameOf, primaryAddressOf } from './contactName'
+import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
 
 const DEFAULT_LIMIT = 10
@@ -35,7 +35,9 @@ export function compareContacts(a: Contact, b: Contact): number {
 
 export interface AddressSuggestion {
   address: string
-  /** Every contact carrying this address, in contact order. Length > 1 for a shared mailbox. */
+  /** Every contact carrying this address that the user actually named, in contact order. Length
+      > 1 for a shared mailbox, and empty for a nameless card — the row is then the address alone,
+      never the address printed twice as its own name. */
   names: string[]
 }
 
@@ -62,20 +64,21 @@ export function suggestionsFor(
     if (!matches(contact, query)) continue
 
     const primary = primaryAddressOf(contact)
+    const name = contactNameOf(contact)
     for (const address of contact.addresses) {
       const key = fold(address.trim())
       if (excludeKeys?.has(key)) continue
 
       const existing = rows.get(key)
       if (existing) {
-        existing.names.push(displayNameOf(contact))
+        if (name !== null) existing.names.push(name)
         existing.favorite ||= contact.isFavorite
         existing.primary ||= address === primary
         continue
       }
       rows.set(key, {
         address,
-        names: [displayNameOf(contact)],
+        names: name === null ? [] : [name],
         favorite: contact.isFavorite,
         primary: address === primary,
       })

@@ -1508,7 +1508,7 @@ describe('MessageReader', () => {
       openKebab()
       fireEvent.click(screen.getByRole('menuitem', { name: 'Move to…' }))
       fireEvent.click(screen.getByText('Archives'))
-      fireEvent.click(screen.getByRole('button', { name: 'Move' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Move to Archives' }))
 
       await waitFor(() =>
         expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives', { accountId: 'primary' }))
@@ -1525,7 +1525,7 @@ describe('MessageReader', () => {
       openKebab()
       fireEvent.click(screen.getByRole('menuitem', { name: 'Copy to…' }))
       fireEvent.click(screen.getByText('Archives'))
-      fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Copy to Archives' }))
 
       await waitFor(() =>
         expect(mocks.copyMessages).toHaveBeenCalledWith('INBOX', [2], 'Archives', { accountId: 'primary' }))

@@ -81,6 +81,19 @@ describe('RecipientsField — contact suggestions', () => {
     expect(screen.getByRole('option', { name: /bruno@x\.be/ })).toHaveTextContent('Bruno Mertens')
   })
 
+  // A nameless card gets the address line and nothing else — printed as its own name too, the row
+  // said the same string twice and read as a person called by their address.
+  it('drops the name line for a contact carrying no name', async () => {
+    const shadow = contact({ id: 's', nickname: 'ghost@x.be', addresses: ['ghost@x.be'] })
+    render(<RecipientsField id="to" label="To" tokens={[]} onChange={vi.fn()} contacts={[shadow]} />)
+
+    await userEvent.type(screen.getByLabelText('To'), 'ghost')
+
+    const row = screen.getByRole('option')
+    expect(row.querySelector('.suggestion-names')).toBeNull()
+    expect(row).toHaveTextContent('ghost@x.be')
+  })
+
   // One row, every owner named: the decision to allow a shared address lands here. Two rows would
   // produce the identical recipient and one name would be an arbitrary pick.
   it('shows a shared address once, naming both contacts', async () => {
@@ -249,6 +262,18 @@ describe('RecipientsField — a token wears its contact name', () => {
     show(['bruno@x.be'], [bruno])
 
     expect(screen.getByRole('button', { name: 'Remove Bruno Mertens' })).toBeInTheDocument()
+  })
+
+  // The bug this exists for: an imported card carrying its own address in a name column sorts
+  // ahead of the real contact — 'd' before 'M' — and first-wins handed the chip an address as a
+  // name. A contact that names nobody must never out-name one that does.
+  it('ignores a contact whose only name is its own address', () => {
+    show(['b@wk.be'], [
+      contact({ id: 'shadow', nickname: 'b@wk.be', addresses: ['b@wk.be'] }),
+      bruno,
+    ])
+
+    expect(screen.getByText('Bruno Mertens')).toHaveAttribute('title', 'b@wk.be')
   })
 
   // One address, two contacts: the chip keeps the name the dropdown offered it under — favourites

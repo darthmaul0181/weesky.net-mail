@@ -118,7 +118,7 @@ export default function ConnectedAccountsPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <span className="settings-page-title"><PersonPlusIcon /> Connected accounts</span>
+        <h1 className="settings-page-title"><PersonPlusIcon size={17} />Connected accounts</h1>
       </div>
       <p className="settings-note">
         Read and send mail from other mailboxes without signing out.

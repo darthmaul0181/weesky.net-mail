@@ -24,7 +24,7 @@ export default function AdminPage() {
     <>
       <div className="settings-page admin-page">
         <div className="settings-page-header">
-          <span className="settings-page-title"><ShieldIcon /> Administration</span>
+          <h1 className="settings-page-title"><ShieldIcon size={17} />Administration</h1>
         </div>
         <div className="admin-modal-body">
           <nav className="admin-tab-bar">
