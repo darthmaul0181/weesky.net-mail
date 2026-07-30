@@ -46,6 +46,9 @@ public sealed class MailMessageDetail
     public string? UnsubscribeUrl { get; set; }
     public bool? TlsReceived { get; set; }
 
+    /// <summary>Priority the sender declared. Normal when the message carries no priority header.</summary>
+    public MailPriority Priority { get; set; } = MailPriority.Normal;
+
     /// <summary>Sanitised HTML body. Empty when the message is text-only.</summary>
     public string HtmlBody { get; set; } = string.Empty;
 

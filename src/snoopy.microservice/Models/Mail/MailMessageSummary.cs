@@ -29,4 +29,7 @@ public class MailMessageSummary
 
     /// <summary>Short body extract for the list row. Empty when the server cannot supply one.</summary>
     public string Preview { get; set; } = string.Empty;
+
+    /// <summary>Priority the sender declared. Normal when the message carries no priority header.</summary>
+    public MailPriority Priority { get; set; } = MailPriority.Normal;
 }

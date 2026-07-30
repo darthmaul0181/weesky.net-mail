@@ -61,6 +61,44 @@ public sealed class ImapSessionTests
         Assert.Empty(summary.To);
     }
 
+    /// <summary>A fetched summary carrying the headers the priority is read out of.</summary>
+    private static IMessageSummary FakeSummary(HeaderList? headers)
+    {
+        var item = new Mock<IMessageSummary>();
+        item.SetupGet(i => i.UniqueId).Returns(new UniqueId(7));
+        item.SetupGet(i => i.Headers).Returns(headers!);
+        return item.Object;
+    }
+
+    /// <summary>The list row's marker comes from here, and search hits share the mapping.</summary>
+    [Fact]
+    public void FillSummary_ReadsThePriorityOffTheFetchedHeaders()
+    {
+        var headers = new HeaderList();
+        headers.Add("X-Priority", "1 (Highest)");
+
+        var summary = ImapSession.FillSummary(new MailMessageSummary(), FakeSummary(headers));
+
+        Assert.Equal(MailPriority.High, summary.Priority);
+    }
+
+    [Fact]
+    public void FillSummary_IsNormalWhenTheMessageCarriesNoPriorityHeader()
+    {
+        var summary = ImapSession.FillSummary(new MailMessageSummary(), FakeSummary(new HeaderList()));
+
+        Assert.Equal(MailPriority.Normal, summary.Priority);
+    }
+
+    /// <summary>A server that answered without the header set must not throw or invent a priority.</summary>
+    [Fact]
+    public void FillSummary_IsNormalWhenTheServerReturnedNoHeadersAtAll()
+    {
+        var summary = ImapSession.FillSummary(new MailMessageSummary(), FakeSummary(headers: null));
+
+        Assert.Equal(MailPriority.Normal, summary.Priority);
+    }
+
     [Fact]
     public void SpecialUseFromAttributes_ReturnsNullWithoutAFlag()
     {
