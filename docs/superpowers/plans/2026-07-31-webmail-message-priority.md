@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-31-webmail-message-priority-design.md`
 
+**Three tasks:** backend end to end, then the composer that sets it, then the display that shows it. Each is one review gate and can fail without the others. Each carries intermediate commits — the task boundary is the *review* boundary, not the commit boundary.
+
 ## Global Constraints
 
 - **`Normal` writes no header at all** — not `X-Priority: 3`. An ordinary message says nothing about its priority.
@@ -19,7 +21,7 @@
 - **`ApiDocumentation.xml` is a tracked artefact that `dotnet test` rewrites** with hundreds of unrelated lines. Check `git status` before every backend commit and `git checkout -- src/snoopy.microservice/ApiDocumentation.xml` if it moved for reasons unrelated to your change.
 - **Frontend tests:** `npx vitest run <path>` from `src/frontend`; `npm run lint` and `npm run typecheck` before each frontend commit.
 - **No literal colours** in `mail.css` — use role tokens (`--danger`, `--text-muted`).
-- **jsdom sees no layout.** Do not assert geometry in a test; the browser check is Task 7.
+- **jsdom sees no layout.** Do not assert geometry in a test; the browser check is the last step of Task 3.
 
 ## Two refinements over the spec
 
@@ -30,22 +32,32 @@ Both are deliberate and are called out where they land:
 
 ---
 
-### Task 1: The enum and the pure header pair
+## Task 1: Backend — the priority, written and read
 
 **Files:**
 - Create: `src/snoopy.microservice/Models/Mail/MailPriority.cs`
 - Create: `src/snoopy.microservice/Services/MailPriorityReader.cs`
 - Create: `src/snoopy.microservice/Services/MailPriorityHeaders.cs`
-- Test: `src/snoopy.microservice/snoopy.microservice.Tests/Services/MailPriorityReaderTests.cs`
-- Test: `src/snoopy.microservice/snoopy.microservice.Tests/Services/MailPriorityHeadersTests.cs`
+- Modify: `src/snoopy.microservice/Models/Mail/SendMessageRequest.cs`
+- Modify: `src/snoopy.microservice/Models/Mail/OpenedDraft.cs`
+- Modify: `src/snoopy.microservice/Models/Mail/MailMessageSummary.cs`
+- Modify: `src/snoopy.microservice/Models/Mail/MailMessageDetail.cs`
+- Modify: `src/snoopy.microservice/Services/OutgoingMessageFactory.cs` (in `BuildMessageAsync`, beside the existing `ApplyThreadingHeaders` call)
+- Modify: `src/snoopy.microservice/Controllers/MailController.cs:1176-1184` (`ToOpenedDraft`)
+- Modify: `src/snoopy.microservice/Services/ImapSession.cs` — `SummaryItems` (~640), `FillSummary` (~648), three `FetchAsync` call sites (~486, ~615, ~627), the detail mapping (~744)
+- Test: `.../Tests/Services/MailPriorityReaderTests.cs` (create), `.../Tests/Services/MailPriorityHeadersTests.cs` (create), `.../Tests/Controllers/MailControllerTests.cs`, `.../Tests/Services/ImapSessionTests.cs`
 
 **Interfaces:**
-- Consumes: `HeaderListExtensions.Topmost(this HeaderList, string field)` — already exists in `Services/HeaderListExtensions.cs`, returns `Header?`.
-- Produces:
-  - `enum MailPriority { Normal, High, Low }` in namespace `weesky.Snoopy.Microservice.Models.Mail`
-  - `MailPriorityReader.Parse(HeaderList headers) → MailPriority`
-  - `MailPriorityReader.Fields → string[]` (the four header names a FETCH must request)
-  - `MailPriorityHeaders.Apply(MimeMessage message, MailPriority priority) → void`
+- Consumes: `HeaderListExtensions.Topmost(this HeaderList, string field) → Header?`, already in `Services/HeaderListExtensions.cs`.
+- Produces, for Tasks 2 and 3 to consume across the wire:
+  - `enum MailPriority { Normal, High, Low }` in `weesky.Snoopy.Microservice.Models.Mail`, serialising as `"normal" | "high" | "low"`
+  - `MailPriorityReader.Parse(HeaderList) → MailPriority`, `MailPriorityReader.Fields → string[]`
+  - `MailPriorityHeaders.Apply(MimeMessage, MailPriority) → void`
+  - `SendMessageRequest.Priority` (inherited by `SaveDraftRequest`)
+  - `OpenedDraft.Priority` as the **tenth positional parameter**, after `References`
+  - `MailMessageSummary.Priority`, `MailMessageDetail.Priority`
+
+### Part A — the pure pair
 
 - [ ] **Step 1: Write the failing reader tests**
 
@@ -125,7 +137,7 @@ public class MailPriorityReaderTests
 }
 ```
 
-- [ ] **Step 2: Write the failing wire-format and writer tests**
+- [ ] **Step 2: Write the failing writer and wire-format tests**
 
 Create `src/snoopy.microservice/snoopy.microservice.Tests/Services/MailPriorityHeadersTests.cs`:
 
@@ -342,9 +354,9 @@ dotnet test --filter "FullyQualifiedName~MailPriority"
 
 Expected: PASS, all of them.
 
-If `SerialisesToTheLowerCaseWireValue` fails, `JsonStringEnumMemberName` is not doing what this plan assumes. Do **not** change the global converter in `Program.cs` — that would move every other enum on the API. Instead drop the attributes and use the PascalCase values (`'Normal' | 'High' | 'Low'`) in the frontend union type in Task 4, and note the change in the commit message.
+If `SerialisesToTheLowerCaseWireValue` fails, `JsonStringEnumMemberName` is not doing what this plan assumes. Do **not** change the global converter in `Program.cs` — that would move every other enum on the API. Instead drop the attributes, use the PascalCase values (`'Normal' | 'High' | 'Low'`) in the frontend union type in Task 2, and say so in the commit message.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Commit the pure pair**
 
 ```bash
 git status   # revert ApiDocumentation.xml if dotnet test rewrote it
@@ -356,24 +368,9 @@ git add src/snoopy.microservice/Models/Mail/MailPriority.cs \
 git commit -m "Add the mail priority enum and its header pair"
 ```
 
----
+### Part B — the write path
 
-### Task 2: The write path — send, draft, and the draft round trip
-
-**Files:**
-- Modify: `src/snoopy.microservice/Models/Mail/SendMessageRequest.cs`
-- Modify: `src/snoopy.microservice/Models/Mail/OpenedDraft.cs`
-- Modify: `src/snoopy.microservice/Services/OutgoingMessageFactory.cs` (in `BuildMessageAsync`, beside the existing `ApplyThreadingHeaders` call)
-- Modify: `src/snoopy.microservice/Controllers/MailController.cs:1176-1184` (`ToOpenedDraft`)
-- Test: `src/snoopy.microservice/snoopy.microservice.Tests/Controllers/MailControllerTests.cs`
-
-**Interfaces:**
-- Consumes: `MailPriority`, `MailPriorityReader.Parse`, `MailPriorityHeaders.Apply` from Task 1.
-- Produces:
-  - `SendMessageRequest.Priority` (type `MailPriority`, defaults to `MailPriority.Normal`) — inherited by `SaveDraftRequest`, which already derives from it.
-  - `OpenedDraft.Priority` as the **tenth positional parameter**, after `References`.
-
-- [ ] **Step 1: Add the request field**
+- [ ] **Step 9: Add the request field**
 
 In `src/snoopy.microservice/Models/Mail/SendMessageRequest.cs`, after the `References` property:
 
@@ -384,7 +381,7 @@ In `src/snoopy.microservice/Models/Mail/SendMessageRequest.cs`, after the `Refer
 
 `SaveDraftRequest` derives from this record, so drafts get the field with no change of their own.
 
-- [ ] **Step 2: Call the writer from the factory**
+- [ ] **Step 10: Call the writer from the factory**
 
 In `src/snoopy.microservice/Services/OutgoingMessageFactory.cs`, inside `BuildMessageAsync`, immediately after the existing line:
 
@@ -398,9 +395,9 @@ add:
         MailPriorityHeaders.Apply(message, request.Priority);
 ```
 
-- [ ] **Step 3: Carry the priority back out of a saved draft**
+- [ ] **Step 11: Carry the priority back out of a saved draft**
 
-In `src/snoopy.microservice/Models/Mail/OpenedDraft.cs`, add the parameter at the end of the record:
+Rewrite `src/snoopy.microservice/Models/Mail/OpenedDraft.cs`:
 
 ```csharp
 namespace weesky.Snoopy.Microservice.Models.Mail;
@@ -435,9 +432,9 @@ In `src/snoopy.microservice/Controllers/MailController.cs`, `ToOpenedDraft` — 
             MailPriorityReader.Parse(message.Headers));
 ```
 
-- [ ] **Step 4: Write the failing controller tests**
+- [ ] **Step 12: Write the controller tests**
 
-In `src/snoopy.microservice/snoopy.microservice.Tests/Controllers/MailControllerTests.cs`, add these three tests. Follow the file's own existing conventions for building an authenticated controller and its mocks — read a neighbouring `Send`/`SaveDraft`/`OpenDraft` test in that file and mirror its arrangement rather than inventing a new one.
+In `src/snoopy.microservice/snoopy.microservice.Tests/Controllers/MailControllerTests.cs`, add these three. Follow the file's own conventions for building an authenticated controller and its mocks — read a neighbouring `Send` / `SaveDraft` / `OpenDraft` test and mirror its arrangement rather than inventing a new one.
 
 ```csharp
     /// <summary>The priority has to survive the hop from the request into the factory's argument.</summary>
@@ -490,23 +487,15 @@ In `src/snoopy.microservice/snoopy.microservice.Tests/Controllers/MailController
 
 `_outgoing`, `CreateController()`, `ValidSendRequest()`, `ValidDraftRequest()`, `StubOpenDraft(...)` and `Envelope(...)` stand in for whatever this file already calls those things. If a helper does not exist under some name, build the arrangement inline exactly the way the neighbouring test for the same endpoint does. Do **not** add a new test-helper layer.
 
-- [ ] **Step 5: Run the tests to verify they fail, then pass**
+- [ ] **Step 13: Run them**
 
 ```bash
 dotnet test --filter "FullyQualifiedName~MailControllerTests"
 ```
 
-Expected on a first run before Steps 1–3 are in place: FAIL. With them in place: PASS. Because Steps 1–3 and the tests land together here, run it once and expect PASS; if it fails, the message names which of the three wirings is missing.
-
-- [ ] **Step 6: Run the whole backend suite**
-
-```bash
-dotnet test
-```
-
 Expected: PASS. `OpenedDraft` gained a positional parameter, so any other construction of it in the suite is now a compile error — the compiler names each one; add `MailPriority.Normal` there.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 14: Commit the write path**
 
 ```bash
 git status   # revert ApiDocumentation.xml if it moved
@@ -518,21 +507,9 @@ git add src/snoopy.microservice/Models/Mail/SendMessageRequest.cs \
 git commit -m "Write the priority headers on send and on draft save"
 ```
 
----
+### Part C — the read path
 
-### Task 3: The read path — summary, detail, and the FETCH that pays for it
-
-**Files:**
-- Modify: `src/snoopy.microservice/Models/Mail/MailMessageSummary.cs`
-- Modify: `src/snoopy.microservice/Models/Mail/MailMessageDetail.cs`
-- Modify: `src/snoopy.microservice/Services/ImapSession.cs` — `SummaryItems` (~line 640), `FillSummary` (~line 648), the three `FetchAsync` call sites (~486, ~615, ~627), the detail mapping (~line 744)
-- Test: `src/snoopy.microservice/snoopy.microservice.Tests/Services/ImapSessionTests.cs`
-
-**Interfaces:**
-- Consumes: `MailPriority`, `MailPriorityReader.Parse`, `MailPriorityReader.Fields` from Task 1.
-- Produces: `MailMessageSummary.Priority` and `MailMessageDetail.Priority`, both `MailPriority`, both defaulting to `Normal`.
-
-- [ ] **Step 1: Add the two properties**
+- [ ] **Step 15: Add the two properties**
 
 In `src/snoopy.microservice/Models/Mail/MailMessageSummary.cs`, after `Preview`:
 
@@ -548,7 +525,7 @@ In `src/snoopy.microservice/Models/Mail/MailMessageDetail.cs`, after `TlsReceive
     public MailPriority Priority { get; set; } = MailPriority.Normal;
 ```
 
-- [ ] **Step 2: Ask the FETCH for the four header fields**
+- [ ] **Step 16: Ask the FETCH for the four header fields**
 
 In `src/snoopy.microservice/Services/ImapSession.cs`, beside the existing `SummaryItems` constant:
 
@@ -580,9 +557,9 @@ var sortedItems = await folder.FetchAsync(wanted, SummaryItems, SummaryHeaders, 
 var items = await folder.FetchAsync(start, end, SummaryItems, SummaryHeaders, cancellationToken);
 ```
 
-Leave every *other* `FetchAsync` in the file alone — the attachment-filter fetch (~line 531) and the search-hit fetch (~line 462) ask for different items and need no headers.
+Leave every *other* `FetchAsync` in the file alone — the attachment-filter fetch (~531) and the search-hit fetch (~462) ask for different items and need no headers.
 
-- [ ] **Step 3: Read it in the one shared mapping**
+- [ ] **Step 17: Read it in the one shared mapping**
 
 In `FillSummary`, after the `summary.Preview` line and before `return summary;`:
 
@@ -590,17 +567,15 @@ In `FillSummary`, after the `summary.Preview` line and before `return summary;`:
         summary.Priority = item.Headers is { } headers ? MailPriorityReader.Parse(headers) : MailPriority.Normal;
 ```
 
-In the detail mapping (~line 744, the object initialiser that already sets `SpamScore`), add after `TlsReceived`:
+In the detail mapping (~744, the object initialiser that already sets `SpamScore`), add after `TlsReceived` — note the trailing comma the line above now needs:
 
 ```csharp
                 Priority = MailPriorityReader.Parse(message.Headers)
 ```
 
-Note the trailing comma on the line above it.
+- [ ] **Step 18: Write the mapping tests**
 
-- [ ] **Step 4: Write the failing tests**
-
-In `src/snoopy.microservice/snoopy.microservice.Tests/Services/ImapSessionTests.cs`, add tests exercising `ImapSession.FillSummary` directly — it is `internal static` and the test project already sees internals (the file tests other internals of this class; if `InternalsVisibleTo` is missing, the existing tests would not compile, so it is present).
+In `src/snoopy.microservice/snoopy.microservice.Tests/Services/ImapSessionTests.cs`, exercising `ImapSession.FillSummary` directly — it is `internal static` and the test project already sees internals (the file tests other internals of this class, so `InternalsVisibleTo` is present).
 
 ```csharp
     /// <summary>The list row's marker comes from here, and search hits share the mapping.</summary>
@@ -633,17 +608,9 @@ In `src/snoopy.microservice/snoopy.microservice.Tests/Services/ImapSessionTests.
     }
 ```
 
-`FakeSummary(HeaderList?)` builds an `IMessageSummary` test double carrying those headers. This file already fabricates `IMessageSummary` values for its other `FillSummary` assertions — reuse that helper and give it a headers parameter rather than writing a second one. If no such helper exists, add one local to this test class using the same mocking approach (`Moq`) the file already uses for MailKit interfaces.
+`FakeSummary(HeaderList?)` builds an `IMessageSummary` test double carrying those headers. This file already fabricates `IMessageSummary` values for its other `FillSummary` assertions — reuse that helper and give it a headers parameter rather than writing a second one. If no such helper exists, add one local to this test class using the same `Moq` approach the file already uses for MailKit interfaces.
 
-- [ ] **Step 5: Run the tests**
-
-```bash
-dotnet test --filter "FullyQualifiedName~ImapSessionTests"
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Run the whole backend suite**
+- [ ] **Step 19: Run the whole backend suite**
 
 ```bash
 dotnet test
@@ -651,7 +618,7 @@ dotnet test
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 20: Commit the read path**
 
 ```bash
 git status   # revert ApiDocumentation.xml if it moved
@@ -664,20 +631,20 @@ git commit -m "Read the priority into the message summary and detail"
 
 ---
 
-### Task 4: The composer sets a priority
+## Task 2: The composer sets a priority, and a draft keeps it
 
 **Files:**
 - Modify: `src/frontend/src/modules/mail/api/mailTypes.ts`
 - Modify: `src/frontend/src/modules/mail/compose/ComposeView.tsx`
+- Modify: `src/frontend/src/modules/mail/compose/composeSeed.ts`
 - Modify: `src/frontend/src/styles/mail.css:1466-1482`
-- Test: `src/frontend/src/modules/mail/compose/ComposeView.test.tsx`
+- Test: `src/frontend/src/modules/mail/compose/ComposeView.test.tsx`, `src/frontend/src/modules/mail/compose/composeSeed.test.ts`
 
 **Interfaces:**
-- Consumes: the wire values from Task 1 — `"normal" | "high" | "low"`.
-- Produces:
+- Consumes: the wire values from Task 1 — `"normal" | "high" | "low"` on the send payload, the draft payload and `OpenedDraft`.
+- Produces, for Task 3 to consume:
   - `export type MailPriority = 'normal' | 'high' | 'low'` in `mailTypes.ts`
-  - `priority` on `MailMessageSummary`, `MailMessageDetail` and `OpenedDraft` (all required, all `MailPriority`)
-  - `priority` in the object `ComposeView.buildPayload()` returns
+  - `priority: MailPriority` on `MailMessageSummary`, `MailMessageDetail` and `OpenedDraft` (all required)
 
 - [ ] **Step 1: Add the type and the three fields**
 
@@ -696,18 +663,18 @@ Add `priority: MailPriority` to `MailMessageSummary` (after `preview`), to `Mail
 cd src/frontend && npm run typecheck
 ```
 
-Expected: FAIL, naming each test fixture that builds a `MailMessageSummary`, `MailMessageDetail` or `OpenedDraft` without `priority`. Add `priority: 'normal'` to each one it names. Re-run until it passes. Do **not** make the field optional to dodge this — the API always sends it, and an optional field would let a real omission through.
+Expected: FAIL, naming each test fixture that builds one of those three without `priority`. Add `priority: 'normal'` to each one it names, and re-run until it passes. Do **not** make the field optional to dodge this — the API always sends it, and an optional field would let a real omission through.
 
 - [ ] **Step 3: Write the failing composer tests**
 
 In `src/frontend/src/modules/mail/compose/ComposeView.test.tsx`, following that file's existing render helper and mocks:
 
 ```tsx
-it('reveals the priority row from the link beside Cc and Bcc', async () => {
+it('reveals the priority row from the link beside Cc and Bcc', () => {
   renderCompose()
   expect(screen.queryByRole('button', { name: 'Priority' })).not.toBeInTheDocument()
 
-  fireEvent.click(screen.getByRole('button', { name: 'Priority', exact: true }))
+  fireEvent.click(screen.getByText('Priority'))
 
   expect(screen.getByRole('button', { name: 'Priority' })).toHaveTextContent('Normal')
 })
@@ -753,15 +720,34 @@ it('arms the leave guard on a priority-only change', () => {
 })
 ```
 
-`renderCompose()` and `fillRecipientAndSend()` stand in for this file's existing helpers — read a neighbouring send test and mirror it. The last test's final assertion should match however this file already asserts that the leave prompt appeared; copy that assertion rather than inventing one.
+`renderCompose()` and `fillRecipientAndSend()` stand in for this file's existing helpers — read a neighbouring send test and mirror it. The last assertion should match however this file already asserts that the leave prompt appeared; copy that rather than inventing one.
+
+And in `src/frontend/src/modules/mail/compose/composeSeed.test.ts` (create it if this repo has no such file — if the seed builders are tested inside another file, add these there instead):
+
+```ts
+it('carries a saved draft priority into the seed', () => {
+  const seed = buildDraftSeed(openedDraft({ priority: 'high' }), [], ref, 'primary')
+
+  expect(seed.priority).toBe('high')
+})
+
+/** A reply to an urgent message is not itself urgent. */
+it('opens a reply at normal whatever the quoted message declared', () => {
+  const seed = buildReplySeed(detail({ priority: 'high' }), quote, [], [], 'reply', 'primary')
+
+  expect(seed.priority).toBe('normal')
+})
+```
+
+`openedDraft(...)`, `detail(...)`, `ref` and `quote` stand in for the fixture builders the surrounding tests already use; match the real signature of `buildReplySeed` as it exists in `composeSeed.ts` rather than the sketch above.
 
 - [ ] **Step 4: Run them to verify they fail**
 
 ```bash
-npx vitest run src/modules/mail/compose/ComposeView.test.tsx
+npx vitest run src/modules/mail/compose/
 ```
 
-Expected: FAIL — no `Priority` link exists.
+Expected: FAIL — no `Priority` link exists and `priority` is not on `ComposeSeed`.
 
 - [ ] **Step 5: Add the state, the link and the row**
 
@@ -844,13 +830,38 @@ and add the row itself between the Bcc field and the Subject `.field-h`:
         )}
 ```
 
-Finally, fold the row away when the value returns to Normal — add beside the other effects:
+Finally, fold the row away when the value returns to Normal — beside the other effects:
 
 ```tsx
 useEffect(() => { if (priority === 'normal') setShowPriority(false) }, [priority])
 ```
 
-- [ ] **Step 6: Style the row on the From row's rules**
+- [ ] **Step 6: Seed the priority from a resumed draft**
+
+In `src/frontend/src/modules/mail/compose/composeSeed.ts`, add to the `ComposeSeed` interface, after `references`:
+
+```ts
+  /** Resumed from a saved draft; every other action opens at 'normal'. */
+  priority: MailPriority
+```
+
+Import the type from `../api/mailTypes` alongside the existing imports.
+
+In `buildDraftSeed`, add to the returned object:
+
+```ts
+    priority: opened.priority,
+```
+
+In **every other** seed builder in this file — reply, reply-all, forward, edit-as-new — add:
+
+```ts
+    priority: 'normal',
+```
+
+Edit-as-new included: it reopens a *sent* message as a fresh one, and the new message's priority is the sender's fresh choice.
+
+- [ ] **Step 7: Style the row on the From row's rules**
 
 In `src/frontend/src/styles/mail.css`, extend the three existing selectors rather than duplicating their values, so the label column stays 66px wide by construction:
 
@@ -873,126 +884,40 @@ In `src/frontend/src/styles/mail.css`, extend the three existing selectors rathe
 
 The rotation rule stays on `.compose-from-select` alone — that trigger uses a right chevron turned down, while this one uses `ChevronDownIcon`, which already points down.
 
-- [ ] **Step 7: Run the tests, lint and typecheck**
-
-```bash
-npx vitest run src/modules/mail/compose/ComposeView.test.tsx
-npm run lint && npm run typecheck
-```
-
-Expected: PASS.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add src/frontend/src/modules/mail/api/mailTypes.ts \
-        src/frontend/src/modules/mail/compose/ComposeView.tsx \
-        src/frontend/src/modules/mail/compose/ComposeView.test.tsx \
-        src/frontend/src/styles/mail.css
-git commit -m "Let the composer set a message priority"
-```
-
-Add any other test file the typecheck step made you touch to the same commit.
-
----
-
-### Task 5: A resumed draft keeps its priority
-
-**Files:**
-- Modify: `src/frontend/src/modules/mail/compose/composeSeed.ts`
-- Test: `src/frontend/src/modules/mail/compose/composeSeed.test.ts`
-
-**Interfaces:**
-- Consumes: `OpenedDraft.priority` (Task 4), `ComposeSeed` (existing).
-- Produces: `ComposeSeed.priority` of type `MailPriority` — already read by `ComposeView` in Task 4 as `seed?.priority ?? 'normal'`.
-
-- [ ] **Step 1: Write the failing seed tests**
-
-In `src/frontend/src/modules/mail/compose/composeSeed.test.ts` (create it if this repo has no such file — check first; if the seed builders are tested inside another file, add these there instead):
-
-```ts
-it('carries a saved draft priority into the seed', () => {
-  const seed = buildDraftSeed(openedDraft({ priority: 'high' }), [], ref, 'primary')
-
-  expect(seed.priority).toBe('high')
-})
-
-/** A reply to an urgent message is not itself urgent. */
-it('opens a reply at normal whatever the quoted message declared', () => {
-  const seed = buildReplySeed(detail({ priority: 'high' }), quote, [], [], 'reply', 'primary')
-
-  expect(seed.priority).toBe('normal')
-})
-```
-
-`openedDraft(...)`, `detail(...)`, `ref` and `quote` stand in for the fixture builders the surrounding tests already use; mirror a neighbouring test's arrangement, and match the real signature of `buildReplySeed` as it exists in `composeSeed.ts` rather than the sketch above.
-
-- [ ] **Step 2: Run them to verify they fail**
-
-```bash
-npx vitest run src/modules/mail/compose/composeSeed.test.ts
-```
-
-Expected: FAIL — `priority` is not on `ComposeSeed`.
-
-- [ ] **Step 3: Add the field and fill it**
-
-In `src/frontend/src/modules/mail/compose/composeSeed.ts`:
-
-Add to the `ComposeSeed` interface, after `references`:
-
-```ts
-  /** Resumed from a saved draft; every other action opens at 'normal'. */
-  priority: MailPriority
-```
-
-Import the type from `../api/mailTypes` alongside the existing imports there.
-
-In `buildDraftSeed`, add to the returned object:
-
-```ts
-    priority: opened.priority,
-```
-
-In **every other** seed builder in this file — the reply / reply-all / forward / edit-as-new path — add:
-
-```ts
-    priority: 'normal',
-```
-
-Edit-as-new included: it re-opens a *sent* message as a fresh one, and the new message's priority is the sender's fresh choice.
-
-- [ ] **Step 4: Run the tests, lint and typecheck**
+- [ ] **Step 8: Run the tests, lint and typecheck**
 
 ```bash
 npx vitest run src/modules/mail/compose/
 npm run lint && npm run typecheck
 ```
 
-Expected: PASS. Typecheck names any `ComposeSeed` fixture in another test file that now lacks `priority`; add `priority: 'normal'` there.
+Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/frontend/src/modules/mail/compose/
-git commit -m "Restore a draft's priority when it is reopened"
+git add src/frontend/src/modules/mail/api/mailTypes.ts \
+        src/frontend/src/modules/mail/compose/ \
+        src/frontend/src/styles/mail.css
+git commit -m "Let the composer set a priority and a draft keep it"
 ```
+
+Add any other test file the typecheck step made you touch to the same commit.
 
 ---
 
-### Task 6: The list row and the reader show it
+## Task 3: The list row and the reader show it
 
 **Files:**
-- Create: `src/frontend/src/icons/PriorityHighIcon.tsx`
-- Create: `src/frontend/src/icons/PriorityLowIcon.tsx`
+- Create: `src/frontend/src/icons/PriorityHighIcon.tsx`, `src/frontend/src/icons/PriorityLowIcon.tsx`
 - Modify: `src/frontend/src/icons/icons.test.tsx`
-- Modify: `src/frontend/src/modules/mail/list/MessageList.tsx` (~line 328 for the a11y label, ~455 wide skin, ~476 narrow skin)
+- Modify: `src/frontend/src/modules/mail/list/MessageList.tsx` (~328 the a11y label, ~455 wide skin, ~476 narrow skin)
 - Modify: `src/frontend/src/modules/mail/reader/MessageReader.tsx` (the `<h1 className="reader-subject">`)
 - Modify: `src/frontend/src/styles/mail.css`
 - Test: `src/frontend/src/modules/mail/list/MessageList.test.tsx`, `src/frontend/src/modules/mail/reader/MessageReader.test.tsx`
 
 **Interfaces:**
-- Consumes: `MailMessageSummary.priority`, `MailMessageDetail.priority` (Task 4).
+- Consumes: `MailMessageSummary.priority`, `MailMessageDetail.priority` (Task 2).
 - Produces: `PriorityHighIcon` and `PriorityLowIcon`, both `({ size = 12 }: { size?: number })`.
 
 - [ ] **Step 1: Create the two icons**
@@ -1027,9 +952,9 @@ export default function PriorityLowIcon({ size = 12 }: { size?: number }) {
 
 A matched pair — one scale read up and read down. Two unrelated marks (a flag and an arrow) would read as two unrelated facts.
 
-Register both in `src/frontend/src/icons/icons.test.tsx`: add the two imports and two rows to the `icons` array, `defaultSize: '12'`.
+Register both in `src/frontend/src/icons/icons.test.tsx`: two imports and two rows in the `icons` array, `defaultSize: '12'`.
 
-- [ ] **Step 2: Write the failing list tests**
+- [ ] **Step 2: Write the failing display tests**
 
 In `src/frontend/src/modules/mail/list/MessageList.test.tsx`, using the file's existing render helper and message fixture builder:
 
@@ -1063,8 +988,6 @@ it('says the priority in the row name', async () => {
 })
 ```
 
-- [ ] **Step 3: Write the failing reader test**
-
 In `src/frontend/src/modules/mail/reader/MessageReader.test.tsx`, with that file's existing helpers:
 
 ```tsx
@@ -1082,7 +1005,7 @@ it('shows no chip at normal priority', async () => {
 })
 ```
 
-- [ ] **Step 4: Run both to verify they fail**
+- [ ] **Step 3: Run them to verify they fail**
 
 ```bash
 npx vitest run src/modules/mail/list/MessageList.test.tsx src/modules/mail/reader/MessageReader.test.tsx
@@ -1090,7 +1013,7 @@ npx vitest run src/modules/mail/list/MessageList.test.tsx src/modules/mail/reade
 
 Expected: FAIL — nothing renders a priority mark.
 
-- [ ] **Step 5: Render the mark in both row skins**
+- [ ] **Step 4: Render the mark in both row skins**
 
 In `src/frontend/src/modules/mail/list/MessageList.tsx`, import the two icons, then inside the row-rendering callback, beside the existing `const subject = …` line:
 
@@ -1112,7 +1035,7 @@ Add it to the accessible name — the existing `label` line becomes:
               + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
 ```
 
-In the **wide** skin, put it first inside `.message-row-line`:
+In the **wide** skin, first inside `.message-row-line`:
 
 ```tsx
                       <span className="message-row-line">
@@ -1120,13 +1043,13 @@ In the **wide** skin, put it first inside `.message-row-line`:
                         {subject}
 ```
 
-In the **narrow** skin, put it first inside `.message-row-subject`:
+In the **narrow** skin, first inside `.message-row-subject`:
 
 ```tsx
                       <div className="message-row-subject">{priorityMark}{subject}</div>
 ```
 
-- [ ] **Step 6: Render the chip in the reader**
+- [ ] **Step 5: Render the chip in the reader**
 
 In `src/frontend/src/modules/mail/reader/MessageReader.tsx`, import `Tooltip` from `../../../components/Tooltip` if it is not already imported, and render the chip as the last child of the `<h1 className="reader-subject">`, after the subject text:
 
@@ -1145,9 +1068,9 @@ In `src/frontend/src/modules/mail/reader/MessageReader.tsx`, import `Tooltip` fr
             )}
 ```
 
-Match `Tooltip`'s real prop names by reading `src/frontend/src/components/Tooltip.tsx` first — the wrapper takes a trigger as children and its bubble text as a prop, but the prop's exact name is that file's to give.
+Match `Tooltip`'s real prop names by reading `src/frontend/src/components/Tooltip.tsx` first — it wraps a trigger passed as children and takes its bubble text as a prop, but that prop's exact name is that file's to give.
 
-- [ ] **Step 7: Style both**
+- [ ] **Step 6: Style both**
 
 In `src/frontend/src/styles/mail.css`, in the message-list section:
 
@@ -1172,24 +1095,16 @@ and in the reader section:
 .reader-priority.is-low { color: var(--text-muted); }
 ```
 
-- [ ] **Step 8: Run the tests, lint and typecheck**
+- [ ] **Step 7: Run the whole frontend suite, lint and typecheck**
 
 ```bash
-npx vitest run src/modules/mail/list/ src/modules/mail/reader/ src/icons/
+npm test
 npm run lint && npm run typecheck
 ```
 
 Expected: PASS.
 
-- [ ] **Step 9: Run the whole frontend suite**
-
-```bash
-npm test
-```
-
-Expected: PASS.
-
-- [ ] **Step 10: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/frontend/src/icons/ \
@@ -1199,32 +1114,22 @@ git add src/frontend/src/icons/ \
 git commit -m "Show the declared priority in the list row and the reader"
 ```
 
----
+- [ ] **Step 9: Check it in a browser**
 
-### Task 7: Check it in a browser
-
-jsdom sees no layout, so nothing above proves the glyph sits right. This task asserts nothing in code; it produces a written result.
-
-**Files:** none modified unless a defect is found.
-
-- [ ] **Step 1: Start the dev server**
+jsdom sees no layout, so nothing above proves the glyph sits right. Start the dev server:
 
 ```bash
 cd src/frontend && npm run dev
 ```
 
-- [ ] **Step 2: Check the four things a test cannot see**
-
-Against a real mailbox, in **both** light and dark mode:
+Against a real mailbox, in **both** light and dark mode, check the four things a test cannot see:
 
 1. The composer's `Priority` link sits on the Cc/Bcc strip without wrapping it to a second line, and the revealed row's label lines up with `From`, `To` and `Subject` in the same 66px column.
 2. The list glyph does not push the subject's ellipsis around — compare a high-priority row against a normal one at the same column width, in **both** row skins (reading pane right, then bottom).
 3. The reader chip does not collide with the actions zone at a narrow reader width, and its tooltip opens down-left without being clipped by the column's `overflow: hidden`.
 4. Both colours are legible on their ground in dark mode — `--danger` on `--surface` and `--text-muted` on `--surface`.
 
-- [ ] **Step 3: Record the result**
-
-Report what was checked and what was seen. If something is off, fix it and re-run the affected test file before committing; if nothing is, say so plainly and commit nothing.
+Report what was checked and what was seen. If something is off, fix it, re-run the affected test file, and commit the fix; if nothing is, say so plainly and commit nothing further.
 
 ---
 
@@ -1234,24 +1139,24 @@ Report what was checked and what was seen. If something is off, fix it and re-ru
 
 | Spec section | Task |
 |---|---|
-| The model (`MailPriority`, Normal = no header) | 1 |
-| Three headers on the way out | 1 (writer), 2 (call site) |
-| The draft round trip (`OpenedDraft.Priority`) | 2 (backend), 5 (client) |
-| A reply never inherits it | 5 |
-| `MailPriorityReader`, precedence, explicit 3, first occurrence | 1 |
-| Wiring at `FillSummary` + the detail mapping | 3 |
-| The FETCH header cost | 3 |
-| Composer link, row, no-fold rule, dirty | 4 |
-| List row glyph, both skins, a11y name | 6 |
-| Reader chip + tooltip naming the header | 6 |
-| Restraint: glyph not band | 6 (CSS comment + no background) |
-| Tests enumerated in the spec | 1, 2, 3, 4, 5, 6 |
-| Browser check (jsdom sees no layout) | 7 |
+| The model (`MailPriority`, Normal = no header) | 1A |
+| Three headers on the way out | 1A (writer), 1B (call site) |
+| The draft round trip (`OpenedDraft.Priority`) | 1B (backend), 2 (client) |
+| A reply never inherits it | 2 |
+| `MailPriorityReader`, precedence, explicit 3, first occurrence | 1A |
+| Wiring at `FillSummary` + the detail mapping | 1C |
+| The FETCH header cost | 1C |
+| Composer link, row, no-fold rule, dirty | 2 |
+| List row glyph, both skins, a11y name | 3 |
+| Reader chip + tooltip naming the header | 3 |
+| Restraint: glyph not band | 3 (CSS comment, no background) |
+| Tests enumerated in the spec | 1, 2, 3 |
+| Browser check (jsdom sees no layout) | 3, Step 9 |
 
 No spec requirement is unassigned.
 
 **Type consistency**
 
-`MailPriority` is the type name on both sides. Backend members `Normal` / `High` / `Low` serialise to `'normal'` / `'high'` / `'low'`, which is exactly the frontend union — asserted in Task 1 Step 2 rather than assumed. `MailPriorityReader.Fields` is produced in Task 1 and consumed as `SummaryHeaders` in Task 3. `ComposeSeed.priority` is produced in Task 5 and consumed in Task 4 Step 5 as `seed?.priority ?? 'normal'` — the `??` is what lets Task 4 land before Task 5 without breaking.
+`MailPriority` is the type name on both sides. Backend members `Normal` / `High` / `Low` serialise to `'normal'` / `'high'` / `'low'`, which is exactly the frontend union — asserted in Task 1 Step 2 rather than assumed. `MailPriorityReader.Fields` is produced in Task 1A and consumed as `SummaryHeaders` in Task 1C. `ComposeSeed.priority` is added in Task 2 Step 6 and read in Task 2 Step 5 as `seed?.priority ?? 'normal'`; both land in the same task, so the `??` guards only a resumed draft opened before the seed builders were updated, never a broken intermediate state.
 
 **Known gap, stated rather than hidden:** the one-line `MailPriorityHeaders.Apply` call inside `OutgoingMessageFactory.BuildMessageAsync` has no test of its own. `OutgoingMessageFactory` has never had a unit test in this repo and standing one up needs six mocked dependencies for a single line. The writer itself, the reader, the round trip between them, and the request-to-factory hop are all covered; the uncovered link is that one call.
