@@ -543,6 +543,12 @@
   flex: none;
 }
 
+/* Inline in the subject line, not a column of its own: a normal-priority row — nearly every row —
+   must be exactly what it was before this existed. */
+.message-row-priority { display: inline-flex; vertical-align: -2px; margin-right: 5px; }
+.message-row-priority.is-high { color: var(--danger); }
+.message-row-priority.is-low { color: var(--text-muted); }
+
 /* ── Row selection checkbox ──────────────────────────────── */
 
 /* Leftmost in both skins. The column is reserved permanently (a padding gutter in the narrow
@@ -764,6 +770,15 @@
 .actions-rule { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
 .reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
+
+/* A glyph and a word, never a coloured band: X-Priority is the sender's claim, freely forged. */
+.reader-priority {
+  margin-left: 10px; padding: 1px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; vertical-align: middle;
+  border: 1px solid currentColor;
+}
+.reader-priority.is-high { color: var(--danger); }
+.reader-priority.is-low { color: var(--text-muted); }
 
 /* Sized against the subject line so the arrow reads as part of it, not as a toolbar. */
 .reader-back {

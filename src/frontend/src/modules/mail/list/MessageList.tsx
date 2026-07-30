@@ -10,6 +10,8 @@ import JunkIcon from '../../../icons/JunkIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
+import PriorityHighIcon from '../../../icons/PriorityHighIcon'
+import PriorityLowIcon from '../../../icons/PriorityLowIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
@@ -328,9 +330,17 @@ export default function MessageList(
             const subject = message.subject || '(no subject)'
             const when = formatListDate(message.date)
             const seenLabel = message.seen ? 'Mark as unread' : 'Mark as read'
+            const priorityLabel = message.priority === 'high' ? 'High priority'
+              : message.priority === 'low' ? 'Low priority' : null
+            const priorityMark = priorityLabel && (
+              <span className={`message-row-priority is-${message.priority}`} title={priorityLabel}>
+                {message.priority === 'high' ? <PriorityHighIcon /> : <PriorityLowIcon />}
+              </span>
+            )
             // role=button is children-presentational: nothing inside the row is exposed on its
             // own, so everything the row states visually has to be said in its name.
-            const label = `${message.seen ? '' : 'Unread. '}${drafts ? 'Draft. ' : ''}${from}: ${subject}`
+            const label = `${message.seen ? '' : 'Unread. '}${drafts ? 'Draft. ' : ''}`
+              + `${priorityLabel ? priorityLabel + '. ' : ''}${from}: ${subject}`
               + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
 
             // Cross-folder results neutralize row selection and actions: the row lives in another
@@ -453,6 +463,7 @@ export default function MessageList(
                       <span className="message-row-from">{from}</span>
                       {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                       <span className="message-row-line">
+                        {priorityMark}
                         {subject}
                         {showsPreview && message.preview && (
                           <span className="message-row-line-preview"> — {message.preview}</span>
@@ -473,7 +484,7 @@ export default function MessageList(
                         <span className="message-row-date">{when}</span>
                         {star}
                       </div>
-                      <div className="message-row-subject">{subject}</div>
+                      <div className="message-row-subject">{priorityMark}{subject}</div>
                       {/* Always rendered when previews are on, even empty: a message with no body
                           would otherwise make a shorter row than its neighbours and break the rhythm
                           of the column. The reserved height lives in CSS. */}
