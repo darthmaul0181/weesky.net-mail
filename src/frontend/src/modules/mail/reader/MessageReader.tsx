@@ -17,6 +17,7 @@ import CopyIcon from '../../../icons/CopyIcon'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import ImageOffIcon from '../../../icons/ImageOffIcon'
+import CodeIcon from '../../../icons/CodeIcon'
 import {
   useAccountId, useAliases, useDeleteMessages, useFolders, useIdentities, useMessage,
   useMoveMessages, usePrepareQuote, useSetFlags, useTrustSender, useTrustedSenders,
@@ -256,6 +257,14 @@ export default function MessageReader(
       onSelect: () => setTrust.mutate({ address: senderAddress, trusted: false }),
     })
   }
+
+  // Its own group: this is neither a flag nor a move but a look at the bytes. A link rather
+  // than a button so middle-click and Ctrl+click open the tab the entry promises.
+  actions.push('separator', {
+    label: 'View source',
+    icon: <CodeIcon size={18} />,
+    href: `/mail/source?folder=${encodeURIComponent(folderPath!)}&uid=${uid}`,
+  })
 
   return (
     <article>

@@ -109,4 +109,13 @@ internal sealed class MailMessageRepository(IImapSessionProvider sessions) : IMa
         return sessions.WithSessionAsync(connection,
             session => session.GetMimeMessageAsync(folderPath, uid, cancellationToken), cancellationToken);
     }
+
+    public Task<Result<MailMessageSource>> GetSourceAsync(
+        User user, MailAccountConnection connection, string folderPath, uint uid, int maxBytes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return sessions.WithSessionAsync(connection,
+            session => session.GetMessageSourceAsync(folderPath, uid, maxBytes, cancellationToken), cancellationToken);
+    }
 }

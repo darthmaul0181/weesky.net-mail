@@ -533,6 +533,84 @@ public sealed class MailControllerTests
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
 
+    // ── Message source ──────────────────────────────────────────────────
+
+    private static MailMessageSource Source(long totalBytes, bool truncated) => new(
+        Subject: "Mount ZFS on rescue system",
+        MessageId: "c24494a9de@weesky.be",
+        Date: new DateTimeOffset(2026, 2, 2, 1, 1, 0, TimeSpan.Zero),
+        FromName: "Michaël",
+        FromAddress: "darth@weesky.be",
+        To: new List<MailAddressInfo> { new("", "darthmaul0181@gmail.com") },
+        Authentication: new MailAuthentication("pass", "pass", "pass", "mx.google.com; spf=pass"),
+        Source: "Delivered-To: darthmaul0181@gmail.com\r\n",
+        TotalBytes: totalBytes,
+        Truncated: truncated);
+
+    [Fact]
+    public async Task GetMessageSource_ReturnsTheSource()
+    {
+        _messages.Setup(m => m.GetSourceAsync(
+                     It.IsAny<User>(), Conn, "INBOX", 42u, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(Source(1024, false)));
+
+        var result = await CreateController().GetMessageSource("INBOX", 42, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<MailMessageSource>(ok.Value);
+        Assert.Equal("Mount ZFS on rescue system", payload.Subject);
+        Assert.Equal("pass", payload.Authentication!.Dmarc);
+        Assert.False(payload.Truncated);
+    }
+
+    [Fact]
+    public async Task GetMessageSource_AsksForOneMegabyte()
+    {
+        _messages.Setup(m => m.GetSourceAsync(
+                     It.IsAny<User>(), Conn, "INBOX", 42u, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(Source(1024, false)));
+
+        await CreateController().GetMessageSource("INBOX", 42, CancellationToken.None);
+
+        _messages.Verify(m => m.GetSourceAsync(
+            It.IsAny<User>(), Conn, "INBOX", 42u, 1024 * 1024, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetMessageSource_Returns400ForABlankFolder()
+    {
+        var result = await CreateController().GetMessageSource("  ", 42, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetMessageSource_Returns404WhenTheMessageIsGone()
+    {
+        _messages.Setup(m => m.GetSourceAsync(
+                     It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(),
+                     It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailMessageSource>(ImapSession.MessageNotFound));
+
+        var result = await CreateController().GetMessageSource("INBOX", 42, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetMessageSource_Returns502WhenImapFails()
+    {
+        _messages.Setup(m => m.GetSourceAsync(
+                     It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(),
+                     It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailMessageSource>("Unable to read the message source"));
+
+        var result = await CreateController().GetMessageSource("INBOX", 42, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
     // ── Attachment ──────────────────────────────────────────────────────
 
     [Fact]

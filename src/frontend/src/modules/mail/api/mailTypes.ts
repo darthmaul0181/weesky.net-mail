@@ -76,10 +76,11 @@ export interface MailAddressInfo {
   address: string
 }
 
-/** SPF/DKIM as the receiving server reported them, plus the raw header behind them. */
+/** SPF/DKIM/DMARC as the receiving server reported them, plus the raw header behind them. */
 export interface MailAuthentication {
   spf: string | null
   dkim: string | null
+  dmarc: string | null
   raw: string
 }
 
@@ -190,4 +191,18 @@ export interface OpenedDraft {
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]
+}
+
+/** A message as it arrived. `source` is capped; `totalBytes` is what the whole message weighs. */
+export interface MailMessageSource {
+  subject: string
+  messageId: string | null
+  date: string
+  fromName: string
+  fromAddress: string
+  to: MailAddressInfo[]
+  authentication: MailAuthentication | null
+  source: string
+  totalBytes: number
+  truncated: boolean
 }

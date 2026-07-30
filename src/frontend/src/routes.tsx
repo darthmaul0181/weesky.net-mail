@@ -20,12 +20,16 @@ const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.js
 const IdentitiesPage = lazy(() => import('./modules/settings/identities/IdentitiesPage'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
+const MessageSourceView = lazy(() => import('./modules/mail/source/MessageSourceView'))
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginRoute /> },
   {
     element: <RequireAuth />,
     children: [
+      // A sibling of AppShell, not a child: that placement is what leaves the rail and the
+      // folder column out, and with them useFolders' poll, in a tab that only shows a text file.
+      { path: 'mail/source', element: <Suspense fallback={null}><MessageSourceView /></Suspense> },
       {
         element: <AppShell />,
         children: [

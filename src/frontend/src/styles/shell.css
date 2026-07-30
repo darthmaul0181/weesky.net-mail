@@ -261,6 +261,9 @@
    carry the same line for the same reason — keep the three in step. */
 .dropdown-item:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 
+/* An <a> arrives underlined; .dropdown-item above already sets its color and font. */
+a.dropdown-item { text-decoration: none; }
+
 .dropdown-rule { height: 1px; border: 0; background: var(--border); margin: 4px 6px; }
 
 .dropdown-root.is-up .dropdown-menu { top: auto; bottom: calc(100% + 4px); }

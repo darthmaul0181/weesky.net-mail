@@ -1,14 +1,29 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-export interface MenuItem {
+interface MenuItemBase {
   label: string
   /** Rich rendering for the row; `label` stays the key and the accessible-name fallback. */
   node?: ReactNode
   icon?: ReactNode
+}
+
+interface MenuAction extends MenuItemBase {
   onSelect: () => void
   disabled?: boolean
   title?: string
+  href?: never
 }
+
+/** A row that navigates rather than acts. Always a new tab: middle-click, Ctrl+click and the
+    browser's own context menu all do nothing on a <button>, and a control that navigates while
+    looking like a command teaches the wrong thing about the menu. Never disabled — a greyed
+    link has no honest markup, and no caller needs one. */
+interface MenuLink extends MenuItemBase {
+  href: string
+  onSelect?: never
+}
+
+export type MenuItem = MenuAction | MenuLink
 
 export type MenuEntry = MenuItem | 'separator'
 
@@ -95,6 +110,13 @@ export default function DropdownMenu(
           {items.map((entry, index) =>
             entry === 'separator' ? (
               <hr key={index} className="dropdown-rule" />
+            ) : entry.href !== undefined ? (
+              <a key={entry.label} role="menuitem" className="dropdown-item" href={entry.href}
+                target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}
+                onAuxClick={() => setOpen(false)}>
+                {entry.icon}
+                {entry.node ?? entry.label}
+              </a>
             ) : (
               <button key={entry.label} type="button" role="menuitem" className="dropdown-item"
                 disabled={entry.disabled} title={entry.title}

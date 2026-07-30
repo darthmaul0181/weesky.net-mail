@@ -108,4 +108,11 @@ public interface IImapSession : IAsyncDisposable
 
     /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
     Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The first <paramref name="maxBytes"/> octets of the message as it arrived, plus the
+    /// headers worth distilling. A partial fetch, not a whole download: a 25 MB message is
+    /// mostly base64 nobody reads, and the headers sit at the head of the file.
+    /// </summary>
+    Task<Result<MailMessageSource>> GetMessageSourceAsync(string folderPath, uint uid, int maxBytes, CancellationToken cancellationToken);
 }

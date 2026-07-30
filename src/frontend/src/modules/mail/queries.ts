@@ -7,9 +7,9 @@ import { ApiError, api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
-  MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSummary, MailSearchPage,
-  FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote, QuotePurpose,
-  SavedDraft, OpenedDraft,
+  MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSource, MailMessageSummary,
+  MailSearchPage, FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote,
+  QuotePurpose, SavedDraft, OpenedDraft,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -43,6 +43,8 @@ export const mailKeys = {
     [...messagesIn(accountId, folder), page, pageSize] as const,
   message: (accountId: string, folder: string, uid: number) =>
     ['mail', accountId, 'message', folder, uid] as const,
+  messageSource: (accountId: string, folder: string, uid: number) =>
+    ['mail', accountId, 'source', folder, uid] as const,
   // Its own key: what it caches is not a page but a sequence of pages, and mixing the two
   // shapes under one key is a type error that only shows at runtime.
   messageStreamIn,
@@ -146,6 +148,20 @@ export function useMessage(folderPath: string | null, uid: number | null) {
     queryKey: mailKeys.message(accountId, folderPath ?? '', uid ?? 0),
     queryFn: ({ signal }) => api.getMailMessage(folderPath, uid, { signal, accountId }),
     enabled: folderPath !== null && uid !== null,
+  })
+}
+
+/** The message as it arrived. Its own key rather than a slice of `message`: what it caches is
+    the RFC822 bytes, and a reader that has the detail has not paid for those. */
+export function useMessageSource(folderPath: string | null, uid: number | null) {
+  const accountId = useAccountId()
+
+  return useQuery<MailMessageSource>({
+    queryKey: mailKeys.messageSource(accountId, folderPath ?? '', uid ?? 0),
+    queryFn: ({ signal }) => api.getMessageSource(folderPath, uid, { signal, accountId }),
+    enabled: folderPath !== null && uid !== null,
+    // The bytes of a given (folder, uid) never change; a stale reload is the user's own call.
+    staleTime: Infinity,
   })
 }
 
