@@ -10,4 +10,6 @@ public sealed record OpenedDraft(
     string HtmlBody,
     IReadOnlyList<StagedAttachmentInfo> Attachments,
     string? InReplyTo,
-    IReadOnlyList<string> References);
+    IReadOnlyList<string> References,
+    // Read back off the saved message. Without it a saved High silently resumes as Normal.
+    MailPriority Priority);

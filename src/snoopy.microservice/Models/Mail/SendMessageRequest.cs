@@ -19,4 +19,7 @@ public record SendMessageRequest
 
     /// <summary>References chain for the reply, oldest first, bare ids. Empty on a fresh message.</summary>
     public IReadOnlyList<string> References { get; init; } = [];
+
+    /// <summary>Priority to declare. Normal writes no header at all — see MailPriorityHeaders.</summary>
+    public MailPriority Priority { get; init; } = MailPriority.Normal;
 }

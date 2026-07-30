@@ -140,6 +140,7 @@ internal sealed class OutgoingMessageFactory(
         message.Subject = request.Subject;
         message.MessageId = MimeUtils.GenerateMessageId(DomainOf(fromAddress));
         ApplyThreadingHeaders(message, request);
+        MailPriorityHeaders.Apply(message, request.Priority);
 
         var builder = new BodyBuilder { HtmlBody = body.Html, TextBody = body.Text };
         foreach (var attachment in linked)

@@ -1181,7 +1181,8 @@ public sealed class MailController(
             prepared.QuotableHtml,
             prepared.Attachments,
             string.IsNullOrWhiteSpace(message.InReplyTo) ? null : message.InReplyTo,
-            message.References?.ToList() ?? []);
+            message.References?.ToList() ?? [],
+            MailPriorityReader.Parse(message.Headers));
 
     private static List<string> Addresses(InternetAddressList? list) =>
         list?.Mailboxes?.Select(m => m.Address).ToList() ?? [];

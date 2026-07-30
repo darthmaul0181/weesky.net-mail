@@ -1869,6 +1869,23 @@ public sealed class MailControllerTests
         Assert.False(((SendMessageResult)ok.Value!).AppendedToSent);
     }
 
+    /// <summary>The priority has to survive the hop from the request into the sender's argument.</summary>
+    [Fact]
+    public async Task SendMessage_CarriesThePriorityIntoTheOutgoingMessage()
+    {
+        SendMessageRequest? captured = null;
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, MailAccountConnection, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SendMessageResult(true)));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["a@example.com"], Priority = MailPriority.High }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(MailPriority.High, captured!.Priority);
+    }
+
     // ── PrepareQuote ────────────────────────────────────────────────────
 
     [Fact]
@@ -2089,6 +2106,21 @@ public sealed class MailControllerTests
         _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task SaveDraft_CarriesThePriorityIntoTheSavedMessage()
+    {
+        SaveDraftRequest? captured = null;
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, MailAccountConnection, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SavedDraft(1, "Drafts")));
+
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { Priority = MailPriority.Low }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(MailPriority.Low, captured!.Priority);
+    }
+
     // ── OpenDraft ───────────────────────────────────────────────────────
 
     [Fact]
@@ -2124,6 +2156,24 @@ public sealed class MailControllerTests
         Assert.Same(stagedInfo, Assert.Single(opened.Attachments));
         Assert.Equal("parent@x.com", opened.InReplyTo);
         Assert.Equal(["oldest@x.com", "newest@x.com"], opened.References);
+    }
+
+    /// <summary>Saved at High, reopened at High — otherwise the setting dies on the round trip.</summary>
+    [Fact]
+    public async Task OpenDraft_ReadsThePriorityBackOffTheSavedMessage()
+    {
+        var saved = new MimeMessage();
+        MailPriorityHeaders.Apply(saved, MailPriority.High);
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(saved));
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, saved, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PreparedQuote("<p>Hi</p>", [])));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(MailPriority.High, Assert.IsType<OpenedDraft>(ok.Value).Priority);
     }
 
     [Fact]
