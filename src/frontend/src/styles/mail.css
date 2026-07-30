@@ -264,12 +264,6 @@
 /* margin-left:auto holds the actions right, now that the name no longer fills the tile. */
 .folder-list .admin-list-item-actions { margin-left: auto; }
 
-/* A system folder's switch is locked; without this it reads as an ordinary "on". */
-.folder-tile .toggle-switch input:disabled + .toggle-track {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .folders-page-hint {
   color: var(--text-muted);
   font-size: 13px;

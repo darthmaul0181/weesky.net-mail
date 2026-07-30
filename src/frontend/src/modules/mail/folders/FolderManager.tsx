@@ -51,7 +51,10 @@ export default function FolderManager({ folders, onNotify }: Props) {
               className="admin-list-item folder-tile"
               style={{ marginLeft: depth * 18 }}
             >
-              <label className="toggle-switch">
+              <label
+                className={`toggle-switch${isSystem ? ' is-locked' : ''}`}
+                title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be hidden` : undefined}
+              >
                 <input
                   type="checkbox"
                   // The switch below is disabled for these, so off is the one state it must

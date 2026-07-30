@@ -849,12 +849,16 @@ body {
   position: absolute;
 }
 
+/* Measured: a --border fill reaches 1.19:1 against --bg, so the off state read as disabled. The
+   hairline carries the 3:1 a component boundary needs — a fill dark enough to reach it alone comes
+   out mid-grey and reads as an "on" of another colour. */
 .toggle-track {
   position: absolute;
   inset: 0;
-  background: var(--border);
+  background: color-mix(in oklab, var(--text-muted) 30%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text-muted) 75%, transparent);
   border-radius: 10px;
-  transition: background 0.2s;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
 .toggle-track::after {
@@ -869,12 +873,22 @@ body {
   transition: transform 0.2s;
 }
 
+/* The accent fill is its own boundary; the hairline over it would be noise. */
 .toggle-switch input:checked + .toggle-track {
   background: var(--action-primary);
+  box-shadow: none;
 }
 
 .toggle-switch input:checked + .toggle-track::after {
   transform: translateX(16px);
+}
+
+/* A lock nothing will lift, never a save in flight: every settings toggle is `disabled` while its
+   mutation runs, so a rule keyed on the attribute would grey the whole page at each click. WCAG
+   1.4.11 exempts an inactive component, which is what makes the dimming legitimate here alone. */
+.toggle-switch.is-locked .toggle-track {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .panel-actions {
@@ -1810,7 +1824,10 @@ body {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 10%, transparent);
 }
 
-.rule-card-disabled {
+/* The card pales, its switch does not: that switch is the only way back on, and it is never
+   `disabled`. An ancestor's opacity cannot be raised by a descendant, so the children carry it. */
+.rule-card-disabled > *:not(.rule-card-header),
+.rule-card-disabled .rule-card-header > *:not(.toggle-switch) {
   opacity: 0.5;
 }
 

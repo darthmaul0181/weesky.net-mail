@@ -103,7 +103,24 @@ When a rule is ambiguous, copy what those screens do.
   narrow column, uppercase and muted. Because the label is beside the control (not wrapping it), every
   field needs an explicit `htmlFor`/`id` pair, or it has no accessible name. Stacked `.field` rows
   (label above the control) are the alternative for very compact dialogs.
-- A boolean is a `.toggle-switch`, not a bare checkbox.
+- A boolean is a `.toggle-switch`, not a bare checkbox. **Its off state is drawn by a hairline, not by
+  the fill**: a `--border` fill measured 1.19:1 against `--bg` and read as a disabled control, while a
+  fill dark enough to reach 3:1 on its own comes out mid-grey and reads as an "on" of another colour.
+  The track is `--text-muted` at 30% over `--surface` with an inset 1px ring at 75%, which clears 3:1
+  (WCAG 1.4.11) on the harder ground in all sixteen palette/mode combinations — `classic` light is the
+  binding case at 3.00:1, so lowering either number breaks it. The checked track drops the ring: the
+  accent fill is its own boundary. Verify in a browser, per palette; jsdom sees no colour at all.
+- **A locked switch is dimmed through `.toggle-switch.is-locked`, never through `:disabled`.** Every
+  settings toggle carries `disabled` while its mutation runs — all seven of `GeneralPage`'s do, and so
+  does Administration's app-install switch — so a rule keyed on the attribute greys the whole page at
+  each click. The caller says which it is: `FolderManager` on `isSystem`, `ToggleRow` via `locked` on a
+  permission that will not be re-prompted. WCAG 1.4.11 exempts an inactive component, which is what
+  makes the ~1.5:1 the dimming leaves acceptable *there* and nowhere else.
+- **An ancestor's opacity must never cover an actionable control.** A disabled rule's card used to
+  fade at `opacity: .5` with its switch inside it, and that switch is the only way back on — measured
+  1.76:1. The opacity now sits on the card's children, skipping the header and, inside it, the switch;
+  an ancestor's opacity cannot be raised back by a descendant. `.rule-wizard-body--locked` keeps its
+  blanket fade because it also carries `pointer-events: none`: nothing in there is actionable.
 
 ## Search & pickers
 
