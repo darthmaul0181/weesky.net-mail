@@ -1,5 +1,24 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ActiveFormats, EditorHandle } from './SquireEditor'
+import DropdownMenu from '../../../components/DropdownMenu'
+import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import UndoIcon from '../../../icons/UndoIcon'
+import RedoIcon from '../../../icons/RedoIcon'
+import TextColourIcon from '../../../icons/TextColourIcon'
+import HighlighterIcon from '../../../icons/HighlighterIcon'
+import FontIcon from '../../../icons/FontIcon'
+import TextSizeIcon from '../../../icons/TextSizeIcon'
+import AlignLeftIcon from '../../../icons/AlignLeftIcon'
+import AlignCentreIcon from '../../../icons/AlignCentreIcon'
+import AlignRightIcon from '../../../icons/AlignRightIcon'
+import AlignJustifyIcon from '../../../icons/AlignJustifyIcon'
+import ListBulletIcon from '../../../icons/ListBulletIcon'
+import ListOrderedIcon from '../../../icons/ListOrderedIcon'
+import IndentIcon from '../../../icons/IndentIcon'
+import OutdentIcon from '../../../icons/OutdentIcon'
+import LinkIcon from '../../../icons/LinkIcon'
+import UnlinkIcon from '../../../icons/UnlinkIcon'
+import ClearFormatIcon from '../../../icons/ClearFormatIcon'
 
 const SWATCHES = [
   '#000000', '#444444', '#666666', '#999999', '#cccccc', '#ffffff',
@@ -10,6 +29,13 @@ const FONTS = ['Arial', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Cour
 const SIZES = [
   { label: 'Small', value: '12px' }, { label: 'Normal', value: '14px' },
   { label: 'Large', value: '18px' }, { label: 'Huge', value: '24px' },
+]
+type Alignment = 'left' | 'center' | 'right' | 'justify'
+const ALIGNMENTS: { label: string; value: Alignment; Icon: typeof AlignLeftIcon }[] = [
+  { label: 'Left', value: 'left', Icon: AlignLeftIcon },
+  { label: 'Center', value: 'center', Icon: AlignCentreIcon },
+  { label: 'Right', value: 'right', Icon: AlignRightIcon },
+  { label: 'Justify', value: 'justify', Icon: AlignJustifyIcon },
 ]
 
 function Popover({ open, children }: { open: boolean; children: ReactNode }) {
@@ -22,6 +48,13 @@ interface Props { editor: EditorHandle | null; active?: ActiveFormats }
 export default function EditorToolbar({ editor, active }: Props) {
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
+  // The editor reports no font, size or colour at the caret, so these are the last choice made
+  // here — the same thing the <select>s' defaultValue used to show.
+  const [font, setFont] = useState(FONTS[0])
+  const [size, setSize] = useState(SIZES[1])
+  const [alignment, setAlignment] = useState(ALIGNMENTS[0])
+  const [textColour, setTextColour] = useState('currentColor')
+  const [highlight, setHighlight] = useState('#f8e71c')
   const container = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -51,65 +84,89 @@ export default function EditorToolbar({ editor, active }: Props) {
     </button>
   )
 
+  /** An icon over the colour it applies, so the button says which colour it will lay down. */
+  const inked = (icon: ReactNode, colour: string) => (
+    <span className="compose-tool-stack">
+      {icon}
+      <span className="compose-tool-ink" style={{ background: colour }} />
+    </span>
+  )
+
   return (
     <div className="compose-toolbar" ref={container}>
-      {btn('Undo', '↶', () => editor?.command('undo'))}
-      {btn('Redo', '↷', () => editor?.command('redo'))}
-      <span className="compose-toolbar-rule" />
-      {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
-      {btn('Italic', <i>I</i>, () => editor?.command('italic'), active?.italic)}
-      {btn('Underline', <u>U</u>, () => editor?.command('underline'), active?.underline)}
-      {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
-      <span className="compose-toolbar-rule" />
-      <span className="compose-popover-anchor">
-        {btn('Text colour', 'A', () => setOpenPopover(p => p === 'text' ? null : 'text'))}
-        <Popover open={openPopover === 'text'}>{swatchGrid(c => editor?.setTextColour(c))}</Popover>
-      </span>
-      <span className="compose-popover-anchor">
-        {btn('Highlight colour', '▩', () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
-        <Popover open={openPopover === 'highlight'}>{swatchGrid(c => editor?.setHighlightColour(c))}</Popover>
-      </span>
-      <span className="compose-select">
-        <select aria-label="Font" title="Font" defaultValue="Arial"
-          onChange={e => editor?.setFontFace(e.target.value)}>
-          {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
-        </select>
-      </span>
-      <span className="compose-select">
-        <select aria-label="Size" title="Size" defaultValue="14px"
-          onChange={e => editor?.setFontSize(e.target.value)}>
-          {SIZES.map(size => <option key={size.value} value={size.value}>{size.label}</option>)}
-        </select>
-      </span>
-      <span className="compose-select">
-        <select aria-label="Alignment" title="Alignment" defaultValue="left"
-          onChange={e => editor?.setAlignment(e.target.value as 'left' | 'center' | 'right' | 'justify')}>
-          <option value="left">Left</option><option value="center">Center</option>
-          <option value="right">Right</option><option value="justify">Justify</option>
-        </select>
-      </span>
-      <span className="compose-toolbar-rule" />
-      {btn('Bulleted list', '•', () => editor?.command('unorderedList'), active?.unorderedList)}
-      {btn('Numbered list', '1.', () => editor?.command('orderedList'), active?.orderedList)}
-      {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
-      {btn('Increase quote', '❯❯', () => editor?.command('increaseQuote'))}
-      {btn('Decrease quote', '❮❮', () => editor?.command('decreaseQuote'))}
-      <span className="compose-toolbar-rule" />
-      <span className="compose-popover-anchor">
-        {btn('Link', '🔗', () => setOpenPopover(p => p === 'link' ? null : 'link'))}
-        <Popover open={openPopover === 'link'}>
-          <div className="compose-link-form">
-            <label htmlFor="compose-link-url">Link URL</label>
-            <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
-            <button type="button" className="btn btn-primary" disabled={!url}
-              onClick={() => { editor?.makeLink(url); setUrl(''); setOpenPopover(null) }}>
-              Apply
-            </button>
-          </div>
-        </Popover>
-      </span>
-      {btn('Remove link', '⛓', () => editor?.command('removeLink'))}
-      {btn('Clear formatting', '⌫', () => editor?.command('clearFormatting'))}
+      <div className="compose-tool-group">
+        {btn('Undo', <UndoIcon />, () => editor?.command('undo'))}
+        {btn('Redo', <RedoIcon />, () => editor?.command('redo'))}
+      </div>
+      <div className="compose-tool-group">
+        {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
+        {btn('Italic', <i>I</i>, () => editor?.command('italic'), active?.italic)}
+        {btn('Underline', <u>U</u>, () => editor?.command('underline'), active?.underline)}
+        {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
+      </div>
+      <div className="compose-tool-group">
+        <span className="compose-popover-anchor">
+          {btn('Text colour', inked(<TextColourIcon size={14} />, textColour),
+            () => setOpenPopover(p => p === 'text' ? null : 'text'))}
+          <Popover open={openPopover === 'text'}>
+            {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) })}
+          </Popover>
+        </span>
+        <span className="compose-popover-anchor">
+          {btn('Highlight colour', inked(<HighlighterIcon size={14} />, highlight),
+            () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
+          <Popover open={openPopover === 'highlight'}>
+            {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) })}
+          </Popover>
+        </span>
+      </div>
+      <div className="compose-tool-group">
+        <DropdownMenu ariaLabel="Font" align="left" className="compose-tool-select"
+          trigger={<><FontIcon size={14} />{font}<ChevronDownIcon size={12} /></>}
+          items={FONTS.map(name => ({
+            label: name,
+            node: <span style={{ fontFamily: name }}>{name}</span>,
+            onSelect: () => { setFont(name); editor?.setFontFace(name) },
+          }))} />
+        <DropdownMenu ariaLabel="Size" align="left" className="compose-tool-select"
+          trigger={<><TextSizeIcon size={14} />{size.label}<ChevronDownIcon size={12} /></>}
+          items={SIZES.map(entry => ({
+            label: entry.label,
+            node: <span style={{ fontSize: entry.value }}>{entry.label}</span>,
+            onSelect: () => { setSize(entry); editor?.setFontSize(entry.value) },
+          }))} />
+        <DropdownMenu ariaLabel="Alignment" align="left" className="compose-tool-select"
+          trigger={<><alignment.Icon size={14} /><ChevronDownIcon size={12} /></>}
+          items={ALIGNMENTS.map(entry => ({
+            label: entry.label,
+            icon: <entry.Icon size={14} />,
+            onSelect: () => { setAlignment(entry); editor?.setAlignment(entry.value) },
+          }))} />
+      </div>
+      <div className="compose-tool-group">
+        {btn('Bulleted list', <ListBulletIcon />, () => editor?.command('unorderedList'), active?.unorderedList)}
+        {btn('Numbered list', <ListOrderedIcon />, () => editor?.command('orderedList'), active?.orderedList)}
+        {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
+        {btn('Increase quote', <IndentIcon />, () => editor?.command('increaseQuote'))}
+        {btn('Decrease quote', <OutdentIcon />, () => editor?.command('decreaseQuote'))}
+      </div>
+      <div className="compose-tool-group">
+        <span className="compose-popover-anchor">
+          {btn('Link', <LinkIcon />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
+          <Popover open={openPopover === 'link'}>
+            <div className="compose-link-form">
+              <label htmlFor="compose-link-url">Link URL</label>
+              <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
+              <button type="button" className="btn btn-primary" disabled={!url}
+                onClick={() => { editor?.makeLink(url); setUrl(''); setOpenPopover(null) }}>
+                Apply
+              </button>
+            </div>
+          </Popover>
+        </span>
+        {btn('Remove link', <UnlinkIcon />, () => editor?.command('removeLink'))}
+        {btn('Clear formatting', <ClearFormatIcon />, () => editor?.command('clearFormatting'))}
+      </div>
     </div>
   )
 }

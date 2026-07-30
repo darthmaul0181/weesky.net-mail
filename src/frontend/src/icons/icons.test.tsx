@@ -30,6 +30,23 @@ import FunnelIcon from './FunnelIcon'
 import PersonPlusIcon from './PersonPlusIcon'
 import ShieldIcon from './ShieldIcon'
 import CodeIcon from './CodeIcon'
+import UndoIcon from './UndoIcon'
+import RedoIcon from './RedoIcon'
+import TextColourIcon from './TextColourIcon'
+import HighlighterIcon from './HighlighterIcon'
+import FontIcon from './FontIcon'
+import TextSizeIcon from './TextSizeIcon'
+import AlignLeftIcon from './AlignLeftIcon'
+import AlignCentreIcon from './AlignCentreIcon'
+import AlignRightIcon from './AlignRightIcon'
+import AlignJustifyIcon from './AlignJustifyIcon'
+import ListBulletIcon from './ListBulletIcon'
+import ListOrderedIcon from './ListOrderedIcon'
+import IndentIcon from './IndentIcon'
+import OutdentIcon from './OutdentIcon'
+import LinkIcon from './LinkIcon'
+import UnlinkIcon from './UnlinkIcon'
+import ClearFormatIcon from './ClearFormatIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -62,6 +79,23 @@ const icons = [
   { name: 'PersonPlusIcon', Icon: PersonPlusIcon, defaultSize: '15' },
   { name: 'ShieldIcon', Icon: ShieldIcon, defaultSize: '15' },
   { name: 'CodeIcon', Icon: CodeIcon, defaultSize: '16' },
+  { name: 'UndoIcon', Icon: UndoIcon, defaultSize: '16' },
+  { name: 'RedoIcon', Icon: RedoIcon, defaultSize: '16' },
+  { name: 'TextColourIcon', Icon: TextColourIcon, defaultSize: '16' },
+  { name: 'HighlighterIcon', Icon: HighlighterIcon, defaultSize: '16' },
+  { name: 'FontIcon', Icon: FontIcon, defaultSize: '16' },
+  { name: 'TextSizeIcon', Icon: TextSizeIcon, defaultSize: '16' },
+  { name: 'AlignLeftIcon', Icon: AlignLeftIcon, defaultSize: '16' },
+  { name: 'AlignCentreIcon', Icon: AlignCentreIcon, defaultSize: '16' },
+  { name: 'AlignRightIcon', Icon: AlignRightIcon, defaultSize: '16' },
+  { name: 'AlignJustifyIcon', Icon: AlignJustifyIcon, defaultSize: '16' },
+  { name: 'ListBulletIcon', Icon: ListBulletIcon, defaultSize: '16' },
+  { name: 'ListOrderedIcon', Icon: ListOrderedIcon, defaultSize: '16' },
+  { name: 'IndentIcon', Icon: IndentIcon, defaultSize: '16' },
+  { name: 'OutdentIcon', Icon: OutdentIcon, defaultSize: '16' },
+  { name: 'LinkIcon', Icon: LinkIcon, defaultSize: '16' },
+  { name: 'UnlinkIcon', Icon: UnlinkIcon, defaultSize: '16' },
+  { name: 'ClearFormatIcon', Icon: ClearFormatIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

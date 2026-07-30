@@ -1092,8 +1092,8 @@
   color: var(--text);
   cursor: pointer;
 }
-/* Same hover as .dropdown-item — see the note there. Both this and .compose-tool rest on
-   --surface (the modal, and .compose-view), so one formula serves all three. */
+/* Same hover as .dropdown-item — see the note there. This rests on --surface (the modal), so the
+   one formula serves both. */
 .attachment-viewer-nav:hover:not(:disabled) { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 .attachment-viewer-nav:disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
 .attachment-viewer-error { color: var(--danger); }
@@ -1316,43 +1316,59 @@
 .compose-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding: 4px 8px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.compose-tool {
+/* Each family of controls is its own capsule, and that grouping is what the 1px rules used to
+   do — a rule between two capsules would say the same thing twice. */
+.compose-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+.compose-tool-group .dropdown-root { display: inline-flex; }
+
+.compose-tool,
+.compose-tool-select {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text);
-  width: 28px;
+  font: inherit;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+.compose-tool { width: 28px; }
+.compose-tool-select { gap: 5px; padding: 0 9px; font-size: 12px; white-space: nowrap; }
+.compose-tool-select > svg:last-child { opacity: 0.6; }
 
-.compose-tool:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
-.compose-tool.is-active { color: var(--badge-count-bg); background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent); }
-
-.compose-toolbar-rule {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 4px;
+/* The capsule is sunken, so the control under the pointer rises out of it instead of tinting it.
+   --surface-raised sits above --surface-sunken in both modes, so one formula serves both. */
+.compose-tool:hover,
+.compose-tool-select:hover {
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
 }
 
-.compose-select select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  padding: 2px 4px;
-  font-size: 12px;
-}
+.compose-tool.is-active { background: var(--action-primary); color: var(--action-primary-fg); }
+.compose-tool.is-active:hover { background: var(--action-primary-hover); box-shadow: none; }
+
+/* A sans-serif italic I is a bare stroke; the serif one keeps its serifs and stays legible. */
+.compose-tool b, .compose-tool i, .compose-tool u, .compose-tool s { font-size: 14px; line-height: 1; }
+.compose-tool i { font-family: Georgia, 'Times New Roman', serif; }
+.compose-tool u { text-underline-offset: 2px; }
+
+.compose-tool-stack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.compose-tool-ink { width: 14px; height: 3px; border-radius: 2px; }
 
 .compose-popover-anchor { position: relative; }
 

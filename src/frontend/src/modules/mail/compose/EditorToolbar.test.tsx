@@ -11,6 +11,11 @@ function fakeEditor(): EditorHandle {
   }
 }
 
+function pick(trigger: string, option: string) {
+  fireEvent.click(screen.getByRole('button', { name: trigger }))
+  fireEvent.click(screen.getByRole('menuitem', { name: option }))
+}
+
 describe('EditorToolbar', () => {
   it('relays a format button to the editor', () => {
     const editor = fakeEditor()
@@ -45,6 +50,14 @@ describe('EditorToolbar', () => {
     expect(editor.setTextColour).not.toHaveBeenCalled()
   })
 
+  it('shows the last applied colour under its button', () => {
+    render(<EditorToolbar editor={fakeEditor()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
+    fireEvent.click(screen.getByRole('button', { name: '#d0021b' }))
+    expect(screen.getByRole('button', { name: 'Text colour' })
+      .querySelector('.compose-tool-ink')).toHaveStyle({ background: '#d0021b' })
+  })
+
   it('closes a popover on an outside mousedown', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} />)
@@ -54,22 +67,32 @@ describe('EditorToolbar', () => {
     expect(screen.queryByRole('button', { name: '#d0021b' })).not.toBeInTheDocument()
   })
 
-  it('applies font, size and alignment from the selects', () => {
+  it('applies font, size and alignment from their menus', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} />)
-    fireEvent.change(screen.getByLabelText('Font'), { target: { value: 'Georgia' } })
-    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '18px' } })
-    fireEvent.change(screen.getByLabelText('Alignment'), { target: { value: 'center' } })
+    pick('Font', 'Georgia')
+    pick('Size', 'Large')
+    pick('Alignment', 'Center')
     expect(editor.setFontFace).toHaveBeenCalledWith('Georgia')
     expect(editor.setFontSize).toHaveBeenCalledWith('18px')
     expect(editor.setAlignment).toHaveBeenCalledWith('center')
   })
 
+  it('shows the chosen font and size on their triggers', () => {
+    render(<EditorToolbar editor={fakeEditor()} />)
+    expect(screen.getByRole('button', { name: 'Font' })).toHaveTextContent('Arial')
+    expect(screen.getByRole('button', { name: 'Size' })).toHaveTextContent('Normal')
+    pick('Font', 'Verdana')
+    pick('Size', 'Huge')
+    expect(screen.getByRole('button', { name: 'Font' })).toHaveTextContent('Verdana')
+    expect(screen.getByRole('button', { name: 'Size' })).toHaveTextContent('Huge')
+  })
+
   it('offers the four sizes as Small/Normal/Large/Huge', () => {
     render(<EditorToolbar editor={fakeEditor()} />)
-    const sizes = screen.getByLabelText('Size') as HTMLSelectElement
-    expect([...sizes.options].map(o => [o.text, o.value])).toEqual([
-      ['Small', '12px'], ['Normal', '14px'], ['Large', '18px'], ['Huge', '24px'],
+    fireEvent.click(screen.getByRole('button', { name: 'Size' }))
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+      'Small', 'Normal', 'Large', 'Huge',
     ])
   })
 
@@ -106,7 +129,7 @@ describe('EditorToolbar', () => {
   it('does nothing without an editor', () => {
     render(<EditorToolbar editor={null} />)
     fireEvent.click(screen.getByRole('button', { name: 'Bold' }))
-    fireEvent.change(screen.getByLabelText('Font'), { target: { value: 'Georgia' } })
+    pick('Font', 'Georgia')
     // no throw is the assertion
   })
 })
