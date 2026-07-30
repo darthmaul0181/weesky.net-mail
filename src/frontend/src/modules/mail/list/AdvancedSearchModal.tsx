@@ -104,8 +104,8 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
             </label>
           </div>
 
-          <div className="folder-pick-actions">
-            <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={empty}>
+          <div className="folder-pick-submit">
+            <button type="submit" className="btn btn-primary" disabled={empty}>
               <SearchIcon size={15} /> Search
             </button>
           </div>

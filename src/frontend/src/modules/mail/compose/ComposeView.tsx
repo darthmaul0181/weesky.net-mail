@@ -335,7 +335,7 @@ export default function ComposeView({ onNotify }: Props) {
               <span className="modal-title">Save this draft?</span>
             </div>
             <p>Your message has unsaved changes.</p>
-            <div className="folder-pick-actions">
+            <div className="folder-pick-submit">
               <button type="button" className="btn btn-ghost" onClick={keepEditing}>Keep editing</button>
               {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
               <button type="button" className="btn btn-ghost" disabled={busy}
