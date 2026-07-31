@@ -20,6 +20,14 @@ import LinkIcon from '../../../icons/LinkIcon'
 import UnlinkIcon from '../../../icons/UnlinkIcon'
 import ClearFormatIcon from '../../../icons/ClearFormatIcon'
 
+/* The bar's icon scale. Its other half — the button, the B/I/U/S letters and the dropdown text —
+   lives on .compose-toolbar in mail.css; change the two together or the glyphs stop being centred
+   in their buttons. */
+const ICON = 19
+/** The two colour buttons stack their glyph over an ink bar, so it runs smaller than the rest. */
+const INK_ICON = 17
+const CHEVRON = 15
+
 const SWATCHES = [
   '#000000', '#444444', '#666666', '#999999', '#cccccc', '#ffffff',
   '#d0021b', '#e2674a', '#f5a623', '#f8e71c', '#7ed321', '#417505',
@@ -95,8 +103,8 @@ export default function EditorToolbar({ editor, active }: Props) {
   return (
     <div className="compose-toolbar" ref={container}>
       <div className="compose-tool-group">
-        {btn('Undo', <UndoIcon />, () => editor?.command('undo'))}
-        {btn('Redo', <RedoIcon />, () => editor?.command('redo'))}
+        {btn('Undo', <UndoIcon size={ICON} />, () => editor?.command('undo'))}
+        {btn('Redo', <RedoIcon size={ICON} />, () => editor?.command('redo'))}
       </div>
       <div className="compose-tool-group">
         {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
@@ -106,14 +114,14 @@ export default function EditorToolbar({ editor, active }: Props) {
       </div>
       <div className="compose-tool-group">
         <span className="compose-popover-anchor">
-          {btn('Text colour', inked(<TextColourIcon size={14} />, textColour),
+          {btn('Text colour', inked(<TextColourIcon size={INK_ICON} />, textColour),
             () => setOpenPopover(p => p === 'text' ? null : 'text'))}
           <Popover open={openPopover === 'text'}>
             {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) })}
           </Popover>
         </span>
         <span className="compose-popover-anchor">
-          {btn('Highlight colour', inked(<HighlighterIcon size={14} />, highlight),
+          {btn('Highlight colour', inked(<HighlighterIcon size={INK_ICON} />, highlight),
             () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
           <Popover open={openPopover === 'highlight'}>
             {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) })}
@@ -122,21 +130,21 @@ export default function EditorToolbar({ editor, active }: Props) {
       </div>
       <div className="compose-tool-group">
         <DropdownMenu ariaLabel="Font" align="left" className="compose-tool-select"
-          trigger={<><FontIcon size={14} />{font}<ChevronDownIcon size={12} /></>}
+          trigger={<><FontIcon size={ICON} />{font}<ChevronDownIcon size={CHEVRON} /></>}
           items={FONTS.map(name => ({
             label: name,
             node: <span style={{ fontFamily: name }}>{name}</span>,
             onSelect: () => { setFont(name); editor?.setFontFace(name) },
           }))} />
         <DropdownMenu ariaLabel="Size" align="left" className="compose-tool-select"
-          trigger={<><TextSizeIcon size={14} />{size.label}<ChevronDownIcon size={12} /></>}
+          trigger={<><TextSizeIcon size={ICON} />{size.label}<ChevronDownIcon size={CHEVRON} /></>}
           items={SIZES.map(entry => ({
             label: entry.label,
             node: <span style={{ fontSize: entry.value }}>{entry.label}</span>,
             onSelect: () => { setSize(entry); editor?.setFontSize(entry.value) },
           }))} />
         <DropdownMenu ariaLabel="Alignment" align="left" className="compose-tool-select"
-          trigger={<><alignment.Icon size={14} /><ChevronDownIcon size={12} /></>}
+          trigger={<><alignment.Icon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={ALIGNMENTS.map(entry => ({
             label: entry.label,
             icon: <entry.Icon size={14} />,
@@ -144,15 +152,15 @@ export default function EditorToolbar({ editor, active }: Props) {
           }))} />
       </div>
       <div className="compose-tool-group">
-        {btn('Bulleted list', <ListBulletIcon />, () => editor?.command('unorderedList'), active?.unorderedList)}
-        {btn('Numbered list', <ListOrderedIcon />, () => editor?.command('orderedList'), active?.orderedList)}
+        {btn('Bulleted list', <ListBulletIcon size={ICON} />, () => editor?.command('unorderedList'), active?.unorderedList)}
+        {btn('Numbered list', <ListOrderedIcon size={ICON} />, () => editor?.command('orderedList'), active?.orderedList)}
         {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
-        {btn('Increase quote', <IndentIcon />, () => editor?.command('increaseQuote'))}
-        {btn('Decrease quote', <OutdentIcon />, () => editor?.command('decreaseQuote'))}
+        {btn('Increase quote', <IndentIcon size={ICON} />, () => editor?.command('increaseQuote'))}
+        {btn('Decrease quote', <OutdentIcon size={ICON} />, () => editor?.command('decreaseQuote'))}
       </div>
       <div className="compose-tool-group">
         <span className="compose-popover-anchor">
-          {btn('Link', <LinkIcon />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
+          {btn('Link', <LinkIcon size={ICON} />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
           <Popover open={openPopover === 'link'}>
             <div className="compose-link-form">
               <label htmlFor="compose-link-url">Link URL</label>
@@ -164,8 +172,8 @@ export default function EditorToolbar({ editor, active }: Props) {
             </div>
           </Popover>
         </span>
-        {btn('Remove link', <UnlinkIcon />, () => editor?.command('removeLink'))}
-        {btn('Clear formatting', <ClearFormatIcon />, () => editor?.command('clearFormatting'))}
+        {btn('Remove link', <UnlinkIcon size={ICON} />, () => editor?.command('removeLink'))}
+        {btn('Clear formatting', <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
       </div>
     </div>
   )
