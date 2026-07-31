@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import EditorToolbar from './EditorToolbar'
 import type { EditorHandle } from './SquireEditor'
 
@@ -81,14 +81,41 @@ describe('EditorToolbar', () => {
     expect(editor.setAlignment).toHaveBeenCalledWith('center')
   })
 
-  it('shows the chosen font and size on their triggers', () => {
+  // The choice used to be spelled on the trigger, which made the bar re-flow when a long font
+  // name was picked. It lives in the menu now, so that is where it has to be readable.
+  // Scoped to the trigger's own dropdown: a click does not close the menu opened before it —
+  // DropdownMenu dismisses on mousedown — so an unscoped query reads two menus at once.
+  const ticked = (menu: string) => {
+    const trigger = screen.getByRole('button', { name: menu })
+    fireEvent.click(trigger)
+    const own = trigger.closest('.dropdown-root') as HTMLElement
+    const marked = within(own).getAllByRole('menuitem')
+      .filter(item => item.querySelector('svg'))
+      .map(item => item.textContent)
+    // Closed again: the trigger toggles, so a menu left open turns the next open into a close.
+    fireEvent.click(trigger)
+    return marked
+  }
+
+  it('marks the chosen font and size in their menus', () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-    expect(screen.getByRole('button', { name: 'Font' })).toHaveTextContent('Arial')
-    expect(screen.getByRole('button', { name: 'Size' })).toHaveTextContent('Normal')
+    expect(ticked('Font')).toEqual(['Arial'])
+    expect(ticked('Size')).toEqual(['Normal'])
+
     pick('Font', 'Verdana')
     pick('Size', 'Huge')
-    expect(screen.getByRole('button', { name: 'Font' })).toHaveTextContent('Verdana')
-    expect(screen.getByRole('button', { name: 'Size' })).toHaveTextContent('Huge')
+
+    expect(ticked('Font')).toEqual(['Verdana'])
+    expect(ticked('Size')).toEqual(['Huge'])
+  })
+
+  // The whole point of the change: no value on the trigger means no width that moves with it.
+  it('keeps the font and size triggers free of their value', () => {
+    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+    pick('Font', 'Times New Roman')
+
+    expect(screen.getByRole('button', { name: 'Font' })).not.toHaveTextContent('Times New Roman')
+    expect(screen.getByRole('button', { name: 'Size' })).not.toHaveTextContent('Normal')
   })
 
   it('offers the four sizes as Small/Normal/Large/Huge', () => {

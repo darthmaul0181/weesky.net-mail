@@ -1382,9 +1382,10 @@ textarea.compose-editor {
 }
 .compose-tool-group .dropdown-root { display: inline-flex; }
 
-/* Half of the bar's scale: the button, the B/I/U/S letters, the dropdown text and the ink bar. The
-   icon sizes are the other half, as ICON / INK_ICON / CHEVRON at the top of EditorToolbar.tsx —
-   revisiting the scale means moving both, and there are only those two places to look. */
+/* Half of the bar's scale: the button, the B/I/U/S letters and the ink bar. The icon sizes are the
+   other half, as ICON / INK_ICON / CHEVRON at the top of EditorToolbar.tsx — revisiting the scale
+   means moving both, and there are only those two places to look. No dropdown carries text any
+   more: a trigger spelling its own value gave the bar a width that moved with the choice. */
 .compose-tool,
 .compose-tool-select {
   background: none;
@@ -1399,7 +1400,7 @@ textarea.compose-editor {
   justify-content: center;
 }
 .compose-tool { width: 31px; }
-.compose-tool-select { gap: 5px; padding: 0 9px; font-size: 13px; white-space: nowrap; }
+.compose-tool-select { gap: 5px; padding: 0 9px; }
 .compose-tool-select > svg:last-child { opacity: 0.6; }
 
 /* The capsule is sunken, so the control under the pointer rises out of it instead of tinting it.
@@ -1417,6 +1418,16 @@ textarea.compose-editor {
 .compose-tool b, .compose-tool i, .compose-tool u, .compose-tool s { font-size: 17px; line-height: 1; }
 .compose-tool i { font-family: Georgia, 'Times New Roman', serif; }
 .compose-tool u { text-underline-offset: 2px; }
+
+/* The row owns the whole item so the tick sits against its right edge; .dropdown-item's own gap
+   would otherwise leave it hugging the label. */
+.compose-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+}
 
 .compose-tool-stack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .compose-tool-ink { width: 16px; height: 3px; border-radius: 2px; }

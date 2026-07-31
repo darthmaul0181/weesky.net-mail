@@ -20,6 +20,7 @@ import LinkIcon from '../../../icons/LinkIcon'
 import UnlinkIcon from '../../../icons/UnlinkIcon'
 import ClearFormatIcon from '../../../icons/ClearFormatIcon'
 import ImageIcon from '../../../icons/ImageIcon'
+import CheckIcon from '../../../icons/CheckIcon'
 import PlainTextIcon from '../../../icons/PlainTextIcon'
 
 /* The bar's icon scale. Its other half — the button, the B/I/U/S letters and the dropdown text —
@@ -105,6 +106,11 @@ export default function EditorToolbar(
     </button>
   )
 
+  /** The menu row carries the tick, since the trigger no longer carries the value. */
+  const chosen = (row: ReactNode, on: boolean) => (
+    <span className="compose-menu-row">{row}{on && <CheckIcon size={14} />}</span>
+  )
+
   /** An icon over the colour it applies, so the button says which colour it will lay down. */
   const inked = (icon: ReactNode, colour: string) => (
     <span className="compose-tool-stack">
@@ -148,18 +154,22 @@ export default function EditorToolbar(
         </span>
       </div>
       <div className="compose-tool-group">
+        {/* Icon only: spelling the value on the trigger made the bar a different width per font,
+            so it re-flowed under the user at the moment of choosing. The choice moved into the
+            menu, which is the one place it was ever read from — the bar cannot see the format at
+            the caret and only ever echoed the last pick. */}
         <DropdownMenu ariaLabel="Font" align="left" className="compose-tool-select"
-          trigger={<><FontIcon size={ICON} />{font}<ChevronDownIcon size={CHEVRON} /></>}
+          trigger={<><FontIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={FONTS.map(name => ({
             label: name,
-            node: <span style={{ fontFamily: name }}>{name}</span>,
+            node: chosen(<span style={{ fontFamily: name }}>{name}</span>, name === font),
             onSelect: () => { setFont(name); editor?.setFontFace(name) },
           }))} />
         <DropdownMenu ariaLabel="Size" align="left" className="compose-tool-select"
-          trigger={<><TextSizeIcon size={ICON} />{size.label}<ChevronDownIcon size={CHEVRON} /></>}
+          trigger={<><TextSizeIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={SIZES.map(entry => ({
             label: entry.label,
-            node: <span style={{ fontSize: entry.value }}>{entry.label}</span>,
+            node: chosen(<span style={{ fontSize: entry.value }}>{entry.label}</span>, entry.label === size.label),
             onSelect: () => { setSize(entry); editor?.setFontSize(entry.value) },
           }))} />
         <DropdownMenu ariaLabel="Alignment" align="left" className="compose-tool-select"
