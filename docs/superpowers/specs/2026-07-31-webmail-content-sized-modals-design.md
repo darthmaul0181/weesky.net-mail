@@ -97,11 +97,15 @@ the problem. Keyed on the control it covers all three at once:
 ```css
 /* .field-h — amends index.css:1350, which is where flex-basis: 0 is declared */
 .modal .field-h > :is(input[type="text"], input[type="password"], input[type="email"],
-                      input[type="number"], select, .quota-field, .identity-combo) {
-  flex-basis: var(--field-w, 34ch);
+                      input[type="number"], .quota-field, .identity-combo) {
+  flex-basis: auto;
+  width: var(--field-w, 34ch);
   min-width: 0;
-  max-width: 100%;               /* lets a wide <select> shrink back */
+  max-width: 100%;
 }
+
+/* A <select> is exempt — its widest option already is the right measure */
+.modal .field-h > select { flex-basis: auto; min-width: 0; max-width: 100%; }
 
 /* .field — a column flex row, so the measure is a width */
 .modal .field > :is(input, select, textarea) { width: var(--field-w, 34ch); max-width: 100%; }
@@ -117,13 +121,29 @@ selector cannot satisfy both constraints at once: written with `:is()` it weighs
 0-1-0 and loses to `.field-h input { flex: 1 }` (0-1-1), leaving every form pinned to the floor. Adding
 `.modal` to each idiom's own selector beats exactly the declaration it is amending and nothing else.
 
-`flex-grow` is left alone, so a control in a row wider than its measure still fills it. The type lists are
-explicit because `input[type="range"]` (the quota slider) and `input[type="checkbox"]` (the toggle switch)
-must keep their own sizing. `.quota-field` and `.identity-combo` are named because they are wrappers
-standing where a control would be, and `index.css:1377` gives the first of them the same `flex: 1`.
+**The measure is a `width`, never a `flex-basis`, and that was established by measurement rather than by
+reading the spec.** The first implementation set `flex-basis: var(--field-w)`; in Chrome, `--field-w` at
+34ch, 44ch and 60ch all produced the identical box, because a flex basis does not feed the flex container's
+intrinsic contribution — only the item's own `width` does. `flex-grow` is left alone, so a control in a row
+wider than its measure still fills it.
 
-`.quota-field input[type="number"] { width: 80px }` is untouched and still wins: the amendment sets a basis
-on the *wrapper*, never on the number box inside it.
+The type lists are explicit because `input[type="range"]` (the quota slider) and `input[type="checkbox"]`
+(the toggle switch) must keep their own sizing. `.quota-field` and `.identity-combo` are named because they
+are wrappers standing where a control would be, and `index.css:1377` gives the first of them the same
+`flex: 1`.
+
+**A `<select>` is exempt.** Its widest option already is exactly the measure content sizing is looking for —
+`SystemFoldersModal` lands at 516px on its folder names with no help at all — and imposing `--field-w` on it
+made that dialog *narrower* than the names it lists.
+
+Two consequences follow for the quota row, both measured:
+
+- **A range input's intrinsic width is a fixed ~129px** whatever it controls, so no content-derived measure
+  can express what the slider needs. That row declares its own: `.modal .field-h:has(> .quota-field)
+  { --field-w: 58ch }`, which restores `AddEditUserModal` to 614px and the slider to 319px.
+- **`.field-h input[type="number"] { flex: 1 }` is a descendant selector**, so the quota number box has
+  always carried a `flex-grow` nobody intended. Invisible while the row was 250px; at 438px it drew a 208px
+  number field. `.modal .quota-field input[type="number"] { flex: none }` pins it back to its declared 80px.
 
 The scale then collapses to **two tokens, both in characters**:
 

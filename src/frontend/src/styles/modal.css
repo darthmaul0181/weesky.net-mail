@@ -81,12 +81,36 @@
 /* A form control declares no intrinsic width — flex-basis:0 in .field-h, width:100% in the other
    two idioms — so a content-sized dialog would collapse onto its floor. One amendment per idiom,
    each adding .modal to the selector it amends: a single blanket selector cannot both beat
-   .field-h's 0-1-1 and lose to .folder-pick-filter's 0-1-0. */
+   .field-h's 0-1-1 and lose to .folder-pick-filter's 0-1-0.
+
+   The measure is a width, never a flex-basis: measured in Chrome, a basis does not feed the flex
+   container's intrinsic contribution at all, so --field-w had literally no effect on the box. */
 .modal .field-h > :is(input[type="text"], input[type="password"], input[type="email"],
-                      input[type="number"], select, .quota-field, .identity-combo) {
-  flex-basis: var(--field-w, 34ch);
+                      input[type="number"], .quota-field, .identity-combo) {
+  flex-basis: auto;
+  width: var(--field-w, 34ch);
   min-width: 0;
   max-width: 100%;
+}
+
+/* A <select> is exempt: its widest option already is the right measure. Forcing --field-w on it
+   made SystemFoldersModal narrower than the folder names it lists. */
+.modal .field-h > select {
+  flex-basis: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A range input's intrinsic width is a fixed ~129px whatever it controls, so no content-derived
+   measure can express what the quota slider needs. The row declares its own. */
+.modal .field-h:has(> .quota-field) {
+  --field-w: 58ch;
+}
+
+/* .field-h's control rule matches by descendant, so the quota box inherits a flex-grow it was
+   never meant to have — invisible at the old width, a 208px number field at the new one. */
+.modal .quota-field input[type="number"] {
+  flex: none;
 }
 
 .modal .field > :is(input, select, textarea) {
