@@ -353,7 +353,7 @@ public sealed class MailController(
         var status = await folders.GetFolderStatusAsync(AuthenticatedUser, connection, request.FolderPath, cancellationToken);
         if (status.IsFailure)
         {
-            return status.Error == ImapSession.FolderNotFound
+            return IsMissing(status.Error)
                 ? NotFoundEnveloppe(status.Error)
                 : BadGatewayEnveloppe(status.Error);
         }
@@ -456,6 +456,8 @@ public sealed class MailController(
 
         var result = await messages.ListAsync(AuthenticatedUser, connection, folder, page, pageSize, cancellationToken);
 
+        if (result.IsFailure && IsMissing(result.Error)) return NotFoundEnveloppe(result.Error);
+
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
 
@@ -491,7 +493,7 @@ public sealed class MailController(
 
         var result = await messages.GetAsync(AuthenticatedUser, connection, folder, uid, cancellationToken);
 
-        if (result.IsFailure && result.Error == ImapSession.MessageNotFound)
+        if (result.IsFailure && IsMissing(result.Error))
         {
             return NotFoundEnveloppe(result.Error);
         }
@@ -566,7 +568,7 @@ public sealed class MailController(
 
         if (result.IsFailure)
         {
-            var status = result.Error is ImapSession.MessageNotFound or ImapSession.AttachmentNotFound
+            var status = IsMissing(result.Error)
                 ? StatusCodes.Status404NotFound
                 : StatusCodes.Status502BadGateway;
 
@@ -609,7 +611,7 @@ public sealed class MailController(
         var result = await messages.GetSourceAsync(
             AuthenticatedUser, connection, folder, uid, MaxSourceBytes, cancellationToken);
 
-        if (result.IsFailure && result.Error == ImapSession.MessageNotFound)
+        if (result.IsFailure && IsMissing(result.Error))
         {
             return NotFoundEnveloppe(result.Error);
         }
@@ -815,6 +817,8 @@ public sealed class MailController(
             AuthenticatedUser, connection, request.FolderPath, request.AllFolders,
             criteria, request.Page, request.PageSize, cancellationToken);
 
+        if (result.IsFailure && IsMissing(result.Error)) return NotFoundEnveloppe(result.Error);
+
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
     }
 
@@ -1015,7 +1019,7 @@ public sealed class MailController(
 
         var message = await messages.GetMimeMessageAsync(
             AuthenticatedUser, connection, request.Folder, request.Uid, cancellationToken);
-        if (message.IsFailure && message.Error == ImapSession.MessageNotFound)
+        if (message.IsFailure && IsMissing(message.Error))
             return NotFoundEnveloppe(message.Error);
         if (message.IsFailure)
             return BadGatewayEnveloppe(message.Error);
@@ -1166,7 +1170,7 @@ public sealed class MailController(
 
         var message = await messages.GetMimeMessageAsync(
             AuthenticatedUser, connection, request.Folder, request.Uid, cancellationToken);
-        if (message.IsFailure && message.Error == ImapSession.MessageNotFound)
+        if (message.IsFailure && IsMissing(message.Error))
             return NotFoundEnveloppe(message.Error);
         if (message.IsFailure)
             return BadGatewayEnveloppe(message.Error);
@@ -1202,6 +1206,14 @@ public sealed class MailController(
 
     private static List<string> Addresses(InternetAddressList? list) =>
         list?.Mailboxes?.Select(m => m.Address).ToList() ?? [];
+
+    /// <summary>
+    /// The three sentinels that name a thing that is not there, against the mail server merely
+    /// refusing. Rule 4 keeps them constants precisely so the layer producing an error and the
+    /// layer choosing a status cannot drift apart, which is what a per-call spelling would allow.
+    /// </summary>
+    private static bool IsMissing(string error) =>
+        error is ImapSession.FolderNotFound or ImapSession.MessageNotFound or ImapSession.AttachmentNotFound;
 
     private static void StampRoles(IReadOnlyList<MailFolderNode> nodes, IReadOnlyDictionary<string, string> roleByPath)
     {

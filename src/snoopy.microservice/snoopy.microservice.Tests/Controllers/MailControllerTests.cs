@@ -457,6 +457,34 @@ public sealed class MailControllerTests
         Assert.Single(page.Messages);
     }
 
+    // A folder deleted from another client is an ordinary race, not a mail-server refusal.
+    [Fact]
+    public async Task GetMessages_Returns404WhenTheFolderIsGone()
+    {
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "Gone", 0, 50, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailFolderPage>(ImapSession.FolderNotFound));
+
+        var result = await CreateController().GetMessages("Gone", 0, 50, CancellationToken.None);
+
+        var obj = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task SearchMessages_Returns404WhenTheFolderIsGone()
+    {
+        _messages.Setup(m => m.SearchAsync(
+                It.IsAny<User>(), Conn, "Gone", false,
+                It.IsAny<MailSearchCriteria>(), 0, 50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<MailSearchPage>(ImapSession.FolderNotFound));
+
+        var result = await CreateController().SearchMessages(
+            new SearchMessagesRequest { FolderPath = "Gone", Quick = "x", Page = 0, PageSize = 50 },
+            CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
     [Fact]
     public async Task GetMessages_Returns400ForABlankFolder()
     {
