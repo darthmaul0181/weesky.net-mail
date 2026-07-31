@@ -1563,7 +1563,10 @@ textarea.compose-editor {
 .compose-link-btn { background: none; border: none; color: var(--action-primary); cursor: pointer; padding: 0; font-size: 13px; }
 
 /* From is plain text, aligned on the same column as the To/Subject boxes. */
-.compose-from, .compose-priority { display: flex; align-items: center; gap: 10px; }
+/* min-height, not a border: these two carry a dropdown rather than a bordered field, so without
+   it they stood 25px among 32px neighbours and broke the header's rhythm — visible once the rows
+   were spaced apart. The row reserves the height; the control keeps its own look. */
+.compose-from, .compose-priority { display: flex; align-items: center; gap: 10px; min-height: 32px; }
 .compose-from-label, .compose-priority-label {
   width: 66px; flex-shrink: 0; font-size: 13px; font-weight: 500; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.04em;
