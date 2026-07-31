@@ -33,7 +33,7 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '380px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isEdit ? <><PencilIcon /> Edit domain</> : <><GlobeIcon /> Add domain</>}</span>
           <button className="modal-close" onClick={onClose}>✕</button>

@@ -502,7 +502,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       {(blocker.state === 'blocked' || leaveAsk !== null) && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: '420px' }}>
+          <div className="modal">
             <div className="modal-header">
               <span className="modal-title">Save this draft?</span>
             </div>
@@ -535,7 +535,7 @@ export default function ComposeView({ onNotify }: Props) {
       {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
       {confirmPlain && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: '420px' }}>
+          <div className="modal">
             <div className="modal-header">
               <span className="modal-title">Switch to plain text?</span>
             </div>

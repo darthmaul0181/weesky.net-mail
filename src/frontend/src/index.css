@@ -550,7 +550,6 @@ body {
 .admin-icon-btn.is-default { color: var(--badge-count-bg); cursor: default; }
 
 /* Add/Edit identity dialog: the alias combobox fills its field row and anchors the dropdown. */
-.modal.identity-modal { max-width: 460px; }
 .identity-combo { position: relative; flex: 1; }
 .identity-combo input { width: 100%; box-sizing: border-box; }
 .identity-combo-hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px 126px; }
@@ -931,63 +930,7 @@ body {
   color: var(--danger);
 }
 
-/* ── Change password modal ───────────────────────────────── */
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  width: 100%;
-  max-width: 380px;
-  padding: 24px;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.modal-title {
-  font-size: 16px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 16px;
-  color: var(--text-muted);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s;
-}
-
-.modal-close:hover {
-  color: var(--text);
-}
-
-.modal-success {
-  color: var(--success);
-  font-size: 14px;
-  padding: 12px 0;
-}
+/* The modal contract lives in styles/modal.css. */
 
 /* ── Toasts ──────────────────────────────────────────────── */
 
@@ -1084,25 +1027,7 @@ body {
   color: var(--text-muted);
 }
 
-/* ── Admin modal ─────────────────────────────────────────── */
-
-.modal-admin {
-  width: 75vw;
-  max-width: 75vw;
-  height: 75vh;
-  max-height: 75vh;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.modal.modal-admin > .modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
+/* ── Admin page body ─────────────────────────────────────── */
 
 .admin-modal-body {
   display: flex;
@@ -1673,7 +1598,6 @@ body {
 }
 
 .rule-help-modal {
-  max-width: 600px;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -2061,24 +1985,7 @@ body {
   background: #1a1f2e;
 }
 
-/* ── Rules modal ─────────────────────────────────────────────  */
-
-.modal-rules {
-  width: 75vw;
-  max-width: 75vw;
-  height: 75vh;
-  max-height: 75vh;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal.modal-rules > .modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
+/* ── Rules page body ─────────────────────────────────────────  */
 
 .rules-modal-body {
   flex: 1;

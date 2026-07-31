@@ -228,7 +228,6 @@
 /* ── Folders settings page and its dialogs ───────────────── */
 
 .modal-folders {
-  max-width: 520px;
   max-height: 78vh;
   display: flex;
   flex-direction: column;
@@ -1138,12 +1137,6 @@
 .pane-splitter:focus-visible { background: var(--accent-unread); outline: none; }
 
 /* ── Move/Copy folder picker ─────────────────────────────── */
-
-/* max-height, because .modal-overlay centres its child: a dialog taller than the viewport
-   overflows both ends and its own top becomes unreachable, with nothing to scroll. Scoped here
-   rather than put on .modal — a scroll container clips absolutely positioned descendants, and
-   the other dialogs hang an .ownership-dropdown out of their own box. */
-.modal.folder-pick-modal { max-width: 460px; max-height: 100%; overflow-y: auto; }
 
 /* Title, count and filter on one row; the filter drops to its own line when the dialog is
    narrower than the three of them, which is the whole point of it being last. */

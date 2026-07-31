@@ -46,7 +46,7 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">Advanced search</span>
           <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>

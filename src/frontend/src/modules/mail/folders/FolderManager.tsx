@@ -110,7 +110,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
 
       {renaming && (
         <div className="modal-overlay" onClick={() => setRenaming(null)}>
-          <div className="modal" style={{ maxWidth: '560px' }} onClick={event => event.stopPropagation()}>
+          <div className="modal" onClick={event => event.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title"><PencilIcon />Rename folder</span>
               <button className="modal-close" aria-label="Close" onClick={() => setRenaming(null)}>✕</button>
