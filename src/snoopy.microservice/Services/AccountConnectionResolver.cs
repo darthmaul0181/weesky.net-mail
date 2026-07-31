@@ -67,10 +67,12 @@ internal sealed class AccountConnectionResolver(
             return Result.Failure<MailAccountConnection>(ConnectedAccountErrors.AccountNotFound);
 
         if (!MailConnectionBuilder.TryExternal(
-                domain, row.Id.ToString(), row.Email, secret, out var connection))
+                domain, row.Id.ToString(), row.Email, secret, out var connection,
+                options.CurrentValue.AllowCleartext))
         {
             logger.LogError(
-                "External domain {DomainName} ({DomainId}) holds an unusable security value",
+                "External domain {DomainName} ({DomainId}) holds an unusable security value — " +
+                "unknown, or None while Mail:AllowCleartext is off",
                 domain.Name, domain.Id);
             return Result.Failure<MailAccountConnection>(ConnectedAccountErrors.AccountNotFound);
         }

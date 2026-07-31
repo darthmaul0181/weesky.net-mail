@@ -48,6 +48,15 @@ public sealed class MailOptions
     /// </summary>
     public bool AllowInvalidCertificate { get; set; }
 
+    /// <summary>
+    /// When true, accept an external domain whose stored transport security is
+    /// <see cref="SecureSocketOptions.None"/>. Off by default, and it must stay off anywhere the
+    /// link is not a loopback: the account's own mail password crosses that socket in the clear,
+    /// and a row is admin-written, not something the server negotiated. Every cleartext connection
+    /// is logged as a warning naming the host, whatever the source of the endpoint.
+    /// </summary>
+    public bool AllowCleartext { get; set; }
+
     /// <summary>True when enough is configured to attempt an IMAP connection.</summary>
     public bool IsImapConfigured => !string.IsNullOrWhiteSpace(ImapHost);
 

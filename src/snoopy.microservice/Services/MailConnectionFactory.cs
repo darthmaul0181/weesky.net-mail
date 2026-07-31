@@ -57,6 +57,13 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
             return Result.Failure<TSession>("Mail service is not configured");
         }
 
+        // The password is about to cross this socket; AuthenticateAsync sends it whether or not the
+        // login succeeds, so the line belongs here rather than on the happy path.
+        if (endpoint.Security is SecureSocketOptions.None)
+            Logger.LogWarning(
+                "Opening an unencrypted {Protocol} connection to {Host}:{Port} — the mail password crosses this link in the clear",
+                endpoint.Protocol, endpoint.Host, endpoint.Port);
+
         TClient? client = null;
 
         try

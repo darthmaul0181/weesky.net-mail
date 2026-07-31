@@ -21,16 +21,18 @@ internal static class MailConnectionBuilder
             SieveHost: null, SievePort: null, username, password);
 
     /// <summary>
-    /// False when a stored security value is not one the admin screens can write — the row is
-    /// unusable, and the caller decides both what to log and what status to answer.
+    /// False when a stored security value is not one the admin screens can write, or names no
+    /// transport security at all without <paramref name="allowCleartext"/> — the row is unusable,
+    /// and the caller decides both what to log and what status to answer. The opt-in defaults to
+    /// off so a caller that has no <see cref="MailOptions"/> to hand refuses the downgrade.
     /// </summary>
     public static bool TryExternal(
         ExternalDomain domain, string accountId, string username, string password,
-        [NotNullWhen(true)] out MailAccountConnection? connection)
+        [NotNullWhen(true)] out MailAccountConnection? connection, bool allowCleartext = false)
     {
         connection = null;
-        if (!TryParseSecurity(domain.ImapSecurity, out var imapSecurity)
-            || !TryParseSecurity(domain.SmtpSecurity, out var smtpSecurity))
+        if (!TryParseSecurity(domain.ImapSecurity, allowCleartext, out var imapSecurity)
+            || !TryParseSecurity(domain.SmtpSecurity, allowCleartext, out var smtpSecurity))
             return false;
 
         connection = new MailAccountConnection(
@@ -41,8 +43,13 @@ internal static class MailConnectionBuilder
         return true;
     }
 
-    /// <summary>Only the three values the admin screens write; anything else is not an endpoint.</summary>
-    private static bool TryParseSecurity(string value, out SecureSocketOptions security)
+    /// <summary>Only the three values the admin screens write, and None only under the opt-in.</summary>
+    private static bool TryParseSecurity(string value, bool allowCleartext, out SecureSocketOptions security)
         => Enum.TryParse(value, out security)
-           && security is SecureSocketOptions.None or SecureSocketOptions.StartTls or SecureSocketOptions.SslOnConnect;
+           && security switch
+           {
+               SecureSocketOptions.StartTls or SecureSocketOptions.SslOnConnect => true,
+               SecureSocketOptions.None => allowCleartext,
+               _ => false
+           };
 }

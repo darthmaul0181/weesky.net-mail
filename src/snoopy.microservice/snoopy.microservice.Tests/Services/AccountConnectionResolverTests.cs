@@ -39,10 +39,13 @@ public sealed class AccountConnectionResolverTests
         _domains = new ExternalDomainStore(_db);
     }
 
-    private AccountConnectionResolver CreateSut()
+    private AccountConnectionResolver CreateSut(bool allowCleartext = false)
     {
+        var options = TestConnections.HomeOptions();
+        options.AllowCleartext = allowCleartext;
+
         var monitor = new Mock<IOptionsMonitor<MailOptions>>();
-        monitor.Setup(m => m.CurrentValue).Returns(TestConnections.HomeOptions());
+        monitor.Setup(m => m.CurrentValue).Returns(options);
 
         return new AccountConnectionResolver(
             _credentials, _accounts, _domains, _users, monitor.Object,
@@ -267,6 +270,56 @@ public sealed class AccountConnectionResolverTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(ConnectedAccountErrors.AccountNotFound, result.Error);
+    }
+
+    // A row an admin wrote as None would put the mail password on an unencrypted socket: it is
+    // refused like any other unusable value, and lands on the same 404 for the same reason.
+    [Theory]
+    [InlineData("None", "StartTls")]
+    [InlineData("SslOnConnect", "None")]
+    public async Task Resolve_ACleartextDomain_FailsAccountNotFoundWithoutTheOptIn(string imap, string smtp)
+    {
+        var domain = await CreateDomainAsync(d => (d.ImapSecurity, d.SmtpSecurity) = (imap, smtp));
+        var account = await ConnectAccountAsync("alice@gmail.test", "gmailpw", domain.Id);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.AccountNotFound, result.Error);
+    }
+
+    [Fact]
+    public async Task Resolve_ACleartextDomain_IsUsableWhenAllowCleartextIsOn()
+    {
+        var domain = await CreateDomainAsync(d => (d.ImapSecurity, d.SmtpSecurity) = ("None", "None"));
+        var account = await ConnectAccountAsync("alice@gmail.test", "gmailpw", domain.Id);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut(allowCleartext: true)
+            .ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SecureSocketOptions.None, result.Value.ImapSecurity);
+        Assert.Equal(SecureSocketOptions.None, result.Value.SmtpSecurity);
+    }
+
+    [Theory]
+    [InlineData("StartTls")]
+    [InlineData("SslOnConnect")]
+    public async Task Resolve_AnEncryptedDomain_IsUnaffectedByTheOptIn(string security)
+    {
+        var domain = await CreateDomainAsync(d => (d.ImapSecurity, d.SmtpSecurity) = (security, security));
+        var account = await ConnectAccountAsync("alice@gmail.test", "gmailpw", domain.Id);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(Enum.Parse<SecureSocketOptions>(security), result.Value.ImapSecurity);
     }
 
     [Fact]
