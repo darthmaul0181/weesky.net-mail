@@ -1482,14 +1482,14 @@ textarea.compose-editor {
   border: none;
   border-radius: 0;
   padding: 0;
-  font-size: 13px;
+  font-size: 14px;
   background: none;
   color: var(--text);
   outline: none;
 }
 .recipient-token, .compose-attachment {
   display: inline-flex; align-items: center;
-  background: var(--surface-sunken); font-size: 12px;
+  background: var(--surface-sunken);
 }
 /* A card filling the box's inner height, not a pill floating in it: at 18px it read as grey text
    rather than as an entered value. 22px, not 24: the box is border-box, so its 32px min-height
@@ -1499,11 +1499,17 @@ textarea.compose-editor {
 .recipient-token {
   gap: 7px;
   height: 22px;
+  /* 14px is what every value in this form is set in — the From line and the subject both. At 12px
+     a recipient read as a caption beside them. line-height: 1 because the inherited 1.5 makes a
+     21px line box for 20px of room inside the card. */
+  font-size: 14px;
+  line-height: 1;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0 6px 0 9px;
 }
-.compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; }
+/* Still 12px: the tray is a footer band listing files, not a form value like a recipient. */
+.compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12px; }
 .recipient-token.is-invalid { color: var(--danger); border-color: var(--danger); }
 .recipient-token button, .compose-attachment button { background: none; border: none; cursor: pointer; color: inherit; padding: 0; }
 
