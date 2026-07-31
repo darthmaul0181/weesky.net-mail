@@ -76,11 +76,18 @@ vi.mock('./SquireEditor', async () => {
   return { default: Stub }
 })
 
+/** The one source of truth for the account's preferences: the api mock resolves it, and
+    renderCompose primes the query cache with it. ComposeView reads the composing format at mount
+    and holds a spinner until it has them, so a test that let the query resolve asynchronously
+    would query the DOM against that spinner. */
+let prefs: Record<string, string> = {}
+
 function renderCompose(from = 'INBOX', seed?: ComposeSeed, search = '') {
   const onNotify = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  client.setQueryData(['preferences'], prefs)
   const router = createMemoryRouter(
     [
       { path: '/mail', element: <span data-testid="mail-view">mail</span> },
@@ -141,7 +148,8 @@ beforeEach(() => {
   mocks.getContacts.mockResolvedValue({ contacts: [bruno] })
   // Capture off by default: every test outside its own describe sends to addresses the book does
   // not hold, and would otherwise assert against a composer quietly creating contacts.
-  mocks.getPreferences.mockResolvedValue({ 'contacts.captureRecipients': 'false' })
+  prefs = { 'contacts.captureRecipients': 'false' }
+  mocks.getPreferences.mockImplementation(async () => prefs)
   // Default: identities still loading — every pre-existing test keeps the 2c1 plain From.
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
@@ -1020,7 +1028,7 @@ describe('capturing new recipients', () => {
 
   beforeEach(() => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
-    mocks.getPreferences.mockResolvedValue({ 'contacts.captureRecipients': 'true' })
+    prefs = { 'contacts.captureRecipients': 'true' }
     mocks.createContact.mockResolvedValue(created)
     mocks.deleteContact.mockResolvedValue(undefined)
   })
@@ -1058,7 +1066,7 @@ describe('capturing new recipients', () => {
   })
 
   it('creates nothing when the preference is off', async () => {
-    mocks.getPreferences.mockResolvedValue({ 'contacts.captureRecipients': 'false' })
+    prefs = { 'contacts.captureRecipients': 'false' }
     await openCompose()
 
     addRecipient('To', 'alice@x.be')
@@ -1525,5 +1533,33 @@ describe('inline images, staged-id lifetime', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByText('Save this draft?')).toBeNull()
     expect(router.state.location.pathname).toBe('/mail')
+  })
+})
+
+// The account's chosen editor, read at mount — unlike captureRecipientsOf, which is read at send.
+describe('the default composing editor', () => {
+  const htmlDraft: ComposeSeed = {
+    action: 'draft', to: [], cc: [], bcc: [], subject: 'Half written',
+    html: '<p>saved</p>', text: null, fromAddress: null, attachments: [],
+    inReplyTo: null, references: [], draftRef: { folderPath: 'Drafts', uid: 41 },
+    nameHints: {}, priority: 'normal',
+  }
+
+  it('opens a new message in the text editor when the account chose text', async () => {
+    prefs = { 'mail.composeFormat': 'text' }
+    renderCompose()
+
+    expect(await screen.findByRole('textbox', { name: 'Message body' }))
+      .toBeInstanceOf(HTMLTextAreaElement)
+  })
+
+  // The carve-out, at the level a user would notice it: an html draft carries text: null exactly
+  // like a reply, so a body test would have reopened it in the wrong editor and lost its body.
+  it('reopens an html draft in the html editor whatever the account chose', async () => {
+    prefs = { 'mail.composeFormat': 'text' }
+    renderCompose('INBOX', htmlDraft)
+
+    await waitFor(() => expect(screen.getByDisplayValue('Half written')).toBeInTheDocument())
+    expect(screen.queryByRole('textbox', { name: 'Message body' })).toBeNull()
   })
 })

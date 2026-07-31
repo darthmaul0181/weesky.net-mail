@@ -29,6 +29,7 @@ public static class UserPreferences
     public const string MailShowSpamScore = "mail.showSpamScore";
     public const string MailReadingPane = "mail.readingPane";
     public const string MailRowActions = "mail.rowActions";
+    public const string MailComposeFormat = "mail.composeFormat";
 
     // contacts., not mail.: the preference governs a write to the address book. The trigger is a
     // send; the effect is what names the key.
@@ -52,6 +53,10 @@ public static class UserPreferences
         // The default is the three icons the row carried before it was choosable, so an account
         // that never touches the setting sees no change at all.
         new(MailRowActions, "seen,archive,delete", ["seen", "archive", "junk", "delete"], IsSet: true),
+        // Governs every composer but a resumed draft, which reopens in the format it was saved in.
+        // An enumeration rather than a boolean: it leaves room for a "follow the original" value
+        // without a key migration.
+        new(MailComposeFormat, "html", ["html", "text"]),
         new(ContactsCaptureRecipients, "true", Booleans),
         new(MailTrustContacts, "false", Booleans),
     ];

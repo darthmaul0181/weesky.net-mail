@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MailMessageDetail, OpenedDraft, SendingIdentity } from '../api/mailTypes'
 import { stagedAttachmentUrl } from '../../../api.js'
-import { buildComposeSeed, buildDraftSeed } from './composeSeed'
+import { applyComposeFormat, buildComposeSeed, buildDraftSeed, type ComposeSeed } from './composeSeed'
 
 const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail => ({
   uid: 1, folderPath: 'INBOX', uidValidity: 1, subject: 'Hello',
@@ -204,5 +204,54 @@ describe('buildDraftSeed', () => {
   // A draft keeps no headers from whatever it was a reply to, so there is nothing to carry.
   it('carries no name hints', () => {
     expect(buildDraftSeed(opened, [], ref, 'primary').nameHints).toEqual({})
+  })
+})
+
+// Mirrors ComposeSeed: `html` is a required string, `nameHints` a record, and
+// StagedAttachmentInfo spells the file name `fileName` with `contentId` a required string | null.
+function seedOf(over: Partial<ComposeSeed> = {}): ComposeSeed {
+  return {
+    action: 'reply', to: [], cc: [], bcc: [], subject: 'Re: hi',
+    html: '<p>mine</p><blockquote><p>yours</p></blockquote>', text: null,
+    fromAddress: null, attachments: [], inReplyTo: null, references: [],
+    priority: 'normal', draftRef: null, nameHints: {}, ...over,
+  }
+}
+
+describe('applyComposeFormat', () => {
+  it('returns its input untouched in html mode', () => {
+    const seed = seedOf()
+    expect(applyComposeFormat(seed, 'html')).toBe(seed)
+  })
+
+  it('answers null for null', () => {
+    expect(applyComposeFormat(null, 'text')).toBeNull()
+  })
+
+  it('converts the quote, prefixing it', () => {
+    const out = applyComposeFormat(seedOf(), 'text')!
+    expect(out.text).toContain('> yours')
+    expect(out.text).toContain('mine')
+    expect(out.html).toBe('')
+  })
+
+  // The one field that moves an inline image into the tray: ComposeView splits on it already.
+  it('nulls every contentId so an inline image becomes an attachment', () => {
+    const out = applyComposeFormat(seedOf({
+      attachments: [{ id: 'a', fileName: 'logo.png', size: 1, contentType: 'image/png', contentId: 'cid1' }],
+    }), 'text')!
+    expect(out.attachments[0].contentId).toBeNull()
+  })
+
+  // Two carve-out assertions, because they fail on different mistakes. The HTML draft is the one a
+  // `seed.text` test cannot see: it carries text: null exactly like a reply does.
+  it('leaves an html draft alone', () => {
+    const draft = seedOf({ action: 'draft', text: null, html: '<p>saved</p>' })
+    expect(applyComposeFormat(draft, 'text')).toBe(draft)
+  })
+
+  it('leaves a text draft alone', () => {
+    const draft = seedOf({ action: 'draft', text: 'saved', html: '' })
+    expect(applyComposeFormat(draft, 'text')).toBe(draft)
   })
 })

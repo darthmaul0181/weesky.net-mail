@@ -483,3 +483,25 @@ describe('GeneralPage notifications', () => {
     expect(mocks.requestDesktopPermission).not.toHaveBeenCalled()
   })
 })
+
+describe('the default composing editor', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows the stored editor', async () => {
+    renderPage({ 'mail.composeFormat': 'text' })
+
+    expect(await screen.findByRole('radio', { name: 'Plain text' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Formatted' })).not.toBeChecked()
+  })
+
+  it('saves the chosen editor', async () => {
+    renderPage({ 'mail.composeFormat': 'html' })
+    const plain = await screen.findByRole('radio', { name: 'Plain text' })
+    expect(plain).not.toBeChecked()
+
+    fireEvent.click(plain)
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.composeFormat', 'text'))
+  })
+})

@@ -3,8 +3,9 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, isStreaming, notifiesOf, notifyDesktopOf,
-  notifySoundOf, readingPaneOf, requestSizeOf, showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
+  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
+  notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf, showPreviewOf,
+  trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -178,5 +179,18 @@ describe('trustContactsOf', () => {
     expect(trustContactsOf({})).toBe(false)
     expect(trustContactsOf({ 'mail.trustContacts': 'true' })).toBe(true)
     expect(trustContactsOf({ 'mail.trustContacts': 'garbage' })).toBe(false)
+  })
+})
+
+describe('composeFormatOf', () => {
+  it('reads the stored editor', () => {
+    expect(composeFormatOf({ 'mail.composeFormat': 'text' })).toBe('text')
+    expect(composeFormatOf({ 'mail.composeFormat': 'html' })).toBe('html')
+  })
+
+  // An older backend does not send the key at all, and today's composer is the HTML one.
+  it('falls back to html on an absent or unrecognised value', () => {
+    expect(composeFormatOf({})).toBe('html')
+    expect(composeFormatOf({ 'mail.composeFormat': 'plain' })).toBe('html')
   })
 })

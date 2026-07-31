@@ -18,6 +18,7 @@ export const PREFERENCE_KEYS = {
   showSpamScore: 'mail.showSpamScore',
   readingPane: 'mail.readingPane',
   rowActions: 'mail.rowActions',
+  composeFormat: 'mail.composeFormat',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
 } as const
@@ -79,6 +80,14 @@ export type ReadingPane = 'right' | 'bottom' | 'none'
 export function readingPaneOf(preferences: Preferences): ReadingPane {
   const stored = preferences[PREFERENCE_KEYS.readingPane]
   return stored === 'bottom' || stored === 'none' ? stored : 'right'
+}
+
+export type ComposeFormat = 'html' | 'text'
+
+/** Which editor a composer opens in. `html` unless the account explicitly chose otherwise, so an
+    unrecognised value from a newer build never leaves the user in an editor they did not pick. */
+export function composeFormatOf(preferences: Preferences): ComposeFormat {
+  return preferences[PREFERENCE_KEYS.composeFormat] === 'text' ? 'text' : 'html'
 }
 
 export type RowAction = 'seen' | 'archive' | 'junk' | 'delete'
