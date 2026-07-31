@@ -35,9 +35,10 @@ internal sealed class ImapSession : IImapSession
     /// full while the client gets one opaque sentence — the server's own words never reach it.
     ///
     /// <c>sentinel</c> maps an exception to a shared sentinel, or null when it is not one this
-    /// operation recognises. Deliberately per-operation rather than global: the set each method
-    /// already translated is the set it keeps, so this stays a refactor and not a change of
-    /// behaviour. Unifying them is worth doing, but only once these paths have coverage.
+    /// operation recognises. Deliberately per-operation rather than global: an operation scoped
+    /// to a folder passes <see cref="FolderSentinel"/>, one that also resolves a specific message
+    /// by UID passes <see cref="FolderOrMessageSentinel"/>, and every method now makes that
+    /// choice — none is left translating a vanished folder into the opaque failure message.
     /// </summary>
     internal async Task<Result<T>> ExecuteAsync<T>(
         CancellationToken cancellationToken,
@@ -504,7 +505,8 @@ internal sealed class ImapSession : IImapSession
             return Result.Success(result);
         },
             "Unable to search the messages",
-            ex => _logger.LogError(ex, "Failed to search messages from {Folder} (allFolders: {AllFolders})", folderPath, allFolders));
+            ex => _logger.LogError(ex, "Failed to search messages from {Folder} (allFolders: {AllFolders})", folderPath, allFolders),
+            FolderSentinel);
 
     /// <summary>The folders one search sweeps: the named one, or every selectable folder.</summary>
     private async Task<IReadOnlyList<IMailFolder>> SearchableFoldersAsync(
@@ -635,7 +637,8 @@ internal sealed class ImapSession : IImapSession
             return Result.Success(result);
         },
             "Unable to read the messages",
-            ex => _logger.LogError(ex, "Failed to list messages in {Folder}", folderPath));
+            ex => _logger.LogError(ex, "Failed to list messages in {Folder}", folderPath),
+            FolderSentinel);
 
     private const MessageSummaryItems SummaryItems =
         MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.Flags |
@@ -778,7 +781,8 @@ internal sealed class ImapSession : IImapSession
             return Result.Success(detail);
         },
             "Unable to read the message",
-            ex => _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath));
+            ex => _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath),
+            FolderOrMessageSentinel);
 
     /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
     public Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
@@ -899,7 +903,8 @@ internal sealed class ImapSession : IImapSession
             });
         },
             "Unable to read the attachment",
-            ex => _logger.LogError(ex, "Failed to read attachment {Part} of message {Uid}", partSpecifier, uid));
+            ex => _logger.LogError(ex, "Failed to read attachment {Part} of message {Uid}", partSpecifier, uid),
+            FolderOrMessageSentinel);
 
     /// <summary>
     /// Sentinel errors the controller maps to 404 rather than 502. Shared constants so the
