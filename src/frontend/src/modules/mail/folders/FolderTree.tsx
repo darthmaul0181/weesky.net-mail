@@ -5,6 +5,7 @@ import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
 import { DRAG_MIME, canDropInto, parseDrag, type DragPayload } from '../list/dragMessages'
 import { isSystemFolder } from './folderNodes'
+import { folderIcon } from './folderIcon'
 
 interface Props {
   folders: MailFolderNode[]
@@ -12,6 +13,8 @@ interface Props {
   onSelect: (path: string) => void
   /** Drop dragged messages into a folder. Absent where the tree is not a drop target. */
   onDropMessages?: (targetPath: string, payload: DragPayload) => void
+  /** `mail.showFolderIcons`, resolved by the caller — the tree holds no data of its own. */
+  showIcons?: boolean
 }
 
 /** The well-known folders, in the order a reader reaches for them. */
@@ -72,11 +75,13 @@ function FolderRow({
   selectedPath,
   onSelect,
   onDropMessages,
+  showIcons,
 }: {
   folder: MailFolderNode
   selectedPath: string | null
   onSelect: (path: string) => void
   onDropMessages?: (targetPath: string, payload: DragPayload) => void
+  showIcons?: boolean
 }) {
   const [open, setOpen] = useState(folder.specialUse === 'inbox')
   const [dropReady, setDropReady] = useState(false)
@@ -147,6 +152,8 @@ function FolderRow({
           disabled={!folder.selectable}
           onClick={() => folder.selectable && onSelect(folder.path)}
         >
+          {/* Decorative: the row is already named by its label, so it adds nothing to say. */}
+          {showIcons && folderIcon(folder.specialUse)}
           <span className="folder-row-name">{label}</span>
           {showsBadge ? <span className="folder-row-count">{folder.unread}</span> : null}
         </button>
@@ -156,7 +163,7 @@ function FolderRow({
         <div className="folder-children">
           {visibleChildren.map(child => (
             <FolderRow key={child.path} folder={child} selectedPath={selectedPath}
-              onSelect={onSelect} onDropMessages={onDropMessages} />
+              onSelect={onSelect} onDropMessages={onDropMessages} showIcons={showIcons} />
           ))}
         </div>
       )}
@@ -166,14 +173,16 @@ function FolderRow({
 
 /** Unsubscribed folders are hidden — that is what the subscription state is for, except for
  *  the inbox, which is always shown (see isVisible). */
-export default function FolderTree({ folders, selectedPath, onSelect, onDropMessages }: Props) {
+export default function FolderTree(
+  { folders, selectedPath, onSelect, onDropMessages, showIcons }: Props,
+) {
   const { system, others } = splitByRole(folders.filter(isVisible))
 
   return (
     <nav aria-label="Folders">
       {system.map(folder => (
         <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath}
-          onSelect={onSelect} onDropMessages={onDropMessages} />
+          onSelect={onSelect} onDropMessages={onDropMessages} showIcons={showIcons} />
       ))}
 
       {/* Only between two populated blocks: a rule under nothing reads as a fault. */}
@@ -181,7 +190,7 @@ export default function FolderTree({ folders, selectedPath, onSelect, onDropMess
 
       {others.map(folder => (
         <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath}
-          onSelect={onSelect} onDropMessages={onDropMessages} />
+          onSelect={onSelect} onDropMessages={onDropMessages} showIcons={showIcons} />
       ))}
     </nav>
   )

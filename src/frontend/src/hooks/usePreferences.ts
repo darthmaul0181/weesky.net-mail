@@ -18,6 +18,8 @@ export const PREFERENCE_KEYS = {
   showSpamScore: 'mail.showSpamScore',
   readingPane: 'mail.readingPane',
   rowActions: 'mail.rowActions',
+  composeFormat: 'mail.composeFormat',
+  showFolderIcons: 'mail.showFolderIcons',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
 } as const
@@ -81,6 +83,14 @@ export function readingPaneOf(preferences: Preferences): ReadingPane {
   return stored === 'bottom' || stored === 'none' ? stored : 'right'
 }
 
+export type ComposeFormat = 'html' | 'text'
+
+/** Which editor a composer opens in. `html` unless the account explicitly chose otherwise, so an
+    unrecognised value from a newer build never leaves the user in an editor they did not pick. */
+export function composeFormatOf(preferences: Preferences): ComposeFormat {
+  return preferences[PREFERENCE_KEYS.composeFormat] === 'text' ? 'text' : 'html'
+}
+
 export type RowAction = 'seen' | 'archive' | 'junk' | 'delete'
 
 /** The order the icons are drawn in, whatever order they were stored in — the setting chooses
@@ -101,6 +111,12 @@ export function rowActionsOf(preferences: Preferences): RowAction[] {
 
   const chosen = new Set(stored.split(','))
   return ROW_ACTIONS.filter(action => chosen.has(action))
+}
+
+/** Off unless explicitly on — the folder column has never carried icons, so a backend that does
+    not know the key yet must leave it as it was. */
+export function showFolderIconsOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.showFolderIcons] === 'true'
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */

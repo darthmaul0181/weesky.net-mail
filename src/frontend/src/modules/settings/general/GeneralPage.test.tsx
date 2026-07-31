@@ -100,6 +100,36 @@ describe('GeneralPage', () => {
     expect(container.querySelector('.toggle-switch')).toBeTruthy()
   })
 
+  // Off unless the account asked for it — the folder column has never carried icons.
+  it('shows the folder-icon toggle off when nothing is stored', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Folder icons')).not.toBeChecked()
+  })
+
+  it('puts the folder-icon row straight under the preview row', async () => {
+    renderPage()
+    const preview = (await screen.findByLabelText('Preview in the message list')).closest('.field-h')
+
+    expect(preview?.nextElementSibling)
+      .toBe(screen.getByLabelText('Folder icons').closest('.field-h'))
+  })
+
+  it('shows the folder-icon toggle on when it is stored', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showFolderIcons': 'true' })
+
+    expect(await screen.findByLabelText('Folder icons')).toBeChecked()
+  })
+
+  it('saves the folder-icon toggle as a string the backend accepts', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Folder icons'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.showFolderIcons', 'true'))
+  })
+
   it('shows the images toggle off by default and on when it is stored', async () => {
     renderPage()
     expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()
@@ -481,5 +511,27 @@ describe('GeneralPage notifications', () => {
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.notifyDesktop', 'false'))
     expect(mocks.requestDesktopPermission).not.toHaveBeenCalled()
+  })
+})
+
+describe('the default composing editor', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows the stored editor', async () => {
+    renderPage({ 'mail.composeFormat': 'text' })
+
+    expect(await screen.findByRole('radio', { name: 'Plain text' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Formatted' })).not.toBeChecked()
+  })
+
+  it('saves the chosen editor', async () => {
+    renderPage({ 'mail.composeFormat': 'html' })
+    const plain = await screen.findByRole('radio', { name: 'Plain text' })
+    expect(plain).not.toBeChecked()
+
+    fireEvent.click(plain)
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.composeFormat', 'text'))
   })
 })

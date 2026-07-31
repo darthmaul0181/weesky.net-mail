@@ -4,10 +4,10 @@ import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, notifyDesktopOf,
-  notifySoundOf, readingPaneOf, rowActionsOf, showPreviewOf, showSpamScoreOf, trustContactsOf,
-  usePreferences, useSetPreference,
-  type ReadingPane, type RowAction,
+  ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf,
+  notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
+  showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
+  type ComposeFormat, type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -46,6 +46,13 @@ const READING_PANES: { value: ReadingPane; label: string; toast: string }[] = [
   { value: 'right', label: 'Right', toast: 'The reader sits beside the message list' },
   { value: 'bottom', label: 'Bottom', toast: 'The reader sits below the message list' },
   { value: 'none', label: 'Hidden', toast: 'Messages will open in place of the list' },
+]
+
+/** No glyph beside these two: PaneGlyph draws three arrangements, a shape a miniature can carry.
+    Two editors are not, and a decorative square would say nothing the label does not. */
+const COMPOSE_FORMATS: { value: ComposeFormat; label: string; toast: string }[] = [
+  { value: 'html', label: 'Formatted', toast: 'New messages will open in the formatted editor' },
+  { value: 'text', label: 'Plain text', toast: 'New messages will open in the plain-text editor' },
 ]
 
 /** A miniature of the arrangement — the glyph is the description, like Appearance's
@@ -226,6 +233,16 @@ export default function GeneralPage() {
                 on ? 'Previews are shown' : 'Previews are hidden')}
             />
 
+            <ToggleRow
+              id="show-folder-icons"
+              label="Folder icons"
+              hint="Show an icon beside each folder in the mail column."
+              checked={showFolderIconsOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.showFolderIcons, String(on),
+                on ? 'Folder icons are shown' : 'Folder icons are hidden')}
+            />
+
             <div className="field-h is-setting is-stacked">
               <span className="setting-label">
                 <span id="row-actions-label">Quick actions on a message</span>
@@ -302,6 +319,33 @@ export default function GeneralPage() {
 
           <section className="account-section">
             <h2>Composing</h2>
+
+            <div className="field-h is-setting is-stacked">
+              <span className="setting-label">
+                <span id="compose-format-label">Default editor</span>
+                <span className="setting-hint">
+                  Applies to new messages, replies and forwards. A saved draft reopens in the
+                  editor it was written in, and the toolbar switches any one message.
+                </span>
+              </span>
+              <div className="layout-cards" role="radiogroup" aria-labelledby="compose-format-label">
+                {COMPOSE_FORMATS.map(({ value, label, toast }) => (
+                  <label key={value} className="layout-card">
+                    <span className="layout-card-name">
+                      <input
+                        type="radio"
+                        name="compose-format"
+                        value={value}
+                        checked={composeFormatOf(preferences) === value}
+                        disabled={setPreference.isPending}
+                        onChange={() => save(PREFERENCE_KEYS.composeFormat, value, toast)}
+                      />
+                      {label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <ToggleRow
               id="capture-recipients"

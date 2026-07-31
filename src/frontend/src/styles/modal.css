@@ -1,0 +1,124 @@
+/* The whole dialog contract. A modal sizes to its own content between a floor and a reading
+   measure; the overlay owns the scroll. See
+   docs/superpowers/specs/2026-07-31-webmail-content-sized-modals-design.md */
+
+/* margin:auto on the child, not align-items:center on the overlay: centred while the dialog fits,
+   anchored to the top and scrollable once it does not. align-items:center plus a scroll makes the
+   overflowing top unreachable. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 200;
+  display: flex;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* The ceiling that matters is the prose's, below: an intrinsic contribution is clamped by the
+   child's own max-width, so max-width here is only the viewport guard. flex:none because a flex
+   item defaults to shrinking, which would take the dialog under that guard. */
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin: auto;
+  flex: none;
+  width: max-content;
+  min-width: var(--modal-w, 24rem);
+  max-width: min(56rem, calc(100vw - 48px));
+  overflow-wrap: break-word;
+  padding: 24px;
+}
+
+/* gap, because space-between distributes zero free space under max-content and would draw the
+   title flush against the ✕ whenever the header is the widest element. */
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+
+.modal-close:hover {
+  color: var(--text);
+}
+
+.modal-success {
+  color: var(--success);
+  font-size: 14px;
+  padding: 12px 0;
+}
+
+/* This is what actually stops the box growing. balance equalises the lines instead of leaving a
+   two-word orphan on the last one. */
+.modal p,
+.modal .modal-hint {
+  max-width: 56ch;
+  text-wrap: balance;
+}
+
+/* A form control declares no intrinsic width — flex-basis:0 in .field-h, width:100% in the other
+   two idioms — so a content-sized dialog would collapse onto its floor. One amendment per idiom,
+   each adding .modal to the selector it amends: a single blanket selector cannot both beat
+   .field-h's 0-1-1 and lose to .folder-pick-filter's 0-1-0.
+
+   The measure is a width, never a flex-basis: measured in Chrome, a basis does not feed the flex
+   container's intrinsic contribution at all, so --field-w had literally no effect on the box. */
+.modal .field-h > :is(input[type="text"], input[type="password"], input[type="email"],
+                      input[type="number"], .quota-field, .identity-combo) {
+  flex-basis: auto;
+  width: var(--field-w, 34ch);
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A <select> is exempt: its widest option already is the right measure. Forcing --field-w on it
+   made SystemFoldersModal narrower than the folder names it lists. */
+.modal .field-h > select {
+  flex-basis: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A range input's intrinsic width is a fixed ~129px whatever it controls, so no content-derived
+   measure can express what the quota slider needs. The row declares its own. */
+.modal .field-h:has(> .quota-field) {
+  --field-w: 58ch;
+}
+
+/* .field-h's control rule matches by descendant, so the quota box inherits a flex-grow it was
+   never meant to have — invisible at the old width, a 208px number field at the new one. */
+.modal .quota-field input[type="number"] {
+  flex: none;
+}
+
+.modal .field > :is(input, select, textarea) {
+  width: var(--field-w, 34ch);
+  max-width: 100%;
+}
+
+.modal .rule-wizard-input {
+  width: var(--field-w, 34ch);
+  max-width: 100%;
+}

@@ -5,7 +5,7 @@ import { useContacts } from '../../contacts/queries'
 import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
-import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
+import { captureRecipientsOf, composeFormatOf, usePreferences } from '../../../hooks/usePreferences'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
@@ -20,7 +20,8 @@ import IdentitySelect from './IdentitySelect'
 import { mailtoSeedFrom } from './mailtoSeed'
 import RecipientsField, { isValidAddress } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
-import type { ComposeAction, ComposeSeed } from './composeSeed'
+import { applyComposeFormat, type ComposeAction, type ComposeSeed } from './composeSeed'
+import LoadingBlock from '../../../components/LoadingBlock'
 import { relativizeStagedUrls } from './stagedUrls'
 import { useStagedAttachments } from './useStagedAttachments'
 
@@ -87,8 +88,13 @@ export default function ComposeView({ onNotify }: Props) {
   const from = state?.from
   // A mailto: arrives through the URL, not through the history state: the operating system opens
   // a cold address, with no React navigation behind it.
-  const seed = useMemo(
+  const rawSeed = useMemo(
     () => state?.seed ?? mailtoSeedFrom(location.search), [state?.seed, location.search])
+  const openedFormat = preferences ? composeFormatOf(preferences) : 'html'
+  // Empty deps deliberately: the editor is chosen when the composer opens. Changing the setting
+  // mid-message must never reformat what is already being written.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const seed = useMemo(() => applyComposeFormat(rawSeed, openedFormat), [])
 
   const [to, setTo] = useState<string[]>(seed?.to ?? [])
   const [cc, setCc] = useState<string[]>(seed?.cc ?? [])
@@ -102,7 +108,9 @@ export default function ComposeView({ onNotify }: Props) {
   const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html || seed?.text))
   // Non-null is the plain-text mode itself, mirroring the wire: it holds the body the textarea
   // owns and the field the payload carries. Null means Squire owns the body.
-  const [text, setText] = useState<string | null>(seed?.text ?? null)
+  // applyComposeFormat has already settled every seeded case, so this only answers the no-seed one.
+  const [text, setText] = useState<string | null>(
+    seed ? seed.text : (preferences && composeFormatOf(preferences) === 'text' ? '' : null))
   // Squire reads initialHtml once, at mount, so a switch back has to hand it the converted body
   // here — a prop change would never reach the editor it already built.
   const [editorHtml, setEditorHtml] = useState(seed?.html)
@@ -420,6 +428,11 @@ export default function ComposeView({ onNotify }: Props) {
     navigate(backTarget)
   }
 
+  // Read at mount, unlike captureRecipientsOf which is read at send. Without this the composer
+  // opens in HTML and flips to a textarea a moment later, under whoever has started typing.
+  // It sits after every hook: an early return above one changes the hook order between renders.
+  if (!preferences) return <LoadingBlock />
+
   return (
     <div className="compose-view" data-testid="compose-view"
       onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
@@ -502,7 +515,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       {(blocker.state === 'blocked' || leaveAsk !== null) && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: '420px' }}>
+          <div className="modal">
             <div className="modal-header">
               <span className="modal-title">Save this draft?</span>
             </div>
@@ -535,7 +548,7 @@ export default function ComposeView({ onNotify }: Props) {
       {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
       {confirmPlain && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: '420px' }}>
+          <div className="modal">
             <div className="modal-header">
               <span className="modal-title">Switch to plain text?</span>
             </div>

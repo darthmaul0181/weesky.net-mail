@@ -91,6 +91,31 @@
 
 .mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 
+/* The two columns show their scrollbar under the cursor only, each on its own hover — but the
+   gutter stays reserved whether the thumb is painted or not. Toggling `overflow` instead would
+   resize the scroller, and the list's load-more sentinel is placed by geometry: a reflow on every
+   pointer entry would fire it. `overflow-y: auto` already keeps the gutter away when it fits. */
+.mail-folders-scroll,
+.mail-list-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.mail-folders-scroll:hover,
+.mail-list-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
+
+.mail-folders-scroll::-webkit-scrollbar,
+.mail-list-scroll::-webkit-scrollbar { width: 8px; }
+
+.mail-folders-scroll::-webkit-scrollbar-track,
+.mail-list-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.mail-folders-scroll::-webkit-scrollbar-thumb,
+.mail-list-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+
+.mail-folders-scroll:hover::-webkit-scrollbar-thumb,
+.mail-list-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
+
 .mail-list-footer {
   flex: none;
   border-top: 1px solid var(--list-separator);
@@ -140,6 +165,10 @@
 }
 
 .folder-row:hover { background: var(--folders-item-hover); }
+
+/* flex: none, or the glyph gives up pixels to buy the name a few — the same rule the settings
+   nav needs for the same reason. The colour is currentColor's, so the active row carries it. */
+.folder-row > svg { flex: none; }
 
 .folder-row.is-system { font-weight: 600; }
 
@@ -228,7 +257,6 @@
 /* ── Folders settings page and its dialogs ───────────────── */
 
 .modal-folders {
-  max-width: 520px;
   max-height: 78vh;
   display: flex;
   flex-direction: column;
@@ -1138,12 +1166,6 @@
 .pane-splitter:focus-visible { background: var(--accent-unread); outline: none; }
 
 /* ── Move/Copy folder picker ─────────────────────────────── */
-
-/* max-height, because .modal-overlay centres its child: a dialog taller than the viewport
-   overflows both ends and its own top becomes unreachable, with nothing to scroll. Scoped here
-   rather than put on .modal — a scroll container clips absolutely positioned descendants, and
-   the other dialogs hang an .ownership-dropdown out of their own box. */
-.modal.folder-pick-modal { max-width: 460px; max-height: 100%; overflow-y: auto; }
 
 /* Title, count and filter on one row; the filter drops to its own line when the dialog is
    narrower than the three of them, which is the whole point of it being last. */

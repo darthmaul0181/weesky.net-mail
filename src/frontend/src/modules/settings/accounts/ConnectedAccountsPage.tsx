@@ -48,7 +48,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title"><KeyIcon /> Re-enter password</span>
           <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>

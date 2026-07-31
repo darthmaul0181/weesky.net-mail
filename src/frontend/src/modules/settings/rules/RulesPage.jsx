@@ -603,7 +603,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '680px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isNew ? 'New rule' : 'Edit rule'}</span>
           <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)} title="Help">?</button>
@@ -761,7 +761,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '712px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">Turn off extended rules?</span>
           <button className="modal-close" onClick={onClose}>✕</button>

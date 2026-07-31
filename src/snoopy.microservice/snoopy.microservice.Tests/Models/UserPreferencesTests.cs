@@ -16,6 +16,8 @@ public sealed class UserPreferencesTests
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailAlwaysShowImages);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowSpamScore);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailReadingPane);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailComposeFormat);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowFolderIcons);
     }
 
     [Theory]
@@ -26,6 +28,8 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailAlwaysShowImages, "false")]
     [InlineData(UserPreferences.MailShowSpamScore, "true")]
     [InlineData(UserPreferences.MailReadingPane, "right")]
+    [InlineData(UserPreferences.MailComposeFormat, "html")]
+    [InlineData(UserPreferences.MailShowFolderIcons, "false")]
     public void Default_IsTheValueAnAccountWithNoRowsGets(string key, string expected)
     {
         Assert.Equal(expected, UserPreferences.All.Single(p => p.Key == key).Default);
@@ -54,6 +58,13 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailReadingPane, "none", true)]
     [InlineData(UserPreferences.MailReadingPane, "left", false)]
     [InlineData(UserPreferences.MailReadingPane, "Right", false)]  // the value is a symbol, not prose
+    [InlineData(UserPreferences.MailComposeFormat, "html", true)]
+    [InlineData(UserPreferences.MailComposeFormat, "text", true)]
+    [InlineData(UserPreferences.MailComposeFormat, "HTML", false)]
+    [InlineData(UserPreferences.MailComposeFormat, "plain", false)]  // the toolbar's label is not the value
+    [InlineData(UserPreferences.MailComposeFormat, "", false)]
+    [InlineData(UserPreferences.MailShowFolderIcons, "true", true)]
+    [InlineData(UserPreferences.MailShowFolderIcons, "on", false)]
     public void IsValid_AcceptsOnlyTheOfferedValues(string key, string value, bool expected)
     {
         Assert.Equal(expected, UserPreferences.IsValid(key, value));
@@ -138,6 +149,14 @@ public sealed class UserPreferencesTests
         var effective = UserPreferences.Effective([]);
 
         Assert.Equal("false", effective["mail.trustContacts"]);
+    }
+
+    [Fact]
+    public void Effective_LeavesFolderIconsOffByDefault()
+    {
+        var effective = UserPreferences.Effective([]);
+
+        Assert.Equal("false", effective[UserPreferences.MailShowFolderIcons]);
     }
 
     [Theory]

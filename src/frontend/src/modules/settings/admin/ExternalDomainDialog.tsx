@@ -102,7 +102,7 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">
             {isEdit ? <PencilIcon /> : <GlobeIcon />} {isEdit ? 'Edit external domain' : 'Add external domain'}

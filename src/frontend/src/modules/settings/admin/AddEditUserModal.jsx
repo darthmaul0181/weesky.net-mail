@@ -61,7 +61,7 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>

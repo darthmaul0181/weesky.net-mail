@@ -3,6 +3,8 @@ import type {
   StagedAttachmentInfo,
 } from '../api/mailTypes'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
+import type { ComposeFormat } from '../../../hooks/usePreferences'
+import { htmlToText } from './bodyFormat'
 import { formatReaderDate } from '../reader/formatReaderDate'
 import {
   editAsNewFrom, myAddresses, preselectIdentity, replyAllRecipients, replyRecipients, subjectFor,
@@ -155,5 +157,28 @@ export function buildDraftSeed(
     priority: opened.priority,
     draftRef: ref,
     nameHints: {},
+  }
+}
+
+/**
+ * The account's chosen editor, applied to a seed before the composer mounts.
+ *
+ * A resumed draft is exempt and the test is `action`, never `text`: an HTML draft carries
+ * `text: null` exactly like a reply does, so a body test cannot tell the two apart and would
+ * discard what the draft holds. `ComposeView` draws the same boundary for its dirty flag.
+ *
+ * Clearing `contentId` is the whole of the attachment handling: the composer already splits the
+ * seed's attachments on that field, so an inline image lands in the tray with nothing else to do.
+ */
+export function applyComposeFormat(
+  seed: ComposeSeed | null, format: ComposeFormat,
+): ComposeSeed | null {
+  if (seed === null || format === 'html' || seed.action === 'draft') return seed
+
+  return {
+    ...seed,
+    html: '',
+    text: htmlToText(seed.html),
+    attachments: seed.attachments.map(a => ({ ...a, contentId: null })),
   }
 }

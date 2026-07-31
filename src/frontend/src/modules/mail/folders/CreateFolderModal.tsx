@@ -22,7 +22,7 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: '560px' }} onClick={event => event.stopPropagation()}>
+      <div className="modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title"><FolderPlusIcon />New folder</span>
           <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
