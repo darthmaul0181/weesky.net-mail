@@ -14,10 +14,15 @@ namespace weesky.Snoopy.Microservice.Services;
 /// </summary>
 internal sealed class StagedAttachmentStore : IStagedAttachmentStore
 {
+    /// <summary>A composer window realistically holds a handful of attachments; 50 is generous
+    /// headroom while still bounding disk inodes and sweep cost for an account left staging forever.</summary>
+    private const int MaxStagedEntriesPerAccount = 50;
+
     private sealed record Entry(StagedAttachmentInfo Info, string AccountId, string FilePath, DateTimeOffset StagedAt);
 
     private readonly ConcurrentDictionary<Guid, Entry> _entries = new();
     private readonly ConcurrentDictionary<string, long> _reserved = new();
+    private readonly ConcurrentDictionary<string, int> _reservedCount = new();
     private readonly IOptionsMonitor<MailOptions> _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<StagedAttachmentStore> _logger;
@@ -44,9 +49,10 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
         // Anti-abuse bound: one abandoned compose must not lock the account out of the next one.
         // The whole file is reserved up front, so concurrent uploads cannot all pass the same gate.
         var reservedAfter = _reserved.AddOrUpdate(accountId, limitBytes, (_, current) => current + limitBytes);
-        if (reservedAfter - limitBytes >= limitBytes * 4)
+        var countAfter = _reservedCount.AddOrUpdate(accountId, 1, (_, current) => current + 1);
+        if (reservedAfter - limitBytes >= limitBytes * 4 || countAfter > MaxStagedEntriesPerAccount)
         {
-            Release(accountId, limitBytes);
+            Release(accountId, limitBytes, releaseCount: true);
             return Result.Failure<StagedAttachmentInfo>("Too many staged attachments; send or discard a draft first");
         }
 
@@ -89,7 +95,7 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
         {
             if (!staged)
             {
-                Release(accountId, limitBytes);
+                Release(accountId, limitBytes, releaseCount: true);
                 TryDeleteFile(path);
             }
         }
@@ -161,12 +167,24 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
 
     private void Forget(Entry entry)
     {
-        if (_entries.TryRemove(entry.Info.Id, out _)) Release(entry.AccountId, entry.Info.Size);
+        if (_entries.TryRemove(entry.Info.Id, out _)) Release(entry.AccountId, entry.Info.Size, releaseCount: true);
     }
 
-    private void Release(string accountId, long bytes)
+    /// <summary>Bytes true down to the real size on every successful save without freeing its
+    /// count slot; releaseCount instead marks the one-per-entry release paths (delete, sweep, failure).</summary>
+    private void Release(string accountId, long bytes, bool releaseCount = false)
     {
-        if (bytes > 0) _reserved.AddOrUpdate(accountId, 0, (_, current) => Math.Max(0, current - bytes));
+        if (bytes > 0)
+        {
+            var remaining = _reserved.AddOrUpdate(accountId, 0, (_, current) => Math.Max(0, current - bytes));
+            if (remaining == 0) _reserved.TryRemove(new KeyValuePair<string, long>(accountId, 0));
+        }
+
+        if (releaseCount)
+        {
+            var remainingCount = _reservedCount.AddOrUpdate(accountId, 0, (_, current) => Math.Max(0, current - 1));
+            if (remainingCount == 0) _reservedCount.TryRemove(new KeyValuePair<string, int>(accountId, 0));
+        }
     }
 
     private bool TryDeleteFile(string path)
