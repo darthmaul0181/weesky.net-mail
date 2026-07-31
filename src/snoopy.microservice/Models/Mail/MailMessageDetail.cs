@@ -58,5 +58,11 @@ public sealed class MailMessageDetail
     /// <summary>Remote images withheld by the sanitiser, for the "show images" prompt.</summary>
     public int BlockedImageCount { get; set; }
 
+    /// <summary>
+    /// True when the HTML body exceeded the sanitiser's input ceiling and only its leading part was
+    /// kept. Without it the reader sees a message that simply stops, with nothing saying why.
+    /// </summary>
+    public bool Truncated { get; set; }
+
     public List<MailAttachmentInfo> Attachments { get; set; } = new();
 }

@@ -19,7 +19,7 @@ public sealed class SaveRulesRequest
     /// When null or empty, the chosen provider's default script name is used. A control
     /// character would split the line-oriented ManageSieve command this name is written into.
     /// </summary>
-    [StringLength(128)]
+    [StringLength(512)]
     [RegularExpression(@"\A[^\x00-\x1F\x7F-\x9F]*\z",
         ErrorMessage = "Script name must not contain control characters")]
     public string? ScriptName { get; set; }

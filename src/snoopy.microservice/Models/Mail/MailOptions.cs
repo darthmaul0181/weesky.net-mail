@@ -50,10 +50,16 @@ public sealed class MailOptions
 
     /// <summary>
     /// When true, accept an external domain whose stored transport security is
-    /// <see cref="SecureSocketOptions.None"/>. Off by default, and it must stay off anywhere the
-    /// link is not a loopback: the account's own mail password crosses that socket in the clear,
-    /// and a row is admin-written, not something the server negotiated. Every cleartext connection
-    /// is logged as a warning naming the host, whatever the source of the endpoint.
+    /// <see cref="SecureSocketOptions.None"/>, and authenticate over a socket that turned out not
+    /// to be encrypted. Off by default, and it must stay off anywhere the link is not a loopback:
+    /// the account's own mail password crosses that socket in the clear.
+    ///
+    /// The refusal is decided from the connected client, not from the configured value, so
+    /// <c>Auto</c> and <c>StartTlsWhenAvailable</c> falling back to cleartext — or an attacker
+    /// stripping STARTTLS from the banner — are caught too, and every cleartext connection that
+    /// this flag permits is logged as a warning naming the host.
+    ///
+    /// This governs IMAP and SMTP only. ManageSieve has its own <c>Sieve:AllowCleartext</c>.
     /// </summary>
     public bool AllowCleartext { get; set; }
 

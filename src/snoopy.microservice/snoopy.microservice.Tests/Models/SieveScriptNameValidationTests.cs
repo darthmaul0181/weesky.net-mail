@@ -74,9 +74,9 @@ public sealed class SieveScriptNameValidationTests
 
     [Fact]
     public void SaveRulesRequest_WithOverlongScriptName_IsInvalid()
-        => Assert.False(IsValid(new SaveRulesRequest { ScriptName = new string('a', 129) }, out _));
+        => Assert.False(IsValid(new SaveRulesRequest { ScriptName = new string('a', 513) }, out _));
 
     [Fact]
     public void SieveRawScript_WithOverlongScriptName_IsInvalid()
-        => Assert.False(IsValid(new SieveRawScript { Content = "stop;", ScriptName = new string('a', 129) }, out _));
+        => Assert.False(IsValid(new SieveRawScript { Content = "stop;", ScriptName = new string('a', 513) }, out _));
 }

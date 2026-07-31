@@ -751,6 +751,7 @@ internal sealed class ImapSession : IImapSession
                 HtmlBody = sanitized.Html,
                 TextBody = message.TextBody ?? string.Empty,
                 BlockedImageCount = sanitized.BlockedImageCount,
+                Truncated = sanitized.Truncated,
                 Authentication = MailAuthenticationReader.Parse(message.Headers),
                 SpamScore = MailSpamScoreReader.Parse(message.Headers),
                 MailingList = headerDetails.MailingList,
