@@ -289,12 +289,19 @@ a.dropdown-item { text-decoration: none; }
 }
 
 .pane-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   padding: 7px 10px;
   border-radius: var(--radius-sm);
   color: var(--text);
   text-decoration: none;
   font-size: 14px;
 }
+
+/* The icon takes currentColor, so the active row's fg carries it too. flex:none because an icon
+   that shrinks to buy the label a few pixels is worse than a label that wraps. */
+.pane-item svg { flex: none; }
 
 .pane-item:hover { background: var(--pane-item-hover); }
 
