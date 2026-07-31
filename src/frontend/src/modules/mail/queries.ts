@@ -9,7 +9,7 @@ import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSource, MailMessageSummary,
   MailSearchPage, FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote,
-  QuotePurpose, SavedDraft, OpenedDraft,
+  QuotePurpose, SavedDraft, OpenedDraft, MailPriority,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -727,7 +727,10 @@ export interface SendMessageArgs {
   bcc: string[]
   subject: string
   htmlBody: string
+  /** Present sends the message as text/plain alone; htmlBody rides along empty. */
+  textBody?: string
   attachmentIds: string[]
+  priority: MailPriority
   /** Omitted picks the account's own address server-side; the display label is always server-resolved. */
   fromAddress?: string
   /** Threading of a reply/forward: the original's id and its extended references chain. */

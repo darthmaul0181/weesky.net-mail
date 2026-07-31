@@ -257,8 +257,8 @@
    --text instead, so it darkens in light and lightens in dark by construction, with no per-mode
    value and no new token. Written inline rather than as a :root token on purpose: a custom
    property declared on :root resolves its var()s against :root, which would be the wrong palette
-   inside the Appearance page's previews. .compose-tool and .attachment-viewer-nav in mail.css
-   carry the same line for the same reason — keep the three in step. */
+   inside the Appearance page's previews. .attachment-viewer-nav in mail.css carries the same line
+   for the same reason — keep the two in step. */
 .dropdown-item:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 
 /* An <a> arrives underlined; .dropdown-item above already sets its color and font. */

@@ -586,6 +586,61 @@ public sealed class MailSenderTests
         finally { File.Delete(path); }
     }
 
+    // ── Plain text ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SendAsync_WithATextBodySendsPlainTextAlone()
+    {
+        var sender = CreateSender();
+        MimeMessage? sent = null;
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(Result.Success());
+
+        var request = Request() with { HtmlBody = string.Empty, TextBody = "hello\nthere" };
+        var result = await sender.SendAsync(_user, Conn, request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        // TextBody decodes with the platform's newline format — CRLF on Windows, LF on the CI
+        // runner — so the claim here is the text, never the line ending the host happens to use.
+        Assert.Equal("hello\nthere", sent!.TextBody!.ReplaceLineEndings("\n"));
+        // No HTML twin: the whole point of the mode is that the recipient gets text.
+        Assert.Null(sent.HtmlBody);
+        _sanitizer.Verify(s => s.Prepare(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_InTextModePacksAnInlinePartAsAnOrdinaryAttachment()
+    {
+        var id = Guid.NewGuid();
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        await File.WriteAllBytesAsync(path, new byte[] { 1, 2, 3 });
+        try
+        {
+            MimeMessage? sent = null;
+            var sender = CreateSender();
+            // Staged as an inline part by the quote preparer: it carries a Content-ID.
+            var info = new StagedAttachmentInfo(id, "logo.png", 3, "image/png", "logo@mail");
+            _staged.Setup(s => s.Open(It.IsAny<string>(), id))
+                .Returns(Result.Success(new StagedAttachment(info, path)));
+            _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+                .Callback<MimeMessage, CancellationToken>((m, _) => sent = m)
+                .ReturnsAsync(Result.Success());
+
+            var request = Request() with
+            {
+                HtmlBody = string.Empty, TextBody = "see the logo", AttachmentIds = [id],
+            };
+            var result = await sender.SendAsync(_user, Conn, request, CancellationToken.None);
+
+            Assert.True(result.IsSuccess);
+            // A text body references no cid, so it travels as a file rather than being dropped.
+            var attachment = Assert.IsType<MimePart>(Assert.Single(sent!.Attachments));
+            Assert.Equal("logo.png", attachment.FileName);
+        }
+        finally { File.Delete(path); }
+    }
+
     // ── Connected accounts ──────────────────────────────────────────────
 
     private MailSender CreateSenderForConnectedAccount()

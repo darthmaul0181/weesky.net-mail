@@ -1,5 +1,6 @@
 import type {
-  AliasInfo, MailMessageDetail, OpenedDraft, PreparedQuote, SendingIdentity, StagedAttachmentInfo,
+  AliasInfo, MailMessageDetail, MailPriority, OpenedDraft, PreparedQuote, SendingIdentity,
+  StagedAttachmentInfo,
 } from '../api/mailTypes'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { formatReaderDate } from '../reader/formatReaderDate'
@@ -24,10 +25,14 @@ export interface ComposeSeed {
   bcc: string[]
   subject: string
   html: string
+  /** Non-null opens the composer in text mode, holding this body. */
+  text: string | null
   fromAddress: string | null
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]
+  /** Resumed from a saved draft; every other action opens at 'normal'. */
+  priority: MailPriority
   /** Set when the composer is editing an existing draft — the version a save replaces. */
   draftRef: DraftRef | null
   /** Canonical address → the display name the original's headers carried. Feeds contact capture
@@ -77,10 +82,12 @@ export function buildComposeSeed(
       bcc: detail.bcc.map(a => a.address),
       subject: detail.subject,
       html: quotable,
+      text: null,
       fromAddress: editAsNewFrom(detail, identities),
       attachments: prepared.attachments,
       inReplyTo: null,
       references: [],
+      priority: 'normal',
       draftRef: null,
       nameHints,
     }
@@ -98,10 +105,12 @@ export function buildComposeSeed(
         fromName: detail.fromName, fromAddress: detail.fromAddress,
         dateText, subject: detail.subject, to: detail.to.map(a => a.address),
       }),
+      text: null,
       fromAddress,
       attachments: prepared.attachments,
       inReplyTo: threading.inReplyTo,
       references: threading.references,
+      priority: 'normal',
       draftRef: null,
       nameHints,
     }
@@ -114,10 +123,12 @@ export function buildComposeSeed(
     to: recipients.to, cc: recipients.cc, bcc: [],
     subject: subjectFor('reply', detail.subject),
     html: replyQuote(quotable, { dateText, name: detail.fromName, address: detail.fromAddress }),
+    text: null,
     fromAddress,
     attachments: prepared.attachments,
     inReplyTo: threading.inReplyTo,
     references: threading.references,
+    priority: 'normal',
     draftRef: null,
     nameHints,
   }
@@ -136,10 +147,12 @@ export function buildDraftSeed(
     to: opened.to, cc: opened.cc, bcc: opened.bcc,
     subject: opened.subject,
     html: absolutizeStagedUrls(opened.htmlBody, opened.attachments.map(a => a.id), accountId),
+    text: opened.textBody,
     fromAddress: owned?.address ?? null,
     attachments: opened.attachments,
     inReplyTo: opened.inReplyTo,
     references: opened.references,
+    priority: opened.priority,
     draftRef: ref,
     nameHints: {},
   }

@@ -8,8 +8,13 @@ import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
+import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
+import DropdownMenu from '../../../components/DropdownMenu'
+import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import RocketIcon from '../../../icons/RocketIcon'
+import type { MailPriority } from '../api/mailTypes'
 import AttachmentTray from './AttachmentTray'
+import { htmlToText, losesFormatting, textToHtml } from './bodyFormat'
 import EditorToolbar from './EditorToolbar'
 import IdentitySelect from './IdentitySelect'
 import { mailtoSeedFrom } from './mailtoSeed'
@@ -28,6 +33,15 @@ const NO_FORMATS: ActiveFormats = {
 const TITLES: Record<ComposeAction, string> = {
   reply: 'Reply', replyAll: 'Reply', forward: 'Forward', editAsNew: 'New message', draft: 'Draft',
 }
+
+/** The single predicate for "goes in the body", so the drop overlay and routeFiles cannot drift. */
+const isImage = (type: string) => type.startsWith('image/')
+
+const PRIORITIES: { value: MailPriority; label: string }[] = [
+  { value: 'high', label: 'High' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Low' },
+]
 
 interface Props {
   onNotify: (
@@ -81,15 +95,37 @@ export default function ComposeView({ onNotify }: Props) {
   const [bcc, setBcc] = useState<string[]>(seed?.bcc ?? [])
   const [showCc, setShowCc] = useState((seed?.cc.length ?? 0) > 0)
   const [showBcc, setShowBcc] = useState((seed?.bcc.length ?? 0) > 0)
+  const [priority, setPriority] = useState<MailPriority>(seed?.priority ?? 'normal')
+  const [showPriority, setShowPriority] = useState((seed?.priority ?? 'normal') !== 'normal')
   const [subject, setSubject] = useState(seed?.subject ?? '')
   // A seeded body is content the user can lose — dirty from the first render.
-  const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html))
+  const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html || seed?.text))
+  // Non-null is the plain-text mode itself, mirroring the wire: it holds the body the textarea
+  // owns and the field the payload carries. Null means Squire owns the body.
+  const [text, setText] = useState<string | null>(seed?.text ?? null)
+  // Squire reads initialHtml once, at mount, so a switch back has to hand it the converted body
+  // here — a prop change would never reach the editor it already built.
+  const [editorHtml, setEditorHtml] = useState(seed?.html)
   const [fromAddress, setFromAddress] = useState<string | null>(seed?.fromAddress ?? null)
   // Inline resources live in the body, not the tray; their ids still ride the send payload.
   const seedTray = useMemo(() => (seed?.attachments ?? []).filter(a => !a.contentId), [seed])
+  const seedInline = useMemo(() => (seed?.attachments ?? []).filter(a => a.contentId), [seed])
+  // An adopted id now rides the payload as a tray id; left in here it would ride it twice, and
+  // the backend packs one staged file per id it is handed.
+  const [inlineAdopted, setInlineAdopted] = useState(false)
+  // Held here as well as in the hook: the hook holds them to release them, this list rides the
+  // payload and names the files the tray needs if the composer ever switches to plain text.
+  const [insertedInline, setInsertedInline] = useState<{ id: string; fileName: string; size: number }[]>([])
+  // The seed alone: an inserted id reaches the hook through addInline, and handed in here as well
+  // it would be held twice — released twice, and adopted into two tray rows the send packs twice.
+  const seedInlineIds = useMemo(
+    () => (inlineAdopted ? [] : seedInline.map(a => a.id)), [seedInline, inlineAdopted])
+  const attachments = useStagedAttachments(accountId, seedTray, seedInlineIds)
+  // Not gated on inlineAdopted: that flag speaks for the seed. A switch empties this list instead,
+  // so an image inserted after a switch back to HTML is inline again and rides the payload again.
   const inlineIds = useMemo(
-    () => (seed?.attachments ?? []).filter(a => a.contentId).map(a => a.id), [seed])
-  const attachments = useStagedAttachments(accountId, seedTray, inlineIds)
+    () => [...seedInlineIds, ...insertedInline.map(a => a.id)],
+    [seedInlineIds, insertedInline])
   const [draftRef, setDraftRef] = useState(seed?.draftRef ?? null)
 
   const usableIdentities = (identityList ?? []).filter(i => !i.stale)
@@ -108,8 +144,10 @@ export default function ComposeView({ onNotify }: Props) {
   // only change there is, and dropping it would silently send from the wrong address.
   // The non-empty clause was written for a composer that could only gain content, so it only
   // applies where there is no filed version: emptying a draft is a change like any other.
+  // An inserted inline image counts here as well as in the tray: it is content in the body, and
+  // resting on Squire having fired `input` for it would be resting on something asserted nowhere.
   const dirty = changed && (draftRef !== null || to.length > 0 || cc.length > 0 || bcc.length > 0
-    || subject !== '' || bodyTouched || attachments.items.length > 0)
+    || subject !== '' || bodyTouched || attachments.items.length > 0 || insertedInline.length > 0)
   const dirtyRef = useRef(dirty)
   const leavingRef = useRef(false)
   useEffect(() => { dirtyRef.current = dirty }, [dirty])
@@ -119,19 +157,63 @@ export default function ComposeView({ onNotify }: Props) {
   const changeCc = useCallback((v: string[]) => { markDirty(); setCc(v) }, [markDirty])
   const changeBcc = useCallback((v: string[]) => { markDirty(); setBcc(v) }, [markDirty])
   const changeSubject = useCallback((v: string) => { markDirty(); setSubject(v) }, [markDirty])
+  const changePriority = useCallback((v: MailPriority) => { markDirty(); setPriority(v) }, [markDirty])
+  useEffect(() => { if (priority === 'normal') setShowPriority(false) }, [priority])
   const stageFiles = attachments.addFiles
   const removeStaged = attachments.remove
   const addFiles = useCallback((files: File[]) => { markDirty(); stageFiles(files) }, [markDirty, stageFiles])
   // The one edit that shrinks the form, so nothing else can notice it.
   const removeFile = useCallback((key: string) => { markDirty(); removeStaged(key) }, [markDirty, removeStaged])
 
+  // An inline upload never reaches the tray, so attachments.uploading cannot see it. Until it
+  // resolves there is no id for a send to carry, for an adoption to move, or for a discard to
+  // release, which is why everything that consumes those ids waits on this count.
+  const [inlineUploads, setInlineUploads] = useState(0)
+  const addInline = attachments.addInline
+  const insertImages = useCallback(async (files: File[]) => {
+    for (const file of files) {
+      setInlineUploads(n => n + 1)
+      try {
+        const info = await uploadAttachment(file, { accountId, inline: true })
+        addInline(info.id)
+        setInsertedInline(previous => [...previous, info])
+        editor?.insertImage(stagedAttachmentUrl(info.id, accountId))
+        // Only once something is actually in the body: a refused upload leaves nothing to lose,
+        // and a composer dirtied by it would still ask to save on the way out.
+        markDirty()
+      } catch (error) {
+        onNotify((error as Error).message, 'error')
+      } finally {
+        setInlineUploads(n => n - 1)
+      }
+    }
+  }, [markDirty, accountId, addInline, editor, onNotify])
+
+  // An image goes in the body, anything else in the tray. Plain text has no body to put one in,
+  // so there everything is an attachment.
+  const routeFiles = useCallback((files: File[]) => {
+    if (text !== null) { addFiles(files); return }
+    const images = files.filter(file => isImage(file.type))
+    const rest = files.filter(file => !isImage(file.type))
+    if (rest.length > 0) addFiles(rest)
+    if (images.length > 0) void insertImages(images)
+  }, [text, addFiles, insertImages])
+
   // Counter, not a boolean: dragleave fires at every child boundary, so the overlay only
   // goes away when as many leaves as enters have fired (or on drop).
   const [dropTarget, setDropTarget] = useState(false)
   const dragDepth = useRef(0)
+  const [bodyInsert, setBodyInsert] = useState(false)
+  const bodyDepth = useRef(0)
 
   function carriesFiles(event: React.DragEvent) {
     return Array.from(event.dataTransfer.types).includes('Files')
+  }
+  // A drag withholds its bytes until the drop, but not the types — enough to word the overlay on
+  // the predicate routeFiles will sort by, so it never promises an insertion the drop won't make.
+  function carriesImage(event: React.DragEvent) {
+    return Array.from(event.dataTransfer.items).some(
+      item => item.kind === 'file' && isImage(item.type))
   }
   function onDragEnter(event: React.DragEvent) {
     if (!carriesFiles(event)) return
@@ -150,17 +232,53 @@ export default function ComposeView({ onNotify }: Props) {
   function onDrop(event: React.DragEvent) {
     if (!carriesFiles(event)) return
     event.preventDefault()
-    dragDepth.current = 0
-    setDropTarget(false)
+    resetDrag()
     const files = Array.from(event.dataTransfer.files)
     if (files.length > 0) addFiles(files)
   }
-
+  function resetDrag() {
+    dragDepth.current = 0
+    bodyDepth.current = 0
+    setDropTarget(false)
+    setBodyInsert(false)
+  }
+  function onBodyDragEnter(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    bodyDepth.current += 1
+    // Plain text has no body to show an image in, so there a drop attaches like any other.
+    setBodyInsert(text === null && carriesImage(event))
+  }
+  function onBodyDragLeave(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    bodyDepth.current = Math.max(0, bodyDepth.current - 1)
+    if (bodyDepth.current === 0) setBodyInsert(false)
+  }
+  // Stops here: the surface handler below would attach what the body has just taken. It therefore
+  // owes the surface its own reset, which is what resetDrag is for.
+  function onBodyDrop(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    resetDrag()
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length > 0) routeFiles(files)
+  }
+  function onBodyPaste(event: React.ClipboardEvent) {
+    const files = Array.from(event.clipboardData.files)
+    if (files.length === 0) return
+    // Capture phase, and stopped rather than merely prevented: Squire's _onPaste never reads
+    // defaultPrevented, so a clipboard carrying an image plus text/plain (Explorer) or plus
+    // rtf+html (Word) would insert its own artefact beside ours.
+    event.preventDefault()
+    event.stopPropagation()
+    routeFiles(files)
+  }
   const blocker = useBlocker(useCallback(() => dirtyRef.current && !leavingRef.current, []))
 
   // The same question, asked by something the router cannot see — today, the mailbox switch in
   // the identity menu. It resolves on the dialog's buttons, so both roads end in one prompt.
   const [leaveAsk, setLeaveAsk] = useState<((ok: boolean) => void) | null>(null)
+  const [confirmPlain, setConfirmPlain] = useState(false)
 
   useEffect(() => {
     registerLeaveGuard(() => dirtyRef.current && !leavingRef.current
@@ -200,19 +318,43 @@ export default function ComposeView({ onNotify }: Props) {
   // SquireEditor binds onChange once at mount, so the callback has to be stable.
   const touchBody = useCallback(() => { markDirty(); setBodyTouched(true) }, [markDirty])
 
+  function switchToPlainText() {
+    setText(htmlToText(editor?.getHTML() ?? ''))
+    attachments.adoptInline([...seedInline, ...insertedInline])
+    setInlineAdopted(true)
+    setInsertedInline([])
+    setConfirmPlain(false)
+    markDirty()
+  }
+
+  function toPlainText() {
+    if (losesFormatting(editor?.getHTML() ?? '')) { setConfirmPlain(true); return }
+    switchToPlainText()
+  }
+
+  function toHtml() {
+    setEditorHtml(textToHtml(text ?? ''))
+    setText(null)
+    markDirty()
+  }
+
   const allValid = [...to, ...cc, ...bcc].every(isValidAddress)
   // Send and Save both file the message and consume the staged ids; the loser of a race would
   // leave a draft behind that the winner's cleanup never knew about.
-  const busy = attachments.uploading || send.isPending || saveDraftMutation.isPending
+  const busy = attachments.uploading || inlineUploads > 0
+    || send.isPending || saveDraftMutation.isPending
   const canSend = to.length > 0 && allValid && !busy
   const canSaveDraft = allValid && !busy
 
   const buildPayload = () => ({
-    to, cc, bcc, subject, htmlBody: relativizeStagedUrls(editor?.getHTML() ?? ''),
+    to, cc, bcc, subject,
+    htmlBody: text === null ? relativizeStagedUrls(editor?.getHTML() ?? '') : '',
+    textBody: text ?? undefined,
     attachmentIds: [...inlineIds, ...attachments.ids],
     fromAddress: effectiveFrom ?? undefined,
     inReplyTo: seed?.inReplyTo ?? undefined,
     references: seed?.references && seed.references.length > 0 ? seed.references : undefined,
+    priority,
   })
 
   // A stale identity is still an address that was yours. A live alias carrying no identity is not
@@ -311,20 +453,50 @@ export default function ComposeView({ onNotify }: Props) {
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>Cc</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>Bcc</button>}
+            {!showPriority && (
+              <button type="button" className="compose-link-btn" onClick={() => setShowPriority(true)}>Priority</button>
+            )}
           </span>
         </div>
         {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc}
           contacts={contacts} />}
         {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc}
           contacts={contacts} />}
+        {/* Stays open while the value is not Normal: folding it would take a live setting off the
+            screen while it kept riding on the message. Cc and Bcc are safe to fold — their tokens
+            stay visible either way. */}
+        {(showPriority || priority !== 'normal') && (
+          <div className="compose-priority">
+            <span className="compose-priority-label">Priority</span>
+            <DropdownMenu
+              ariaLabel="Priority"
+              className="compose-priority-select"
+              align="left"
+              // Fallback guards a render-time throw: an out-of-union value would blank the whole app.
+              trigger={<>{PRIORITIES.find(p => p.value === priority)?.label ?? 'Normal'} <ChevronDownIcon size={13} /></>}
+              items={PRIORITIES.map(p => ({ label: p.label, onSelect: () => changePriority(p.value) }))}
+            />
+          </div>
+        )}
         <div className="field-h">
           <label htmlFor="compose-subject">Subject</label>
           <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />
         </div>
       </div>
 
-      <EditorToolbar editor={editor} active={active} />
-      <SquireEditor ref={setEditor} initialHtml={seed?.html} onChange={touchBody} onFormatChange={setActive} />
+      <EditorToolbar editor={editor} active={active} plainText={text !== null}
+        switchLocked={inlineUploads > 0}
+        onPickImages={routeFiles}
+        onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
+      <div className="compose-body" onDragEnter={onBodyDragEnter} onDragLeave={onBodyDragLeave}
+        onDrop={onBodyDrop} onPasteCapture={onBodyPaste}>
+        {text === null ? (
+          <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
+        ) : (
+          <textarea className="compose-editor" data-testid="compose-text-editor" aria-label="Message body"
+            value={text} onChange={e => { setText(e.target.value); touchBody() }} />
+        )}
+      </div>
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={removeFile} />
 
@@ -360,8 +532,28 @@ export default function ComposeView({ onNotify }: Props) {
         </div>
       )}
 
+      {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
+      {confirmPlain && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <span className="modal-title">Switch to plain text?</span>
+            </div>
+            <p>Formatting will be removed, and images in the message become attachments.</p>
+            <div className="folder-pick-submit">
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmPlain(false)}>
+                Keep formatting
+              </button>
+              <button type="button" className="btn btn-primary" onClick={switchToPlainText}>Switch</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {dropTarget && (
-        <div className="compose-drop-overlay">Drop files to attach</div>
+        <div className="compose-drop-overlay">
+          {bodyInsert ? 'Drop image into the message' : 'Drop files to attach'}
+        </div>
       )}
     </div>
   )

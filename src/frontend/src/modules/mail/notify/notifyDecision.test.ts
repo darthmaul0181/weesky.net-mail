@@ -8,6 +8,7 @@ function message(uid: number, fromName = '', subject = ''): MailMessageSummary {
   return {
     uid, subject, fromName, fromAddress: 'a@b.c', to: [], date: '2026-07-21T00:00:00Z',
     seen: false, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
+    priority: 'normal',
   }
 }
 

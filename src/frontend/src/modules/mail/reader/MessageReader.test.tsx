@@ -1064,6 +1064,25 @@ describe('MessageReader', () => {
     expect(await screen.findByText(/could not load this message/i)).toBeInTheDocument()
   })
 
+  describe('the declared priority', () => {
+    it('shows a chip for a high-priority message', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, priority: 'high' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      expect(await screen.findByText('High priority')).toBeInTheDocument()
+    })
+
+    it('shows no chip at normal priority', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, priority: 'normal' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText(/priority/i)).not.toBeInTheDocument()
+    })
+  })
+
   // A stale deep link in the no-split mode must not strand the user on an error with no way
   // back — Escape works, but there is nothing on screen suggesting it.
   it('offers a back button beside a load failure when a handler is given', async () => {

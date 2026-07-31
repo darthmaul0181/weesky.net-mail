@@ -36,6 +36,7 @@ function pageOf(uids: number[]): MailFolderPage {
     messages: uids.map(uid => ({
       uid, subject: '', fromName: '', fromAddress: '', to: [], date: '2026-07-21T00:00:00Z',
       seen: true, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
+      priority: 'normal',
     })),
   }
 }

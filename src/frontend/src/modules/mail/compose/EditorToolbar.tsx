@@ -1,5 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ActiveFormats, EditorHandle } from './SquireEditor'
+import DropdownMenu from '../../../components/DropdownMenu'
+import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import UndoIcon from '../../../icons/UndoIcon'
+import RedoIcon from '../../../icons/RedoIcon'
+import TextColourIcon from '../../../icons/TextColourIcon'
+import HighlighterIcon from '../../../icons/HighlighterIcon'
+import FontIcon from '../../../icons/FontIcon'
+import TextSizeIcon from '../../../icons/TextSizeIcon'
+import AlignLeftIcon from '../../../icons/AlignLeftIcon'
+import AlignCentreIcon from '../../../icons/AlignCentreIcon'
+import AlignRightIcon from '../../../icons/AlignRightIcon'
+import AlignJustifyIcon from '../../../icons/AlignJustifyIcon'
+import ListBulletIcon from '../../../icons/ListBulletIcon'
+import ListOrderedIcon from '../../../icons/ListOrderedIcon'
+import IndentIcon from '../../../icons/IndentIcon'
+import OutdentIcon from '../../../icons/OutdentIcon'
+import LinkIcon from '../../../icons/LinkIcon'
+import UnlinkIcon from '../../../icons/UnlinkIcon'
+import ClearFormatIcon from '../../../icons/ClearFormatIcon'
+import ImageIcon from '../../../icons/ImageIcon'
+import CheckIcon from '../../../icons/CheckIcon'
+import PlainTextIcon from '../../../icons/PlainTextIcon'
+
+/* The bar's icon scale. Its other half — the button, the B/I/U/S letters and the dropdown text —
+   lives on .compose-toolbar in mail.css; change the two together or the glyphs stop being centred
+   in their buttons. */
+const ICON = 19
+/** The two colour buttons stack their glyph over an ink bar, so it runs smaller than the rest. */
+const INK_ICON = 17
+const CHEVRON = 15
 
 const SWATCHES = [
   '#000000', '#444444', '#666666', '#999999', '#cccccc', '#ffffff',
@@ -11,18 +41,43 @@ const SIZES = [
   { label: 'Small', value: '12px' }, { label: 'Normal', value: '14px' },
   { label: 'Large', value: '18px' }, { label: 'Huge', value: '24px' },
 ]
+type Alignment = 'left' | 'center' | 'right' | 'justify'
+const ALIGNMENTS: { label: string; value: Alignment; Icon: typeof AlignLeftIcon }[] = [
+  { label: 'Left', value: 'left', Icon: AlignLeftIcon },
+  { label: 'Center', value: 'center', Icon: AlignCentreIcon },
+  { label: 'Right', value: 'right', Icon: AlignRightIcon },
+  { label: 'Justify', value: 'justify', Icon: AlignJustifyIcon },
+]
 
 function Popover({ open, children }: { open: boolean; children: ReactNode }) {
   if (!open) return null
   return <div className="compose-popover">{children}</div>
 }
 
-interface Props { editor: EditorHandle | null; active?: ActiveFormats }
+interface Props {
+  editor: EditorHandle | null
+  active?: ActiveFormats
+  plainText: boolean
+  /** An inline upload is in flight: switching now strands the id it has not produced yet. */
+  switchLocked?: boolean
+  onTogglePlainText: () => void
+  /** Picked images go through the composer's own routing, the one paste and drop already use. */
+  onPickImages: (files: File[]) => void
+}
 
-export default function EditorToolbar({ editor, active }: Props) {
+export default function EditorToolbar(
+  { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages }: Props) {
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
+  // The editor reports no font, size or colour at the caret, so these are the last choice made
+  // here — the same thing the <select>s' defaultValue used to show.
+  const [font, setFont] = useState(FONTS[0])
+  const [size, setSize] = useState(SIZES[1])
+  const [alignment, setAlignment] = useState(ALIGNMENTS[0])
+  const [textColour, setTextColour] = useState('currentColor')
+  const [highlight, setHighlight] = useState('#f8e71c')
   const container = useRef<HTMLDivElement>(null)
+  const picker = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!openPopover) return
@@ -44,72 +99,126 @@ export default function EditorToolbar({ editor, active }: Props) {
     )
   }
 
-  const btn = (label: string, glyph: ReactNode, onClick: () => void, on = false) => (
+  const btn = (label: string, glyph: ReactNode, onClick: () => void, on = false, off = false) => (
     <button type="button" className={`compose-tool${on ? ' is-active' : ''}`} aria-pressed={on}
-      aria-label={label} title={label} onClick={onClick}>
+      aria-label={label} title={label} disabled={off} onClick={onClick}>
       {glyph}
     </button>
   )
 
+  /** The menu row carries the tick, since the trigger no longer carries the value. */
+  const chosen = (row: ReactNode, on: boolean) => (
+    <span className="compose-menu-row">{row}{on && <CheckIcon size={14} />}</span>
+  )
+
+  /** An icon over the colour it applies, so the button says which colour it will lay down. */
+  const inked = (icon: ReactNode, colour: string) => (
+    <span className="compose-tool-stack">
+      {icon}
+      <span className="compose-tool-ink" style={{ background: colour }} />
+    </span>
+  )
+
   return (
     <div className="compose-toolbar" ref={container}>
-      {btn('Undo', '↶', () => editor?.command('undo'))}
-      {btn('Redo', '↷', () => editor?.command('redo'))}
-      <span className="compose-toolbar-rule" />
-      {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
-      {btn('Italic', <i>I</i>, () => editor?.command('italic'), active?.italic)}
-      {btn('Underline', <u>U</u>, () => editor?.command('underline'), active?.underline)}
-      {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
-      <span className="compose-toolbar-rule" />
-      <span className="compose-popover-anchor">
-        {btn('Text colour', 'A', () => setOpenPopover(p => p === 'text' ? null : 'text'))}
-        <Popover open={openPopover === 'text'}>{swatchGrid(c => editor?.setTextColour(c))}</Popover>
-      </span>
-      <span className="compose-popover-anchor">
-        {btn('Highlight colour', '▩', () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
-        <Popover open={openPopover === 'highlight'}>{swatchGrid(c => editor?.setHighlightColour(c))}</Popover>
-      </span>
-      <span className="compose-select">
-        <select aria-label="Font" title="Font" defaultValue="Arial"
-          onChange={e => editor?.setFontFace(e.target.value)}>
-          {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
-        </select>
-      </span>
-      <span className="compose-select">
-        <select aria-label="Size" title="Size" defaultValue="14px"
-          onChange={e => editor?.setFontSize(e.target.value)}>
-          {SIZES.map(size => <option key={size.value} value={size.value}>{size.label}</option>)}
-        </select>
-      </span>
-      <span className="compose-select">
-        <select aria-label="Alignment" title="Alignment" defaultValue="left"
-          onChange={e => editor?.setAlignment(e.target.value as 'left' | 'center' | 'right' | 'justify')}>
-          <option value="left">Left</option><option value="center">Center</option>
-          <option value="right">Right</option><option value="justify">Justify</option>
-        </select>
-      </span>
-      <span className="compose-toolbar-rule" />
-      {btn('Bulleted list', '•', () => editor?.command('unorderedList'), active?.unorderedList)}
-      {btn('Numbered list', '1.', () => editor?.command('orderedList'), active?.orderedList)}
-      {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
-      {btn('Increase quote', '❯❯', () => editor?.command('increaseQuote'))}
-      {btn('Decrease quote', '❮❮', () => editor?.command('decreaseQuote'))}
-      <span className="compose-toolbar-rule" />
-      <span className="compose-popover-anchor">
-        {btn('Link', '🔗', () => setOpenPopover(p => p === 'link' ? null : 'link'))}
-        <Popover open={openPopover === 'link'}>
-          <div className="compose-link-form">
-            <label htmlFor="compose-link-url">Link URL</label>
-            <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
-            <button type="button" className="btn btn-primary" disabled={!url}
-              onClick={() => { editor?.makeLink(url); setUrl(''); setOpenPopover(null) }}>
-              Apply
-            </button>
-          </div>
-        </Popover>
-      </span>
-      {btn('Remove link', '⛓', () => editor?.command('removeLink'))}
-      {btn('Clear formatting', '⌫', () => editor?.command('clearFormatting'))}
+      {/* Stays when everything else folds away: it is the only way back to the editor. */}
+      <div className="compose-tool-group">
+        {btn('Plain text', <PlainTextIcon size={ICON} />, onTogglePlainText, plainText, switchLocked)}
+      </div>
+      {plainText ? null : (
+      <>
+      <div className="compose-tool-group">
+        {btn('Undo', <UndoIcon size={ICON} />, () => editor?.command('undo'))}
+        {btn('Redo', <RedoIcon size={ICON} />, () => editor?.command('redo'))}
+      </div>
+      <div className="compose-tool-group">
+        {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
+        {btn('Italic', <i>I</i>, () => editor?.command('italic'), active?.italic)}
+        {btn('Underline', <u>U</u>, () => editor?.command('underline'), active?.underline)}
+        {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
+      </div>
+      <div className="compose-tool-group">
+        <span className="compose-popover-anchor">
+          {btn('Text colour', inked(<TextColourIcon size={INK_ICON} />, textColour),
+            () => setOpenPopover(p => p === 'text' ? null : 'text'))}
+          <Popover open={openPopover === 'text'}>
+            {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) })}
+          </Popover>
+        </span>
+        <span className="compose-popover-anchor">
+          {btn('Highlight colour', inked(<HighlighterIcon size={INK_ICON} />, highlight),
+            () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
+          <Popover open={openPopover === 'highlight'}>
+            {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) })}
+          </Popover>
+        </span>
+      </div>
+      <div className="compose-tool-group">
+        {/* Icon only: spelling the value on the trigger made the bar a different width per font,
+            so it re-flowed under the user at the moment of choosing. The choice moved into the
+            menu, which is the one place it was ever read from — the bar cannot see the format at
+            the caret and only ever echoed the last pick. */}
+        <DropdownMenu ariaLabel="Font" align="left" className="compose-tool-select"
+          trigger={<><FontIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
+          items={FONTS.map(name => ({
+            label: name,
+            node: chosen(<span style={{ fontFamily: name }}>{name}</span>, name === font),
+            onSelect: () => { setFont(name); editor?.setFontFace(name) },
+          }))} />
+        <DropdownMenu ariaLabel="Size" align="left" className="compose-tool-select"
+          trigger={<><TextSizeIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
+          items={SIZES.map(entry => ({
+            label: entry.label,
+            node: chosen(<span style={{ fontSize: entry.value }}>{entry.label}</span>, entry.label === size.label),
+            onSelect: () => { setSize(entry); editor?.setFontSize(entry.value) },
+          }))} />
+        <DropdownMenu ariaLabel="Alignment" align="left" className="compose-tool-select"
+          trigger={<><alignment.Icon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
+          items={ALIGNMENTS.map(entry => ({
+            label: entry.label,
+            icon: <entry.Icon size={14} />,
+            onSelect: () => { setAlignment(entry); editor?.setAlignment(entry.value) },
+          }))} />
+      </div>
+      <div className="compose-tool-group">
+        {btn('Bulleted list', <ListBulletIcon size={ICON} />, () => editor?.command('unorderedList'), active?.unorderedList)}
+        {btn('Numbered list', <ListOrderedIcon size={ICON} />, () => editor?.command('orderedList'), active?.orderedList)}
+        {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
+        {btn('Increase quote', <IndentIcon size={ICON} />, () => editor?.command('increaseQuote'))}
+        {btn('Decrease quote', <OutdentIcon size={ICON} />, () => editor?.command('decreaseQuote'))}
+      </div>
+      <div className="compose-tool-group">
+        <span className="compose-popover-anchor">
+          {btn('Link', <LinkIcon size={ICON} />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
+          <Popover open={openPopover === 'link'}>
+            <div className="compose-link-form">
+              <label htmlFor="compose-link-url">Link URL</label>
+              <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
+              <button type="button" className="btn btn-primary" disabled={!url}
+                onClick={() => { editor?.makeLink(url); setUrl(''); setOpenPopover(null) }}>
+                Apply
+              </button>
+            </div>
+          </Popover>
+        </span>
+        {btn('Remove link', <UnlinkIcon size={ICON} />, () => editor?.command('removeLink'))}
+        {/* Not built from btn: that one stamps aria-pressed on everything, and this opens a picker
+            rather than holding a state. */}
+        <button type="button" className="compose-tool" aria-label="Insert image" title="Insert image"
+          onClick={() => picker.current?.click()}>
+          <ImageIcon size={ICON} />
+        </button>
+        {/* The keyboard and touch way in, next to the paste and the drop that cannot serve either. */}
+        <input ref={picker} type="file" accept="image/*" multiple hidden data-testid="inline-image-input"
+          onChange={e => {
+            const files = e.target.files
+            // Cleared straight away: an input keeping its value fires no change for the same file twice.
+            if (files?.length) { onPickImages(Array.from(files)); e.target.value = '' }
+          }} />
+        {btn('Clear formatting', <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
+      </div>
+      </>
+      )}
     </div>
   )
 }

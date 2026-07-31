@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 }))
 // The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
 // it here would only re-test what SquireEditor.mount already covers.
-const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[] }))
+const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[], images: [] as string[] }))
 
 vi.mock('../../../api.js', () => ({
   api: {
@@ -63,6 +63,7 @@ vi.mock('./SquireEditor', async () => {
         command: (name: string) => { editorState.commands.push(name) },
         setTextColour: () => {}, setHighlightColour: () => {},
         setFontFace: () => {}, setFontSize: () => {}, setAlignment: () => {}, makeLink: () => {},
+        insertImage: (src: string) => { editorState.images.push(src) },
       }), [])
       return (
         <textarea
@@ -107,8 +108,15 @@ async function discardModal() {
   return title.closest('.modal') as HTMLElement
 }
 
+// items carries the type because a real drag exposes it before the drop, and the overlay's
+// wording is decided from it.
 function fileDragData(files: File[] = []) {
-  return { dataTransfer: { types: ['Files'], files, items: files.map(() => ({ kind: 'file' })) } }
+  return {
+    dataTransfer: {
+      types: ['Files'], files,
+      items: files.map(file => ({ kind: 'file', type: file.type })),
+    },
+  }
 }
 
 const bruno = {
@@ -125,6 +133,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   editorState.html = ''
   editorState.commands = []
+  editorState.images = []
   mocks.uploadAttachment.mockResolvedValue({ id: 'att-1', size: 3 })
   mocks.deleteAttachment.mockResolvedValue(undefined)
   mocks.deleteMessages.mockResolvedValue(undefined)
@@ -243,6 +252,7 @@ describe('ComposeView', () => {
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith({
       to: ['a@b.c'], cc: ['c@b.c'], bcc: [], subject: 'Hello', htmlBody: '<p>Hi</p>', attachmentIds: [],
+      priority: 'normal',
     }, { accountId: 'primary' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
     expect(router.state.location.search).toBe('?folder=Projects')
@@ -415,19 +425,126 @@ describe('ComposeView', () => {
   })
 })
 
+describe('the priority row', () => {
+  const trigger = () => screen.getByRole('button', { name: 'Priority' })
+  const pick = (label: string) => {
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: label }))
+  }
+  const draftSeed: ComposeSeed = {
+    action: 'draft', to: ['alice@ext.example'], cc: [], bcc: [],
+    subject: 'Half written', html: '<p>later</p>', text: null, fromAddress: null, attachments: [],
+    inReplyTo: null, references: [], draftRef: { folderPath: 'Drafts', uid: 41 },
+    nameHints: {}, priority: 'normal',
+  }
+
+  it('reveals the priority row from the link beside Cc and Bcc', () => {
+    renderCompose()
+    expect(screen.queryByText('Priority', { selector: '.compose-priority-label' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Priority'))
+
+    expect(trigger()).toHaveTextContent('Normal')
+  })
+
+  it('sends the chosen priority', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    addRecipient('To', 'a@b.c')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: 'high' }), { accountId: 'primary' }))
+  })
+
+  it('sends normal when the row was never opened', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+
+    addRecipient('To', 'a@b.c')
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: 'normal' }), { accountId: 'primary' }))
+  })
+
+  /** Folding the row away would take a live setting off the screen while it still rides the mail. */
+  it('keeps the priority row open while the value is not normal', () => {
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('Low')
+
+    expect(screen.queryByText('Priority', { selector: '.compose-link-btn' })).not.toBeInTheDocument()
+    expect(trigger()).toHaveTextContent('Low')
+  })
+
+  // Back at Normal there is nothing left to keep on screen, so the row folds into its link again.
+  it('folds the row away once the value returns to normal', () => {
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    pick('Normal')
+
+    expect(screen.getByText('Priority', { selector: '.compose-link-btn' })).toBeInTheDocument()
+  })
+
+  /** Same rule as a From-only edit: on a resumed draft the priority is the only change there is,
+      and leaving without the guard would silently drop it. */
+  it('arms the leave guard on a priority-only change to a resumed draft', async () => {
+    const { router } = renderCompose('INBOX', draftSeed)
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  // The other half of the From rule: there is no message here to attach the setting to, so the
+  // prompt would offer to file a draft holding nothing but a priority header.
+  it('leaves an otherwise-empty composer clean', async () => {
+    const { router } = renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+  })
+
+  // The whole point of storing it on the draft: the resumed composer has to open on it and save
+  // it back, or the setting is lost on the first round trip.
+  it('opens a resumed draft on its stored priority and saves it back', async () => {
+    renderCompose('INBOX', { ...draftSeed, priority: 'high' })
+
+    expect(trigger()).toHaveTextContent('High')
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: 'high' }), { accountId: 'primary' }))
+  })
+})
+
 // A reply/forward arrives as router state; the composer opens on it instead of on a blank form.
 describe('a seeded ComposeView', () => {
   const seed: ComposeSeed = {
     action: 'reply',
     to: ['alice@ext.example'], cc: ['bob@ext.example'], bcc: [],
-    subject: 'Re: Hello', html: '<div><br></div><blockquote><p>original</p></blockquote>',
+    subject: 'Re: Hello', html: '<div><br></div><blockquote><p>original</p></blockquote>', text: null,
     fromAddress: null,
     attachments: [
       { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
       { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
     ],
     inReplyTo: 'm@x', references: ['m@x'],
-    draftRef: null, nameHints: {},
+    draftRef: null, nameHints: {}, priority: 'normal',
   }
 
   it('prefills the form', () => {
@@ -640,6 +757,30 @@ describe('dropping files on the composer', () => {
     expect(screen.queryByText('Drop files to attach')).not.toBeInTheDocument()
   })
 
+  // The overlay is a promise about the drop to come: over the body it may only say "into the
+  // message" for a file routeFiles will actually put there.
+  it('words the overlay from what the drag carries, not from where it hovers', () => {
+    renderCompose()
+    const body = screen.getByTestId('compose-editor')
+
+    fireEvent.dragEnter(body, fileDragData([new File(['x'], 'a.png', { type: 'image/png' })]))
+    expect(screen.getByText('Drop image into the message')).toBeInTheDocument()
+
+    fireEvent.dragLeave(body, fileDragData())
+    fireEvent.dragEnter(body, fileDragData([new File(['x'], 'r.pdf', { type: 'application/pdf' })]))
+    expect(screen.getByText('Drop files to attach')).toBeInTheDocument()
+  })
+
+  it('promises no insertion over a plain-text body, which has nowhere to show an image', () => {
+    renderCompose()
+    fireEvent.click(screen.getByRole('button', { name: 'Plain text' }))
+
+    fireEvent.dragEnter(screen.getByTestId('compose-text-editor'),
+      fileDragData([new File(['x'], 'a.png', { type: 'image/png' })]))
+
+    expect(screen.getByText('Drop files to attach')).toBeInTheDocument()
+  })
+
   it('stages the dropped files and dirties the composer', async () => {
     const { router } = renderCompose()
     const file = new File(['x'], 'photo.png', { type: 'image/png' })
@@ -664,10 +805,10 @@ describe('drafts in the composer', () => {
   const draftSeed: ComposeSeed = {
     action: 'draft',
     to: ['alice@ext.example'], cc: [], bcc: [],
-    subject: 'Half written', html: '<p>later</p>',
+    subject: 'Half written', html: '<p>later</p>', text: null,
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
-    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {},
+    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {}, priority: 'normal',
   }
   const withParts: ComposeSeed = {
     ...draftSeed,
@@ -871,10 +1012,10 @@ describe('capturing new recipients', () => {
   const hintedSeed: ComposeSeed = {
     action: 'reply',
     to: ['alice@x.be'], cc: [], bcc: [],
-    subject: 'Re: Hello', html: '<p>later</p>',
+    subject: 'Re: Hello', html: '<p>later</p>', text: null,
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
-    draftRef: null, nameHints: { 'alice@x.be': 'Alice Dupont' },
+    draftRef: null, nameHints: { 'alice@x.be': 'Alice Dupont' }, priority: 'normal',
   }
 
   beforeEach(() => {
@@ -1033,5 +1174,356 @@ describe('capturing new recipients', () => {
     await waitFor(() => expect(mocks.createContact).toHaveBeenCalled())
     await settle()
     expect(onNotify.mock.calls).toEqual([['Message sent']])
+  })
+})
+
+describe('plain text in the composer', () => {
+  const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
+  const textArea = () => screen.getByTestId('compose-text-editor') as HTMLTextAreaElement
+
+  const draftSeed: ComposeSeed = {
+    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+    draftRef: { folderPath: 'Drafts', uid: 3 }, nameHints: {},
+  }
+
+  it('swaps the editor for a textarea and folds the toolbar away', () => {
+    editorState.html = '<div>one</div><div>two</div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+
+    expect(textArea().value).toBe('one\ntwo')
+    expect(screen.queryByTestId('compose-editor')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Bold' })).toBeNull()
+    expect(plainToggle()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sends the textarea as textBody with no html beside it', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    editorState.html = '<div>draft</div>'
+    renderCompose()
+    addRecipient('To', 'alice@x.be')
+
+    fireEvent.click(plainToggle())
+    fireEvent.change(textArea(), { target: { value: 'just text' } })
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    const payload = mocks.sendMessage.mock.calls[0][0]
+    expect(payload.textBody).toBe('just text')
+    expect(payload.htmlBody).toBe('')
+  })
+
+  it('carries the text back into the editor on the way out', () => {
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+    fireEvent.change(textArea(), { target: { value: 'a\nb' } })
+    fireEvent.click(plainToggle())
+
+    expect(screen.getByTestId('compose-editor')).toHaveValue('<div>a<br>b</div>')
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+  })
+
+  it('opens a text draft in text mode', () => {
+    renderCompose('INBOX', { ...draftSeed, text: 'stored text' })
+
+    expect(textArea().value).toBe('stored text')
+    expect(plainToggle()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sends an HTML message with no textBody at all', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    editorState.html = '<div>rich</div>'
+    renderCompose()
+    addRecipient('To', 'alice@x.be')
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].textBody).toBeUndefined()
+  })
+})
+
+describe('what a plain-text switch costs', () => {
+  const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
+  const textArea = () => screen.getByTestId('compose-text-editor') as HTMLTextAreaElement
+
+  const draftSeed: ComposeSeed = {
+    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+    draftRef: { folderPath: 'Drafts', uid: 3 }, nameHints: {},
+  }
+
+  it('asks before a switch that would cost formatting', () => {
+    editorState.html = '<div><b>bold</b></div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+
+    expect(screen.getByText('Switch to plain text?')).toBeInTheDocument()
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
+    expect(textArea().value).toBe('bold')
+  })
+
+  it('keeps the editor when the switch is declined', () => {
+    editorState.html = '<div><b>bold</b></div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(screen.getByRole('button', { name: 'Keep formatting' }))
+
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+    expect(screen.getByTestId('compose-editor')).toBeInTheDocument()
+  })
+
+  it('says nothing when there is nothing to lose', () => {
+    editorState.html = '<div>plain enough</div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+
+    expect(screen.queryByText('Switch to plain text?')).toBeNull()
+    expect(textArea().value).toBe('plain enough')
+  })
+
+  it('moves an inline image into the tray on the switch', () => {
+    const seed: ComposeSeed = {
+      ...draftSeed,
+      html: '<div><img src="https://api.test.example/api/Mail/Attachments/i1/content"></div>',
+      attachments: [
+        { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@mail' },
+      ],
+    }
+    editorState.html = seed.html
+    renderCompose('INBOX', seed)
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
+
+    expect(screen.getByText('logo.png')).toBeInTheDocument()
+  })
+
+  // The adopted id now rides the payload as a tray id. Sent twice, the backend packs the file
+  // twice and the recipient gets two copies of it.
+  it('sends an adopted image once, not twice', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    const seed: ComposeSeed = {
+      ...draftSeed,
+      html: '<div><img src="https://api.test.example/api/Mail/Attachments/i1/content"></div>',
+      attachments: [
+        { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@mail' },
+      ],
+    }
+    editorState.html = seed.html
+    renderCompose('INBOX', seed)
+    addRecipient('To', 'alice@x.be')
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toEqual(['i1'])
+  })
+})
+
+describe('inline images', () => {
+  function imageFile(name = 'shot.png') {
+    return new File(['xx'], name, { type: 'image/png' })
+  }
+
+  it('uploads a pasted image inline and inserts it at the caret', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i1', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.paste(screen.getByTestId('compose-editor'), {
+      clipboardData: { files: [imageFile()] },
+    })
+
+    await waitFor(() => expect(editorState.images).toEqual([
+      'https://api.test.example/api/Mail/Attachments/i1/content',
+    ]))
+    expect(mocks.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File), expect.objectContaining({ inline: true }))
+    // The body is where it lives; the tray must not also list it.
+    expect(screen.queryByText('shot.png')).not.toBeInTheDocument()
+  })
+
+  it('inserts an image chosen from the toolbar button', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i8', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.change(screen.getByTestId('inline-image-input'), { target: { files: [imageFile()] } })
+
+    await waitFor(() => expect(editorState.images).toEqual([
+      'https://api.test.example/api/Mail/Attachments/i8/content',
+    ]))
+    expect(mocks.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File), expect.objectContaining({ inline: true }))
+    expect(screen.queryByText('shot.png')).not.toBeInTheDocument()
+  })
+
+  it('inserts an image dropped on the body and attaches one dropped on the composer', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i2', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.drop(screen.getByTestId('compose-editor'), {
+      dataTransfer: { files: [imageFile()], types: ['Files'] },
+    })
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+
+    fireEvent.drop(screen.getByTestId('compose-view'), {
+      dataTransfer: { files: [new File(['x'], 'report.pdf', { type: 'application/pdf' })], types: ['Files'] },
+    })
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument()
+    expect(editorState.images).toHaveLength(1)
+  })
+
+  it('attaches a non-image dropped on the body rather than refusing it', async () => {
+    renderCompose()
+
+    fireEvent.drop(screen.getByTestId('compose-editor'), {
+      dataTransfer: { files: [new File(['x'], 'report.pdf', { type: 'application/pdf' })], types: ['Files'] },
+    })
+
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument()
+    expect(editorState.images).toHaveLength(0)
+  })
+
+  it('sends an inserted image as an inline id', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i3', fileName: 'shot.png', size: 2 })
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+    addRecipient('To', 'her@example.com')
+
+    fireEvent.paste(screen.getByTestId('compose-editor'), {
+      clipboardData: { files: [imageFile()] },
+    })
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toContain('i3')
+  })
+
+  it('moves an inserted image to the tray when the composer switches to plain text', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i4', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.paste(screen.getByTestId('compose-editor'), {
+      clipboardData: { files: [imageFile()] },
+    })
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Plain text' }))
+
+    // Exactly one row: the hook holds the inserted id once, and a tray listing it twice would
+    // send the file twice.
+    expect(await screen.findByText('shot.png')).toBeInTheDocument()
+  })
+})
+
+// Four lifetime bugs, none of which turns anything red on screen: a staged id that reaches no
+// payload, a second artefact from one paste, and two windows where an upload in flight is
+// invisible to everything that consumes the id it will produce.
+describe('inline images, staged-id lifetime', () => {
+  function imageFile(name = 'shot.png') {
+    return new File(['xx'], name, { type: 'image/png' })
+  }
+  const pasteImage = () => fireEvent.paste(screen.getByTestId('compose-editor'),
+    { clipboardData: { files: [imageFile()] } })
+  const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
+
+  // inlineAdopted speaks for the seed. Zeroing the inserted half with it left the body pointing
+  // at a cid the send packed no part for: a broken image, with nothing on screen to say so.
+  it('sends an image inserted after a plain-text round trip', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'round-trip', fileName: 'shot.png', size: 2 })
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+    addRecipient('To', 'her@example.com')
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(plainToggle())
+    pasteImage()
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+
+    fireEvent.click(sendButton())
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toContain('round-trip')
+  })
+
+  // Squire's _onPaste never reads defaultPrevented: it bails only on an image with no text/plain
+  // and no rtf+html. Explorer and Word both send those, so only stopping the event keeps its
+  // handler — here, any listener on the editor element — from inserting a second artefact.
+  it('keeps the paste from reaching the editor s own handler', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i5', fileName: 'shot.png', size: 2 })
+    renderCompose()
+    const squirePaste = vi.fn()
+    screen.getByTestId('compose-editor').addEventListener('paste', squirePaste)
+
+    pasteImage()
+
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+    expect(squirePaste).not.toHaveBeenCalled()
+  })
+
+  // The upload is not in the tray, so attachments.uploading is blind to it. Sent in that window
+  // the message leaves without the image and without its id, and the staged bytes are released
+  // by nobody — the leave unmounts the hook the upload was going to report to.
+  it('locks Send and Discard while an inline upload is in flight', async () => {
+    let resolve!: (v: unknown) => void
+    mocks.uploadAttachment.mockReturnValue(new Promise(r => { resolve = r }))
+    renderCompose()
+    addRecipient('To', 'her@example.com')
+    expect(sendButton()).toBeEnabled()
+
+    pasteImage()
+    await waitFor(() => expect(sendButton()).toBeDisabled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(within(await discardModal()).getByRole('button', { name: 'Discard' })).toBeDisabled()
+
+    await act(async () => { resolve({ id: 'i6', fileName: 'shot.png', size: 2 }) })
+    expect(sendButton()).toBeEnabled()
+  })
+
+  // Switched mid-upload, adoptInline finds both refs empty and returns, inlineAdopted lands, and
+  // the id arriving after it belongs to no tray row and no payload — the image silently vanishes.
+  it('locks the plain-text switch while an inline upload is in flight', async () => {
+    let resolve!: (v: unknown) => void
+    mocks.uploadAttachment.mockReturnValue(new Promise(r => { resolve = r }))
+    renderCompose()
+
+    pasteImage()
+    await waitFor(() => expect(plainToggle()).toBeDisabled())
+
+    await act(async () => { resolve({ id: 'i7', fileName: 'shot.png', size: 2 }) })
+    expect(plainToggle()).toBeEnabled()
+
+    fireEvent.click(plainToggle())
+    expect(await screen.findByText('shot.png')).toBeInTheDocument()
+  })
+
+  // A resumed draft is the case that bites: it opens clean while every other clause of `dirty` is
+  // already true, so dirtying up front made a refused upload alone ask to re-save an untouched
+  // draft. An empty composer hides the bug — nothing there for `changed` to combine with.
+  it('leaves a resumed draft clean when an inline upload is refused', async () => {
+    mocks.uploadAttachment.mockRejectedValue(new Error('Too large'))
+    const seed: ComposeSeed = {
+      action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+      fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+      draftRef: { folderPath: 'Drafts', uid: 7 }, nameHints: {},
+    }
+    const { onNotify, router } = renderCompose('INBOX', seed)
+
+    pasteImage()
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Too large', 'error'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+    expect(router.state.location.pathname).toBe('/mail')
   })
 })

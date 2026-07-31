@@ -16,6 +16,7 @@ import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import Tooltip from '../../../components/Tooltip'
 import ImageOffIcon from '../../../icons/ImageOffIcon'
 import CodeIcon from '../../../icons/CodeIcon'
 import {
@@ -282,6 +283,18 @@ export default function MessageReader(
               </button>
             )}
             {data.subject || '(no subject)'}
+            {data.priority !== 'normal' && (
+              <Tooltip
+                placement="bottom-left"
+                content={data.priority === 'high'
+                  ? 'The sender marked this message high priority'
+                  : 'The sender marked this message low priority'}
+              >
+                <span className={`reader-priority is-${data.priority}`}>
+                  {data.priority === 'high' ? 'High priority' : 'Low priority'}
+                </span>
+              </Tooltip>
+            )}
           </h1>
           <div className="reader-meta">
             <div className="reader-from">

@@ -163,4 +163,60 @@ describe('useStagedAttachments', () => {
     expect(result.current.items[0]).toMatchObject({ id: 'id-a', progress: 1 })
     expect(result.current.items[1]).toMatchObject({ id: 'id-b', progress: 1 })
   })
+
+  it('moves the inline ids into the tray, once', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], ['inline-1']))
+
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+
+    expect(result.current.items).toHaveLength(1)
+    expect(result.current.items[0]).toMatchObject({ id: 'inline-1', fileName: 'logo.png', size: 3 })
+    expect(result.current.ids).toEqual(['inline-1'])
+
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    expect(result.current.items).toHaveLength(1)
+  })
+
+  // Adopted means owned by the tray: discarding must release it once, not twice.
+  it('releases an adopted id a single time', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], ['inline-1']))
+
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    act(() => { result.current.discardAll() })
+
+    expect(api.deleteAttachment).toHaveBeenCalledTimes(1)
+  })
+
+  // An image inserted then abandoned in the same breath must still be released: routed through
+  // the seed prop it would not be recorded until the next effect flush, and the bytes would fall
+  // to the TTL sweeper in silence.
+  it('releases an imperatively added inline id on discard', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], []))
+
+    act(() => { result.current.addInline('i9') })
+    act(() => { result.current.discardAll() })
+
+    expect(api.deleteAttachment).toHaveBeenCalledWith('i9', { accountId: 'primary' })
+  })
+
+  it('moves an imperatively added inline id into the tray on adoption', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], []))
+
+    act(() => { result.current.addInline('i9') })
+    act(() => { result.current.adoptInline([{ id: 'i9', fileName: 'shot.png', size: 12 }]) })
+
+    expect(result.current.items.map(i => i.fileName)).toEqual(['shot.png'])
+    expect(result.current.ids).toEqual(['i9'])
+  })
+
+  // The composer can leave while an inline upload is still in flight. Its id arrives after the
+  // discard drained both refs, so held it would be held by nobody and swept twelve hours later.
+  it('releases an inline id handed in after the discard', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], []))
+
+    act(() => { result.current.discardAll() })
+    act(() => { result.current.addInline('late') })
+
+    expect(api.deleteAttachment).toHaveBeenCalledWith('late', { accountId: 'primary' })
+  })
 })

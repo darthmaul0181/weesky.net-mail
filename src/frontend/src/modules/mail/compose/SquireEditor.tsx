@@ -21,6 +21,7 @@ export interface EditorHandle {
   setFontSize: (size: string) => void
   setAlignment: (alignment: 'left' | 'center' | 'right' | 'justify') => void
   makeLink: (url: string) => void
+  insertImage: (src: string) => void
 }
 
 /** Which inline/list formats are on at the caret, so the toolbar can light its buttons. */
@@ -135,6 +136,9 @@ const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor(
     setFontSize: (size) => { editor.current?.setFontSize(size) },
     setAlignment: (alignment) => { editor.current?.setTextAlignment(alignment) },
     makeLink: (url) => { editor.current?.makeLink(url) },
+    // The bound is on the image itself rather than in a stylesheet: the recipient's client has
+    // none of ours, and a 4000px photo would otherwise blow out their reading column.
+    insertImage: (src) => { editor.current?.insertImage(src, { style: 'max-width: 100%' }) },
   }), [])
 
   return <div ref={root} className="compose-editor" data-testid="compose-editor" />

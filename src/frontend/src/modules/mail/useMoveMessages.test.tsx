@@ -24,6 +24,7 @@ function wrapper({ children }: { children: ReactNode }) {
 const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
   uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
   seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
+  priority: 'normal',
   ...over,
 })
 

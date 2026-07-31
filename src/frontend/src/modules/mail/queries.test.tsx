@@ -415,6 +415,7 @@ describe('useSendMessage', () => {
 
   const sendArgs = {
     to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
+    priority: 'normal' as const,
   }
 
   it('calls api.sendMessage with the composed args', async () => {

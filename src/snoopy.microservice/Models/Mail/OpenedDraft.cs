@@ -10,4 +10,9 @@ public sealed record OpenedDraft(
     string HtmlBody,
     IReadOnlyList<StagedAttachmentInfo> Attachments,
     string? InReplyTo,
-    IReadOnlyList<string> References);
+    IReadOnlyList<string> References,
+    // Read back off the saved message. Without it a saved High silently resumes as Normal.
+    MailPriority Priority,
+    // Non-null when the stored draft carried no HTML part: the composer reopens in text mode
+    // rather than resuming an HTML editor holding the quote preparer's <div> wrapping.
+    string? TextBody);

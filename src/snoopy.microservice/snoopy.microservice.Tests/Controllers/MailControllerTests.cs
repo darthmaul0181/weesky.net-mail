@@ -222,10 +222,47 @@ public sealed class MailControllerTests
         var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.txt")
         { Headers = new HeaderDictionary(), ContentType = "text/plain" };
 
-        await controller.UploadAttachment(file, CancellationToken.None);
+        await controller.UploadAttachment(file, inline: false, CancellationToken.None);
 
         _staged.Verify(s => s.SaveAsync(ConnectedConn.StagedScope(controller.AuthenticatedUser),
             "a.txt", "text/plain", It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // An inline part is referenced from the body by cid; without an id assigned here the composer
+    // could only ever produce attachments, whatever the body says.
+    [Fact]
+    public async Task UploadAttachment_AssignsAContentIdToAnInlineImage()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+        _staged.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Stream>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
+            .ReturnsAsync(Result.Success(new StagedAttachmentInfo(Guid.NewGuid(), "shot.png", 4, "image/png")));
+        var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "shot.png")
+        { Headers = new HeaderDictionary(), ContentType = "image/png" };
+
+        await controller.UploadAttachment(file, inline: true, CancellationToken.None);
+
+        _staged.Verify(s => s.SaveAsync(ConnectedConn.StagedScope(controller.AuthenticatedUser),
+            "shot.png", "image/png", It.IsAny<Stream>(), It.IsAny<CancellationToken>(),
+            It.Is<string>(id => !string.IsNullOrWhiteSpace(id))), Times.Once);
+    }
+
+    // A non-image inline part has nowhere to be shown: it would travel in the related part
+    // referenced by nothing, which is the condition the send path's pruning exists to prevent.
+    [Fact]
+    public async Task UploadAttachment_RefusesANonImageInlinePart()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+        var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.pdf")
+        { Headers = new HeaderDictionary(), ContentType = "application/pdf" };
+
+        var result = await controller.UploadAttachment(file, inline: true, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _staged.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Stream>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -1633,7 +1670,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task UploadAttachment_RefusesAMissingFile()
     {
-        var result = await CreateController().UploadAttachment(null, CancellationToken.None);
+        var result = await CreateController().UploadAttachment(null, inline: false, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
@@ -1650,7 +1687,7 @@ public sealed class MailControllerTests
         var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.txt")
         { Headers = new HeaderDictionary(), ContentType = "text/plain" };
 
-        var result = await CreateController().UploadAttachment(file, CancellationToken.None);
+        var result = await CreateController().UploadAttachment(file, inline: false, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(info, ok.Value);
@@ -1666,7 +1703,7 @@ public sealed class MailControllerTests
         var file = new FormFile(new MemoryStream([1]), 0, 1, "file", "big.bin")
         { Headers = new HeaderDictionary(), ContentType = "application/octet-stream" };
 
-        var result = await CreateController().UploadAttachment(file, CancellationToken.None);
+        var result = await CreateController().UploadAttachment(file, inline: false, CancellationToken.None);
 
         Assert.IsType<ObjectResult>(result.Result); // FromResult path: StatusCode(400, enveloppe)
     }
@@ -1867,6 +1904,23 @@ public sealed class MailControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.False(((SendMessageResult)ok.Value!).AppendedToSent);
+    }
+
+    /// <summary>The priority has to survive the hop from the request into the sender's argument.</summary>
+    [Fact]
+    public async Task SendMessage_CarriesThePriorityIntoTheOutgoingMessage()
+    {
+        SendMessageRequest? captured = null;
+        _sender.Setup(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
+                It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, MailAccountConnection, SendMessageRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SendMessageResult(true)));
+
+        var result = await CreateController().SendMessage(
+            new SendMessageRequest { To = ["a@example.com"], Priority = MailPriority.High }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(MailPriority.High, captured!.Priority);
     }
 
     // ── PrepareQuote ────────────────────────────────────────────────────
@@ -2089,6 +2143,21 @@ public sealed class MailControllerTests
         _drafts.Verify(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task SaveDraft_CarriesThePriorityIntoTheSavedMessage()
+    {
+        SaveDraftRequest? captured = null;
+        _drafts.Setup(d => d.SaveAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<SaveDraftRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<User, MailAccountConnection, SaveDraftRequest, CancellationToken>((_, _, r, _) => captured = r)
+            .ReturnsAsync(Result.Success(new SavedDraft(1, "Drafts")));
+
+        var result = await CreateController().SaveDraft(
+            new SaveDraftRequest { Priority = MailPriority.Low }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(MailPriority.Low, captured!.Priority);
+    }
+
     // ── OpenDraft ───────────────────────────────────────────────────────
 
     [Fact]
@@ -2124,6 +2193,57 @@ public sealed class MailControllerTests
         Assert.Same(stagedInfo, Assert.Single(opened.Attachments));
         Assert.Equal("parent@x.com", opened.InReplyTo);
         Assert.Equal(["oldest@x.com", "newest@x.com"], opened.References);
+    }
+
+    /// <summary>Saved at High, reopened at High — otherwise the setting dies on the round trip.</summary>
+    [Fact]
+    public async Task OpenDraft_ReadsThePriorityBackOffTheSavedMessage()
+    {
+        var saved = new MimeMessage();
+        MailPriorityHeaders.Apply(saved, MailPriority.High);
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(saved));
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, saved, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PreparedQuote("<p>Hi</p>", [])));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(MailPriority.High, Assert.IsType<OpenedDraft>(ok.Value).Priority);
+    }
+
+    /// <summary>A draft written as text reopens as text; without this it comes back as HTML.</summary>
+    [Fact]
+    public async Task OpenDraft_ReportsATextOnlyDraftAsPlainText()
+    {
+        var saved = new MimeMessage { Body = new TextPart("plain") { Text = "hello\nthere" } };
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(saved));
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, saved, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PreparedQuote("<div>hello<br>there</div>", [])));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("hello\nthere", Assert.IsType<OpenedDraft>(ok.Value).TextBody);
+    }
+
+    [Fact]
+    public async Task OpenDraft_LeavesAnHtmlDraftWithNoTextBody()
+    {
+        var saved = new MimeMessage { Body = new TextPart("html") { Text = "<p>Hi</p>" } };
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(saved));
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, saved, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PreparedQuote("<p>Hi</p>", [])));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Null(Assert.IsType<OpenedDraft>(ok.Value).TextBody);
     }
 
     [Fact]

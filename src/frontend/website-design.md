@@ -80,6 +80,14 @@ When a rule is ambiguous, copy what those screens do.
   red). Conventional order: **edit, then delete**.
 - The page's primary action is a filled `.btn.btn-primary`. An **"Add" button pairs an icon with the
   word "Add"** (the icon says what is being added — person, globe…).
+- **`.btn-primary` is full-width by default — add `.btn-auto` everywhere that is not a form's
+  submit.** The `width: 100%` was written for the login form and the dialogs, where the button is
+  the form's only control and filling the width is right. Everywhere else — a settings page, a
+  toolbar, a band, a card footer — it stretches the button across the whole panel, which reads as a
+  broken layout. This has now been the same bug six times, each one patched with its own
+  `<parent> .btn-primary { width: auto }` rule; `.btn-auto` is the one modifier for it. A primary
+  button that is not submitting a form it fills should carry it from the first render — jsdom sees
+  no layout, so no test in this repo will ever catch its absence.
 - **Deleting opens a `DeleteConfirmModal`**, never deletes in place on the first click.
 - A disabled button dims and switches its cursor; a button that fires async work shows a `.spinner`
   while it is pending.

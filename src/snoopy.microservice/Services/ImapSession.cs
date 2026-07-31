@@ -483,7 +483,7 @@ internal sealed class ImapSession : IImapSession
             {
                 await group.Key.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
                 var items = await group.Key.FetchAsync(
-                    group.Select(m => m.Uid).ToList(), SummaryItems, cancellationToken);
+                    group.Select(m => m.Uid).ToList(), SummaryItems, SummaryHeaders, cancellationToken);
                 foreach (var item in items)
                 {
                     byKey[(group.Key.FullName, item.UniqueId.Id)] = FillSummary(new MailSearchResult
@@ -612,7 +612,7 @@ internal sealed class ImapSession : IImapSession
                 var wanted = PageOf(sorted, page, pageSize).ToList();
                 if (wanted.Count == 0) return Result.Success(result);
 
-                var sortedItems = await folder.FetchAsync(wanted, SummaryItems, cancellationToken);
+                var sortedItems = await folder.FetchAsync(wanted, SummaryItems, SummaryHeaders, cancellationToken);
                 foreach (var item in InOrderOf(sortedItems, wanted, item => item.UniqueId))
                 {
                     result.Messages.Add(ToSummary(item));
@@ -624,7 +624,7 @@ internal sealed class ImapSession : IImapSession
             var (start, end) = ComputePageWindow(folder.Count, page, pageSize);
             if (start < 0) return Result.Success(result);
 
-            var items = await folder.FetchAsync(start, end, SummaryItems, cancellationToken);
+            var items = await folder.FetchAsync(start, end, SummaryItems, SummaryHeaders, cancellationToken);
 
             // The fetch runs oldest-first; the list is newest-first.
             foreach (var item in items.Reverse())
@@ -641,6 +641,13 @@ internal sealed class ImapSession : IImapSession
         MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.Flags |
         MessageSummaryItems.Size | MessageSummaryItems.BodyStructure | MessageSummaryItems.InternalDate |
         MessageSummaryItems.PreviewText;
+
+    /// <summary>
+    /// Priority is not in the envelope, so the summary FETCH has to name its headers. On the wire
+    /// this is one BODY.PEEK[HEADER.FIELDS (...)] alongside the items above — one more item in the
+    /// same round trip, not a second request, and the price of showing priority in the list at all.
+    /// </summary>
+    private static readonly string[] SummaryHeaders = MailPriorityReader.Fields;
 
     private static MailMessageSummary ToSummary(IMessageSummary item) => FillSummary(new MailMessageSummary(), item);
 
@@ -667,6 +674,7 @@ internal sealed class ImapSession : IImapSession
         summary.HasAttachments = item.Attachments?.Any() ?? false;
         summary.Size = item.Size ?? 0;
         summary.Preview = item.PreviewText ?? string.Empty;
+        summary.Priority = item.Headers is { } headers ? MailPriorityReader.Parse(headers) : MailPriority.Normal;
         return summary;
     }
 
@@ -746,7 +754,8 @@ internal sealed class ImapSession : IImapSession
                 SentBy = headerDetails.SentBy,
                 SignedBy = headerDetails.SignedBy,
                 UnsubscribeUrl = headerDetails.UnsubscribeUrl,
-                TlsReceived = headerDetails.TlsReceived
+                TlsReceived = headerDetails.TlsReceived,
+                Priority = MailPriorityReader.Parse(message.Headers)
             };
 
             ApplyThreading(detail, message);

@@ -40,4 +40,19 @@ describe('SquireEditor against the real engine', () => {
     expect(ref.current!.isEmpty()).toBe(true)
     view.unmount()
   })
+
+  // Against the real engine, not a mock: an insertImage signature that has moved is exactly the
+  // class of mismatch the sibling suite's stub cannot see.
+  it('inserts an image bounded to the message width', () => {
+    const ref = createRef<EditorHandle>()
+    const view = render(<SquireEditor ref={ref} onChange={() => {}} />)
+
+    ref.current!.insertImage('https://api.test.example/api/Mail/Attachments/i1/content')
+
+    const html = ref.current!.getHTML()
+    expect(html).toContain('src="https://api.test.example/api/Mail/Attachments/i1/content"')
+    expect(html).toContain('max-width')
+    expect(ref.current!.isEmpty()).toBe(false)
+    view.unmount()
+  })
 })

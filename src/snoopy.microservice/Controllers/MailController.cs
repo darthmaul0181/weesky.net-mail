@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MimeKit;
+using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Configuration;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
@@ -826,9 +827,10 @@ public sealed class MailController(
     /// (<see cref="AttachmentSizeLimitFilter"/>), and the store re-checks it while streaming.
     /// </summary>
     /// <param name="file">the uploaded file</param>
+    /// <param name="inline">stage as a body resource (cid) rather than an attachment</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">Id and metadata of the staged file</response>
-    /// <response code="400">No file, file over the limit, or account staging cap reached</response>
+    /// <response code="400">No file, a non-image staged inline, file over the limit, or account staging cap reached</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such account</response>
     /// <response code="409">The connected account's stored credentials no longer decrypt</response>
@@ -840,10 +842,15 @@ public sealed class MailController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<StagedAttachmentInfo>> UploadAttachment(IFormFile? file, CancellationToken cancellationToken)
+    public async Task<ActionResult<StagedAttachmentInfo>> UploadAttachment(
+        IFormFile? file, [FromForm] bool inline, CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
             return BadRequestEnveloppe("A file is required");
+        // Beside the file check rather than after the account resolution: both describe the
+        // request itself, and neither needs a mailbox to be judged.
+        if (inline && !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return BadRequestEnveloppe("An inline part must be an image");
 
         var (connection, error) = await TryResolveAsync(cancellationToken);
         if (connection is null) return error!;
@@ -851,7 +858,8 @@ public sealed class MailController(
         await using var content = file.OpenReadStream();
         var result = await staged.SaveAsync(
             connection.StagedScope(AuthenticatedUser),
-            file.FileName, file.ContentType, content, cancellationToken);
+            file.FileName, file.ContentType, content, cancellationToken,
+            inline ? MimeUtils.GenerateMessageId() : null);
 
         return FromResult(result);
     }
@@ -1181,7 +1189,16 @@ public sealed class MailController(
             prepared.QuotableHtml,
             prepared.Attachments,
             string.IsNullOrWhiteSpace(message.InReplyTo) ? null : message.InReplyTo,
-            message.References?.ToList() ?? []);
+            message.References?.ToList() ?? [],
+            MailPriorityReader.Parse(message.Headers),
+            // No HTML part is what "this draft was written as text" looks like on the wire. Only
+            // the draft path reads it: a reply to a text-only original still opens an HTML composer.
+            // TextBody decodes with the host's newline format, and a textarea reports LF whatever it
+            // was handed — an unnormalised CR would survive in the composer's state alone and
+            // desynchronise the controlled input.
+            string.IsNullOrEmpty(message.HtmlBody)
+                ? (message.TextBody ?? string.Empty).ReplaceLineEndings("\n")
+                : null);
 
     private static List<string> Addresses(InternetAddressList? list) =>
         list?.Mailboxes?.Select(m => m.Address).ToList() ?? [];

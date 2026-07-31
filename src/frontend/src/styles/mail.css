@@ -543,6 +543,21 @@
   flex: none;
 }
 
+/* A word in the header line, sharing .message-row-draft's slot: a glyph in the subject line sat in
+   the text flow, so a marked row began its subject 17px right of every other one and the column
+   lost the axis the eye scans down. Set apart from Draft typographically on purpose — the two can
+   appear side by side, and two coloured words in one voice would read as one label in two halves. */
+.message-row-priority {
+  flex: none;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.message-row-priority.is-high { color: var(--danger); }
+.message-row-priority.is-low { color: var(--text-muted); }
+
 /* ── Row selection checkbox ──────────────────────────────── */
 
 /* Leftmost in both skins. The column is reserved permanently (a padding gutter in the narrow
@@ -764,6 +779,15 @@
 .actions-rule { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
 .reader-subject { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
+
+/* A glyph and a word, never a coloured band: X-Priority is the sender's claim, freely forged. */
+.reader-priority {
+  margin-left: 10px; padding: 1px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; vertical-align: middle;
+  border: 1px solid currentColor;
+}
+.reader-priority.is-high { color: var(--danger); }
+.reader-priority.is-low { color: var(--text-muted); }
 
 /* Sized against the subject line so the arrow reads as part of it, not as a toolbar. */
 .reader-back {
@@ -1092,8 +1116,8 @@
   color: var(--text);
   cursor: pointer;
 }
-/* Same hover as .dropdown-item — see the note there. Both this and .compose-tool rest on
-   --surface (the modal, and .compose-view), so one formula serves all three. */
+/* Same hover as .dropdown-item — see the note there. This rests on --surface (the modal), so the
+   one formula serves both. */
 .attachment-viewer-nav:hover:not(:disabled) { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 .attachment-viewer-nav:disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
 .attachment-viewer-error { color: var(--danger); }
@@ -1289,8 +1313,20 @@
 }
 
 /* ── Compose: editor ─────────────────────────────────────────────────────── */
+/* The editor's band, and the zone that tells an image dropped into the message from a file
+   dropped on the composer. It has to carry the band-stack rules itself — the column gives its
+   free height to one child, and that is now this wrapper rather than the editor inside it. */
+.compose-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* The canvas follows the theme (dark in dark mode) by product choice: a dark-mode composer
-   wants a dark writing surface, and composes knowing the recipient still receives on white. */
+   wants a dark writing surface, and composes knowing the recipient still receives on white.
+   position: relative is Squire's: it appends its image-resize handles into this root and offsets
+   them by the root's own scrollTop, so anchoring them anywhere else leaves them behind on scroll. */
 .compose-editor {
   flex: 1;
   min-height: 0;
@@ -1299,6 +1335,7 @@
   color: var(--text);
   padding: 12px 16px;
   outline: none;
+  position: relative;
 }
 
 /* The global reset zeroes blockquote/list indent, so give the editor visible feedback for the
@@ -1313,46 +1350,87 @@
 .compose-editor ul,
 .compose-editor ol { padding-left: 24px; }
 
+/* The plain-text canvas: the same box as the editor, monospaced because that is what the mode
+   means — the recipient's client will not lay this out, so what is typed is what is read. */
+textarea.compose-editor {
+  width: 100%;
+  border: none;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
 .compose-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding: 4px 8px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.compose-tool {
+/* Each family of controls is its own capsule, and that grouping is what the 1px rules used to
+   do — a rule between two capsules would say the same thing twice. */
+.compose-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+.compose-tool-group .dropdown-root { display: inline-flex; }
+
+/* Half of the bar's scale: the button, the B/I/U/S letters and the ink bar. The icon sizes are the
+   other half, as ICON / INK_ICON / CHEVRON at the top of EditorToolbar.tsx — revisiting the scale
+   means moving both, and there are only those two places to look. No dropdown carries text any
+   more: a trigger spelling its own value gave the bar a width that moved with the choice. */
+.compose-tool,
+.compose-tool-select {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
+  font: inherit;
+  height: 31px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+.compose-tool { width: 31px; }
+.compose-tool-select { gap: 5px; padding: 0 9px; }
+.compose-tool-select > svg:last-child { opacity: 0.6; }
 
-.compose-tool:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
-.compose-tool.is-active { color: var(--badge-count-bg); background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent); }
-
-.compose-toolbar-rule {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 4px;
+/* The capsule is sunken, so the control under the pointer rises out of it instead of tinting it.
+   --surface-raised sits above --surface-sunken in both modes, so one formula serves both. */
+.compose-tool:hover,
+.compose-tool-select:hover {
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
 }
 
-.compose-select select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  padding: 2px 4px;
-  font-size: 12px;
+.compose-tool.is-active { background: var(--action-primary); color: var(--action-primary-fg); }
+.compose-tool.is-active:hover { background: var(--action-primary-hover); box-shadow: none; }
+
+/* A sans-serif italic I is a bare stroke; the serif one keeps its serifs and stays legible. */
+.compose-tool b, .compose-tool i, .compose-tool u, .compose-tool s { font-size: 17px; line-height: 1; }
+.compose-tool i { font-family: Georgia, 'Times New Roman', serif; }
+.compose-tool u { text-underline-offset: 2px; }
+
+/* The row owns the whole item so the tick sits against its right edge; .dropdown-item's own gap
+   would otherwise leave it hugging the label. */
+.compose-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
 }
+
+.compose-tool-stack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.compose-tool-ink { width: 16px; height: 3px; border-radius: 2px; }
 
 .compose-popover-anchor { position: relative; }
 
@@ -1394,14 +1472,45 @@
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); padding: 4px 6px; min-height: 32px;
 }
-.recipients-box input { flex: 1; min-width: 140px; border: none; background: none; color: var(--text); outline: none; }
+/* Three classes on purpose. `.field-h input[type="text"]` in index.css is drawn for a settings
+   row and outranks a plain `.recipients-box input` (0,2,1 against 0,1,1), so the caret came back
+   bordered and padded — a second box inside the field, 38.5px tall, which pushed the field to
+   48.5px and left every token floating in it whatever height the token was given. */
+.field-h.recipients-field .recipients-box input {
+  flex: 1;
+  min-width: 140px;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 14px;
+  background: none;
+  color: var(--text);
+  outline: none;
+}
 .recipient-token, .compose-attachment {
   display: inline-flex; align-items: center;
-  background: var(--surface-sunken); font-size: 12px;
+  background: var(--surface-sunken);
 }
-.recipient-token { gap: 4px; border-radius: 999px; padding: 2px 8px; }
-.compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; }
-.recipient-token.is-invalid { color: var(--danger); border: 1px solid var(--danger); }
+/* A card filling the box's inner height, not a pill floating in it: at 18px it read as grey text
+   rather than as an entered value. 22px, not 24: the box is border-box, so its 32px min-height
+   less 8px of padding and 2px of border leaves exactly 22 — measured, and 24 grew the field by
+   2px on each of To, Cc and Bcc. The border is on every token, so the invalid one below only
+   recolours it; as an addition it made the offending chip 2px taller than its neighbours. */
+.recipient-token {
+  gap: 7px;
+  height: 22px;
+  /* 14px is what every value in this form is set in — the From line and the subject both. At 12px
+     a recipient read as a caption beside them. line-height: 1 because the inherited 1.5 makes a
+     21px line box for 20px of room inside the card. */
+  font-size: 14px;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 6px 0 9px;
+}
+/* Still 12px: the tray is a footer band listing files, not a form value like a recipient. */
+.compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12px; }
+.recipient-token.is-invalid { color: var(--danger); border-color: var(--danger); }
 .recipient-token button, .compose-attachment button { background: none; border: none; cursor: pointer; color: inherit; padding: 0; }
 
 .compose-link-form input { width: 220px; }
@@ -1412,11 +1521,12 @@
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   background: var(--surface); min-width: 0; position: relative;
 }
-/* Last child of .compose-view during a file drag, above Squire's contenteditable so the drop
-   lands here rather than in the editor. No pointer-events: none — it has to intercept the drop
-   itself and let it bubble to the root handler. */
+/* Last child of .compose-view during a file drag, drawn over the whole surface. It is transparent
+   to the pointer: covering inset: 0 it would otherwise sit between the cursor and .compose-body,
+   which would never see a dragenter or a drop, and every image would land in the tray. */
 .compose-drop-overlay {
   position: absolute; inset: 0; z-index: 30;
+  pointer-events: none;
   display: flex; align-items: center; justify-content: center;
   font-size: 17px; font-weight: 600; color: var(--text);
   border: 2px dashed var(--action-primary);
@@ -1441,7 +1551,9 @@
 .compose-header .btn-ghost { padding: 8px 14px; }
 /* Tight header: no per-row margin (the column gap spaces them) and a narrow label so From/To/
    Subject values line up close to their labels. */
-.compose-fields { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; }
+/* One gap for the whole header: From, To, Cc, Bcc, Priority and Subject are all direct children,
+   so the spacing between them is this value and nothing else. */
+.compose-fields { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; }
 .compose-fields .field-h { margin-bottom: 0; gap: 10px; }
 .compose-fields .field-h > label:first-child { width: 66px; }
 .compose-fields .field-h > input[type="text"] { padding: 6px 10px; }
@@ -1451,18 +1563,22 @@
 .compose-link-btn { background: none; border: none; color: var(--action-primary); cursor: pointer; padding: 0; font-size: 13px; }
 
 /* From is plain text, aligned on the same column as the To/Subject boxes. */
-.compose-from { display: flex; align-items: center; gap: 10px; }
-.compose-from-label {
+/* min-height, not a border: these two carry a dropdown rather than a bordered field, so without
+   it they stood 25px among 32px neighbours and broke the header's rhythm — visible once the rows
+   were spaced apart. The row reserves the height; the control keeps its own look. */
+.compose-from, .compose-priority { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.compose-from-label, .compose-priority-label {
   width: 66px; flex-shrink: 0; font-size: 13px; font-weight: 500; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .compose-from-value { font-size: 14px; color: var(--text); }
-.compose-from-select {
+.compose-from-select, .compose-priority-select {
   background: none; border: none; padding: 2px 6px; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
   font: inherit; color: var(--text); border-radius: 6px;
 }
-.compose-from-select:hover { background: var(--pane-item-hover); }
+.compose-from-select:hover, .compose-priority-select:hover { background: var(--pane-item-hover); }
+/* The From trigger uses a right chevron turned down; this one already points down. */
 .compose-from-select svg { transform: rotate(90deg); }
 
 /* ── Compose: attachments ────────────────────────────────────────────────── */

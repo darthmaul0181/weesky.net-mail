@@ -412,7 +412,7 @@ export function stagedAttachmentUrl(id, accountId) {
  * Uploads one outgoing attachment. XMLHttpRequest, not fetch: only XHR exposes upload
  * progress, and a 25 MB file without a bar reads as a hang.
  */
-export function uploadAttachment(file, { onProgress, signal, accountId } = {}) {
+export function uploadAttachment(file, { onProgress, signal, accountId, inline } = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${BASE}/api/Mail/Attachments`)
@@ -452,6 +452,7 @@ export function uploadAttachment(file, { onProgress, signal, accountId } = {}) {
     signal?.addEventListener('abort', onAbort)
     const form = new FormData()
     form.append('file', file)
+    if (inline) form.append('inline', 'true')
     xhr.send(form)
   })
 }

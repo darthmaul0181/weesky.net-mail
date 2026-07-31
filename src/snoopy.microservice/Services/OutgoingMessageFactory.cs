@@ -101,33 +101,49 @@ internal sealed class OutgoingMessageFactory(
         User user, SendMessageRequest request, IReadOnlyList<StagedAttachment> attachments,
         bool isPrimary, IReadOnlyList<SendingIdentity> stored, string fromAddress, CancellationToken cancellationToken)
     {
-        // The composer displays a staged inline image through its content URL; on the wire that
-        // becomes a cid reference into the multipart/related. An image the user deleted from the
-        // body has no URL left to rewrite: it is not packed, and still purged after the send.
-        var html = request.HtmlBody;
         var linked = new List<StagedAttachment>();
         var regular = new List<StagedAttachment>();
-        foreach (var attachment in attachments)
+        var builder = new BodyBuilder();
+
+        if (request.TextBody is { } text)
         {
-            if (attachment.Info.ContentId == null) { regular.Add(attachment); continue; }
-            // StagedContentUrl is the contract with QuotePreparer, the sole producer of these URLs.
-            if (!StagedContentUrl.TryRewrite(html, attachment.Info.Id, $"cid:{attachment.Info.ContentId}", out html))
-                continue;
-            linked.Add(attachment);
+            // Text references no cid, so an inline part has nowhere to be shown: every staged file
+            // travels as an ordinary attachment rather than being silently dropped. Nothing is
+            // sanitized — there is no markup to judge, and the policy would mangle a literal '<'.
+            builder.TextBody = text;
+            regular.AddRange(attachments);
         }
-
-        // Rewrite first, sanitize second: the outgoing policy keeps cid: and culls any leftover
-        // relative URL, so no staged URL can survive into the wire format.
-        var body = sanitizer.Prepare(html);
-
-        // The sanitizer may still have dropped an image the raw body named; only what the final
-        // body references gets packed, so no resource rides along unreferenced. Match on the decoded
-        // body: the sanitizer's formatter escapes attribute values, so a Content-ID carrying '&' —
-        // legal, and taken straight off the inbound part — reads back as "&amp;" and would be culled.
-        if (linked.Count > 0)
+        else
         {
-            var referenced = WebUtility.HtmlDecode(body.Html);
-            linked.RemoveAll(a => !referenced.Contains($"cid:{a.Info.ContentId}", StringComparison.OrdinalIgnoreCase));
+            // The composer displays a staged inline image through its content URL; on the wire that
+            // becomes a cid reference into the multipart/related. An image the user deleted from the
+            // body has no URL left to rewrite: it is not packed, and still purged after the send.
+            var html = request.HtmlBody;
+            foreach (var attachment in attachments)
+            {
+                if (attachment.Info.ContentId == null) { regular.Add(attachment); continue; }
+                // StagedContentUrl is the contract with QuotePreparer, the sole producer of these URLs.
+                if (!StagedContentUrl.TryRewrite(html, attachment.Info.Id, $"cid:{attachment.Info.ContentId}", out html))
+                    continue;
+                linked.Add(attachment);
+            }
+
+            // Rewrite first, sanitize second: the outgoing policy keeps cid: and culls any leftover
+            // relative URL, so no staged URL can survive into the wire format.
+            var body = sanitizer.Prepare(html);
+
+            // The sanitizer may still have dropped an image the raw body named; only what the final
+            // body references gets packed, so no resource rides along unreferenced. Match on the decoded
+            // body: the sanitizer's formatter escapes attribute values, so a Content-ID carrying '&' —
+            // legal, and taken straight off the inbound part — reads back as "&amp;" and would be culled.
+            if (linked.Count > 0)
+            {
+                var referenced = WebUtility.HtmlDecode(body.Html);
+                linked.RemoveAll(a => !referenced.Contains($"cid:{a.Info.ContentId}", StringComparison.OrdinalIgnoreCase));
+            }
+
+            builder.HtmlBody = body.Html;
+            builder.TextBody = body.Text;
         }
 
         var message = new MimeMessage();
@@ -140,8 +156,8 @@ internal sealed class OutgoingMessageFactory(
         message.Subject = request.Subject;
         message.MessageId = MimeUtils.GenerateMessageId(DomainOf(fromAddress));
         ApplyThreadingHeaders(message, request);
+        MailPriorityHeaders.Apply(message, request.Priority);
 
-        var builder = new BodyBuilder { HtmlBody = body.Html, TextBody = body.Text };
         foreach (var attachment in linked)
         {
             await using var content = File.OpenRead(attachment.FilePath);

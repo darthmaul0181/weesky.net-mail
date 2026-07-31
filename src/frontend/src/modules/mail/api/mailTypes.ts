@@ -2,6 +2,9 @@
 
 export type SpecialUse = 'inbox' | 'sent' | 'drafts' | 'trash' | 'junk' | 'archive'
 
+/** What the sender declared. 'normal' is the absence of any priority header. */
+export type MailPriority = 'normal' | 'high' | 'low'
+
 export interface MailFolderNode {
   /** Full IMAP path. Opaque — never parsed or built client-side: the separator is the server's. */
   path: string
@@ -33,6 +36,7 @@ export interface MailMessageSummary {
   hasAttachments: boolean
   size: number
   preview: string
+  priority: MailPriority
 }
 
 export interface MailFolderPage {
@@ -117,6 +121,7 @@ export interface MailMessageDetail {
   signedBy: string | null
   unsubscribeUrl: string | null
   tlsReceived: boolean | null
+  priority: MailPriority
   /** Already sanitised by the backend. Still only ever rendered in a sandboxed iframe. */
   htmlBody: string
   textBody: string
@@ -188,9 +193,12 @@ export interface OpenedDraft {
   subject: string
   fromAddress: string | null
   htmlBody: string
+  /** Non-null when the stored draft was written as text: the composer reopens in text mode. */
+  textBody: string | null
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]
+  priority: MailPriority
 }
 
 /** A message as it arrived. `source` is capped; `totalBytes` is what the whole message weighs. */

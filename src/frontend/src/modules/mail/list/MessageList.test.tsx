@@ -302,6 +302,72 @@ describe('MessageList', () => {
   })
 })
 
+describe('the declared priority', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+  })
+
+  it('marks a high-priority row with a word beside the sender', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...sample[0], subject: 'Devis', priority: 'high' }] }))
+    renderList()
+
+    expect(await screen.findByTitle('High priority')).toHaveTextContent('High')
+  })
+
+  it('marks a low-priority row', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...sample[0], subject: 'Newsletter', priority: 'low' }] }))
+    renderList()
+
+    expect(await screen.findByTitle('Low priority')).toHaveTextContent('Low')
+  })
+
+  // The whole point of the placement: the subject line carries the subject and nothing else, so
+  // every row's subject starts on the same axis whether or not it is marked.
+  it('keeps the mark out of the subject line', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...sample[0], subject: 'Devis', priority: 'high' }] }))
+    renderList()
+    const mark = await screen.findByTitle('High priority')
+
+    expect(mark.closest('.message-row-subject')).toBeNull()
+    expect(mark.closest('.message-row-top')).not.toBeNull()
+  })
+
+  // Every row, nearly always — it must add nothing at all.
+  it('marks nothing on a normal-priority row', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...sample[0], subject: 'Bonjour', priority: 'normal' }] }))
+    renderList()
+    await screen.findByText('Bonjour')
+
+    expect(screen.queryByTitle('High priority')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Low priority')).not.toBeInTheDocument()
+  })
+
+  // The row is children-presentational, so anything it states visually has to be in its name.
+  it('says the priority in the row name', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...sample[0], subject: 'Devis', fromName: 'Camille', priority: 'high' }] }))
+    renderList()
+
+    expect(await screen.findByRole('button', { name: /High priority/ })).toBeInTheDocument()
+  })
+
+  it('marks a high-priority row in the wide skin too, out of the subject line', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [{ ...wideSample[0], priority: 'high' }] }))
+    renderList({ wide: true })
+    const mark = await screen.findByTitle('High priority')
+
+    expect(mark).toHaveTextContent('High')
+    expect(mark.closest('.message-row-line')).toBeNull()
+  })
+})
+
 const draftSample = [
   {
     uid: 5, subject: 'To Bob', fromName: 'Me', fromAddress: 'me@x.be',

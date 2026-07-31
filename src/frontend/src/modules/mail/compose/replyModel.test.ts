@@ -11,6 +11,7 @@ const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail =
   authentication: null, spamScore: null, mailingList: null, sentBy: null, signedBy: null,
   unsubscribeUrl: null, tlsReceived: null, htmlBody: '', textBody: '', blockedImageCount: 0,
   attachments: [], messageId: 'm@x', references: [], inReplyTo: null, replyTo: [], bcc: [],
+  priority: 'normal',
   ...overrides,
 })
 

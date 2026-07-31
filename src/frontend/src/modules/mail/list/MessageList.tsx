@@ -328,9 +328,20 @@ export default function MessageList(
             const subject = message.subject || '(no subject)'
             const when = formatListDate(message.date)
             const seenLabel = message.seen ? 'Mark as unread' : 'Mark as read'
+            const priorityLabel = message.priority === 'high' ? 'High priority'
+              : message.priority === 'low' ? 'Low priority' : null
+            // A word in the Draft badge's slot, not a glyph in the subject line: a glyph there sat
+            // in the text flow, so a marked row started its subject 17px right of every other one
+            // and the column lost the axis the eye scans down.
+            const priorityMark = priorityLabel && (
+              <span className={`message-row-priority is-${message.priority}`} title={priorityLabel}>
+                {message.priority === 'high' ? 'High' : 'Low'}
+              </span>
+            )
             // role=button is children-presentational: nothing inside the row is exposed on its
             // own, so everything the row states visually has to be said in its name.
-            const label = `${message.seen ? '' : 'Unread. '}${drafts ? 'Draft. ' : ''}${from}: ${subject}`
+            const label = `${message.seen ? '' : 'Unread. '}${drafts ? 'Draft. ' : ''}`
+              + `${priorityLabel ? priorityLabel + '. ' : ''}${from}: ${subject}`
               + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
 
             // Cross-folder results neutralize row selection and actions: the row lives in another
@@ -450,6 +461,7 @@ export default function MessageList(
                       {check}
                       {!message.seen && <span className="message-row-unread-dot" />}
                       {drafts && <span className="message-row-draft">Draft</span>}
+                      {priorityMark}
                       <span className="message-row-from">{from}</span>
                       {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                       <span className="message-row-line">
@@ -468,6 +480,7 @@ export default function MessageList(
                       <div className="message-row-top">
                         {!message.seen && <span className="message-row-unread-dot" />}
                         {drafts && <span className="message-row-draft">Draft</span>}
+                        {priorityMark}
                         <span className="message-row-from">{from}</span>
                         {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                         <span className="message-row-date">{when}</span>

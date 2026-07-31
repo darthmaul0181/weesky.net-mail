@@ -1,5 +1,5 @@
 import type { ComposeSeed } from './composeSeed'
-import { escapeHtml } from '../../../lib/escapeHtml'
+import { textToHtml } from './bodyFormat'
 import { isValidAddress } from './RecipientsField'
 
 /** A malformed escape is a link somebody typed by hand, not a reason to open no composer at all. */
@@ -74,8 +74,11 @@ export function mailtoSeedFrom(search: string): ComposeSeed | null {
     // Left unescaped on purpose: it lands on a controlled input value, and entity-encoding it
     // would put the entities themselves in the Subject header of the message that goes out.
     subject: decode(fields.get('subject') ?? ''),
-    html: body ? `<div>${escapeHtml(body).replace(/\r?\n/g, '<br>')}</div>` : '',
+    // The guard stays: textToHtml('') is an empty <div>, and a bodyless mailto opens empty.
+    html: body ? textToHtml(body) : '',
+    text: null,
     fromAddress: null,
+    priority: 'normal',
     attachments: [],
     inReplyTo: null,
     references: [],
