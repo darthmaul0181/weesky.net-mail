@@ -543,9 +543,18 @@
   flex: none;
 }
 
-/* Inline in the subject line, not a column of its own: a normal-priority row — nearly every row —
-   must be exactly what it was before this existed. */
-.message-row-priority { display: inline-flex; vertical-align: -2px; margin-right: 5px; }
+/* A word in the header line, sharing .message-row-draft's slot: a glyph in the subject line sat in
+   the text flow, so a marked row began its subject 17px right of every other one and the column
+   lost the axis the eye scans down. Set apart from Draft typographically on purpose — the two can
+   appear side by side, and two coloured words in one voice would read as one label in two halves. */
+.message-row-priority {
+  flex: none;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 .message-row-priority.is-high { color: var(--danger); }
 .message-row-priority.is-low { color: var(--text-muted); }
 

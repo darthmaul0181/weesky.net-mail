@@ -47,8 +47,6 @@ import OutdentIcon from './OutdentIcon'
 import LinkIcon from './LinkIcon'
 import UnlinkIcon from './UnlinkIcon'
 import ClearFormatIcon from './ClearFormatIcon'
-import PriorityHighIcon from './PriorityHighIcon'
-import PriorityLowIcon from './PriorityLowIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -98,8 +96,6 @@ const icons = [
   { name: 'LinkIcon', Icon: LinkIcon, defaultSize: '16' },
   { name: 'UnlinkIcon', Icon: UnlinkIcon, defaultSize: '16' },
   { name: 'ClearFormatIcon', Icon: ClearFormatIcon, defaultSize: '16' },
-  { name: 'PriorityHighIcon', Icon: PriorityHighIcon, defaultSize: '12' },
-  { name: 'PriorityLowIcon', Icon: PriorityLowIcon, defaultSize: '12' },
 ]
 
 describe('icons', () => {

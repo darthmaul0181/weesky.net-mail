@@ -10,8 +10,6 @@ import JunkIcon from '../../../icons/JunkIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
-import PriorityHighIcon from '../../../icons/PriorityHighIcon'
-import PriorityLowIcon from '../../../icons/PriorityLowIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
@@ -332,9 +330,12 @@ export default function MessageList(
             const seenLabel = message.seen ? 'Mark as unread' : 'Mark as read'
             const priorityLabel = message.priority === 'high' ? 'High priority'
               : message.priority === 'low' ? 'Low priority' : null
+            // A word in the Draft badge's slot, not a glyph in the subject line: a glyph there sat
+            // in the text flow, so a marked row started its subject 17px right of every other one
+            // and the column lost the axis the eye scans down.
             const priorityMark = priorityLabel && (
               <span className={`message-row-priority is-${message.priority}`} title={priorityLabel}>
-                {message.priority === 'high' ? <PriorityHighIcon /> : <PriorityLowIcon />}
+                {message.priority === 'high' ? 'High' : 'Low'}
               </span>
             )
             // role=button is children-presentational: nothing inside the row is exposed on its
@@ -460,10 +461,10 @@ export default function MessageList(
                       {check}
                       {!message.seen && <span className="message-row-unread-dot" />}
                       {drafts && <span className="message-row-draft">Draft</span>}
+                      {priorityMark}
                       <span className="message-row-from">{from}</span>
                       {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                       <span className="message-row-line">
-                        {priorityMark}
                         {subject}
                         {showsPreview && message.preview && (
                           <span className="message-row-line-preview"> — {message.preview}</span>
@@ -479,12 +480,13 @@ export default function MessageList(
                       <div className="message-row-top">
                         {!message.seen && <span className="message-row-unread-dot" />}
                         {drafts && <span className="message-row-draft">Draft</span>}
+                        {priorityMark}
                         <span className="message-row-from">{from}</span>
                         {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
                         <span className="message-row-date">{when}</span>
                         {star}
                       </div>
-                      <div className="message-row-subject">{priorityMark}{subject}</div>
+                      <div className="message-row-subject">{subject}</div>
                       {/* Always rendered when previews are on, even empty: a message with no body
                           would otherwise make a shorter row than its neighbours and break the rhythm
                           of the column. The reserved height lives in CSS. */}
