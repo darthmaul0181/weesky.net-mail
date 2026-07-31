@@ -8,6 +8,7 @@ import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, usePreferences } from '../../../hooks/usePreferences'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
+import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
 import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import RocketIcon from '../../../icons/RocketIcon'
@@ -109,9 +110,19 @@ export default function ComposeView({ onNotify }: Props) {
   // An adopted id now rides the payload as a tray id; left in here it would ride it twice, and
   // the backend packs one staged file per id it is handed.
   const [inlineAdopted, setInlineAdopted] = useState(false)
-  const inlineIds = useMemo(
+  // Held here as well as in the hook: the hook holds them to release them, this list rides the
+  // payload and names the files the tray needs if the composer ever switches to plain text.
+  const [insertedInline, setInsertedInline] = useState<{ id: string; fileName: string; size: number }[]>([])
+  // The seed alone: an inserted id reaches the hook through addInline, and handed in here as well
+  // it would be held twice — released twice, and adopted into two tray rows the send packs twice.
+  const seedInlineIds = useMemo(
     () => (inlineAdopted ? [] : seedInline.map(a => a.id)), [seedInline, inlineAdopted])
-  const attachments = useStagedAttachments(accountId, seedTray, inlineIds)
+  const attachments = useStagedAttachments(accountId, seedTray, seedInlineIds)
+  // Not gated on inlineAdopted: that flag speaks for the seed. A switch empties this list instead,
+  // so an image inserted after a switch back to HTML is inline again and rides the payload again.
+  const inlineIds = useMemo(
+    () => [...seedInlineIds, ...insertedInline.map(a => a.id)],
+    [seedInlineIds, insertedInline])
   const [draftRef, setDraftRef] = useState(seed?.draftRef ?? null)
 
   const usableIdentities = (identityList ?? []).filter(i => !i.stale)
@@ -130,8 +141,10 @@ export default function ComposeView({ onNotify }: Props) {
   // only change there is, and dropping it would silently send from the wrong address.
   // The non-empty clause was written for a composer that could only gain content, so it only
   // applies where there is no filed version: emptying a draft is a change like any other.
+  // An inserted inline image counts here as well as in the tray: it is content in the body, and
+  // resting on Squire having fired `input` for it would be resting on something asserted nowhere.
   const dirty = changed && (draftRef !== null || to.length > 0 || cc.length > 0 || bcc.length > 0
-    || subject !== '' || bodyTouched || attachments.items.length > 0)
+    || subject !== '' || bodyTouched || attachments.items.length > 0 || insertedInline.length > 0)
   const dirtyRef = useRef(dirty)
   const leavingRef = useRef(false)
   useEffect(() => { dirtyRef.current = dirty }, [dirty])
@@ -149,10 +162,44 @@ export default function ComposeView({ onNotify }: Props) {
   // The one edit that shrinks the form, so nothing else can notice it.
   const removeFile = useCallback((key: string) => { markDirty(); removeStaged(key) }, [markDirty, removeStaged])
 
+  // An inline upload never reaches the tray, so attachments.uploading cannot see it. Until it
+  // resolves there is no id for a send to carry, for an adoption to move, or for a discard to
+  // release, which is why everything that consumes those ids waits on this count.
+  const [inlineUploads, setInlineUploads] = useState(0)
+  const addInline = attachments.addInline
+  const insertImages = useCallback(async (files: File[]) => {
+    markDirty()
+    for (const file of files) {
+      setInlineUploads(n => n + 1)
+      try {
+        const info = await uploadAttachment(file, { accountId, inline: true })
+        addInline(info.id)
+        setInsertedInline(previous => [...previous, info])
+        editor?.insertImage(stagedAttachmentUrl(info.id, accountId))
+      } catch (error) {
+        onNotify((error as Error).message, 'error')
+      } finally {
+        setInlineUploads(n => n - 1)
+      }
+    }
+  }, [markDirty, accountId, addInline, editor, onNotify])
+
+  // An image goes in the body, anything else in the tray. Plain text has no body to put one in,
+  // so there everything is an attachment.
+  const routeFiles = useCallback((files: File[]) => {
+    if (text !== null) { addFiles(files); return }
+    const images = files.filter(file => file.type.startsWith('image/'))
+    const rest = files.filter(file => !file.type.startsWith('image/'))
+    if (rest.length > 0) addFiles(rest)
+    if (images.length > 0) void insertImages(images)
+  }, [text, addFiles, insertImages])
+
   // Counter, not a boolean: dragleave fires at every child boundary, so the overlay only
   // goes away when as many leaves as enters have fired (or on drop).
   const [dropTarget, setDropTarget] = useState(false)
   const dragDepth = useRef(0)
+  const [overBody, setOverBody] = useState(false)
+  const bodyDepth = useRef(0)
 
   function carriesFiles(event: React.DragEvent) {
     return Array.from(event.dataTransfer.types).includes('Files')
@@ -174,12 +221,46 @@ export default function ComposeView({ onNotify }: Props) {
   function onDrop(event: React.DragEvent) {
     if (!carriesFiles(event)) return
     event.preventDefault()
-    dragDepth.current = 0
-    setDropTarget(false)
+    resetDrag()
     const files = Array.from(event.dataTransfer.files)
     if (files.length > 0) addFiles(files)
   }
-
+  function resetDrag() {
+    dragDepth.current = 0
+    bodyDepth.current = 0
+    setDropTarget(false)
+    setOverBody(false)
+  }
+  function onBodyDragEnter(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    bodyDepth.current += 1
+    setOverBody(true)
+  }
+  function onBodyDragLeave(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    bodyDepth.current = Math.max(0, bodyDepth.current - 1)
+    if (bodyDepth.current === 0) setOverBody(false)
+  }
+  // Stops here: the surface handler below would attach what the body has just taken. It therefore
+  // owes the surface its own reset, which is what resetDrag is for.
+  function onBodyDrop(event: React.DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    resetDrag()
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length > 0) routeFiles(files)
+  }
+  function onBodyPaste(event: React.ClipboardEvent) {
+    const files = Array.from(event.clipboardData.files)
+    if (files.length === 0) return
+    // Capture phase, and stopped rather than merely prevented: Squire's _onPaste never reads
+    // defaultPrevented, so a clipboard carrying an image plus text/plain (Explorer) or plus
+    // rtf+html (Word) would insert its own artefact beside ours.
+    event.preventDefault()
+    event.stopPropagation()
+    routeFiles(files)
+  }
   const blocker = useBlocker(useCallback(() => dirtyRef.current && !leavingRef.current, []))
 
   // The same question, asked by something the router cannot see — today, the mailbox switch in
@@ -227,8 +308,9 @@ export default function ComposeView({ onNotify }: Props) {
 
   function switchToPlainText() {
     setText(htmlToText(editor?.getHTML() ?? ''))
-    attachments.adoptInline(seedInline)
+    attachments.adoptInline([...seedInline, ...insertedInline])
     setInlineAdopted(true)
+    setInsertedInline([])
     setConfirmPlain(false)
     markDirty()
   }
@@ -247,7 +329,8 @@ export default function ComposeView({ onNotify }: Props) {
   const allValid = [...to, ...cc, ...bcc].every(isValidAddress)
   // Send and Save both file the message and consume the staged ids; the loser of a race would
   // leave a draft behind that the winner's cleanup never knew about.
-  const busy = attachments.uploading || send.isPending || saveDraftMutation.isPending
+  const busy = attachments.uploading || inlineUploads > 0
+    || send.isPending || saveDraftMutation.isPending
   const canSend = to.length > 0 && allValid && !busy
   const canSaveDraft = allValid && !busy
 
@@ -390,13 +473,17 @@ export default function ComposeView({ onNotify }: Props) {
       </div>
 
       <EditorToolbar editor={editor} active={active} plainText={text !== null}
+        switchLocked={inlineUploads > 0}
         onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
-      {text === null ? (
-        <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
-      ) : (
-        <textarea className="compose-editor" data-testid="compose-text-editor" aria-label="Message body"
-          value={text} onChange={e => { setText(e.target.value); touchBody() }} />
-      )}
+      <div className="compose-body" onDragEnter={onBodyDragEnter} onDragLeave={onBodyDragLeave}
+        onDrop={onBodyDrop} onPasteCapture={onBodyPaste}>
+        {text === null ? (
+          <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
+        ) : (
+          <textarea className="compose-editor" data-testid="compose-text-editor" aria-label="Message body"
+            value={text} onChange={e => { setText(e.target.value); touchBody() }} />
+        )}
+      </div>
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={removeFile} />
 
@@ -451,7 +538,9 @@ export default function ComposeView({ onNotify }: Props) {
       )}
 
       {dropTarget && (
-        <div className="compose-drop-overlay">Drop files to attach</div>
+        <div className="compose-drop-overlay">
+          {overBody ? 'Drop image into the message' : 'Drop files to attach'}
+        </div>
       )}
     </div>
   )

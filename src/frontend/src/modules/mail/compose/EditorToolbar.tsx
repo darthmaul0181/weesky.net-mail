@@ -56,10 +56,13 @@ interface Props {
   editor: EditorHandle | null
   active?: ActiveFormats
   plainText: boolean
+  /** An inline upload is in flight: switching now strands the id it has not produced yet. */
+  switchLocked?: boolean
   onTogglePlainText: () => void
 }
 
-export default function EditorToolbar({ editor, active, plainText, onTogglePlainText }: Props) {
+export default function EditorToolbar(
+  { editor, active, plainText, switchLocked, onTogglePlainText }: Props) {
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
   // The editor reports no font, size or colour at the caret, so these are the last choice made
@@ -91,9 +94,9 @@ export default function EditorToolbar({ editor, active, plainText, onTogglePlain
     )
   }
 
-  const btn = (label: string, glyph: ReactNode, onClick: () => void, on = false) => (
+  const btn = (label: string, glyph: ReactNode, onClick: () => void, on = false, off = false) => (
     <button type="button" className={`compose-tool${on ? ' is-active' : ''}`} aria-pressed={on}
-      aria-label={label} title={label} onClick={onClick}>
+      aria-label={label} title={label} disabled={off} onClick={onClick}>
       {glyph}
     </button>
   )
@@ -110,7 +113,7 @@ export default function EditorToolbar({ editor, active, plainText, onTogglePlain
     <div className="compose-toolbar" ref={container}>
       {/* Stays when everything else folds away: it is the only way back to the editor. */}
       <div className="compose-tool-group">
-        {btn('Plain text', <PlainTextIcon size={ICON} />, onTogglePlainText, plainText)}
+        {btn('Plain text', <PlainTextIcon size={ICON} />, onTogglePlainText, plainText, switchLocked)}
       </div>
       {plainText ? null : (
       <>

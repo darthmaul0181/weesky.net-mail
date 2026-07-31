@@ -222,10 +222,47 @@ public sealed class MailControllerTests
         var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.txt")
         { Headers = new HeaderDictionary(), ContentType = "text/plain" };
 
-        await controller.UploadAttachment(file, CancellationToken.None);
+        await controller.UploadAttachment(file, inline: false, CancellationToken.None);
 
         _staged.Verify(s => s.SaveAsync(ConnectedConn.StagedScope(controller.AuthenticatedUser),
             "a.txt", "text/plain", It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // An inline part is referenced from the body by cid; without an id assigned here the composer
+    // could only ever produce attachments, whatever the body says.
+    [Fact]
+    public async Task UploadAttachment_AssignsAContentIdToAnInlineImage()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+        _staged.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Stream>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
+            .ReturnsAsync(Result.Success(new StagedAttachmentInfo(Guid.NewGuid(), "shot.png", 4, "image/png")));
+        var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "shot.png")
+        { Headers = new HeaderDictionary(), ContentType = "image/png" };
+
+        await controller.UploadAttachment(file, inline: true, CancellationToken.None);
+
+        _staged.Verify(s => s.SaveAsync(ConnectedConn.StagedScope(controller.AuthenticatedUser),
+            "shot.png", "image/png", It.IsAny<Stream>(), It.IsAny<CancellationToken>(),
+            It.Is<string>(id => !string.IsNullOrWhiteSpace(id))), Times.Once);
+    }
+
+    // A non-image inline part has nowhere to be shown: it would travel in the related part
+    // referenced by nothing, which is the condition the send path's pruning exists to prevent.
+    [Fact]
+    public async Task UploadAttachment_RefusesANonImageInlinePart()
+    {
+        var controller = CreateController();
+        ResolveTo(ConnectedConn);
+        var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.pdf")
+        { Headers = new HeaderDictionary(), ContentType = "application/pdf" };
+
+        var result = await controller.UploadAttachment(file, inline: true, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _staged.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Stream>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -1633,7 +1670,7 @@ public sealed class MailControllerTests
     [Fact]
     public async Task UploadAttachment_RefusesAMissingFile()
     {
-        var result = await CreateController().UploadAttachment(null, CancellationToken.None);
+        var result = await CreateController().UploadAttachment(null, inline: false, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
@@ -1650,7 +1687,7 @@ public sealed class MailControllerTests
         var file = new FormFile(new MemoryStream("abcd"u8.ToArray()), 0, 4, "file", "a.txt")
         { Headers = new HeaderDictionary(), ContentType = "text/plain" };
 
-        var result = await CreateController().UploadAttachment(file, CancellationToken.None);
+        var result = await CreateController().UploadAttachment(file, inline: false, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(info, ok.Value);
@@ -1666,7 +1703,7 @@ public sealed class MailControllerTests
         var file = new FormFile(new MemoryStream([1]), 0, 1, "file", "big.bin")
         { Headers = new HeaderDictionary(), ContentType = "application/octet-stream" };
 
-        var result = await CreateController().UploadAttachment(file, CancellationToken.None);
+        var result = await CreateController().UploadAttachment(file, inline: false, CancellationToken.None);
 
         Assert.IsType<ObjectResult>(result.Result); // FromResult path: StatusCode(400, enveloppe)
     }

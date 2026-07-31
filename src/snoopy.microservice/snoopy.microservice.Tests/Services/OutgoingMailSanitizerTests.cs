@@ -111,6 +111,19 @@ public sealed class OutgoingMailSanitizerTests
         Assert.Contains("<img", body.Html);
     }
 
+    // The composer resizes an inline image with Squire's own handles, which write width/height as
+    // inline style. Culling either here would silently send every resized image at full size.
+    [Fact]
+    public void Prepare_KeepsTheInlineSizeStyleAResizeWrites()
+    {
+        var body = _sanitizer.Prepare(
+            "<img src=\"cid:logo@mail\" style=\"max-width: 100%; width: 320px; height: auto\">");
+
+        Assert.Contains("width: 320px", body.Html);
+        Assert.Contains("max-width: 100%", body.Html);
+        Assert.Contains("height: auto", body.Html);
+    }
+
     [Fact]
     public void Prepare_StillRemovesNonRemoteNonCidImages()
     {

@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 }))
 // The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
 // it here would only re-test what SquireEditor.mount already covers.
-const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[] }))
+const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[], images: [] as string[] }))
 
 vi.mock('../../../api.js', () => ({
   api: {
@@ -63,6 +63,7 @@ vi.mock('./SquireEditor', async () => {
         command: (name: string) => { editorState.commands.push(name) },
         setTextColour: () => {}, setHighlightColour: () => {},
         setFontFace: () => {}, setFontSize: () => {}, setAlignment: () => {}, makeLink: () => {},
+        insertImage: (src: string) => { editorState.images.push(src) },
       }), [])
       return (
         <textarea
@@ -125,6 +126,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   editorState.html = ''
   editorState.commands = []
+  editorState.images = []
   mocks.uploadAttachment.mockResolvedValue({ id: 'att-1', size: 3 })
   mocks.deleteAttachment.mockResolvedValue(undefined)
   mocks.deleteMessages.mockResolvedValue(undefined)
@@ -1295,5 +1297,168 @@ describe('what a plain-text switch costs', () => {
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
     expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toEqual(['i1'])
+  })
+})
+
+describe('inline images', () => {
+  function imageFile(name = 'shot.png') {
+    return new File(['xx'], name, { type: 'image/png' })
+  }
+
+  it('uploads a pasted image inline and inserts it at the caret', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i1', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.paste(screen.getByTestId('compose-editor'), {
+      clipboardData: { files: [imageFile()] },
+    })
+
+    await waitFor(() => expect(editorState.images).toEqual([
+      'https://api.test.example/api/Mail/Attachments/i1/content',
+    ]))
+    expect(mocks.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File), expect.objectContaining({ inline: true }))
+    // The body is where it lives; the tray must not also list it.
+    expect(screen.queryByText('shot.png')).not.toBeInTheDocument()
+  })
+
+  it('inserts an image dropped on the body and attaches one dropped on the composer', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i2', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.drop(screen.getByTestId('compose-editor'), {
+      dataTransfer: { files: [imageFile()], types: ['Files'] },
+    })
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+
+    fireEvent.drop(screen.getByTestId('compose-view'), {
+      dataTransfer: { files: [new File(['x'], 'report.pdf', { type: 'application/pdf' })], types: ['Files'] },
+    })
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument()
+    expect(editorState.images).toHaveLength(1)
+  })
+
+  it('attaches a non-image dropped on the body rather than refusing it', async () => {
+    renderCompose()
+
+    fireEvent.drop(screen.getByTestId('compose-editor'), {
+      dataTransfer: { files: [new File(['x'], 'report.pdf', { type: 'application/pdf' })], types: ['Files'] },
+    })
+
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument()
+    expect(editorState.images).toHaveLength(0)
+  })
+
+  it('sends an inserted image as an inline id', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i3', fileName: 'shot.png', size: 2 })
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+    addRecipient('To', 'her@example.com')
+
+    fireEvent.paste(screen.getByTestId('compose-editor'), {
+      clipboardData: { files: [imageFile()] },
+    })
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toContain('i3')
+  })
+
+  it('moves an inserted image to the tray when the composer switches to plain text', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i4', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.paste(screen.getByTestId('compose-editor'), {
+      clipboardData: { files: [imageFile()] },
+    })
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Plain text' }))
+
+    // Exactly one row: the hook holds the inserted id once, and a tray listing it twice would
+    // send the file twice.
+    expect(await screen.findByText('shot.png')).toBeInTheDocument()
+  })
+})
+
+// Four lifetime bugs, none of which turns anything red on screen: a staged id that reaches no
+// payload, a second artefact from one paste, and two windows where an upload in flight is
+// invisible to everything that consumes the id it will produce.
+describe('inline images, staged-id lifetime', () => {
+  function imageFile(name = 'shot.png') {
+    return new File(['xx'], name, { type: 'image/png' })
+  }
+  const pasteImage = () => fireEvent.paste(screen.getByTestId('compose-editor'),
+    { clipboardData: { files: [imageFile()] } })
+  const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
+
+  // inlineAdopted speaks for the seed. Zeroing the inserted half with it left the body pointing
+  // at a cid the send packed no part for: a broken image, with nothing on screen to say so.
+  it('sends an image inserted after a plain-text round trip', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'round-trip', fileName: 'shot.png', size: 2 })
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    renderCompose()
+    addRecipient('To', 'her@example.com')
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(plainToggle())
+    pasteImage()
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+
+    fireEvent.click(sendButton())
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toContain('round-trip')
+  })
+
+  // Squire's _onPaste never reads defaultPrevented: it bails only on an image with no text/plain
+  // and no rtf+html. Explorer and Word both send those, so only stopping the event keeps its
+  // handler — here, any listener on the editor element — from inserting a second artefact.
+  it('keeps the paste from reaching the editor s own handler', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i5', fileName: 'shot.png', size: 2 })
+    renderCompose()
+    const squirePaste = vi.fn()
+    screen.getByTestId('compose-editor').addEventListener('paste', squirePaste)
+
+    pasteImage()
+
+    await waitFor(() => expect(editorState.images).toHaveLength(1))
+    expect(squirePaste).not.toHaveBeenCalled()
+  })
+
+  // The upload is not in the tray, so attachments.uploading is blind to it. Sent in that window
+  // the message leaves without the image and without its id, and the staged bytes are released
+  // by nobody — the leave unmounts the hook the upload was going to report to.
+  it('locks Send and Discard while an inline upload is in flight', async () => {
+    let resolve!: (v: unknown) => void
+    mocks.uploadAttachment.mockReturnValue(new Promise(r => { resolve = r }))
+    renderCompose()
+    addRecipient('To', 'her@example.com')
+    expect(sendButton()).toBeEnabled()
+
+    pasteImage()
+    await waitFor(() => expect(sendButton()).toBeDisabled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(within(await discardModal()).getByRole('button', { name: 'Discard' })).toBeDisabled()
+
+    await act(async () => { resolve({ id: 'i6', fileName: 'shot.png', size: 2 }) })
+    expect(sendButton()).toBeEnabled()
+  })
+
+  // Switched mid-upload, adoptInline finds both refs empty and returns, inlineAdopted lands, and
+  // the id arriving after it belongs to no tray row and no payload — the image silently vanishes.
+  it('locks the plain-text switch while an inline upload is in flight', async () => {
+    let resolve!: (v: unknown) => void
+    mocks.uploadAttachment.mockReturnValue(new Promise(r => { resolve = r }))
+    renderCompose()
+
+    pasteImage()
+    await waitFor(() => expect(plainToggle()).toBeDisabled())
+
+    await act(async () => { resolve({ id: 'i7', fileName: 'shot.png', size: 2 }) })
+    expect(plainToggle()).toBeEnabled()
+
+    fireEvent.click(plainToggle())
+    expect(await screen.findByText('shot.png')).toBeInTheDocument()
   })
 })

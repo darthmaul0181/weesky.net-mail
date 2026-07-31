@@ -8,6 +8,7 @@ function fakeEditor(): EditorHandle {
     getHTML: vi.fn(() => ''), isEmpty: vi.fn(() => true), focus: vi.fn(),
     command: vi.fn(), setTextColour: vi.fn(), setHighlightColour: vi.fn(),
     setFontFace: vi.fn(), setFontSize: vi.fn(), setAlignment: vi.fn(), makeLink: vi.fn(),
+    insertImage: vi.fn(),
   }
 }
 
@@ -140,5 +141,17 @@ describe('EditorToolbar', () => {
 
     expect(screen.getByRole('button', { name: 'Plain text' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('button', { name: 'Bold' })).toBeNull()
+  })
+
+  // The composer locks the switch while an inline upload is in flight: adopting before the id
+  // exists strands it in no tray row and no payload.
+  it('locks the toggle when the caller says the switch is not safe yet', () => {
+    const onToggle = vi.fn()
+    render(<EditorToolbar editor={null} plainText={false} switchLocked onTogglePlainText={onToggle} />)
+
+    const toggle = screen.getByRole('button', { name: 'Plain text' })
+    expect(toggle).toBeDisabled()
+    fireEvent.click(toggle)
+    expect(onToggle).not.toHaveBeenCalled()
   })
 })
