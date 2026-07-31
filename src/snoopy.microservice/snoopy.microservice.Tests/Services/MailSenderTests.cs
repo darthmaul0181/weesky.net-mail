@@ -601,8 +601,9 @@ public sealed class MailSenderTests
         var result = await sender.SendAsync(_user, Conn, request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        // CRLF because that is the wire's line ending, written by MimeKit as the part is encoded.
-        Assert.Equal("hello\r\nthere", sent!.TextBody);
+        // TextBody decodes with the platform's newline format — CRLF on Windows, LF on the CI
+        // runner — so the claim here is the text, never the line ending the host happens to use.
+        Assert.Equal("hello\nthere", sent!.TextBody!.ReplaceLineEndings("\n"));
         // No HTML twin: the whole point of the mode is that the recipient gets text.
         Assert.Null(sent.HtmlBody);
         _sanitizer.Verify(s => s.Prepare(It.IsAny<string>()), Times.Never);

@@ -1185,10 +1185,11 @@ public sealed class MailController(
             MailPriorityReader.Parse(message.Headers),
             // No HTML part is what "this draft was written as text" looks like on the wire. Only
             // the draft path reads it: a reply to a text-only original still opens an HTML composer.
-            // LF, not the wire's CRLF: a textarea reports LF whatever it was handed, so the CR would
-            // survive only in the composer's own state and desynchronise the controlled input.
+            // TextBody decodes with the host's newline format, and a textarea reports LF whatever it
+            // was handed — an unnormalised CR would survive in the composer's state alone and
+            // desynchronise the controlled input.
             string.IsNullOrEmpty(message.HtmlBody)
-                ? (message.TextBody ?? string.Empty).Replace("\r\n", "\n")
+                ? (message.TextBody ?? string.Empty).ReplaceLineEndings("\n")
                 : null);
 
     private static List<string> Addresses(InternetAddressList? list) =>
