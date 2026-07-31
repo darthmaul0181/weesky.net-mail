@@ -115,9 +115,11 @@ export default function ApplicationTab({ addToast }: Props) {
         />
       </div>
 
+      {/* .btn-auto: a primary button is full-width by default, which is a dialog's shape. On a
+          settings page it would stretch the whole panel. */}
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn-primary btn-auto"
         disabled={!enabled || setSetting.isPending}
         onClick={saveNames}
       >
