@@ -47,23 +47,28 @@ public sealed class LoginController : ApiBaseController
     /// credentials cookie the mail endpoints need to open IMAP on the user's behalf.
     /// The password is unrecoverable from the database, so this is the only moment it
     /// can be captured.
+    /// The JWT itself is never in the body — it exists only in the HttpOnly cookie, and the
+    /// response carries just the session's inactivity window so the client can plan its renewal.
     /// </remarks>
     /// <param name="credentials">user credentials</param>
     /// <param name="cancellationToken">cancellation token</param>
-    /// <returns></returns>
+    /// <returns>The issued session's expiry, in minutes.</returns>
     /// <response code="200">Login successful</response>
     /// <response code="401">Invalid credentials</response>
     /// <response code="429">Too many authentication attempts</response>
     [HttpPost]
     [EnableRateLimiting("login")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ResultEnveloppe), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-    public async Task<ActionResult<AuthToken>> Login(Credentials credentials, CancellationToken cancellationToken)
+    public async Task<ActionResult<LoginResponse>> Login(Credentials credentials, CancellationToken cancellationToken)
     {
         Result<AuthToken> result = await _authenticator.AuthenticateAsync(credentials.Email, credentials.Password);
 
-        if (result.IsSuccess && !string.IsNullOrEmpty(result.Value.Token))
+        if (result.IsFailure)
+            return FromResult(result.ConvertFailure<LoginResponse>(), errorStatusCode: StatusCodes.Status401Unauthorized);
+
+        if (!string.IsNullOrEmpty(result.Value.Token))
         {
             HttpContext.Response.WriteAuthCookie(_tokenConstants.Value, result.Value.Token);
 
@@ -78,7 +83,7 @@ public sealed class LoginController : ApiBaseController
                 TimeSpan.FromMinutes(_tokenConstants.Value.ExpiryInMinutes));
         }
 
-        return FromResult(result, errorStatusCode: StatusCodes.Status401Unauthorized);
+        return Ok(new LoginResponse(result.Value.ExpiresIn));
     }
 
     /// <summary>

@@ -1,5 +1,10 @@
 namespace weesky.Snoopy.Microservice.Authentication.Models;
 
+/// <summary>
+/// The issued session, as it travels inside the service. It is never a response body: the token
+/// belongs to the HttpOnly cookie alone, and controllers answer
+/// <see cref="Microservice.Models.LoginResponse"/>.
+/// </summary>
 public sealed class AuthToken
 {
     /// <summary>
