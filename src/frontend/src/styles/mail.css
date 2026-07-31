@@ -1477,9 +1477,19 @@ textarea.compose-editor {
   display: inline-flex; align-items: center;
   background: var(--surface-sunken); font-size: 12px;
 }
-.recipient-token { gap: 4px; border-radius: 999px; padding: 2px 8px; }
+/* A card filling the box's inner height (32px less its 4px padding, border-box), not a pill
+   floating in it: at 18px in a 24px slot it read as grey text rather than as an entered value.
+   The border is on every token, so the invalid one below only recolours it — as an addition it
+   made the offending chip 2px taller than its neighbours. */
+.recipient-token {
+  gap: 7px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 6px 0 9px;
+}
 .compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; }
-.recipient-token.is-invalid { color: var(--danger); border: 1px solid var(--danger); }
+.recipient-token.is-invalid { color: var(--danger); border-color: var(--danger); }
 .recipient-token button, .compose-attachment button { background: none; border: none; cursor: pointer; color: inherit; padding: 0; }
 
 .compose-link-form input { width: 220px; }
