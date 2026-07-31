@@ -30,6 +30,7 @@ public static class UserPreferences
     public const string MailReadingPane = "mail.readingPane";
     public const string MailRowActions = "mail.rowActions";
     public const string MailComposeFormat = "mail.composeFormat";
+    public const string MailShowFolderIcons = "mail.showFolderIcons";
 
     // contacts., not mail.: the preference governs a write to the address book. The trigger is a
     // send; the effect is what names the key.
@@ -57,6 +58,9 @@ public static class UserPreferences
         // An enumeration rather than a boolean: it leaves room for a "follow the original" value
         // without a key migration.
         new(MailComposeFormat, "html", ["html", "text"]),
+        // Off by default: the folder column has never carried icons, so an account that never
+        // opens the setting sees exactly what it saw yesterday.
+        new(MailShowFolderIcons, "false", Booleans),
         new(ContactsCaptureRecipients, "true", Booleans),
         new(MailTrustContacts, "false", Booleans),
     ];

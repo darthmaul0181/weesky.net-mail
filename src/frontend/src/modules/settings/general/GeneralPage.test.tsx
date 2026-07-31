@@ -100,6 +100,28 @@ describe('GeneralPage', () => {
     expect(container.querySelector('.toggle-switch')).toBeTruthy()
   })
 
+  // Off unless the account asked for it — the folder column has never carried icons.
+  it('shows the folder-icon toggle off when nothing is stored', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Folder icons')).not.toBeChecked()
+  })
+
+  it('shows the folder-icon toggle on when it is stored', async () => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showFolderIcons': 'true' })
+
+    expect(await screen.findByLabelText('Folder icons')).toBeChecked()
+  })
+
+  it('saves the folder-icon toggle as a string the backend accepts', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Folder icons'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.showFolderIcons', 'true'))
+  })
+
   it('shows the images toggle off by default and on when it is stored', async () => {
     renderPage()
     expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()

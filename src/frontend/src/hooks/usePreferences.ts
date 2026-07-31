@@ -19,6 +19,7 @@ export const PREFERENCE_KEYS = {
   readingPane: 'mail.readingPane',
   rowActions: 'mail.rowActions',
   composeFormat: 'mail.composeFormat',
+  showFolderIcons: 'mail.showFolderIcons',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
 } as const
@@ -110,6 +111,12 @@ export function rowActionsOf(preferences: Preferences): RowAction[] {
 
   const chosen = new Set(stored.split(','))
   return ROW_ACTIONS.filter(action => chosen.has(action))
+}
+
+/** Off unless explicitly on — the folder column has never carried icons, so a backend that does
+    not know the key yet must leave it as it was. */
+export function showFolderIconsOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.showFolderIcons] === 'true'
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */

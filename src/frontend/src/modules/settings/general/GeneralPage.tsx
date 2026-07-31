@@ -5,8 +5,8 @@ import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
   ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf,
-  notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf, showPreviewOf, showSpamScoreOf,
-  trustContactsOf, usePreferences, useSetPreference,
+  notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
+  showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
   type ComposeFormat, type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
@@ -267,6 +267,16 @@ export default function GeneralPage() {
                 })}
               </div>
             </div>
+
+            <ToggleRow
+              id="show-folder-icons"
+              label="Folder icons"
+              hint="Show an icon beside each folder in the mail column."
+              checked={showFolderIconsOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.showFolderIcons, String(on),
+                on ? 'Folder icons are shown' : 'Folder icons are hidden')}
+            />
           </section>
 
           <section className="account-section">

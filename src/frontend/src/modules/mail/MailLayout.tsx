@@ -22,7 +22,7 @@ import {
 import RefreshButton from './folders/RefreshButton'
 import { buildDraftSeed } from './compose/composeSeed'
 import { roleLabel } from './roleLabel'
-import { readingPaneOf, usePreferences } from '../../hooks/usePreferences'
+import { readingPaneOf, showFolderIconsOf, usePreferences } from '../../hooks/usePreferences'
 import PaneSplitter from './split/PaneSplitter'
 import { usePaneSize } from './split/usePaneSize'
 
@@ -193,7 +193,7 @@ export default function MailLayout() {
     setParams({ folder, uid: String(nextUid) })
   }, [folder, setParams])
 
-  const { data: preferences } = usePreferences()
+  const { data: preferences, isLoading: preferencesLoading } = usePreferences()
   // Until the preferences answer, today's layout — the list already waits on the same query,
   // so nothing meaningful can flash in the wrong arrangement.
   const pane = preferences ? readingPaneOf(preferences) : 'right'
@@ -285,11 +285,16 @@ export default function MailLayout() {
           <RefreshButton fetching={refreshFetching} onRefresh={refresh} />
         </div>
         <div className="mail-folders-scroll">
-          {isLoading && <p className="mail-empty">Loading folders…</p>}
+          {/* The tree waits on the preferences too: without that, an account that turned the
+              icons on gets a column that appears late and pushes every name sideways. The two
+              queries leave together, so it costs nothing in the ordinary case — and an errored
+              preferences query still resolves, leaving the tree to draw without icons. */}
+          {(isLoading || preferencesLoading) && <p className="mail-empty">Loading folders…</p>}
           {isError && <p className="mail-empty">Could not load folders.</p>}
-          {folders && (
+          {folders && !preferencesLoading && (
             <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder}
-              onDropMessages={dropMessages} />
+              onDropMessages={dropMessages}
+              showIcons={preferences ? showFolderIconsOf(preferences) : false} />
           )}
         </div>
 

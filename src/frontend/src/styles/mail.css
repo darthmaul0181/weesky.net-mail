@@ -141,6 +141,10 @@
 
 .folder-row:hover { background: var(--folders-item-hover); }
 
+/* flex: none, or the glyph gives up pixels to buy the name a few — the same rule the settings
+   nav needs for the same reason. The colour is currentColor's, so the active row carries it. */
+.folder-row > svg { flex: none; }
+
 .folder-row.is-system { font-weight: 600; }
 
 /* Inset, so it reads as a divider inside the list rather than a border on the column.

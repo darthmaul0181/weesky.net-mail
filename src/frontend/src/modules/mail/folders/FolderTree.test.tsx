@@ -355,3 +355,67 @@ describe('FolderTree as a drop target', () => {
     expect(onDrop).not.toHaveBeenCalled()
   })
 })
+
+describe('FolderTree folder icons', () => {
+  const iconTree: MailFolderNode[] = [
+    node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    node({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+    node({
+      path: 'Projects', name: 'Projects',
+      children: [node({ path: 'Projects/Alpha', name: 'Alpha' })],
+    }),
+  ]
+
+  const glyphOf = (name: string) =>
+    screen.getByRole('button', { name }).querySelector('svg')
+
+  function renderTree(showIcons?: boolean) {
+    render(
+      <FolderTree folders={iconTree} selectedPath="INBOX" onSelect={vi.fn()} showIcons={showIcons} />)
+  }
+
+  it('draws no glyph while the setting is off', () => {
+    renderTree()
+
+    expect(glyphOf('Inbox')).toBeNull()
+    expect(glyphOf('Projects')).toBeNull()
+  })
+
+  it('draws one on every row while the setting is on', () => {
+    renderTree(true)
+
+    expect(glyphOf('Inbox')).toBeInTheDocument()
+    expect(glyphOf('Trash')).toBeInTheDocument()
+    expect(glyphOf('Projects')).toBeInTheDocument()
+  })
+
+  // The whole point of the setting: two folders with different roles must not look alike.
+  it('gives a role its own glyph and every plain folder the same one', () => {
+    renderTree(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Projects' }))
+
+    expect(glyphOf('Inbox')?.innerHTML).not.toBe(glyphOf('Trash')?.innerHTML)
+    expect(glyphOf('Inbox')?.innerHTML).not.toBe(glyphOf('Projects')?.innerHTML)
+    expect(glyphOf('Projects')?.innerHTML).toBe(glyphOf('Alpha')?.innerHTML)
+  })
+
+  // It sits inside the row button, so it takes the active row's colour with no rule of its own.
+  it('puts the glyph ahead of the name inside the row button', () => {
+    renderTree(true)
+    const row = screen.getByRole('button', { name: 'Inbox' })
+
+    expect(row.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    expect(row.querySelector('.folder-row-name')).toBeInTheDocument()
+  })
+
+  // Decorative: the row already says which folder it is, so the glyph must add nothing to the
+  // name — asserted on the badge row, where the name is spelled out rather than inherited.
+  it('leaves the row accessible name alone', () => {
+    render(
+      <FolderTree
+        folders={[node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 })]}
+        selectedPath="INBOX" onSelect={vi.fn()} showIcons />)
+
+    expect(screen.getByRole('button', { name: 'Inbox, 4 unread' })).toBeInTheDocument()
+  })
+})

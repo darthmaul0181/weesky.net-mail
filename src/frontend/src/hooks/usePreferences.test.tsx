@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
-  notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf, showPreviewOf,
-  trustContactsOf, usePreferences, useSetPreference,
+  notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf, showFolderIconsOf,
+  showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -179,6 +179,17 @@ describe('trustContactsOf', () => {
     expect(trustContactsOf({})).toBe(false)
     expect(trustContactsOf({ 'mail.trustContacts': 'true' })).toBe(true)
     expect(trustContactsOf({ 'mail.trustContacts': 'garbage' })).toBe(false)
+  })
+})
+
+describe('showFolderIconsOf', () => {
+  // Off unless explicitly on: the folder column has never carried icons, so a backend that
+  // predates the key must leave it exactly as it was rather than draw a column of glyphs.
+  it('is off by default and on only for an explicit true', () => {
+    expect(showFolderIconsOf({})).toBe(false)
+    expect(showFolderIconsOf({ 'mail.showFolderIcons': 'true' })).toBe(true)
+    expect(showFolderIconsOf({ 'mail.showFolderIcons': 'false' })).toBe(false)
+    expect(showFolderIconsOf({ 'mail.showFolderIcons': 'yes' })).toBe(false)
   })
 })
 
