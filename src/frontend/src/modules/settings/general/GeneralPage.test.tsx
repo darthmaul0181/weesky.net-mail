@@ -107,6 +107,14 @@ describe('GeneralPage', () => {
     expect(await screen.findByLabelText('Folder icons')).not.toBeChecked()
   })
 
+  it('puts the folder-icon row straight under the preview row', async () => {
+    renderPage()
+    const preview = (await screen.findByLabelText('Preview in the message list')).closest('.field-h')
+
+    expect(preview?.nextElementSibling)
+      .toBe(screen.getByLabelText('Folder icons').closest('.field-h'))
+  })
+
   it('shows the folder-icon toggle on when it is stored', async () => {
     renderPage({ 'mail.pageSize': '30', 'mail.showFolderIcons': 'true' })
 

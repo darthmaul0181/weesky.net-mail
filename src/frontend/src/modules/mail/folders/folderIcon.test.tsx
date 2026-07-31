@@ -4,15 +4,15 @@ import ArchiveIcon from '../../../icons/ArchiveIcon'
 import FolderIcon from '../../../icons/FolderIcon'
 import InboxIcon from '../../../icons/InboxIcon'
 import JunkIcon from '../../../icons/JunkIcon'
-import PaperPlaneIcon from '../../../icons/PaperPlaneIcon'
 import PencilIcon from '../../../icons/PencilIcon'
+import RocketIcon from '../../../icons/RocketIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 
 describe('folderIcon', () => {
   it.each([
     ['inbox', InboxIcon],
     ['drafts', PencilIcon],
-    ['sent', PaperPlaneIcon],
+    ['sent', RocketIcon],
     ['archive', ArchiveIcon],
     ['junk', JunkIcon],
     ['trash', TrashIcon],

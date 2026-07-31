@@ -3,8 +3,8 @@ import ArchiveIcon from '../../../icons/ArchiveIcon'
 import FolderIcon from '../../../icons/FolderIcon'
 import InboxIcon from '../../../icons/InboxIcon'
 import JunkIcon from '../../../icons/JunkIcon'
-import PaperPlaneIcon from '../../../icons/PaperPlaneIcon'
 import PencilIcon from '../../../icons/PencilIcon'
+import RocketIcon from '../../../icons/RocketIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 
 /**
@@ -17,7 +17,8 @@ import TrashIcon from '../../../icons/TrashIcon'
 const BY_ROLE: Record<string, (size: number) => ReactElement> = {
   inbox: size => <InboxIcon size={size} />,
   drafts: size => <PencilIcon size={size} />,
-  sent: size => <PaperPlaneIcon size={size} />,
+  // The rocket the composer's New message and Send buttons carry: one mark for sending, everywhere.
+  sent: size => <RocketIcon size={size} />,
   archive: size => <ArchiveIcon size={size} />,
   junk: size => <JunkIcon size={size} />,
   trash: size => <TrashIcon size={size} />,

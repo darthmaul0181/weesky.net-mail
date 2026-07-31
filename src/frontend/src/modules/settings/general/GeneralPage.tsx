@@ -233,6 +233,16 @@ export default function GeneralPage() {
                 on ? 'Previews are shown' : 'Previews are hidden')}
             />
 
+            <ToggleRow
+              id="show-folder-icons"
+              label="Folder icons"
+              hint="Show an icon beside each folder in the mail column."
+              checked={showFolderIconsOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.showFolderIcons, String(on),
+                on ? 'Folder icons are shown' : 'Folder icons are hidden')}
+            />
+
             <div className="field-h is-setting is-stacked">
               <span className="setting-label">
                 <span id="row-actions-label">Quick actions on a message</span>
@@ -267,16 +277,6 @@ export default function GeneralPage() {
                 })}
               </div>
             </div>
-
-            <ToggleRow
-              id="show-folder-icons"
-              label="Folder icons"
-              hint="Show an icon beside each folder in the mail column."
-              checked={showFolderIconsOf(preferences)}
-              disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.showFolderIcons, String(on),
-                on ? 'Folder icons are shown' : 'Folder icons are hidden')}
-            />
           </section>
 
           <section className="account-section">
