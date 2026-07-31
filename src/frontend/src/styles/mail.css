@@ -1472,18 +1472,33 @@ textarea.compose-editor {
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); padding: 4px 6px; min-height: 32px;
 }
-.recipients-box input { flex: 1; min-width: 140px; border: none; background: none; color: var(--text); outline: none; }
+/* Three classes on purpose. `.field-h input[type="text"]` in index.css is drawn for a settings
+   row and outranks a plain `.recipients-box input` (0,2,1 against 0,1,1), so the caret came back
+   bordered and padded — a second box inside the field, 38.5px tall, which pushed the field to
+   48.5px and left every token floating in it whatever height the token was given. */
+.field-h.recipients-field .recipients-box input {
+  flex: 1;
+  min-width: 140px;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 13px;
+  background: none;
+  color: var(--text);
+  outline: none;
+}
 .recipient-token, .compose-attachment {
   display: inline-flex; align-items: center;
   background: var(--surface-sunken); font-size: 12px;
 }
-/* A card filling the box's inner height (32px less its 4px padding, border-box), not a pill
-   floating in it: at 18px in a 24px slot it read as grey text rather than as an entered value.
-   The border is on every token, so the invalid one below only recolours it — as an addition it
-   made the offending chip 2px taller than its neighbours. */
+/* A card filling the box's inner height, not a pill floating in it: at 18px it read as grey text
+   rather than as an entered value. 22px, not 24: the box is border-box, so its 32px min-height
+   less 8px of padding and 2px of border leaves exactly 22 — measured, and 24 grew the field by
+   2px on each of To, Cc and Bcc. The border is on every token, so the invalid one below only
+   recolours it; as an addition it made the offending chip 2px taller than its neighbours. */
 .recipient-token {
   gap: 7px;
-  height: 24px;
+  height: 22px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0 6px 0 9px;
