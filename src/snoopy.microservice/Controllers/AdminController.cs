@@ -1,9 +1,11 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 
@@ -18,20 +20,23 @@ public sealed class AdminController : ApiBaseController
     /// carry one, and adding a method just for it is not worth it for an admin-only error.</summary>
     private const string AccountsStillConnected = "Accounts are still connected to this domain";
 
-    private static readonly HashSet<string> AllowedSecurities = ["None", "StartTls", "SslOnConnect"];
+    private static readonly HashSet<string> EncryptedSecurities = ["StartTls", "SslOnConnect"];
 
     private readonly IAdminRepository _adminRepository;
     private readonly IDovecotQuotaClient _dovecotQuotaClient;
     private readonly IExternalDomainStore _externalDomains;
+    private readonly IOptionsMonitor<MailOptions> _mailOptions;
 
     public AdminController(
         IAdminRepository adminRepository,
         IDovecotQuotaClient dovecotQuotaClient,
-        IExternalDomainStore externalDomains)
+        IExternalDomainStore externalDomains,
+        IOptionsMonitor<MailOptions> mailOptions)
     {
         _adminRepository = adminRepository;
         _dovecotQuotaClient = dovecotQuotaClient;
         _externalDomains = externalDomains;
+        _mailOptions = mailOptions;
     }
 
     /// <summary>Returns all users</summary>
@@ -258,7 +263,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<ExternalDomainResponse>> CreateExternalDomain(
         ExternalDomainRequest request, CancellationToken cancellationToken)
     {
-        var validated = Validate(request);
+        var validated = Validate(request, _mailOptions.CurrentValue.AllowCleartext);
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
         var created = await _externalDomains.CreateAsync(ToEntity(Guid.Empty, request), cancellationToken);
@@ -281,7 +286,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult> UpdateExternalDomain(
         Guid id, ExternalDomainRequest request, CancellationToken cancellationToken)
     {
-        var validated = Validate(request);
+        var validated = Validate(request, _mailOptions.CurrentValue.AllowCleartext);
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
         var result = await _externalDomains.UpdateAsync(ToEntity(id, request), cancellationToken);
@@ -331,9 +336,10 @@ public sealed class AdminController : ApiBaseController
     /// <summary>
     /// Securities are checked by exact, case-sensitive string match against the three literals —
     /// not <c>Enum.TryParse</c>, which also accepts a numeric string and would let a value the
-    /// admin never typed reach the resolver that reads this row back.
+    /// admin never typed reach the resolver that reads this row back. The cleartext opt-in is the
+    /// same one the resolver applies, so a row that saves here is a row that resolves there.
     /// </summary>
-    private static Result Validate(ExternalDomainRequest request)
+    private static Result Validate(ExternalDomainRequest request, bool allowCleartext)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 100)
             return Result.Failure("Name must be between 1 and 100 characters");
@@ -344,10 +350,10 @@ public sealed class AdminController : ApiBaseController
         if (request.ImapPort is < 1 or > 65535) return Result.Failure("Imap port must be between 1 and 65535");
         if (request.SmtpPort is < 1 or > 65535) return Result.Failure("Smtp port must be between 1 and 65535");
 
-        if (!AllowedSecurities.Contains(request.ImapSecurity))
-            return Result.Failure("Imap security must be exactly one of None, StartTls, SslOnConnect");
-        if (!AllowedSecurities.Contains(request.SmtpSecurity))
-            return Result.Failure("Smtp security must be exactly one of None, StartTls, SslOnConnect");
+        if (ValidateSecurity(request.ImapSecurity, allowCleartext) is { } imapSecurityError)
+            return Result.Failure($"Imap {imapSecurityError}");
+        if (ValidateSecurity(request.SmtpSecurity, allowCleartext) is { } smtpSecurityError)
+            return Result.Failure($"Smtp {smtpSecurityError}");
 
         if (request.SieveHost is null != request.SievePort is null)
             return Result.Failure("Sieve host and port must both be present or both be absent");
@@ -365,4 +371,14 @@ public sealed class AdminController : ApiBaseController
         if (string.IsNullOrEmpty(host) || host.Length > 255) return "Host must be between 1 and 255 characters";
         return Uri.CheckHostName(host) == UriHostNameType.Unknown ? "Host is not a valid hostname or IP address" : null;
     }
+
+    /// <summary>Refusing None here rather than at read time is what stops an admin from saving a
+    /// row that would answer 404 on every use, with nothing on screen saying why.</summary>
+    private static string? ValidateSecurity(string security, bool allowCleartext) => security switch
+    {
+        _ when EncryptedSecurities.Contains(security) => null,
+        "None" when allowCleartext => null,
+        "None" => "security cannot be None: set Mail:AllowCleartext to accept an unencrypted endpoint",
+        _ => "security must be exactly one of None, StartTls, SslOnConnect"
+    };
 }

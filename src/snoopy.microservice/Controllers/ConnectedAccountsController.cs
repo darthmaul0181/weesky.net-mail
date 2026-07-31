@@ -286,11 +286,15 @@ public sealed class ConnectedAccountsController(
         if (domain is null)
             return MailConnectionBuilder.Home(options.CurrentValue, ProbeAccountId, email, password);
 
-        if (MailConnectionBuilder.TryExternal(domain, ProbeAccountId, email, password, out var connection))
+        // Same opt-in the resolver applies: a stricter probe would refuse to verify a password
+        // against a domain the resolver would then happily open.
+        if (MailConnectionBuilder.TryExternal(domain, ProbeAccountId, email, password, out var connection,
+                options.CurrentValue.AllowCleartext))
             return connection;
 
         logger.LogError(
-            "External domain {DomainName} ({DomainId}) holds an unusable security value",
+            "External domain {DomainName} ({DomainId}) holds an unusable security value — " +
+            "unknown, or None while Mail:AllowCleartext is off",
             domain.Name, domain.Id);
         return null;
     }

@@ -1,11 +1,13 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Moq;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -19,9 +21,13 @@ public sealed class AdminControllerTests
     private readonly Mock<IDovecotQuotaClient> _dovecot = new();
     private readonly Mock<IExternalDomainStore> _externalDomains = new();
 
-    private AdminController CreateController()
+    private AdminController CreateController(bool allowCleartext = false)
     {
-        var controller = new AdminController(_repo.Object, _dovecot.Object, _externalDomains.Object);
+        var monitor = new Mock<IOptionsMonitor<MailOptions>>();
+        monitor.Setup(m => m.CurrentValue).Returns(new MailOptions { AllowCleartext = allowCleartext });
+
+        var controller = new AdminController(
+            _repo.Object, _dovecot.Object, _externalDomains.Object, monitor.Object);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
         return controller;
     }
@@ -402,6 +408,47 @@ public sealed class AdminControllerTests
     {
         var obj = Assert.IsType<BadRequestObjectResult>(
             (await CreateController().CreateExternalDomain(ValidRequest(name: ""), CancellationToken.None)).Result);
+        Assert.Equal(400, obj.StatusCode);
+        _externalDomains.Verify(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Saving None while the resolver refuses it would store a row that answers 404 on every use.
+    [Theory]
+    [InlineData("None", "StartTls")]
+    [InlineData("SslOnConnect", "None")]
+    public async Task CreateExternalDomain_WhenCleartextWithoutTheOptIn_Returns400(string imap, string smtp)
+    {
+        var request = ValidRequest(imapSecurity: imap, smtpSecurity: smtp);
+
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController().CreateExternalDomain(request, CancellationToken.None)).Result);
+
+        Assert.Equal(400, obj.StatusCode);
+        var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
+        Assert.Contains("Mail:AllowCleartext", envelope.Message);
+        _externalDomains.Verify(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenCleartextWithTheOptIn_IsAccepted()
+    {
+        _externalDomains.Setup(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(Domain()));
+        var request = ValidRequest(imapSecurity: "None", smtpSecurity: "None");
+
+        var result = await CreateController(allowCleartext: true).CreateExternalDomain(request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateExternalDomain_WhenSecurityUnknown_Returns400WhateverTheOptIn()
+    {
+        var request = ValidRequest(imapSecurity: "Tls");
+
+        var obj = Assert.IsType<BadRequestObjectResult>(
+            (await CreateController(allowCleartext: true).CreateExternalDomain(request, CancellationToken.None)).Result);
+
         Assert.Equal(400, obj.StatusCode);
         _externalDomains.Verify(s => s.CreateAsync(It.IsAny<ExternalDomain>(), It.IsAny<CancellationToken>()), Times.Never);
     }
