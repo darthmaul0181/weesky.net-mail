@@ -243,6 +243,86 @@ public sealed class ManageSieveSessionTests
         Assert.Equal("DELETESCRIPT \"weird\\\"name\"\r\n", stream.ClientWritesAsString);
     }
 
+    // ----- Command injection: a control character in a name must never reach the wire -----
+
+    public static TheoryData<string> InjectingNames => new()
+    {
+        "weesky-rules\r\nDELETESCRIPT \"rainloop.user\"",
+        "weesky-rules\nSETACTIVE \"\"",
+        "weesky-rules\rX",
+        "weesky-rules\0",
+        "weesky\u007Frules",
+        "weesky\trules",
+    };
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task GetScriptAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.GetScriptAsync(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task PutScriptAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.PutScriptAsync(name, "stop;");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task SetActiveAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.SetActiveAsync(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task DeleteScriptAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.DeleteScriptAsync(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    // The providers' real default names, plus a name a foreign webmail leaves behind.
+    [Theory]
+    [InlineData("weesky-rules")]
+    [InlineData("rainloop.user")]
+    [InlineData("rainloop.sieve.0")]
+    [InlineData("Filtres perso")]
+    public async Task DeleteScriptAsync_WithLegitimateName_ReachesTheWire(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.DeleteScriptAsync(name);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal($"DELETESCRIPT \"{name}\"\r\n", stream.ClientWritesAsString);
+    }
+
     private sealed class FakeDuplexStream : Stream
     {
         private readonly MemoryStream _serverToClient;

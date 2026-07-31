@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace weesky.Snoopy.Microservice.Models;
 
 /// <summary>
@@ -13,6 +15,12 @@ public sealed class SaveRulesRequest
     /// <summary>When null, the server's default provider is used.</summary>
     public string? ProviderId { get; set; }
 
-    /// <summary>When null, the chosen provider's default script name is used.</summary>
+    /// <summary>
+    /// When null or empty, the chosen provider's default script name is used. A control
+    /// character would split the line-oriented ManageSieve command this name is written into.
+    /// </summary>
+    [StringLength(128)]
+    [RegularExpression(@"\A[^\x00-\x1F\x7F-\x9F]*\z",
+        ErrorMessage = "Script name must not contain control characters")]
     public string? ScriptName { get; set; }
 }

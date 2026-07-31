@@ -11,6 +11,8 @@ namespace weesky.Snoopy.Microservice.Services;
 /// </summary>
 internal sealed class ManageSieveSession : IManageSieveSession
 {
+    private const string ControlCharacterInName = "Script name contains a forbidden control character";
+
     private static readonly UTF8Encoding Utf8 = new(false);
     private static readonly byte[] CrLf = { 0x0D, 0x0A };
 
@@ -56,7 +58,10 @@ internal sealed class ManageSieveSession : IManageSieveSession
         if (string.IsNullOrEmpty(name))
             return Result.Failure<string>("Script name is required");
 
-        await SendLineAsync($"GETSCRIPT {QuoteString(name)}", cancellationToken);
+        var quoted = QuoteName(name);
+        if (quoted.IsFailure) return Result.Failure<string>(quoted.Error);
+
+        await SendLineAsync($"GETSCRIPT {quoted.Value}", cancellationToken);
 
         var first = await ReadLineAsync(cancellationToken);
         if (first == null)
@@ -90,8 +95,11 @@ internal sealed class ManageSieveSession : IManageSieveSession
             return Result.Failure("Script name is required");
         content ??= string.Empty;
 
+        var quoted = QuoteName(name);
+        if (quoted.IsFailure) return Result.Failure(quoted.Error);
+
         var contentBytes = Utf8.GetBytes(content);
-        var header = Utf8.GetBytes($"PUTSCRIPT {QuoteString(name)} {{{contentBytes.Length}+}}\r\n");
+        var header = Utf8.GetBytes($"PUTSCRIPT {quoted.Value} {{{contentBytes.Length}+}}\r\n");
 
         await _stream.WriteAsync(header, cancellationToken);
         await _stream.WriteAsync(contentBytes, cancellationToken);
@@ -105,14 +113,24 @@ internal sealed class ManageSieveSession : IManageSieveSession
     }
 
     public Task<Result> SetActiveAsync(string name, CancellationToken cancellationToken = default)
-        => SendSimpleAsync($"SETACTIVE {QuoteString(name ?? string.Empty)}", "Unable to change active script", cancellationToken);
+    {
+        ThrowIfDisposed();
+        var quoted = QuoteName(name ?? string.Empty);
+        return quoted.IsFailure
+            ? Task.FromResult(Result.Failure(quoted.Error))
+            : SendSimpleAsync($"SETACTIVE {quoted.Value}", "Unable to change active script", cancellationToken);
+    }
 
     public Task<Result> DeleteScriptAsync(string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(name))
             return Task.FromResult(Result.Failure("Script name is required"));
-        return SendSimpleAsync($"DELETESCRIPT {QuoteString(name)}", "Unable to delete script", cancellationToken);
+
+        var quoted = QuoteName(name);
+        return quoted.IsFailure
+            ? Task.FromResult(Result.Failure(quoted.Error))
+            : SendSimpleAsync($"DELETESCRIPT {quoted.Value}", "Unable to delete script", cancellationToken);
     }
 
     private async Task<Result> SendSimpleAsync(string command, string failureFallback, CancellationToken cancellationToken)
@@ -256,17 +274,23 @@ internal sealed class ManageSieveSession : IManageSieveSession
         return null;
     }
 
-    private static string QuoteString(string s)
+    /// <summary>
+    /// The single path from a caller-supplied script name to the wire. ManageSieve is line
+    /// oriented, so a name carrying CR/LF would split the command and inject another one;
+    /// returning a <see cref="Result{T}"/> is what stops a new verb from quoting unchecked.
+    /// </summary>
+    private static Result<string> QuoteName(string name)
     {
-        var sb = new StringBuilder(s.Length + 2);
+        var sb = new StringBuilder(name.Length + 2);
         sb.Append('"');
-        foreach (var c in s)
+        foreach (var c in name)
         {
+            if (char.IsControl(c)) return Result.Failure<string>(ControlCharacterInName);
             if (c == '"' || c == '\\') sb.Append('\\');
             sb.Append(c);
         }
         sb.Append('"');
-        return sb.ToString();
+        return Result.Success(sb.ToString());
     }
 
     private async Task<SieveScriptListEntry?> ParseListEntryAsync(string line, CancellationToken cancellationToken)
