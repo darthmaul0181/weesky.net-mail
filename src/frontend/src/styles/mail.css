@@ -1551,7 +1551,9 @@ textarea.compose-editor {
 .compose-header .btn-ghost { padding: 8px 14px; }
 /* Tight header: no per-row margin (the column gap spaces them) and a narrow label so From/To/
    Subject values line up close to their labels. */
-.compose-fields { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; }
+/* One gap for the whole header: From, To, Cc, Bcc, Priority and Subject are all direct children,
+   so the spacing between them is this value and nothing else. */
+.compose-fields { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; }
 .compose-fields .field-h { margin-bottom: 0; gap: 10px; }
 .compose-fields .field-h > label:first-child { width: 66px; }
 .compose-fields .field-h > input[type="text"] { padding: 6px 10px; }
