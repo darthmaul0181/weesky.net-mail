@@ -108,8 +108,15 @@ async function discardModal() {
   return title.closest('.modal') as HTMLElement
 }
 
+// items carries the type because a real drag exposes it before the drop, and the overlay's
+// wording is decided from it.
 function fileDragData(files: File[] = []) {
-  return { dataTransfer: { types: ['Files'], files, items: files.map(() => ({ kind: 'file' })) } }
+  return {
+    dataTransfer: {
+      types: ['Files'], files,
+      items: files.map(file => ({ kind: 'file', type: file.type })),
+    },
+  }
 }
 
 const bruno = {
@@ -748,6 +755,30 @@ describe('dropping files on the composer', () => {
       { dataTransfer: { types: ['text/plain'], files: [], items: [] } })
 
     expect(screen.queryByText('Drop files to attach')).not.toBeInTheDocument()
+  })
+
+  // The overlay is a promise about the drop to come: over the body it may only say "into the
+  // message" for a file routeFiles will actually put there.
+  it('words the overlay from what the drag carries, not from where it hovers', () => {
+    renderCompose()
+    const body = screen.getByTestId('compose-editor')
+
+    fireEvent.dragEnter(body, fileDragData([new File(['x'], 'a.png', { type: 'image/png' })]))
+    expect(screen.getByText('Drop image into the message')).toBeInTheDocument()
+
+    fireEvent.dragLeave(body, fileDragData())
+    fireEvent.dragEnter(body, fileDragData([new File(['x'], 'r.pdf', { type: 'application/pdf' })]))
+    expect(screen.getByText('Drop files to attach')).toBeInTheDocument()
+  })
+
+  it('promises no insertion over a plain-text body, which has nowhere to show an image', () => {
+    renderCompose()
+    fireEvent.click(screen.getByRole('button', { name: 'Plain text' }))
+
+    fireEvent.dragEnter(screen.getByTestId('compose-text-editor'),
+      fileDragData([new File(['x'], 'a.png', { type: 'image/png' })]))
+
+    expect(screen.getByText('Drop files to attach')).toBeInTheDocument()
   })
 
   it('stages the dropped files and dirties the composer', async () => {
@@ -1460,5 +1491,25 @@ describe('inline images, staged-id lifetime', () => {
 
     fireEvent.click(plainToggle())
     expect(await screen.findByText('shot.png')).toBeInTheDocument()
+  })
+
+  // A resumed draft is the case that bites: it opens clean while every other clause of `dirty` is
+  // already true, so dirtying up front made a refused upload alone ask to re-save an untouched
+  // draft. An empty composer hides the bug — nothing there for `changed` to combine with.
+  it('leaves a resumed draft clean when an inline upload is refused', async () => {
+    mocks.uploadAttachment.mockRejectedValue(new Error('Too large'))
+    const seed: ComposeSeed = {
+      action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+      fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+      draftRef: { folderPath: 'Drafts', uid: 7 }, nameHints: {},
+    }
+    const { onNotify, router } = renderCompose('INBOX', seed)
+
+    pasteImage()
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Too large', 'error'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+    expect(router.state.location.pathname).toBe('/mail')
   })
 })

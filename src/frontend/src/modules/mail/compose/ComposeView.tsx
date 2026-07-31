@@ -34,6 +34,9 @@ const TITLES: Record<ComposeAction, string> = {
   reply: 'Reply', replyAll: 'Reply', forward: 'Forward', editAsNew: 'New message', draft: 'Draft',
 }
 
+/** The single predicate for "goes in the body", so the drop overlay and routeFiles cannot drift. */
+const isImage = (type: string) => type.startsWith('image/')
+
 const PRIORITIES: { value: MailPriority; label: string }[] = [
   { value: 'high', label: 'High' },
   { value: 'normal', label: 'Normal' },
@@ -168,7 +171,6 @@ export default function ComposeView({ onNotify }: Props) {
   const [inlineUploads, setInlineUploads] = useState(0)
   const addInline = attachments.addInline
   const insertImages = useCallback(async (files: File[]) => {
-    markDirty()
     for (const file of files) {
       setInlineUploads(n => n + 1)
       try {
@@ -176,6 +178,9 @@ export default function ComposeView({ onNotify }: Props) {
         addInline(info.id)
         setInsertedInline(previous => [...previous, info])
         editor?.insertImage(stagedAttachmentUrl(info.id, accountId))
+        // Only once something is actually in the body: a refused upload leaves nothing to lose,
+        // and a composer dirtied by it would still ask to save on the way out.
+        markDirty()
       } catch (error) {
         onNotify((error as Error).message, 'error')
       } finally {
@@ -188,8 +193,8 @@ export default function ComposeView({ onNotify }: Props) {
   // so there everything is an attachment.
   const routeFiles = useCallback((files: File[]) => {
     if (text !== null) { addFiles(files); return }
-    const images = files.filter(file => file.type.startsWith('image/'))
-    const rest = files.filter(file => !file.type.startsWith('image/'))
+    const images = files.filter(file => isImage(file.type))
+    const rest = files.filter(file => !isImage(file.type))
     if (rest.length > 0) addFiles(rest)
     if (images.length > 0) void insertImages(images)
   }, [text, addFiles, insertImages])
@@ -198,11 +203,17 @@ export default function ComposeView({ onNotify }: Props) {
   // goes away when as many leaves as enters have fired (or on drop).
   const [dropTarget, setDropTarget] = useState(false)
   const dragDepth = useRef(0)
-  const [overBody, setOverBody] = useState(false)
+  const [bodyInsert, setBodyInsert] = useState(false)
   const bodyDepth = useRef(0)
 
   function carriesFiles(event: React.DragEvent) {
     return Array.from(event.dataTransfer.types).includes('Files')
+  }
+  // A drag withholds its bytes until the drop, but not the types — enough to word the overlay on
+  // the predicate routeFiles will sort by, so it never promises an insertion the drop won't make.
+  function carriesImage(event: React.DragEvent) {
+    return Array.from(event.dataTransfer.items).some(
+      item => item.kind === 'file' && isImage(item.type))
   }
   function onDragEnter(event: React.DragEvent) {
     if (!carriesFiles(event)) return
@@ -229,17 +240,18 @@ export default function ComposeView({ onNotify }: Props) {
     dragDepth.current = 0
     bodyDepth.current = 0
     setDropTarget(false)
-    setOverBody(false)
+    setBodyInsert(false)
   }
   function onBodyDragEnter(event: React.DragEvent) {
     if (!carriesFiles(event)) return
     bodyDepth.current += 1
-    setOverBody(true)
+    // Plain text has no body to show an image in, so there a drop attaches like any other.
+    setBodyInsert(text === null && carriesImage(event))
   }
   function onBodyDragLeave(event: React.DragEvent) {
     if (!carriesFiles(event)) return
     bodyDepth.current = Math.max(0, bodyDepth.current - 1)
-    if (bodyDepth.current === 0) setOverBody(false)
+    if (bodyDepth.current === 0) setBodyInsert(false)
   }
   // Stops here: the surface handler below would attach what the body has just taken. It therefore
   // owes the surface its own reset, which is what resetDrag is for.
@@ -539,7 +551,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       {dropTarget && (
         <div className="compose-drop-overlay">
-          {overBody ? 'Drop image into the message' : 'Drop files to attach'}
+          {bodyInsert ? 'Drop image into the message' : 'Drop files to attach'}
         </div>
       )}
     </div>
