@@ -19,6 +19,7 @@ import OutdentIcon from '../../../icons/OutdentIcon'
 import LinkIcon from '../../../icons/LinkIcon'
 import UnlinkIcon from '../../../icons/UnlinkIcon'
 import ClearFormatIcon from '../../../icons/ClearFormatIcon'
+import ImageIcon from '../../../icons/ImageIcon'
 import PlainTextIcon from '../../../icons/PlainTextIcon'
 
 /* The bar's icon scale. Its other half — the button, the B/I/U/S letters and the dropdown text —
@@ -59,10 +60,12 @@ interface Props {
   /** An inline upload is in flight: switching now strands the id it has not produced yet. */
   switchLocked?: boolean
   onTogglePlainText: () => void
+  /** Picked images go through the composer's own routing, the one paste and drop already use. */
+  onPickImages: (files: File[]) => void
 }
 
 export default function EditorToolbar(
-  { editor, active, plainText, switchLocked, onTogglePlainText }: Props) {
+  { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages }: Props) {
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
   // The editor reports no font, size or colour at the caret, so these are the last choice made
@@ -73,6 +76,7 @@ export default function EditorToolbar(
   const [textColour, setTextColour] = useState('currentColor')
   const [highlight, setHighlight] = useState('#f8e71c')
   const container = useRef<HTMLDivElement>(null)
+  const picker = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!openPopover) return
@@ -188,6 +192,19 @@ export default function EditorToolbar(
           </Popover>
         </span>
         {btn('Remove link', <UnlinkIcon size={ICON} />, () => editor?.command('removeLink'))}
+        {/* Not built from btn: that one stamps aria-pressed on everything, and this opens a picker
+            rather than holding a state. */}
+        <button type="button" className="compose-tool" aria-label="Insert image" title="Insert image"
+          onClick={() => picker.current?.click()}>
+          <ImageIcon size={ICON} />
+        </button>
+        {/* The keyboard and touch way in, next to the paste and the drop that cannot serve either. */}
+        <input ref={picker} type="file" accept="image/*" multiple hidden data-testid="inline-image-input"
+          onChange={e => {
+            const files = e.target.files
+            // Cleared straight away: an input keeping its value fires no change for the same file twice.
+            if (files?.length) { onPickImages(Array.from(files)); e.target.value = '' }
+          }} />
         {btn('Clear formatting', <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
       </div>
       </>

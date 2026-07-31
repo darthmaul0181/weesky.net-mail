@@ -486,6 +486,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       <EditorToolbar editor={editor} active={active} plainText={text !== null}
         switchLocked={inlineUploads > 0}
+        onPickImages={routeFiles}
         onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
       <div className="compose-body" onDragEnter={onBodyDragEnter} onDragLeave={onBodyDragLeave}
         onDrop={onBodyDrop} onPasteCapture={onBodyPaste}>

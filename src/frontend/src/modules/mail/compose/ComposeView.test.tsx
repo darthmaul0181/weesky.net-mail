@@ -1353,6 +1353,20 @@ describe('inline images', () => {
     expect(screen.queryByText('shot.png')).not.toBeInTheDocument()
   })
 
+  it('inserts an image chosen from the toolbar button', async () => {
+    mocks.uploadAttachment.mockResolvedValue({ id: 'i8', fileName: 'shot.png', size: 2 })
+    renderCompose()
+
+    fireEvent.change(screen.getByTestId('inline-image-input'), { target: { files: [imageFile()] } })
+
+    await waitFor(() => expect(editorState.images).toEqual([
+      'https://api.test.example/api/Mail/Attachments/i8/content',
+    ]))
+    expect(mocks.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File), expect.objectContaining({ inline: true }))
+    expect(screen.queryByText('shot.png')).not.toBeInTheDocument()
+  })
+
   it('inserts an image dropped on the body and attaches one dropped on the composer', async () => {
     mocks.uploadAttachment.mockResolvedValue({ id: 'i2', fileName: 'shot.png', size: 2 })
     renderCompose()

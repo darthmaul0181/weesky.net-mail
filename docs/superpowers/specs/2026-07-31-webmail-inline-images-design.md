@@ -141,9 +141,22 @@ painted. Dragging the native handles writes `style.width` / `height: auto`, whic
 bar's `width` attribute in any case. No test in this repo could see any of it: jsdom has no
 geometry and `ComposeView.test.tsx` stubs the editor.
 
-Two consequences kept from this amendment. The outgoing sanitiser must keep the **inline width
+One consequence kept from this amendment: the outgoing sanitiser must keep the **inline width
 style**, not a `width` attribute — asserted by
 `OutgoingMailSanitizerTests.Prepare_KeepsTheInlineSizeStyleAResizeWrites`, and the resumed-draft
-path runs through that same sanitiser (`QuotePreparer`). And `SquireEditor` compares `getHTML()`
-before forwarding `onChange`: `getHTML` omits the handle container, so an unchanged body means a
-click rather than an edit, and clicking an image in a resumed draft no longer prompts to save it.
+path runs through that same sanitiser (`QuotePreparer`).
+
+**Clicking an image still marks the composer dirty**, because the handle DOM Squire appends is a
+mutation like any other. Comparing `getHTML()` before forwarding `onChange` was tried as the guard
+and reverted: `getHTML` detaches the handle container to serialise the body, which releases the
+pointer capture a drag rides on, so the resize died after one increment and refused to start again
+for the rest of the session. The Minor stands unfixed rather than paid for at that price.
+
+## Amendment — 2026-07-31: the toolbar button was added after all
+
+"Not a toolbar button" above is superseded. An `Insert image` button sits in the toolbar's link
+group, opening a hidden `accept="image/*"` picker. It was the one thing the original design
+knowingly gave up — there was no keyboard path and no touch path to inserting an image — and it
+cost nothing to restore, exactly as that section predicted: the button hands its files to
+`routeFiles`, the same entry paste and drop already used. It folds away in plain-text mode with the
+rest of the bar, which has no body to insert into.
