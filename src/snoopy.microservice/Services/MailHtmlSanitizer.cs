@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using AngleSharp;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using Ganss.Xss;
@@ -10,6 +11,11 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 {
     private const string BlockedSrcAttribute = "data-blocked-src";
     private const string BlockedBackgroundAttribute = "data-blocked-bg";
+
+    // The pipeline builds three DOM trees plus two serialisations, and ImapSession feeds it
+    // attacker-chosen bodies of arbitrary size. 2M chars (~4 MB of UTF-16) is far above any
+    // legitimate mail body — images travel as MIME parts, not markup — and bounds one request.
+    internal const int MaxInputLength = 2 * 1024 * 1024;
 
     // Every serialisation AngleSharp can hand us: quoted either way, or bare.
     private static readonly Regex CssUrl = new(
@@ -100,6 +106,12 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     {
         if (string.IsNullOrEmpty(html)) return new SanitizedHtml();
 
+        // The cut happens before any parse so the kept part crosses the whole pipeline; a cut
+        // after would let truncation reopen what the passes had closed.
+        var truncated = html.Length > MaxInputLength;
+        if (truncated)
+            html = html[..(char.IsHighSurrogate(html[MaxInputLength - 1]) ? MaxInputLength - 1 : MaxInputLength)];
+
         // Unwrap pass first: a bpost mail wrapped its whole 62 KB body in one <center>, and the
         // sanitiser deletes a disallowed tag with its subtree, rendering the message empty.
         var pre = _parser.ParseDocument(html);
@@ -173,8 +185,11 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 
         return new SanitizedHtml
         {
-            Html = document.Body?.InnerHtml ?? string.Empty,
-            BlockedImageCount = blocked
+            // Ganss's formatter escapes < and > in attribute values; AngleSharp's default
+            // (InnerHtml) does not, which would undo that hardening on this last serialise.
+            Html = document.Body is { } body ? body.ChildNodes.ToHtml(HtmlFormatter.Instance) : string.Empty,
+            BlockedImageCount = blocked,
+            Truncated = truncated
         };
     }
 

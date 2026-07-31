@@ -460,6 +460,47 @@ public sealed class MailHtmlSanitizerTests
         Assert.DoesNotContain("alert", result, StringComparison.OrdinalIgnoreCase);
     }
 
+    // AngleSharp's default formatter (InnerHtml) leaves < and > unescaped in attribute values,
+    // so a payload smuggled in a title came back as live markup wherever the value is re-read
+    // as HTML. The final serialisation must use Ganss's formatter, like OutgoingMailSanitizer.
+    [Fact]
+    public void Sanitize_EscapesAngleBracketsInAttributeValues()
+    {
+        var result = _sut.Sanitize("<p title=\"<img src=x onerror=alert(1)>\">hi</p>").Html;
+
+        Assert.DoesNotContain("<img", result);
+        Assert.Contains("&lt;img", result);
+        Assert.Contains("hi", result);
+    }
+
+    // The ceiling is applied before any parse, so the kept part crosses the whole pipeline:
+    // a script inside it is still removed, and nothing past the cut survives.
+    [Fact]
+    public void Sanitize_TruncatesAnOversizedBodyAndStillSanitisesIt()
+    {
+        var html = "<script>alert(1)</script><p>hi</p><p>"
+            + new string('a', MailHtmlSanitizer.MaxInputLength)
+            + "</p><img src=\"https://tail.example/z.png\">";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.DoesNotContain("script", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("alert", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hi", result.Html);
+        Assert.DoesNotContain("tail.example", result.Html);
+        Assert.InRange(result.Html.Length, 1, MailHtmlSanitizer.MaxInputLength + 1024);
+    }
+
+    [Fact]
+    public void Sanitize_DoesNotFlagANormalBodyAsTruncated()
+    {
+        var result = _sut.Sanitize("<p>hi</p>");
+
+        Assert.False(result.Truncated);
+        Assert.Contains("hi", result.Html);
+    }
+
     // A withheld URL is meant to appear in data-blocked-bg; what must never appear is the URL
     // still inside the CSS, which is the only place a leak can fetch from.
     private static string StyleOf(string html) =>
