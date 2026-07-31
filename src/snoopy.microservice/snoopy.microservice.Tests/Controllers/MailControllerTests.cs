@@ -2176,6 +2176,39 @@ public sealed class MailControllerTests
         Assert.Equal(MailPriority.High, Assert.IsType<OpenedDraft>(ok.Value).Priority);
     }
 
+    /// <summary>A draft written as text reopens as text; without this it comes back as HTML.</summary>
+    [Fact]
+    public async Task OpenDraft_ReportsATextOnlyDraftAsPlainText()
+    {
+        var saved = new MimeMessage { Body = new TextPart("plain") { Text = "hello\nthere" } };
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(saved));
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, saved, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PreparedQuote("<div>hello<br>there</div>", [])));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("hello\nthere", Assert.IsType<OpenedDraft>(ok.Value).TextBody);
+    }
+
+    [Fact]
+    public async Task OpenDraft_LeavesAnHtmlDraftWithNoTextBody()
+    {
+        var saved = new MimeMessage { Body = new TextPart("html") { Text = "<p>Hi</p>" } };
+        _messages.Setup(m => m.GetMimeMessageAsync(It.IsAny<User>(), Conn, "Drafts", 7u, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(saved));
+        _quotes.Setup(q => q.PrepareAsync(StagedScope, saved, QuotePurpose.EditAsNew, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PreparedQuote("<p>Hi</p>", [])));
+
+        var result = await CreateController().OpenDraft(
+            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Null(Assert.IsType<OpenedDraft>(ok.Value).TextBody);
+    }
+
     [Fact]
     public async Task OpenDraft_Returns404ForAMissingUid()
     {

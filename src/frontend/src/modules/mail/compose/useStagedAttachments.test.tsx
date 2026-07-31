@@ -163,4 +163,27 @@ describe('useStagedAttachments', () => {
     expect(result.current.items[0]).toMatchObject({ id: 'id-a', progress: 1 })
     expect(result.current.items[1]).toMatchObject({ id: 'id-b', progress: 1 })
   })
+
+  it('moves the inline ids into the tray, once', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], ['inline-1']))
+
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+
+    expect(result.current.items).toHaveLength(1)
+    expect(result.current.items[0]).toMatchObject({ id: 'inline-1', fileName: 'logo.png', size: 3 })
+    expect(result.current.ids).toEqual(['inline-1'])
+
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    expect(result.current.items).toHaveLength(1)
+  })
+
+  // Adopted means owned by the tray: discarding must release it once, not twice.
+  it('releases an adopted id a single time', () => {
+    const { result } = renderHook(() => useStagedAttachments('primary', [], ['inline-1']))
+
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    act(() => { result.current.discardAll() })
+
+    expect(api.deleteAttachment).toHaveBeenCalledTimes(1)
+  })
 })

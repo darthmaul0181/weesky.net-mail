@@ -9,6 +9,13 @@ public record SendMessageRequest
     public string Subject { get; init; } = string.Empty;
     public string HtmlBody { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Set to send the message as text/plain and nothing else — no HTML twin, no inline parts.
+    /// Non-null is the format itself, so a flag can never contradict the body it describes; null
+    /// is an HTML message, which is every message composed before this field existed.
+    /// </summary>
+    public string? TextBody { get; init; }
+
     /// <summary>Identity to send as. Null/empty means the primary address — the 2c1 behaviour.</summary>
     public string? FromAddress { get; init; }
 

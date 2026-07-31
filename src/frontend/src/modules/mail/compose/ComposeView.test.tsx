@@ -424,7 +424,7 @@ describe('the priority row', () => {
   }
   const draftSeed: ComposeSeed = {
     action: 'draft', to: ['alice@ext.example'], cc: [], bcc: [],
-    subject: 'Half written', html: '<p>later</p>', fromAddress: null, attachments: [],
+    subject: 'Half written', html: '<p>later</p>', text: null, fromAddress: null, attachments: [],
     inReplyTo: null, references: [], draftRef: { folderPath: 'Drafts', uid: 41 },
     nameHints: {}, priority: 'normal',
   }
@@ -528,7 +528,7 @@ describe('a seeded ComposeView', () => {
   const seed: ComposeSeed = {
     action: 'reply',
     to: ['alice@ext.example'], cc: ['bob@ext.example'], bcc: [],
-    subject: 'Re: Hello', html: '<div><br></div><blockquote><p>original</p></blockquote>',
+    subject: 'Re: Hello', html: '<div><br></div><blockquote><p>original</p></blockquote>', text: null,
     fromAddress: null,
     attachments: [
       { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
@@ -772,7 +772,7 @@ describe('drafts in the composer', () => {
   const draftSeed: ComposeSeed = {
     action: 'draft',
     to: ['alice@ext.example'], cc: [], bcc: [],
-    subject: 'Half written', html: '<p>later</p>',
+    subject: 'Half written', html: '<p>later</p>', text: null,
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
     draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {}, priority: 'normal',
@@ -979,7 +979,7 @@ describe('capturing new recipients', () => {
   const hintedSeed: ComposeSeed = {
     action: 'reply',
     to: ['alice@x.be'], cc: [], bcc: [],
-    subject: 'Re: Hello', html: '<p>later</p>',
+    subject: 'Re: Hello', html: '<p>later</p>', text: null,
     fromAddress: null, attachments: [],
     inReplyTo: null, references: [],
     draftRef: null, nameHints: { 'alice@x.be': 'Alice Dupont' }, priority: 'normal',
@@ -1141,5 +1141,159 @@ describe('capturing new recipients', () => {
     await waitFor(() => expect(mocks.createContact).toHaveBeenCalled())
     await settle()
     expect(onNotify.mock.calls).toEqual([['Message sent']])
+  })
+})
+
+describe('plain text in the composer', () => {
+  const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
+  const textArea = () => screen.getByTestId('compose-text-editor') as HTMLTextAreaElement
+
+  const draftSeed: ComposeSeed = {
+    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+    draftRef: { folderPath: 'Drafts', uid: 3 }, nameHints: {},
+  }
+
+  it('swaps the editor for a textarea and folds the toolbar away', () => {
+    editorState.html = '<div>one</div><div>two</div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+
+    expect(textArea().value).toBe('one\ntwo')
+    expect(screen.queryByTestId('compose-editor')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Bold' })).toBeNull()
+    expect(plainToggle()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sends the textarea as textBody with no html beside it', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    editorState.html = '<div>draft</div>'
+    renderCompose()
+    addRecipient('To', 'alice@x.be')
+
+    fireEvent.click(plainToggle())
+    fireEvent.change(textArea(), { target: { value: 'just text' } })
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    const payload = mocks.sendMessage.mock.calls[0][0]
+    expect(payload.textBody).toBe('just text')
+    expect(payload.htmlBody).toBe('')
+  })
+
+  it('carries the text back into the editor on the way out', () => {
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+    fireEvent.change(textArea(), { target: { value: 'a\nb' } })
+    fireEvent.click(plainToggle())
+
+    expect(screen.getByTestId('compose-editor')).toHaveValue('<div>a<br>b</div>')
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+  })
+
+  it('opens a text draft in text mode', () => {
+    renderCompose('INBOX', { ...draftSeed, text: 'stored text' })
+
+    expect(textArea().value).toBe('stored text')
+    expect(plainToggle()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sends an HTML message with no textBody at all', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    editorState.html = '<div>rich</div>'
+    renderCompose()
+    addRecipient('To', 'alice@x.be')
+
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].textBody).toBeUndefined()
+  })
+})
+
+describe('what a plain-text switch costs', () => {
+  const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
+  const textArea = () => screen.getByTestId('compose-text-editor') as HTMLTextAreaElement
+
+  const draftSeed: ComposeSeed = {
+    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+    draftRef: { folderPath: 'Drafts', uid: 3 }, nameHints: {},
+  }
+
+  it('asks before a switch that would cost formatting', () => {
+    editorState.html = '<div><b>bold</b></div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+
+    expect(screen.getByText('Switch to plain text?')).toBeInTheDocument()
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
+    expect(textArea().value).toBe('bold')
+  })
+
+  it('keeps the editor when the switch is declined', () => {
+    editorState.html = '<div><b>bold</b></div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(screen.getByRole('button', { name: 'Keep formatting' }))
+
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+    expect(screen.getByTestId('compose-editor')).toBeInTheDocument()
+  })
+
+  it('says nothing when there is nothing to lose', () => {
+    editorState.html = '<div>plain enough</div>'
+    renderCompose()
+
+    fireEvent.click(plainToggle())
+
+    expect(screen.queryByText('Switch to plain text?')).toBeNull()
+    expect(textArea().value).toBe('plain enough')
+  })
+
+  it('moves an inline image into the tray on the switch', () => {
+    const seed: ComposeSeed = {
+      ...draftSeed,
+      html: '<div><img src="https://api.test.example/api/Mail/Attachments/i1/content"></div>',
+      attachments: [
+        { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@mail' },
+      ],
+    }
+    editorState.html = seed.html
+    renderCompose('INBOX', seed)
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
+
+    expect(screen.getByText('logo.png')).toBeInTheDocument()
+  })
+
+  // The adopted id now rides the payload as a tray id. Sent twice, the backend packs the file
+  // twice and the recipient gets two copies of it.
+  it('sends an adopted image once, not twice', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    const seed: ComposeSeed = {
+      ...draftSeed,
+      html: '<div><img src="https://api.test.example/api/Mail/Attachments/i1/content"></div>',
+      attachments: [
+        { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@mail' },
+      ],
+    }
+    editorState.html = seed.html
+    renderCompose('INBOX', seed)
+    addRecipient('To', 'alice@x.be')
+
+    fireEvent.click(plainToggle())
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
+    fireEvent.click(sendButton())
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
+    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toEqual(['i1'])
   })
 })

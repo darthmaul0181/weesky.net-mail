@@ -193,6 +193,8 @@ export interface OpenedDraft {
   subject: string
   fromAddress: string | null
   htmlBody: string
+  /** Non-null when the stored draft was written as text: the composer reopens in text mode. */
+  textBody: string | null
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]

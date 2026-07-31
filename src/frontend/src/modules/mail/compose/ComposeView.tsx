@@ -13,6 +13,7 @@ import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import RocketIcon from '../../../icons/RocketIcon'
 import type { MailPriority } from '../api/mailTypes'
 import AttachmentTray from './AttachmentTray'
+import { htmlToText, losesFormatting, textToHtml } from './bodyFormat'
 import EditorToolbar from './EditorToolbar'
 import IdentitySelect from './IdentitySelect'
 import { mailtoSeedFrom } from './mailtoSeed'
@@ -94,12 +95,22 @@ export default function ComposeView({ onNotify }: Props) {
   const [showPriority, setShowPriority] = useState((seed?.priority ?? 'normal') !== 'normal')
   const [subject, setSubject] = useState(seed?.subject ?? '')
   // A seeded body is content the user can lose — dirty from the first render.
-  const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html))
+  const [bodyTouched, setBodyTouched] = useState(Boolean(seed?.html || seed?.text))
+  // Non-null is the plain-text mode itself, mirroring the wire: it holds the body the textarea
+  // owns and the field the payload carries. Null means Squire owns the body.
+  const [text, setText] = useState<string | null>(seed?.text ?? null)
+  // Squire reads initialHtml once, at mount, so a switch back has to hand it the converted body
+  // here — a prop change would never reach the editor it already built.
+  const [editorHtml, setEditorHtml] = useState(seed?.html)
   const [fromAddress, setFromAddress] = useState<string | null>(seed?.fromAddress ?? null)
   // Inline resources live in the body, not the tray; their ids still ride the send payload.
   const seedTray = useMemo(() => (seed?.attachments ?? []).filter(a => !a.contentId), [seed])
+  const seedInline = useMemo(() => (seed?.attachments ?? []).filter(a => a.contentId), [seed])
+  // An adopted id now rides the payload as a tray id; left in here it would ride it twice, and
+  // the backend packs one staged file per id it is handed.
+  const [inlineAdopted, setInlineAdopted] = useState(false)
   const inlineIds = useMemo(
-    () => (seed?.attachments ?? []).filter(a => a.contentId).map(a => a.id), [seed])
+    () => (inlineAdopted ? [] : seedInline.map(a => a.id)), [seedInline, inlineAdopted])
   const attachments = useStagedAttachments(accountId, seedTray, inlineIds)
   const [draftRef, setDraftRef] = useState(seed?.draftRef ?? null)
 
@@ -174,6 +185,7 @@ export default function ComposeView({ onNotify }: Props) {
   // The same question, asked by something the router cannot see — today, the mailbox switch in
   // the identity menu. It resolves on the dialog's buttons, so both roads end in one prompt.
   const [leaveAsk, setLeaveAsk] = useState<((ok: boolean) => void) | null>(null)
+  const [confirmPlain, setConfirmPlain] = useState(false)
 
   useEffect(() => {
     registerLeaveGuard(() => dirtyRef.current && !leavingRef.current
@@ -213,6 +225,25 @@ export default function ComposeView({ onNotify }: Props) {
   // SquireEditor binds onChange once at mount, so the callback has to be stable.
   const touchBody = useCallback(() => { markDirty(); setBodyTouched(true) }, [markDirty])
 
+  function switchToPlainText() {
+    setText(htmlToText(editor?.getHTML() ?? ''))
+    attachments.adoptInline(seedInline)
+    setInlineAdopted(true)
+    setConfirmPlain(false)
+    markDirty()
+  }
+
+  function toPlainText() {
+    if (losesFormatting(editor?.getHTML() ?? '')) { setConfirmPlain(true); return }
+    switchToPlainText()
+  }
+
+  function toHtml() {
+    setEditorHtml(textToHtml(text ?? ''))
+    setText(null)
+    markDirty()
+  }
+
   const allValid = [...to, ...cc, ...bcc].every(isValidAddress)
   // Send and Save both file the message and consume the staged ids; the loser of a race would
   // leave a draft behind that the winner's cleanup never knew about.
@@ -221,7 +252,9 @@ export default function ComposeView({ onNotify }: Props) {
   const canSaveDraft = allValid && !busy
 
   const buildPayload = () => ({
-    to, cc, bcc, subject, htmlBody: relativizeStagedUrls(editor?.getHTML() ?? ''),
+    to, cc, bcc, subject,
+    htmlBody: text === null ? relativizeStagedUrls(editor?.getHTML() ?? '') : '',
+    textBody: text ?? undefined,
     attachmentIds: [...inlineIds, ...attachments.ids],
     fromAddress: effectiveFrom ?? undefined,
     inReplyTo: seed?.inReplyTo ?? undefined,
@@ -356,8 +389,14 @@ export default function ComposeView({ onNotify }: Props) {
         </div>
       </div>
 
-      <EditorToolbar editor={editor} active={active} />
-      <SquireEditor ref={setEditor} initialHtml={seed?.html} onChange={touchBody} onFormatChange={setActive} />
+      <EditorToolbar editor={editor} active={active} plainText={text !== null}
+        onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
+      {text === null ? (
+        <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
+      ) : (
+        <textarea className="compose-editor" data-testid="compose-text-editor" aria-label="Message body"
+          value={text} onChange={e => { setText(e.target.value); touchBody() }} />
+      )}
 
       <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={removeFile} />
 
@@ -388,6 +427,24 @@ export default function ComposeView({ onNotify }: Props) {
                 })}>
                 Save draft
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
+      {confirmPlain && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <span className="modal-title">Switch to plain text?</span>
+            </div>
+            <p>Formatting will be removed, and images in the message become attachments.</p>
+            <div className="folder-pick-submit">
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmPlain(false)}>
+                Keep formatting
+              </button>
+              <button type="button" className="btn btn-primary" onClick={switchToPlainText}>Switch</button>
             </div>
           </div>
         </div>

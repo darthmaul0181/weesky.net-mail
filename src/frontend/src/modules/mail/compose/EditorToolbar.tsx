@@ -19,6 +19,7 @@ import OutdentIcon from '../../../icons/OutdentIcon'
 import LinkIcon from '../../../icons/LinkIcon'
 import UnlinkIcon from '../../../icons/UnlinkIcon'
 import ClearFormatIcon from '../../../icons/ClearFormatIcon'
+import PlainTextIcon from '../../../icons/PlainTextIcon'
 
 /* The bar's icon scale. Its other half — the button, the B/I/U/S letters and the dropdown text —
    lives on .compose-toolbar in mail.css; change the two together or the glyphs stop being centred
@@ -51,9 +52,14 @@ function Popover({ open, children }: { open: boolean; children: ReactNode }) {
   return <div className="compose-popover">{children}</div>
 }
 
-interface Props { editor: EditorHandle | null; active?: ActiveFormats }
+interface Props {
+  editor: EditorHandle | null
+  active?: ActiveFormats
+  plainText: boolean
+  onTogglePlainText: () => void
+}
 
-export default function EditorToolbar({ editor, active }: Props) {
+export default function EditorToolbar({ editor, active, plainText, onTogglePlainText }: Props) {
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
   // The editor reports no font, size or colour at the caret, so these are the last choice made
@@ -102,6 +108,12 @@ export default function EditorToolbar({ editor, active }: Props) {
 
   return (
     <div className="compose-toolbar" ref={container}>
+      {/* Stays when everything else folds away: it is the only way back to the editor. */}
+      <div className="compose-tool-group">
+        {btn('Plain text', <PlainTextIcon size={ICON} />, onTogglePlainText, plainText)}
+      </div>
+      {plainText ? null : (
+      <>
       <div className="compose-tool-group">
         {btn('Undo', <UndoIcon size={ICON} />, () => editor?.command('undo'))}
         {btn('Redo', <RedoIcon size={ICON} />, () => editor?.command('redo'))}
@@ -175,6 +187,8 @@ export default function EditorToolbar({ editor, active }: Props) {
         {btn('Remove link', <UnlinkIcon size={ICON} />, () => editor?.command('removeLink'))}
         {btn('Clear formatting', <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
       </div>
+      </>
+      )}
     </div>
   )
 }

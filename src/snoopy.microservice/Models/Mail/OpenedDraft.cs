@@ -12,4 +12,7 @@ public sealed record OpenedDraft(
     string? InReplyTo,
     IReadOnlyList<string> References,
     // Read back off the saved message. Without it a saved High silently resumes as Normal.
-    MailPriority Priority);
+    MailPriority Priority,
+    // Non-null when the stored draft carried no HTML part: the composer reopens in text mode
+    // rather than resuming an HTML editor holding the quote preparer's <div> wrapping.
+    string? TextBody);

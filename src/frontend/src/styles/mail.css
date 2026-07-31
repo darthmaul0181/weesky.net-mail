@@ -1337,6 +1337,17 @@
 .compose-editor ul,
 .compose-editor ol { padding-left: 24px; }
 
+/* The plain-text canvas: the same box as the editor, monospaced because that is what the mode
+   means — the recipient's client will not lay this out, so what is typed is what is read. */
+textarea.compose-editor {
+  width: 100%;
+  border: none;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
 .compose-toolbar {
   display: flex;
   align-items: center;

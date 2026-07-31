@@ -45,7 +45,7 @@ describe('staged inline images in a seed', () => {
       to: [], cc: [], bcc: [], subject: 's', fromAddress: null,
       htmlBody: '<img src="/api/Mail/Attachments/i1/content">',
       attachments: [{ id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' }],
-      inReplyTo: null, references: [], priority: 'normal',
+      inReplyTo: null, references: [], priority: 'normal', textBody: null,
     }
 
     const seed = buildDraftSeed(opened, [], { folderPath: 'Drafts', uid: 9 }, 'linked-1')
@@ -168,7 +168,7 @@ describe('buildDraftSeed', () => {
       { id: 'a2', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
     ],
     inReplyTo: 'msg1@ext.example', references: ['msg0@ext.example', 'msg1@ext.example'],
-    priority: 'normal',
+    priority: 'normal', textBody: null,
   }
   const ref = { folderPath: 'Drafts', uid: 41 }
 

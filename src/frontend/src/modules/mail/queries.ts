@@ -727,6 +727,8 @@ export interface SendMessageArgs {
   bcc: string[]
   subject: string
   htmlBody: string
+  /** Present sends the message as text/plain alone; htmlBody rides along empty. */
+  textBody?: string
   attachmentIds: string[]
   priority: MailPriority
   /** Omitted picks the account's own address server-side; the display label is always server-resolved. */

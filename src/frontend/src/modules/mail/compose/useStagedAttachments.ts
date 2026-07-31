@@ -33,13 +33,19 @@ export function useStagedAttachments(
   // Each id keeps the account it was staged under: a release aimed at whatever account is current
   // when the composer closes would leave the real owner's files to the TTL sweeper, in silence.
   const inlineRef = useRef(inlineIds.map(id => ({ id, accountId })))
+  // Ids the tray has taken over. The sync below must never resurrect one: the caller keeps
+  // handing in the seed it mounted on, which cannot know an id has become a plain attachment —
+  // and a resurrected id is adopted twice, then released twice.
+  const adoptedRef = useRef(new Set<string>())
   // A passive sync is early enough here, unlike itemsRef below: the inline ids come from the
   // seed a composer mounts on, so they cannot change between a render and the handler after it.
   // An id already known keeps the account it was recorded under; only a new one takes the
   // current account, or a switch would rewrite the owner of files it never staged.
   useEffect(() => {
     const known = new Map(inlineRef.current.map(entry => [entry.id, entry]))
-    inlineRef.current = inlineIds.map(id => known.get(id) ?? { id, accountId })
+    inlineRef.current = inlineIds
+      .filter(id => !adoptedRef.current.has(id))
+      .map(id => known.get(id) ?? { id, accountId })
   }, [inlineIds, accountId])
 
   // Keeps the ref authoritative at every instant, not just after the next
@@ -82,6 +88,28 @@ export function useStagedAttachments(
     apply(previous => previous.filter(i => i.key !== key))
   }, [apply, release])
 
+  /**
+   * The body no longer has anywhere to show an inline part, so it becomes an ordinary attachment.
+   * `known` names the files — the caller holds the seed those ids came from. Idempotent: a second
+   * call finds nothing left to move.
+   */
+  const adoptInline = useCallback((known: { id: string; fileName: string; size: number }[]) => {
+    const moving = inlineRef.current
+    if (moving.length === 0) return
+    inlineRef.current = []
+    for (const entry of moving) adoptedRef.current.add(entry.id)
+    const byId = new Map(known.map(entry => [entry.id, entry]))
+    apply(previous => [...previous, ...moving.map(entry => ({
+      key: `staged-${nextKey++}`,
+      id: entry.id,
+      fileName: byId.get(entry.id)?.fileName ?? 'attachment',
+      size: byId.get(entry.id)?.size ?? 0,
+      progress: 1,
+      error: null,
+      accountId: entry.accountId,
+    }))])
+  }, [apply])
+
   const discardAll = useCallback(() => {
     for (const inline of inlineRef.current) release(inline.id, inline.accountId)
     for (const item of itemsRef.current) {
@@ -96,7 +124,7 @@ export function useStagedAttachments(
   )
 
   return {
-    items, addFiles, remove, discardAll,
+    items, addFiles, remove, discardAll, adoptInline,
     uploading: items.some(item => item.id === null && item.error === null),
     ids,
   }
