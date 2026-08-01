@@ -121,6 +121,28 @@ public sealed class AdminRepositoryTests
         Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
     }
 
+    // The window is the whole bound on a demotion this process never sees, so it is asserted from
+    // both sides: reused before it elapses, re-read after.
+    [Fact]
+    public async Task IsAdmin_ReReadsTheFlagOnceTheCacheWindowHasElapsed()
+    {
+        using var ctx = CreateContext();
+        var clock = new StubSystemClock();
+        using var cache = new MemoryCache(new MemoryCacheOptions { Clock = clock });
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        // Demoted behind the repository's back, as a direct database edit would be.
+        user.Admin = ActiveState.N;
+        ctx.SaveChanges();
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        clock.Advance(AdminRepository.CacheWindow + TimeSpan.FromSeconds(1));
+
+        Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+    }
+
     // One account's flag must never answer for another, in either direction of the key.
     [Fact]
     public async Task IsAdmin_CachesPerAccount()
