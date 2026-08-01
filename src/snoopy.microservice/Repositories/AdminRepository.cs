@@ -318,11 +318,14 @@ internal sealed class AdminRepository(
     private static ActiveState State(bool on) => on ? ActiveState.Y : ActiveState.N;
 
     /// <summary>
-    /// Keyed on the whole address, so no account's flag can answer for another: '@' cannot occur
-    /// in either half, which makes the pair unambiguous.
+    /// One key per account, folding exactly what the query folds and nothing more: the username
+    /// because it is compared lower-cased on both sides, the domain not at all since it is compared
+    /// under the database collation. A name differing by a space is another row, so another key.
+    /// The halves cannot run together because <see cref="Models.User"/> refuses an address that is
+    /// not exactly two '@'-separated parts, and every claim is built from one.
     /// </summary>
     private static string AdminFlagKey(string username, string domainName) =>
-        $"admin-flag:{username.Trim().ToLowerInvariant()}@{domainName.Trim().ToLowerInvariant()}";
+        $"admin-flag:{username.ToLowerInvariant()}@{domainName}";
 
     /// <summary>
     /// Invalidates every cached flag, including answers still being computed. One epoch for all of

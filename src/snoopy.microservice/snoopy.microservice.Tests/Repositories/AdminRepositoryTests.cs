@@ -200,6 +200,23 @@ public sealed class AdminRepositoryTests
         Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
     }
 
+    // Nothing on the write path trims a username, and MySQL's PAD SPACE folds trailing spaces
+    // only, so " alice" and "alice" are two rows: a mistyped admin account must not answer for the
+    // real one. The key may only fold what the query itself folds, which is case.
+    [Fact]
+    public async Task IsAdmin_DoesNotFoldUsernamesThatDifferBySpacing()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx);
+        AddUser(ctx, " alice", "WSY", admin: ActiveState.Y);
+        AddUser(ctx, "alice", "WSY", admin: ActiveState.N);
+        var repo = CreateRepository(ctx, cache: cache);
+
+        Assert.True(await repo.IsAdminAsync(" alice", "weesky.be"));
+        Assert.False(await repo.IsAdminAsync("alice", "weesky.be"));
+    }
+
     [Fact]
     public async Task UpdateUser_DropsTheCachedAdminFlag()
     {
