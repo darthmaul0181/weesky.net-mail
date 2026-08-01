@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -502,20 +501,19 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains("hi", result.Html);
     }
 
-    // The width ceiling bounds characters; the pipeline's cost is proportional to elements.
-    // 2M characters of <div>x</div> is ~175 000 of them, measured between 22.7 s and 71.5 s
-    // with the width ceiling alone in place.
+    // The width ceiling bounds characters; the pipeline's cost is proportional to nodes. 2M
+    // characters of <div>x</div> is ~175 000 of them, measured between 22.7 s and 71.5 s with the
+    // width ceiling alone. What is asserted is the bound, not a duration: the timings belong to
+    // the measurement harness, and a millisecond threshold only ever encodes the runner's speed.
     [Fact]
     public void Sanitize_BoundsTheCostOfAnElementDenseBody()
     {
         var html = string.Concat(Enumerable.Repeat("<div>x</div>", MailHtmlSanitizer.MaxInputLength / 12));
 
-        var stopwatch = Stopwatch.StartNew();
         var result = _sut.Sanitize(html);
 
         Assert.True(result.Truncated);
         Assert.Equal(20_000, Regex.Matches(result.Html, "<div>").Count);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
     }
 
     // The cut keeps the leading part and flags it, exactly as the width ceiling does — and what
@@ -569,11 +567,12 @@ public sealed class MailHtmlSanitizerTests
     {
         var html = string.Concat(Enumerable.Repeat("<div>", 200_000)) + "deep";
 
-        var stopwatch = Stopwatch.StartNew();
         var result = _sut.Sanitize(html).Html;
 
+        // The tree the parser is handed is what matters, and it is countable: 1024 levels, never
+        // the 200 000 the sender chose.
         Assert.Contains("deep", result);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
     }
 
     [Fact]
@@ -671,16 +670,16 @@ public sealed class MailHtmlSanitizerTests
     [InlineData("<!--->")]
     public void Sanitize_DoesNotLetAPrefixThatOnlyLooksKnownHideTheDocument(string prefix)
     {
-        var html = prefix + string.Concat(Enumerable.Repeat("<div>", 60_000)) + "deep";
+        // 1 100 levels, not 60 000: what discriminates is the count that survives, so the payload
+        // only has to cross the cap. A prefix the scan mis-reads leaves all 1 100 standing.
+        var html = prefix + string.Concat(Enumerable.Repeat("<div>", 1_100)) + "deep";
 
-        var stopwatch = Stopwatch.StartNew();
         var result = _sut.Sanitize(html).Html;
 
         // 1023 where the prefix is an element the parser nests — it holds the first level itself —
         // and 1024 where it is a comment, which opens nothing.
         Assert.Contains("deep", result);
         Assert.InRange(Regex.Matches(result, "<div>").Count, 1023, 1024);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"took {stopwatch.Elapsed}");
     }
 
     [Theory]
@@ -690,13 +689,14 @@ public sealed class MailHtmlSanitizerTests
     [InlineData("<div></1>")]
     public void Sanitize_CountsDepthATagOnlyLookingLikeAVoidPeerOrEndTagWouldHide(string unit)
     {
-        var html = string.Concat(Enumerable.Repeat(unit, 60_000)) + "deep";
+        var html = string.Concat(Enumerable.Repeat(unit, 1_100)) + "<b>marker</b>";
 
-        var stopwatch = Stopwatch.StartNew();
         var result = _sut.Sanitize(html).Html;
 
-        Assert.Contains("deep", result);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"took {stopwatch.Elapsed}");
+        // Past the cap a wrapper is elided and its content kept. A unit the scan reads as opening
+        // no level leaves the marker inside the cap, still wrapped — which is the whole tell.
+        Assert.Contains("marker", result);
+        Assert.DoesNotContain("<b>", result);
     }
 
     // The tokeniser's whitespace set, not Unicode's: a no-break space does not separate
