@@ -465,31 +465,37 @@ internal sealed class ImapSession : IImapSession
                                  | MessageSummaryItems.InternalDate;
                 if (sortCapable && criteria.HasAttachment) fetchItems |= MessageSummaryItems.BodyStructure;
 
-                var exactTotal = 0;
-                // One attachment scan budget for the whole search, spent folder by folder; a
-                // folder always keeps at least its page window, the merge's minimum.
-                var scanBudget = sortCapable && criteria.HasAttachment ? (long)AttachmentScanBudget : 0L;
-                var hits = new List<SearchHit>();
+                // Pass 1 — SEARCH/SORT only: bare UID lists, cheap whatever the folders hold,
+                // and the whole picture the budget split below needs before anything is fetched.
+                var perFolder = new List<(IMailFolder Folder, IList<UniqueId> Found)>();
                 foreach (var folder in await SearchableFoldersAsync(folderPath, allFolders, cancellationToken))
                 {
                     await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
-
                     IList<UniqueId> found = sortCapable
                         ? await folder.SortAsync(query, [OrderBy.ReverseDate], cancellationToken)
                         : await folder.SearchAsync(query, cancellationToken);
-                    if (found.Count == 0) continue;
-                    exactTotal += found.Count;
+                    if (found.Count > 0) perFolder.Add((folder, found));
+                }
 
-                    IList<UniqueId> candidates;
-                    if (sortCapable)
-                    {
-                        candidates = BoundCandidates(found, page, pageSize, scanBudget);
-                        scanBudget = Math.Max(0L, scanBudget - candidates.Count);
-                    }
-                    else
-                    {
-                        candidates = found;
-                    }
+                var exactTotal = perFolder.Sum(entry => entry.Found.Count);
+
+                // The attachment budget splits across folders by need, never by the order the
+                // folder list arrived in; each folder always keeps its page window regardless.
+                var shares = sortCapable && criteria.HasAttachment
+                    ? FairShares(perFolder.Select(entry => entry.Found.Count).ToList(), AttachmentScanBudget)
+                    : null;
+
+                // Pass 2 — the bounded key fetch. Each folder is re-opened: IMAP selects one
+                // mailbox at a time, and pass 1 left only the last one selected.
+                var hits = new List<SearchHit>();
+                for (var i = 0; i < perFolder.Count; i++)
+                {
+                    var (folder, found) = perFolder[i];
+                    await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+                    var candidates = sortCapable
+                        ? BoundCandidates(found, page, pageSize, shares?[i] ?? 0L)
+                        : found;
 
                     var items = await folder.FetchAsync(candidates, fetchItems, cancellationToken);
                     hits.AddRange(items.Select(item => new SearchHit(
@@ -603,6 +609,28 @@ internal sealed class ImapSession : IImapSession
     /// <summary>How many date-ordered hits the non-SORT attachment filter may examine.</summary>
     internal static int ExamineLimit(int page, int pageSize) =>
         (int)Math.Min(int.MaxValue, Math.Max((page + 1L) * pageSize, AttachmentScanBudget));
+
+    /// <summary>
+    /// Splits the attachment scan budget across folders by need, never by list position: a
+    /// folder wanting less than an equal split keeps only what it has, and what it leaves is
+    /// re-split among the larger ones — so which folders scan deep cannot depend on the
+    /// alphabetical order the folder list happens to arrive in.
+    /// </summary>
+    internal static IReadOnlyList<long> FairShares(IReadOnlyList<int> counts, long budget)
+    {
+        var shares = new long[counts.Count];
+        var bySize = Enumerable.Range(0, counts.Count).OrderBy(index => counts[index]).ToList();
+        var remaining = budget;
+        for (var n = 0; n < bySize.Count; n++)
+        {
+            var index = bySize[n];
+            var share = Math.Min(counts[index], remaining / (bySize.Count - n));
+            shares[index] = share;
+            remaining -= share;
+        }
+
+        return shares;
+    }
 
     /// <summary>
     /// Keeps the hits whose BODYSTRUCTURE shows an attachment — the non-SORT second phase,

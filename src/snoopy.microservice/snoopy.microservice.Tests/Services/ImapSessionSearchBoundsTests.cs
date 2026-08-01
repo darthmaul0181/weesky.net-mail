@@ -140,6 +140,39 @@ public sealed class ImapSessionSearchBoundsTests
     }
 
     [Fact]
+    public void FairShares_LetsSmallFoldersKeepTheirsAndSplitsTheRest()
+    {
+        Assert.Equal(new long[] { 1500, 500 }, ImapSession.FairShares([3000, 500], 2000));
+        Assert.Equal(new long[] { 1000, 1000 }, ImapSession.FairShares([1500, 1500], 2000));
+        Assert.Equal(new long[] { 100, 200 }, ImapSession.FairShares([100, 200], 2000));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SplitsTheAttachmentBudgetAcrossFoldersByNeed()
+    {
+        // Alphabetical folder order must not decide search results: Archive lists first and
+        // holds 3000 matches, so spending the budget in list order would leave INBOX its bare
+        // page window and lose the attachment sitting 300 deep there.
+        var folders = new Dictionary<string, IEnumerable<int>>
+        {
+            ["Archive"] = Enumerable.Range(1000, 3000),
+            ["INBOX"] = Enumerable.Range(1, 500),
+        };
+        using var server = new SearchBoundsImapServer(sort: true, folders, attachmentUids: [200]);
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var session = await ConnectedSessionAsync(server, cts.Token);
+
+        var result = await session.SearchAsync("INBOX", allFolders: true, Criteria(hasAttachment: true), 0, 2, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Equal(1, result.Value.Total);
+        var row = Assert.Single(result.Value.Results);
+        Assert.Equal(200u, row.Uid);
+        Assert.Equal("INBOX", row.FolderPath);
+    }
+
+    [Fact]
     public async Task SearchAsync_AppliesTheScanBudgetOnTheSingleFolderSortPath()
     {
         // Same over-correction existed on the SORT branch: its attachment filter must scan to
@@ -170,11 +203,12 @@ public sealed class ImapSessionSearchBoundsTests
 internal sealed class SearchBoundsImapServer : IDisposable
 {
     private readonly bool _sort;
-    private readonly uint[] _searchUids;
+    private readonly List<(string Name, uint[] Uids)> _folders;
     private readonly HashSet<uint> _attachmentUids;
     private readonly Dictionary<uint, string> _envelopeDates;
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
+    private uint[] _selectedUids = [];
 
     private const string DefaultDate = "Wed, 01 Jul 2026 10:00:00 +0000";
 
@@ -191,9 +225,17 @@ internal sealed class SearchBoundsImapServer : IDisposable
         bool sort, IEnumerable<int> searchUids,
         IEnumerable<int>? attachmentUids = null,
         IReadOnlyDictionary<int, string>? envelopeDates = null)
+        : this(sort, new Dictionary<string, IEnumerable<int>> { ["INBOX"] = searchUids }, attachmentUids, envelopeDates)
+    {
+    }
+
+    public SearchBoundsImapServer(
+        bool sort, IReadOnlyDictionary<string, IEnumerable<int>> folders,
+        IEnumerable<int>? attachmentUids = null,
+        IReadOnlyDictionary<int, string>? envelopeDates = null)
     {
         _sort = sort;
-        _searchUids = searchUids.Select(uid => (uint)uid).ToArray();
+        _folders = folders.Select(pair => (pair.Key, pair.Value.Select(uid => (uint)uid).ToArray())).ToList();
         _attachmentUids = (attachmentUids ?? []).Select(uid => (uint)uid).ToHashSet();
         _envelopeDates = (envelopeDates ?? new Dictionary<int, string>())
             .ToDictionary(pair => (uint)pair.Key, pair => pair.Value);
@@ -272,30 +314,35 @@ internal sealed class SearchBoundsImapServer : IDisposable
                         break;
 
                     case "LIST":
-                        await writer.WriteLineAsync("* LIST (\\HasNoChildren) \"/\" \"INBOX\"");
+                        foreach (var (name, _) in _folders)
+                            await writer.WriteLineAsync($"* LIST (\\HasNoChildren) \"/\" \"{name}\"");
                         await writer.WriteLineAsync($"{tag} OK LIST completed");
                         break;
 
                     case "SELECT":
                     case "EXAMINE":
-                        await writer.WriteLineAsync($"* {_searchUids.Length} EXISTS");
+                        var mailbox = remainder.Split(' ')[0].Trim('"');
+                        _selectedUids = _folders
+                            .FirstOrDefault(folder => string.Equals(folder.Name, mailbox, StringComparison.OrdinalIgnoreCase))
+                            .Uids ?? [];
+                        await writer.WriteLineAsync($"* {_selectedUids.Length} EXISTS");
                         await writer.WriteLineAsync("* 0 RECENT");
                         await writer.WriteLineAsync("* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)");
                         await writer.WriteLineAsync("* OK [PERMANENTFLAGS ()] Read-only");
                         await writer.WriteLineAsync("* OK [UIDVALIDITY 100] UIDs valid");
-                        await writer.WriteLineAsync($"* OK [UIDNEXT {_searchUids.Length + 1}] Predicted next UID");
+                        await writer.WriteLineAsync($"* OK [UIDNEXT {_selectedUids.Length + 1}] Predicted next UID");
                         await writer.WriteLineAsync($"{tag} OK [READ-ONLY] EXAMINE completed");
                         break;
 
                     case "SEARCH":
                         SearchCommands.Add(line);
-                        await writer.WriteLineAsync($"* SEARCH {string.Join(' ', _searchUids)}");
+                        await writer.WriteLineAsync($"* SEARCH {string.Join(' ', _selectedUids)}");
                         await writer.WriteLineAsync($"{tag} OK SEARCH completed");
                         break;
 
                     case "SORT":
                         SortCommands.Add(line);
-                        await writer.WriteLineAsync($"* SORT {string.Join(' ', _searchUids.Reverse())}");
+                        await writer.WriteLineAsync($"* SORT {string.Join(' ', _selectedUids.Reverse())}");
                         await writer.WriteLineAsync($"{tag} OK SORT completed");
                         break;
 
