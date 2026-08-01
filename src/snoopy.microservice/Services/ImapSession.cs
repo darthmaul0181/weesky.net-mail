@@ -943,7 +943,9 @@ internal sealed class ImapSession : IImapSession
         IMailFolder folder, UniqueId uniqueId, BodyPartText part, CancellationToken cancellationToken)
     {
         using var encoded = await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
-        MimeUtils.TryParse(part.ContentTransferEncoding, out ContentEncoding encoding);
+        // A NIL body_fld_enc reads as the default encoding. TryParse tolerates null on this
+        // MimeKit version (verified), but that is its internals, not its contract.
+        MimeUtils.TryParse(part.ContentTransferEncoding ?? string.Empty, out ContentEncoding encoding);
 
         var textPart = new TextPart(part.ContentType.MediaSubtype)
         {
@@ -1075,7 +1077,9 @@ internal sealed class ImapSession : IImapSession
             // hand already says how to decode. Decoding lands in MemoryBlockStream — seekable for
             // Content-Length, pooled 2 KB blocks, so no large-object-heap buffer and no resizing.
             using var encoded = await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
-            MimeUtils.TryParse(part.ContentTransferEncoding, out ContentEncoding encoding);
+            // A NIL body_fld_enc reads as the default encoding. TryParse tolerates null on this
+        // MimeKit version (verified), but that is its internals, not its contract.
+        MimeUtils.TryParse(part.ContentTransferEncoding ?? string.Empty, out ContentEncoding encoding);
 
             var decoded = new MemoryBlockStream();
             await new MimeContent(encoded, encoding).DecodeToAsync(decoded, cancellationToken);

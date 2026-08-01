@@ -110,6 +110,46 @@ public sealed class ImapSessionMessageFetchTests
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
         Assert.Contains("unwrapped.", result.Value.TextBody, StringComparison.Ordinal);
     }
+
+    // A server may answer NIL for body_fld_enc; that null must read as the default encoding,
+    // not turn opening the message into a 502.
+    [Fact]
+    public async Task GetMessageAsync_SurvivesANilTransferEncoding()
+    {
+        const string structure =
+            "(\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL NIL 12 1 NIL NIL NIL NIL)";
+        using var server = new SinglePartImapServer(structure, "Plain body.\r\n");
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var result = await GetSinglePartMessageAsync(server, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Contains("Plain body.", result.Value.TextBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetAttachmentAsync_SurvivesANilTransferEncoding()
+    {
+        const string structure =
+            "(\"application\" \"octet-stream\" (\"name\" \"raw.bin\") NIL NIL NIL 4 NIL " +
+            "(\"attachment\" (\"filename\" \"raw.bin\")) NIL NIL)";
+        using var server = new SinglePartImapServer(structure, "data");
+        server.Start();
+
+        using var client = new ImapClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await client.ConnectAsync("127.0.0.1", server.Port, SecureSocketOptions.None, cts.Token);
+        await client.AuthenticateAsync("alice", "hunter2", cts.Token);
+        await using var session = new ImapSession(client, Mock.Of<IMailHtmlSanitizer>(), Mock.Of<ILogger>());
+
+        var result = await session.GetAttachmentAsync("INBOX", 1, "", cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        using var reader = new MemoryStream();
+        await result.Value.Content.CopyToAsync(reader, cts.Token);
+        Assert.Equal("data"u8.ToArray(), reader.ToArray());
+    }
 }
 
 /// <summary>
