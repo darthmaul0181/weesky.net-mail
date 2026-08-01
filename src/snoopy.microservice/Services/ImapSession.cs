@@ -443,7 +443,8 @@ internal sealed class ImapSession : IImapSession
 
                 var sorted = await folder.SortAsync(query, [OrderBy.ReverseDate], cancellationToken);
                 var uids = criteria.HasAttachment
-                    ? await WithAttachmentsAsync(folder, BoundCandidates(sorted, page, pageSize), cancellationToken)
+                    ? await WithAttachmentsAsync(
+                        folder, BoundCandidates(sorted, page, pageSize, AttachmentScanBudget), cancellationToken)
                     : sorted;
                 matches = uids.Select(uid => (folder, uid)).ToList();
                 result.Total = criteria.HasAttachment ? matches.Count : sorted.Count;
@@ -455,13 +456,17 @@ internal sealed class ImapSession : IImapSession
                 // then one FETCH for the merge key (Envelope.Date, arrival as fallback) and — only
                 // when attachments are asked for — BODYSTRUCTURE. The FETCH is bounded to the
                 // (page + 1) * pageSize candidates that can still reach the requested page once the
-                // folders are merged; the SEARCH itself stays whole, so the match count stays exact.
+                // folders are merged — widened to the attachment scan budget when that post-filter
+                // runs; the SEARCH itself stays whole, so the match count stays exact.
                 var fetchItems = MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope
                                  | MessageSummaryItems.InternalDate;
                 if (criteria.HasAttachment) fetchItems |= MessageSummaryItems.BodyStructure;
 
                 var sortCapable = _client.Capabilities.HasFlag(ImapCapabilities.Sort);
                 var exactTotal = 0;
+                // One attachment scan budget for the whole search, spent folder by folder; a
+                // folder always keeps at least its page window, the merge's minimum.
+                var scanBudget = criteria.HasAttachment ? (long)AttachmentScanBudget : 0L;
                 var hits = new List<SearchHit>();
                 foreach (var folder in await SearchableFoldersAsync(folderPath, allFolders, cancellationToken))
                 {
@@ -475,7 +480,8 @@ internal sealed class ImapSession : IImapSession
 
                     var candidates = BoundCandidates(
                         sortCapable ? found : found.OrderByDescending(uid => uid.Id).ToList(),
-                        page, pageSize);
+                        page, pageSize, scanBudget);
+                    scanBudget = Math.Max(0L, scanBudget - candidates.Count);
 
                     var items = await folder.FetchAsync(candidates, fetchItems, cancellationToken);
                     hits.AddRange(items.Select(item => new SearchHit(
@@ -554,13 +560,24 @@ internal sealed class ImapSession : IImapSession
     }
 
     /// <summary>
+    /// How many BODYSTRUCTUREs one attachment-filtered search may examine past the page window.
+    /// No IMAP SEARCH criterion covers attachments, so the filter must look at candidates; at a
+    /// few hundred bytes of summary each, two thousand costs a few hundred KB and well under a
+    /// second, so a realistic search is examined whole and its count stays exact — only the
+    /// whole-mailbox sweep is cut, and its Total degrades to "at least what was examined".
+    /// </summary>
+    internal const int AttachmentScanBudget = 2000;
+
+    /// <summary>
     /// The per-folder candidate window: once every folder's newest-first list is merged, only its
     /// first (page + 1) * pageSize entries can still land on the requested page, so nothing past
-    /// them is worth a per-message FETCH. Long arithmetic: the controller caps pageSize, not page.
+    /// them is worth a per-message FETCH. <paramref name="floor"/> widens the window when a
+    /// post-filter needs to look deeper than the page alone (the attachment scan budget).
+    /// Long arithmetic: the controller caps pageSize, not page.
     /// </summary>
-    internal static IList<UniqueId> BoundCandidates(IList<UniqueId> newestFirst, int page, int pageSize)
+    internal static IList<UniqueId> BoundCandidates(IList<UniqueId> newestFirst, int page, int pageSize, long floor = 0)
     {
-        var take = (page + 1L) * pageSize;
+        var take = Math.Max((page + 1L) * pageSize, floor);
         if (take <= 0) return [];
 
         return take >= newestFirst.Count ? newestFirst : newestFirst.Take((int)take).ToList();

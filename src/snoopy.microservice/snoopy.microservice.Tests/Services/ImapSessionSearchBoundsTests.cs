@@ -36,25 +36,22 @@ public sealed class ImapSessionSearchBoundsTests
     [Fact]
     public async Task SearchAsync_FetchesOnlyThePageWindowOfCandidatesOnTheMergePath()
     {
+        // No SORT capability forces the merge path even on a single folder — the path that used
+        // to fetch the envelope of every SEARCH match before paging.
         using var server = new SearchBoundsImapServer(sort: false, searchUids: Enumerable.Range(1, 10));
         server.Start();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var session = await ConnectedSessionAsync(server, cts.Token);
 
-        // No SORT capability forces the merge path even on a single folder; hasAttachment is
-        // the request that used to fetch envelope + BODYSTRUCTURE for the entire mailbox.
-        var result = await session.SearchAsync("INBOX", allFolders: false, Criteria(hasAttachment: true), 0, 2, cts.Token);
+        var result = await session.SearchAsync("INBOX", allFolders: false, Criteria(hasAttachment: false), 0, 2, cts.Token);
 
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
 
         // (page + 1) * pageSize = 2 candidates, taken UID-descending as the newest-first proxy.
-        var fetched = Assert.Single(server.FetchedUidSets);
-        Assert.Equal(new[] { 9u, 10u }, fetched.OrderBy(uid => uid));
+        Assert.Equal(new[] { 9u, 10u }, server.FetchedUidSets[0].OrderBy(uid => uid));
 
-        // None of the examined candidates carries an attachment, so under the post-filter the
-        // count is "at least" over what was examined — here zero, not the folder's ten.
-        Assert.Equal(0, result.Value.Total);
-        Assert.Empty(result.Value.Results);
+        Assert.Equal(10, result.Value.Total);
+        Assert.Equal(2, result.Value.Results.Count);
     }
 
     [Fact]
@@ -83,7 +80,7 @@ public sealed class ImapSessionSearchBoundsTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var session = await ConnectedSessionAsync(server, cts.Token);
 
-        var result = await session.SearchAsync("INBOX", allFolders: true, Criteria(hasAttachment: true), 0, 2, cts.Token);
+        var result = await session.SearchAsync("INBOX", allFolders: true, Criteria(hasAttachment: false), 0, 2, cts.Token);
 
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
 
@@ -93,21 +90,84 @@ public sealed class ImapSessionSearchBoundsTests
         Assert.Contains("REVERSE DATE", sortCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(server.SearchCommands);
 
+        Assert.Equal(new[] { 9u, 10u }, server.FetchedUidSets[0].OrderBy(uid => uid));
+        Assert.Equal(10, result.Value.Total);
+    }
+
+    [Fact]
+    public async Task SearchAsync_FindsAnAttachmentPastThePageWindowWithinTheScanBudget()
+    {
+        // The realistic case the page-window bound over-corrected: 500 matches, the only
+        // attachment-bearing one 300 deep. The scan budget must reach it — 500 BODYSTRUCTUREs
+        // is a cheap scan, not the whole-mailbox sweep the bound exists to stop.
+        using var server = new SearchBoundsImapServer(
+            sort: false, searchUids: Enumerable.Range(1, 500), attachmentUids: [200]);
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var session = await ConnectedSessionAsync(server, cts.Token);
+
+        var result = await session.SearchAsync("INBOX", allFolders: false, Criteria(hasAttachment: true), 0, 2, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Equal(500, server.FetchedUidSets[0].Count);
+        Assert.Equal(1, result.Value.Total);
+        var row = Assert.Single(result.Value.Results);
+        Assert.Equal(200u, row.Uid);
+        Assert.True(row.HasAttachments);
+    }
+
+    [Fact]
+    public async Task SearchAsync_CapsTheAttachmentScanAtItsBudget()
+    {
+        using var server = new SearchBoundsImapServer(sort: false, searchUids: Enumerable.Range(1, 2500));
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var session = await ConnectedSessionAsync(server, cts.Token);
+
+        var result = await session.SearchAsync("INBOX", allFolders: false, Criteria(hasAttachment: true), 0, 2, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+
+        // The pathological sweep is still cut: exactly the budget of newest candidates, no more.
         var fetched = Assert.Single(server.FetchedUidSets);
-        Assert.Equal(new[] { 9u, 10u }, fetched.OrderBy(uid => uid));
+        Assert.Equal(ImapSession.AttachmentScanBudget, fetched.Count);
+        Assert.Equal(501u, fetched.Min());
+        Assert.Equal(2500u, fetched.Max());
+    }
+
+    [Fact]
+    public async Task SearchAsync_AppliesTheScanBudgetOnTheSingleFolderSortPath()
+    {
+        // Same over-correction existed on the SORT branch: its attachment filter must scan to
+        // the budget too, not stop at the page window.
+        using var server = new SearchBoundsImapServer(
+            sort: true, searchUids: Enumerable.Range(1, 500), attachmentUids: [200]);
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var session = await ConnectedSessionAsync(server, cts.Token);
+
+        var result = await session.SearchAsync("INBOX", allFolders: false, Criteria(hasAttachment: true), 0, 2, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Single(server.SortCommands);
+        Assert.Equal(1, result.Value.Total);
+        var row = Assert.Single(result.Value.Results);
+        Assert.Equal(200u, row.Uid);
     }
 }
 
 /// <summary>
-/// Scripts enough of an IMAP session for SearchAsync's merge path: greeting, LOGIN, NAMESPACE,
-/// LIST, EXAMINE, UID SEARCH / UID SORT (answering a configured UID list, newest last / first
-/// respectively) and UID FETCH (answering envelope + INTERNALDATE + an attachment-less
-/// BODYSTRUCTURE per requested UID), recording each so tests can assert what was asked for.
+/// Scripts enough of an IMAP session for SearchAsync: greeting, LOGIN, NAMESPACE, LIST,
+/// EXAMINE, UID SEARCH / UID SORT (answering a configured UID list, newest last / first
+/// respectively) and UID FETCH — per requested UID, envelope + INTERNALDATE + a BODYSTRUCTURE
+/// that carries an attachment only for the configured UIDs, plus the partial text-part fetch
+/// MailKit issues for previews — recording each so tests can assert what was asked for.
 /// </summary>
 internal sealed class SearchBoundsImapServer : IDisposable
 {
     private readonly bool _sort;
     private readonly uint[] _searchUids;
+    private readonly HashSet<uint> _attachmentUids;
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
 
@@ -117,12 +177,19 @@ internal sealed class SearchBoundsImapServer : IDisposable
         "((\"Bob\" NIL \"bob\" \"weesky.be\")) NIL NIL NIL \"<m@weesky.be>\")";
 
     private const string TextOnlyBodyStructure =
-        "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 5 1 NIL NIL NIL NIL)";
+        "(\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 5 1 NIL NIL NIL NIL)";
 
-    public SearchBoundsImapServer(bool sort, IEnumerable<int> searchUids)
+    private const string AttachmentBodyStructure =
+        "((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 5 1 NIL NIL NIL NIL)" +
+        "(\"application\" \"pdf\" (\"name\" \"a.pdf\") NIL NIL \"base64\" 12 NIL " +
+        "(\"attachment\" (\"filename\" \"a.pdf\")) NIL NIL) " +
+        "\"mixed\" (\"boundary\" \"b\") NIL NIL NIL)";
+
+    public SearchBoundsImapServer(bool sort, IEnumerable<int> searchUids, IEnumerable<int>? attachmentUids = null)
     {
         _sort = sort;
         _searchUids = searchUids.Select(uid => (uint)uid).ToArray();
+        _attachmentUids = (attachmentUids ?? []).Select(uid => (uint)uid).ToHashSet();
     }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -221,11 +288,26 @@ internal sealed class SearchBoundsImapServer : IDisposable
                         FetchCommands.Add(line);
                         var uids = ExpandSet(remainder.Split(' ', 2)[0]);
                         FetchedUidSets.Add(uids);
+
+                        // MailKit computes previews itself on a server without PREVIEW, with a
+                        // partial fetch of the text part; answer it — echoing the section it
+                        // asked for — or the page fetch never completes.
+                        if (line.Contains("]<0.", StringComparison.Ordinal))
+                        {
+                            var open = line.IndexOf("BODY.PEEK[", StringComparison.OrdinalIgnoreCase) + 10;
+                            var section = line[open..line.IndexOf(']', open)];
+                            foreach (var uid in uids)
+                                await writer.WriteLineAsync($"* {uid} FETCH (UID {uid} BODY[{section}]<0> {{5}}\r\nhello)");
+                            await writer.WriteLineAsync($"{tag} OK FETCH completed");
+                            break;
+                        }
+
                         foreach (var uid in uids)
                         {
+                            var structure = _attachmentUids.Contains(uid) ? AttachmentBodyStructure : TextOnlyBodyStructure;
                             await writer.WriteLineAsync(
                                 $"* {uid} FETCH (UID {uid} INTERNALDATE \"01-Aug-2026 10:00:00 +0000\" " +
-                                $"ENVELOPE {Envelope} BODYSTRUCTURE {TextOnlyBodyStructure})");
+                                $"ENVELOPE {Envelope} BODYSTRUCTURE {structure})");
                         }
                         await writer.WriteLineAsync($"{tag} OK FETCH completed");
                         break;
