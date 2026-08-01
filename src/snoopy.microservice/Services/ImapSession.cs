@@ -453,21 +453,22 @@ internal sealed class ImapSession : IImapSession
             else
             {
                 // All folders — or a server without SORT: per folder, SORT (REVERSE DATE) when the
-                // session advertises it (rule 2), UID-descending as the newest-first proxy otherwise,
-                // then one FETCH for the merge key (Envelope.Date, arrival as fallback) and — only
-                // when attachments are asked for — BODYSTRUCTURE. The FETCH is bounded to the
-                // (page + 1) * pageSize candidates that can still reach the requested page once the
-                // folders are merged — widened to the attachment scan budget when that post-filter
-                // runs; the SEARCH itself stays whole, so the match count stays exact.
+                // session advertises it (rule 2), then one FETCH for the merge key (Envelope.Date,
+                // arrival as fallback) bounded to the (page + 1) * pageSize candidates that can
+                // still reach the requested page — widened to the attachment scan budget when that
+                // post-filter rides the same FETCH. Without SORT no order exists until the dates
+                // arrive — UID order is arrival order, exactly what rule 2 says is not date order —
+                // so every match's key is fetched (items, never bodies) and the attachment filter
+                // becomes a budgeted second phase over the merged date order instead.
+                var sortCapable = _client.Capabilities.HasFlag(ImapCapabilities.Sort);
                 var fetchItems = MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope
                                  | MessageSummaryItems.InternalDate;
-                if (criteria.HasAttachment) fetchItems |= MessageSummaryItems.BodyStructure;
+                if (sortCapable && criteria.HasAttachment) fetchItems |= MessageSummaryItems.BodyStructure;
 
-                var sortCapable = _client.Capabilities.HasFlag(ImapCapabilities.Sort);
                 var exactTotal = 0;
                 // One attachment scan budget for the whole search, spent folder by folder; a
                 // folder always keeps at least its page window, the merge's minimum.
-                var scanBudget = criteria.HasAttachment ? (long)AttachmentScanBudget : 0L;
+                var scanBudget = sortCapable && criteria.HasAttachment ? (long)AttachmentScanBudget : 0L;
                 var hits = new List<SearchHit>();
                 foreach (var folder in await SearchableFoldersAsync(folderPath, allFolders, cancellationToken))
                 {
@@ -479,10 +480,16 @@ internal sealed class ImapSession : IImapSession
                     if (found.Count == 0) continue;
                     exactTotal += found.Count;
 
-                    var candidates = BoundCandidates(
-                        sortCapable ? found : found.OrderByDescending(uid => uid.Id).ToList(),
-                        page, pageSize, scanBudget);
-                    scanBudget = Math.Max(0L, scanBudget - candidates.Count);
+                    IList<UniqueId> candidates;
+                    if (sortCapable)
+                    {
+                        candidates = BoundCandidates(found, page, pageSize, scanBudget);
+                        scanBudget = Math.Max(0L, scanBudget - candidates.Count);
+                    }
+                    else
+                    {
+                        candidates = found;
+                    }
 
                     var items = await folder.FetchAsync(candidates, fetchItems, cancellationToken);
                     hits.AddRange(items.Select(item => new SearchHit(
@@ -491,8 +498,17 @@ internal sealed class ImapSession : IImapSession
                         item.Attachments?.Any() ?? false)));
                 }
 
+                if (criteria.HasAttachment && !sortCapable)
+                {
+                    // Keys for every match are in hand, BODYSTRUCTURE for none: examine only the
+                    // newest budget's worth, chosen on the merged date order.
+                    var examined = OrderHits(hits, attachmentsOnly: false)
+                        .Take(ExamineLimit(page, pageSize)).ToList();
+                    hits = await WhereAttachmentsAsync(examined, cancellationToken);
+                }
+
                 // Filter (attachments) and sort BEFORE pagination. Under the post-filter only the
-                // bounded candidates were ever examined, so Total is "at least" what is counted
+                // budgeted candidates were ever examined, so Total is "at least" what is counted
                 // here; without it, SEARCH already said exactly how many match.
                 matches = OrderHits(hits, criteria.HasAttachment)
                     .Select(hit => (hit.Folder, hit.Uid)).ToList();
@@ -582,6 +598,30 @@ internal sealed class ImapSession : IImapSession
         if (take <= 0) return [];
 
         return take >= newestFirst.Count ? newestFirst : newestFirst.Take((int)take).ToList();
+    }
+
+    /// <summary>How many date-ordered hits the non-SORT attachment filter may examine.</summary>
+    internal static int ExamineLimit(int page, int pageSize) =>
+        (int)Math.Min(int.MaxValue, Math.Max((page + 1L) * pageSize, AttachmentScanBudget));
+
+    /// <summary>
+    /// Keeps the hits whose BODYSTRUCTURE shows an attachment — the non-SORT second phase,
+    /// fetched per folder for exactly the hits given, after the date merge chose them.
+    /// </summary>
+    private static async Task<List<SearchHit>> WhereAttachmentsAsync(
+        List<SearchHit> hits, CancellationToken cancellationToken)
+    {
+        var kept = new List<SearchHit>();
+        foreach (var group in hits.GroupBy(hit => hit.Folder))
+        {
+            await group.Key.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+            var keep = (await WithAttachmentsAsync(
+                group.Key, group.Select(hit => hit.Uid).ToList(), cancellationToken)).ToHashSet();
+            kept.AddRange(group.Where(hit => keep.Contains(hit.Uid))
+                .Select(hit => hit with { HasAttachment = true }));
+        }
+
+        return kept;
     }
 
     /// <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>

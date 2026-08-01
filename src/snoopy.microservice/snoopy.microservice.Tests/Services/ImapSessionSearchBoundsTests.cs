@@ -34,11 +34,14 @@ public sealed class ImapSessionSearchBoundsTests
     }
 
     [Fact]
-    public async Task SearchAsync_FetchesOnlyThePageWindowOfCandidatesOnTheMergePath()
+    public async Task SearchAsync_PagesByDateNotByUidWithoutSort()
     {
-        // No SORT capability forces the merge path even on a single folder — the path that used
-        // to fetch the envelope of every SEARCH match before paging.
-        using var server = new SearchBoundsImapServer(sort: false, searchUids: Enumerable.Range(1, 10));
+        // Rule 2: UID order is arrival-into-the-folder order, not date order. uid 3 was filed
+        // into this folder long ago (low UID) but carries the newest date — truncating to the
+        // highest UIDs before the date merge dropped it from its own result page.
+        using var server = new SearchBoundsImapServer(
+            sort: false, searchUids: Enumerable.Range(1, 10),
+            envelopeDates: new Dictionary<int, string> { [3] = "Sat, 01 Aug 2026 10:00:00 +0000" });
         server.Start();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var session = await ConnectedSessionAsync(server, cts.Token);
@@ -47,11 +50,12 @@ public sealed class ImapSessionSearchBoundsTests
 
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
 
-        // (page + 1) * pageSize = 2 candidates, taken UID-descending as the newest-first proxy.
-        Assert.Equal(new[] { 9u, 10u }, server.FetchedUidSets[0].OrderBy(uid => uid));
+        // Without SORT there is no order to bound by until the dates arrive: every match's
+        // merge key is fetched — items, never bodies.
+        Assert.Equal(10, server.FetchedUidSets[0].Count);
 
         Assert.Equal(10, result.Value.Total);
-        Assert.Equal(2, result.Value.Results.Count);
+        Assert.Equal(3u, result.Value.Results[0].Uid);
     }
 
     [Fact]
@@ -128,11 +132,11 @@ public sealed class ImapSessionSearchBoundsTests
 
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
 
-        // The pathological sweep is still cut: exactly the budget of newest candidates, no more.
-        var fetched = Assert.Single(server.FetchedUidSets);
-        Assert.Equal(ImapSession.AttachmentScanBudget, fetched.Count);
-        Assert.Equal(501u, fetched.Min());
-        Assert.Equal(2500u, fetched.Max());
+        // Without SORT the merge keys are fetched whole (items), then the pathological
+        // BODYSTRUCTURE sweep is still cut: exactly the budget of the newest, no more.
+        Assert.Equal(2, server.FetchedUidSets.Count);
+        Assert.Equal(2500, server.FetchedUidSets[0].Count);
+        Assert.Equal(ImapSession.AttachmentScanBudget, server.FetchedUidSets[1].Count);
     }
 
     [Fact]
@@ -168,13 +172,11 @@ internal sealed class SearchBoundsImapServer : IDisposable
     private readonly bool _sort;
     private readonly uint[] _searchUids;
     private readonly HashSet<uint> _attachmentUids;
+    private readonly Dictionary<uint, string> _envelopeDates;
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
 
-    private const string Envelope =
-        "(\"Sat, 01 Aug 2026 10:00:00 +0000\" \"Hi\" ((\"Alice\" NIL \"alice\" \"weesky.be\")) " +
-        "((\"Alice\" NIL \"alice\" \"weesky.be\")) ((\"Alice\" NIL \"alice\" \"weesky.be\")) " +
-        "((\"Bob\" NIL \"bob\" \"weesky.be\")) NIL NIL NIL \"<m@weesky.be>\")";
+    private const string DefaultDate = "Wed, 01 Jul 2026 10:00:00 +0000";
 
     private const string TextOnlyBodyStructure =
         "(\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 5 1 NIL NIL NIL NIL)";
@@ -185,11 +187,24 @@ internal sealed class SearchBoundsImapServer : IDisposable
         "(\"attachment\" (\"filename\" \"a.pdf\")) NIL NIL) " +
         "\"mixed\" (\"boundary\" \"b\") NIL NIL NIL)";
 
-    public SearchBoundsImapServer(bool sort, IEnumerable<int> searchUids, IEnumerable<int>? attachmentUids = null)
+    public SearchBoundsImapServer(
+        bool sort, IEnumerable<int> searchUids,
+        IEnumerable<int>? attachmentUids = null,
+        IReadOnlyDictionary<int, string>? envelopeDates = null)
     {
         _sort = sort;
         _searchUids = searchUids.Select(uid => (uint)uid).ToArray();
         _attachmentUids = (attachmentUids ?? []).Select(uid => (uint)uid).ToHashSet();
+        _envelopeDates = (envelopeDates ?? new Dictionary<int, string>())
+            .ToDictionary(pair => (uint)pair.Key, pair => pair.Value);
+    }
+
+    private string EnvelopeFor(uint uid)
+    {
+        var date = _envelopeDates.GetValueOrDefault(uid, DefaultDate);
+        return $"(\"{date}\" \"Hi\" ((\"Alice\" NIL \"alice\" \"weesky.be\")) " +
+               "((\"Alice\" NIL \"alice\" \"weesky.be\")) ((\"Alice\" NIL \"alice\" \"weesky.be\")) " +
+               $"((\"Bob\" NIL \"bob\" \"weesky.be\")) NIL NIL NIL \"<m{uid}@weesky.be>\")";
     }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -306,8 +321,8 @@ internal sealed class SearchBoundsImapServer : IDisposable
                         {
                             var structure = _attachmentUids.Contains(uid) ? AttachmentBodyStructure : TextOnlyBodyStructure;
                             await writer.WriteLineAsync(
-                                $"* {uid} FETCH (UID {uid} INTERNALDATE \"01-Aug-2026 10:00:00 +0000\" " +
-                                $"ENVELOPE {Envelope} BODYSTRUCTURE {structure})");
+                                $"* {uid} FETCH (UID {uid} INTERNALDATE \"01-Jul-2026 10:00:00 +0000\" " +
+                                $"ENVELOPE {EnvelopeFor(uid)} BODYSTRUCTURE {structure})");
                         }
                         await writer.WriteLineAsync($"{tag} OK FETCH completed");
                         break;
