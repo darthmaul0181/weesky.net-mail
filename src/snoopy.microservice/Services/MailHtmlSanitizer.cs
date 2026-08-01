@@ -28,12 +28,13 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     // 100 000 levels 43.6 s — so a guard on the parsed tree has already paid the cost.
     private const int MaxNestingDepth = 1024;
 
-    // Elements, which is what the cost is actually proportional to and what a character ceiling
-    // does not bound: 2M characters still hold ~175 000 of them, measured between 22.7 s and
-    // 71.5 s. Every pass here is per-element, so this is the ceiling that sets the worst case.
+    // Nodes, which is what the cost is actually proportional to and what a character ceiling does
+    // not bound: 2M characters hold ~175 000 elements, measured between 22.7 s and 71.5 s, or
+    // ~233 000 comments, measured at 55 s. Comments count because the parser builds a node for
+    // each and removing them is quadratic in siblings — an element-only ceiling never saw them.
     // 20 000 is 18× the densest newsletter measured and ~3× the heaviest body plausible at all,
     // which is the margin a hard cut earns: past it the reader sees an amputated message.
-    private const int MaxElementCount = 20_000;
+    private const int MaxNodeCount = 20_000;
 
     // Every serialisation AngleSharp can hand us: quoted either way, or bare.
     private static readonly Regex CssUrl = new(
@@ -243,8 +244,8 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     /// <summary>
     /// One pre-parse pass over the raw text bounding both dimensions the pipeline's cost rides on.
     /// Tags nesting past <see cref="MaxNestingDepth"/> are elided and their content kept — rule
-    /// 6(b)'s unwrap applied to depth — and the text is cut at the <see cref="MaxElementCount"/>th
-    /// element, degrading as the width ceiling does. Returns whether it cut, for
+    /// 6(b)'s unwrap applied to depth — and the text is cut at the <see cref="MaxNodeCount"/>th
+    /// node, degrading as the width ceiling does. Returns whether it cut, for
     /// <see cref="SanitizedHtml.Truncated"/>. What survives crosses the whole pipeline, so a
     /// miscount here costs layout, never safety.
     /// </summary>
@@ -253,7 +254,7 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         StringBuilder? capped = null;
         var copied = 0;
         var depth = 0;
-        var elements = 0;
+        var nodes = 0;
         var cut = -1;
         var i = 0;
 
@@ -264,7 +265,15 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 
             var (name, isEnd, end) = ReadTag(html, open);
             i = end;
-            if (name.Length == 0) continue;
+
+            if (name.Length == 0)
+            {
+                // A comment or a declaration is a node the parser builds and no element ceiling
+                // would ever see. `</1>` is one, and 233 000 of them measured 55 s where the same
+                // count of elements measured 0.5 s. A stray '<' is text, and text merges.
+                if (end > open + 1 && ++nodes > MaxNodeCount) { cut = open; break; }
+                continue;
+            }
 
             var opensLevel = !VoidTags.Contains(name) && !PeerTags.Contains(name);
             var elide = opensLevel
@@ -282,8 +291,9 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
                 continue;
             }
 
-            // Only what survives the depth cap reaches the parser, so only that is counted.
-            if (!isEnd && ++elements > MaxElementCount)
+            // Only what survives the depth cap reaches the parser, so only that is counted. An end
+            // tag builds nothing of its own.
+            if (!isEnd && ++nodes > MaxNodeCount)
             {
                 cut = open;
                 break;

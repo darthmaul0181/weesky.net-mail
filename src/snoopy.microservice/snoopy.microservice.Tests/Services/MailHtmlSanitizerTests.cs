@@ -516,6 +516,22 @@ public sealed class MailHtmlSanitizerTests
         Assert.Equal(20_000, Regex.Matches(result.Html, "<div>").Count);
     }
 
+    // A comment is a node the parser builds and an element ceiling never sees. 233 000 of them
+    // inside kept levels measured 55 s, against 0.5 s for the same count of elements: removing
+    // them is quadratic in siblings, so the ceiling has to count them too.
+    [Theory]
+    [InlineData("<div></1>")]
+    [InlineData("<div><!--x-->")]
+    public void Sanitize_BoundsTheCostOfACommentDenseBody(string unit)
+    {
+        var html = string.Concat(Enumerable.Repeat(unit, MailHtmlSanitizer.MaxInputLength / unit.Length));
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.Equal(1024, Regex.Matches(result.Html, "<div>").Count);
+    }
+
     // The cut keeps the leading part and flags it, exactly as the width ceiling does — and what
     // it keeps has still crossed every pass.
     [Fact]
