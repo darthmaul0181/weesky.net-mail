@@ -598,6 +598,36 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains("<div><p>hi</p></div>", result);
     }
 
+    // What survives the cap crosses the whole pipeline unchanged — the guard runs before it,
+    // never instead of it, so rule 6's three sub-rules still decide the outcome.
+    [Theory]
+    [InlineData("<script>alert(1)</script>", "alert(1)")]
+    [InlineData("<img src=x onerror=\"alert(1)\">", "onerror")]
+    [InlineData("<a href=\"javascript:alert(1)\">x</a>", "javascript:")]
+    [InlineData("<p style=\"border-image: url(https://evil.example/a.png)\">x</p>", "evil.example")]
+    [InlineData("<p style=\"background-image: \\75 rl(https://evil.example/a.png)\">x</p>", "evil.example")]
+    public void Sanitize_StillStripsHostileContentJustInsideTheCap(string hostile, string forbidden)
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 1_000)) + hostile;
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain(forbidden, result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Sanitize_StillWithholdsARemoteBackgroundJustInsideTheCap()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 1_000))
+                   + "<p style=\"background-image: url(https://cdn.example/logo.png)\">x</p>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/logo.png\"", result.Html);
+        Assert.DoesNotContain("url(", result.Html);
+    }
+
     // The cap runs before the pipeline, never instead of it.
     [Theory]
     [InlineData("<script>alert(1)</script>", "alert(1)")]
