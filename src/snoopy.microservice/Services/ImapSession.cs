@@ -4,6 +4,7 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
 using MimeKit;
+using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
@@ -726,14 +727,26 @@ internal sealed class ImapSession : IImapSession
 
             var summaries = await folder.FetchAsync(
                 new[] { uniqueId },
-                MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.BodyStructure,
+                MessageSummaryItems.UniqueId | MessageSummaryItems.BodyStructure,
                 cancellationToken);
 
             var summary = summaries.FirstOrDefault();
             if (summary == null) return Result.Failure<MailMessageDetail>(MessageNotFound);
 
-            var message = await folder.GetMessageAsync(uniqueId, cancellationToken);
-            var sanitized = _sanitizer.Sanitize(message.HtmlBody ?? string.Empty);
+            // Never BODY.PEEK[] here: the whole-message fetch pulled every attachment over the
+            // wire to render a few KB of body. BODYSTRUCTURE names the text parts, so only those
+            // and the header block are fetched; attachments stay on the server until clicked.
+            var headers = await folder.GetHeadersAsync(uniqueId, cancellationToken);
+            var message = ToHeaderOnlyMessage(headers);
+
+            var htmlBody = summary.HtmlBody is { } htmlPart
+                ? await ReadTextPartAsync(folder, uniqueId, htmlPart, cancellationToken)
+                : null;
+            var textBody = summary.TextBody is { } textPart
+                ? await ReadTextPartAsync(folder, uniqueId, textPart, cancellationToken)
+                : null;
+
+            var sanitized = _sanitizer.Sanitize(htmlBody ?? string.Empty);
             var sender = message.From?.Mailboxes?.FirstOrDefault();
             var headerDetails = MailHeaderDetailsReader.Parse(message.Headers);
 
@@ -749,7 +762,7 @@ internal sealed class ImapSession : IImapSession
                 Cc = ToAddressInfos(message.Cc),
                 Date = message.Date,
                 HtmlBody = sanitized.Html,
-                TextBody = message.TextBody ?? string.Empty,
+                TextBody = textBody ?? string.Empty,
                 BlockedImageCount = sanitized.BlockedImageCount,
                 Truncated = sanitized.Truncated,
                 Authentication = MailAuthenticationReader.Parse(message.Headers),
@@ -784,6 +797,47 @@ internal sealed class ImapSession : IImapSession
             "Unable to read the message",
             ex => _logger.LogError(ex, "Failed to read message {Uid} in {Folder}", uid, folderPath),
             FolderOrMessageSentinel);
+
+    /// <summary>
+    /// Rehydrates a fetched header block into a MimeMessage, so every header-derived field —
+    /// envelope, threading (In-Reply-To/References), the four readers — keeps MimeKit's exact
+    /// decoding, byte-identical to when the whole message was downloaded and parsed.
+    /// </summary>
+    internal static MimeMessage ToHeaderOnlyMessage(HeaderList headers)
+    {
+        using var buffer = new MemoryStream();
+        headers.WriteTo(buffer);
+        buffer.Position = 0;
+        return MimeMessage.Load(buffer);
+    }
+
+    /// <summary>
+    /// IMAP spells "the body of a non-multipart message" TEXT, not an empty section — an empty
+    /// section is the whole RFC822 message, headers included.
+    /// </summary>
+    internal static string SectionOf(BodyPartBasic part) =>
+        part.PartSpecifier.Length == 0 ? "TEXT" : part.PartSpecifier;
+
+    /// <summary>
+    /// Fetches one text part by its specifier and decodes it the way MimeKit decodes a parsed
+    /// message's body — same transfer decoding, same charset handling and fallbacks — so a
+    /// quoted-printable accented body reads exactly as it did off the whole-message fetch.
+    /// </summary>
+    private static async Task<string> ReadTextPartAsync(
+        IMailFolder folder, UniqueId uniqueId, BodyPartText part, CancellationToken cancellationToken)
+    {
+        using var encoded = await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
+        MimeUtils.TryParse(part.ContentTransferEncoding, out ContentEncoding encoding);
+
+        var textPart = new TextPart(part.ContentType.MediaSubtype)
+        {
+            Content = new MimeContent(encoded, encoding)
+        };
+        foreach (var parameter in part.ContentType.Parameters)
+            textPart.ContentType.Parameters[parameter.Name] = parameter.Value;
+
+        return textPart.Text;
+    }
 
     /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
     public Task<Result<MimeMessage>> GetMimeMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>

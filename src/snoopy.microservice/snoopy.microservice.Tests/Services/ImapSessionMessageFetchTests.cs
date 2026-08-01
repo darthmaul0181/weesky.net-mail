@@ -25,9 +25,7 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 /// </summary>
 public sealed class ImapSessionMessageFetchTests
 {
-    [Fact(Skip = "Red by design — pins the wave 2 defect: GetMessageAsync issues " +
-                 "'UID FETCH <uid> (BODY.PEEK[])' and pulls every attachment to render the body. " +
-                 "Remove this Skip with the fix (fetch the text parts by specifier + one header fetch).")]
+    [Fact]
     public async Task GetMessageAsync_DoesNotDownloadTheWholeMessage()
     {
         using var server = new MessageFetchImapServer();
