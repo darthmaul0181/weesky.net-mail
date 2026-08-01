@@ -4,6 +4,7 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
 using MimeKit;
+using MimeKit.IO;
 using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Models.Mail;
 
@@ -965,23 +966,21 @@ internal sealed class ImapSession : IImapSession
                 .FirstOrDefault(p => string.Equals(p.PartSpecifier, partSpecifier, StringComparison.Ordinal));
             if (part == null) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
 
-            var entity = await folder.GetBodyPartAsync(uniqueId, part, cancellationToken);
-            if (entity is not MimePart mimePart) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
+            // Verified on MailKit 4.17: every Get* materialises the literal into a backing stream
+            // before returning — there is no socket-to-response path. GetStreamAsync still beats
+            // GetBodyPartAsync: no [n.MIME] sub-fetch, no MimeParser pass, and BODYSTRUCTURE in
+            // hand already says how to decode. Decoding lands in MemoryBlockStream — seekable for
+            // Content-Length, pooled 2 KB blocks, so no large-object-heap buffer and no resizing.
+            using var encoded = await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
+            MimeUtils.TryParse(part.ContentTransferEncoding, out ContentEncoding encoding);
 
-            // A part with no content is not an attachment we can serve, decoded or otherwise.
-            if (mimePart.Content == null) return Result.Failure<MailAttachmentContent>(AttachmentNotFound);
-
-            // GetBodyPartAsync has already materialised the part, so this decodes an in-memory
-            // entity rather than the socket — MailKit exposes no true socket-to-response path.
-            // What it does avoid is the ToArray() that used to follow: the buffer is handed over
-            // as-is instead of being copied a second time into a byte[] on the large object heap.
-            var buffer = new MemoryStream();
-            await mimePart.Content.DecodeToAsync(buffer, cancellationToken);
-            buffer.Position = 0;
+            var decoded = new MemoryBlockStream();
+            await new MimeContent(encoded, encoding).DecodeToAsync(decoded, cancellationToken);
+            decoded.Position = 0;
 
             return Result.Success(new MailAttachmentContent
             {
-                Content = buffer,
+                Content = decoded,
                 FileName = string.IsNullOrEmpty(part.FileName) ? "attachment" : part.FileName,
                 ContentType = part.ContentType?.MimeType ?? "application/octet-stream"
             });
