@@ -881,6 +881,28 @@ public sealed class AdminRepositoryTests
         Assert.Contains(result[0].Owners, o => o.OwnerEmail == "bob@weesky.be");
     }
 
+    // The four cases of "not primary, or owned" in one call: each domain must be judged on its
+    // own rows, never on another domain's.
+    [Fact]
+    public async Task GetAllVirtualDomains_JudgesEachDomainOnItsOwnRows()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx, "WSY", "weesky.be");
+        AddDomain(ctx, "PRI", "primary-owned.be");
+        AddDomain(ctx, "EXT", "extra.com");
+        AddDomain(ctx, "ALS", "alias-owned.com");
+        var alice = AddUser(ctx, "alice", "WSY");
+        AddUser(ctx, "bob", "PRI");
+        AddOwnership(ctx, "PRI", alice.Id);
+        AddOwnership(ctx, "ALS", alice.Id);
+
+        var result = (await CreateRepository(ctx).GetAllVirtualDomainsAsync()).ToList();
+
+        Assert.Equal(["ALS", "EXT", "PRI"], result.Select(d => d.DomainId).Order());
+        Assert.Empty(result.Single(d => d.DomainId == "EXT").Owners);
+        Assert.Equal("alice@weesky.be", result.Single(d => d.DomainId == "PRI").Owners.Single().OwnerEmail);
+    }
+
     // ── AddVirtualDomainOwner ──────────────────────────────────────
 
     [Fact]

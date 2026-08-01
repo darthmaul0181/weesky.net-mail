@@ -230,14 +230,13 @@ internal sealed class AdminRepository(
 
     public async Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync()
     {
-        var primaryDomainIds = (await context.Users.Select(u => u.DomainId).Distinct().ToListAsync()).ToHashSet();
-        var ownedDomainIds = (await context.DomainsOwnerships.Select(o => o.DomainId).ToListAsync()).ToHashSet();
-
-        var aliasDomains = (await context.Domains
-                .Select(d => new { d.Id, d.Name })
-                .ToListAsync())
-            .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
-            .ToList();
+        // "No mailbox lives here, or someone was given it" as two EXISTS: the equivalent client-side
+        // filter read the whole users and ownerships tables to answer it.
+        var aliasDomains = await context.Domains
+            .Where(d => !context.Users.Any(u => u.DomainId == d.Id) ||
+                        context.DomainsOwnerships.Any(o => o.DomainId == d.Id))
+            .Select(d => new { d.Id, d.Name })
+            .ToListAsync();
 
         // One query for every owner, grouped in memory: the per-domain lookup this replaces
         // issued a round trip per alias domain.
