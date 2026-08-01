@@ -177,6 +177,25 @@ public sealed class AdminRepositoryTests
         Assert.Equal("lmtp", logins[1].Service);
     }
 
+    // The admin list is a read: materialising the rows as tracked entities would pull every
+    // password into the change tracker and keep it alive for the whole request.
+    [Fact]
+    public async Task GetAllUsers_TracksNothing()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx, "WSY", "weesky.be");
+        AddUser(ctx, "alice", "WSY");
+        ctx.LastLogins.Add(new LastLogin { UserId = "alice@weesky.be", Service = "imap", LastAccess = 1 });
+        ctx.SaveChanges();
+        ctx.ChangeTracker.Clear();
+
+        await CreateRepository(ctx).GetAllUsersAsync();
+
+        Assert.Empty(ctx.ChangeTracker.Entries<MailUser>());
+        Assert.Empty(ctx.ChangeTracker.Entries<LastLogin>());
+        Assert.Empty(ctx.ChangeTracker.Entries<MailDomain>());
+    }
+
     // ── GetUserById ───────────────────────────────────────
 
     [Fact]

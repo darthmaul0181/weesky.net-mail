@@ -36,23 +36,25 @@ internal sealed class AdminRepository : IAdminRepository
 
     public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync()
     {
-        var users = await (from user in _context.Users
+        // Projected, not materialised as entities: the admin list needs eight columns and the
+        // password is not one of them, so it never reaches memory or the change tracker.
+        var users = await (from user in _context.Users.AsNoTracking()
                            join domain in _context.Domains on user.DomainId equals domain.Id
-                           select new { user, domainName = domain.Name })
+                           select new AdminUserRow(user.Id, user.Name, user.DomainId, domain.Name,
+                               user.FullName, user.QuotaMb, user.Active, user.Admin))
             .ToListAsync();
 
         // LastLogins keys on the full email; only fetch rows for users we are returning
         // (skips stale rows of deleted accounts instead of loading the whole table).
-        var emails = users.Select(x => x.user.Name + "@" + x.domainName).ToList();
-        var loginsByUser = (await _context.LastLogins
+        var emails = users.Select(u => u.Email).ToList();
+        var loginsByUser = (await _context.LastLogins.AsNoTracking()
                 .Where(l => emails.Contains(l.UserId))
                 .ToListAsync())
             .GroupBy(l => l.UserId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         return users
-            .Select(x => MapToAdminUserInfo(x.user, x.domainName,
-                BuildLastLogins(loginsByUser, $"{x.user.Name}@{x.domainName}")))
+            .Select(u => u.ToInfo(BuildLastLogins(loginsByUser, u.Email)))
             .ToList();
     }
 
@@ -284,19 +286,28 @@ internal sealed class AdminRepository : IAdminRepository
 
     private static ActiveState State(bool on) => on ? ActiveState.Y : ActiveState.N;
 
-    private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null)
+    private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null) =>
+        new AdminUserRow(user.Id, user.Name, user.DomainId, domainName,
+            user.FullName, user.QuotaMb, user.Active, user.Admin).ToInfo(lastLogins);
+
+    /// <summary>The columns <see cref="AdminUserInfo"/> is built from, and nothing else.</summary>
+    private sealed record AdminUserRow(
+        int Id, string Name, string DomainId, string DomainName,
+        string? FullName, int QuotaMb, ActiveState Active, ActiveState Admin)
     {
-        return new AdminUserInfo
+        public string Email => $"{Name}@{DomainName}";
+
+        public AdminUserInfo ToInfo(List<LastLoginEntry>? lastLogins = null) => new()
         {
-            Id = user.Id,
-            UserName = user.Name,
-            DomainId = user.DomainId,
-            DomainName = domainName,
-            FullName = user.FullName,
-            QuotaMb = user.QuotaMb,
-            Active = user.Active == ActiveState.Y,
-            Admin = user.Admin == ActiveState.Y,
-            LastLogins = lastLogins ?? new List<LastLoginEntry>()
+            Id = Id,
+            UserName = Name,
+            DomainId = DomainId,
+            DomainName = DomainName,
+            FullName = FullName,
+            QuotaMb = QuotaMb,
+            Active = Active == ActiveState.Y,
+            Admin = Admin == ActiveState.Y,
+            LastLogins = lastLogins ?? []
         };
     }
 
