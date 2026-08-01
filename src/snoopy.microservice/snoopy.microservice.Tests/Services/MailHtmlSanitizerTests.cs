@@ -655,6 +655,79 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains("<div><p>hi</p></div>", result);
     }
 
+    // Where a tag name ends is the one thing the scan and the tokeniser must agree on for every
+    // input. Each of these reads as a name the scan once acted on and the tokeniser never emits,
+    // and each left the scan seeing no depth at all while the parser built the whole tree:
+    // <script_x> as raw-text `script` whose skip swallowed the document, <br_x> as a void tag,
+    // <p_x> as a peer, </1> as an end tag closing a level nothing opened, and the two comment
+    // terminators the scan did not know, which skipped every element up to the next `-->`.
+    [Theory]
+    [InlineData("<script_x>")]
+    [InlineData("<style:x>")]
+    [InlineData("<iframe.x>")]
+    [InlineData("<textarea1>")]
+    [InlineData("<!-- x --!>")]
+    [InlineData("<!-->")]
+    [InlineData("<!--->")]
+    public void Sanitize_DoesNotLetAPrefixThatOnlyLooksKnownHideTheDocument(string prefix)
+    {
+        var html = prefix + string.Concat(Enumerable.Repeat("<div>", 60_000)) + "deep";
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = _sut.Sanitize(html).Html;
+
+        // 1023 where the prefix is an element the parser nests — it holds the first level itself —
+        // and 1024 where it is a comment, which opens nothing.
+        Assert.Contains("deep", result);
+        Assert.InRange(Regex.Matches(result, "<div>").Count, 1023, 1024);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"took {stopwatch.Elapsed}");
+    }
+
+    [Theory]
+    [InlineData("<br_x>")]
+    [InlineData("<p_x>")]
+    [InlineData("<td:x>")]
+    [InlineData("<div></1>")]
+    public void Sanitize_CountsDepthATagOnlyLookingLikeAVoidPeerOrEndTagWouldHide(string unit)
+    {
+        var html = string.Concat(Enumerable.Repeat(unit, 60_000)) + "deep";
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("deep", result);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"took {stopwatch.Elapsed}");
+    }
+
+    // The tokeniser's whitespace set, not Unicode's: a no-break space does not separate
+    // attributes, so a quote after one opens no value and the tag still ends at its first '>'.
+    [Fact]
+    public void Sanitize_DoesNotLetANoBreakSpaceOpenAnAttributeValue()
+    {
+        var html = "<div title= \"x><p>hi</p>\">" + string.Concat(Enumerable.Repeat("<div>", 5_000)) + "deep";
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("hi", result);
+        Assert.Contains("deep", result);
+        Assert.InRange(Regex.Matches(result, "<div>").Count, 1023, 1024);
+    }
+
+    // Conditional comments carry markup Outlook alone reads. It is comment text to everyone else,
+    // and reading it as elements would spend a real message's depth and element budget on it.
+    [Fact]
+    public void Sanitize_TreatsAConditionalCommentAsComment()
+    {
+        var html = "<!--[if mso]>" + string.Concat(Enumerable.Repeat("<table><tr><td>x</td></tr></table>", 500))
+                   + "<![endif]--><p>hi</p>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.False(result.Truncated);
+        Assert.Contains("<p>hi</p>", result.Html);
+        Assert.DoesNotContain("<table>", result.Html);
+    }
+
     // What survives the cap crosses the whole pipeline unchanged — the guard runs before it,
     // never instead of it, so rule 6's three sub-rules still decide the outcome.
     [Theory]

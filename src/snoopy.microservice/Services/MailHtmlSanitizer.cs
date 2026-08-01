@@ -295,30 +295,38 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 
     /// <summary>
     /// Reads the tag opening at <paramref name="open"/>, returning its name — empty for a comment,
-    /// a doctype or a stray <c>&lt;</c> — and the index just past the token.
+    /// a declaration, a bogus comment or a stray <c>&lt;</c> — and the index just past the token.
     /// </summary>
+    /// <remarks>
+    /// Every boundary here is the tokeniser's, because the two must agree on where a name ends for
+    /// every input, not merely for well-formed ones. Reading a name as shorter than the tokeniser
+    /// does is what let <c>&lt;script_x&gt;</c> pass as a raw-text <c>script</c>, whose skip then
+    /// swallowed the document the parser went on to build. The same shortening made
+    /// <c>&lt;br_x&gt;</c> read as a void tag and <c>&lt;p_x&gt;</c> as a peer, both uncounted,
+    /// and <c>&lt;/1&gt;</c> — a bogus comment — read as an end tag closing a level nothing opened.
+    /// </remarks>
     private static (string Name, bool IsEnd, int End) ReadTag(string html, int open)
     {
         var i = open + 1;
         if (i >= html.Length) return (string.Empty, false, html.Length);
 
-        if (html.AsSpan(i).StartsWith("!--"))
-        {
-            var close = html.IndexOf("-->", i, StringComparison.Ordinal);
-            return (string.Empty, false, close < 0 ? html.Length : close + 3);
-        }
+        if (html.AsSpan(i).StartsWith("!--")) return (string.Empty, false, EndOfComment(html, i + 3));
 
-        if (html[i] is '!' or '?') return (string.Empty, false, EndOfTag(html, i));
+        // Doctype or processing instruction: consumed to the next '>', nothing emitted.
+        if (html[i] is '!' or '?') return (string.Empty, false, EndOfDeclaration(html, i));
 
         var isEnd = html[i] == '/';
         if (isEnd) i++;
 
-        var start = i;
-        while (i < html.Length && (char.IsLetterOrDigit(html[i]) || html[i] == '-')) i++;
+        // Only an ASCII letter opens a tag. Anything else after '<' is literal text, and after
+        // '</' a bogus comment — neither reaches the tree, so neither may move the counters.
+        if (i >= html.Length || !char.IsAsciiLetter(html[i]))
+            return (string.Empty, false, isEnd ? EndOfDeclaration(html, i) : open + 1);
 
-        return i == start
-            ? (string.Empty, false, open + 1)
-            : (html[start..i], isEnd, EndOfTag(html, i));
+        var start = i;
+        while (i < html.Length && !IsHtmlSpace(html[i]) && html[i] is not ('/' or '>')) i++;
+
+        return (html[start..i], isEnd, EndOfTag(html, i));
     }
 
     /// Index just past the '>' closing the tag, skipping quoted attribute values. A quote opens
@@ -348,18 +356,58 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 
             if (c == '>') return i + 1;
             if (c == '=') afterEquals = true;
-            else if (!char.IsWhiteSpace(c)) afterEquals = false;
+            else if (!IsHtmlSpace(c)) afterEquals = false;
         }
 
         return html.Length;
     }
 
-    // Stops on the closing tag rather than past it, so the caller still counts it down.
+    // A comment closes on `-->` and on `--!>`, and the degenerate `<!-->` / `<!--->` on their own
+    // '>'. Missing any of them would skip to the next `-->` — past markup the parser still builds.
+    private static int EndOfComment(string html, int i)
+    {
+        if (i < html.Length && html[i] == '>') return i + 1;
+        if (i + 1 < html.Length && html[i] == '-' && html[i + 1] == '>') return i + 2;
+
+        for (var d = html.IndexOf("--", i, StringComparison.Ordinal); d >= 0;
+             d = html.IndexOf("--", d + 1, StringComparison.Ordinal))
+        {
+            if (d + 2 < html.Length && html[d + 2] == '>') return d + 3;
+            if (d + 3 < html.Length && html[d + 2] == '!' && html[d + 3] == '>') return d + 4;
+        }
+
+        return html.Length;
+    }
+
+    // A doctype, a processing instruction or a bogus comment: consumed to the next '>' with
+    // nothing special inside it, quotes included.
+    private static int EndOfDeclaration(string html, int i)
+    {
+        var close = html.IndexOf('>', i);
+        return close < 0 ? html.Length : close + 1;
+    }
+
+    /// Stops on the element's own end tag rather than past it, so the caller still counts it down.
+    /// Raw text closes only on <c>&lt;/name</c> followed by whitespace, '/' or '>', so
+    /// <c>&lt;/scriptx&gt;</c> does not close a script: stopping there would read the rest of the
+    /// script's text as markup, and a sender could spend `&lt;/div&gt;` in it to cancel real depth.
     private static int SkipRawText(string html, string name, int from)
     {
-        var close = html.IndexOf($"</{name}", from, StringComparison.OrdinalIgnoreCase);
-        return close < 0 ? html.Length : close;
+        var close = $"</{name}";
+
+        for (var i = html.IndexOf(close, from, StringComparison.OrdinalIgnoreCase); i >= 0;
+             i = html.IndexOf(close, i + 2, StringComparison.OrdinalIgnoreCase))
+        {
+            var after = i + close.Length;
+            if (after >= html.Length || IsHtmlSpace(html[after]) || html[after] is '/' or '>') return i;
+        }
+
+        return html.Length;
     }
+
+    // The tokeniser's whitespace, not Unicode's: a no-break space does not separate attributes,
+    // so treating it as one would let a quote open a value where the tokeniser reads a character.
+    private static bool IsHtmlSpace(char c) => c is '\t' or '\n' or '\f' or '\r' or ' ';
 
     // The CSS parser resolves escapes before the withholding pass sees them, so `\75 rl(` would
     // reach it spelled plainly and be treated as a genuine url(). Dropping such a declaration
