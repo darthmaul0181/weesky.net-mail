@@ -118,8 +118,14 @@ export function useMessages(
     queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize),
     queryFn: ({ signal }) => api.getMailMessages(folderPath, page, pageSize, { signal, accountId }),
     enabled: enabled && folderPath !== null,
-    // Keeps the current page on screen while the next one loads, instead of flashing empty.
-    placeholderData: (previous) => previous,
+    // Keeps the current page on screen while the next one loads, instead of flashing empty — but
+    // only between pages of one folder in one mailbox. Held across either, it shows somebody
+    // else's mail under this heading, which is the one wrong state a reader cannot tell from a
+    // right one; the streaming mode has no placeholder at all and is what this now matches.
+    placeholderData: (previous, previousQuery) => {
+      const key = previousQuery?.queryKey as readonly unknown[] | undefined
+      return key?.[1] === accountId && key?.[3] === (folderPath ?? '') ? previous : undefined
+    },
   })
 }
 

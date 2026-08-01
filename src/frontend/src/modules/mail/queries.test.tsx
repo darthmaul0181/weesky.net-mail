@@ -226,6 +226,52 @@ describe('account scoping on the wire', () => {
       expect.objectContaining({ accountId: 'linked-1' }))
   })
 
+  // The placeholder exists so paging does not flash empty. Carried across a mailbox it shows one
+  // account's mail under another's heading — worse than the empty it was avoiding, and the one
+  // thing a reader cannot tell apart from real data.
+  it('does not hold the previous account page on screen while the new one loads', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    const { wrapper } = createWrapper()
+    const { result, rerender } = renderHook(() => useMessages('INBOX', 0, 30), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    mocks.getMailMessages.mockImplementation(() => new Promise(() => {}))
+    auth.activeAccountId = 'linked-1'
+    rerender()
+
+    expect(result.current.data).toBeUndefined()
+  })
+
+  // Same reason, one step closer: another folder's mail under this folder's name is the same lie.
+  it('does not hold the previous folder page on screen while the new one loads', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    const { wrapper } = createWrapper()
+    const { result, rerender } = renderHook(
+      ({ folder }: { folder: string }) => useMessages(folder, 0, 30),
+      { wrapper, initialProps: { folder: 'INBOX' } })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    mocks.getMailMessages.mockImplementation(() => new Promise(() => {}))
+    rerender({ folder: 'Archive' })
+
+    expect(result.current.data).toBeUndefined()
+  })
+
+  // What the placeholder is actually for: the next page of the same folder, same mailbox.
+  it('keeps the current page on screen while the next page of the same folder loads', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 60))
+    const { wrapper } = createWrapper()
+    const { result, rerender } = renderHook(
+      ({ page }: { page: number }) => useMessages('INBOX', page, 30),
+      { wrapper, initialProps: { page: 0 } })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    mocks.getMailMessages.mockImplementation(() => new Promise(() => {}))
+    rerender({ page: 1 })
+
+    expect(result.current.data?.messages.map(m => m.uid)).toEqual([1])
+  })
+
   // The subtle one: a write is aimed at the mailbox it was fired from. Switching while it is in
   // flight must not redirect a STORE already on the wire into the other account's folder.
   it('fires useSetFlags with the account it was rendered under, even after a switch', async () => {
