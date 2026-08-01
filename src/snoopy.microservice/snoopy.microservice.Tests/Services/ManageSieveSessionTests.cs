@@ -231,6 +231,30 @@ public sealed class ManageSieveSessionTests
         Assert.Equal("LOGOUT\r\n", stream.ClientWritesAsString);
     }
 
+    /// <summary>
+    /// QuoteName guards the outbound path, so a hostile server can still hand us a name carrying
+    /// CRLF through a literal — the listing reads it verbatim. What must hold is that replaying it
+    /// cannot become a second command: the guard fires before a byte is written, so the socket has
+    /// seen nothing but the original LISTSCRIPTS.
+    /// </summary>
+    [Fact]
+    public async Task ANameListedWithAControlCharacter_CannotBeReplayedOntoTheWire()
+    {
+        const string hostile = "evil\r\nDELETESCRIPT \"weesky-rules\"";
+        var server = $"{{{Encoding.UTF8.GetByteCount(hostile)}+}}\r\n{hostile}\r\nOK\r\n";
+        var sut = CreateSut(server, out var stream);
+
+        var listed = await sut.ListScriptsAsync();
+        Assert.True(listed.IsSuccess);
+        Assert.Equal(hostile, Assert.Single(listed.Value).Name);
+
+        var replay = await sut.DeleteScriptAsync(listed.Value[0].Name);
+
+        Assert.True(replay.IsFailure);
+        Assert.Contains("control character", replay.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("LISTSCRIPTS\r\n", stream.ClientWritesAsString);
+    }
+
     // ----- Server-driven allocation -----
 
     /// <summary>
