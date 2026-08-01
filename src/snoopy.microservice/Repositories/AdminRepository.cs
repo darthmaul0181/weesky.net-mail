@@ -44,13 +44,18 @@ internal sealed class AdminRepository(
         return isAdmin;
     }
 
+    /// <summary>
+    /// The domain resolves to a single row, as the two-step lookup this replaces did: joining every
+    /// row bearing the name would let an admin namesake in a second one answer for this account.
+    /// </summary>
+    internal static IQueryable<bool> AdminFlagQuery(ApplicationDbContext context, string username, string domainName) =>
+        context.Users.AsNoTracking()
+            .Where(u => u.DomainId == context.Domains.Where(d => d.Name == domainName).Select(d => d.Id).FirstOrDefault() &&
+                        string.Equals(u.Name, username, StringComparison.InvariantCultureIgnoreCase))
+            .Select(u => u.Admin == ActiveState.Y);
+
     private Task<bool> ReadAdminFlagAsync(string username, string domainName) =>
-        (from user in context.Users.AsNoTracking()
-         join domain in context.Domains on user.DomainId equals domain.Id
-         where domain.Name == domainName &&
-               string.Equals(user.Name, username, StringComparison.InvariantCultureIgnoreCase)
-         select user.Admin == ActiveState.Y)
-        .FirstOrDefaultAsync();
+        AdminFlagQuery(context, username, domainName).FirstOrDefaultAsync();
 
     public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync()
     {

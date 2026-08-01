@@ -121,6 +121,28 @@ public sealed class AdminRepositoryTests
         Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
     }
 
+    // domains.name carries no unique constraint, so exactly one domain row may decide the answer:
+    // resolved across all rows bearing the name, an admin in one grants the role to a namesake in
+    // another. The expected value is read through that same one-row rule rather than fixed here.
+    [Fact]
+    public async Task IsAdmin_ResolvesThroughASingleDomainRow()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx, "WSY", "weesky.be");
+        AddDomain(ctx, "DUP", "weesky.be");
+        var first = AddUser(ctx, "alice", "WSY");
+        var second = AddUser(ctx, "alice", "DUP");
+
+        // The admin is put in whichever row the name does *not* resolve to, so the answer is False
+        // on any provider and the demonstration does not rest on insertion order.
+        var resolved = ctx.Domains.Where(d => d.Name == "weesky.be").Select(d => d.Id).First();
+        first.Admin = first.DomainId == resolved ? ActiveState.N : ActiveState.Y;
+        second.Admin = second.DomainId == resolved ? ActiveState.N : ActiveState.Y;
+        ctx.SaveChanges();
+
+        Assert.False(await CreateRepository(ctx).IsAdminAsync("alice", "weesky.be"));
+    }
+
     // The window is the whole bound on a demotion this process never sees, so it is asserted from
     // both sides: reused before it elapses, re-read after.
     [Fact]
