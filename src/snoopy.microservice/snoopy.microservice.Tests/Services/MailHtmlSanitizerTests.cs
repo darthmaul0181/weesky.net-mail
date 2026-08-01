@@ -502,6 +502,65 @@ public sealed class MailHtmlSanitizerTests
         Assert.Contains("hi", result.Html);
     }
 
+    // The width ceiling bounds characters; the pipeline's cost is proportional to elements.
+    // 2M characters of <div>x</div> is ~175 000 of them, measured between 22.7 s and 71.5 s
+    // with the width ceiling alone in place.
+    [Fact]
+    public void Sanitize_BoundsTheCostOfAnElementDenseBody()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>x</div>", MailHtmlSanitizer.MaxInputLength / 12));
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.Equal(10_000, Regex.Matches(result.Html, "<div>").Count);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
+    }
+
+    // The cut keeps the leading part and flags it, exactly as the width ceiling does — and what
+    // it keeps has still crossed every pass.
+    [Fact]
+    public void Sanitize_CutsAtTheElementCeilingAndStillSanitisesWhatItKeeps()
+    {
+        var html = "<script>alert(1)</script><p>hi</p>"
+                   + string.Concat(Enumerable.Repeat("<div>x</div>", 30_000))
+                   + "<img src=\"https://tail.example/z.png\">";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.Contains("hi", result.Html);
+        Assert.DoesNotContain("alert", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tail.example", result.Html);
+    }
+
+    [Fact]
+    public void Sanitize_DoesNotCutAnOrdinaryElementCount()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>x</div>", 2_000));
+
+        var result = _sut.Sanitize(html);
+
+        Assert.False(result.Truncated);
+        Assert.Equal(2_000, Regex.Matches(result.Html, "<div>").Count);
+    }
+
+    // A tag that closes a peer is a sibling, not a level. Counted as a level, 1024 unclosed
+    // paragraphs or table cells would flatten the rest of a perfectly ordinary newsletter.
+    [Theory]
+    [InlineData("<p>", "<p>")]
+    [InlineData("<tr><td>x", "<td>")]
+    public void Sanitize_DoesNotReadAPeerTagAsALevel(string unit, string expected)
+    {
+        var html = "<table>" + string.Concat(Enumerable.Repeat(unit, 3_000)) + "</table>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.False(result.Truncated);
+        Assert.Equal(3_000, Regex.Matches(result.Html, expected).Count);
+    }
+
     // AngleSharp's tree construction is superlinear in nesting depth: measured on this runtime,
     // parsing 50 000 nested divs takes 6.5 s and 100 000 takes 43.6 s, and the pipeline parses
     // three times. 200 000 levels fit in a body a sender chooses freely.
@@ -563,10 +622,8 @@ public sealed class MailHtmlSanitizerTests
 
         var result = _sut.Sanitize(html).Html;
 
-        // 1023, not 1024: the <p> holds the first level of the count. The scan is a counter,
-        // not a tree — it never sees the parser close that <p> when the first <div> opens.
         Assert.Contains("deep", result);
-        Assert.Equal(1023, Regex.Matches(result, "<div>").Count);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
     }
 
     [Fact]
@@ -634,7 +691,8 @@ public sealed class MailHtmlSanitizerTests
     [InlineData("<style>body{color:red}</style>", "color:red")]
     [InlineData("<img src=x onerror=\"alert(1)\">", "onerror")]
     [InlineData("<a href=\"javascript:alert(1)\">x</a>", "javascript:")]
-    [InlineData("<p style=\"background-image:url(https://evil.example/a.png)\">x</p>", "evil.example")]
+    [InlineData("<p style=\"border-image: url(https://evil.example/a.png)\">x</p>", "evil.example")]
+    [InlineData("<p style=\"background-image: \\75 rl(https://evil.example/a.png)\">x</p>", "evil.example")]
     public void Sanitize_StillStripsHostileContentBuriedPastTheCap(string hostile, string forbidden)
     {
         var html = string.Concat(Enumerable.Repeat("<div>", 5_000)) + hostile;
@@ -642,6 +700,21 @@ public sealed class MailHtmlSanitizerTests
         var result = _sut.Sanitize(html).Html;
 
         Assert.DoesNotContain(forbidden, result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // A peer tag is never elided, so an over-deep document still carries elements the CSS pass
+    // must judge: a remote background there is withheld, not left fetchable in the style.
+    [Fact]
+    public void Sanitize_StillWithholdsARemoteBackgroundPastTheCap()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 5_000))
+                   + "<p style=\"background-image: url(https://cdn.example/logo.png)\">x</p>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/logo.png\"", result.Html);
+        Assert.DoesNotContain("url(", result.Html);
     }
 
     // A withheld URL is meant to appear in data-blocked-bg; what must never appear is the URL

@@ -13,15 +13,25 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     private const string BlockedSrcAttribute = "data-blocked-src";
     private const string BlockedBackgroundAttribute = "data-blocked-bg";
 
-    // The pipeline builds three DOM trees plus two serialisations, and ImapSession feeds it
-    // attacker-chosen bodies of arbitrary size. 2M chars (~4 MB of UTF-16) is far above any
-    // legitimate mail body — images travel as MIME parts, not markup — and bounds one request.
-    internal const int MaxInputLength = 2 * 1024 * 1024;
+    // Three ceilings, one per dimension the pipeline's cost rides on. It builds three DOM trees
+    // plus two serialisations over bodies ImapSession takes straight off the wire, and each
+    // dimension alone reaches minutes of CPU per message. All three are far above real mail: the
+    // densest newsletter measured here is 90 KB, ~1 100 elements, nested 8 deep, in 133 ms.
 
-    // Nesting is capped on the raw text, before the first parse, because AngleSharp's tree
-    // construction is itself superlinear in depth — measured here: 50 000 levels 6.5 s,
+    // Characters. Halved from 2M once the element ceiling below landed: with elements bounded,
+    // this became the binding constraint on the worst case — 2M characters of gradient-bearing
+    // style attributes measured 1.69 s, and no legitimate body approaches even a tenth of it.
+    internal const int MaxInputLength = 1024 * 1024;
+
+    // Depth, capped on the raw text before the first parse, because AngleSharp's tree
+    // construction is itself superlinear in it — measured here: 50 000 levels 6.5 s,
     // 100 000 levels 43.6 s — so a guard on the parsed tree has already paid the cost.
     private const int MaxNestingDepth = 1024;
+
+    // Elements, which is what the cost is actually proportional to and what a character ceiling
+    // does not bound: 2M characters still hold ~175 000 of them, measured between 22.7 s and
+    // 71.5 s. Every pass here is per-element, so this is the ceiling that sets the worst case.
+    private const int MaxElementCount = 10_000;
 
     // Every serialisation AngleSharp can hand us: quoted either way, or bare.
     private static readonly Regex CssUrl = new(
@@ -52,6 +62,14 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     private static readonly HashSet<string> RawTextTags = new(StringComparer.OrdinalIgnoreCase)
     {
         "script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"
+    };
+
+    // These close a peer instead of nesting under it, so a counter that has no tree cannot tell
+    // <p>a<p>b from two levels. None can appear without a counted ancestor between two of them —
+    // a td needs a table — so ignoring them undercounts real depth by a bounded factor only.
+    private static readonly HashSet<string> PeerTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "p", "li", "td", "th", "tr", "dt", "dd", "option"
     };
 
     private readonly HtmlSanitizer _sanitizer;
@@ -133,13 +151,15 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         if (truncated)
             html = html[..(char.IsHighSurrogate(html[MaxInputLength - 1]) ? MaxInputLength - 1 : MaxInputLength)];
 
-        // Depth is capped after the width cut, never before: the cut is what bounds the text this
-        // scan walks. A cut landing mid-tag ends the scan there, as it ends the parser's own
-        // tokenisation there — both give up on the same unterminated tag.
-        //
+        // The structural bound runs after the width cut, never before: the cut is what bounds the
+        // text it walks, and a cut landing mid-tag ends its scan exactly where it ends the
+        // parser's own tokenisation — both give up on the same unterminated tag.
+        var (bounded, tooManyElements) = BoundStructure(html);
+        truncated |= tooManyElements;
+
         // Unwrap pass first: a bpost mail wrapped its whole 62 KB body in one <center>, and the
         // sanitiser deletes a disallowed tag with its subtree, rendering the message empty.
-        var pre = _parser.ParseDocument(CapNestingDepth(html));
+        var pre = _parser.ParseDocument(bounded);
         UnwrapDisallowedTags(pre.Body!);
         CullEscapedDeclarations(pre.Body!);
 
@@ -219,15 +239,20 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     }
 
     /// <summary>
-    /// Elides the start and end tags that would nest past <see cref="MaxNestingDepth"/> and keeps
-    /// their content — rule 6(b)'s unwrap applied to depth, so the reader still gets the message.
-    /// The result crosses the whole pipeline afterwards, so a miscount costs layout, never safety.
+    /// One pre-parse pass over the raw text bounding both dimensions the pipeline's cost rides on.
+    /// Tags nesting past <see cref="MaxNestingDepth"/> are elided and their content kept — rule
+    /// 6(b)'s unwrap applied to depth — and the text is cut at the <see cref="MaxElementCount"/>th
+    /// element, degrading as the width ceiling does. Returns whether it cut, for
+    /// <see cref="SanitizedHtml.Truncated"/>. What survives crosses the whole pipeline, so a
+    /// miscount here costs layout, never safety.
     /// </summary>
-    private static string CapNestingDepth(string html)
+    private static (string Html, bool Truncated) BoundStructure(string html)
     {
         StringBuilder? capped = null;
         var copied = 0;
         var depth = 0;
+        var elements = 0;
+        var cut = -1;
         var i = 0;
 
         while (i < html.Length)
@@ -237,21 +262,35 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 
             var (name, isEnd, end) = ReadTag(html, open);
             i = end;
-            if (name.Length == 0 || VoidTags.Contains(name)) continue;
+            if (name.Length == 0) continue;
 
-            var elide = isEnd ? depth > 0 && depth-- > MaxNestingDepth : ++depth > MaxNestingDepth;
+            var opensLevel = !VoidTags.Contains(name) && !PeerTags.Contains(name);
+            var elide = opensLevel
+                && (isEnd ? depth > 0 && depth-- > MaxNestingDepth : ++depth > MaxNestingDepth);
 
             // A raw-text element goes with its content or not at all: eliding only its start tag
             // would spill a script's source as visible text, the leak DropWithContent prevents.
             if (!isEnd && RawTextTags.Contains(name)) i = SkipRawText(html, name, end);
-            if (!elide) continue;
 
-            capped ??= new StringBuilder(html.Length);
-            capped.Append(html, copied, open - copied);
-            copied = i;
+            if (elide)
+            {
+                capped ??= new StringBuilder(html.Length);
+                capped.Append(html, copied, open - copied);
+                copied = i;
+                continue;
+            }
+
+            // Only what survives the depth cap reaches the parser, so only that is counted.
+            if (!isEnd && ++elements > MaxElementCount)
+            {
+                cut = open;
+                break;
+            }
         }
 
-        return capped is null ? html : capped.Append(html, copied, html.Length - copied).ToString();
+        var stop = cut < 0 ? html.Length : cut;
+        return (capped is null ? html[..stop] : capped.Append(html, copied, stop - copied).ToString(),
+            cut >= 0);
     }
 
     /// <summary>
