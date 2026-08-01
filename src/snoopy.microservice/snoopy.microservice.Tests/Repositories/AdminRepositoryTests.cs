@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using weesky.Snoopy.Microservice.Data;
@@ -12,8 +13,12 @@ public sealed class AdminRepositoryTests
 {
     private static TestDbContext CreateContext() => new(Guid.NewGuid().ToString());
 
-    private static AdminRepository CreateRepository(TestDbContext ctx, IWebmailUserStore? webmailUsers = null) =>
-        new(ctx, webmailUsers ?? new Mock<IWebmailUserStore>().Object, NullLogger<AdminRepository>.Instance);
+    private static IMemoryCache CreateCache() => new MemoryCache(new MemoryCacheOptions());
+
+    private static AdminRepository CreateRepository(TestDbContext ctx, IWebmailUserStore? webmailUsers = null,
+        IMemoryCache? cache = null) =>
+        new(ctx, webmailUsers ?? new Mock<IWebmailUserStore>().Object, cache ?? CreateCache(),
+            NullLogger<AdminRepository>.Instance);
 
     private static MailDomain AddDomain(TestDbContext ctx, string id = "WSY", string name = "weesky.be")
     {
@@ -85,6 +90,82 @@ public sealed class AdminRepositoryTests
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
         Assert.True(await CreateRepository(ctx).IsAdminAsync("ALICE", "weesky.be"));
+    }
+
+    [Fact]
+    public async Task IsAdmin_TracksNothing()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        ctx.ChangeTracker.Clear();
+
+        await CreateRepository(ctx).IsAdminAsync("alice", "weesky.be");
+
+        Assert.Empty(ctx.ChangeTracker.Entries<MailUser>());
+        Assert.Empty(ctx.ChangeTracker.Entries<MailDomain>());
+    }
+
+    [Fact]
+    public async Task IsAdmin_ReusesTheFlagWithinTheCacheWindow()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        ctx.Users.Remove(user);
+        ctx.SaveChanges();
+
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+    }
+
+    // One account's flag must never answer for another, in either direction of the key.
+    [Fact]
+    public async Task IsAdmin_CachesPerAccount()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx, "WSY", "weesky.be");
+        AddDomain(ctx, "OTH", "other.com");
+        AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        AddUser(ctx, "bob", "WSY", admin: ActiveState.N);
+        AddUser(ctx, "alice", "OTH", admin: ActiveState.N);
+        var repo = CreateRepository(ctx, cache: cache);
+
+        Assert.True(await repo.IsAdminAsync("alice", "weesky.be"));
+        Assert.False(await repo.IsAdminAsync("bob", "weesky.be"));
+        Assert.False(await repo.IsAdminAsync("alice", "other.com"));
+    }
+
+    [Fact]
+    public async Task UpdateUser_DropsTheCachedAdminFlag()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        await CreateRepository(ctx, cache: cache).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "alice", Admin = false });
+
+        Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+    }
+
+    [Fact]
+    public async Task DeleteUser_DropsTheCachedAdminFlag()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        await CreateRepository(ctx, cache: cache).DeleteUserAsync(user.Id);
+
+        Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
     }
 
     // ── GetAllUsers ───────────────────────────────────────

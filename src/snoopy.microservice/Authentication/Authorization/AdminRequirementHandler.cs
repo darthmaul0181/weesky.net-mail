@@ -4,15 +4,13 @@ using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Authentication.Authorization;
 
-public sealed class AdminRequirementHandler : AuthorizationHandler<AdminRequirement>
+/// <summary>
+/// Runs on every request to an admin endpoint; the flag itself is cached by
+/// <see cref="IAdminRepository.IsAdminAsync"/> for the same window a session check uses.
+/// </summary>
+public sealed class AdminRequirementHandler(IAdminRepository adminRepository)
+    : AuthorizationHandler<AdminRequirement>
 {
-    private readonly IAdminRepository _adminRepository;
-
-    public AdminRequirementHandler(IAdminRepository adminRepository)
-    {
-        _adminRepository = adminRepository;
-    }
-
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, AdminRequirement requirement)
     {
         var name = context.User.FindFirst(ClaimTypes.Upn)?.Value;
@@ -20,7 +18,7 @@ public sealed class AdminRequirementHandler : AuthorizationHandler<AdminRequirem
 
         if (!string.IsNullOrWhiteSpace(name) &&
             !string.IsNullOrWhiteSpace(domain) &&
-            await _adminRepository.IsAdminAsync(name, domain))
+            await adminRepository.IsAdminAsync(name, domain))
         {
             context.Succeed(requirement);
         }
