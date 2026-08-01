@@ -514,7 +514,7 @@ public sealed class MailHtmlSanitizerTests
         var result = _sut.Sanitize(html);
 
         Assert.True(result.Truncated);
-        Assert.Equal(10_000, Regex.Matches(result.Html, "<div>").Count);
+        Assert.Equal(20_000, Regex.Matches(result.Html, "<div>").Count);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
     }
 

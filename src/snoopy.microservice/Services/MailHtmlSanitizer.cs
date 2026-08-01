@@ -18,10 +18,10 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     // dimension alone reaches minutes of CPU per message. All three are far above real mail: the
     // densest newsletter measured here is 90 KB, ~1 100 elements, nested 8 deep, in 133 ms.
 
-    // Characters. Halved from 2M once the element ceiling below landed: with elements bounded,
-    // this became the binding constraint on the worst case — 2M characters of gradient-bearing
-    // style attributes measured 1.69 s, and no legitimate body approaches even a tenth of it.
-    internal const int MaxInputLength = 1024 * 1024;
+    // Characters. Left where it was found: halving it bought 1.85 s of worst case down to 1.04 s
+    // and in exchange cut bodies between 1 and 2M that had always rendered whole. Truncating a
+    // real message is the worse failure, and the element ceiling below is the cheaper lever.
+    internal const int MaxInputLength = 2 * 1024 * 1024;
 
     // Depth, capped on the raw text before the first parse, because AngleSharp's tree
     // construction is itself superlinear in it — measured here: 50 000 levels 6.5 s,
@@ -31,7 +31,9 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     // Elements, which is what the cost is actually proportional to and what a character ceiling
     // does not bound: 2M characters still hold ~175 000 of them, measured between 22.7 s and
     // 71.5 s. Every pass here is per-element, so this is the ceiling that sets the worst case.
-    private const int MaxElementCount = 10_000;
+    // 20 000 is 18× the densest newsletter measured and ~3× the heaviest body plausible at all,
+    // which is the margin a hard cut earns: past it the reader sees an amputated message.
+    private const int MaxElementCount = 20_000;
 
     // Every serialisation AngleSharp can hand us: quoted either way, or bare.
     private static readonly Regex CssUrl = new(
