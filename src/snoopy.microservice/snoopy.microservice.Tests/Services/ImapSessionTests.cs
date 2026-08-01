@@ -365,6 +365,8 @@ public sealed class ImapSessionTests
     [InlineData(4, 3, new int[0])]           // past the end
     [InlineData(-1, 3, new int[0])]
     [InlineData(0, 0, new int[0])]
+    // page * pageSize overflowing int must read as "past the end", never wrap into page 0.
+    [InlineData(int.MaxValue, 200, new int[0])]
     public void PageOf_SlicesTheOrderedList(int page, int pageSize, int[] expected)
     {
         int[] newestFirst = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0];

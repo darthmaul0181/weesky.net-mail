@@ -1147,7 +1147,9 @@ internal sealed class ImapSession : IImapSession
     {
         if (page < 0 || pageSize <= 0) return [];
 
-        return ordered.Skip(page * pageSize).Take(pageSize).ToList();
+        // Long arithmetic, clamped: an overflowing page must read "past the end", never page 0.
+        var skip = (int)Math.Min((long)page * pageSize, int.MaxValue);
+        return ordered.Skip(skip).Take(pageSize).ToList();
     }
 
     /// <summary>
