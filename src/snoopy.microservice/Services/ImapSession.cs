@@ -439,41 +439,54 @@ internal sealed class ImapSession : IImapSession
 
                 var sorted = await folder.SortAsync(query, [OrderBy.ReverseDate], cancellationToken);
                 var uids = criteria.HasAttachment
-                    ? await WithAttachmentsAsync(folder, sorted, cancellationToken)
+                    ? await WithAttachmentsAsync(folder, BoundCandidates(sorted, page, pageSize), cancellationToken)
                     : sorted;
                 matches = uids.Select(uid => (folder, uid)).ToList();
+                result.Total = criteria.HasAttachment ? matches.Count : sorted.Count;
             }
             else
             {
-                // All folders — or a server without SORT: SEARCH each, then one FETCH per folder for
-                // the sent date (Envelope.Date, arrival as fallback) and — only when attachments are
-                // asked for — BODYSTRUCTURE. Ordering by sent date keeps this scope in step with the
-                // single-folder SORT DATE path, which the arrival-date key used to silently contradict.
+                // All folders — or a server without SORT: per folder, SORT (REVERSE DATE) when the
+                // session advertises it (rule 2), UID-descending as the newest-first proxy otherwise,
+                // then one FETCH for the merge key (Envelope.Date, arrival as fallback) and — only
+                // when attachments are asked for — BODYSTRUCTURE. The FETCH is bounded to the
+                // (page + 1) * pageSize candidates that can still reach the requested page once the
+                // folders are merged; the SEARCH itself stays whole, so the match count stays exact.
                 var fetchItems = MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope
                                  | MessageSummaryItems.InternalDate;
                 if (criteria.HasAttachment) fetchItems |= MessageSummaryItems.BodyStructure;
 
+                var sortCapable = _client.Capabilities.HasFlag(ImapCapabilities.Sort);
+                var exactTotal = 0;
                 var hits = new List<SearchHit>();
                 foreach (var folder in await SearchableFoldersAsync(folderPath, allFolders, cancellationToken))
                 {
                     await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
 
-                    var found = await folder.SearchAsync(query, cancellationToken);
+                    IList<UniqueId> found = sortCapable
+                        ? await folder.SortAsync(query, [OrderBy.ReverseDate], cancellationToken)
+                        : await folder.SearchAsync(query, cancellationToken);
                     if (found.Count == 0) continue;
+                    exactTotal += found.Count;
 
-                    var items = await folder.FetchAsync(found, fetchItems, cancellationToken);
+                    var candidates = BoundCandidates(
+                        sortCapable ? found : found.OrderByDescending(uid => uid.Id).ToList(),
+                        page, pageSize);
+
+                    var items = await folder.FetchAsync(candidates, fetchItems, cancellationToken);
                     hits.AddRange(items.Select(item => new SearchHit(
                         item.UniqueId, folder,
                         SortKeyOf(item.Envelope?.Date, item.InternalDate),
                         item.Attachments?.Any() ?? false)));
                 }
 
-                // Filter (attachments) and sort BEFORE Total/pagination — filtering after would falsify Total.
+                // Filter (attachments) and sort BEFORE pagination. Under the post-filter only the
+                // bounded candidates were ever examined, so Total is "at least" what is counted
+                // here; without it, SEARCH already said exactly how many match.
                 matches = OrderHits(hits, criteria.HasAttachment)
                     .Select(hit => (hit.Folder, hit.Uid)).ToList();
+                result.Total = criteria.HasAttachment ? matches.Count : exactTotal;
             }
-
-            result.Total = matches.Count;
 
             var wanted = PageOf(matches, page, pageSize);
             if (wanted.Count == 0) return Result.Success(result);
@@ -534,6 +547,19 @@ internal sealed class ImapSession : IImapSession
             uids, MessageSummaryItems.UniqueId | MessageSummaryItems.BodyStructure, cancellationToken);
         var keep = items.Where(i => i.Attachments?.Any() ?? false).Select(i => i.UniqueId).ToHashSet();
         return uids.Where(keep.Contains).ToList();
+    }
+
+    /// <summary>
+    /// The per-folder candidate window: once every folder's newest-first list is merged, only its
+    /// first (page + 1) * pageSize entries can still land on the requested page, so nothing past
+    /// them is worth a per-message FETCH. Long arithmetic: the controller caps pageSize, not page.
+    /// </summary>
+    internal static IList<UniqueId> BoundCandidates(IList<UniqueId> newestFirst, int page, int pageSize)
+    {
+        var take = (page + 1L) * pageSize;
+        if (take <= 0) return [];
+
+        return take >= newestFirst.Count ? newestFirst : newestFirst.Take((int)take).ToList();
     }
 
     /// <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
