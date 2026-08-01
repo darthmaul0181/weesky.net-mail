@@ -131,6 +131,23 @@ public sealed class ConnectedAccountsControllerTests
     private void AssertNeverOpened() => _imap.Verify(
         f => f.OpenAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Never);
 
+    // Only for the call-count pin below: every other test reads through the real store, since
+    // whether the settings page issues one query or N is not observable from its rows alone.
+    private ConnectedAccountsController CreateControllerWithMockedIdentities(ISendingIdentityStore identities)
+    {
+        var monitor = new Mock<IOptionsMonitor<MailOptions>>();
+        monitor.Setup(m => m.CurrentValue).Returns(TestConnections.HomeOptions());
+
+        var controller = new ConnectedAccountsController(
+            _accounts, _domains, identities, _credentials, _users, _imap.Object, monitor.Object,
+            NullLogger<ConnectedAccountsController>.Instance)
+        {
+            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", Uid)
+        };
+        controller.Request.Headers.Cookie = $"MailCredentials={IssueCookie()}";
+        return controller;
+    }
+
     // ---- Domains choice list ----
 
     [Fact]
@@ -208,6 +225,64 @@ public sealed class ConnectedAccountsControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsAssignableFrom<IReadOnlyList<ConnectedAccountResponse>>(ok.Value);
         Assert.Equal("Support", Assert.Single(body).DisplayName);
+    }
+
+    [Fact]
+    public async Task List_LeavesTheDisplayNameEmptyWhenNoIdentityMatches()
+    {
+        await ConnectedAsync("shared@weesky.be");
+
+        var result = await CreateController().List(CancellationToken.None);
+
+        var body = Assert.IsAssignableFrom<IReadOnlyList<ConnectedAccountResponse>>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(string.Empty, Assert.Single(body).DisplayName);
+    }
+
+    // Pins the in-memory grouping the batch read relies on: one account's stored identity must
+    // never leak onto another account's row, whether by address collision or plain mix-up.
+    [Fact]
+    public async Task List_ResolvesEachAccountsLabelIndependently()
+    {
+        var withLabel = await ConnectedAsync("a@weesky.be");
+        await _arrangedIdentities.ReplaceAsync(Uid, withLabel.Id.ToString(),
+            [new SendingIdentity { Address = "a@weesky.be", DisplayName = "Team A", IsDefault = true }],
+            CancellationToken.None);
+        var withoutLabel = await ConnectedAsync("b@weesky.be");
+        var withUnrelatedRow = await ConnectedAsync("c@weesky.be");
+        await _arrangedIdentities.ReplaceAsync(Uid, withUnrelatedRow.Id.ToString(),
+            [new SendingIdentity { Address = "other@weesky.be", DisplayName = "Not This Account" }],
+            CancellationToken.None);
+
+        var result = await CreateController().List(CancellationToken.None);
+
+        var body = Assert.IsAssignableFrom<IReadOnlyList<ConnectedAccountResponse>>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("Team A", body.Single(a => a.Id == withLabel.Id).DisplayName);
+        Assert.Equal(string.Empty, body.Single(a => a.Id == withoutLabel.Id).DisplayName);
+        Assert.Equal(string.Empty, body.Single(a => a.Id == withUnrelatedRow.Id).DisplayName);
+    }
+
+    // The N+1 this replaces: one query per row inside the response loop made the settings page's
+    // first paint issue one round trip per attached mailbox.
+    [Fact]
+    public async Task List_FetchesIdentitiesOnceRegardlessOfAccountCount()
+    {
+        await ConnectedAsync("a@weesky.be");
+        await ConnectedAsync("b@weesky.be");
+        await ConnectedAsync("c@weesky.be");
+
+        var mockIdentities = new Mock<ISendingIdentityStore>();
+        mockIdentities.Setup(i => i.GetAllAsync(Uid, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<SendingIdentity>)[]);
+
+        var result = await CreateControllerWithMockedIdentities(mockIdentities.Object)
+            .List(CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        mockIdentities.Verify(i => i.GetAllAsync(Uid, It.IsAny<CancellationToken>()), Times.Once);
+        mockIdentities.Verify(i => i.GetAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The settings page lists every attached mailbox at once: one IMAP dialogue per row would make

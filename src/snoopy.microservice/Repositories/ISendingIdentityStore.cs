@@ -11,6 +11,11 @@ public interface ISendingIdentityStore
     Task<IReadOnlyList<SendingIdentity>> GetAsync(
         Guid userId, string accountId, CancellationToken cancellationToken);
 
+    /// <summary>Every row the user owns, across every account (primary and connected) in one
+    /// read — for callers that need to resolve several accounts' labels at once, grouping by
+    /// <see cref="SendingIdentity.AccountId"/> in memory rather than reading account by account.</summary>
+    Task<IReadOnlyList<SendingIdentity>> GetAllAsync(Guid userId, CancellationToken cancellationToken);
+
     /// <summary>Replaces the account's whole set in one transaction — the PUT semantics.</summary>
     Task ReplaceAsync(Guid userId, string accountId, IReadOnlyList<SendingIdentity> identities,
         CancellationToken cancellationToken);

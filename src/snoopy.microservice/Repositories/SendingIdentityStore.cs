@@ -12,6 +12,13 @@ internal sealed class SendingIdentityStore(PreferencesDbContext context) : ISend
             .OrderBy(i => i.Address)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<SendingIdentity>> GetAllAsync(
+        Guid userId, CancellationToken cancellationToken)
+        => await context.SendingIdentities.AsNoTracking()
+            .Where(i => i.UserId == userId)
+            .OrderBy(i => i.AccountId).ThenBy(i => i.Address)
+            .ToListAsync(cancellationToken);
+
     public async Task ReplaceAsync(Guid userId, string accountId,
         IReadOnlyList<SendingIdentity> identities, CancellationToken cancellationToken)
     {

@@ -99,4 +99,40 @@ public sealed class SendingIdentityStoreTests
         Assert.Equal("shared@weesky.be", row.Address);
         Assert.Equal(connected, row.AccountId);
     }
+
+    // The batch read behind the connected-accounts settings page: one call must return every
+    // account's rows so the caller can group them in memory instead of reading account by account.
+    [Fact]
+    public async Task GetAll_ReturnsRowsFromEveryAccountOfTheUser()
+    {
+        var db = nameof(GetAll_ReturnsRowsFromEveryAccountOfTheUser);
+        var user = Guid.NewGuid();
+        var firstAccount = Guid.NewGuid().ToString();
+        var secondAccount = Guid.NewGuid().ToString();
+        var store = CreateStore(db);
+        await store.ReplaceAsync(user, AccountScope.Primary, [Row("primary@weesky.be")], CancellationToken.None);
+        await CreateStore(db).ReplaceAsync(user, firstAccount, [Row("a@weesky.be", "A")], CancellationToken.None);
+        await CreateStore(db).ReplaceAsync(user, secondAccount, [Row("b@weesky.be", "B")], CancellationToken.None);
+
+        var rows = await CreateStore(db).GetAllAsync(user, CancellationToken.None);
+
+        Assert.Equal(3, rows.Count);
+        Assert.Contains(rows, r => r.AccountId == AccountScope.Primary && r.Address == "primary@weesky.be");
+        Assert.Contains(rows, r => r.AccountId == firstAccount && r.Address == "a@weesky.be");
+        Assert.Contains(rows, r => r.AccountId == secondAccount && r.Address == "b@weesky.be");
+    }
+
+    [Fact]
+    public async Task GetAll_LeavesOtherUsersAlone()
+    {
+        var db = nameof(GetAll_LeavesOtherUsersAlone);
+        var bob = Guid.NewGuid();
+        var alice = Guid.NewGuid();
+        await CreateStore(db).ReplaceAsync(bob, AccountScope.Primary, [Row("bob@weesky.be")], CancellationToken.None);
+        await CreateStore(db).ReplaceAsync(alice, AccountScope.Primary, [Row("a@weesky.be")], CancellationToken.None);
+
+        var rows = await CreateStore(db).GetAllAsync(bob, CancellationToken.None);
+
+        Assert.Equal("bob@weesky.be", Assert.Single(rows).Address);
+    }
 }

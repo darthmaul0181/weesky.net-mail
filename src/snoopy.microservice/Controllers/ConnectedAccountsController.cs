@@ -72,6 +72,8 @@ public sealed class ConnectedAccountsController(
 
         var rows = await accounts.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         var byId = (await domains.ListAsync(cancellationToken)).ToDictionary(d => d.Id);
+        var identitiesByAccount = (await identities.GetAllAsync(AuthenticatedUser.WebmailUid, cancellationToken))
+            .ToLookup(i => i.AccountId);
 
         var responses = new List<ConnectedAccountResponse>(rows.Count);
         foreach (var row in rows)
@@ -79,7 +81,7 @@ public sealed class ConnectedAccountsController(
             var domain = row.DomainId is { } id && byId.TryGetValue(id, out var found) ? found : null;
             responses.Add(Describe(
                 row, domain,
-                await DefaultLabelAsync(row, cancellationToken),
+                DefaultLabel(identitiesByAccount[row.Id.ToString()], row.Email),
                 ConnectedAccountCipher.Decrypt(kek.Value, row.Cipher).IsSuccess));
         }
 
@@ -247,12 +249,8 @@ public sealed class ConnectedAccountsController(
             SieveSupported: row.DomainId is null || domain?.SieveHost is not null,
             credentialsValid, row.CreationDate);
 
-    private async Task<string> DefaultLabelAsync(ConnectedAccount row, CancellationToken cancellationToken)
-    {
-        var stored = await identities.GetAsync(
-            AuthenticatedUser.WebmailUid, row.Id.ToString(), cancellationToken);
-        return stored.FirstOrDefault(i => i.Address == row.Email)?.DisplayName ?? string.Empty;
-    }
+    private static string DefaultLabel(IEnumerable<SendingIdentity> stored, string email) =>
+        stored.FirstOrDefault(i => i.Address == email)?.DisplayName ?? string.Empty;
 
     /// <summary>
     /// The key every stored cipher hangs off. A v1 cookie carries none, so it is derived from the
