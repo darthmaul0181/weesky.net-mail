@@ -350,18 +350,21 @@ internal sealed class ImapSession : IImapSession
             var folder = await _client.GetFolderAsync(folderPath, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
 
-            var uids = await folder.SearchAsync(SearchQuery.All, cancellationToken);
-            if (uids.Count == 0) return Result.Success();
-
             if (move)
             {
+                var uids = await folder.SearchAsync(SearchQuery.All, cancellationToken);
+                if (uids.Count == 0) return Result.Success();
+
                 await folder.MoveToAsync(uids, target!, cancellationToken);
             }
             else
             {
-                // Bare EXPUNGE purges every \Deleted message; emptying purges the whole folder,
-                // so no UID EXPUNGE (UIDPLUS) is needed — unlike DeleteAsync which targets a subset.
-                await folder.AddFlagsAsync(uids, MessageFlags.Deleted, silent: true, cancellationToken);
+                // 1:* needs no SEARCH: enumerating a large trash into an explicit UID set only
+                // named every message the range already names, on a command line that grew with
+                // the folder. Bare EXPUNGE purges every \Deleted message; emptying purges the
+                // whole folder, so no UID EXPUNGE (UIDPLUS) is needed — unlike DeleteAsync.
+                await folder.AddFlagsAsync(new UniqueIdRange(UniqueId.MinValue, UniqueId.MaxValue),
+                    MessageFlags.Deleted, silent: true, cancellationToken);
                 await folder.ExpungeAsync(cancellationToken);
             }
 
