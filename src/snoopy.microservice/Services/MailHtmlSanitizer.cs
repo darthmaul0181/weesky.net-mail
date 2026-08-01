@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 using AngleSharp;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
@@ -17,6 +18,11 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     // legitimate mail body — images travel as MIME parts, not markup — and bounds one request.
     internal const int MaxInputLength = 2 * 1024 * 1024;
 
+    // Nesting is capped on the raw text, before the first parse, because AngleSharp's tree
+    // construction is itself superlinear in depth — measured here: 50 000 levels 6.5 s,
+    // 100 000 levels 43.6 s — so a guard on the parsed tree has already paid the cost.
+    private const int MaxNestingDepth = 1024;
+
     // Every serialisation AngleSharp can hand us: quoted either way, or bare.
     private static readonly Regex CssUrl = new(
         @"url\(\s*(?:""(?<u>[^""]*)""|'(?<u>[^']*)'|(?<u>[^)\s]*))\s*\)",
@@ -31,6 +37,21 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         "noscript", "noembed", "noframes", "xmp", "plaintext", "listing",
         "svg", "math", "annotation-xml", "mi", "mn", "mo", "ms", "mtext", "foreignobject", "desc",
         "audio", "video", "colgroup"
+    };
+
+    // Void elements open no level. Every other start tag does, `<div/>` included: HTML has no
+    // self-closing syntax outside this list, so honouring a trailing slash would be a way past
+    // the cap uncounted.
+    private static readonly HashSet<string> VoidTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr"
+    };
+
+    // Their content is text, not markup: `if (a<b)` inside a script must not read as nesting.
+    private static readonly HashSet<string> RawTextTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"
     };
 
     private readonly HtmlSanitizer _sanitizer;
@@ -112,9 +133,13 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         if (truncated)
             html = html[..(char.IsHighSurrogate(html[MaxInputLength - 1]) ? MaxInputLength - 1 : MaxInputLength)];
 
+        // Depth is capped after the width cut, never before: the cut is what bounds the text this
+        // scan walks. A cut landing mid-tag ends the scan there, as it ends the parser's own
+        // tokenisation there — both give up on the same unterminated tag.
+        //
         // Unwrap pass first: a bpost mail wrapped its whole 62 KB body in one <center>, and the
         // sanitiser deletes a disallowed tag with its subtree, rendering the message empty.
-        var pre = _parser.ParseDocument(html);
+        var pre = _parser.ParseDocument(CapNestingDepth(html));
         UnwrapDisallowedTags(pre.Body!);
         CullEscapedDeclarations(pre.Body!);
 
@@ -191,6 +216,110 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
             BlockedImageCount = blocked,
             Truncated = truncated
         };
+    }
+
+    /// <summary>
+    /// Elides the start and end tags that would nest past <see cref="MaxNestingDepth"/> and keeps
+    /// their content — rule 6(b)'s unwrap applied to depth, so the reader still gets the message.
+    /// The result crosses the whole pipeline afterwards, so a miscount costs layout, never safety.
+    /// </summary>
+    private static string CapNestingDepth(string html)
+    {
+        StringBuilder? capped = null;
+        var copied = 0;
+        var depth = 0;
+        var i = 0;
+
+        while (i < html.Length)
+        {
+            var open = html.IndexOf('<', i);
+            if (open < 0) break;
+
+            var (name, isEnd, end) = ReadTag(html, open);
+            i = end;
+            if (name.Length == 0 || VoidTags.Contains(name)) continue;
+
+            var elide = isEnd ? depth > 0 && depth-- > MaxNestingDepth : ++depth > MaxNestingDepth;
+
+            // A raw-text element goes with its content or not at all: eliding only its start tag
+            // would spill a script's source as visible text, the leak DropWithContent prevents.
+            if (!isEnd && RawTextTags.Contains(name)) i = SkipRawText(html, name, end);
+            if (!elide) continue;
+
+            capped ??= new StringBuilder(html.Length);
+            capped.Append(html, copied, open - copied);
+            copied = i;
+        }
+
+        return capped is null ? html : capped.Append(html, copied, html.Length - copied).ToString();
+    }
+
+    /// <summary>
+    /// Reads the tag opening at <paramref name="open"/>, returning its name — empty for a comment,
+    /// a doctype or a stray <c>&lt;</c> — and the index just past the token.
+    /// </summary>
+    private static (string Name, bool IsEnd, int End) ReadTag(string html, int open)
+    {
+        var i = open + 1;
+        if (i >= html.Length) return (string.Empty, false, html.Length);
+
+        if (html.AsSpan(i).StartsWith("!--"))
+        {
+            var close = html.IndexOf("-->", i, StringComparison.Ordinal);
+            return (string.Empty, false, close < 0 ? html.Length : close + 3);
+        }
+
+        if (html[i] is '!' or '?') return (string.Empty, false, EndOfTag(html, i));
+
+        var isEnd = html[i] == '/';
+        if (isEnd) i++;
+
+        var start = i;
+        while (i < html.Length && (char.IsLetterOrDigit(html[i]) || html[i] == '-')) i++;
+
+        return i == start
+            ? (string.Empty, false, open + 1)
+            : (html[start..i], isEnd, EndOfTag(html, i));
+    }
+
+    /// Index just past the '>' closing the tag, skipping quoted attribute values. A quote opens
+    /// one only right after '=', as in HTML tokenisation: reading a stray apostrophe as a
+    /// delimiter would let one tag swallow the document, and its nesting with it.
+    private static int EndOfTag(string html, int i)
+    {
+        var quote = '\0';
+        var afterEquals = false;
+
+        for (; i < html.Length; i++)
+        {
+            var c = html[i];
+
+            if (quote != '\0')
+            {
+                if (c == quote) quote = '\0';
+                continue;
+            }
+
+            if (afterEquals && c is '"' or '\'')
+            {
+                quote = c;
+                afterEquals = false;
+                continue;
+            }
+
+            if (c == '>') return i + 1;
+            if (c == '=') afterEquals = true;
+            else if (!char.IsWhiteSpace(c)) afterEquals = false;
+        }
+
+        return html.Length;
+    }
+
+    // Stops on the closing tag rather than past it, so the caller still counts it down.
+    private static int SkipRawText(string html, string name, int from)
+    {
+        var close = html.IndexOf($"</{name}", from, StringComparison.OrdinalIgnoreCase);
+        return close < 0 ? html.Length : close;
     }
 
     // The CSS parser resolves escapes before the withholding pass sees them, so `\75 rl(` would

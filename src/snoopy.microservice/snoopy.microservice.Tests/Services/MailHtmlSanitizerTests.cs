@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Diagnostics;
+using System.Text.RegularExpressions;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -499,6 +500,118 @@ public sealed class MailHtmlSanitizerTests
 
         Assert.False(result.Truncated);
         Assert.Contains("hi", result.Html);
+    }
+
+    // AngleSharp's tree construction is superlinear in nesting depth: measured on this runtime,
+    // parsing 50 000 nested divs takes 6.5 s and 100 000 takes 43.6 s, and the pipeline parses
+    // three times. 200 000 levels fit in a body a sender chooses freely.
+    [Fact]
+    public void Sanitize_SurvivesADocumentTooDeepForTheParser()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 200_000)) + "deep";
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("deep", result);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
+    }
+
+    [Fact]
+    public void Sanitize_KeepsNestingRealMailReaches()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 200)) + "deep"
+                   + string.Concat(Enumerable.Repeat("</div>", 200));
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Equal(200, Regex.Matches(result, "<div>").Count);
+    }
+
+    // The over-deep wrappers go, their content stays — rule 6(b)'s unwrap applied to depth.
+    [Fact]
+    public void Sanitize_FlattensNestingPastTheCapWithoutLosingContent()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 5_000)) + "<p>the whole message</p>"
+                   + string.Concat(Enumerable.Repeat("</div>", 5_000));
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("the whole message", result);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
+    }
+
+    // HTML has no self-closing syntax outside void elements: <div/> opens a level, and honouring
+    // its slash would let a sender nest past the cap uncounted.
+    [Theory]
+    [InlineData("<div/>")]
+    [InlineData("<DIV>")]
+    public void Sanitize_CountsTagsThatOnlyLookSelfClosingOrLowercase(string open)
+    {
+        var result = _sut.Sanitize(string.Concat(Enumerable.Repeat(open, 5_000)) + "deep").Html;
+
+        Assert.Contains("deep", result);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
+    }
+
+    // A quote opens an attribute value only right after '='. Read as a delimiter anywhere, a
+    // stray apostrophe would let one tag swallow the document and the nesting inside it.
+    [Fact]
+    public void Sanitize_CountsNestingBehindAStrayApostrophe()
+    {
+        var html = "<p title=it's>" + string.Concat(Enumerable.Repeat("<div>", 5_000)) + "deep'";
+
+        var result = _sut.Sanitize(html).Html;
+
+        // 1023, not 1024: the <p> holds the first level of the count. The scan is a counter,
+        // not a tree — it never sees the parser close that <p> when the first <div> opens.
+        Assert.Contains("deep", result);
+        Assert.Equal(1023, Regex.Matches(result, "<div>").Count);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsAQuotedAngleBracketInsideAnAttribute()
+    {
+        var result = _sut.Sanitize("<div title=\"a>b\"><p>hi</p></div>").Html;
+
+        Assert.Contains("<p>hi</p>", result);
+    }
+
+    [Fact]
+    public void Sanitize_DoesNotCountVoidTagsAsNesting()
+    {
+        var result = _sut.Sanitize(string.Concat(Enumerable.Repeat("<br>", 2_000)) + "<p>hi</p>").Html;
+
+        Assert.Equal(2_000, Regex.Matches(result, "<br>").Count);
+        Assert.Contains("<p>hi</p>", result);
+    }
+
+    // A comparison inside a script is text, not a start tag; counting it would flatten the
+    // markup that follows a perfectly ordinary message.
+    [Fact]
+    public void Sanitize_DoesNotReadScriptTextAsNesting()
+    {
+        var script = "<script>" + string.Concat(Enumerable.Repeat("if(a<b){}", 2_000)) + "</script>";
+
+        var result = _sut.Sanitize(script + "<div><p>hi</p></div>").Html;
+
+        Assert.Contains("<div><p>hi</p></div>", result);
+    }
+
+    // The cap runs before the pipeline, never instead of it.
+    [Theory]
+    [InlineData("<script>alert(1)</script>", "alert(1)")]
+    [InlineData("<style>body{color:red}</style>", "color:red")]
+    [InlineData("<img src=x onerror=\"alert(1)\">", "onerror")]
+    [InlineData("<a href=\"javascript:alert(1)\">x</a>", "javascript:")]
+    [InlineData("<p style=\"background-image:url(https://evil.example/a.png)\">x</p>", "evil.example")]
+    public void Sanitize_StillStripsHostileContentBuriedPastTheCap(string hostile, string forbidden)
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 5_000)) + hostile;
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain(forbidden, result, StringComparison.OrdinalIgnoreCase);
     }
 
     // A withheld URL is meant to appear in data-blocked-bg; what must never appear is the URL
