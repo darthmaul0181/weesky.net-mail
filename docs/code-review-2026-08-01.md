@@ -72,6 +72,65 @@ Impacts de déploiement à connaître : une ligne domaine externe stockant `None
 un `StartTlsWhenAvailable` contre un serveur sans STARTTLS ; un consommateur d'API tiers lisant `.token`
 dans la réponse de login casse ; le corps de `Detail` gagne un champ `truncated`.
 
+## Statut — vague 2 (performance) livrée le 2026-08-01
+
+32 commits sur `backend-refactor-1`, build Release **0 avertissement**, suite **1861 tests verts**
+(1767 après la vague 1, +94). Aucun test ignoré : le verrou écrit pour le fetch de message est passé
+au vert.
+
+| Constat | Statut |
+|---|---|
+| Ouverture d'un mail téléchargeant tout le message | ✅ `BODYSTRUCTURE` + `BODY.PEEK[HEADER]` + une partie texte ; ~27 Mo → quelques Ko |
+| Recherche tous-dossiers non bornée | ✅ fenêtre de pagination pour les enveloppes, budget de 2000 candidats pour le filtre pièces jointes, réparti par besoin |
+| Purge d'un dossier énumérant chaque UID | ✅ `1:*` + `\Deleted` + `EXPUNGE` |
+| Pièce jointe copiée deux fois en mémoire | ✅ `GetStreamAsync` + blocs mutualisés ; plus aucune allocation LOH |
+| Teardown IMAP/SMTP bloquant | ✅ borné à 2 s (30 s auparavant) |
+| ManageSieve sans timeout | ✅ un budget unique couvre tout le dialogue ; littéral serveur plafonné à 1 Mo |
+| N+1 page réglages | ✅ N+1 requêtes → 2, quel que soit le nombre de boîtes |
+| Requêtes admin | ✅ projection sans le hash de mot de passe, flag admin caché 60 s, filtrage serveur |
+| Profondeur/coût du sanitiseur | ✅ borne structurelle pré-analyse ; pire cas 22–71 s → **1,68 s mesuré** |
+
+**Le `LCASE`/index reste écarté**, conformément à l'arbitrage du 2026-07-25 (voir ci-dessous).
+
+### Revue adverse — la vague avait introduit des régressions
+
+Une passe adverse (Opus, lecture seule, IL de MailKit/MimeKit à l'appui) a validé la réhydratation des
+en-têtes (règle 7 préservée), l'abandon de l'item `Envelope`, la résolution des jeux de caractères,
+l'argument de fusion des recherches et les trois sous-règles de la règle 6. Elle a aussi trouvé quatre
+défauts réels, tous corrigés :
+
+1. **Critique — le déni de service était rouvert.** Le scanner pré-analyse lisait `<script_x>` comme le
+   nom `script` (arrêt au `_`, que HTML5 ne traite pas comme terminateur), en déduisait du texte brut et
+   cessait de compter, pendant qu'AngleSharp y voyait un élément ordinaire et analysait la suite comme du
+   balisage. Les deux plafonds contournés d'un coup. Traité comme une **classe** : quatre divergences de
+   même nature trouvées (troncature du nom, caractère d'ouverture, terminateur `--!>`, fin de texte brut),
+   toutes fermées. Mesure : la charge n'a pas terminé en 21 minutes avant correction, 1,05 s après.
+2. **Haut — le cache admin avait bien une fenêtre.** `GetOrCreateAsync` ne valide l'entrée qu'après le
+   retour de la requête : un lecteur entré dans la fabrique avant le `SaveChanges` du révocateur inscrivait
+   l'ancienne valeur *après* l'invalidation. Corrigé par une invalidation par époque (et non par retrait de
+   clé, qui n'aurait fait que rétrécir la fenêtre). Fenêtre résiduelle nulle pour toute écriture applicative.
+3. **Haut — `format=flowed` n'était plus déroulé.** `MimeMessage.TextBody` passe par `FlowedToText` ;
+   le chemin réduit appelait `TextPart.Text` directement. Tout mail texte (défaut de Thunderbird et
+   d'Apple Mail) s'affichait coupé à ~72 colonnes. Corrigé en reproduisant le chemin interne de MimeKit.
+4. **Moyen — troncature par UID sur serveur sans `SORT`**, en contradiction avec la règle 2 que le
+   commentaire invoquait ; et budget de balayage dépensé dans l'ordre alphabétique des dossiers. Les deux
+   corrigés (toutes les clés de fusion récupérées sans `SORT`, répartition par besoin).
+
+**Un faux positif de la revue adverse**, réfuté preuve à l'appui : le NRE annoncé sur un `body_fld_enc`
+valant `NIL` ne se reproduit pas — `MimeUtils.TryParse(null, …)` renvoie `false` sans lever sur MimeKit
+4.17. La protection a été ajoutée en durcissement, pas en correction.
+
+### Restes assumés
+
+- `Total` devient un « au moins » quand le budget tronque le balayage pièces jointes, sans champ pour
+  le signaler ; le rendre explicite coûterait un booléen sur `MailSearchPage` plus le rendu côté frontend.
+- Pagination de `GET /api/Admin/users` non ajoutée (changement de contrat ; ~1,5 Mo par chargement à
+  10 000 comptes).
+- `GET /api/account` renvoie `isAdmin` non caché alors que l'autorisation répond depuis le cache : après
+  une modification hors application, le lien Administration et l'API peuvent diverger 60 s.
+- Le scan du sanitiseur reste un compteur, pas un arbre : un document pathologiquement mal imbriqué peut
+  être aplati au-delà de 1024 niveaux — le contenu survit, la mise en page non.
+
 ## Recoupement avec la revue du 2026-07-25
 
 `docs/code-review-microservice-2026-07-25.md` couvrait le même périmètre et porte un statut par
