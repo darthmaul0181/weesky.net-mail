@@ -5,6 +5,7 @@ using MailKit.Net.Imap;
 using MailKit.Search;
 using MimeKit;
 using MimeKit.IO;
+using MimeKit.Text;
 using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Models.Mail;
 
@@ -883,7 +884,24 @@ internal sealed class ImapSession : IImapSession
         foreach (var parameter in part.ContentType.Parameters)
             textPart.ContentType.Parameters[parameter.Name] = parameter.Value;
 
-        return textPart.Text;
+        return UnflowText(textPart);
+    }
+
+    /// <summary>
+    /// MimeMessage.TextBody unflows RFC 3676 format=flowed — Thunderbird's and Apple Mail's
+    /// default — before returning, via MimeKit's internal MultipartAlternative.GetText; that
+    /// helper is not public, so its conversion is mirrored here. TextPart.Text alone would hand
+    /// the reader ~72-column hard wraps, space-stuffed quotes and delsp=yes stray spaces.
+    /// </summary>
+    internal static string UnflowText(TextPart textPart)
+    {
+        if (!textPart.IsFlowed) return textPart.Text;
+
+        var converter = new FlowedToText();
+        if (textPart.ContentType.Parameters.TryGetValue("delsp", out string? delsp))
+            converter.DeleteSpace = delsp.Equals("yes", StringComparison.OrdinalIgnoreCase);
+
+        return converter.Convert(textPart.Text);
     }
 
     /// <summary>The message as MimeKit parsed it — PrepareQuote needs the raw body and its parts.</summary>
