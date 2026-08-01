@@ -139,6 +139,23 @@ public sealed class AdminRepositoryTests
         Assert.False(await repo.IsAdminAsync("alice", "other.com"));
     }
 
+    // A cache entry is published when the factory returns, not when it starts: a revocation landing
+    // in that window finds no entry to remove, and the pre-write answer would then outlive it.
+    [Fact]
+    public async Task IsAdmin_WhenRevokedWhileTheReadIsInFlight_DoesNotKeepThePreWriteAnswer()
+    {
+        using var ctx = CreateContext();
+        using var cache = new CommitHookCache(k => k is string key && key.Contains('@'));
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+
+        cache.BeforeNextCommit(() => Task.Run(() => CreateRepository(ctx, cache: cache)
+            .UpdateUserAsync(user.Id, new AdminUserRequest { UserName = "alice", Admin = false })).GetAwaiter().GetResult());
+
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+        Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+    }
+
     [Fact]
     public async Task UpdateUser_DropsTheCachedAdminFlag()
     {
@@ -152,6 +169,39 @@ public sealed class AdminRepositoryTests
             new AdminUserRequest { UserName = "alice", Admin = false });
 
         Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+    }
+
+    // A name reads as "not an admin" until the account behind it exists.
+    [Fact]
+    public async Task CreateUser_DropsTheCachedAdminFlag()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx);
+        Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        await CreateRepository(ctx, cache: cache).CreateUserAsync(new AdminUserRequest
+        {
+            UserName = "alice", DomainId = "WSY", Password = "password123", Admin = true
+        });
+
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+    }
+
+    // The domain name is half the key, so renaming it must not leave the old name granting admin.
+    [Fact]
+    public async Task UpdateDomain_DropsTheCachedAdminFlag()
+    {
+        using var ctx = CreateContext();
+        using var cache = CreateCache();
+        AddDomain(ctx, "WSY", "weesky.be");
+        AddUser(ctx, "alice", "WSY", admin: ActiveState.Y);
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+
+        await CreateRepository(ctx, cache: cache).UpdateDomainAsync("WSY", new AdminDomainRequest { Name = "weesky.net" });
+
+        Assert.False(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.be"));
+        Assert.True(await CreateRepository(ctx, cache: cache).IsAdminAsync("alice", "weesky.net"));
     }
 
     [Fact]

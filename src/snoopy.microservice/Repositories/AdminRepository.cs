@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -21,24 +22,35 @@ internal sealed class AdminRepository(
     /// How long the admin flag is reused across requests, kept equal to
     /// <see cref="SessionGuard.CacheWindow"/>: both bound how long an
     /// account state change made outside this process keeps being answered from memory. Changes
-    /// made through this repository drop the entry at once.
+    /// made through this repository take effect on the next request.
     /// </summary>
     internal static readonly TimeSpan CacheWindow = SessionGuard.CacheWindow;
 
+    private const string EpochKey = "admin-flag:epoch";
+
     public async Task<bool> IsAdminAsync(string username, string domainName)
     {
-        return await cache.GetOrCreateAsync(AdminFlagKey(username, domainName), async entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = CacheWindow;
+        // Read before the query, stored with its answer: a write that commits while the query is
+        // in flight has no entry to remove yet, so the epoch is what makes that answer unusable.
+        var epoch = Interlocked.Read(ref Epoch().Value);
+        var key = AdminFlagKey(username, domainName);
 
-            return await (from user in context.Users.AsNoTracking()
-                          join domain in context.Domains on user.DomainId equals domain.Id
-                          where domain.Name == domainName &&
-                                string.Equals(user.Name, username, StringComparison.InvariantCultureIgnoreCase)
-                          select user.Admin == ActiveState.Y)
-                .FirstOrDefaultAsync();
-        });
+        if (cache.TryGetValue(key, out CachedAdminFlag cached) && cached.Epoch == epoch)
+            return cached.IsAdmin;
+
+        var isAdmin = await ReadAdminFlagAsync(username, domainName);
+
+        cache.Set(key, new CachedAdminFlag(isAdmin, epoch), CacheWindow);
+        return isAdmin;
     }
+
+    private Task<bool> ReadAdminFlagAsync(string username, string domainName) =>
+        (from user in context.Users.AsNoTracking()
+         join domain in context.Domains on user.DomainId equals domain.Id
+         where domain.Name == domainName &&
+               string.Equals(user.Name, username, StringComparison.InvariantCultureIgnoreCase)
+         select user.Admin == ActiveState.Y)
+        .FirstOrDefaultAsync();
 
     public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync()
     {
@@ -110,6 +122,7 @@ internal sealed class AdminRepository(
 
         context.Users.Add(newUser);
         await context.SaveChangesAsync();
+        ForgetAdminFlags();
 
         return Result.Success(MapToAdminUserInfo(newUser, domain.Name));
     }
@@ -139,7 +152,7 @@ internal sealed class AdminRepository(
         }
 
         await context.SaveChangesAsync();
-        ForgetAdminFlag(user.Name, domain?.Name);
+        ForgetAdminFlags();
 
         return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
     }
@@ -154,7 +167,7 @@ internal sealed class AdminRepository(
 
         context.Users.Remove(user);
         await context.SaveChangesAsync();
-        ForgetAdminFlag(user.Name, domain?.Name);
+        ForgetAdminFlags();
 
         if (domain is not null)
         {
@@ -195,6 +208,7 @@ internal sealed class AdminRepository(
         var domain = new MailDomain { Id = request.Id.ToUpperInvariant(), Name = request.Name };
         context.Domains.Add(domain);
         await context.SaveChangesAsync();
+        ForgetAdminFlags();
 
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
@@ -208,8 +222,11 @@ internal sealed class AdminRepository(
         if (domain == null)
             return Result.Failure<Domain>($"Domain '{id}' not found");
 
+        // The domain name is half the cache key: a rename moves every flag under it to a key
+        // nothing has cached yet, and leaves the old key answering for a name that no longer maps.
         domain.Name = request.Name;
         await context.SaveChangesAsync();
+        ForgetAdminFlags();
 
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
@@ -225,6 +242,8 @@ internal sealed class AdminRepository(
 
         context.Domains.Remove(domain);
         await context.SaveChangesAsync();
+        ForgetAdminFlags();
+
         return Result.Success();
     }
 
@@ -300,11 +319,26 @@ internal sealed class AdminRepository(
     private static string AdminFlagKey(string username, string domainName) =>
         $"admin-flag:{username.Trim().ToLowerInvariant()}@{domainName.Trim().ToLowerInvariant()}";
 
-    /// <summary>A role granted or revoked here takes effect on the next request, not in a minute.</summary>
-    private void ForgetAdminFlag(string username, string? domainName)
+    /// <summary>
+    /// Invalidates every cached flag, including answers still being computed. One epoch for all of
+    /// them: a write here is rare, and a per-key removal cannot reach an entry that does not exist
+    /// yet, which is exactly the entry a revocation must not leave behind.
+    /// </summary>
+    private void ForgetAdminFlags() => Interlocked.Increment(ref Epoch().Value);
+
+    /// <summary>Kept out of eviction, and monotonically seeded so a lost holder cannot reissue a live epoch.</summary>
+    private WriteEpoch Epoch() => cache.GetOrCreate(EpochKey, entry =>
     {
-        if (domainName is not null) cache.Remove(AdminFlagKey(username, domainName));
+        entry.Priority = CacheItemPriority.NeverRemove;
+        return new WriteEpoch();
+    })!;
+
+    private sealed class WriteEpoch
+    {
+        public long Value = Stopwatch.GetTimestamp();
     }
+
+    private readonly record struct CachedAdminFlag(bool IsAdmin, long Epoch);
 
     private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null) =>
         new AdminUserRow(user.Id, user.Name, user.DomainId, domainName,
