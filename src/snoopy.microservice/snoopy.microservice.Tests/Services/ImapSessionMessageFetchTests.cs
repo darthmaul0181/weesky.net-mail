@@ -128,6 +128,28 @@ public sealed class ImapSessionMessageFetchTests
         Assert.Contains("Plain body.", result.Value.TextBody, StringComparison.Ordinal);
     }
 
+    // MimeKit refuses an attachment-disposed part as the message body; MailKit's non-multipart
+    // TextBody/HtmlBody branch does not, so the guard is ours. A sole text/plain filed as an
+    // attachment belongs on the attachment list, not in the reader pane.
+    [Fact]
+    public async Task GetMessageAsync_DoesNotRenderAnAttachmentDisposedSolePartAsTheBody()
+    {
+        const string structure =
+            "(\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 6 1 NIL " +
+            "(\"attachment\" (\"filename\" \"notes.txt\")) NIL NIL)";
+        using var server = new SinglePartImapServer(structure, "Notes.");
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var result = await GetSinglePartMessageAsync(server, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Equal(string.Empty, result.Value.TextBody);
+        Assert.Equal(string.Empty, result.Value.HtmlBody);
+        var attachment = Assert.Single(result.Value.Attachments);
+        Assert.Equal("notes.txt", attachment.FileName);
+    }
+
     [Fact]
     public async Task GetAttachmentAsync_SurvivesANilTransferEncoding()
     {

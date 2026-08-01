@@ -855,10 +855,12 @@ internal sealed class ImapSession : IImapSession
             var headers = await folder.GetHeadersAsync(uniqueId, cancellationToken);
             var message = ToHeaderOnlyMessage(headers);
 
-            var htmlBody = summary.HtmlBody is { } htmlPart
+            // IsAttachment: MimeKit refuses an attachment-disposed part as the body; MailKit's
+            // non-multipart TextBody/HtmlBody branch does not check, so the guard sits here.
+            var htmlBody = summary.HtmlBody is { IsAttachment: false } htmlPart
                 ? await ReadTextPartAsync(folder, uniqueId, htmlPart, cancellationToken)
                 : null;
-            var textBody = summary.TextBody is { } textPart
+            var textBody = summary.TextBody is { IsAttachment: false } textPart
                 ? await ReadTextPartAsync(folder, uniqueId, textPart, cancellationToken)
                 : null;
 
