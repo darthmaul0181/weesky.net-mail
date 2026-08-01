@@ -32,7 +32,7 @@ internal sealed class AdminRepository(
     {
         // Read before the query, stored with its answer: a write that commits while the query is
         // in flight has no entry to remove yet, so the epoch is what makes that answer unusable.
-        var epoch = Interlocked.Read(ref Epoch().Value);
+        var epoch = CurrentEpoch();
         var key = AdminFlagKey(username, domainName);
 
         if (cache.TryGetValue(key, out CachedAdminFlag cached) && cached.Epoch == epoch)
@@ -332,19 +332,19 @@ internal sealed class AdminRepository(
     /// them: a write here is rare, and a per-key removal cannot reach an entry that does not exist
     /// yet, which is exactly the entry a revocation must not leave behind.
     /// </summary>
-    private void ForgetAdminFlags() => Interlocked.Increment(ref Epoch().Value);
+    private void ForgetAdminFlags() =>
+        cache.Set(EpochKey, Stopwatch.GetTimestamp(), new MemoryCacheEntryOptions { Priority = CacheItemPriority.NeverRemove });
 
-    /// <summary>Kept out of eviction, and monotonically seeded so a lost holder cannot reissue a live epoch.</summary>
-    private WriteEpoch Epoch() => cache.GetOrCreate(EpochKey, entry =>
+    /// <summary>
+    /// A timestamp rather than a counter, so nothing has to be read before it is written: two
+    /// writers cannot lose each other's bump, and an epoch that went missing comes back larger than
+    /// any a live entry carries, which costs a re-read instead of serving a revoked flag.
+    /// </summary>
+    private long CurrentEpoch() => cache.GetOrCreate(EpochKey, entry =>
     {
         entry.Priority = CacheItemPriority.NeverRemove;
-        return new WriteEpoch();
-    })!;
-
-    private sealed class WriteEpoch
-    {
-        public long Value = Stopwatch.GetTimestamp();
-    }
+        return Stopwatch.GetTimestamp();
+    });
 
     private readonly record struct CachedAdminFlag(bool IsAdmin, long Epoch);
 
