@@ -1161,7 +1161,11 @@ internal sealed class ImapSession : IImapSession
         {
             if (_client.IsConnected)
             {
-                await _client.DisconnectAsync(quit: true);
+                // Teardown runs after the response went out and must not inherit the protocol
+                // timeout: two seconds pays for a polite LOGOUT (quit: true) when the server is
+                // alive, and Dispose below cuts the socket when it is not.
+                using var cap = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await _client.DisconnectAsync(quit: true, cap.Token);
             }
         }
         catch
