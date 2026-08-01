@@ -12,6 +12,15 @@ namespace weesky.Snoopy.Microservice.Services;
 internal sealed class ManageSieveSession : IManageSieveSession
 {
     internal const string TimedOut = "The rules service stopped responding";
+    internal const string ResponseTooLarge = "The rules service sent an oversized response";
+
+    /// <summary>
+    /// A Sieve script is kilobytes and a script name is bytes, so a megabyte is already generous.
+    /// The figure that drives the allocation is the server's own literal prefix, and an external
+    /// endpoint is admin-configured rather than trusted: without this ceiling one line of response
+    /// asks for a two-gigabyte buffer.
+    /// </summary>
+    private const int MaxResponseBytes = 1024 * 1024;
 
     private const string ControlCharacterInName = "Script name contains a forbidden control character";
 
@@ -29,6 +38,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
     private readonly byte[] _readBuffer = new byte[8192];
     private int _readBufferLen;
     private int _readBufferPos;
+    private string? _readFailure;
     private bool _disposed;
 
     public ManageSieveSession(Stream stream, TimeSpan? operationTimeout = null, Func<ValueTask>? onDisposeAsync = null)
@@ -54,7 +64,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
         {
             var line = await ReadLineAsync(cancellationToken);
             if (line == null)
-                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>("Connection closed");
+                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>(ReadFailure());
             if (IsTerminator(line, out var status))
             {
                 return status.IsOk
@@ -63,7 +73,9 @@ internal sealed class ManageSieveSession : IManageSieveSession
             }
 
             var entry = await ParseListEntryAsync(line, cancellationToken);
-            if (entry != null) entries.Add(entry);
+            if (entry.IsFailure)
+                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>(entry.Error);
+            if (entry.Value != null) entries.Add(entry.Value);
         }
     }
 
@@ -85,7 +97,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
 
         var first = await ReadLineAsync(cancellationToken);
         if (first == null)
-            return Result.Failure<string>("Connection closed");
+            return Result.Failure<string>(ReadFailure());
 
         if (IsTerminator(first, out var status))
             return status.IsOk
@@ -96,7 +108,10 @@ internal sealed class ManageSieveSession : IManageSieveSession
         if (!TryParseLiteralPrefix(first, out var size))
             return Result.Failure<string>("Unexpected response from server");
 
-        var bytes = await ReadExactlyAsync(size, cancellationToken);
+        var payload = await ReadExactlyAsync(size, cancellationToken);
+        if (payload.IsFailure)
+            return Result.Failure<string>(payload.Error);
+
         // After the literal, the server sends a CRLF then the final OK/NO line.
         // We consume the CRLF by reading one (possibly empty) line.
         await ReadLineAsync(cancellationToken);
@@ -105,7 +120,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
         if (!final.IsOk)
             return Result.Failure<string>(final.Message ?? "Unable to fetch script");
 
-        return Result.Success(Utf8.GetString(bytes));
+        return Result.Success(Utf8.GetString(payload.Value));
     }
 
     public Task<Result> PutScriptAsync(string name, string content, CancellationToken cancellationToken = default)
@@ -244,7 +259,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
         while (true)
         {
             var line = await ReadLineAsync(cancellationToken);
-            if (line == null) return new Status(false, "Connection closed");
+            if (line == null) return new Status(false, ReadFailure());
 
             if (IsTerminator(line, out var status)) return status;
             dataLines.Add(line);
@@ -354,9 +369,11 @@ internal sealed class ManageSieveSession : IManageSieveSession
         return Result.Success(sb.ToString());
     }
 
-    private async Task<SieveScriptListEntry?> ParseListEntryAsync(string line, CancellationToken cancellationToken)
+    /// <summary>A null value is a line this parser does not recognise and skips; a failure is the
+    /// stream itself giving up, which the listing must not survive.</summary>
+    private async Task<Result<SieveScriptListEntry?>> ParseListEntryAsync(string line, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(line)) return null;
+        if (string.IsNullOrEmpty(line)) return Result.Success<SieveScriptListEntry?>(null);
 
         // Quoted form: "name" [ACTIVE]
         if (line[0] == '"')
@@ -367,22 +384,25 @@ internal sealed class ManageSieveSession : IManageSieveSession
                 if (line[i] == '\\' && i + 1 < line.Length) { i++; continue; }
                 if (line[i] == '"') { end = i; break; }
             }
-            if (end < 0) return null;
+            if (end < 0) return Result.Success<SieveScriptListEntry?>(null);
             var name = TryUnquote(line.Substring(0, end + 1)) ?? string.Empty;
             var rest = line.Substring(end + 1).Trim();
-            return new SieveScriptListEntry(name, IsActiveKeyword(rest));
+            return Result.Success<SieveScriptListEntry?>(new SieveScriptListEntry(name, IsActiveKeyword(rest)));
         }
 
         // Literal form: {N} or {N+} on its own line, then N bytes of name, then maybe " ACTIVE\r\n"
         if (line[0] == '{' && TryParseLiteralPrefix(line, out var size))
         {
             var nameBytes = await ReadExactlyAsync(size, cancellationToken);
-            var name = Utf8.GetString(nameBytes);
+            if (nameBytes.IsFailure) return Result.Failure<SieveScriptListEntry?>(nameBytes.Error);
+
+            var name = Utf8.GetString(nameBytes.Value);
             var trailing = await ReadLineAsync(cancellationToken);
-            return new SieveScriptListEntry(name, trailing != null && IsActiveKeyword(trailing.Trim()));
+            return Result.Success<SieveScriptListEntry?>(
+                new SieveScriptListEntry(name, trailing != null && IsActiveKeyword(trailing.Trim())));
         }
 
-        return null;
+        return Result.Success<SieveScriptListEntry?>(null);
     }
 
     private static bool IsActiveKeyword(string s) =>
@@ -401,6 +421,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
 
     // ---------- Low-level read helpers ----------
 
+    /// <summary>Null means the read gave up; <see cref="ReadFailure"/> says why.</summary>
     private async Task<string?> ReadLineAsync(CancellationToken cancellationToken)
     {
         using var ms = new MemoryStream();
@@ -421,12 +442,22 @@ internal sealed class ManageSieveSession : IManageSieveSession
                 if (len > 0 && bytes[len - 1] == 0x0D) len--;
                 return Utf8.GetString(bytes, 0, len);
             }
+            if (ms.Length >= MaxResponseBytes)
+            {
+                _readFailure = ResponseTooLarge;
+                return null;
+            }
             ms.WriteByte(b);
         }
     }
 
-    private async Task<byte[]> ReadExactlyAsync(int count, CancellationToken cancellationToken)
+    private string ReadFailure() => _readFailure ?? "Connection closed";
+
+    private async Task<Result<byte[]>> ReadExactlyAsync(int count, CancellationToken cancellationToken)
     {
+        if (count > MaxResponseBytes)
+            return Result.Failure<byte[]>(ResponseTooLarge);
+
         var result = new byte[count];
         int read = 0;
         while (read < count)
@@ -436,7 +467,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
                 _readBufferLen = await _stream.ReadAsync(_readBuffer, cancellationToken);
                 _readBufferPos = 0;
                 if (_readBufferLen == 0)
-                    throw new IOException("Unexpected end of stream while reading literal payload");
+                    return Result.Failure<byte[]>(ReadFailure());
             }
             int available = _readBufferLen - _readBufferPos;
             int toCopy = Math.Min(count - read, available);

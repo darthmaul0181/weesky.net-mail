@@ -231,6 +231,46 @@ public sealed class ManageSieveSessionTests
         Assert.Equal("LOGOUT\r\n", stream.ClientWritesAsString);
     }
 
+    // ----- Server-driven allocation -----
+
+    /// <summary>
+    /// The literal size is the server's word, and an external endpoint is only admin-configured:
+    /// it must never be allocated on trust.
+    /// </summary>
+    [Fact]
+    public async Task GetScriptAsync_WithAnOversizedLiteral_FailsBeforeAllocating()
+    {
+        var sut = CreateSut($"{{{int.MaxValue}+}}\r\n", out _);
+
+        var result = await sut.GetScriptAsync("weesky-rules");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ManageSieveSession.ResponseTooLarge, result.Error);
+    }
+
+    [Fact]
+    public async Task ListScriptsAsync_WithAnOversizedLiteralName_FailsBeforeAllocating()
+    {
+        var sut = CreateSut($"{{{int.MaxValue}+}}\r\n", out _);
+
+        var result = await sut.ListScriptsAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ManageSieveSession.ResponseTooLarge, result.Error);
+    }
+
+    /// <summary>A line the server never terminates is the same unbounded growth spelled differently.</summary>
+    [Fact]
+    public async Task ListScriptsAsync_WhenTheServerStreamsALineThatNeverEnds_StopsAtTheCeiling()
+    {
+        var sut = CreateSut(new string('x', (1024 * 1024) + 8), out _);
+
+        var result = await sut.ListScriptsAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ManageSieveSession.ResponseTooLarge, result.Error);
+    }
+
     // ----- Timeouts -----
 
     [Fact]
