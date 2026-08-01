@@ -245,7 +245,7 @@ public sealed class ManageSieveSessionTests
         var result = await sut.GetScriptAsync("weesky-rules");
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ManageSieveSession.ResponseTooLarge, result.Error);
+        Assert.Equal(SieveErrors.ResponseTooLarge, result.Error);
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public sealed class ManageSieveSessionTests
         var result = await sut.ListScriptsAsync();
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ManageSieveSession.ResponseTooLarge, result.Error);
+        Assert.Equal(SieveErrors.ResponseTooLarge, result.Error);
     }
 
     /// <summary>A line the server never terminates is the same unbounded growth spelled differently.</summary>
@@ -268,7 +268,7 @@ public sealed class ManageSieveSessionTests
         var result = await sut.ListScriptsAsync();
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ManageSieveSession.ResponseTooLarge, result.Error);
+        Assert.Equal(SieveErrors.ResponseTooLarge, result.Error);
     }
 
     // ----- Timeouts -----
@@ -282,7 +282,7 @@ public sealed class ManageSieveSessionTests
         var result = await sut.ListScriptsAsync().WaitAsync(TimeSpan.FromSeconds(20));
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ManageSieveSession.TimedOut, result.Error);
+        Assert.Equal(SieveErrors.TimedOut, result.Error);
     }
 
     [Fact]
@@ -294,7 +294,7 @@ public sealed class ManageSieveSessionTests
         var result = await sut.GetScriptAsync("weesky-rules").WaitAsync(TimeSpan.FromSeconds(20));
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ManageSieveSession.TimedOut, result.Error);
+        Assert.Equal(SieveErrors.TimedOut, result.Error);
     }
 
     /// <summary>

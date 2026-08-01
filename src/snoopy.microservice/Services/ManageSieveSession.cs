@@ -11,9 +11,6 @@ namespace weesky.Snoopy.Microservice.Services;
 /// </summary>
 internal sealed class ManageSieveSession : IManageSieveSession
 {
-    internal const string TimedOut = "The rules service stopped responding";
-    internal const string ResponseTooLarge = "The rules service sent an oversized response";
-
     /// <summary>
     /// A Sieve script is kilobytes and a script name is bytes, so a megabyte is already generous.
     /// The figure that drives the allocation is the server's own literal prefix, and an external
@@ -221,7 +218,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Result.Failure<T>(TimedOut);
+            return Result.Failure<T>(SieveErrors.TimedOut);
         }
     }
 
@@ -235,7 +232,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Result.Failure(TimedOut);
+            return Result.Failure(SieveErrors.TimedOut);
         }
     }
 
@@ -444,7 +441,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
             }
             if (ms.Length >= MaxResponseBytes)
             {
-                _readFailure = ResponseTooLarge;
+                _readFailure = SieveErrors.ResponseTooLarge;
                 return null;
             }
             ms.WriteByte(b);
@@ -456,7 +453,7 @@ internal sealed class ManageSieveSession : IManageSieveSession
     private async Task<Result<byte[]>> ReadExactlyAsync(int count, CancellationToken cancellationToken)
     {
         if (count > MaxResponseBytes)
-            return Result.Failure<byte[]>(ResponseTooLarge);
+            return Result.Failure<byte[]>(SieveErrors.ResponseTooLarge);
 
         var result = new byte[count];
         int read = 0;
