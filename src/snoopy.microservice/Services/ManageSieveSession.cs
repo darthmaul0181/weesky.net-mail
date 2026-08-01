@@ -11,27 +11,42 @@ namespace weesky.Snoopy.Microservice.Services;
 /// </summary>
 internal sealed class ManageSieveSession : IManageSieveSession
 {
+    internal const string TimedOut = "The rules service stopped responding";
+
     private const string ControlCharacterInName = "Script name contains a forbidden control character";
 
     private static readonly UTF8Encoding Utf8 = new(false);
     private static readonly byte[] CrLf = { 0x0D, 0x0A };
+    private static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>The socket is closing either way: a LOGOUT the peer never reads must not hold the
+    /// response back, since disposal is the request's last act.</summary>
+    private static readonly TimeSpan LogoutTimeout = TimeSpan.FromSeconds(2);
 
     private readonly Stream _stream;
+    private readonly TimeSpan _operationTimeout;
     private readonly Func<ValueTask>? _onDisposeAsync;
     private readonly byte[] _readBuffer = new byte[8192];
     private int _readBufferLen;
     private int _readBufferPos;
     private bool _disposed;
 
-    public ManageSieveSession(Stream stream, Func<ValueTask>? onDisposeAsync = null)
+    public ManageSieveSession(Stream stream, TimeSpan? operationTimeout = null, Func<ValueTask>? onDisposeAsync = null)
     {
-        _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+        ArgumentNullException.ThrowIfNull(stream);
+        _stream = stream;
+        _operationTimeout = operationTimeout is { } timeout && timeout > TimeSpan.Zero ? timeout : DefaultOperationTimeout;
         _onDisposeAsync = onDisposeAsync;
     }
 
-    public async Task<Result<IReadOnlyList<SieveScriptListEntry>>> ListScriptsAsync(CancellationToken cancellationToken = default)
+    public Task<Result<IReadOnlyList<SieveScriptListEntry>>> ListScriptsAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return BoundedAsync(cancellationToken, ListScriptsCoreAsync);
+    }
+
+    private async Task<Result<IReadOnlyList<SieveScriptListEntry>>> ListScriptsCoreAsync(CancellationToken cancellationToken)
+    {
         await SendLineAsync("LISTSCRIPTS", cancellationToken);
 
         var entries = new List<SieveScriptListEntry>();
@@ -52,16 +67,21 @@ internal sealed class ManageSieveSession : IManageSieveSession
         }
     }
 
-    public async Task<Result<string>> GetScriptAsync(string name, CancellationToken cancellationToken = default)
+    public Task<Result<string>> GetScriptAsync(string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(name))
-            return Result.Failure<string>("Script name is required");
+            return Task.FromResult(Result.Failure<string>("Script name is required"));
 
         var quoted = QuoteName(name);
-        if (quoted.IsFailure) return Result.Failure<string>(quoted.Error);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure<string>(quoted.Error));
 
-        await SendLineAsync($"GETSCRIPT {quoted.Value}", cancellationToken);
+        return BoundedAsync(cancellationToken, token => GetScriptCoreAsync(quoted.Value, token));
+    }
+
+    private async Task<Result<string>> GetScriptCoreAsync(string quotedName, CancellationToken cancellationToken)
+    {
+        await SendLineAsync($"GETSCRIPT {quotedName}", cancellationToken);
 
         var first = await ReadLineAsync(cancellationToken);
         if (first == null)
@@ -88,18 +108,22 @@ internal sealed class ManageSieveSession : IManageSieveSession
         return Result.Success(Utf8.GetString(bytes));
     }
 
-    public async Task<Result> PutScriptAsync(string name, string content, CancellationToken cancellationToken = default)
+    public Task<Result> PutScriptAsync(string name, string content, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(name))
-            return Result.Failure("Script name is required");
-        content ??= string.Empty;
+            return Task.FromResult(Result.Failure("Script name is required"));
 
         var quoted = QuoteName(name);
-        if (quoted.IsFailure) return Result.Failure(quoted.Error);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure(quoted.Error));
 
+        return BoundedAsync(cancellationToken, token => PutScriptCoreAsync(quoted.Value, content ?? string.Empty, token));
+    }
+
+    private async Task<Result> PutScriptCoreAsync(string quotedName, string content, CancellationToken cancellationToken)
+    {
         var contentBytes = Utf8.GetBytes(content);
-        var header = Utf8.GetBytes($"PUTSCRIPT {quoted.Value} {{{contentBytes.Length}+}}\r\n");
+        var header = Utf8.GetBytes($"PUTSCRIPT {quotedName} {{{contentBytes.Length}+}}\r\n");
 
         await _stream.WriteAsync(header, cancellationToken);
         await _stream.WriteAsync(contentBytes, cancellationToken);
@@ -116,9 +140,10 @@ internal sealed class ManageSieveSession : IManageSieveSession
     {
         ThrowIfDisposed();
         var quoted = QuoteName(name ?? string.Empty);
-        return quoted.IsFailure
-            ? Task.FromResult(Result.Failure(quoted.Error))
-            : SendSimpleAsync($"SETACTIVE {quoted.Value}", "Unable to change active script", cancellationToken);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure(quoted.Error));
+
+        return BoundedAsync(cancellationToken,
+            token => SendSimpleAsync($"SETACTIVE {quoted.Value}", "Unable to change active script", token));
     }
 
     public Task<Result> DeleteScriptAsync(string name, CancellationToken cancellationToken = default)
@@ -128,14 +153,14 @@ internal sealed class ManageSieveSession : IManageSieveSession
             return Task.FromResult(Result.Failure("Script name is required"));
 
         var quoted = QuoteName(name);
-        return quoted.IsFailure
-            ? Task.FromResult(Result.Failure(quoted.Error))
-            : SendSimpleAsync($"DELETESCRIPT {quoted.Value}", "Unable to delete script", cancellationToken);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure(quoted.Error));
+
+        return BoundedAsync(cancellationToken,
+            token => SendSimpleAsync($"DELETESCRIPT {quoted.Value}", "Unable to delete script", token));
     }
 
     private async Task<Result> SendSimpleAsync(string command, string failureFallback, CancellationToken cancellationToken)
     {
-        ThrowIfDisposed();
         await SendLineAsync(command, cancellationToken);
         var response = await ReadResponseAsync(cancellationToken);
         return response.IsOk
@@ -147,13 +172,16 @@ internal sealed class ManageSieveSession : IManageSieveSession
     {
         if (_disposed) return;
         _disposed = true;
-        try
+        using (var logoutCts = new CancellationTokenSource(LogoutTimeout))
         {
-            await SendLineAsync("LOGOUT", CancellationToken.None);
-        }
-        catch
-        {
-            // best-effort
+            try
+            {
+                await SendLineAsync("LOGOUT", logoutCts.Token);
+            }
+            catch
+            {
+                // best-effort
+            }
         }
         if (_onDisposeAsync != null)
         {
@@ -162,6 +190,39 @@ internal sealed class ManageSieveSession : IManageSieveSession
     }
 
     // ---------- Protocol helpers ----------
+
+    /// <summary>
+    /// Every read and write below is async, so the socket-level ReceiveTimeout/SendTimeout the
+    /// transport sets bind none of them: this is the only thing keeping a silent peer from holding
+    /// the request open. A timeout the caller did not ask for is a failure, never an exception.
+    /// </summary>
+    private async Task<Result<T>> BoundedAsync<T>(CancellationToken cancellationToken, Func<CancellationToken, Task<Result<T>>> operation)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(_operationTimeout);
+        try
+        {
+            return await operation(cts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Result.Failure<T>(TimedOut);
+        }
+    }
+
+    private async Task<Result> BoundedAsync(CancellationToken cancellationToken, Func<CancellationToken, Task<Result>> operation)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(_operationTimeout);
+        try
+        {
+            return await operation(cts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Result.Failure(TimedOut);
+        }
+    }
 
     private async Task SendLineAsync(string line, CancellationToken cancellationToken)
     {

@@ -48,32 +48,38 @@ internal sealed class ManageSieveClient : IManageSieveClient
                 SendTimeout = _options.TimeoutSeconds * 1000
             };
 
-            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-            {
-                connectCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
-                await tcp.ConnectAsync(connection.Host, connection.Port, connectCts.Token);
-            }
+            // Those two socket timeouts bind synchronous calls only, and every step below is async:
+            // this token is what stops a server that accepts and then goes silent from holding the
+            // socket — and the request behind it — for good.
+            using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            handshakeCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+            var handshakeToken = handshakeCts.Token;
+
+            await tcp.ConnectAsync(connection.Host, connection.Port, handshakeToken);
 
             stream = tcp.GetStream();
 
-            var (capabilities, status) = await ReadCapabilitiesAsync(stream, cancellationToken);
+            var (capabilities, status) = await ReadCapabilitiesAsync(stream, handshakeToken);
             if (!status.IsOk)
                 return FailUnreachable("greeting", connection.Host, status.Message);
 
             if (HasCapability(capabilities, "STARTTLS"))
             {
-                await WriteLineAsync(stream, "STARTTLS", cancellationToken);
-                var tlsStatus = await ReadSimpleStatusAsync(stream, cancellationToken);
+                await WriteLineAsync(stream, "STARTTLS", handshakeToken);
+                var tlsStatus = await ReadSimpleStatusAsync(stream, handshakeToken);
                 if (!tlsStatus.IsOk)
                     return FailUnreachable("STARTTLS", connection.Host, tlsStatus.Message);
 
+                // Owned before it can throw: assigning after the handshake leaked the SslStream and
+                // left the finally disposing the inner NetworkStream on its own.
                 var ssl = new SslStream(stream, leaveInnerStreamOpen: false,
                     (_, certificate, chain, errors) => ValidateCertificate(connection.Host, certificate, chain, errors));
-                await ssl.AuthenticateAsClientAsync(connection.Host);
                 stream = ssl;
+                await ssl.AuthenticateAsClientAsync(
+                    new SslClientAuthenticationOptions { TargetHost = connection.Host }, handshakeToken);
 
                 // Server re-sends capabilities over the encrypted channel.
-                var (_, postTlsStatus) = await ReadCapabilitiesAsync(stream, cancellationToken);
+                var (_, postTlsStatus) = await ReadCapabilitiesAsync(stream, handshakeToken);
                 if (!postTlsStatus.IsOk)
                     return FailUnreachable("post-STARTTLS handshake", connection.Host, postTlsStatus.Message);
             }
@@ -93,8 +99,8 @@ internal sealed class ManageSieveClient : IManageSieveClient
             // account), an empty one means we are authenticating as the mailbox itself.
             var saslPayload = $"{connection.AuthorizationIdentity}\0{connection.AuthenticationIdentity}\0{connection.Password}";
             var b64 = Convert.ToBase64String(Utf8.GetBytes(saslPayload));
-            await WriteLineAsync(stream, $"AUTHENTICATE \"PLAIN\" \"{b64}\"", cancellationToken);
-            var authStatus = await ReadSimpleStatusAsync(stream, cancellationToken);
+            await WriteLineAsync(stream, $"AUTHENTICATE \"PLAIN\" \"{b64}\"", handshakeToken);
+            var authStatus = await ReadSimpleStatusAsync(stream, handshakeToken);
             if (!authStatus.IsOk)
             {
                 _logger.LogWarning("ManageSieve auth failed for {Connection}: {Message}", connection, authStatus.Message);
@@ -103,7 +109,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
 
             var capturedTcp = tcp;
             var capturedStream = stream;
-            var session = new ManageSieveSession(stream, onDisposeAsync: () =>
+            var session = new ManageSieveSession(stream, TimeSpan.FromSeconds(_options.TimeoutSeconds), onDisposeAsync: () =>
             {
                 try { capturedStream.Dispose(); } catch { /* ignore */ }
                 try { capturedTcp.Dispose(); } catch { /* ignore */ }

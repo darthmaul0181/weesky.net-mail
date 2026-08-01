@@ -231,6 +231,48 @@ public sealed class ManageSieveSessionTests
         Assert.Equal("LOGOUT\r\n", stream.ClientWritesAsString);
     }
 
+    // ----- Timeouts -----
+
+    [Fact]
+    public async Task ListScriptsAsync_WhenTheServerNeverAnswers_FailsOnTheOperationTimeout()
+    {
+        await using var stream = new SilentStream();
+        var sut = new ManageSieveSession(stream, TimeSpan.FromMilliseconds(200));
+
+        var result = await sut.ListScriptsAsync().WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ManageSieveSession.TimedOut, result.Error);
+    }
+
+    [Fact]
+    public async Task GetScriptAsync_WhenTheServerNeverAnswers_FailsOnTheOperationTimeout()
+    {
+        await using var stream = new SilentStream();
+        var sut = new ManageSieveSession(stream, TimeSpan.FromMilliseconds(200));
+
+        var result = await sut.GetScriptAsync("weesky-rules").WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ManageSieveSession.TimedOut, result.Error);
+    }
+
+    /// <summary>
+    /// Disposal is the request's last act — `await using` in SieveRepository — so a LOGOUT the peer
+    /// never reads must not be what holds the response back.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_WhenThePeerStoppedReading_StillCompletesAndRunsTheCallback()
+    {
+        await using var stream = new SilentStream(blockWrites: true);
+        var released = false;
+        var session = new ManageSieveSession(stream, onDisposeAsync: () => { released = true; return ValueTask.CompletedTask; });
+
+        await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(released);
+    }
+
     // ----- Name escaping -----
 
     [Fact]
@@ -321,6 +363,39 @@ public sealed class ManageSieveSessionTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal($"DELETESCRIPT \"{name}\"\r\n", stream.ClientWritesAsString);
+    }
+
+    /// <summary>A peer that accepted the socket and then stopped talking — and, optionally, stopped reading.</summary>
+    private sealed class SilentStream(bool blockWrites = false) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() { }
+
+        public override Task FlushAsync(CancellationToken cancellationToken) =>
+            blockWrites ? Task.Delay(Timeout.Infinite, cancellationToken) : Task.CompletedTask;
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (blockWrites) await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 
     private sealed class FakeDuplexStream : Stream

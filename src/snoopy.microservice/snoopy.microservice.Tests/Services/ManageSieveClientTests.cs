@@ -93,6 +93,28 @@ public sealed class ManageSieveClientTests
         Assert.Equal(SieveErrors.AuthenticationFailed, result.Error);
     }
 
+    /// <summary>
+    /// TcpClient.ReceiveTimeout/SendTimeout bind synchronous socket calls only, and every read in
+    /// the handshake is async: a server that accepts the connection and then says nothing used to
+    /// hold the socket — and the request behind it — forever.
+    /// </summary>
+    [Fact]
+    public async Task OpenSessionAsync_WhenTheServerAcceptsThenGoesSilent_FailsWithinTheTimeout()
+    {
+        using var server = new SilentSieveServer();
+        var options = Configured();
+        options.TimeoutSeconds = 1;
+
+        var result = await CreateSut(options)
+            .OpenSessionAsync(
+                new SieveConnection("127.0.0.1", server.Port, string.Empty, "bob@external.test", "bob-secret"),
+                CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SieveErrors.Unreachable, result.Error);
+    }
+
     [Fact]
     public async Task OpenSessionAsync_WithAnIncompleteConnection_FailsNotConfigured()
     {
@@ -102,6 +124,36 @@ public sealed class ManageSieveClientTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(SieveErrors.NotConfigured, result.Error);
+    }
+
+    /// <summary>Accepts the connection and never writes a byte.</summary>
+    private sealed class SilentSieveServer : IDisposable
+    {
+        private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _stop = new();
+        private TcpClient? _accepted;
+
+        public SilentSieveServer()
+        {
+            _listener.Start();
+            _ = AcceptAsync();
+        }
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        private async Task AcceptAsync()
+        {
+            try { _accepted = await _listener.AcceptTcpClientAsync(_stop.Token); }
+            catch { /* the fixture is being torn down */ }
+        }
+
+        public void Dispose()
+        {
+            _stop.Cancel();
+            _accepted?.Dispose();
+            _listener.Dispose();
+            _stop.Dispose();
+        }
     }
 
     /// <summary>
