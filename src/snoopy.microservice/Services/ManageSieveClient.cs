@@ -1,7 +1,6 @@
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Models;
@@ -12,12 +11,13 @@ namespace weesky.Snoopy.Microservice.Services;
 /// Opens ManageSieve (RFC 5804) sessions over TCP+STARTTLS. The SASL PLAIN identities come from
 /// the <see cref="SieveConnection"/>; everything else — timeouts, TLS policy — from
 /// <see cref="SieveOptions"/>, which is a client policy rather than a per-target setting.
+///
+/// The handshake and the session that follows it read through the same
+/// <see cref="ManageSieveWire"/>, so nothing this class buffers past a line boundary is lost to
+/// the verbs behind it.
 /// </summary>
 internal sealed class ManageSieveClient : IManageSieveClient
 {
-    private static readonly UTF8Encoding Utf8 = new(false);
-    private static readonly byte[] CrLf = { 0x0D, 0x0A };
-
     private readonly SieveOptions _options;
     private readonly ILogger<ManageSieveClient> _logger;
 
@@ -39,7 +39,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
         }
 
         TcpClient? tcp = null;
-        Stream? stream = null;
+        ManageSieveWire? wire = null;
         try
         {
             tcp = new TcpClient
@@ -57,29 +57,29 @@ internal sealed class ManageSieveClient : IManageSieveClient
 
             await tcp.ConnectAsync(connection.Host, connection.Port, handshakeToken);
 
-            stream = tcp.GetStream();
+            wire = new ManageSieveWire(tcp.GetStream(), tcp);
+            tcp = null; // the wire owns the socket from here, including on the TLS failure path
 
-            var (capabilities, status) = await ReadCapabilitiesAsync(stream, handshakeToken);
+            var (capabilities, status) = await ReadCapabilitiesAsync(wire, handshakeToken);
             if (!status.IsOk)
                 return FailUnreachable("greeting", connection.Host, status.Message);
 
             if (HasCapability(capabilities, "STARTTLS"))
             {
-                await WriteLineAsync(stream, "STARTTLS", handshakeToken);
-                var tlsStatus = await ReadSimpleStatusAsync(stream, handshakeToken);
+                await wire.WriteLineAsync("STARTTLS", handshakeToken);
+                var tlsStatus = await ReadSimpleStatusAsync(wire, handshakeToken);
                 if (!tlsStatus.IsOk)
                     return FailUnreachable("STARTTLS", connection.Host, tlsStatus.Message);
 
-                // Owned before it can throw: assigning after the handshake leaked the SslStream and
-                // left the finally disposing the inner NetworkStream on its own.
-                var ssl = new SslStream(stream, leaveInnerStreamOpen: false,
-                    (_, certificate, chain, errors) => ValidateCertificate(connection.Host, certificate, chain, errors));
-                stream = ssl;
-                await ssl.AuthenticateAsClientAsync(
-                    new SslClientAuthenticationOptions { TargetHost = connection.Host }, handshakeToken);
+                var secured = await wire.TryStartTlsAsync(
+                    new SslClientAuthenticationOptions { TargetHost = connection.Host },
+                    (_, certificate, chain, errors) => ValidateCertificate(connection.Host, certificate, chain, errors),
+                    handshakeToken);
+                if (!secured)
+                    return FailUnreachable("STARTTLS", connection.Host, "Server sent data before the TLS handshake");
 
                 // Server re-sends capabilities over the encrypted channel.
-                var (_, postTlsStatus) = await ReadCapabilitiesAsync(stream, handshakeToken);
+                var (_, postTlsStatus) = await ReadCapabilitiesAsync(wire, handshakeToken);
                 if (!postTlsStatus.IsOk)
                     return FailUnreachable("post-STARTTLS handshake", connection.Host, postTlsStatus.Message);
             }
@@ -98,25 +98,17 @@ internal sealed class ManageSieveClient : IManageSieveClient
             // authzid \0 authcid \0 password: an authzid is impersonation (our own server, master
             // account), an empty one means we are authenticating as the mailbox itself.
             var saslPayload = $"{connection.AuthorizationIdentity}\0{connection.AuthenticationIdentity}\0{connection.Password}";
-            var b64 = Convert.ToBase64String(Utf8.GetBytes(saslPayload));
-            await WriteLineAsync(stream, $"AUTHENTICATE \"PLAIN\" \"{b64}\"", handshakeToken);
-            var authStatus = await ReadSimpleStatusAsync(stream, handshakeToken);
+            var b64 = Convert.ToBase64String(ManageSieveWire.Utf8.GetBytes(saslPayload));
+            await wire.WriteLineAsync($"AUTHENTICATE \"PLAIN\" \"{b64}\"", handshakeToken);
+            var authStatus = await ReadSimpleStatusAsync(wire, handshakeToken);
             if (!authStatus.IsOk)
             {
                 _logger.LogWarning("ManageSieve auth failed for {Connection}: {Message}", connection, authStatus.Message);
                 return Fail(SieveErrors.AuthenticationFailed);
             }
 
-            var capturedTcp = tcp;
-            var capturedStream = stream;
-            var session = new ManageSieveSession(stream, TimeSpan.FromSeconds(_options.TimeoutSeconds), onDisposeAsync: () =>
-            {
-                try { capturedStream.Dispose(); } catch { /* ignore */ }
-                try { capturedTcp.Dispose(); } catch { /* ignore */ }
-                return ValueTask.CompletedTask;
-            });
-            tcp = null; // ownership transferred
-            stream = null;
+            var session = new ManageSieveSession(wire, TimeSpan.FromSeconds(_options.TimeoutSeconds));
+            wire = null; // ownership transferred: disposing the session now closes the connection
             return Result.Success<IManageSieveSession>(session);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -130,7 +122,9 @@ internal sealed class ManageSieveClient : IManageSieveClient
         }
         finally
         {
-            stream?.Dispose();
+            // Exactly one of these is non-null on a failed path; both are null once the session has
+            // the wire. tcp only survives a ConnectAsync that never reached the wire.
+            if (wire != null) await wire.DisposeAsync();
             tcp?.Dispose();
         }
     }
@@ -163,106 +157,30 @@ internal sealed class ManageSieveClient : IManageSieveClient
     private static bool HasCapability(IReadOnlyList<string> capabilities, string name) =>
         capabilities.Any(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-    private static async Task<(IReadOnlyList<string> Capabilities, Status Status)> ReadCapabilitiesAsync(Stream stream, CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<string> Capabilities, ManageSieveWire.Status Status)> ReadCapabilitiesAsync(
+        ManageSieveWire wire, CancellationToken cancellationToken)
     {
         var caps = new List<string>();
         while (true)
         {
-            var line = await ReadLineAsync(stream, cancellationToken);
-            if (line == null) return (caps, new Status(false, "Connection closed"));
-            if (TryParseStatus(line, out var status)) return (caps, status);
+            var line = await wire.ReadLineAsync(cancellationToken);
+            if (line == null) return (caps, new ManageSieveWire.Status(false, wire.ReadFailure));
+            if (ManageSieveWire.TryParseStatus(line, out var status)) return (caps, status);
 
             // Capability line is of the form: "NAME" or "NAME" "value"
-            var capName = ExtractFirstQuoted(line);
+            var capName = ManageSieveWire.UnquoteFirst(line);
             if (capName != null) caps.Add(capName);
         }
     }
 
-    private static async Task<Status> ReadSimpleStatusAsync(Stream stream, CancellationToken cancellationToken)
+    private static async Task<ManageSieveWire.Status> ReadSimpleStatusAsync(ManageSieveWire wire, CancellationToken cancellationToken)
     {
         while (true)
         {
-            var line = await ReadLineAsync(stream, cancellationToken);
-            if (line == null) return new Status(false, "Connection closed");
-            if (TryParseStatus(line, out var status)) return status;
+            var line = await wire.ReadLineAsync(cancellationToken);
+            if (line == null) return new ManageSieveWire.Status(false, wire.ReadFailure);
+            if (ManageSieveWire.TryParseStatus(line, out var status)) return status;
             // Skip any continuation lines (rare for AUTHENTICATE/STARTTLS).
         }
     }
-
-    private static bool TryParseStatus(string line, out Status status)
-    {
-        if (StartsWithKeyword(line, "OK"))
-        {
-            status = new Status(true, line.Length > 2 ? line.Substring(3) : string.Empty);
-            return true;
-        }
-        if (StartsWithKeyword(line, "NO"))
-        {
-            status = new Status(false, line.Length > 2 ? line.Substring(3) : "Rejected");
-            return true;
-        }
-        if (StartsWithKeyword(line, "BYE"))
-        {
-            status = new Status(false, line.Length > 3 ? line.Substring(4) : "Server closed the connection");
-            return true;
-        }
-        status = default;
-        return false;
-    }
-
-    private static bool StartsWithKeyword(string line, string keyword)
-    {
-        if (!line.StartsWith(keyword, StringComparison.Ordinal)) return false;
-        return line.Length == keyword.Length || line[keyword.Length] == ' ';
-    }
-
-    private static string? ExtractFirstQuoted(string line)
-    {
-        int start = line.IndexOf('"');
-        if (start < 0) return null;
-        var sb = new StringBuilder();
-        for (int i = start + 1; i < line.Length; i++)
-        {
-            var c = line[i];
-            if (c == '\\' && i + 1 < line.Length) { sb.Append(line[++i]); continue; }
-            if (c == '"') return sb.ToString();
-            sb.Append(c);
-        }
-        return null;
-    }
-
-    private static async Task WriteLineAsync(Stream stream, string line, CancellationToken cancellationToken)
-    {
-        var bytes = Utf8.GetBytes(line);
-        await stream.WriteAsync(bytes, cancellationToken);
-        await stream.WriteAsync(CrLf, cancellationToken);
-        await stream.FlushAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Unbuffered line read used only during the handshake. Once the session is
-    /// authenticated and handed to <see cref="ManageSieveSession"/>, that class
-    /// uses its own buffered reader.
-    /// </summary>
-    private static async Task<string?> ReadLineAsync(Stream stream, CancellationToken cancellationToken)
-    {
-        using var ms = new MemoryStream();
-        var one = new byte[1];
-        while (true)
-        {
-            int read = await stream.ReadAsync(one, cancellationToken);
-            if (read == 0)
-                return ms.Length == 0 ? null : Utf8.GetString(ms.ToArray());
-            if (one[0] == 0x0A)
-            {
-                var bytes = ms.ToArray();
-                int len = bytes.Length;
-                if (len > 0 && bytes[len - 1] == 0x0D) len--;
-                return Utf8.GetString(bytes, 0, len);
-            }
-            ms.WriteByte(one[0]);
-        }
-    }
-
-    private readonly record struct Status(bool IsOk, string Message);
 }

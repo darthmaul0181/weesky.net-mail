@@ -9,7 +9,7 @@ public sealed class ManageSieveSessionTests
     private static ManageSieveSession CreateSut(string serverScript, out FakeDuplexStream stream)
     {
         stream = new FakeDuplexStream(serverScript);
-        return new ManageSieveSession(stream);
+        return new ManageSieveSession(new ManageSieveWire(stream));
     }
 
     // ----- LISTSCRIPTS -----
@@ -219,11 +219,11 @@ public sealed class ManageSieveSessionTests
     // ----- Dispose -----
 
     [Fact]
-    public async Task DisposeAsync_SendsLogoutAndInvokesCallback()
+    public async Task DisposeAsync_SendsLogoutAndClosesTheTransport()
     {
-        var stream = new FakeDuplexStream("OK\r\n");
         var disposed = false;
-        var session = new ManageSieveSession(stream, onDisposeAsync: () => { disposed = true; return ValueTask.CompletedTask; });
+        var stream = new FakeDuplexStream("OK\r\n", onDispose: () => disposed = true);
+        var session = new ManageSieveSession(new ManageSieveWire(stream));
 
         await session.DisposeAsync();
 
@@ -301,7 +301,7 @@ public sealed class ManageSieveSessionTests
     public async Task ListScriptsAsync_WhenTheServerNeverAnswers_FailsOnTheOperationTimeout()
     {
         await using var stream = new SilentStream();
-        var sut = new ManageSieveSession(stream, TimeSpan.FromMilliseconds(200));
+        var sut = new ManageSieveSession(new ManageSieveWire(stream), TimeSpan.FromMilliseconds(200));
 
         var result = await sut.ListScriptsAsync().WaitAsync(TimeSpan.FromSeconds(20));
 
@@ -313,7 +313,7 @@ public sealed class ManageSieveSessionTests
     public async Task GetScriptAsync_WhenTheServerNeverAnswers_FailsOnTheOperationTimeout()
     {
         await using var stream = new SilentStream();
-        var sut = new ManageSieveSession(stream, TimeSpan.FromMilliseconds(200));
+        var sut = new ManageSieveSession(new ManageSieveWire(stream), TimeSpan.FromMilliseconds(200));
 
         var result = await sut.GetScriptAsync("weesky-rules").WaitAsync(TimeSpan.FromSeconds(20));
 
@@ -326,11 +326,11 @@ public sealed class ManageSieveSessionTests
     /// never reads must not be what holds the response back.
     /// </summary>
     [Fact]
-    public async Task DisposeAsync_WhenThePeerStoppedReading_StillCompletesAndRunsTheCallback()
+    public async Task DisposeAsync_WhenThePeerStoppedReading_StillCompletesAndClosesTheTransport()
     {
-        await using var stream = new SilentStream(blockWrites: true);
         var released = false;
-        var session = new ManageSieveSession(stream, onDisposeAsync: () => { released = true; return ValueTask.CompletedTask; });
+        await using var stream = new SilentStream(blockWrites: true, onDispose: () => released = true);
+        var session = new ManageSieveSession(new ManageSieveWire(stream));
 
         await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(20));
 
@@ -430,7 +430,7 @@ public sealed class ManageSieveSessionTests
     }
 
     /// <summary>A peer that accepted the socket and then stopped talking — and, optionally, stopped reading.</summary>
-    private sealed class SilentStream(bool blockWrites = false) : Stream
+    private sealed class SilentStream(bool blockWrites = false, Action? onDispose = null) : Stream
     {
         public override bool CanRead => true;
         public override bool CanWrite => true;
@@ -460,16 +460,20 @@ public sealed class ManageSieveSessionTests
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing) => onDispose?.Invoke();
     }
 
     private sealed class FakeDuplexStream : Stream
     {
         private readonly MemoryStream _serverToClient;
         private readonly MemoryStream _clientToServer = new();
+        private readonly Action? _onDispose;
 
-        public FakeDuplexStream(string serverScript)
+        public FakeDuplexStream(string serverScript, Action? onDispose = null)
         {
             _serverToClient = new MemoryStream(Encoding.UTF8.GetBytes(serverScript));
+            _onDispose = onDispose;
         }
 
         public string ClientWritesAsString => Encoding.UTF8.GetString(_clientToServer.ToArray());
@@ -495,5 +499,8 @@ public sealed class ManageSieveSessionTests
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
+
+        // MemoryStream.ToArray still answers after Close, so ClientWritesAsString survives disposal.
+        protected override void Dispose(bool disposing) => _onDispose?.Invoke();
     }
 }
