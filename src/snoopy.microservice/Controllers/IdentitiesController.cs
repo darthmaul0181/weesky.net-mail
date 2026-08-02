@@ -107,11 +107,11 @@ public sealed class IdentitiesController(
         if (accountId is null) return (null, null);
 
         if (!Guid.TryParse(accountId, out var id))
-            return (null, NotFoundEnveloppe(ConnectedAccountErrors.AccountNotFound));
+            return (null, ConnectedAccountError(ConnectedAccountErrors.AccountNotFound));
 
         var account = await accounts.FindAsync(AuthenticatedUser.WebmailUid, id, cancellationToken);
         return account is null
-            ? (null, NotFoundEnveloppe(ConnectedAccountErrors.AccountNotFound))
+            ? (null, ConnectedAccountError(ConnectedAccountErrors.AccountNotFound))
             : (account, null);
     }
 }

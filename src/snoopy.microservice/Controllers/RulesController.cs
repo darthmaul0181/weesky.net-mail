@@ -25,17 +25,12 @@ public sealed class RulesController(
     /// impersonation is the primary account's alone; a connected mailbox authenticates with the
     /// credentials we hold for it, so revoking its password revokes its filters in the same move.
     /// </summary>
-    private async Task<(SieveConnection? Connection, ActionResult? Error)> TryResolveAsync(
+    private async Task<AccountResolution<SieveConnection>> TryResolveAsync(
         CancellationToken cancellationToken)
     {
         var resolved = await connections.ResolveAsync(AuthenticatedUser, Request, cancellationToken);
         if (resolved.IsFailure)
-            return (null, resolved.Error switch
-            {
-                ConnectedAccountErrors.AccountNotFound => NotFoundEnveloppe(resolved.Error),
-                ConnectedAccountErrors.CredentialsInvalid => ConflictEnveloppe(resolved.Error),
-                _ => UnauthorizedEnveloppe(resolved.Error),
-            });
+            return AccountResolution<SieveConnection>.Failure(ConnectedAccountError(resolved.Error));
 
         var account = resolved.Value;
         var sieve = sieveOptions.Value;
@@ -46,23 +41,23 @@ public sealed class RulesController(
             // empty credential — a stream of failed master logins against our own Dovecot, and a
             // 502 blaming the server. Fail here instead. Host and MasterUser the client guards.
             if (string.IsNullOrWhiteSpace(sieve.MasterPassword))
-                return (null, SieveFailure(SieveErrors.NotConfigured));
+                return AccountResolution<SieveConnection>.Failure(SieveFailure(SieveErrors.NotConfigured));
 
-            return (new SieveConnection(
-                sieve.Host, sieve.Port, account.Username, sieve.MasterUser, sieve.MasterPassword), null);
+            return AccountResolution<SieveConnection>.Success(new SieveConnection(
+                sieve.Host, sieve.Port, account.Username, sieve.MasterUser, sieve.MasterPassword));
         }
 
         // A connected mailbox on our own server: its own login, but the house endpoint — the
         // resolver leaves SieveHost null for home connections, since there is nothing to store.
         if (account.IsHomeServer)
-            return (new SieveConnection(
-                sieve.Host, sieve.Port, string.Empty, account.Username, account.Password), null);
+            return AccountResolution<SieveConnection>.Success(new SieveConnection(
+                sieve.Host, sieve.Port, string.Empty, account.Username, account.Password));
 
         if (account.SieveHost == null || account.SievePort == null)
-            return (null, NotFoundEnveloppe(SieveErrors.Unsupported));
+            return AccountResolution<SieveConnection>.Failure(NotFoundEnveloppe(SieveErrors.Unsupported));
 
-        return (new SieveConnection(
-            account.SieveHost, account.SievePort.Value, string.Empty, account.Username, account.Password), null);
+        return AccountResolution<SieveConnection>.Success(new SieveConnection(
+            account.SieveHost, account.SievePort.Value, string.Empty, account.Username, account.Password));
     }
 
     /// <summary>
@@ -94,10 +89,10 @@ public sealed class RulesController(
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SieveRuleSet>> Get(CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (error != null) return error;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
-        Result<SieveRuleSet> result = await sieveRepository.GetRuleSetAsync(connection!, cancellationToken);
+        Result<SieveRuleSet> result = await sieveRepository.GetRuleSetAsync(connection, cancellationToken);
         if (result.IsSuccess) return Ok(result.Value);
         return SieveFailure(result.Error);
     }
@@ -123,11 +118,11 @@ public sealed class RulesController(
         if (request == null)
             return BadRequestEnveloppe("Request body is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (error != null) return error;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         Result result = await sieveRepository.SaveRulesAsync(
-            connection!, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
+            connection, request.Rules ?? new List<SieveRule>(), request.ProviderId, request.ScriptName, cancellationToken);
         return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
@@ -146,10 +141,10 @@ public sealed class RulesController(
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<ResultEnveloppe>> DeleteAll(CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (error != null) return error;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
-        Result result = await sieveRepository.DeleteAllRulesAsync(connection!, cancellationToken);
+        Result result = await sieveRepository.DeleteAllRulesAsync(connection, cancellationToken);
         return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 
@@ -168,10 +163,10 @@ public sealed class RulesController(
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SieveRawScript>> GetRaw(CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (error != null) return error;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
-        Result<SieveRuleSet> result = await sieveRepository.GetRuleSetAsync(connection!, cancellationToken);
+        Result<SieveRuleSet> result = await sieveRepository.GetRuleSetAsync(connection, cancellationToken);
         if (result.IsFailure)
             return SieveFailure(result.Error);
 
@@ -202,11 +197,11 @@ public sealed class RulesController(
         if (script == null)
             return BadRequestEnveloppe("Request body is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (error != null) return error;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         Result result = await sieveRepository.SaveRawScriptAsync(
-            connection!, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
+            connection, script.Content ?? string.Empty, script.ScriptName, cancellationToken);
         return FromResult(result, SieveErrorStatus(result), StatusCodes.Status204NoContent);
     }
 

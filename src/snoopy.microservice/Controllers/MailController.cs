@@ -53,18 +53,13 @@ public sealed class MailController(
     /// directly and no filter would run, so moving the check into the pipeline would move it
     /// out of the tests that cover it.
     /// </summary>
-    private async Task<(MailAccountConnection? Connection, ActionResult? Error)> TryResolveAsync(
+    private async Task<AccountResolution<MailAccountConnection>> TryResolveAsync(
         CancellationToken cancellationToken)
     {
         var resolved = await connections.ResolveAsync(AuthenticatedUser, Request, cancellationToken);
-        if (resolved.IsSuccess) return (resolved.Value, null);
-
-        return (null, resolved.Error switch
-        {
-            ConnectedAccountErrors.AccountNotFound => NotFoundEnveloppe(resolved.Error),
-            ConnectedAccountErrors.CredentialsInvalid => ConflictEnveloppe(resolved.Error),
-            _ => UnauthorizedEnveloppe(resolved.Error),
-        });
+        return resolved.IsSuccess
+            ? AccountResolution<MailAccountConnection>.Success(resolved.Value)
+            : AccountResolution<MailAccountConnection>.Failure(ConnectedAccountError(resolved.Error));
     }
 
     /// <summary>
@@ -125,8 +120,8 @@ public sealed class MailController(
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<IReadOnlyList<MailFolderNode>>> GetFolders(CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await folders.GetTreeAsync(AuthenticatedUser, connection, cancellationToken);
         if (result.IsFailure)
@@ -136,8 +131,8 @@ public sealed class MailController(
         // user override reassigns the role, and the displaced folder shows under its own
         // name (spec § 4.1).
         var overrides = await roleStore.GetAsync(AuthenticatedUser.WebmailUid, connection.StorageAccountId, cancellationToken);
-        var resolution = FolderRoleResolver.Resolve(result.Value, overrides);
-        StampRoles(result.Value, resolution.RoleByPath);
+        var roles = FolderRoleResolver.Resolve(result.Value, overrides);
+        StampRoles(result.Value, roles.RoleByPath);
 
         return Ok(result.Value);
     }
@@ -165,8 +160,8 @@ public sealed class MailController(
         if (request == null) return BadRequestEnveloppe("Request body is required");
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequestEnveloppe("A folder name is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await folders.CreateFolderAsync(
             AuthenticatedUser, connection, request.ParentPath ?? string.Empty, request.Name, cancellationToken);
@@ -196,8 +191,8 @@ public sealed class MailController(
         if (string.IsNullOrWhiteSpace(request.Path)) return BadRequestEnveloppe("A folder path is required");
         if (string.IsNullOrWhiteSpace(request.NewName)) return BadRequestEnveloppe("A folder name is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         if (await RefuseIfSystemFolderAsync(
                 connection, request.Path, "renamed", includeDescendants: false, cancellationToken) is { } refusal)
@@ -230,8 +225,8 @@ public sealed class MailController(
         if (request == null) return BadRequestEnveloppe("Request body is required");
         if (string.IsNullOrWhiteSpace(request.Path)) return BadRequestEnveloppe("A folder path is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         if (await RefuseIfSystemFolderAsync(
                 connection, request.Path, "deleted", includeDescendants: true, cancellationToken) is { } refusal)
@@ -268,8 +263,8 @@ public sealed class MailController(
         if (request == null) return BadRequestEnveloppe("Request body is required");
         if (string.IsNullOrWhiteSpace(request.Path)) return BadRequestEnveloppe("A folder path is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         // Only hiding is refused: refusing to subscribe would leave a mailbox whose trash
         // another client hid stuck that way.
@@ -305,17 +300,17 @@ public sealed class MailController(
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<IReadOnlyList<FolderRoleEntry>>> GetFolderRoles(CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var tree = await folders.GetTreeAsync(AuthenticatedUser, connection, cancellationToken);
         if (tree.IsFailure)
             return BadGatewayEnveloppe(tree.Error);
 
         var overrides = await roleStore.GetAsync(AuthenticatedUser.WebmailUid, connection.StorageAccountId, cancellationToken);
-        var resolution = FolderRoleResolver.Resolve(tree.Value, overrides);
+        var roles = FolderRoleResolver.Resolve(tree.Value, overrides);
 
-        return Ok(resolution.Roles);
+        return Ok(roles.Roles);
     }
 
     /// <summary>
@@ -347,8 +342,8 @@ public sealed class MailController(
         if (string.Equals(request.FolderPath, "INBOX", StringComparison.OrdinalIgnoreCase))
             return BadRequestEnveloppe("The inbox cannot be assigned a role");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var status = await folders.GetFolderStatusAsync(AuthenticatedUser, connection, request.FolderPath, cancellationToken);
         if (status.IsFailure)
@@ -411,8 +406,8 @@ public sealed class MailController(
 
         // No mailbox is opened here, but the account still has to be resolved: the override
         // rows are per account, and clearing the wrong account's is silent data loss.
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         await roleStore.DeleteAsync(AuthenticatedUser.WebmailUid, connection.StorageAccountId, role!, cancellationToken);
         return NoContent();
@@ -451,8 +446,8 @@ public sealed class MailController(
         // An unbounded page size lets one request pull an entire mailbox.
         if (pageSize is < 1 or > 200) return BadRequestEnveloppe("Page size must be between 1 and 200");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.ListAsync(AuthenticatedUser, connection, folder, page, pageSize, cancellationToken);
 
@@ -488,8 +483,8 @@ public sealed class MailController(
     {
         if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.GetAsync(AuthenticatedUser, connection, folder, uid, cancellationToken);
 
@@ -560,8 +555,8 @@ public sealed class MailController(
     {
         if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.GetAttachmentAsync(
             AuthenticatedUser, connection, folder, uid, part ?? string.Empty, cancellationToken);
@@ -605,8 +600,8 @@ public sealed class MailController(
     {
         if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.GetSourceAsync(
             AuthenticatedUser, connection, folder, uid, MaxSourceBytes, cancellationToken);
@@ -643,8 +638,8 @@ public sealed class MailController(
         if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder is required");
         if (request.Uids.Count is < 1 or > 200) return BadRequestEnveloppe("Uids must hold between 1 and 200 entries");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.SetFlagsAsync(
             AuthenticatedUser, connection, request.FolderPath, request.Uids, request.Flag, request.Value, cancellationToken);
@@ -698,8 +693,8 @@ public sealed class MailController(
         if (string.Equals(request.FolderPath, request.TargetFolderPath, StringComparison.Ordinal))
             return BadRequestEnveloppe("The target folder must differ from the source folder");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.MoveOrCopyAsync(
             AuthenticatedUser, connection, request.FolderPath, request.Uids, request.TargetFolderPath, copy, cancellationToken);
@@ -733,8 +728,8 @@ public sealed class MailController(
         if (string.IsNullOrWhiteSpace(request.FolderPath)) return BadRequestEnveloppe("A folder is required");
         if (request.Uids.Count is < 1 or > 200) return BadRequestEnveloppe("Uids must hold between 1 and 200 entries");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.DeleteAsync(AuthenticatedUser, connection, request.FolderPath, request.Uids, cancellationToken);
 
@@ -765,8 +760,8 @@ public sealed class MailController(
             && string.Equals(request.FolderPath, request.TargetFolderPath, StringComparison.Ordinal))
             return BadRequestEnveloppe("The target folder must differ from the source folder");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.EmptyAsync(
             AuthenticatedUser, connection, request.FolderPath, request.TargetFolderPath, cancellationToken);
@@ -810,8 +805,8 @@ public sealed class MailController(
         if (!MailSearchQueryBuilder.HasAnyCriterion(criteria))
             return BadRequestEnveloppe("At least one search criterion is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await messages.SearchAsync(
             AuthenticatedUser, connection, request.FolderPath, request.AllFolders,
@@ -856,8 +851,8 @@ public sealed class MailController(
         if (inline && !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return BadRequestEnveloppe("An inline part must be an image");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         await using var content = file.OpenReadStream();
         var result = await staged.SaveAsync(
@@ -886,8 +881,8 @@ public sealed class MailController(
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> DeleteAttachment(Guid id, CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         staged.Delete(connection.StagedScope(AuthenticatedUser), id);
         return NoContent();
@@ -912,8 +907,8 @@ public sealed class MailController(
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> GetStagedAttachment(Guid id, CancellationToken cancellationToken)
     {
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = staged.Open(connection.StagedScope(AuthenticatedUser), id);
         if (result.IsFailure) return NotFoundEnveloppe("Attachment not found");
@@ -964,8 +959,8 @@ public sealed class MailController(
         if (invalid != null) return invalid;
         request = normalized;
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await sender.SendAsync(AuthenticatedUser, connection, request, cancellationToken);
 
@@ -1014,8 +1009,8 @@ public sealed class MailController(
         if (purpose == null)
             return BadRequestEnveloppe("Purpose must be reply, forward or editAsNew");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var message = await messages.GetMimeMessageAsync(
             AuthenticatedUser, connection, request.Folder, request.Uid, cancellationToken);
@@ -1065,8 +1060,8 @@ public sealed class MailController(
         if (invalid != null) return invalid;
         request = (SaveDraftRequest)normalized;
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var result = await drafts.SaveAsync(AuthenticatedUser, connection, request, cancellationToken);
 
@@ -1165,8 +1160,8 @@ public sealed class MailController(
         if (request == null || string.IsNullOrWhiteSpace(request.Folder))
             return BadRequestEnveloppe("A folder is required");
 
-        var (connection, error) = await TryResolveAsync(cancellationToken);
-        if (connection is null) return error!;
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
 
         var message = await messages.GetMimeMessageAsync(
             AuthenticatedUser, connection, request.Folder, request.Uid, cancellationToken);
