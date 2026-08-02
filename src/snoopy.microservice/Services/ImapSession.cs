@@ -445,7 +445,7 @@ internal sealed class ImapSession : IImapSession
                 var sorted = await folder.SortAsync(query, [OrderBy.ReverseDate], cancellationToken);
                 var uids = criteria.HasAttachment
                     ? await WithAttachmentsAsync(
-                        folder, BoundCandidates(sorted, page, pageSize, AttachmentScanBudget), cancellationToken)
+                        folder, MailPaging.BoundCandidates(sorted, page, pageSize, MailPaging.AttachmentScanBudget), cancellationToken)
                     : sorted;
                 matches = uids.Select(uid => (folder, uid)).ToList();
                 result.Total = criteria.HasAttachment ? matches.Count : sorted.Count;
@@ -482,25 +482,25 @@ internal sealed class ImapSession : IImapSession
                 // The attachment budget splits across folders by need, never by the order the
                 // folder list arrived in; each folder always keeps its page window regardless.
                 var shares = sortCapable && criteria.HasAttachment
-                    ? FairShares(perFolder.Select(entry => entry.Found.Count).ToList(), AttachmentScanBudget)
+                    ? MailPaging.FairShares(perFolder.Select(entry => entry.Found.Count).ToList(), MailPaging.AttachmentScanBudget)
                     : null;
 
                 // Pass 2 — the bounded key fetch. Each folder is re-opened: IMAP selects one
                 // mailbox at a time, and pass 1 left only the last one selected.
-                var hits = new List<SearchHit>();
+                var hits = new List<MailPaging.SearchHit>();
                 for (var i = 0; i < perFolder.Count; i++)
                 {
                     var (folder, found) = perFolder[i];
                     await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
 
                     var candidates = sortCapable
-                        ? BoundCandidates(found, page, pageSize, shares?[i] ?? 0L)
+                        ? MailPaging.BoundCandidates(found, page, pageSize, shares?[i] ?? 0L)
                         : found;
 
                     var items = await folder.FetchAsync(candidates, fetchItems, cancellationToken);
-                    hits.AddRange(items.Select(item => new SearchHit(
+                    hits.AddRange(items.Select(item => new MailPaging.SearchHit(
                         item.UniqueId, folder,
-                        SortKeyOf(item.Envelope?.Date, item.InternalDate),
+                        MailPaging.SortKeyOf(item.Envelope?.Date, item.InternalDate),
                         item.Attachments?.Any() ?? false)));
                 }
 
@@ -508,20 +508,20 @@ internal sealed class ImapSession : IImapSession
                 {
                     // Keys for every match are in hand, BODYSTRUCTURE for none: examine only the
                     // newest budget's worth, chosen on the merged date order.
-                    var examined = OrderHits(hits, attachmentsOnly: false)
-                        .Take(ExamineLimit(page, pageSize)).ToList();
+                    var examined = MailPaging.OrderHits(hits, attachmentsOnly: false)
+                        .Take(MailPaging.ExamineLimit(page, pageSize)).ToList();
                     hits = await WhereAttachmentsAsync(examined, cancellationToken);
                 }
 
                 // Filter (attachments) and sort BEFORE pagination. Under the post-filter only the
                 // budgeted candidates were ever examined, so Total is "at least" what is counted
                 // here; without it, SEARCH already said exactly how many match.
-                matches = OrderHits(hits, criteria.HasAttachment)
+                matches = MailPaging.OrderHits(hits, criteria.HasAttachment)
                     .Select(hit => (hit.Folder, hit.Uid)).ToList();
                 result.Total = criteria.HasAttachment ? matches.Count : exactTotal;
             }
 
-            var wanted = PageOf(matches, page, pageSize);
+            var wanted = MailPaging.PageOf(matches, page, pageSize);
             if (wanted.Count == 0) return Result.Success(result);
 
             // One summary fetch per folder present in the page. Each folder is re-opened:
@@ -583,63 +583,13 @@ internal sealed class ImapSession : IImapSession
     }
 
     /// <summary>
-    /// How many BODYSTRUCTUREs one attachment-filtered search may examine past the page window.
-    /// No IMAP SEARCH criterion covers attachments, so the filter must look at candidates; at a
-    /// few hundred bytes of summary each, two thousand costs a few hundred KB and well under a
-    /// second, so a realistic search is examined whole and its count stays exact — only the
-    /// whole-mailbox sweep is cut, and its Total degrades to "at least what was examined".
-    /// </summary>
-    internal const int AttachmentScanBudget = 2000;
-
-    /// <summary>
-    /// The per-folder candidate window: once every folder's newest-first list is merged, only its
-    /// first (page + 1) * pageSize entries can still land on the requested page, so nothing past
-    /// them is worth a per-message FETCH. <paramref name="floor"/> widens the window when a
-    /// post-filter needs to look deeper than the page alone (the attachment scan budget).
-    /// Long arithmetic: the controller caps pageSize, not page.
-    /// </summary>
-    internal static IList<UniqueId> BoundCandidates(IList<UniqueId> newestFirst, int page, int pageSize, long floor = 0)
-    {
-        var take = Math.Max((page + 1L) * pageSize, floor);
-        if (take <= 0) return [];
-
-        return take >= newestFirst.Count ? newestFirst : newestFirst.Take((int)take).ToList();
-    }
-
-    /// <summary>How many date-ordered hits the non-SORT attachment filter may examine.</summary>
-    internal static int ExamineLimit(int page, int pageSize) =>
-        (int)Math.Min(int.MaxValue, Math.Max((page + 1L) * pageSize, AttachmentScanBudget));
-
-    /// <summary>
-    /// Splits the attachment scan budget across folders by need, never by list position: a
-    /// folder wanting less than an equal split keeps only what it has, and what it leaves is
-    /// re-split among the larger ones — so which folders scan deep cannot depend on the
-    /// alphabetical order the folder list happens to arrive in.
-    /// </summary>
-    internal static IReadOnlyList<long> FairShares(IReadOnlyList<int> counts, long budget)
-    {
-        var shares = new long[counts.Count];
-        var bySize = Enumerable.Range(0, counts.Count).OrderBy(index => counts[index]).ToList();
-        var remaining = budget;
-        for (var n = 0; n < bySize.Count; n++)
-        {
-            var index = bySize[n];
-            var share = Math.Min(counts[index], remaining / (bySize.Count - n));
-            shares[index] = share;
-            remaining -= share;
-        }
-
-        return shares;
-    }
-
-    /// <summary>
     /// Keeps the hits whose BODYSTRUCTURE shows an attachment — the non-SORT second phase,
     /// fetched per folder for exactly the hits given, after the date merge chose them.
     /// </summary>
-    private static async Task<List<SearchHit>> WhereAttachmentsAsync(
-        List<SearchHit> hits, CancellationToken cancellationToken)
+    private static async Task<List<MailPaging.SearchHit>> WhereAttachmentsAsync(
+        List<MailPaging.SearchHit> hits, CancellationToken cancellationToken)
     {
-        var kept = new List<SearchHit>();
+        var kept = new List<MailPaging.SearchHit>();
         foreach (var group in hits.GroupBy(hit => hit.Folder))
         {
             await group.Key.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
@@ -650,26 +600,6 @@ internal sealed class ImapSession : IImapSession
         }
 
         return kept;
-    }
-
-    /// <summary>A merge-path match: folder+uid to fetch, the sent-date sort key, its attachment flag.</summary>
-    internal sealed record SearchHit(UniqueId Uid, IMailFolder Folder, DateTimeOffset SortKey, bool HasAttachment);
-
-    /// <summary>
-    /// The merge sort key: the sent date, falling back to arrival then MinValue so a malformed
-    /// message missing its Envelope.Date still orders sanely and never yields null.
-    /// </summary>
-    internal static DateTimeOffset SortKeyOf(DateTimeOffset? sentDate, DateTimeOffset? internalDate)
-        => sentDate ?? internalDate ?? DateTimeOffset.MinValue;
-
-    /// <summary>
-    /// Orders merge-path hits by sent date, newest first, optionally keeping only those carrying an
-    /// attachment. Pure so the refine-before-Total ordering is unit-tested apart from any IMAP call.
-    /// </summary>
-    internal static List<SearchHit> OrderHits(IEnumerable<SearchHit> hits, bool attachmentsOnly)
-    {
-        var kept = attachmentsOnly ? hits.Where(hit => hit.HasAttachment) : hits;
-        return kept.OrderByDescending(hit => hit.SortKey).ToList();
     }
 
     public Task<Result<MailFolderStatus>> GetFolderStatusAsync(string path, CancellationToken cancellationToken) =>
@@ -728,11 +658,11 @@ internal sealed class ImapSession : IImapSession
                 var sorted = await folder.SortAsync(
                     SearchQuery.All, [OrderBy.ReverseDate], cancellationToken);
 
-                var wanted = PageOf(sorted, page, pageSize).ToList();
+                var wanted = MailPaging.PageOf(sorted, page, pageSize).ToList();
                 if (wanted.Count == 0) return Result.Success(result);
 
                 var sortedItems = await folder.FetchAsync(wanted, SummaryItems, SummaryHeaders, cancellationToken);
-                foreach (var item in InOrderOf(sortedItems, wanted, item => item.UniqueId))
+                foreach (var item in MailPaging.InOrderOf(sortedItems, wanted, item => item.UniqueId))
                 {
                     result.Messages.Add(ToSummary(item));
                 }
@@ -740,7 +670,7 @@ internal sealed class ImapSession : IImapSession
                 return Result.Success(result);
             }
 
-            var (start, end) = ComputePageWindow(folder.Count, page, pageSize);
+            var (start, end) = MailPaging.ComputePageWindow(folder.Count, page, pageSize);
             if (start < 0) return Result.Success(result);
 
             var items = await folder.FetchAsync(start, end, SummaryItems, SummaryHeaders, cancellationToken);
@@ -1125,45 +1055,6 @@ internal sealed class ImapSession : IImapSession
 
     public static string CombinePath(string parentPath, string name, char separator)
         => string.IsNullOrEmpty(parentPath) ? name : $"{parentPath}{separator}{name}";
-
-    /// <summary>
-    /// Maps a newest-first page onto an IMAP sequence range, which runs oldest-first: page
-    /// zero is the window at the *end* of the folder. Returns (-1, -1) when the page lies
-    /// past the end, or when the arguments make no sense.
-    /// </summary>
-    public static (int Start, int End) ComputePageWindow(int total, int page, int pageSize)
-    {
-        if (total <= 0 || page < 0 || pageSize <= 0) return (-1, -1);
-
-        var end = total - 1 - (page * pageSize);
-        if (end < 0) return (-1, -1);
-
-        var start = Math.Max(0, end - pageSize + 1);
-        return (start, end);
-    }
-
-    /// <summary>Slice of an already-ordered list, or empty when the page lies past its end.</summary>
-    public static IReadOnlyList<T> PageOf<T>(IEnumerable<T> ordered, int page, int pageSize)
-    {
-        if (page < 0 || pageSize <= 0) return [];
-
-        // Long arithmetic, clamped: an overflowing page must read "past the end", never page 0.
-        var skip = (int)Math.Min((long)page * pageSize, int.MaxValue);
-        return ordered.Skip(skip).Take(pageSize).ToList();
-    }
-
-    /// <summary>
-    /// Re-orders fetched items to match the order they were asked for. A server answers a UID
-    /// FETCH in whatever order it likes — ascending UID in practice, which is exactly not the
-    /// sort order requested.
-    /// </summary>
-    public static IReadOnlyList<T> InOrderOf<T, TKey>(
-        IEnumerable<T> items, IEnumerable<TKey> order, Func<T, TKey> keyOf) where TKey : notnull
-    {
-        var byKey = items.GroupBy(keyOf).ToDictionary(group => group.Key, group => group.First());
-
-        return order.Where(byKey.ContainsKey).Select(key => byKey[key]).ToList();
-    }
 
     private void ThrowIfDisposed()
     {

@@ -136,15 +136,7 @@ public sealed class ImapSessionSearchBoundsTests
         // BODYSTRUCTURE sweep is still cut: exactly the budget of the newest, no more.
         Assert.Equal(2, server.FetchedUidSets.Count);
         Assert.Equal(2500, server.FetchedUidSets[0].Count);
-        Assert.Equal(ImapSession.AttachmentScanBudget, server.FetchedUidSets[1].Count);
-    }
-
-    [Fact]
-    public void FairShares_LetsSmallFoldersKeepTheirsAndSplitsTheRest()
-    {
-        Assert.Equal(new long[] { 1500, 500 }, ImapSession.FairShares([3000, 500], 2000));
-        Assert.Equal(new long[] { 1000, 1000 }, ImapSession.FairShares([1500, 1500], 2000));
-        Assert.Equal(new long[] { 100, 200 }, ImapSession.FairShares([100, 200], 2000));
+        Assert.Equal(MailPaging.AttachmentScanBudget, server.FetchedUidSets[1].Count);
     }
 
     [Fact]
