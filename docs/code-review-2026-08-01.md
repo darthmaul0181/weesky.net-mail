@@ -1,5 +1,11 @@
 # Code review backend `snoopy.microservice` — 2026-08-01
 
+> **À lire avec `code-review-2026-08-02-verification.md`.** La contre-revue du 2026-08-02 a
+> établi que les tableaux de statut ci-dessous suivent ce que chaque vague a livré, **et non le
+> sort de chaque constat** : six constats 🔴/🟠 de ce document n'ont été ni corrigés ni déclarés
+> ouverts, et trois affirmations de la vague 4 sont inexactes. Ne pas lire une case absente de
+> ces tableaux comme « traité ».
+
 Revue menée en vue d'un refactoring (propreté, duplication, standards, performance, sécurité).
 Cinq axes revus en parallèle : contrôleurs+auth, services mail (IMAP/SMTP/Sieve), repositories+EF,
 services transverses (crypto/sanitiser/CSV/staging), configuration+models+rules.
