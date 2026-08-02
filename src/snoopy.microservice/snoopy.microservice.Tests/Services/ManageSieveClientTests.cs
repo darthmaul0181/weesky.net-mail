@@ -115,6 +115,31 @@ public sealed class ManageSieveClientTests
         Assert.Equal(SieveErrors.Unreachable, result.Error);
     }
 
+    /// <summary>
+    /// The handshake and the verbs read through one buffer. This server packs the AUTHENTICATE
+    /// answer and the whole LISTSCRIPTS response into a single write, so the handshake's own read
+    /// necessarily pulls in bytes that belong to the session: with a buffer per half — the shape
+    /// this fixture would have caught — those bytes are read once and never delivered.
+    /// </summary>
+    [Fact]
+    public async Task OpenSessionAsync_WhenOneWriteCarriesTheAuthReplyAndTheNextResponse_TheSessionStillReadsIt()
+    {
+        using var server = new FakeSieveServer(authResponse: "OK\r\n\"summer\" ACTIVE\r\nOK\r\n");
+
+        var result = await CreateSut().OpenSessionAsync(
+            new SieveConnection("127.0.0.1", server.Port, string.Empty, "bob@external.test", "bob-secret"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        await using var session = result.Value;
+        var scripts = await session.ListScriptsAsync();
+
+        Assert.True(scripts.IsSuccess);
+        var only = Assert.Single(scripts.Value);
+        Assert.Equal("summer", only.Name);
+        Assert.True(only.IsActive);
+    }
+
     [Fact]
     public async Task OpenSessionAsync_WithAnIncompleteConnection_FailsNotConfigured()
     {
