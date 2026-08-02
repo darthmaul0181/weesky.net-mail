@@ -131,6 +131,75 @@ valant `NIL` ne se reproduit pas — `MimeUtils.TryParse(null, …)` renvoie `fa
 - Le scan du sanitiseur reste un compteur, pas un arbre : un document pathologiquement mal imbriqué peut
   être aplati au-delà de 1024 niveaux — le contenu survit, la mise en page non.
 
+## Statut — vague 3 (standards mécaniques) livrée le 2026-08-02
+
+9 commits, suite **1914 tests verts** (1863 après la vague 2, +51), build Release 0 avertissement.
+
+| Constat | Statut |
+|---|---|
+| `CancellationToken` absent des 3 anciens repositories | ✅ obligatoire (jamais `= default`) sur les ~20 méthodes et chez tous les appelants |
+| Deux formes d'erreur incompatibles | ✅ `InvalidModelStateResponseFactory` répond l'enveloppe ; une seule forme sur toute l'API |
+| DTO sans attributs de validation | ✅ annotés là où la contrainte est une **forme** ; 7 DTO laissés à leur validation manuelle, avec raison |
+| Bug `Alias.Equals`/`GetHashCode` | ✅ hachage aligné sur l'égalité, épinglé par un test de **contrat** (`HashSet` fusionne) |
+| `DomainOwnershipInfo` code mort | ✅ supprimé après vérification |
+| `Quote()` dupliqué entre RuleProviders | ✅ extrait dans `SieveQuoting` |
+| Constructeurs primaires restants | ✅ 6 classes converties |
+| Health check sur une seule base | ✅ couvre les deux, en nommant celle qui tombe |
+| `DateTime.UtcNow` dans `TokenBuilder` | ✅ `TimeProvider` injecté ; l'expiration du JWT est pilotable |
+
+**Le piège qui aurait tout annulé en silence :** `PostConfigure`, pas `Configure`. `AddSnoopyOptions`
+s'exécute avant `AddControllers()`, dont le `ApiBehaviorOptionsSetup` réassigne la fabrique
+**inconditionnellement** — un `Configure` aurait été écrasé sans le moindre signal. Le test résout la
+fabrique à travers la même composition DI que `Program`, précisément parce qu'un test du délégué isolé
+serait passé malgré l'écrasement.
+
+**Pourquoi les messages n'ont pas changé :** le `required` implicite des types non-nullables utilise
+`AllowEmptyStrings = true`, donc les DTO portant `= string.Empty` ne le déclenchaient jamais et leurs
+gardes manuels étaient réellement atteints. Les attributs reprennent **mot pour mot** le libellé du
+contrôleur, vérifié : « A folder is required », « Uids must hold between 1 and 200 entries ».
+
+**Les gardes manuels sont conservés délibérément.** Ils sont inatteignables en production — le binder
+refuse avant, avec le même message — mais restent la seule façon d'exercer ces chemins depuis les tests
+qui invoquent les actions directement. Défense en profondeur, pas code mort.
+
+## Statut — vague 4 (architecture) livrée le 2026-08-02
+
+11 commits, suite **1919 tests verts**, build Release 0 avertissement. Aucun changement de comportement.
+
+| Constat | Statut |
+|---|---|
+| Résolution de compte en 3 exemplaires | ✅ une seule : `ApiBaseController.ConnectedAccountError` + `AccountResolution<T>` |
+| `MailController`, 1214 lignes, 5 responsabilités | ✅ 4 contrôleurs + base, 29 à 372 lignes |
+| `ImapSession`, 1289 lignes, 4 responsabilités | ✅ 6 fichiers, façade de 198 lignes |
+| ~100 lignes dupliquées ManageSieve | ✅ `ManageSieveWire` ; 355 lignes supprimées, −103 net |
+| 9 stores quasi identiques | ✅ 5 sur `ScopedStore`, 4 exclus avec raison ; **+17 lignes nettes, assumé** |
+
+**Les preuves, pas les affirmations.** Le découpage des contrôleurs est épinglé par
+`MailRouteSurfaceTests`, une énumération par réflexion des 25 couples (verbe, gabarit), de leurs statuts
+et de leur jeu de filtres, **passée d'abord contre le `MailController` intact** puis inchangée après :
+ensemble d'avant = ensemble épinglé = ensemble d'après. Elle vérifie aussi que
+`AttachmentSizeLimitFilter` est sur `POST Attachments` et nulle part ailleurs. `IImapSession` est
+**byte-identique à master** (diff vide), donc aucun de ses six consommateurs ne peut être affecté. Et la
+conservation des assertions est démontrée par multiensemble : les 272 lignes `Assert.*` retirées,
+normalisées, égalent exactement celles ajoutées.
+
+**Le piège du découpage :** `[Route("api/[controller]")]` sur quatre classes aux noms différents donne
+quatre préfixes différents. L'application compile, les tests unitaires passent, et **toutes les URL
+changent**. Chaque contrôleur porte donc une route explicite, et la raison est écrite dans le code.
+
+**Deux trouvailles hors périmètre.** Le plafond d'allocation de 1 Mo de la vague 2 ne couvrait que la
+moitié session de ManageSieve : côté client, une bannière sans saut de ligne faisait croître un tampon
+sans borne **pendant le handshake, avant authentification**. Corrigé. Et l'introduction d'un lecteur
+bufferisé côté client ouvrait une surface de TLS stripping — des octets tamponnés avant STARTTLS rejoués
+comme protégés — refermée par une garde qui teste le tampon avant l'enveloppement (RFC 5804 : le serveur
+ne doit rien envoyer entre le `OK` et la négociation).
+
+**Trois constats de cette revue se sont révélés faux à l'usage.** Les trois corps d'upsert n'étaient pas
+« identiques au caractère près » ; `MailController` avait 25 actions et non 22 ; et l'invariant
+`AsNoTracking` de `ConnectedAccountStore` était déjà couvert par un test. Le commentaire de `ContactStore`
+que le §2 déclare factuellement faux est à considérer comme **non vérifié** : personne n'a contrôlé ce
+que MariaDB émet réellement.
+
 ## Recoupement avec la revue du 2026-07-25
 
 `docs/code-review-microservice-2026-07-25.md` couvrait le même périmètre et porte un statut par
@@ -423,17 +492,41 @@ Par rentabilité décroissante :
 
 ---
 
-## Plan de refactoring proposé (par vagues)
+## Bilan des quatre vagues
 
-1. **Vague sécurité + bugs** (petits diffs, gros gains) : CRLF Sieve · `HtmlFormatter` du sanitiseur ·
-   refus cleartext · JWT hors du corps de login · health check · borne HTML · cap d'entrées staging ·
-   tick initial des sweepers · mapping 404 des 4 lectures IMAP.
-2. **Vague performance** : fetch ciblé des parties de message · suppression `EnableStringComparisonTranslations`
-   + `==` · timeouts ManageSieve · `1:*` pour Empty · streaming des pièces jointes · N+1 comptes connectés · cache admin.
-3. **Vague standards mécaniques** : `CancellationToken` partout · primary constructors ·
-   `ProducesResponseType` typés · `InvalidModelStateResponseFactory` + DataAnnotations (efface ~30 gardes dupliqués).
-4. **Vague architecture** : découpage `MailController` et `ImapSession` · résolution de compte partagée ·
-   `ManageSieveWire` · `ScopedStore<T>`.
+Les quatre vagues prévues sont livrées et validées manuellement. Suite passée de **1684 à 1919 tests**,
+build Release sans avertissement à chaque étape.
+
+| Vague | Objet | Résultat |
+|---|---|---|
+| 1 | Sécurité + bugs | 9 correctifs ; 2 défauts trouvés ensuite par revue adverse et corrigés |
+| 2 | Performance | ouverture d'un mail : ~27 Mo → quelques Ko ; sanitiseur : 22-71 s → 1,7 s pire cas |
+| 3 | Standards mécaniques | une seule forme d'erreur sur toute l'API ; annulation propagée partout |
+| 4 | Architecture | 2 fichiers de plus de 1000 lignes découpés ; 3 duplications éliminées |
+
+**Ce que la revue adverse a rapporté.** Lancée après les vagues 1 et 2, elle a trouvé trois régressions
+réelles qu'aucun agent n'avait vues sur son propre code — dont la réouverture du déni de service que la
+vague 2 devait fermer, et l'affichage cassé de tout mail en texte brut. Sans elle, le tout partait en
+déploiement avec la suite au vert. C'est la leçon la plus transférable de l'exercice.
+
+### Ce qui reste ouvert, et assumé
+
+- **Le `LCASE`/index reste écarté** conformément à l'arbitrage du 2026-07-25 ; à ne rouvrir qu'avec la
+  base de production sous les yeux (voir ci-dessous).
+- `Total` devient un « au moins » quand le budget de balayage tronque, sans champ pour le signaler :
+  un booléen sur `MailSearchPage` plus un rendu côté frontend.
+- Pas de pagination sur `GET /api/Admin/users` (~1,5 Mo par chargement à 10 000 comptes) — changement
+  de contrat.
+- `GET /api/account` renvoie `isAdmin` non caché alors que l'autorisation répond depuis un cache de 60 s :
+  le lien Administration et l'API peuvent diverger après une modification hors application.
+- Le scan du sanitiseur reste un compteur, pas un arbre : un document pathologiquement mal imbriqué peut
+  être aplati au-delà de 1024 niveaux — le contenu survit, la mise en page non.
+- `api.js` peut perdre sa branche `ProblemDetails`, devenue morte depuis la vague 3.
+- `AdminOwnershipRequest` est du code mort, repéré au passage.
+- `ApiDocumentation.xml` est un artefact versionné chroniquement périmé que chaque `dotnet test` salit ;
+  à régénérer en un commit dédié, ou à sortir du versionnement.
+- Une seule assertion à la montre subsiste (`ImapSessionDisposeTests`), pilotée par minuteur donc peu
+  sensible à la vitesse de la machine, mais non nulle sur un conteneur affamé.
 
 ---
 
