@@ -34,7 +34,21 @@ public sealed class AliasTests
 
     [Fact]
     public void GetHashCode_IsBasedOnEmail()
-        => Assert.Equal("test@example.com".GetHashCode(), Make().GetHashCode());
+        => Assert.Equal(
+            StringComparer.InvariantCultureIgnoreCase.GetHashCode("test@example.com"),
+            Make().GetHashCode());
+
+    [Fact]
+    public void GetHashCode_IsCaseInsensitive()
+        => Assert.Equal(Make("Test", "Example.COM").GetHashCode(), Make("test", "example.com").GetHashCode());
+
+    [Fact]
+    public void HashSet_CollapsesAliasesDifferingOnlyByCase()
+    {
+        var set = new HashSet<Alias> { Make("Test", "Example.COM"), Make("test", "example.com") };
+
+        Assert.Single(set);
+    }
 
     [Fact]
     public void DebuggerDisplay_ReturnsEmailFormat()
