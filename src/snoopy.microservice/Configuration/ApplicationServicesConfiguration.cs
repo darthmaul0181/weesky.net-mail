@@ -29,6 +29,8 @@ internal static class ApplicationServicesConfiguration
             options.MultipartBodyLengthLimit = (long)maxMessageSizeMb * 1024 * 1024 + 1024 * 1024;
         });
 
+        services.AddEnveloppeModelStateResponse();
+
         return services;
     }
 
