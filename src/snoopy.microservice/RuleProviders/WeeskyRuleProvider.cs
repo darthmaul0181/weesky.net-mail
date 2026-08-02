@@ -81,7 +81,7 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
         if (requires.Count > 0)
         {
             sb.Append("require [");
-            sb.Append(string.Join(", ", requires.Select(Quote)));
+            sb.Append(string.Join(", ", requires.Select(SieveQuoting.Quote)));
             sb.Append("];\n");
         }
         sb.Append('\n');
@@ -312,7 +312,7 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
 
         if (c.Field == SieveConditionField.CurrentDate || c.Field == SieveConditionField.MessageDate)
         {
-            var dateValue = Quote(c.Value!.Trim());
+            var dateValue = SieveQuoting.Quote(c.Value!.Trim());
             bool isCurrent = c.Field == SieveConditionField.CurrentDate;
             return c.Operator switch
             {
@@ -332,13 +332,13 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
         {
             var parts = c.Value!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (parts.Length == 1)
-                return $"currentdate :is \"weekday\" {Quote(parts[0])}";
-            return "currentdate :is \"weekday\" [" + string.Join(", ", parts.Select(Quote)) + "]";
+                return $"currentdate :is \"weekday\" {SieveQuoting.Quote(parts[0])}";
+            return "currentdate :is \"weekday\" [" + string.Join(", ", parts.Select(SieveQuoting.Quote)) + "]";
         }
 
         if (c.Field == SieveConditionField.CurrentHour)
         {
-            var hourVal = Quote(c.Value!.Trim());
+            var hourVal = SieveQuoting.Quote(c.Value!.Trim());
             return c.Operator switch
             {
                 SieveConditionOperator.Before => $"currentdate :value \"lt\" \"hour\" {hourVal}",
@@ -356,7 +356,7 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
                 SieveConditionOperator.Regex => ":regex",
                 _ => ":contains"
             };
-            var bodyExpr = $"body :text {bodyOp} {Quote(c.Value)}";
+            var bodyExpr = $"body :text {bodyOp} {SieveQuoting.Quote(c.Value)}";
             return bodyNegate ? $"not {bodyExpr}" : bodyExpr;
         }
 
@@ -373,16 +373,16 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
         string expr;
         if (c.Field == SieveConditionField.Recipient)
         {
-            expr = $"header {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+            expr = $"header {matchOp} [\"To\", \"Cc\"] {SieveQuoting.Quote(c.Value)}";
         }
         else if (c.Field == SieveConditionField.EnvelopeFrom || c.Field == SieveConditionField.EnvelopeTo)
         {
             var part = c.Field == SieveConditionField.EnvelopeFrom ? "from" : "to";
-            expr = $"envelope {matchOp} {Quote(part)} {Quote(c.Value)}";
+            expr = $"envelope {matchOp} {SieveQuoting.Quote(part)} {SieveQuoting.Quote(c.Value)}";
         }
         else if (c.Field == SieveConditionField.RecipientDetail)
         {
-            expr = $"address :detail {matchOp} [\"To\", \"Cc\"] {Quote(c.Value)}";
+            expr = $"address :detail {matchOp} [\"To\", \"Cc\"] {SieveQuoting.Quote(c.Value)}";
         }
         else
         {
@@ -395,7 +395,7 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
                 SieveConditionField.Header => c.HeaderName!,
                 _ => throw new InvalidOperationException($"Field {c.Field} is not a text field")
             };
-            expr = $"header {matchOp} {Quote(headerName)} {Quote(c.Value)}";
+            expr = $"header {matchOp} {SieveQuoting.Quote(headerName)} {SieveQuoting.Quote(c.Value)}";
         }
 
         return negate ? $"not {expr}" : expr;
@@ -404,28 +404,15 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
     private static string BuildAction(SieveAction a) => a.Type switch
     {
         SieveActionType.FileInto => a.AutoCreate
-            ? $"fileinto :create {Quote(a.Argument!)};"
-            : $"fileinto {Quote(a.Argument!)};",
-        SieveActionType.Redirect => $"redirect {Quote(a.Argument!)};",
+            ? $"fileinto :create {SieveQuoting.Quote(a.Argument!)};"
+            : $"fileinto {SieveQuoting.Quote(a.Argument!)};",
+        SieveActionType.Redirect => $"redirect {SieveQuoting.Quote(a.Argument!)};",
         SieveActionType.Discard => "discard;",
-        SieveActionType.Reject => $"reject {Quote(a.Argument!)};",
-        SieveActionType.SetFlag => $"addflag {Quote(a.Argument!)};",
+        SieveActionType.Reject => $"reject {SieveQuoting.Quote(a.Argument!)};",
+        SieveActionType.SetFlag => $"addflag {SieveQuoting.Quote(a.Argument!)};",
         SieveActionType.Keep => "keep;",
         _ => throw new InvalidOperationException($"Unknown action type {a.Type}")
     };
-
-    private static string Quote(string s)
-    {
-        var sb = new StringBuilder(s.Length + 2);
-        sb.Append('"');
-        foreach (var c in s)
-        {
-            if (c == '"' || c == '\\') sb.Append('\\');
-            sb.Append(c);
-        }
-        sb.Append('"');
-        return sb.ToString();
-    }
 
     private static string EscapeForComment(string s) =>
         s.Replace("\r", " ").Replace("\n", " ");
