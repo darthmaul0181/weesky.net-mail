@@ -3,29 +3,22 @@ using weesky.Snoopy.Microservice.Data.Preferences;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class UserPreferenceStore : IUserPreferenceStore
+internal sealed class UserPreferenceStore(PreferencesDbContext context) : IUserPreferenceStore
 {
-    private readonly PreferencesDbContext _context;
-
-    public UserPreferenceStore(PreferencesDbContext context)
-    {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
-    }
-
     public async Task<IReadOnlyList<UserPreference>> GetAsync(Guid userId, CancellationToken cancellationToken)
-        => await _context.UserPreferences.AsNoTracking()
+        => await context.UserPreferences.AsNoTracking()
             .Where(p => p.UserId == userId)
             .OrderBy(p => p.PreferenceKey)
             .ToListAsync(cancellationToken);
 
     public async Task SetAsync(Guid userId, string key, string value, CancellationToken cancellationToken)
     {
-        var existing = await _context.UserPreferences
+        var existing = await context.UserPreferences
             .FirstOrDefaultAsync(p => p.UserId == userId && p.PreferenceKey == key, cancellationToken);
 
         if (existing is null)
         {
-            _context.UserPreferences.Add(new UserPreference
+            context.UserPreferences.Add(new UserPreference
             {
                 UserId = userId,
                 PreferenceKey = key,
@@ -39,6 +32,6 @@ internal sealed class UserPreferenceStore : IUserPreferenceStore
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 }
