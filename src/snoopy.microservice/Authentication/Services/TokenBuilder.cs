@@ -21,18 +21,6 @@ public sealed class TokenBuilder
     private DateTime? _expires;
     private SigningCredentials? _credentials;
 
-    public TokenBuilder AddClaims(params Claim[] claims)
-    {
-        _claims.AddRange(claims);
-        return this;
-    }
-
-    public TokenBuilder AddClaim(Claim claim)
-    {
-        _claims.Add(claim);
-        return this;
-    }
-
     public TokenBuilder AddClaim(string type, string value)
     {
         _claims.Add(new Claim(type, value));
@@ -51,9 +39,9 @@ public sealed class TokenBuilder
         return this;
     }
 
-    public TokenBuilder AddExpiry(int minutes)
+    public TokenBuilder AddExpiry(int minutes, DateTime utcNow)
     {
-        _expires = DateTime.UtcNow.AddMinutes(minutes);
+        _expires = utcNow.AddMinutes(minutes);
         return this;
     }
 

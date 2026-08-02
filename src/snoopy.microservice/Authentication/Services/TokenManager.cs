@@ -7,32 +7,26 @@ using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Authentication.Services;
 
-public sealed class TokenManager : ITokenManager
+public sealed class TokenManager(IOptions<TokenConstants> tokenConstants, TimeProvider timeProvider) : ITokenManager
 {
-    private IOptions<TokenConstants> TokenConstants { get; }
-
-    public TokenManager(IOptions<TokenConstants> tokenConstants)
-    {
-        TokenConstants = tokenConstants;
-    }
-
     public AuthToken Generate(User user)
     {
+        var constants = tokenConstants.Value;
         var tokenBuilder = new TokenBuilder();
 
         string token = tokenBuilder.AddClaim(ClaimTypes.Upn, user.Name)
             .AddClaim(ClaimTypes.Dns, user.Domain)
             .AddClaim(WebmailClaimTypes.Uid, user.WebmailUid.ToString())
             .AddClaim(WebmailClaimTypes.Stamp, user.SecurityStamp.ToString())
-            .AddIssuer(TokenConstants.Value.Issuer)
-            .AddAudience(TokenConstants.Value.Audience)
-            .AddExpiry(TokenConstants.Value.ExpiryInMinutes)
-            .AddKey(TokenConstants.Value.Key)
+            .AddIssuer(constants.Issuer)
+            .AddAudience(constants.Audience)
+            .AddExpiry(constants.ExpiryInMinutes, timeProvider.GetUtcNow().UtcDateTime)
+            .AddKey(constants.Key)
             .Build();
 
         return new AuthToken
         {
-            ExpiresIn = TokenConstants.Value.ExpiryInMinutes,
+            ExpiresIn = constants.ExpiryInMinutes,
             Token = token
         };
     }

@@ -17,7 +17,7 @@ public sealed class TokenBuilderTests
             .AddClaim(ClaimTypes.Upn, "john")
             .AddIssuer("issuer")
             .AddAudience("audience")
-            .AddExpiry(30)
+            .AddExpiry(30, DateTime.UtcNow)
             .AddKey(TestKey)
             .Build());
 
@@ -37,29 +37,6 @@ public sealed class TokenBuilderTests
     }
 
     [Fact]
-    public void AddClaim_ClaimObject_AddsClaimToToken()
-    {
-        var token = new JsonWebToken(new TokenBuilder()
-            .AddClaim(new Claim("mytype", "myvalue"))
-            .AddKey(TestKey)
-            .Build());
-
-        Assert.Contains(token.Claims, c => c.Type == "mytype" && c.Value == "myvalue");
-    }
-
-    [Fact]
-    public void AddClaims_Array_AddsAllClaimsToToken()
-    {
-        var token = new JsonWebToken(new TokenBuilder()
-            .AddClaims(new Claim("type1", "val1"), new Claim("type2", "val2"))
-            .AddKey(TestKey)
-            .Build());
-
-        Assert.Contains(token.Claims, c => c.Type == "type1" && c.Value == "val1");
-        Assert.Contains(token.Claims, c => c.Type == "type2" && c.Value == "val2");
-    }
-
-    [Fact]
     public void AddIssuer_SetsIssuerOnToken()
     {
         var token = new JsonWebToken(new TokenBuilder()
@@ -74,12 +51,25 @@ public sealed class TokenBuilderTests
     public void AddExpiry_SetsExpiration()
     {
         var token = new JsonWebToken(new TokenBuilder()
-            .AddExpiry(30)
+            .AddExpiry(30, DateTime.UtcNow)
             .AddKey(TestKey)
             .Build());
 
         var minutesToExpiry = (token.ValidTo - DateTime.UtcNow).TotalMinutes;
         Assert.InRange(minutesToExpiry, 29.9, 30.1);
+    }
+
+    [Fact]
+    public void AddExpiry_IsDrivenByTheGivenInstant_NotTheWallClock()
+    {
+        var utcNow = new DateTime(2030, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var token = new JsonWebToken(new TokenBuilder()
+            .AddExpiry(30, utcNow)
+            .AddKey(TestKey)
+            .Build());
+
+        Assert.Equal(utcNow.AddMinutes(30), token.ValidTo);
     }
 
     [Fact]
@@ -101,7 +91,7 @@ public sealed class TokenBuilderTests
             .AddClaim("t", "v")
             .AddIssuer("i")
             .AddAudience("a")
-            .AddExpiry(10)
+            .AddExpiry(10, DateTime.UtcNow)
             .AddKey(TestKey);
 
         Assert.Same(builder, result);

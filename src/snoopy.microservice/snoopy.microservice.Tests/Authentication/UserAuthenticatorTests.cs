@@ -31,7 +31,7 @@ public sealed class UserAuthenticatorTests
         ExpiryInMinutes = 30,
         Key = "test-signing-key-long-enough-for-hmac256",
         AuthCookieName = "BearerAuth"
-    }));
+    }), TimeProvider.System);
 
     [Fact]
     public async Task Authenticate_WithUnknownUser_ReturnsFailure()
