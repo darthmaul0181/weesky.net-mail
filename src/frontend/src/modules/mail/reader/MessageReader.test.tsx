@@ -118,7 +118,7 @@ const detail = {
   messageId: 'm@x.be', references: [], inReplyTo: null, replyTo: [], bcc: [],
   spamScore: null,
   mailingList: null, sentBy: null, signedBy: null, unsubscribeUrl: null, tlsReceived: null,
-  htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0,
+  htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0, truncated: false,
   attachments: [
     {
       part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048,
@@ -376,6 +376,38 @@ describe('MessageReader', () => {
     expect(srcdoc).toContain('ok')
     expect(srcdoc).not.toContain('script')
     expect(srcdoc).not.toContain('onerror')
+  })
+
+  // The backend cuts an oversized body before it ever parses it. Saying nothing leaves a message
+  // ending mid-sentence, which reads as the sender's mistake rather than ours.
+  it('says so when the backend truncated the body', async () => {
+    mocks.getMailMessage.mockResolvedValue({ ...detail, truncated: true })
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+    expect(await screen.findByText(/too large to display in full/i)).toBeInTheDocument()
+  })
+
+  it('says nothing when the whole body came through', async () => {
+    mocks.getMailMessage.mockResolvedValue(detail)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    expect(screen.queryByText(/too large to display in full/i)).not.toBeInTheDocument()
+  })
+
+  // The two ship through separate skills, so an older API answers no such field at all. Absent
+  // must read as "not truncated", never as a banner on every message.
+  it('says nothing when the API predates the field', async () => {
+    const withoutField: Partial<typeof detail> = { ...detail }
+    delete withoutField.truncated
+    mocks.getMailMessage.mockResolvedValue(withoutField)
+
+    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    expect(screen.queryByText(/too large to display in full/i)).not.toBeInTheDocument()
   })
 
   it('offers to show blocked images and reveals them on demand', async () => {

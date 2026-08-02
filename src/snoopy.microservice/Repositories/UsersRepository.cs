@@ -173,10 +173,10 @@ internal sealed class UsersRepository(ApplicationDbContext context, ILogger<User
 
     public async Task<Result> ChangePasswordAsync(User user, string newPassword, string oldPassword, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
+        if (string.IsNullOrEmpty(newPassword) || newPassword.Length < PasswordPolicy.MinimumLength)
         {
             logger.LogInformation("Audit: change_password user={User} outcome=failure reason=weak_password", user.Email);
-            return Result.Failure($"Your password should contains 8 chars at least");
+            return Result.Failure($"Your password should contains {PasswordPolicy.MinimumLength} chars at least");
         }
 
         var match = await FindMailUserAsync(user.Name, user.Domain, cancellationToken);

@@ -901,6 +901,35 @@ public sealed class AdminRepositoryTests
         Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None)).IsSuccess);
     }
 
+    // aliases.source_domain cascades where the users FK does not, so the database refuses the
+    // first case on its own and would silently destroy this one.
+    [Fact]
+    public async Task DeleteDomain_WhenDomainHasAliases_ReturnsFailure()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        ctx.Aliases.Add(new MailAlias { Name = "sales", Domain = "WSY", DestinationUserId = 1 });
+        ctx.SaveChanges();
+
+        var result = await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("aliases", result.Error);
+    }
+
+    [Fact]
+    public async Task DeleteDomain_WhenDomainHasAliases_KeepsTheDomain()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        ctx.Aliases.Add(new MailAlias { Name = "sales", Domain = "WSY", DestinationUserId = 1 });
+        ctx.SaveChanges();
+
+        await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None);
+
+        Assert.True(ctx.Domains.Any(d => d.Id == "WSY"));
+    }
+
     [Fact]
     public async Task DeleteDomain_RemovesDomainFromDatabase()
     {

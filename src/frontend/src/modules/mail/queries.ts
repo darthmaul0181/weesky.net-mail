@@ -185,7 +185,14 @@ export function useSearchMessages(criteria: SearchCriteria | null, page: number,
     queryFn: ({ signal }) => api.searchMessages(criteria, page, pageSize, { signal, accountId }),
     enabled: criteria !== null && pageSize > 0,
     refetchOnWindowFocus: false,
-    placeholderData: (previous) => previous,
+    // Held across a mailbox change, this shows the previous account's hits under the new
+    // account's heading — the same wrong state useMessages guards against. Only the account is
+    // checked: keeping the previous page while another page, or another search, loads is the
+    // point of having a placeholder at all.
+    placeholderData: (previous, previousQuery) => {
+      const key = previousQuery?.queryKey as readonly unknown[] | undefined
+      return key?.[1] === accountId ? previous : undefined
+    },
   })
 }
 

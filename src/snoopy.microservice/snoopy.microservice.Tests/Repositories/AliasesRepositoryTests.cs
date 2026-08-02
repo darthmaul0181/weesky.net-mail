@@ -141,6 +141,55 @@ public sealed class AliasesRepositoryTests
         Assert.True(result.IsFailure);
     }
 
+    // The unique key is (source_addr, source_domain): destination_user is not in it, so an address
+    // another user already holds on a shared domain has to be refused here. Narrowed to this user,
+    // the check passed and SaveChanges turned the constraint into a 500.
+    [Fact]
+    public async Task AddAlias_WhenAnotherUserHoldsTheAddress_ReturnsFailure()
+    {
+        var (repo, context, _) = CreateSut();
+        var stranger = new MailUser
+        {
+            Name = "jane",
+            Password = Crypter.MD5.Crypt("password"),
+            DomainId = "OTH",
+            Active = ActiveState.Y,
+            FullName = "Jane Roe"
+        };
+        context.Users.Add(stranger);
+        context.SaveChanges();
+        context.Aliases.Add(new MailAlias { Name = "shared", Domain = "OTH", DestinationUserId = stranger.Id });
+        context.SaveChanges();
+
+        var result = await repo.AddAliasAsync(
+            AuthUser, new Alias { Name = "shared", Domain = OwnedDomain }, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("already exists", result.Error);
+    }
+
+    [Fact]
+    public async Task AddAlias_WhenAnotherUserHoldsTheAddress_WritesNothing()
+    {
+        var (repo, context, _) = CreateSut();
+        var stranger = new MailUser
+        {
+            Name = "jane",
+            Password = Crypter.MD5.Crypt("password"),
+            DomainId = "OTH",
+            Active = ActiveState.Y,
+            FullName = "Jane Roe"
+        };
+        context.Users.Add(stranger);
+        context.SaveChanges();
+        context.Aliases.Add(new MailAlias { Name = "shared", Domain = "OTH", DestinationUserId = stranger.Id });
+        context.SaveChanges();
+
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "shared", Domain = OwnedDomain }, CancellationToken.None);
+
+        Assert.Single(context.Aliases.Where(a => a.Name == "shared" && a.Domain == "OTH"));
+    }
+
     [Fact]
     public async Task AddAlias_WithNullAlias_ThrowsArgumentNullException()
     {

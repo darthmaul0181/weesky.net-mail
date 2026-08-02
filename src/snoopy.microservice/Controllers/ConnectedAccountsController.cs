@@ -300,6 +300,12 @@ public sealed class ConnectedAccountsController(
     /// <summary>
     /// Opens a real session and closes it at once: the point is to refuse a wrong password before
     /// it is stored, and nothing about the session is kept.
+    ///
+    /// Both outcomes are audited, and both name the actor as well as the address probed. This
+    /// endpoint drives a real IMAP login against any address the caller supplies, so a log holding
+    /// only the target cannot tell somebody attaching their own mailbox from somebody sweeping
+    /// addresses that are not theirs — and a success is the half worth having, since that is the
+    /// one that found a password.
     /// </summary>
     private async Task<Result> VerifyAsync(
         MailAccountConnection probe, string email, CancellationToken cancellationToken)
@@ -308,9 +314,15 @@ public sealed class ConnectedAccountsController(
         if (session.IsFailure)
         {
             // Neither the server's own text nor the credentials that produced it belong in a log.
-            logger.LogWarning("Connected-account credentials refused for {Email}", email);
+            logger.LogWarning(
+                "Audit: connect_account user={User} target={Target} outcome=failure reason=server_refused",
+                AuthenticatedUser.Email, email);
             return Result.Failure(ServerRefused);
         }
+
+        logger.LogInformation(
+            "Audit: connect_account user={User} target={Target} outcome=success",
+            AuthenticatedUser.Email, email);
 
         await session.Value.DisposeAsync();
         return Result.Success();

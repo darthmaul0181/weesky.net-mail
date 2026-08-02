@@ -354,6 +354,17 @@ export default function MessageReader(
         />
       </header>
 
+      {/* The backend hit one of its sanitiser ceilings. Nothing here can restore the rest — the
+          cut happens before the body is ever parsed — so this states the fact and points at the
+          one view that still shows the whole thing. Silence would be worse than the cut: a
+          message ending mid-sentence reads as the sender's mistake. */}
+      {data.truncated && (
+        <div className="reader-truncated">
+          This message was too large to display in full. Some of it is not shown —
+          open “View source” to read the original.
+        </div>
+      )}
+
       {data.blockedImageCount > 0 && !showImages && (
         <div className="reader-blocked-images">
           <span>

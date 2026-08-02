@@ -47,23 +47,41 @@ internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<Al
             return Result.Failure("Account not found");
         }
 
-        if (await context.Aliases.AnyAsync(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase) && a.DestinationUserId == mailUser.Id, cancellationToken))
-        {
-            logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=failure reason=already_exists", user.Email, $"{alias.Name}@{alias.Domain}");
-            return Result.Failure($"Alias '{alias.Name}@{alias.Domain}' already exists for this user");
-        }
+        // The unique key is (source_addr, source_domain) — destination_user is not part of it. A
+        // predicate narrowed to this user therefore passes an address another user already holds
+        // on a shared domain, and the insert below turns that into a 500 instead of a refusal.
+        if (await context.Aliases.AnyAsync(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase), cancellationToken))
+            return AlreadyTaken();
 
-        context.Aliases.Add(new MailAlias
+        var entry = context.Aliases.Add(new MailAlias
         {
             Name = alias.Name,
             Domain = mailDomain.Id,
             DestinationUserId = mailUser.Id,
         });
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // The check above and this insert are not one transaction: a concurrent add of the
+            // same address lands between them, and the unique index is what catches it. Detached
+            // rather than left Added, so a later SaveChanges on this scoped context does not
+            // retry the row that just bounced.
+            entry.State = EntityState.Detached;
+            return AlreadyTaken();
+        }
 
         logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=success", user.Email, $"{alias.Name}@{alias.Domain}");
         return Result.Success();
+
+        Result AlreadyTaken()
+        {
+            logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=failure reason=already_exists", user.Email, $"{alias.Name}@{alias.Domain}");
+            return Result.Failure($"Alias '{alias.Name}@{alias.Domain}' already exists");
+        }
     }
 
     public async Task<Result> DeleteAliasAsync(User user, Alias alias, CancellationToken cancellationToken)

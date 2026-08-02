@@ -257,6 +257,38 @@ describe('account scoping on the wire', () => {
     expect(result.current.data).toBeUndefined()
   })
 
+  // The search hook carries its own placeholder, so it needs its own guard: results found in one
+  // mailbox listed under another's heading is the same lie the page guard above prevents.
+  it('does not hold the previous account search results on screen while the new ones load', async () => {
+    const criteria = { folderPath: 'INBOX', allFolders: false, quick: 'x' }
+    mocks.searchMessages.mockResolvedValue({ total: 1, page: 0, pageSize: 50, results: [] })
+    const { wrapper } = createWrapper()
+    const { result, rerender } = renderHook(() => useSearchMessages(criteria, 0, 50), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    mocks.searchMessages.mockImplementation(() => new Promise(() => {}))
+    auth.activeAccountId = 'linked-1'
+    rerender()
+
+    expect(result.current.data).toBeUndefined()
+  })
+
+  // What that placeholder is for: the next page of the same search, same mailbox.
+  it('keeps the current search results on screen while the next page loads', async () => {
+    const criteria = { folderPath: 'INBOX', allFolders: false, quick: 'x' }
+    mocks.searchMessages.mockResolvedValue({ total: 60, page: 0, pageSize: 50, results: [] })
+    const { wrapper } = createWrapper()
+    const { result, rerender } = renderHook(
+      ({ page }: { page: number }) => useSearchMessages(criteria, page, 50),
+      { wrapper, initialProps: { page: 0 } })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    mocks.searchMessages.mockImplementation(() => new Promise(() => {}))
+    rerender({ page: 1 })
+
+    expect(result.current.data?.total).toBe(60)
+  })
+
   // What the placeholder is actually for: the next page of the same folder, same mailbox.
   it('keeps the current page on screen while the next page of the same folder loads', async () => {
     mocks.getMailMessages.mockResolvedValue(pageOf([1], 60))

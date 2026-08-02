@@ -15,7 +15,7 @@ internal sealed class AdminRepository(
     IMemoryCache cache,
     ILogger<AdminRepository> logger) : IAdminRepository
 {
-    private const int MinPasswordLength = 8;
+    private const int MinPasswordLength = PasswordPolicy.MinimumLength;
     private const int DefaultQuotaMb = 1024;
 
     /// <summary>
@@ -248,6 +248,11 @@ internal sealed class AdminRepository(
 
         if (await context.Users.AnyAsync(u => u.DomainId == id, cancellationToken))
             return Result.Failure($"Cannot delete domain '{id}': it still has associated users");
+
+        // aliases.source_domain is ON DELETE CASCADE where the users FK is not, so nothing at the
+        // database level would refuse this one: the rows would simply be gone, unannounced.
+        if (await context.Aliases.AnyAsync(a => a.Domain == id, cancellationToken))
+            return Result.Failure($"Cannot delete domain '{id}': it still has associated aliases");
 
         context.Domains.Remove(domain);
         await context.SaveChangesAsync(cancellationToken);
