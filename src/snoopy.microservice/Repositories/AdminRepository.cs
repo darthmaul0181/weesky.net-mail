@@ -198,8 +198,16 @@ internal sealed class AdminRepository(
 
     public async Task<IEnumerable<Domain>> GetAllDomainsAsync(CancellationToken cancellationToken)
     {
+        // The alias count rides on the listing rather than on a lookup of its own: the delete
+        // confirmation is the only consumer, and a second round trip per domain to answer a
+        // question the list is already fetching would be the N+1 this repository just lost.
         return await context.Domains
-            .Select(d => new Domain { Id = d.Id, Name = d.Name })
+            .Select(d => new Domain
+            {
+                Id = d.Id,
+                Name = d.Name,
+                AliasCount = context.Aliases.Count(a => a.Domain == d.Id)
+            })
             .ToListAsync(cancellationToken);
     }
 
@@ -240,7 +248,7 @@ internal sealed class AdminRepository(
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
 
-    public async Task<Result> DeleteDomainAsync(string id, CancellationToken cancellationToken)
+    public async Task<Result> DeleteDomainAsync(string id, bool deleteAliases, CancellationToken cancellationToken)
     {
         var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (domain == null)
@@ -249,14 +257,24 @@ internal sealed class AdminRepository(
         if (await context.Users.AnyAsync(u => u.DomainId == id, cancellationToken))
             return Result.Failure($"Cannot delete domain '{id}': it still has associated users");
 
-        // aliases.source_domain is ON DELETE CASCADE where the users FK is not, so nothing at the
-        // database level would refuse this one: the rows would simply be gone, unannounced.
-        if (await context.Aliases.AnyAsync(a => a.Domain == id, cancellationToken))
-            return Result.Failure($"Cannot delete domain '{id}': it still has associated aliases");
+        // aliases.source_domain is ON DELETE CASCADE where the users FK is not: the database
+        // refuses the case above on its own, and would take these rows with it without a word.
+        // Taking them is what the cascade is deliberately for — an alias domain holds aliases by
+        // definition, and refusing outright would leave one undeletable, since no screen in this
+        // application lists another user's aliases. So this asks, and says how many.
+        var aliasCount = await context.Aliases.CountAsync(a => a.Domain == id, cancellationToken);
+        if (aliasCount > 0 && !deleteAliases)
+            return Result.Failure(
+                $"Deleting domain '{id}' would also delete {aliasCount} alias{(aliasCount == 1 ? string.Empty : "es")}");
 
         context.Domains.Remove(domain);
         await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
+
+        // The rows are gone and nothing else records them: the count is the only trace left.
+        if (aliasCount > 0)
+            logger.LogInformation(
+                "Audit: delete_domain domain={Domain} aliases_deleted={Count} outcome=success", id, aliasCount);
 
         return Result.Success();
     }

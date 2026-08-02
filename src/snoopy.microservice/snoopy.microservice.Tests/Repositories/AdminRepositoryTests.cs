@@ -881,7 +881,7 @@ public sealed class AdminRepositoryTests
     public async Task DeleteDomain_WhenNotFound_ReturnsFailure()
     {
         using var ctx = CreateContext();
-        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("ZZZ", CancellationToken.None)).IsFailure);
+        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("ZZZ", false, CancellationToken.None)).IsFailure);
     }
 
     [Fact]
@@ -890,7 +890,7 @@ public sealed class AdminRepositoryTests
         using var ctx = CreateContext();
         AddDomain(ctx);
         AddUser(ctx, "alice", "WSY");
-        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None)).IsFailure);
+        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY", false, CancellationToken.None)).IsFailure);
     }
 
     [Fact]
@@ -898,36 +898,88 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None)).IsSuccess);
+        Assert.True((await CreateRepository(ctx).DeleteDomainAsync("WSY", false, CancellationToken.None)).IsSuccess);
     }
 
-    // aliases.source_domain cascades where the users FK does not, so the database refuses the
-    // first case on its own and would silently destroy this one.
+    private static void AddAlias(TestDbContext ctx, string name, string domainId, int userId = 1)
+    {
+        ctx.Aliases.Add(new MailAlias { Name = name, Domain = domainId, DestinationUserId = userId });
+        ctx.SaveChanges();
+    }
+
+    // aliases.source_domain cascades where the users FK does not: the database refuses a domain
+    // holding users on its own, and would take these rows away without a word.
     [Fact]
-    public async Task DeleteDomain_WhenDomainHasAliases_ReturnsFailure()
+    public async Task DeleteDomain_WhenDomainHasUnacknowledgedAliases_ReturnsFailure()
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        ctx.Aliases.Add(new MailAlias { Name = "sales", Domain = "WSY", DestinationUserId = 1 });
-        ctx.SaveChanges();
+        AddAlias(ctx, "sales", "WSY");
 
-        var result = await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None);
+        var result = await CreateRepository(ctx).DeleteDomainAsync("WSY", false, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Contains("aliases", result.Error);
+        Assert.Contains("would also delete 1 alias", result.Error);
     }
 
+    // The count is what the confirmation is built from, so it has to be the real one.
     [Fact]
-    public async Task DeleteDomain_WhenDomainHasAliases_KeepsTheDomain()
+    public async Task DeleteDomain_RefusalNamesHowManyAliasesWouldGo()
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        ctx.Aliases.Add(new MailAlias { Name = "sales", Domain = "WSY", DestinationUserId = 1 });
-        ctx.SaveChanges();
+        AddAlias(ctx, "sales", "WSY");
+        AddAlias(ctx, "support", "WSY");
+        AddDomain(ctx, "OTH", "other.com");
+        AddAlias(ctx, "elsewhere", "OTH");
 
-        await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None);
+        var result = await CreateRepository(ctx).DeleteDomainAsync("WSY", false, CancellationToken.None);
+
+        Assert.Contains("would also delete 2 aliases", result.Error);
+    }
+
+    [Fact]
+    public async Task DeleteDomain_WhenAliasesUnacknowledged_KeepsTheDomain()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        AddAlias(ctx, "sales", "WSY");
+
+        await CreateRepository(ctx).DeleteDomainAsync("WSY", false, CancellationToken.None);
 
         Assert.True(ctx.Domains.Any(d => d.Id == "WSY"));
+    }
+
+    // An alias domain holds aliases by definition, and no screen here lists another user's: a
+    // refusal that could not be answered would leave such a domain undeletable.
+    [Fact]
+    public async Task DeleteDomain_WhenAliasesAcknowledged_Succeeds()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        AddAlias(ctx, "sales", "WSY");
+
+        var result = await CreateRepository(ctx).DeleteDomainAsync("WSY", true, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(ctx.Domains.Any(d => d.Id == "WSY"));
+    }
+
+    // The acknowledgement covers this domain's aliases, never a neighbour's.
+    [Fact]
+    public async Task GetAllDomains_CountsTheAliasesAnchoredOnEachDomain()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        AddDomain(ctx, "OTH", "other.com");
+        AddAlias(ctx, "sales", "WSY");
+        AddAlias(ctx, "support", "WSY");
+        AddAlias(ctx, "elsewhere", "OTH");
+
+        var domains = (await CreateRepository(ctx).GetAllDomainsAsync(CancellationToken.None)).ToList();
+
+        Assert.Equal(2, domains.Single(d => d.Id == "WSY").AliasCount);
+        Assert.Equal(1, domains.Single(d => d.Id == "OTH").AliasCount);
     }
 
     [Fact]
@@ -935,7 +987,7 @@ public sealed class AdminRepositoryTests
     {
         using var ctx = CreateContext();
         AddDomain(ctx);
-        await CreateRepository(ctx).DeleteDomainAsync("WSY", CancellationToken.None);
+        await CreateRepository(ctx).DeleteDomainAsync("WSY", false, CancellationToken.None);
         Assert.False(ctx.Domains.Any(d => d.Id == "WSY"));
     }
 

@@ -247,17 +247,56 @@ commentaire si la correction est écartée durablement.
 
 ## 9. Correctifs livrés
 
-Backend **1923 tests** (1919 + 4), build Release 0 avertissement. Frontend **2275 tests**,
+Backend **1927 tests** (1919 + 8), build Release 0 avertissement. Frontend **2281 tests**,
 typecheck et lint propres.
 
 | # | Correctif | Verrou |
 |---|---|---|
 | 1 | `useSearchMessages` : placeholder gardé sur `accountId` | 2 tests — le changement de compte vide le placeholder, la page suivante du même compte le garde |
 | 2 | Pré-check d'alias élargi à `(source_addr, source_domain)` + `catch (DbUpdateException)` | 2 tests — refus, et aucune écriture |
-| 3 | `DeleteDomainAsync` refuse un domaine portant des alias | 2 tests — refus motivé, et le domaine survit |
+| 3 | Suppression de domaine : cascade annoncée puis confirmée, jamais silencieuse | 5 tests back + 4 front — voir la correction ci-dessous |
 | 4 | Bannière de troncature dans le lecteur | 3 tests — présente, absente, et absente aussi quand l'API ne renvoie pas le champ |
 | 5 | Audit `connect_account` nommant l'acteur **et** la cible, sur refus comme sur succès | — |
 | 6 | `PasswordPolicy.MinimumLength` partagé par les deux repositories | — |
+
+### Correction du n°3 — le premier remède était trop strict
+
+La première version refusait purement et simplement la suppression d'un domaine portant des
+alias. **C'était une erreur d'arbitrage**, relevée en répondant à la question « pourquoi refuser ? »
+et corrigée dans la foulée. Trois faits l'ont établie :
+
+- Il n'existe **aucun endpoint admin** listant ou supprimant des alias — la surface admin couvre
+  users, domaines, propriétaires de domaines virtuels et domaines externes.
+- `AliasesController` n'est pas réservé aux admins et passe par `UserOwnsDomainAsync` : **être
+  admin n'y donne aucun droit**.
+- `GetAliasesAsync` filtre sur `alias.DestinationUserId == usr.Id` : **un utilisateur ne voit que
+  ses propres alias**, même sur un domaine qu'il possède.
+
+Un refus sec rendait donc un domaine d'alias **indélébile depuis l'application** : il aurait fallu
+que chaque détenteur d'alias se connecte et supprime les siens, sans que l'admin puisse seulement
+savoir de qui il s'agit. Or un domaine virtuel porte des alias par définition — c'est l'onglet
+« Virtual domains » — et la cascade est déclarée délibérément dans le schéma : l'auteur *voulait*
+que les alias partent avec le domaine. Le garde combattait l'intention du schéma au lieu de
+corriger ce qui manquait.
+
+**Le défaut était le silence, pas la suppression.** La version livrée :
+
+```
+DELETE /api/Admin/domains/{id}                     → 400 « would also delete 3 aliases »
+DELETE /api/Admin/domains/{id}?deleteAliases=true  → 204 + ligne d'audit avec le compte
+```
+
+`GetAllDomainsAsync` porte désormais `AliasCount`, sur la même requête — la confirmation n'a
+aucune autre source pour dire ce que la suppression coûte, et un aller-retour par domaine aurait
+réintroduit le N+1 que ce repository venait de perdre. Côté UI, `DeleteConfirmModal` reçoit un
+`message` nommant le nombre d'alias et le fait que le courrier vers ces adresses cessera d'être
+distribué ; confirmer **est** l'acquittement envoyé sur le fil. La ligne d'audit est la seule
+trace qui subsiste des lignes détruites.
+
+**La leçon.** Le rapport du 2026-08-01 proposait deux remèdes — « garde `AnyAsync` **ou** remonter
+le compte d'alias dans la confirmation » — et le premier jet a pris le premier sans arbitrer.
+Quand un constat offre deux remèdes, le choix entre eux est une décision à motiver, pas un détail
+d'implémentation.
 
 **Choix à connaître sur le n°2.** Le pré-check ne demande plus si *cet utilisateur* détient déjà
 l'adresse mais si *quiconque* la détient, ce qui est exactement ce que dit la contrainte unique.

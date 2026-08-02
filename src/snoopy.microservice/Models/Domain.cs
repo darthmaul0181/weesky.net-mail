@@ -14,4 +14,11 @@ public sealed class Domain
     /// The name of the domain.
     /// </summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Aliases anchored on this domain, which deleting it takes with them. Carried on the listing
+    /// because nothing in this application lets an admin enumerate another user's aliases, so a
+    /// confirmation has no other way to say what the deletion costs.
+    /// </summary>
+    public int AliasCount { get; set; }
 }

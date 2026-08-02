@@ -234,18 +234,33 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task DeleteDomain_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.DeleteDomainAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.DeleteDomainAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Domain has users"));
-        var obj = Assert.IsType<ObjectResult>(await CreateController().DeleteDomain("WSY", CancellationToken.None));
+        var obj = Assert.IsType<ObjectResult>(await CreateController().DeleteDomain("WSY", false, CancellationToken.None));
         Assert.Equal(400, obj.StatusCode);
     }
 
     [Fact]
     public async Task DeleteDomain_WhenSuccess_Returns204()
     {
-        _repo.Setup(r => r.DeleteDomainAsync("WSY", It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
-        var status = Assert.IsType<StatusCodeResult>(await CreateController().DeleteDomain("WSY", CancellationToken.None));
+        _repo.Setup(r => r.DeleteDomainAsync("WSY", It.IsAny<bool>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
+        var status = Assert.IsType<StatusCodeResult>(await CreateController().DeleteDomain("WSY", false, CancellationToken.None));
         Assert.Equal(204, status.StatusCode);
+    }
+
+    // The acknowledgement is the whole point of the query parameter: dropped on the way through,
+    // the confirmation the user answered would never reach the guard it was answering.
+    [Fact]
+    public async Task DeleteDomain_PassesTheAliasAcknowledgementThrough()
+    {
+        _repo.Setup(r => r.DeleteDomainAsync("WSY", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var status = Assert.IsType<StatusCodeResult>(
+            await CreateController().DeleteDomain("WSY", true, CancellationToken.None));
+
+        Assert.Equal(204, status.StatusCode);
+        _repo.Verify(r => r.DeleteDomainAsync("WSY", true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── GetUserQuota ──────────────────────────────────────

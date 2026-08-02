@@ -360,6 +360,25 @@ describe('admin api methods', () => {
     )
   })
 
+  // Absent by default rather than false: the API treats the flag's presence as the acknowledgement.
+  it('adminDeleteDomain omits the alias acknowledgement unless it is given', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteDomain('WSY')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.not.stringContaining('deleteAliases'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('adminDeleteDomain carries the alias acknowledgement when confirmed', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteDomain('WSY', true)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/WSY?deleteAliases=true'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
   it('adminGetUserQuota calls GET /api/Admin/users/:id/quota', async () => {
     const { api } = await import('./api.js')
     await api.adminGetUserQuota(5)

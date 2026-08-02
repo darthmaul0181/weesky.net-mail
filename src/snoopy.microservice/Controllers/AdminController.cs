@@ -174,8 +174,14 @@ public sealed class AdminController : ApiBaseController
     }
 
     /// <summary>Deletes a domain</summary>
+    /// <param name="id">the domain to delete</param>
+    /// <param name="deleteAliases">
+    /// Acknowledges that every alias anchored on the domain is deleted with it. Omitted, the
+    /// request is refused and the refusal names how many there are.
+    /// </param>
+    /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Domain deleted</response>
-    /// <response code="400">Domain not found or still has users</response>
+    /// <response code="400">Domain not found, still has users, or holds unacknowledged aliases</response>
     /// <response code="401">Unauthenticated</response>
     /// <response code="403">Not an admin</response>
     [HttpDelete("domains/{id}")]
@@ -183,9 +189,10 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult> DeleteDomain(string id, CancellationToken cancellationToken)
+    public async Task<ActionResult> DeleteDomain(
+        string id, [FromQuery] bool deleteAliases, CancellationToken cancellationToken)
     {
-        Result result = await _adminRepository.DeleteDomainAsync(id, cancellationToken);
+        Result result = await _adminRepository.DeleteDomainAsync(id, deleteAliases, cancellationToken);
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 

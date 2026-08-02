@@ -14,7 +14,12 @@ public interface IAdminRepository
     Task<IEnumerable<Domain>> GetAllDomainsAsync(CancellationToken cancellationToken);
     Task<Result<Domain>> CreateDomainAsync(AdminDomainRequest request, CancellationToken cancellationToken);
     Task<Result<Domain>> UpdateDomainAsync(string id, AdminDomainRequest request, CancellationToken cancellationToken);
-    Task<Result> DeleteDomainAsync(string id, CancellationToken cancellationToken);
+    /// <remarks>
+    /// <c>deleteAliases</c> acknowledges that the aliases anchored on the domain go with it —
+    /// their foreign key cascades. False refuses rather than destroying them silently, and the
+    /// refusal names how many there are, since that count is all a confirmation has to go on.
+    /// </remarks>
+    Task<Result> DeleteDomainAsync(string id, bool deleteAliases, CancellationToken cancellationToken);
     Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync(CancellationToken cancellationToken);
     Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId, CancellationToken cancellationToken);
     Task<Result> RemoveVirtualDomainOwnerAsync(string domainId, int userId, CancellationToken cancellationToken);

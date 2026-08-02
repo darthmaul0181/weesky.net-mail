@@ -230,8 +230,10 @@ export const api = {
   adminUpdateDomain: (id, payload) =>
     request('PUT', `/api/Admin/domains/${id}`, payload),
 
-  adminDeleteDomain: (id) =>
-    request('DELETE', `/api/Admin/domains/${id}`),
+  // deleteAliases acknowledges the cascade: the aliases anchored on the domain go with it. Sent
+  // only once the user has confirmed, so an unacknowledged call is refused server-side too.
+  adminDeleteDomain: (id, deleteAliases = false) =>
+    request('DELETE', `/api/Admin/domains/${id}${deleteAliases ? '?deleteAliases=true' : ''}`),
 
   adminGetUserQuota: (id) =>
     request('GET', `/api/Admin/users/${id}/quota`),

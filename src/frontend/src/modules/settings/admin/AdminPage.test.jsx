@@ -513,8 +513,57 @@ describe('DomainsTab', () => {
     await screen.findByText('WSY')
     await userEvent.click(screen.getByTitle('Delete'))
     await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
-    await waitFor(() => expect(api.adminDeleteDomain).toHaveBeenCalledWith('WSY'))
+    await waitFor(() => expect(api.adminDeleteDomain).toHaveBeenCalledWith('WSY', false))
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Domain weesky.be deleted'))
+  })
+
+  // The aliases cascade away with the domain and no screen anywhere lists another user's, so the
+  // count on the confirmation is the only warning the admin will ever get.
+  it('says how many aliases go with the domain before deleting it', async () => {
+    api.adminGetDomains.mockResolvedValue([{ id: 'WSY', name: 'weesky.be', aliasCount: 3 }])
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+
+    await userEvent.click(screen.getByTitle('Delete'))
+
+    expect(screen.getByText(/3 aliases/)).toBeInTheDocument()
+    expect(screen.getByText(/stop being delivered/)).toBeInTheDocument()
+  })
+
+  it('reads the count as singular when one alias goes', async () => {
+    api.adminGetDomains.mockResolvedValue([{ id: 'WSY', name: 'weesky.be', aliasCount: 1 }])
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+
+    await userEvent.click(screen.getByTitle('Delete'))
+
+    expect(screen.getByText(/1 alias(?!es)/)).toBeInTheDocument()
+    expect(screen.getByText(/that address/)).toBeInTheDocument()
+  })
+
+  // Confirming *is* the acknowledgement: without it on the wire the API refuses, and the admin
+  // would be shown a warning that changed nothing.
+  it('acknowledges the cascade once the admin has confirmed', async () => {
+    api.adminGetDomains.mockResolvedValue([{ id: 'WSY', name: 'weesky.be', aliasCount: 3 }])
+    api.adminDeleteDomain.mockResolvedValue(null)
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+
+    await userEvent.click(screen.getByTitle('Delete'))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+
+    await waitFor(() => expect(api.adminDeleteDomain).toHaveBeenCalledWith('WSY', true))
+  })
+
+  it('keeps the plain wording when the domain holds no alias', async () => {
+    api.adminGetDomains.mockResolvedValue([{ id: 'WSY', name: 'weesky.be', aliasCount: 0 }])
+    render(<DomainsTab addToast={vi.fn()} />)
+    await screen.findByText('WSY')
+
+    await userEvent.click(screen.getByTitle('Delete'))
+
+    expect(screen.getByText(/This action cannot be undone/)).toBeInTheDocument()
+    expect(screen.queryByText(/stop being delivered/)).not.toBeInTheDocument()
   })
 
   it('shows error toast when delete fails', async () => {
