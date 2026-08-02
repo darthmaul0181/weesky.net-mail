@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace weesky.Snoopy.Microservice.Models.Mail;
 
 /// <summary>
@@ -8,6 +10,7 @@ public abstract class MessageBatchRequest
 {
     private IReadOnlyList<uint> _uids = [];
 
+    [Required(ErrorMessage = "A folder is required")]
     public string FolderPath { get; set; } = string.Empty;
 
     /// <summary>
@@ -15,6 +18,8 @@ public abstract class MessageBatchRequest
     /// initialiser only covers an *absent* property: a body carrying <c>"uids": null</c>
     /// overwrites it, and the controller's count check then threw a 500 on a bad request.
     /// </summary>
+    [MinLength(1, ErrorMessage = "Uids must hold between 1 and 200 entries")]
+    [MaxLength(200, ErrorMessage = "Uids must hold between 1 and 200 entries")]
     public IReadOnlyList<uint> Uids
     {
         get => _uids;
@@ -32,6 +37,7 @@ public sealed class SetMessageFlagsRequest : MessageBatchRequest
 
 public sealed class MoveMessagesRequest : MessageBatchRequest
 {
+    [Required(ErrorMessage = "A target folder is required")]
     public string TargetFolderPath { get; set; } = string.Empty;
 }
 
@@ -44,6 +50,7 @@ public sealed class DeleteMessagesRequest : MessageBatchRequest;
 /// </summary>
 public sealed class EmptyFolderRequest
 {
+    [Required(ErrorMessage = "A folder is required")]
     public string FolderPath { get; set; } = string.Empty;
 
     /// <summary>Null or blank = purge. Set = move all messages into this folder.</summary>
@@ -56,6 +63,7 @@ public sealed class EmptyFolderRequest
 /// </summary>
 public sealed class SearchMessagesRequest
 {
+    [Required(ErrorMessage = "A folder is required")]
     public string FolderPath { get; set; } = string.Empty;
     public bool AllFolders { get; set; }
     public string? Quick { get; set; }
@@ -68,6 +76,10 @@ public sealed class SearchMessagesRequest
     public bool Unread { get; set; }
     public bool Flagged { get; set; }
     public bool HasAttachment { get; set; }
+
+    [Range(0, int.MaxValue, ErrorMessage = "Page must not be negative")]
     public int Page { get; set; }
+
+    [Range(1, 200, ErrorMessage = "Page size must be between 1 and 200")]
     public int PageSize { get; set; } = 50;
 }
