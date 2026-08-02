@@ -85,7 +85,7 @@ internal static class FolderRoleResolver
         }
 
         // Levels 3 and 4: discovery over whatever roles and folders the overrides left.
-        var discovered = ImapSession.ResolveSpecialUses(
+        var discovered = SpecialUseCatalog.ResolveSpecialUses(
             flat.Select(n => (n.Path, n.Name, n.AttributeRole, n.Selectable)),
             claimedRoles,
             claimedFolders);

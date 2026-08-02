@@ -1,0 +1,237 @@
+using MailKit;
+using weesky.Snoopy.Microservice.Services;
+using Xunit;
+
+namespace weesky.Snoopy.Microservice.Tests.Services;
+
+public sealed class SpecialUseCatalogTests
+{
+    /// <summary>A discovery candidate. Selectable unless a test says otherwise.</summary>
+    private static (string Path, string Name, string? AttributeRole, bool Selectable) F(
+        string path, string name, string? attributeRole = null, bool selectable = true)
+        => (path, name, attributeRole, selectable);
+
+    [Theory]
+    [InlineData(FolderAttributes.Sent, "sent")]
+    [InlineData(FolderAttributes.Drafts, "drafts")]
+    [InlineData(FolderAttributes.Trash, "trash")]
+    [InlineData(FolderAttributes.Junk, "junk")]
+    [InlineData(FolderAttributes.Archive, "archive")]
+    public void SpecialUseFromAttributes_MapsEachServerFlag(FolderAttributes attributes, string expected)
+    {
+        Assert.Equal(expected, SpecialUseCatalog.SpecialUseFromAttributes(attributes, isInbox: false));
+    }
+
+    [Fact]
+    public void SpecialUseFromAttributes_ReturnsInboxForTheInbox()
+    {
+        Assert.Equal("inbox", SpecialUseCatalog.SpecialUseFromAttributes(FolderAttributes.None, isInbox: true));
+    }
+
+    [Fact]
+    public void SpecialUseFromAttributes_ReturnsNullWithoutAFlag()
+    {
+        Assert.Null(SpecialUseCatalog.SpecialUseFromAttributes(FolderAttributes.None, isInbox: false));
+    }
+
+    [Theory]
+    [InlineData("Sent", "sent")]
+    [InlineData("Sent Messages", "sent")]
+    [InlineData("Drafts", "drafts")]
+    [InlineData("Trash", "trash")]
+    [InlineData("Deleted Messages", "trash")]
+    [InlineData("Junk", "junk")]
+    [InlineData("Spam", "junk")]
+    [InlineData("Archive", "archive")]
+    public void SpecialUseFromName_RecognisesTheWellKnownNames(string name, string expected)
+    {
+        Assert.Equal(expected, SpecialUseCatalog.SpecialUseFromName(name));
+    }
+
+    [Fact]
+    public void SpecialUseFromName_MatchesCaseInsensitively()
+    {
+        Assert.Equal("trash", SpecialUseCatalog.SpecialUseFromName("TRASH"));
+    }
+
+    [Fact]
+    public void SpecialUseFromName_ReturnsNullForAnOrdinaryFolder()
+    {
+        Assert.Null(SpecialUseCatalog.SpecialUseFromName("Projects"));
+    }
+
+    [Theory]
+    [InlineData("Brouillons", "drafts")]
+    [InlineData("Courrier indésirable", "junk")]
+    [InlineData("Éléments supprimés", "trash")]
+    [InlineData("Corbeille", "trash")]
+    [InlineData("Envoyés", "sent")]
+    public void SpecialUseFromName_RecognisesLocalisedNames(string name, string expected)
+    {
+        Assert.Equal(expected, SpecialUseCatalog.SpecialUseFromName(name));
+    }
+
+    // A mailbox provisioned by two clients holds both "Drafts" and "Brouillons". Naming
+    // both as the drafts folder would sort two folders into the well-known block and leave
+    // the client with no way to say which one a draft belongs in.
+    [Fact]
+    public void ResolveSpecialUses_GivesEachRoleToOneFolderOnly()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("Drafts", "Drafts"),
+            F("Brouillons", "Brouillons")
+        ]);
+
+        Assert.Equal("drafts", roles["Drafts"].Role);
+        Assert.False(roles.ContainsKey("Brouillons"));
+    }
+
+    [Fact]
+    public void ResolveSpecialUses_LetsTheServerFlagBeatTheNameGuess()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("Drafts", "Drafts"),
+            F("Brouillons", "Brouillons", "drafts")
+        ]);
+
+        Assert.Equal("drafts", roles["Brouillons"].Role);
+        Assert.Equal(SpecialUseAssignment.FromFlag, roles["Brouillons"].Source);
+        Assert.False(roles.ContainsKey("Drafts"));
+    }
+
+    [Fact]
+    public void ResolveSpecialUses_KeepsDistinctRolesApart()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("INBOX", "INBOX", "inbox"),
+            F("Sent", "Sent"),
+            F("Archive", "Archive"),
+            F("Projects", "Projects")
+        ]);
+
+        Assert.Equal("inbox", roles["INBOX"].Role);
+        Assert.Equal("sent", roles["Sent"].Role);
+        Assert.Equal(SpecialUseAssignment.FromName, roles["Sent"].Source);
+        Assert.Equal("archive", roles["Archive"].Role);
+        Assert.False(roles.ContainsKey("Projects"));
+    }
+
+    // A folder flagged \Sent but named "Trash" used to claim both roles, and the
+    // path→role inversion then crashed on the duplicate key. One folder, one role.
+    [Fact]
+    public void ResolveSpecialUses_NeverGivesOneFolderTwoRoles()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("Weird", "Trash", "sent")
+        ]);
+
+        Assert.Equal("sent", roles["Weird"].Role);
+        Assert.DoesNotContain(roles.Values, a => a.Role == "trash");
+    }
+
+    [Fact]
+    public void ResolveSpecialUses_ASeededRoleIsNotClaimable()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+            [F("Drafts", "Drafts", "drafts")],
+            claimedRoles: ["drafts"]);
+
+        Assert.Empty(roles);
+    }
+
+    // Spec § 4.1, second half: the folder is taken by an override, so its flag claims
+    // nothing — and the name pass hands the freed role to the next candidate.
+    [Fact]
+    public void ResolveSpecialUses_ASeededFolderClaimsNothingAndTheRolePassesOn()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+            [F("Drafts", "Drafts", "drafts"), F("Brouillons", "Brouillons")],
+            claimedFolders: ["Drafts"]);
+
+        Assert.False(roles.ContainsKey("Drafts"));
+        Assert.Equal("drafts", roles["Brouillons"].Role);
+        Assert.Equal(SpecialUseAssignment.FromName, roles["Brouillons"].Source);
+    }
+
+    // Two folders flagged \Sent: the loser must end up with no role at all. Marking only
+    // the winner as taken let the name pass re-purpose the loser, so a guess contradicted
+    // what the server had explicitly declared.
+    [Fact]
+    public void ResolveSpecialUses_AFlaggedFolderThatLosesItsRoleIsNotRenamedByAGuess()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("Sent", "Sent", "sent"),
+            F("Weird", "Trash", "sent")
+        ]);
+
+        Assert.Equal("sent", roles["Sent"].Role);
+        Assert.False(roles.ContainsKey("Weird"));
+    }
+
+    // The call shape the override task will use: some roles already filled, and the
+    // folders holding them already spoken for.
+    [Fact]
+    public void ResolveSpecialUses_HonoursBothSeededSetsAtOnce()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+            [F("Corbeille", "Corbeille"), F("Deleted Items", "Deleted Items", "trash"), F("Sent", "Sent", "sent")],
+            claimedRoles: ["trash"],
+            claimedFolders: ["Corbeille"]);
+
+        // trash is held by an override on Corbeille: neither the flagged folder nor the
+        // name-matched one may claim it.
+        Assert.False(roles.ContainsKey("Corbeille"));
+        Assert.False(roles.ContainsKey("Deleted Items"));
+        // A role no override touched still resolves normally.
+        Assert.Equal("sent", roles["Sent"].Role);
+    }
+
+    // The ordinary shape: "Archive" exists only as a \NoSelect container for the year
+    // folders under it. It must not win the name pass — the role would sit on a mailbox
+    // that cannot hold a message, and the real archive folder could never take it back.
+    [Fact]
+    public void ResolveSpecialUses_ANoSelectContainerNeverWinsTheNamePass()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("Archive", "Archive", selectable: false),
+            F("Archive/2024", "2024"),
+            F("Archive/2025", "2025"),
+            F("Archives", "Archives")
+        ]);
+
+        Assert.False(roles.ContainsKey("Archive"));
+        Assert.Equal("archive", roles["Archives"].Role);
+        Assert.Equal(SpecialUseAssignment.FromName, roles["Archives"].Source);
+    }
+
+    // Same rule on the flag pass: a server may flag a container it also refuses to open.
+    [Fact]
+    public void ResolveSpecialUses_ANonSelectableFolderNeverWinsTheFlagPass()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses(
+        [
+            F("Container", "Container", "sent", selectable: false),
+            F("Sent", "Sent", "sent")
+        ]);
+
+        Assert.False(roles.ContainsKey("Container"));
+        Assert.Equal("sent", roles["Sent"].Role);
+        Assert.Equal(SpecialUseAssignment.FromFlag, roles["Sent"].Source);
+    }
+
+    // Skipped, not merely outranked: a non-selectable folder must not consume the role
+    // and leave it unassignable when nothing else can claim it.
+    [Fact]
+    public void ResolveSpecialUses_ANonSelectableFolderDoesNotConsumeTheRole()
+    {
+        var roles = SpecialUseCatalog.ResolveSpecialUses([F("Trash", "Trash", "trash", selectable: false)]);
+
+        Assert.Empty(roles);
+    }
+}
