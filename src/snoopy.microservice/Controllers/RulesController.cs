@@ -62,7 +62,7 @@ public sealed class RulesController(
 
     /// <summary>
     /// A ManageSieve outage is the service's fault, not the caller's: 502, the same split
-    /// MailController applies to IMAP. Anything else — an unknown provider, a rule the format
+    /// the api/Mail controllers apply to IMAP. Anything else — an unknown provider, a rule the format
     /// cannot express — really is a bad request.
     /// </summary>
     private ActionResult SieveFailure(string error) =>

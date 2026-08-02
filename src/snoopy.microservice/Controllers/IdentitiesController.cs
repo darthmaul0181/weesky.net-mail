@@ -10,7 +10,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 
 /// <summary>
 /// Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
-/// no credentials cookie: both verbs are database reads, so this lives outside MailController.
+/// no credentials cookie: both verbs are database reads, so this lives outside the mail controllers.
 /// The account id is decoded by <see cref="IAccountConnectionResolver.AccountIdFrom"/>, the same
 /// reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
 /// they do there; a connected account's set is validated against the account address itself,
