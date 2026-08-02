@@ -23,10 +23,10 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task Add_WhenSuccess_Returns204()
     {
-        _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+        _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
-        var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
+        var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" }, CancellationToken.None);
 
         var status = Assert.IsType<StatusCodeResult>(result.Result);
         Assert.Equal(204, status.StatusCode);
@@ -35,10 +35,10 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task Add_WhenFailure_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+        _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Alias already exists"));
 
-        var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
+        var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" }, CancellationToken.None);
 
         var obj = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, obj.StatusCode);
@@ -47,10 +47,10 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task Add_WhenFailure_EnvelopeContainsErrorMessage()
     {
-        _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+        _repo.Setup(r => r.AddAliasAsync(It.IsAny<User>(), It.IsAny<Alias>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Alias already exists"));
 
-        var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" });
+        var result = await CreateController().Add(new Alias { Name = "johnny", Domain = "example.com" }, CancellationToken.None);
 
         var obj = Assert.IsType<ObjectResult>(result.Result);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
@@ -61,9 +61,9 @@ public sealed class AliasesControllerTests
     public async Task List_ReturnsAliasesFromRepository()
     {
         var aliases = new[] { new Alias { Name = "alias1", Domain = "example.com" } };
-        _repo.Setup(r => r.GetAliasesAsync(It.IsAny<User>())).ReturnsAsync(aliases);
+        _repo.Setup(r => r.GetAliasesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(aliases);
 
-        var result = await CreateController().List();
+        var result = await CreateController().List(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(aliases, ok.Value);
@@ -72,9 +72,9 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task List_WithNoAliases_ReturnsEmptyCollection()
     {
-        _repo.Setup(r => r.GetAliasesAsync(It.IsAny<User>())).ReturnsAsync(Enumerable.Empty<Alias>());
+        _repo.Setup(r => r.GetAliasesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(Enumerable.Empty<Alias>());
 
-        var result = await CreateController().List();
+        var result = await CreateController().List(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Empty((IEnumerable<Alias>)ok.Value!);
@@ -83,10 +83,10 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task Delete_WhenSuccess_Returns204()
     {
-        _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+        _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
-        var result = await CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" });
+        var result = await CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" }, CancellationToken.None);
 
         var status = Assert.IsType<StatusCodeResult>(result.Result);
         Assert.Equal(204, status.StatusCode);
@@ -95,10 +95,10 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task Delete_WhenFailure_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+        _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Alias not found"));
 
-        var result = await CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" });
+        var result = await CreateController().Delete(new Alias { Name = "johnny", Domain = "example.com" }, CancellationToken.None);
 
         var obj = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, obj.StatusCode);
@@ -107,14 +107,14 @@ public sealed class AliasesControllerTests
     [Fact]
     public async Task Delete_PassesAuthenticatedUserToRepository()
     {
-        _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>()))
+        _repo.Setup(r => r.DeleteAliasAsync(It.IsAny<User>(), It.IsAny<Alias>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
-        await CreateController().Delete(new Alias { Name = "x", Domain = "example.com" });
+        await CreateController().Delete(new Alias { Name = "x", Domain = "example.com" }, CancellationToken.None);
 
         _repo.Verify(r => r.DeleteAliasAsync(
             It.Is<User>(u => u.Name == "john" && u.Domain == "example.com"),
-            It.IsAny<Alias>()),
+            It.IsAny<Alias>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

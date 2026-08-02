@@ -56,7 +56,7 @@ public sealed class LoginControllerTests
     public async Task Login_WithValidCredentials_Returns200WithTheExpiryOnly()
     {
         var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
-        _authenticator.Setup(a => a.AuthenticateAsync("user@domain.com", "pass"))
+        _authenticator.Setup(a => a.AuthenticateAsync("user@domain.com", "pass", It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(token));
 
         var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
@@ -71,7 +71,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_DoesNotSerialiseTheJwtIntoTheResponseBody()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
 
         var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
@@ -86,7 +86,7 @@ public sealed class LoginControllerTests
     public async Task Login_WithValidCredentials_WritesTheJwtIntoTheAuthCookie()
     {
         var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(token));
         var httpContext = new DefaultHttpContext();
 
@@ -100,18 +100,18 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_PassesEmailAndPasswordToTheAuthenticator()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
 
         await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
 
-        _authenticator.Verify(a => a.AuthenticateAsync("user@domain.com", "pass"), Times.Once);
+        _authenticator.Verify(a => a.AuthenticateAsync("user@domain.com", "pass", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Login_WithInvalidCredentials_Returns401()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
 
         var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" }, CancellationToken.None);
@@ -125,7 +125,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_WithInvalidCredentials_DoesNotSetCookie()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Authentication failed"));
         var httpContext = new DefaultHttpContext();
 
@@ -150,7 +150,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_OnSuccess_StoresTheCredentialsCookie()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
 
         await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "hunter2" }, CancellationToken.None);
@@ -166,7 +166,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_StoresTheKekAlongsideThePassword()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
         MailCredentialPayload? stored = null;
         _credentialStore.Setup(s => s.Store(It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()))
@@ -183,7 +183,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_OnFailure_DoesNotStoreTheCredentialsCookie()
     {
-        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AuthToken>("Invalid credentials"));
 
         await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "wrong" }, CancellationToken.None);

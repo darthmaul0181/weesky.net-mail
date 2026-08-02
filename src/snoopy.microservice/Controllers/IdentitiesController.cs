@@ -89,8 +89,8 @@ public sealed class IdentitiesController(
         LoadSourcesAsync(CancellationToken cancellationToken)
     {
         var stored = await store.GetAsync(AuthenticatedUser.WebmailUid, AccountScope.Primary, cancellationToken);
-        var aliasList = await aliases.GetAliasesAsync(AuthenticatedUser);
-        var dbUser = await users.FindByEmailAsync(AuthenticatedUser.Email);
+        var aliasList = await aliases.GetAliasesAsync(AuthenticatedUser, cancellationToken);
+        var dbUser = await users.FindByEmailAsync(AuthenticatedUser.Email, cancellationToken);
         return (stored, aliasList.ToAddresses(), dbUser?.FullName);
     }
 

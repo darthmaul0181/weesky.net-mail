@@ -36,9 +36,9 @@ public sealed class AccountController(
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<AccountInfo>> GetAccountInfo()
+    public async Task<ActionResult<AccountInfo>> GetAccountInfo(CancellationToken cancellationToken)
     {
-        Result<AccountInfo> result = await usersRepository.GetAccountInfoAsync(AuthenticatedUser);
+        Result<AccountInfo> result = await usersRepository.GetAccountInfoAsync(AuthenticatedUser, cancellationToken);
         return FromResult(result, errorStatusCode: StatusCodes.Status404NotFound);
     }
 
@@ -97,18 +97,23 @@ public sealed class AccountController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> ChangePassword(SecretChange secretChange, CancellationToken cancellationToken)
     {
-        Result result = await usersRepository.ChangePasswordAsync(AuthenticatedUser, secretChange.NewPassword, secretChange.OldPassword);
+        Result result = await usersRepository.ChangePasswordAsync(
+            AuthenticatedUser, secretChange.NewPassword, secretChange.OldPassword, cancellationToken);
 
         if (result.IsSuccess)
         {
+            // Everything below is compensating work for a password that is already committed, so
+            // none of it takes the request's token: a client that disconnects here would otherwise
+            // be left with a changed password, un-rekeyed accounts and cookies holding the old one.
+
             // Before the cookie writes: the old key still has to be read off the incoming one.
-            var newKek = await ReKeyConnectedAccountsAsync(secretChange, cancellationToken);
+            var newKek = await ReKeyConnectedAccountsAsync(secretChange, CancellationToken.None);
 
             // Rotating cuts every session of this account, which is the point — a password is
             // changed precisely when the other ones are no longer wanted. It also cuts this one,
             // so the caller is handed a fresh pair of cookies in the same response; without that
             // the user would sign themselves out by changing their password.
-            var stamp = await webmailUsers.RotateSecurityStampAsync(AuthenticatedUser.Email, cancellationToken);
+            var stamp = await webmailUsers.RotateSecurityStampAsync(AuthenticatedUser.Email, CancellationToken.None);
             sessions.Forget(AuthenticatedUser.Email);
 
             var renewed = new User(AuthenticatedUser.Email)
@@ -171,6 +176,7 @@ public sealed class AccountController(
     /// Change the account full name
     /// </summary>
     /// <param name="fullNameChange">the new full name</param>
+    /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Full name changed successfully</response>
     /// <response code="400">Invalid request</response>
     /// <response code="401">Unauthenticated user</response>
@@ -178,9 +184,9 @@ public sealed class AccountController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult> ChangeFullName(FullNameChange fullNameChange)
+    public async Task<ActionResult> ChangeFullName(FullNameChange fullNameChange, CancellationToken cancellationToken)
     {
-        Result result = await usersRepository.ChangeFullNameAsync(AuthenticatedUser, fullNameChange.FullName);
+        Result result = await usersRepository.ChangeFullNameAsync(AuthenticatedUser, fullNameChange.FullName, cancellationToken);
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 }

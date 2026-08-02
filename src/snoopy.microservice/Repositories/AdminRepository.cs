@@ -28,7 +28,7 @@ internal sealed class AdminRepository(
 
     private const string EpochKey = "admin-flag:epoch";
 
-    public async Task<bool> IsAdminAsync(string username, string domainName)
+    public async Task<bool> IsAdminAsync(string username, string domainName, CancellationToken cancellationToken)
     {
         // Read before the query, stored with its answer: a write that commits while the query is
         // in flight has no entry to remove yet, so the epoch is what makes that answer unusable.
@@ -38,8 +38,10 @@ internal sealed class AdminRepository(
         if (cache.TryGetValue(key, out CachedAdminFlag cached) && cached.Epoch == epoch)
             return cached.IsAdmin;
 
-        var isAdmin = await ReadAdminFlagAsync(username, domainName);
+        var isAdmin = await ReadAdminFlagAsync(username, domainName, cancellationToken);
 
+        // Publishing after the await, never through a cache factory: an abandoned read throws here
+        // and leaves no entry behind, where a factory would store the answer — or the faulted task.
         cache.Set(key, new CachedAdminFlag(isAdmin, epoch), CacheWindow);
         return isAdmin;
     }
@@ -54,10 +56,10 @@ internal sealed class AdminRepository(
                         string.Equals(u.Name, username, StringComparison.InvariantCultureIgnoreCase))
             .Select(u => u.Admin == ActiveState.Y);
 
-    private Task<bool> ReadAdminFlagAsync(string username, string domainName) =>
-        AdminFlagQuery(context, username, domainName).FirstOrDefaultAsync();
+    private Task<bool> ReadAdminFlagAsync(string username, string domainName, CancellationToken cancellationToken) =>
+        AdminFlagQuery(context, username, domainName).FirstOrDefaultAsync(cancellationToken);
 
-    public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync()
+    public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync(CancellationToken cancellationToken)
     {
         // Projected, not materialised as entities: the admin list needs eight columns and the
         // password is not one of them, so it never reaches memory or the change tracker.
@@ -65,14 +67,14 @@ internal sealed class AdminRepository(
                            join domain in context.Domains on user.DomainId equals domain.Id
                            select new AdminUserRow(user.Id, user.Name, user.DomainId, domain.Name,
                                user.FullName, user.QuotaMb, user.Active, user.Admin))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // LastLogins keys on the full email; only fetch rows for users we are returning
         // (skips stale rows of deleted accounts instead of loading the whole table).
         var emails = users.Select(u => u.Email).ToList();
         var loginsByUser = (await context.LastLogins.AsNoTracking()
                 .Where(l => emails.Contains(l.UserId))
-                .ToListAsync())
+                .ToListAsync(cancellationToken))
             .GroupBy(l => l.UserId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -81,18 +83,18 @@ internal sealed class AdminRepository(
             .ToList();
     }
 
-    public async Task<AdminUserInfo?> GetUserByIdAsync(int id)
+    public async Task<AdminUserInfo?> GetUserByIdAsync(int id, CancellationToken cancellationToken)
     {
         var row = await (from user in context.Users
                          join domain in context.Domains on user.DomainId equals domain.Id
                          where user.Id == id
                          select new { user, domain })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         return row == null ? null : MapToAdminUserInfo(row.user, row.domain.Name);
     }
 
-    public async Task<Result<AdminUserInfo>> CreateUserAsync(AdminUserRequest request)
+    public async Task<Result<AdminUserInfo>> CreateUserAsync(AdminUserRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.UserName))
             return Result.Failure<AdminUserInfo>("Username is required");
@@ -103,13 +105,13 @@ internal sealed class AdminRepository(
         if (request.Password.Length < MinPasswordLength)
             return Result.Failure<AdminUserInfo>($"Password must contain at least {MinPasswordLength} characters");
 
-        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == request.DomainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == request.DomainId, cancellationToken);
         if (domain == null)
             return Result.Failure<AdminUserInfo>($"Domain '{request.DomainId}' not found");
 
         bool duplicate = await context.Users.AnyAsync(u =>
             string.Equals(u.Name, request.UserName, StringComparison.InvariantCultureIgnoreCase) &&
-            u.DomainId == request.DomainId);
+            u.DomainId == request.DomainId, cancellationToken);
         if (duplicate)
             return Result.Failure<AdminUserInfo>($"User '{request.UserName}@{domain.Name}' already exists");
 
@@ -126,22 +128,22 @@ internal sealed class AdminRepository(
         };
 
         context.Users.Add(newUser);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
         return Result.Success(MapToAdminUserInfo(newUser, domain.Name));
     }
 
-    public async Task<Result<AdminUserInfo>> UpdateUserAsync(int id, AdminUserRequest request)
+    public async Task<Result<AdminUserInfo>> UpdateUserAsync(int id, AdminUserRequest request, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(request.Password) && request.Password.Length < MinPasswordLength)
             return Result.Failure<AdminUserInfo>($"Password must contain at least {MinPasswordLength} characters");
 
-        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         if (user == null)
             return Result.Failure<AdminUserInfo>($"User with id {id} not found");
 
-        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId, cancellationToken);
 
         // Absent means "leave it alone", never "set it to the default": a PUT that omits
         // quota or the admin flag must not reset the quota nor revoke the role.
@@ -156,22 +158,22 @@ internal sealed class AdminRepository(
             user.LastUpdate = DateTime.UtcNow;
         }
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
         return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
     }
 
-    public async Task<Result> DeleteUserAsync(int id)
+    public async Task<Result> DeleteUserAsync(int id, CancellationToken cancellationToken)
     {
-        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         if (user == null)
             return Result.Failure($"User with id {id} not found");
 
-        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId, cancellationToken);
 
         context.Users.Remove(user);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
         if (domain is not null)
@@ -179,6 +181,8 @@ internal sealed class AdminRepository(
             var email = $"{user.Name}@{domain.Name}".Trim().ToLowerInvariant();
             try
             {
+                // Not the caller's token: the dovecot rows are already committed, so a client
+                // disconnect here would orphan the webmail row with nothing left to retry it.
                 await webmailUsers.DeleteByEmailAsync(email, CancellationToken.None);
             }
             catch (Exception ex)
@@ -192,14 +196,14 @@ internal sealed class AdminRepository(
         return Result.Success();
     }
 
-    public async Task<IEnumerable<Domain>> GetAllDomainsAsync()
+    public async Task<IEnumerable<Domain>> GetAllDomainsAsync(CancellationToken cancellationToken)
     {
         return await context.Domains
             .Select(d => new Domain { Id = d.Id, Name = d.Name })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<Result<Domain>> CreateDomainAsync(AdminDomainRequest request)
+    public async Task<Result<Domain>> CreateDomainAsync(AdminDomainRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Id) || request.Id.Length > 3)
             return Result.Failure<Domain>("Domain id must be 1-3 characters");
@@ -207,52 +211,52 @@ internal sealed class AdminRepository(
         if (string.IsNullOrWhiteSpace(request.Name))
             return Result.Failure<Domain>("Domain name is required");
 
-        if (await context.Domains.AnyAsync(d => d.Id == request.Id))
+        if (await context.Domains.AnyAsync(d => d.Id == request.Id, cancellationToken))
             return Result.Failure<Domain>($"Domain id '{request.Id}' already exists");
 
         var domain = new MailDomain { Id = request.Id.ToUpperInvariant(), Name = request.Name };
         context.Domains.Add(domain);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
 
-    public async Task<Result<Domain>> UpdateDomainAsync(string id, AdminDomainRequest request)
+    public async Task<Result<Domain>> UpdateDomainAsync(string id, AdminDomainRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return Result.Failure<Domain>("Domain name is required");
 
-        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (domain == null)
             return Result.Failure<Domain>($"Domain '{id}' not found");
 
         // The domain name is half the cache key: a rename moves every flag under it to a key
         // nothing has cached yet, and leaves the old key answering for a name that no longer maps.
         domain.Name = request.Name;
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
 
-    public async Task<Result> DeleteDomainAsync(string id)
+    public async Task<Result> DeleteDomainAsync(string id, CancellationToken cancellationToken)
     {
-        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (domain == null)
             return Result.Failure($"Domain '{id}' not found");
 
-        if (await context.Users.AnyAsync(u => u.DomainId == id))
+        if (await context.Users.AnyAsync(u => u.DomainId == id, cancellationToken))
             return Result.Failure($"Cannot delete domain '{id}': it still has associated users");
 
         context.Domains.Remove(domain);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
         return Result.Success();
     }
 
-    public async Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync()
+    public async Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync(CancellationToken cancellationToken)
     {
         // "No mailbox lives here, or someone was given it" as two EXISTS: the equivalent client-side
         // filter read the whole users and ownerships tables to answer it.
@@ -260,12 +264,12 @@ internal sealed class AdminRepository(
             .Where(d => !context.Users.Any(u => u.DomainId == d.Id) ||
                         context.DomainsOwnerships.Any(o => o.DomainId == d.Id))
             .Select(d => new { d.Id, d.Name })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // One query for every owner, grouped in memory: the per-domain lookup this replaces
         // issued a round trip per alias domain.
         var ids = aliasDomains.Select(d => d.Id).ToList();
-        var ownersByDomain = (await OwnersQuery(o => ids.Contains(o.DomainId)).ToListAsync())
+        var ownersByDomain = (await OwnersQuery(o => ids.Contains(o.DomainId)).ToListAsync(cancellationToken))
             .GroupBy(x => x.DomainId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Owner).ToList(), StringComparer.Ordinal);
 
@@ -279,37 +283,37 @@ internal sealed class AdminRepository(
             .ToList();
     }
 
-    public async Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId)
+    public async Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId, CancellationToken cancellationToken)
     {
-        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == domainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == domainId, cancellationToken);
         if (domain == null)
             return Result.Failure<VirtualDomainInfo>($"Domain '{domainId}' not found");
 
-        if (!await context.Users.AnyAsync(u => u.Id == userId))
+        if (!await context.Users.AnyAsync(u => u.Id == userId, cancellationToken))
             return Result.Failure<VirtualDomainInfo>($"User with id {userId} not found");
 
-        if (!await context.DomainsOwnerships.AnyAsync(o => o.DomainId == domainId && o.UserId == userId))
+        if (!await context.DomainsOwnerships.AnyAsync(o => o.DomainId == domainId && o.UserId == userId, cancellationToken))
         {
             context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         return Result.Success(new VirtualDomainInfo
         {
             DomainId = domain.Id,
             DomainName = domain.Name,
-            Owners = await GetDomainOwnersAsync(domainId)
+            Owners = await GetDomainOwnersAsync(domainId, cancellationToken)
         });
     }
 
-    public async Task<Result> RemoveVirtualDomainOwnerAsync(string domainId, int userId)
+    public async Task<Result> RemoveVirtualDomainOwnerAsync(string domainId, int userId, CancellationToken cancellationToken)
     {
-        var ownership = await context.DomainsOwnerships.FirstOrDefaultAsync(o => o.DomainId == domainId && o.UserId == userId);
+        var ownership = await context.DomainsOwnerships.FirstOrDefaultAsync(o => o.DomainId == domainId && o.UserId == userId, cancellationToken);
         if (ownership == null)
             return Result.Failure($"No ownership found for domain '{domainId}' and user {userId}");
 
         context.DomainsOwnerships.Remove(ownership);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
@@ -388,8 +392,8 @@ internal sealed class AdminRepository(
             .ToList();
     }
 
-    private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId) =>
-        OwnersQuery(o => o.DomainId == domainId).Select(x => x.Owner).ToListAsync();
+    private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId, CancellationToken cancellationToken) =>
+        OwnersQuery(o => o.DomainId == domainId).Select(x => x.Owner).ToListAsync(cancellationToken);
 
     /// <summary>
     /// Owners of the ownerships matching <paramref name="scope"/>, each carrying the domain it

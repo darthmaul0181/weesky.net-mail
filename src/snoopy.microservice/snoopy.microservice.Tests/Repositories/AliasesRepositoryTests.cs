@@ -52,7 +52,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        Assert.True(await repo.UserOwnsDomainAsync(AuthUser, PrimaryDomain));
+        Assert.True(await repo.UserOwnsDomainAsync(AuthUser, PrimaryDomain, CancellationToken.None));
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        Assert.True(await repo.UserOwnsDomainAsync(AuthUser, OwnedDomain));
+        Assert.True(await repo.UserOwnsDomainAsync(AuthUser, OwnedDomain, CancellationToken.None));
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        Assert.False(await repo.UserOwnsDomainAsync(AuthUser, UnownedDomain));
+        Assert.False(await repo.UserOwnsDomainAsync(AuthUser, UnownedDomain, CancellationToken.None));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        Assert.False(await repo.UserOwnsDomainAsync(new User("nobody@" + PrimaryDomain), OwnedDomain));
+        Assert.False(await repo.UserOwnsDomainAsync(new User("nobody@" + PrimaryDomain), OwnedDomain, CancellationToken.None));
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        Assert.False(await repo.UserOwnsDomainAsync(AuthUser, "doesnotexist.com"));
+        Assert.False(await repo.UserOwnsDomainAsync(AuthUser, "doesnotexist.com", CancellationToken.None));
     }
 
     // --- AddAlias ---
@@ -94,7 +94,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = PrimaryDomain });
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -104,7 +104,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = OwnedDomain });
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = OwnedDomain }, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -114,7 +114,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = UnownedDomain });
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = UnownedDomain }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -123,9 +123,9 @@ public sealed class AliasesRepositoryTests
     public async Task AddAlias_WhenAliasAlreadyExists_ReturnsFailure()
     {
         var (repo, _, _) = CreateSut();
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain }, CancellationToken.None);
 
-        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -134,9 +134,9 @@ public sealed class AliasesRepositoryTests
     public async Task AddAlias_DuplicateCheckIsCaseInsensitive()
     {
         var (repo, _, _) = CreateSut();
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "Duplicate", Domain = PrimaryDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "Duplicate", Domain = PrimaryDomain }, CancellationToken.None);
 
-        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain });
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "duplicate", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -146,7 +146,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() => repo.AddAliasAsync(AuthUser, null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repo.AddAliasAsync(AuthUser, null!, CancellationToken.None));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, context, userId) = CreateSut();
 
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "newone", Domain = PrimaryDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "newone", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.True(context.Aliases.Any(a => a.Name == "newone" && a.DestinationUserId == userId));
     }
@@ -165,9 +165,9 @@ public sealed class AliasesRepositoryTests
     public async Task DeleteAlias_WhenAliasExists_ReturnsSuccess()
     {
         var (repo, _, _) = CreateSut();
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain }, CancellationToken.None);
 
-        var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain });
+        var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "todelete", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -177,7 +177,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "nonexistent", Domain = PrimaryDomain });
+        var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "nonexistent", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -187,7 +187,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "alias", Domain = UnownedDomain });
+        var result = await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "alias", Domain = UnownedDomain }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -197,16 +197,16 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() => repo.DeleteAliasAsync(AuthUser, null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repo.DeleteAliasAsync(AuthUser, null!, CancellationToken.None));
     }
 
     [Fact]
     public async Task DeleteAlias_RemovesAliasFromDatabase()
     {
         var (repo, context, userId) = CreateSut();
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain }, CancellationToken.None);
 
-        await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain });
+        await repo.DeleteAliasAsync(AuthUser, new Alias { Name = "gone", Domain = PrimaryDomain }, CancellationToken.None);
 
         Assert.False(context.Aliases.Any(a => a.Name == "gone" && a.DestinationUserId == userId));
     }
@@ -218,7 +218,7 @@ public sealed class AliasesRepositoryTests
     {
         var (repo, _, _) = CreateSut();
 
-        var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
+        var aliases = (await repo.GetAliasesAsync(AuthUser, CancellationToken.None)).ToList();
 
         Assert.Empty(aliases);
     }
@@ -227,9 +227,9 @@ public sealed class AliasesRepositoryTests
     public async Task GetAliases_ReturnsPrimaryDomainAliases()
     {
         var (repo, _, _) = CreateSut();
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "alias1", Domain = PrimaryDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "alias1", Domain = PrimaryDomain }, CancellationToken.None);
 
-        var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
+        var aliases = (await repo.GetAliasesAsync(AuthUser, CancellationToken.None)).ToList();
 
         Assert.Contains(aliases, a => a.Name == "alias1" && a.Domain == PrimaryDomain);
     }
@@ -238,9 +238,9 @@ public sealed class AliasesRepositoryTests
     public async Task GetAliases_ReturnsOwnedDomainAliases()
     {
         var (repo, _, _) = CreateSut();
-        await repo.AddAliasAsync(AuthUser, new Alias { Name = "alias2", Domain = OwnedDomain });
+        await repo.AddAliasAsync(AuthUser, new Alias { Name = "alias2", Domain = OwnedDomain }, CancellationToken.None);
 
-        var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
+        var aliases = (await repo.GetAliasesAsync(AuthUser, CancellationToken.None)).ToList();
 
         Assert.Contains(aliases, a => a.Name == "alias2" && a.Domain == OwnedDomain);
     }
@@ -256,8 +256,32 @@ public sealed class AliasesRepositoryTests
         context.Aliases.Add(new MailAlias { Name = "alice-alias", Domain = "WKY", DestinationUserId = otherUserId });
         context.SaveChanges();
 
-        var aliases = (await repo.GetAliasesAsync(AuthUser)).ToList();
+        var aliases = (await repo.GetAliasesAsync(AuthUser, CancellationToken.None)).ToList();
 
         Assert.DoesNotContain(aliases, a => a.Name == "alice-alias");
+    }
+
+    // --- Cancellation ---
+
+    [Fact]
+    public async Task GetAliases_WithACancelledToken_DoesNotQuery()
+    {
+        var (repo, _, _) = CreateSut();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => repo.GetAliasesAsync(AuthUser, cts.Token));
+    }
+
+    [Fact]
+    public async Task AddAlias_WithACancelledToken_DoesNotWrite()
+    {
+        var (repo, context, _) = CreateSut();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => repo.AddAliasAsync(AuthUser, new Alias { Name = "johnny", Domain = OwnedDomain }, cts.Token));
+        Assert.Empty(context.Aliases);
     }
 }

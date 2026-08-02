@@ -28,9 +28,9 @@ public sealed class IdentitiesControllerTests
     {
         _store.Setup(s => s.GetAsync(WebmailUid, AccountScope.Primary, It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored ?? []);
-        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>()))
+        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(aliases ?? []);
-        _users.Setup(u => u.FindByEmailAsync("mick@weesky.be"))
+        _users.Setup(u => u.FindByEmailAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new User("mick@weesky.be") { FullName = fullName! });
 
         var controller = new IdentitiesController(_store.Object, _aliases.Object, _users.Object, _accounts.Object)

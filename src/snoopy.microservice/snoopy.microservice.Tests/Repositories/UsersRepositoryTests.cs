@@ -44,7 +44,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var user = await repo.FindByEmailAsync(TestEmail);
+        var user = await repo.FindByEmailAsync(TestEmail, CancellationToken.None);
 
         Assert.NotNull(user);
         Assert.Equal("john", user.Name);
@@ -58,7 +58,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var user = await repo.FindByEmailAsync(TestEmail);
+        var user = await repo.FindByEmailAsync(TestEmail, CancellationToken.None);
 
         Assert.Equal("John Doe", user!.FullName);
     }
@@ -68,7 +68,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var user = await repo.FindByEmailAsync("JOHN@weesky.be");
+        var user = await repo.FindByEmailAsync("JOHN@weesky.be", CancellationToken.None);
 
         Assert.NotNull(user);
     }
@@ -78,7 +78,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var user = await repo.FindByEmailAsync("john@unknown-domain.com");
+        var user = await repo.FindByEmailAsync("john@unknown-domain.com", CancellationToken.None);
 
         Assert.Null(user);
     }
@@ -93,7 +93,7 @@ public sealed class UsersRepositoryTests
         context.Users.First().Active = ActiveState.N;
         await context.SaveChangesAsync();
 
-        var user = await repo.FindByEmailAsync(TestEmail);
+        var user = await repo.FindByEmailAsync(TestEmail, CancellationToken.None);
 
         Assert.Null(user);
     }
@@ -103,7 +103,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var user = await repo.FindByEmailAsync("nobody@weesky.be");
+        var user = await repo.FindByEmailAsync("nobody@weesky.be", CancellationToken.None);
 
         Assert.Null(user);
     }
@@ -115,7 +115,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var user = await repo.FindByEmailAsync(email);
+        var user = await repo.FindByEmailAsync(email, CancellationToken.None);
 
         Assert.Null(user);
     }
@@ -127,7 +127,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var check = await repo.VerifyCredentialsAsync(TestEmail, TestPassword);
+        var check = await repo.VerifyCredentialsAsync(TestEmail, TestPassword, CancellationToken.None);
 
         Assert.Equal(CredentialResult.Ok, check.Result);
         Assert.Equal(TestEmail, check.User!.Email);
@@ -138,7 +138,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var check = await repo.VerifyCredentialsAsync(TestEmail, "WrongPassword!");
+        var check = await repo.VerifyCredentialsAsync(TestEmail, "WrongPassword!", CancellationToken.None);
 
         Assert.Equal(CredentialResult.WrongPassword, check.Result);
         Assert.Null(check.User);
@@ -152,7 +152,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var check = await repo.VerifyCredentialsAsync(email, TestPassword);
+        var check = await repo.VerifyCredentialsAsync(email, TestPassword, CancellationToken.None);
 
         Assert.Equal(CredentialResult.UnknownAccount, check.Result);
         Assert.Null(check.User);
@@ -165,7 +165,7 @@ public sealed class UsersRepositoryTests
         context.Users.First().Active = ActiveState.N;
         await context.SaveChangesAsync();
 
-        var check = await repo.VerifyCredentialsAsync(TestEmail, TestPassword);
+        var check = await repo.VerifyCredentialsAsync(TestEmail, TestPassword, CancellationToken.None);
 
         Assert.Equal(CredentialResult.Deactivated, check.Result);
         Assert.Null(check.User);
@@ -219,7 +219,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.GetAccountInfoAsync(new User(TestEmail));
+        var result = await repo.GetAccountInfoAsync(new User(TestEmail), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -229,7 +229,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.GetAccountInfoAsync(new User(TestEmail));
+        var result = await repo.GetAccountInfoAsync(new User(TestEmail), CancellationToken.None);
 
         Assert.Equal("john", result.Value.UserName);
         Assert.Equal("John Doe", result.Value.FullName);
@@ -241,7 +241,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.GetAccountInfoAsync(new User(TestEmail));
+        var result = await repo.GetAccountInfoAsync(new User(TestEmail), CancellationToken.None);
 
         Assert.Single(result.Value.Domains);
         Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
@@ -255,7 +255,7 @@ public sealed class UsersRepositoryTests
         context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
         context.SaveChanges();
 
-        var result = await repo.GetAccountInfoAsync(new User(TestEmail));
+        var result = await repo.GetAccountInfoAsync(new User(TestEmail), CancellationToken.None);
 
         Assert.Contains(result.Value.Domains, d => d.Name == "other.com");
     }
@@ -268,7 +268,7 @@ public sealed class UsersRepositoryTests
         context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "OTH", UserId = userId });
         context.SaveChanges();
 
-        var result = await repo.GetAccountInfoAsync(new User(TestEmail));
+        var result = await repo.GetAccountInfoAsync(new User(TestEmail), CancellationToken.None);
 
         Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
         Assert.Contains(result.Value.Domains, d => d.Name == "other.com");
@@ -282,7 +282,7 @@ public sealed class UsersRepositoryTests
         context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "WKY", UserId = userId });
         context.SaveChanges();
 
-        var result = await repo.GetAccountInfoAsync(new User(TestEmail));
+        var result = await repo.GetAccountInfoAsync(new User(TestEmail), CancellationToken.None);
 
         Assert.Single(result.Value.Domains);
         Assert.Contains(result.Value.Domains, d => d.Name == "weesky.be");
@@ -293,7 +293,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.GetAccountInfoAsync(new User("john@nonexistent.com"));
+        var result = await repo.GetAccountInfoAsync(new User("john@nonexistent.com"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -303,7 +303,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.GetAccountInfoAsync(new User("nobody@weesky.be"));
+        var result = await repo.GetAccountInfoAsync(new User("nobody@weesky.be"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -315,7 +315,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangePasswordAsync(new User(TestEmail), "short", TestPassword);
+        var result = await repo.ChangePasswordAsync(new User(TestEmail), "short", TestPassword, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -325,7 +325,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", "WrongOldPassword");
+        var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", "WrongOldPassword", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -335,7 +335,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangePasswordAsync(new User("nobody@weesky.be"), "NewPassword123!", TestPassword);
+        var result = await repo.ChangePasswordAsync(new User("nobody@weesky.be"), "NewPassword123!", TestPassword, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -345,7 +345,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", TestPassword);
+        var result = await repo.ChangePasswordAsync(new User(TestEmail), "NewPassword123!", TestPassword, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -357,7 +357,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangePasswordAsync(new User(TestEmail), newPassword, TestPassword);
+        var result = await repo.ChangePasswordAsync(new User(TestEmail), newPassword, TestPassword, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -367,7 +367,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangePasswordAsync(new User("john@nonexistent.com"), "NewPassword123!", TestPassword);
+        var result = await repo.ChangePasswordAsync(new User("john@nonexistent.com"), "NewPassword123!", TestPassword, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -379,7 +379,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangeFullNameAsync(new User(TestEmail), "New Name");
+        var result = await repo.ChangeFullNameAsync(new User(TestEmail), "New Name", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -389,7 +389,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, context) = CreateSut();
 
-        await repo.ChangeFullNameAsync(new User(TestEmail), "New Name");
+        await repo.ChangeFullNameAsync(new User(TestEmail), "New Name", CancellationToken.None);
 
         Assert.Equal("New Name", context.Users.First(u => u.Name == "john").FullName);
     }
@@ -399,7 +399,7 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangeFullNameAsync(new User("john@nonexistent.com"), "New Name");
+        var result = await repo.ChangeFullNameAsync(new User("john@nonexistent.com"), "New Name", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -409,8 +409,32 @@ public sealed class UsersRepositoryTests
     {
         var (repo, _) = CreateSut();
 
-        var result = await repo.ChangeFullNameAsync(new User("nobody@weesky.be"), "New Name");
+        var result = await repo.ChangeFullNameAsync(new User("nobody@weesky.be"), "New Name", CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    // --- Cancellation ---
+
+    [Fact]
+    public async Task FindByEmail_WithACancelledToken_DoesNotQuery()
+    {
+        var (repo, _) = CreateSut();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => repo.FindByEmailAsync(TestEmail, cts.Token));
+    }
+
+    [Fact]
+    public async Task ChangeFullName_WithACancelledToken_DoesNotWrite()
+    {
+        var (repo, context) = CreateSut();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => repo.ChangeFullNameAsync(new User(TestEmail), "New Name", cts.Token));
+        Assert.Equal("John Doe", context.Users.Single().FullName);
     }
 }

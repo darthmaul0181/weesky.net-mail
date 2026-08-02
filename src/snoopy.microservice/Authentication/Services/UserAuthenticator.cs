@@ -20,9 +20,9 @@ public sealed class UserAuthenticator : IUserAuthenticator
         _logger = logger;
     }
 
-    public async Task<Result<AuthToken>> AuthenticateAsync(string email, string password)
+    public async Task<Result<AuthToken>> AuthenticateAsync(string email, string password, CancellationToken cancellationToken)
     {
-        var check = await _usersRepository.VerifyCredentialsAsync(email, password);
+        var check = await _usersRepository.VerifyCredentialsAsync(email, password, cancellationToken);
 
         if (check.User is not { } user)
         {
@@ -35,7 +35,10 @@ public sealed class UserAuthenticator : IUserAuthenticator
         }
 
         _logger.LogInformation("Audit: login email={Email} outcome=success", email);
-        var account = await _webmailUsers.RegisterLoginAsync(user.Email, CancellationToken.None);
+        // The caller's token, not None: this upsert precedes the only durable effect of a login —
+        // the cookies — and the token cannot be built without the id and stamp it returns, so an
+        // abandoned login has nothing left half-done and the next one writes the same row again.
+        var account = await _webmailUsers.RegisterLoginAsync(user.Email, cancellationToken);
         user.WebmailUid = account.Id;
         user.SecurityStamp = account.SecurityStamp;
         return Result.Success(_tokenManager.Generate(user));

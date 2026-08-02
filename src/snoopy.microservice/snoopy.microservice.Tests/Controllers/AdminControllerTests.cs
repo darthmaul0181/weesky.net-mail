@@ -76,8 +76,8 @@ public sealed class AdminControllerTests
     public async Task GetUsers_Returns200WithList()
     {
         var users = new[] { new AdminUserInfo { UserName = "alice" } };
-        _repo.Setup(r => r.GetAllUsersAsync()).ReturnsAsync(users);
-        var ok = Assert.IsType<OkObjectResult>((await CreateController().GetUsers()).Result);
+        _repo.Setup(r => r.GetAllUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(users);
+        var ok = Assert.IsType<OkObjectResult>((await CreateController().GetUsers(CancellationToken.None)).Result);
         Assert.Same(users, ok.Value);
     }
 
@@ -87,7 +87,7 @@ public sealed class AdminControllerTests
     public async Task CreateUser_WhenPasswordNull_Returns400()
     {
         var obj = Assert.IsType<BadRequestObjectResult>(
-            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = null })).Result);
+            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = null }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
     }
 
@@ -95,17 +95,17 @@ public sealed class AdminControllerTests
     public async Task CreateUser_WhenPasswordEmpty_Returns400()
     {
         var obj = Assert.IsType<BadRequestObjectResult>(
-            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "" })).Result);
+            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "" }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
     }
 
     [Fact]
     public async Task CreateUser_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.CreateUserAsync(It.IsAny<AdminUserRequest>()))
+        _repo.Setup(r => r.CreateUserAsync(It.IsAny<AdminUserRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AdminUserInfo>("Duplicate user"));
         var obj = Assert.IsType<BadRequestObjectResult>(
-            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "pw" })).Result);
+            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "pw" }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
         Assert.Equal("Duplicate user", envelope.Message);
@@ -115,10 +115,10 @@ public sealed class AdminControllerTests
     public async Task CreateUser_WhenSuccess_Returns201WithUser()
     {
         var userInfo = new AdminUserInfo { UserName = "alice" };
-        _repo.Setup(r => r.CreateUserAsync(It.IsAny<AdminUserRequest>()))
+        _repo.Setup(r => r.CreateUserAsync(It.IsAny<AdminUserRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(userInfo));
         var obj = Assert.IsType<ObjectResult>(
-            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "pw" })).Result);
+            (await CreateController().CreateUser(new AdminUserRequest { UserName = "alice", Password = "pw" }, CancellationToken.None)).Result);
         Assert.Equal(201, obj.StatusCode);
         Assert.Same(userInfo, obj.Value);
     }
@@ -128,10 +128,10 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task UpdateUser_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.UpdateUserAsync(It.IsAny<int>(), It.IsAny<AdminUserRequest>()))
+        _repo.Setup(r => r.UpdateUserAsync(It.IsAny<int>(), It.IsAny<AdminUserRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AdminUserInfo>("User not found"));
         var obj = Assert.IsType<BadRequestObjectResult>(
-            (await CreateController().UpdateUser(1, new AdminUserRequest { UserName = "alice" })).Result);
+            (await CreateController().UpdateUser(1, new AdminUserRequest { UserName = "alice" }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
         Assert.Equal("User not found", envelope.Message);
@@ -141,10 +141,10 @@ public sealed class AdminControllerTests
     public async Task UpdateUser_WhenSuccess_Returns200WithUser()
     {
         var userInfo = new AdminUserInfo { UserName = "alice" };
-        _repo.Setup(r => r.UpdateUserAsync(1, It.IsAny<AdminUserRequest>()))
+        _repo.Setup(r => r.UpdateUserAsync(1, It.IsAny<AdminUserRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(userInfo));
         var ok = Assert.IsType<OkObjectResult>(
-            (await CreateController().UpdateUser(1, new AdminUserRequest { UserName = "alice" })).Result);
+            (await CreateController().UpdateUser(1, new AdminUserRequest { UserName = "alice" }, CancellationToken.None)).Result);
         Assert.Same(userInfo, ok.Value);
     }
 
@@ -153,17 +153,17 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task DeleteUser_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.DeleteUserAsync(It.IsAny<int>()))
+        _repo.Setup(r => r.DeleteUserAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("User not found"));
-        var obj = Assert.IsType<ObjectResult>(await CreateController().DeleteUser(1));
+        var obj = Assert.IsType<ObjectResult>(await CreateController().DeleteUser(1, CancellationToken.None));
         Assert.Equal(400, obj.StatusCode);
     }
 
     [Fact]
     public async Task DeleteUser_WhenSuccess_Returns204()
     {
-        _repo.Setup(r => r.DeleteUserAsync(1)).ReturnsAsync(Result.Success());
-        var status = Assert.IsType<StatusCodeResult>(await CreateController().DeleteUser(1));
+        _repo.Setup(r => r.DeleteUserAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
+        var status = Assert.IsType<StatusCodeResult>(await CreateController().DeleteUser(1, CancellationToken.None));
         Assert.Equal(204, status.StatusCode);
     }
 
@@ -173,8 +173,8 @@ public sealed class AdminControllerTests
     public async Task GetDomains_Returns200WithList()
     {
         var domains = new[] { new Domain { Id = "WSY", Name = "weesky.be" } };
-        _repo.Setup(r => r.GetAllDomainsAsync()).ReturnsAsync(domains);
-        var ok = Assert.IsType<OkObjectResult>((await CreateController().GetDomains()).Result);
+        _repo.Setup(r => r.GetAllDomainsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(domains);
+        var ok = Assert.IsType<OkObjectResult>((await CreateController().GetDomains(CancellationToken.None)).Result);
         Assert.Same(domains, ok.Value);
     }
 
@@ -183,10 +183,10 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task CreateDomain_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.CreateDomainAsync(It.IsAny<AdminDomainRequest>()))
+        _repo.Setup(r => r.CreateDomainAsync(It.IsAny<AdminDomainRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<Domain>("Invalid id"));
         var obj = Assert.IsType<BadRequestObjectResult>((await CreateController()
-            .CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" })).Result);
+            .CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
         Assert.Equal("Invalid id", envelope.Message);
@@ -196,10 +196,10 @@ public sealed class AdminControllerTests
     public async Task CreateDomain_WhenSuccess_Returns201WithDomain()
     {
         var domain = new Domain { Id = "TST", Name = "test.com" };
-        _repo.Setup(r => r.CreateDomainAsync(It.IsAny<AdminDomainRequest>()))
+        _repo.Setup(r => r.CreateDomainAsync(It.IsAny<AdminDomainRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(domain));
         var obj = Assert.IsType<ObjectResult>((await CreateController()
-            .CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" })).Result);
+            .CreateDomain(new AdminDomainRequest { Id = "TST", Name = "test.com" }, CancellationToken.None)).Result);
         Assert.Equal(201, obj.StatusCode);
         Assert.Same(domain, obj.Value);
     }
@@ -209,10 +209,10 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task UpdateDomain_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.UpdateDomainAsync(It.IsAny<string>(), It.IsAny<AdminDomainRequest>()))
+        _repo.Setup(r => r.UpdateDomainAsync(It.IsAny<string>(), It.IsAny<AdminDomainRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<Domain>("Domain not found"));
         var obj = Assert.IsType<BadRequestObjectResult>((await CreateController()
-            .UpdateDomain("WSY", new AdminDomainRequest { Name = "new.com" })).Result);
+            .UpdateDomain("WSY", new AdminDomainRequest { Name = "new.com" }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
         Assert.Equal("Domain not found", envelope.Message);
@@ -222,10 +222,10 @@ public sealed class AdminControllerTests
     public async Task UpdateDomain_WhenSuccess_Returns200WithDomain()
     {
         var domain = new Domain { Id = "WSY", Name = "new.com" };
-        _repo.Setup(r => r.UpdateDomainAsync("WSY", It.IsAny<AdminDomainRequest>()))
+        _repo.Setup(r => r.UpdateDomainAsync("WSY", It.IsAny<AdminDomainRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(domain));
         var ok = Assert.IsType<OkObjectResult>((await CreateController()
-            .UpdateDomain("WSY", new AdminDomainRequest { Name = "new.com" })).Result);
+            .UpdateDomain("WSY", new AdminDomainRequest { Name = "new.com" }, CancellationToken.None)).Result);
         Assert.Same(domain, ok.Value);
     }
 
@@ -234,17 +234,17 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task DeleteDomain_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.DeleteDomainAsync(It.IsAny<string>()))
+        _repo.Setup(r => r.DeleteDomainAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Domain has users"));
-        var obj = Assert.IsType<ObjectResult>(await CreateController().DeleteDomain("WSY"));
+        var obj = Assert.IsType<ObjectResult>(await CreateController().DeleteDomain("WSY", CancellationToken.None));
         Assert.Equal(400, obj.StatusCode);
     }
 
     [Fact]
     public async Task DeleteDomain_WhenSuccess_Returns204()
     {
-        _repo.Setup(r => r.DeleteDomainAsync("WSY")).ReturnsAsync(Result.Success());
-        var status = Assert.IsType<StatusCodeResult>(await CreateController().DeleteDomain("WSY"));
+        _repo.Setup(r => r.DeleteDomainAsync("WSY", It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
+        var status = Assert.IsType<StatusCodeResult>(await CreateController().DeleteDomain("WSY", CancellationToken.None));
         Assert.Equal(204, status.StatusCode);
     }
 
@@ -253,7 +253,7 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task GetUserQuota_WhenUserNotFound_Returns400()
     {
-        _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync((AdminUserInfo?)null);
+        _repo.Setup(r => r.GetUserByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync((AdminUserInfo?)null);
         var result = await CreateController().GetUserQuota(1, CancellationToken.None);
         var obj = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal(400, obj.StatusCode);
@@ -262,7 +262,7 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task GetUserQuota_WhenDovecotFails_Returns502WithEnvelope()
     {
-        _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync(
+        _repo.Setup(r => r.GetUserByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(
             new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
         _dovecot.Setup(d => d.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<Quota>("Unreachable"));
@@ -277,7 +277,7 @@ public sealed class AdminControllerTests
     public async Task GetUserQuota_WhenSuccess_Returns200WithQuota()
     {
         var quota = new Quota { StorageBytesUsed = 1024 };
-        _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync(
+        _repo.Setup(r => r.GetUserByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(
             new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
         _dovecot.Setup(d => d.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(quota));
@@ -289,7 +289,7 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task GetUserQuota_CallsDovecotWithCorrectEmail()
     {
-        _repo.Setup(r => r.GetUserByIdAsync(1)).ReturnsAsync(
+        _repo.Setup(r => r.GetUserByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(
             new AdminUserInfo { Id = 1, UserName = "alice", DomainName = "weesky.be" });
         _dovecot.Setup(d => d.GetQuotaAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<Quota>("err"));
@@ -305,8 +305,8 @@ public sealed class AdminControllerTests
     public async Task GetVirtualDomains_Returns200WithList()
     {
         var virtualDomains = new[] { new VirtualDomainInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() } };
-        _repo.Setup(r => r.GetAllVirtualDomainsAsync()).ReturnsAsync(virtualDomains);
-        var ok = Assert.IsType<OkObjectResult>((await CreateController().GetVirtualDomains()).Result);
+        _repo.Setup(r => r.GetAllVirtualDomainsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(virtualDomains);
+        var ok = Assert.IsType<OkObjectResult>((await CreateController().GetVirtualDomains(CancellationToken.None)).Result);
         Assert.Same(virtualDomains, ok.Value);
     }
 
@@ -315,10 +315,10 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task AddVirtualDomainOwner_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.AddVirtualDomainOwnerAsync(It.IsAny<string>(), It.IsAny<int>()))
+        _repo.Setup(r => r.AddVirtualDomainOwnerAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<VirtualDomainInfo>("User not found"));
         var obj = Assert.IsType<BadRequestObjectResult>((await CreateController()
-            .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 })).Result);
+            .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 }, CancellationToken.None)).Result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
         Assert.Equal("User not found", envelope.Message);
@@ -328,9 +328,9 @@ public sealed class AdminControllerTests
     public async Task AddVirtualDomainOwner_WhenSuccess_Returns200WithVirtualDomain()
     {
         var info = new VirtualDomainInfo { DomainId = "EXT", DomainName = "extra.com", Owners = new() { new OwnerInfo { OwnerId = 1, OwnerEmail = "alice@weesky.be" } } };
-        _repo.Setup(r => r.AddVirtualDomainOwnerAsync("EXT", 1)).ReturnsAsync(Result.Success(info));
+        _repo.Setup(r => r.AddVirtualDomainOwnerAsync("EXT", 1, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success(info));
         var ok = Assert.IsType<OkObjectResult>((await CreateController()
-            .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 })).Result);
+            .AddVirtualDomainOwner("EXT", new AdminVirtualDomainOwnerRequest { UserId = 1 }, CancellationToken.None)).Result);
         Assert.Same(info, ok.Value);
     }
 
@@ -339,17 +339,17 @@ public sealed class AdminControllerTests
     [Fact]
     public async Task RemoveVirtualDomainOwner_WhenRepositoryFails_Returns400WithEnvelope()
     {
-        _repo.Setup(r => r.RemoveVirtualDomainOwnerAsync(It.IsAny<string>(), It.IsAny<int>()))
+        _repo.Setup(r => r.RemoveVirtualDomainOwnerAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Owner not found"));
-        var obj = Assert.IsType<ObjectResult>(await CreateController().RemoveVirtualDomainOwner("EXT", 1));
+        var obj = Assert.IsType<ObjectResult>(await CreateController().RemoveVirtualDomainOwner("EXT", 1, CancellationToken.None));
         Assert.Equal(400, obj.StatusCode);
     }
 
     [Fact]
     public async Task RemoveVirtualDomainOwner_WhenSuccess_Returns204()
     {
-        _repo.Setup(r => r.RemoveVirtualDomainOwnerAsync("EXT", 1)).ReturnsAsync(Result.Success());
-        var status = Assert.IsType<StatusCodeResult>(await CreateController().RemoveVirtualDomainOwner("EXT", 1));
+        _repo.Setup(r => r.RemoveVirtualDomainOwnerAsync("EXT", 1, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
+        var status = Assert.IsType<StatusCodeResult>(await CreateController().RemoveVirtualDomainOwner("EXT", 1, CancellationToken.None));
         Assert.Equal(204, status.StatusCode);
     }
 

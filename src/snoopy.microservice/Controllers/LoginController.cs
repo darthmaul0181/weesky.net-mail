@@ -63,7 +63,7 @@ public sealed class LoginController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<LoginResponse>> Login(Credentials credentials, CancellationToken cancellationToken)
     {
-        Result<AuthToken> result = await _authenticator.AuthenticateAsync(credentials.Email, credentials.Password);
+        Result<AuthToken> result = await _authenticator.AuthenticateAsync(credentials.Email, credentials.Password, cancellationToken);
 
         if (result.IsFailure)
             return FromResult(result.ConvertFailure<LoginResponse>(), errorStatusCode: StatusCodes.Status401Unauthorized);

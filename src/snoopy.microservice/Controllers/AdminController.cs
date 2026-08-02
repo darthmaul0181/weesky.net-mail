@@ -47,9 +47,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IEnumerable<AdminUserInfo>>> GetUsers()
+    public async Task<ActionResult<IEnumerable<AdminUserInfo>>> GetUsers(CancellationToken cancellationToken)
     {
-        return Ok(await _adminRepository.GetAllUsersAsync());
+        return Ok(await _adminRepository.GetAllUsersAsync(cancellationToken));
     }
 
     /// <summary>Creates a new user</summary>
@@ -62,11 +62,11 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<AdminUserInfo>> CreateUser(AdminUserRequest request)
+    public async Task<ActionResult<AdminUserInfo>> CreateUser(AdminUserRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(request.Password))
             return BadRequestEnveloppe("Password is required");
-        Result<AdminUserInfo> result = await _adminRepository.CreateUserAsync(request);
+        Result<AdminUserInfo> result = await _adminRepository.CreateUserAsync(request, cancellationToken);
         if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
@@ -81,9 +81,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<AdminUserInfo>> UpdateUser(int id, AdminUserRequest request)
+    public async Task<ActionResult<AdminUserInfo>> UpdateUser(int id, AdminUserRequest request, CancellationToken cancellationToken)
     {
-        Result<AdminUserInfo> result = await _adminRepository.UpdateUserAsync(id, request);
+        Result<AdminUserInfo> result = await _adminRepository.UpdateUserAsync(id, request, cancellationToken);
         if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return Ok(result.Value);
     }
@@ -98,9 +98,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult> DeleteUser(int id)
+    public async Task<ActionResult> DeleteUser(int id, CancellationToken cancellationToken)
     {
-        Result result = await _adminRepository.DeleteUserAsync(id);
+        Result result = await _adminRepository.DeleteUserAsync(id, cancellationToken);
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 
@@ -112,9 +112,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IEnumerable<Domain>>> GetDomains()
+    public async Task<ActionResult<IEnumerable<Domain>>> GetDomains(CancellationToken cancellationToken)
     {
-        return Ok(await _adminRepository.GetAllDomainsAsync());
+        return Ok(await _adminRepository.GetAllDomainsAsync(cancellationToken));
     }
 
     /// <summary>Creates a new domain</summary>
@@ -127,9 +127,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<Domain>> CreateDomain(AdminDomainRequest request)
+    public async Task<ActionResult<Domain>> CreateDomain(AdminDomainRequest request, CancellationToken cancellationToken)
     {
-        Result<Domain> result = await _adminRepository.CreateDomainAsync(request);
+        Result<Domain> result = await _adminRepository.CreateDomainAsync(request, cancellationToken);
         if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
@@ -144,9 +144,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<Domain>> UpdateDomain(string id, AdminDomainRequest request)
+    public async Task<ActionResult<Domain>> UpdateDomain(string id, AdminDomainRequest request, CancellationToken cancellationToken)
     {
-        Result<Domain> result = await _adminRepository.UpdateDomainAsync(id, request);
+        Result<Domain> result = await _adminRepository.UpdateDomainAsync(id, request, cancellationToken);
         if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return Ok(result.Value);
     }
@@ -165,7 +165,7 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<Quota>> GetUserQuota(int id, CancellationToken cancellationToken)
     {
-        var userInfo = await _adminRepository.GetUserByIdAsync(id);
+        var userInfo = await _adminRepository.GetUserByIdAsync(id, cancellationToken);
         if (userInfo == null) return BadRequestEnveloppe($"User {id} not found");
 
         var user = new User($"{userInfo.UserName}@{userInfo.DomainName}");
@@ -183,9 +183,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult> DeleteDomain(string id)
+    public async Task<ActionResult> DeleteDomain(string id, CancellationToken cancellationToken)
     {
-        Result result = await _adminRepository.DeleteDomainAsync(id);
+        Result result = await _adminRepository.DeleteDomainAsync(id, cancellationToken);
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 
@@ -197,9 +197,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IEnumerable<VirtualDomainInfo>>> GetVirtualDomains()
+    public async Task<ActionResult<IEnumerable<VirtualDomainInfo>>> GetVirtualDomains(CancellationToken cancellationToken)
     {
-        return Ok(await _adminRepository.GetAllVirtualDomainsAsync());
+        return Ok(await _adminRepository.GetAllVirtualDomainsAsync(cancellationToken));
     }
 
     /// <summary>Adds an owner to a virtual domain</summary>
@@ -212,9 +212,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<VirtualDomainInfo>> AddVirtualDomainOwner(string domainId, AdminVirtualDomainOwnerRequest request)
+    public async Task<ActionResult<VirtualDomainInfo>> AddVirtualDomainOwner(string domainId, AdminVirtualDomainOwnerRequest request, CancellationToken cancellationToken)
     {
-        Result<VirtualDomainInfo> result = await _adminRepository.AddVirtualDomainOwnerAsync(domainId, request.UserId);
+        Result<VirtualDomainInfo> result = await _adminRepository.AddVirtualDomainOwnerAsync(domainId, request.UserId, cancellationToken);
         if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return Ok(result.Value);
     }
@@ -229,9 +229,9 @@ public sealed class AdminController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult> RemoveVirtualDomainOwner(string domainId, int userId)
+    public async Task<ActionResult> RemoveVirtualDomainOwner(string domainId, int userId, CancellationToken cancellationToken)
     {
-        Result result = await _adminRepository.RemoveVirtualDomainOwnerAsync(domainId, userId);
+        Result result = await _adminRepository.RemoveVirtualDomainOwnerAsync(domainId, userId, cancellationToken);
         return FromResult(result, successStatusCode: StatusCodes.Status204NoContent);
     }
 

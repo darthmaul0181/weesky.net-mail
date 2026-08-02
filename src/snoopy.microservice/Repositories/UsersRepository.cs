@@ -8,17 +8,8 @@ using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class UsersRepository : IUsersRepository
+internal sealed class UsersRepository(ApplicationDbContext context, ILogger<UsersRepository> logger) : IUsersRepository
 {
-    private readonly ApplicationDbContext _context;
-    private readonly ILogger<UsersRepository> _logger;
-
-    public UsersRepository(ApplicationDbContext dbContext, ILogger<UsersRepository> logger)
-    {
-        _context = dbContext;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Resolves a *usable* account: a deactivated one (<c>active = 'N'</c>) reads as absent.
     /// Both authentication paths funnel through here — the login itself and the per-request
@@ -27,7 +18,7 @@ internal sealed class UsersRepository : IUsersRepository
     /// through the mail server (aliases, preferences, admin, and Sieve rules, which
     /// authenticate as the master user) kept working for a disabled mailbox.
     /// </summary>
-    public async Task<User?> FindByEmailAsync(string email)
+    public async Task<User?> FindByEmailAsync(string email, CancellationToken cancellationToken)
     {
         string[] emailParts = email.Split('@');
 
@@ -36,7 +27,7 @@ internal sealed class UsersRepository : IUsersRepository
             return null;
         }
 
-        var match = await FindMailUserAsync(emailParts[0], emailParts[1]);
+        var match = await FindMailUserAsync(emailParts[0], emailParts[1], cancellationToken);
         if (match == null || match.Value.MailUser.Active != ActiveState.Y)
         {
             return null;
@@ -62,10 +53,10 @@ internal sealed class UsersRepository : IUsersRepository
     /// This holds only while the stored hashes and the decoy share their cost parameters. Both
     /// come from CryptSharp's default <c>$6$</c> rounds, the same the MariaDB trigger writes.
     /// </remarks>
-    public async Task<CredentialCheck> VerifyCredentialsAsync(string email, string password)
+    public async Task<CredentialCheck> VerifyCredentialsAsync(string email, string password, CancellationToken cancellationToken)
     {
         var parts = email.Split('@');
-        var match = parts.Length == 2 ? await FindMailUserAsync(parts[0], parts[1]) : null;
+        var match = parts.Length == 2 ? await FindMailUserAsync(parts[0], parts[1], cancellationToken) : null;
 
         var storedHash = match?.MailUser.Password ?? AbsentAccountHash;
         var passwordMatches = PasswordMatches(storedHash, password);
@@ -102,7 +93,7 @@ internal sealed class UsersRepository : IUsersRepository
     {
         if (storedHash.StartsWith("$6$", StringComparison.Ordinal)) return;
 
-        _logger.LogWarning(
+        logger.LogWarning(
             "Audit: login email={Email} outcome=failure reason=unverifiable_hash scheme={Scheme}. " +
             "The stored password is not a $6$ SHA-512 crypt hash, so no password can match it. " +
             "Check the MariaDB INSERT_PASSWORD/UPDATE_PASSWORD trigger on the users table.",
@@ -137,18 +128,18 @@ internal sealed class UsersRepository : IUsersRepository
             : "(unrecognised)";
     }
 
-    public async Task<Result<AccountInfo>> GetAccountInfoAsync(User user)
+    public async Task<Result<AccountInfo>> GetAccountInfoAsync(User user, CancellationToken cancellationToken)
     {
-        var match = await FindMailUserAsync(user.Name, user.Domain);
+        var match = await FindMailUserAsync(user.Name, user.Domain, cancellationToken);
         if (match == null)
             return Result.Failure<AccountInfo>("Account not found");
 
         var (mailUser, domain) = match.Value;
 
-        var ownedDomains = await _context.DomainsOwnerships
+        var ownedDomains = await context.DomainsOwnerships
             .Where(o => o.UserId == mailUser.Id)
-            .Join(_context.Domains, o => o.DomainId, d => d.Id, (o, d) => new Domain { Id = d.Id, Name = d.Name })
-            .ToListAsync();
+            .Join(context.Domains, o => o.DomainId, d => d.Id, (o, d) => new Domain { Id = d.Id, Name = d.Name })
+            .ToListAsync(cancellationToken);
 
         if (ownedDomains.All(d => d.Id != domain.Id))
             ownedDomains.Add(new Domain { Id = domain.Id, Name = domain.Name });
@@ -164,34 +155,34 @@ internal sealed class UsersRepository : IUsersRepository
         });
     }
 
-    public async Task<Result> ChangeFullNameAsync(User user, string fullName)
+    public async Task<Result> ChangeFullNameAsync(User user, string fullName, CancellationToken cancellationToken)
     {
-        var match = await FindMailUserAsync(user.Name, user.Domain);
+        var match = await FindMailUserAsync(user.Name, user.Domain, cancellationToken);
         if (match == null)
         {
-            _logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
+            logger.LogInformation("Audit: change_fullname user={User} outcome=failure reason=account_not_found", user.Email);
             return Result.Failure($"User {user.Name}@{user.Domain} not found");
         }
 
         match.Value.MailUser.FullName = fullName;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Audit: change_fullname user={User} outcome=success", user.Email);
+        logger.LogInformation("Audit: change_fullname user={User} outcome=success", user.Email);
         return Result.Success();
     }
 
-    public async Task<Result> ChangePasswordAsync(User user, string newPassword, string oldPassword)
+    public async Task<Result> ChangePasswordAsync(User user, string newPassword, string oldPassword, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
         {
-            _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=weak_password", user.Email);
+            logger.LogInformation("Audit: change_password user={User} outcome=failure reason=weak_password", user.Email);
             return Result.Failure($"Your password should contains 8 chars at least");
         }
 
-        var match = await FindMailUserAsync(user.Name, user.Domain);
+        var match = await FindMailUserAsync(user.Name, user.Domain, cancellationToken);
         if (match == null)
         {
-            _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
+            logger.LogInformation("Audit: change_password user={User} outcome=failure reason=account_not_found", user.Email);
             return Result.Failure($"User {user.Name}@{user.Domain} not found");
         }
 
@@ -199,14 +190,14 @@ internal sealed class UsersRepository : IUsersRepository
 
         if (!PasswordMatches(mailUser.Password, oldPassword))
         {
-            _logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
+            logger.LogInformation("Audit: change_password user={User} outcome=failure reason=bad_old_password", user.Email);
             return Result.Failure($"Invalid password");
         }
 
         mailUser.Password = newPassword;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Audit: change_password user={User} outcome=success", user.Email);
+        logger.LogInformation("Audit: change_password user={User} outcome=success", user.Email);
         return Result.Success();
     }
 
@@ -220,14 +211,14 @@ internal sealed class UsersRepository : IUsersRepository
     /// makes an unknown domain cost the same as an unknown mailbox: with two, the first returning
     /// nothing skipped the second, and the response time said which of the two it was.
     /// </remarks>
-    private async Task<(MailUser MailUser, MailDomain Domain)?> FindMailUserAsync(string name, string domainName)
+    private async Task<(MailUser MailUser, MailDomain Domain)?> FindMailUserAsync(string name, string domainName, CancellationToken cancellationToken)
     {
-        var row = await (from mailUser in _context.Users
-                         join domain in _context.Domains on mailUser.DomainId equals domain.Id
+        var row = await (from mailUser in context.Users
+                         join domain in context.Domains on mailUser.DomainId equals domain.Id
                          where domain.Name == domainName
                             && string.Equals(mailUser.Name, name, StringComparison.InvariantCultureIgnoreCase)
                          select new { MailUser = mailUser, Domain = domain })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         return row == null ? null : (row.MailUser, row.Domain);
     }
