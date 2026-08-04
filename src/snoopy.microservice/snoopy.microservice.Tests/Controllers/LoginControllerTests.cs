@@ -55,7 +55,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_WithValidCredentials_Returns200WithTheExpiryOnly()
     {
-        var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
+        var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token", Email = "user@domain.com" };
         _authenticator.Setup(a => a.AuthenticateAsync("user@domain.com", "pass", It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(token));
 
@@ -72,7 +72,7 @@ public sealed class LoginControllerTests
     public async Task Login_DoesNotSerialiseTheJwtIntoTheResponseBody()
     {
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
+            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token", Email = "user@domain.com" }));
 
         var result = await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "pass" }, CancellationToken.None);
 
@@ -85,7 +85,7 @@ public sealed class LoginControllerTests
     [Fact]
     public async Task Login_WithValidCredentials_WritesTheJwtIntoTheAuthCookie()
     {
-        var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token" };
+        var token = new AuthToken { ExpiresIn = 30, Token = "jwt.token", Email = "user@domain.com" };
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(token));
         var httpContext = new DefaultHttpContext();
@@ -151,7 +151,7 @@ public sealed class LoginControllerTests
     public async Task Login_OnSuccess_StoresTheCredentialsCookie()
     {
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
+            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token", Email = "user@domain.com" }));
 
         await CreateController().Login(new Credentials { Email = "user@domain.com", Password = "hunter2" }, CancellationToken.None);
 
@@ -167,7 +167,7 @@ public sealed class LoginControllerTests
     public async Task Login_StoresTheKekAlongsideThePassword()
     {
         _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token" }));
+            .ReturnsAsync(Result.Success(new AuthToken { ExpiresIn = 30, Token = "jwt.token", Email = "user@domain.com" }));
         MailCredentialPayload? stored = null;
         _credentialStore.Setup(s => s.Store(It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()))
                         .Callback<HttpResponse, MailCredentialPayload, TimeSpan>((_, p, _) => stored = p);
@@ -178,6 +178,23 @@ public sealed class LoginControllerTests
         Assert.NotNull(stored);
         Assert.Equal("hunter2", stored.Password);
         Assert.Equal<byte[]>(ExpectedKek, stored.Kek!);
+    }
+
+    // The salt row belongs to the account the credentials resolved to, not to the address that was
+    // typed. Reading it under the caller's spelling can miss the row and hand back a salt nobody
+    // persisted — a key that opens none of the connected accounts, and only says so much later.
+    [Fact]
+    public async Task Login_FetchesTheSaltUnderTheResolvedAddress_NotTheOneTyped()
+    {
+        _authenticator.Setup(a => a.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(
+                new AuthToken { ExpiresIn = 30, Token = "jwt.token", Email = "user@domain.com" }));
+
+        await CreateController().Login(
+            new Credentials { Email = " User@Domain.com ", Password = "hunter2" }, CancellationToken.None);
+
+        _webmailUsers.Verify(s => s.GetOrCreateKdfSaltAsync("user@domain.com", It.IsAny<CancellationToken>()), Times.Once);
+        _webmailUsers.Verify(s => s.GetOrCreateKdfSaltAsync(" User@Domain.com ", It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

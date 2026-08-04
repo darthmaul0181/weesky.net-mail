@@ -7,6 +7,12 @@ namespace weesky.Snoopy.Microservice.Repositories;
 
 internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<AliasesRepository> logger) : IAliasesRepository
 {
+    /// <summary>
+    /// The account's live aliases. Case is folded on both sides here as it is everywhere else in
+    /// this repository: what this returns is what decides whether a <c>fromAddress</c> may be sent
+    /// from (see <see cref="Services.OutgoingMessageFactory"/>), so it is an authorization answer,
+    /// and it must not be the one query in the file that depends on how the database was collated.
+    /// </summary>
     public async Task<IEnumerable<Alias>> GetAliasesAsync(User user, CancellationToken cancellationToken)
     {
         var aliases = from alias in context.Aliases
@@ -15,8 +21,8 @@ internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<Al
                       join aliasDomain in context.Domains on alias.Domain equals aliasDomain.Id
                       where alias.DestinationUserId == usr.Id
                            && usr.DomainId == domain.Id
-                           && usr.Name == user.Name
-                           && domain.Name == user.Domain
+                           && string.Equals(usr.Name, user.Name, StringComparison.InvariantCultureIgnoreCase)
+                           && string.Equals(domain.Name, user.Domain, StringComparison.InvariantCultureIgnoreCase)
                            && (alias.Domain == usr.DomainId || context.DomainsOwnerships.Any(own => own.DomainId == alias.Domain && own.UserId == usr.Id))
                       select new Alias
                       {
@@ -30,7 +36,7 @@ internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<Al
     public async Task<Result> AddAliasAsync(User user, Alias alias, CancellationToken cancellationToken)
     {
         if (alias == null)
-            throw new ArgumentNullException("alias");
+            throw new ArgumentNullException(nameof(alias));
 
         if (!await UserOwnsDomainAsync(user, alias.Domain, cancellationToken))
         {
@@ -120,7 +126,10 @@ internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<Al
 
     public async Task<bool> UserOwnsDomainAsync(User user, string domainName, CancellationToken cancellationToken)
     {
-        if (string.Equals(user.Domain, domainName))
+        // Ordinal here, InvariantCultureIgnoreCase in the queries below: this one runs in memory,
+        // where an ordinal fold is both the right comparison for a host name and the cheap one.
+        // The queries need the culture-aware overload because that is what the provider translates.
+        if (string.Equals(user.Domain, domainName, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

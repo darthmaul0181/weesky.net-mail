@@ -27,7 +27,8 @@ public sealed class TokenManager(IOptions<TokenConstants> tokenConstants, TimePr
         return new AuthToken
         {
             ExpiresIn = constants.ExpiryInMinutes,
-            Token = token
+            Token = token,
+            Email = user.Email
         };
     }
 }

@@ -74,7 +74,12 @@ public sealed class LoginController : ApiBaseController
 
             // The only moment the 600k-iteration key derivation is affordable: the cookie carries
             // the result so no later request has to pay it again.
-            var salt = await _webmailUsers.GetOrCreateKdfSaltAsync(credentials.Email, cancellationToken);
+            //
+            // The salt is fetched under the address the account was resolved to, never the one the
+            // caller typed: the row this reads is the row RegisterLoginAsync just wrote, and a
+            // spelling that missed it would hand back a salt nobody persisted — a key that opens
+            // none of the connected accounts, for the whole life of the session.
+            var salt = await _webmailUsers.GetOrCreateKdfSaltAsync(result.Value.Email, cancellationToken);
             var kek = ConnectedAccountCipher.DeriveKek(credentials.Password, salt);
 
             _credentialStore.Store(
