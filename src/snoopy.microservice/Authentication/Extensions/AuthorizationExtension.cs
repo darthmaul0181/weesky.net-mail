@@ -13,6 +13,9 @@ namespace weesky.Snoopy.Microservice.Authentication.Extensions;
 [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 public static class AuthorizationExtension
 {
+    /// <summary>256 bits — the output width of the HMAC this service signs with.</summary>
+    internal const int MinimumSigningKeyBytes = 32;
+
     /// <summary>
     /// Adds JwtBearer Middleware to the Pipeline. The bearer options are configured
     /// through the named-options pipeline so <see cref="TokenConstants"/> is resolved
@@ -32,14 +35,20 @@ public static class AuthorizationExtension
             {
                 var tokenConstants = tokenConstantsOptions.Value;
 
+                // Length is guaranteed by AddSnoopyOptions, which refuses to start on a short key.
+                var key = Encoding.UTF8.GetBytes(tokenConstants.Key);
+
                 options.TokenValidationParameters = new TokenValidationParameters()
                 {
                     ValidateAudience = true,
                     ValidateIssuer = true,
                     ValidateLifetime = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenConstants.Key)),
+                    IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidIssuer = tokenConstants.Issuer,
-                    ValidAudience = tokenConstants.Audience
+                    ValidAudience = tokenConstants.Audience,
+                    // The one algorithm TokenBuilder signs with. Nothing else is a token this
+                    // service ever issued, so nothing else is worth attempting to validate.
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256]
                 };
 
                 options.Events = new JwtBearerEvents()

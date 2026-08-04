@@ -292,6 +292,9 @@ internal sealed class RainloopRuleProvider : IRuleProvider
         if (rule.Conditions == null || rule.Conditions.Count == 0) return Result.Failure<RainloopFilter>("At least one condition is required");
         if (rule.Actions == null || rule.Actions.Count == 0) return Result.Failure<RainloopFilter>("At least one action is required");
 
+        var printable = SieveQuoting.RejectControlCharacters(rule);
+        if (printable.IsFailure) return Result.Failure<RainloopFilter>(printable.Error);
+
         var primaries = rule.Actions
             .Where(a => a.Type is SieveActionType.FileInto or SieveActionType.Redirect or SieveActionType.Reject or SieveActionType.Discard)
             .ToList();

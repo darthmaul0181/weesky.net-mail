@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Models;
@@ -91,10 +92,17 @@ public sealed class AccountController(
     /// <response code="204">Secret changed successfully</response>
     /// <response code="400">Wrong credentials</response>
     /// <response code="401">Unauthenticated user</response>
+    /// <response code="429">Too many attempts</response>
     [HttpPatch("ChangeSecret")]
+    // This verifies a password, so it is bounded like the two other endpoints that do — a stolen
+    // session would otherwise enumerate the old one, and the crypt's cost is the only thing
+    // slowing it down. It shares the login partition on purpose: the caller is the same address,
+    // and spending the quota here is exactly what should stop them logging in as well.
+    [EnableRateLimiting("login")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult> ChangePassword(SecretChange secretChange, CancellationToken cancellationToken)
     {
         Result result = await usersRepository.ChangePasswordAsync(

@@ -1,3 +1,5 @@
+using System.Text;
+using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -13,7 +15,18 @@ internal static class ApplicationServicesConfiguration
 {
     public static IServiceCollection AddSnoopyOptions(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddOptions<TokenConstants>().Bind(configuration.GetSection("TokenConstants"));
+        // The signing key is the whole of this API's authentication, and a short one is not refused
+        // by the handler — HMAC takes any length. Validated on start rather than on first use, so
+        // a misconfigured deployment fails where an operator is watching instead of on a 500 the
+        // first user meets. Same refusal AddFrontendCors and AddCredentialKeyRing make.
+        services.AddOptions<TokenConstants>()
+            .Bind(configuration.GetSection("TokenConstants"))
+            .Validate(
+                constants => Encoding.UTF8.GetByteCount(constants.Key ?? string.Empty)
+                             >= AuthorizationExtension.MinimumSigningKeyBytes,
+                $"TokenConstants:Key must be at least {AuthorizationExtension.MinimumSigningKeyBytes} bytes " +
+                "to sign with HMAC-SHA256. Set TokenConstants__Key in the service's EnvironmentFile.")
+            .ValidateOnStart();
         services.AddOptions<DovecotOptions>().Bind(configuration.GetSection("Dovecot"));
         services.AddOptions<SieveOptions>().Bind(configuration.GetSection("Sieve"));
         services.AddOptions<MailOptions>().Bind(configuration.GetSection("Mail"));

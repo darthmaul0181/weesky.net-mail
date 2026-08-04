@@ -111,6 +111,9 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
         if (rule.Conditions == null || rule.Conditions.Count == 0) return Result.Failure("At least one condition is required");
         if (rule.Actions == null || rule.Actions.Count == 0) return Result.Failure("At least one action is required");
 
+        var printable = SieveQuoting.RejectControlCharacters(rule);
+        if (printable.IsFailure) return printable;
+
         foreach (var c in rule.Conditions)
         {
             var cv = ValidateCondition(c);
