@@ -83,6 +83,34 @@ public sealed class MailComposeControllerTests
         Assert.Contains("not-an-address", ((ResultEnveloppe)bad.Value!).Message);
     }
 
+    // Each list is capped on its own by an attribute; only the controller can count the three
+    // together, and without that a single request still addresses three times the ceiling.
+    [Fact]
+    public async Task SendMessage_RefusesMoreRecipientsThanTheCeiling_CountedAcrossTheThreeLists()
+    {
+        var forty = Enumerable.Range(1, 40).Select(i => $"a{i}@weesky.be").ToList();
+        var request = new SendMessageRequest { To = forty, Cc = forty, Bcc = forty };
+
+        var result = await CreateController().SendMessage(request, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("more than 100 recipients", ((ResultEnveloppe)bad.Value!).Message);
+        _sender.Verify(s => s.SendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(),
+            It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveDraft_RefusesMoreRecipientsThanTheCeiling()
+    {
+        var forty = Enumerable.Range(1, 40).Select(i => $"a{i}@weesky.be").ToList();
+        var request = new SaveDraftRequest { To = forty, Cc = forty, Bcc = forty };
+
+        var result = await CreateController().SaveDraft(request, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("more than 100 recipients", ((ResultEnveloppe)bad.Value!).Message);
+    }
+
     [Fact]
     public async Task SendMessage_RefusesAnInvalidFromAddress()
     {

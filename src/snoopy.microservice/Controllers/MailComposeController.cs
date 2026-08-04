@@ -200,7 +200,14 @@ public sealed class MailComposeController(
         if (requireRecipient && normalized.To.Count == 0)
             return BadRequestEnveloppe("At least one recipient is required");
 
-        foreach (var address in normalized.To.Concat(normalized.Cc).Concat(normalized.Bcc))
+        // The three lists together, which no attribute can count: each one capped on its own still
+        // lets a single request address three times the ceiling.
+        var recipients = normalized.To.Concat(normalized.Cc).Concat(normalized.Bcc).ToList();
+        if (recipients.Count > SendMessageRequest.MaxRecipients)
+            return BadRequestEnveloppe(
+                $"A message cannot name more than {SendMessageRequest.MaxRecipients} recipients");
+
+        foreach (var address in recipients)
         {
             if (string.IsNullOrWhiteSpace(address) || !MailboxAddress.TryParse(RecipientAddressParser.Options, address, out _))
                 return BadRequestEnveloppe($"\"{address}\" is not a valid email address");

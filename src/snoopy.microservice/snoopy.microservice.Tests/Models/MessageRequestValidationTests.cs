@@ -109,4 +109,82 @@ public sealed class MessageRequestValidationTests
     {
         Assert.Empty(RequestValidation.Messages(new OpenDraftRequest("Drafts", 5)));
     }
+
+    // ── Outgoing message ceilings ───────────────────────────────────────
+    // Every other request on this API bounds what it accepts; this one bounded nothing at all,
+    // so one authenticated caller could turn a single POST into a mass mailing.
+
+    [Fact]
+    public void Send_Above100RecipientsInOneList_IsRefused()
+    {
+        var request = new SendMessageRequest
+        {
+            To = [.. Enumerable.Range(1, 101).Select(i => $"a{i}@weesky.be")],
+        };
+
+        Assert.Contains("A message cannot name more than 100 recipients", RequestValidation.Messages(request));
+    }
+
+    // The cumulative rule is the controller's — three lists of 100 pass every attribute and still
+    // address 300 people. This pins that the attributes alone do not, so the guard cannot be dropped.
+    [Fact]
+    public void Send_With100InEachList_PassesTheAttributesAlone()
+    {
+        var hundred = Enumerable.Range(1, 100).Select(i => $"a{i}@weesky.be").ToList();
+        var request = new SendMessageRequest { To = hundred, Cc = hundred, Bcc = hundred };
+
+        Assert.Empty(RequestValidation.Messages(request));
+    }
+
+    [Fact]
+    public void Send_WithAnOverLongSubject_IsRefused()
+    {
+        var request = new SendMessageRequest { Subject = new string('s', 999) };
+
+        Assert.Contains("The subject must be at most 998 characters", RequestValidation.Messages(request));
+    }
+
+    [Fact]
+    public void Send_WithAnOversizedBody_IsRefused()
+    {
+        var request = new SendMessageRequest
+        {
+            HtmlBody = new string('x', SendMessageRequest.MaxBodyLength + 1),
+        };
+
+        Assert.Contains("The message body is too large", RequestValidation.Messages(request));
+    }
+
+    [Fact]
+    public void Send_Above50Attachments_IsRefused()
+    {
+        var request = new SendMessageRequest
+        {
+            AttachmentIds = [.. Enumerable.Range(1, 51).Select(_ => Guid.NewGuid())],
+        };
+
+        Assert.Contains("A message cannot carry more than 50 attachments", RequestValidation.Messages(request));
+    }
+
+    // A draft is the send shape minus the recipient gate: it inherits every ceiling above.
+    [Fact]
+    public void Draft_InheritsTheSendCeilings()
+    {
+        var request = new SaveDraftRequest { Subject = new string('s', 999), ReplaceUid = 12 };
+
+        Assert.Contains("The subject must be at most 998 characters", RequestValidation.Messages(request));
+    }
+
+    [Fact]
+    public void Send_WithAnOrdinaryMessage_IsValid()
+    {
+        var request = new SendMessageRequest
+        {
+            To = ["bob@weesky.be"],
+            Subject = "Lunch",
+            HtmlBody = "<p>At one?</p>",
+        };
+
+        Assert.Empty(RequestValidation.Messages(request));
+    }
 }
