@@ -13,6 +13,7 @@ builder.Services
     .AddRepositories()
     .AddSnoopyAuthentication()
     .AddFrontendCors(builder.Configuration)
+    .AddProxyForwardedHeaders(builder.Configuration, builder.Environment)
     .AddLoginRateLimiter()
     .AddApiDocumentation()
     .AddProblemDetails();
@@ -31,6 +32,10 @@ builder.Services.AddControllers(MvcFormatterConfiguration.ConfigureFormatters).A
 var app = builder.Build();
 
 app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
+
+// First of all: everything downstream that reads the caller's address — the request log and the
+// login rate limiter above all — must see the client's, not the reverse proxy's.
+app.UseForwardedHeaders();
 
 app.UseSnoopyRequestLogging();
 app.UseExceptionHandler();

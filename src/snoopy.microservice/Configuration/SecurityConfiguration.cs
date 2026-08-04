@@ -1,6 +1,8 @@
+using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
@@ -77,6 +79,62 @@ internal static class SecurityConfiguration
         });
     }
 
+    /// <summary>
+    /// Restores the caller's own address on <c>RemoteIpAddress</c>, which is what
+    /// <see cref="AddLoginRateLimiter"/> partitions on. Behind the reverse proxy every request
+    /// arrives from the proxy, so without this the login limiter holds one bucket for the whole
+    /// world: five attempts answer 429 to every user of the service, and no partition ever
+    /// discriminates the source of a password-guessing run.
+    ///
+    /// The proxies are named in the environment rather than trusted by default, because the
+    /// header is caller-supplied: a middleware that honours it from any peer hands anybody the
+    /// ability to write their own partition key. The default known-proxy entries are cleared for
+    /// the same reason — trust here is only ever what the deployment spelled out.
+    /// </summary>
+    public static IServiceCollection AddProxyForwardedHeaders(
+        this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
+    {
+        var knownProxies = configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+
+        // A proxy the configuration does not name makes the middleware drop the header silently:
+        // the address stays the proxy's, the limiter goes back to one global bucket, and nothing
+        // says so. Refusing to start names the cause instead — as AddFrontendCors and
+        // AddCredentialKeyRing already do for their own silent failures.
+        if (knownProxies.Length == 0 && !environment.IsDevelopment())
+        {
+            throw new InvalidOperationException(
+                "No reverse proxy is configured. Set ForwardedHeaders__KnownProxies__0 in the service's " +
+                "EnvironmentFile to the address the proxy connects from — 127.0.0.1 when it runs on this " +
+                "host, plus ::1 if Kestrel listens on the IPv6 loopback. Refusing to start rather than " +
+                "rate-limiting every account against one shared bucket.");
+        }
+
+        return services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+            // One hop: the proxy's own entry. Accepting more would let its client prepend an
+            // address of its choosing and pick which partition it lands in.
+            options.ForwardLimit = 1;
+
+            options.KnownProxies.Clear();
+            options.KnownIPNetworks.Clear();
+            foreach (var proxy in knownProxies)
+            {
+                if (IPAddress.TryParse(proxy, out var address)) options.KnownProxies.Add(address);
+                else throw new InvalidOperationException(
+                    $"ForwardedHeaders:KnownProxies holds '{proxy}', which is not an IP address.");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Bounds password guessing on the three endpoints that verify one: the login itself, attaching
+    /// a mailbox, and re-entering an attached mailbox's password.
+    ///
+    /// The partition is the caller's address, which only means anything once
+    /// <see cref="AddProxyForwardedHeaders"/> has put the real one there.
+    /// </summary>
     public static IServiceCollection AddLoginRateLimiter(this IServiceCollection services) =>
         services.AddRateLimiter(options =>
         {
