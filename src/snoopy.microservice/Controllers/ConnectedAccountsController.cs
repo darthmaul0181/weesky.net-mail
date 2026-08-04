@@ -82,7 +82,8 @@ public sealed class ConnectedAccountsController(
             responses.Add(Describe(
                 row, domain,
                 DefaultLabel(identitiesByAccount[row.Id.ToString()], row.Email),
-                ConnectedAccountCipher.Decrypt(kek.Value, row.Cipher).IsSuccess));
+                ConnectedAccountCipher.Decrypt(
+                    kek.Value, row.Cipher, ConnectedAccountCipher.Context(row)).IsSuccess));
         }
 
         return Ok(responses);
@@ -141,13 +142,19 @@ public sealed class ConnectedAccountsController(
         var verified = await VerifyAsync(probe, email, cancellationToken);
         if (verified.IsFailure) return BadGatewayEnveloppe(verified.Error);
 
-        var created = await accounts.CreateAsync(new ConnectedAccount
+        // The id is minted here rather than by the store: the cipher is bound to it, so it has to
+        // exist before the password is encrypted.
+        var row = new ConnectedAccount
         {
+            Id = Guid.NewGuid(),
             UserId = AuthenticatedUser.WebmailUid,
             DomainId = request.DomainId,
-            Email = email,
-            Cipher = ConnectedAccountCipher.Encrypt(kek.Value, request.Password)
-        }, cancellationToken);
+            Email = email
+        };
+        row.Cipher = ConnectedAccountCipher.Encrypt(
+            kek.Value, request.Password, ConnectedAccountCipher.Context(row));
+
+        var created = await accounts.CreateAsync(row, cancellationToken);
         if (created.IsFailure) return BadRequestEnveloppe(created.Error);
 
         // The store writes the default identity with an empty label, so the UI falls back to the
@@ -203,7 +210,10 @@ public sealed class ConnectedAccountsController(
         if (verified.IsFailure) return BadGatewayEnveloppe(verified.Error);
 
         await accounts.UpdateCipherAsync(
-            row, ConnectedAccountCipher.Encrypt(kek.Value, request.Password), cancellationToken);
+            row,
+            ConnectedAccountCipher.Encrypt(
+                kek.Value, request.Password, ConnectedAccountCipher.Context(row)),
+            cancellationToken);
         return NoContent();
     }
 

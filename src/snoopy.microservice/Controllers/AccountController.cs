@@ -155,9 +155,12 @@ public sealed class AccountController(
         var reKeyed = new Dictionary<Guid, byte[]>(accounts.Count);
         foreach (var account in accounts)
         {
-            var secret = ConnectedAccountCipher.Decrypt(oldKek, account.Cipher);
+            // Same context on both halves: the row is not moving, only its key. A pre-binding
+            // cipher comes out of this bound, so a password change migrates the whole set.
+            var context = ConnectedAccountCipher.Context(account);
+            var secret = ConnectedAccountCipher.Decrypt(oldKek, account.Cipher, context);
             if (secret.IsSuccess)
-                reKeyed[account.Id] = ConnectedAccountCipher.Encrypt(newKek, secret.Value);
+                reKeyed[account.Id] = ConnectedAccountCipher.Encrypt(newKek, secret.Value, context);
         }
 
         if (reKeyed.Count > 0)

@@ -105,13 +105,18 @@ public sealed class ConnectedAccountsControllerTests
     private async Task<ConnectedAccount> ConnectedAsync(
         string email, string secret = "secret", Guid? domainId = null, Guid? ownerId = null, byte[]? kek = null)
     {
-        var created = await _arrangedAccounts.CreateAsync(new ConnectedAccount
+        // Id first, like the controller: the cipher is bound to the row it will live on.
+        var row = new ConnectedAccount
         {
+            Id = Guid.NewGuid(),
             UserId = ownerId ?? Uid,
             DomainId = domainId,
-            Email = email,
-            Cipher = ConnectedAccountCipher.Encrypt(kek ?? _kek, secret)
-        }, CancellationToken.None);
+            Email = email
+        };
+        row.Cipher = ConnectedAccountCipher.Encrypt(
+            kek ?? _kek, secret, ConnectedAccountCipher.Context(row));
+
+        var created = await _arrangedAccounts.CreateAsync(row, CancellationToken.None);
         return created.Value;
     }
 
@@ -377,7 +382,8 @@ public sealed class ConnectedAccountsControllerTests
             new ConnectAccountRequest(null, "shared@weesky.be", "sharedpw"), CancellationToken.None);
 
         var stored = Assert.Single(await _accounts.ListAsync(Uid, CancellationToken.None));
-        Assert.Equal("sharedpw", ConnectedAccountCipher.Decrypt(_kek, stored.Cipher).Value);
+        Assert.Equal("sharedpw", ConnectedAccountCipher.Decrypt(
+            _kek, stored.Cipher, ConnectedAccountCipher.Context(stored)).Value);
     }
 
     [Fact]
@@ -552,7 +558,7 @@ public sealed class ConnectedAccountsControllerTests
 
         Assert.IsType<NoContentResult>(result);
         var stored = await _accounts.FindAsync(Uid, account.Id, CancellationToken.None);
-        Assert.Equal("newpw", ConnectedAccountCipher.Decrypt(_kek, stored!.Cipher).Value);
+        Assert.Equal("newpw", ConnectedAccountCipher.Decrypt(_kek, stored!.Cipher, ConnectedAccountCipher.Context(stored)).Value);
     }
 
     [Fact]
@@ -582,7 +588,7 @@ public sealed class ConnectedAccountsControllerTests
         Assert.Equal(StatusCodes.Status502BadGateway, refused.StatusCode);
 
         var stored = await _accounts.FindAsync(Uid, account.Id, CancellationToken.None);
-        Assert.Equal("oldpw", ConnectedAccountCipher.Decrypt(_kek, stored!.Cipher).Value);
+        Assert.Equal("oldpw", ConnectedAccountCipher.Decrypt(_kek, stored!.Cipher, ConnectedAccountCipher.Context(stored)).Value);
     }
 
     [Fact]

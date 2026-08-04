@@ -25,18 +25,27 @@ public sealed class AccountConnectionResolverTests
     private const string MainPassword = "hunter2";
 
     private readonly User _alice = new("alice@weesky.be") { WebmailUid = Guid.NewGuid() };
-    private readonly PreferencesTestDbContext _db = new(Guid.NewGuid().ToString());
+    private readonly string _databaseName = Guid.NewGuid().ToString();
+    private readonly PreferencesTestDbContext _db;
     private readonly MailCredentialStore _credentials = new(new EphemeralDataProtectionProvider());
     private readonly WebmailUserStore _users;
     private readonly ConnectedAccountStore _accounts;
     private readonly ExternalDomainStore _domains;
     private readonly byte[] _kek = ConnectedAccountCipher.DeriveKek(MainPassword, ConnectedAccountCipher.NewSalt());
 
+    /// <summary>
+    /// A second context over the same database, as production has one per request. The binding
+    /// upgrade attaches the row it was handed, which the arrange context would already be tracking.
+    /// </summary>
+    private readonly ConnectedAccountStore _arrangedAccounts;
+
     public AccountConnectionResolverTests()
     {
+        _db = new PreferencesTestDbContext(_databaseName);
         _users = new WebmailUserStore(_db);
         _accounts = new ConnectedAccountStore(_db);
         _domains = new ExternalDomainStore(_db);
+        _arrangedAccounts = new ConnectedAccountStore(new PreferencesTestDbContext(_databaseName));
     }
 
     private AccountConnectionResolver CreateSut(bool allowCleartext = false)
@@ -68,13 +77,18 @@ public sealed class AccountConnectionResolverTests
     private async Task<ConnectedAccount> ConnectAccountAsync(
         string email, string secret, Guid? domainId = null, Guid? ownerId = null, byte[]? kek = null)
     {
-        var created = await _accounts.CreateAsync(new ConnectedAccount
+        // Id first, like the controller: the cipher is bound to the row it will live on.
+        var row = new ConnectedAccount
         {
+            Id = Guid.NewGuid(),
             UserId = ownerId ?? _alice.WebmailUid,
             DomainId = domainId,
-            Email = email,
-            Cipher = ConnectedAccountCipher.Encrypt(kek ?? _kek, secret)
-        }, CancellationToken.None);
+            Email = email
+        };
+        row.Cipher = ConnectedAccountCipher.Encrypt(
+            kek ?? _kek, secret, ConnectedAccountCipher.Context(row));
+
+        var created = await _accounts.CreateAsync(row, CancellationToken.None);
         return created.Value;
     }
 
@@ -89,6 +103,73 @@ public sealed class AccountConnectionResolverTests
         };
         mutate?.Invoke(domain);
         return (await _domains.CreateAsync(domain, CancellationToken.None)).Value;
+    }
+
+    /// <summary>
+    /// A row as it exists today: nonce, tag, ciphertext, no version byte and no associated data.
+    /// Written straight through the store, since the cipher is exactly what is being aged.
+    /// </summary>
+    private async Task<ConnectedAccount> ConnectUnboundAccountAsync(string email, string secret)
+    {
+        var plaintext = System.Text.Encoding.UTF8.GetBytes(secret);
+        var nonce = System.Security.Cryptography.RandomNumberGenerator.GetBytes(
+            ConnectedAccountCipher.NonceLength);
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[ConnectedAccountCipher.TagLength];
+
+        using (var aes = new System.Security.Cryptography.AesGcm(_kek, ConnectedAccountCipher.TagLength))
+            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+
+        var blob = new byte[nonce.Length + tag.Length + ciphertext.Length];
+        nonce.CopyTo(blob, 0);
+        tag.CopyTo(blob, nonce.Length);
+        ciphertext.CopyTo(blob, nonce.Length + tag.Length);
+
+        var created = await _arrangedAccounts.CreateAsync(new ConnectedAccount
+        {
+            Id = Guid.NewGuid(),
+            UserId = _alice.WebmailUid,
+            Email = email,
+            Cipher = blob
+        }, CancellationToken.None);
+        return created.Value;
+    }
+
+    // The migration, and the reason the binding is worth anything on an existing deployment: no
+    // user is asked for a provider password again, so an old row has to bind itself the first
+    // time it is opened. Without this, only accounts created after the deploy are protected.
+    [Fact]
+    public async Task Resolve_BindsAPreBindingCipherOnFirstUse()
+    {
+        var account = await ConnectUnboundAccountAsync("legacy@weesky.be", "provider-pw");
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("provider-pw", result.Value.Password);
+
+        var stored = await _arrangedAccounts.FindAsync(_alice.WebmailUid, account.Id, CancellationToken.None);
+        ConnectedAccountCipher.Decrypt(
+            _kek, stored!.Cipher, ConnectedAccountCipher.Context(stored), out var bound);
+        Assert.True(bound);
+    }
+
+    // Binding must not change what the row means: the same secret comes back on the next request,
+    // now through the bound path.
+    [Fact]
+    public async Task Resolve_StillOpensTheAccountAfterItHasBeenBound()
+    {
+        var account = await ConnectUnboundAccountAsync("legacy@weesky.be", "provider-pw");
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+        await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        var again = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(again.IsSuccess);
+        Assert.Equal("provider-pw", again.Value.Password);
     }
 
     [Fact]

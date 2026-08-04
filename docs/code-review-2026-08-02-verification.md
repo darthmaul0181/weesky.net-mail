@@ -49,7 +49,7 @@ La garde protégeait exactement le cas qui se protégeait tout seul.
 | 🔴 | Suppression de domaine détruit les alias | `AdminRepository.cs:249` ne teste que `context.Users` |
 | 🔴 | Oracle de test de mots de passe | politique `login` toujours partitionnée sur `RemoteIpAddress` seule et partagée avec `/api/login` ; aucun cap de comptes par utilisateur ; le log ne nomme que l'adresse sondée, jamais l'acteur |
 | 🔴 | `ProducesResponseType` sans type | **328 non typés, 0 typé** (le rapport en annonçait ~120) |
-| 🟠 | AES-GCM sans associated data | aucun AAD — voir §7 |
+| 🟠 | AES-GCM sans associated data | **corrigé le 2026-08-04** — voir §7 |
 | 🟠 | `HtmlSanitizer` épinglé en bêta | toujours `9.1.949-beta`, sur la barrière XSS principale |
 
 ## 3. Une régression de la même classe, à quatre lignes du correctif
@@ -105,11 +105,12 @@ déclarait fermée. L'hôte est configuré par un administrateur, donc 🟠 et n
 
 ---
 
-## 7. AES-GCM sans associated data — analyse, décision différée
+## 7. AES-GCM sans associated data — corrigé le 2026-08-04
 
-**Décision du 2026-08-02 : constat accepté, correction reportée.** La menace retenue est celle
-d'un **DBA mal intentionné**. Rien n'est corrigé pour l'instant ; cette section existe pour que
-la limite soit écrite plutôt que déduite.
+**Décision du 2026-08-02 : constat accepté, correction reportée** (menace retenue : un **DBA mal
+intentionné**). **Reprise et livrée le 2026-08-04** — voir « Ce qui a été livré » en fin de
+section. L'analyse ci-dessous est conservée telle quelle : elle explique pourquoi le correctif a
+la forme qu'il a, et notamment pourquoi lier le seul identifiant de compte n'aurait pas suffi.
 
 ### Le dispositif
 
@@ -198,13 +199,46 @@ hôte et port dans l'AAD, ce qui casserait tous les chiffrés le jour où un adm
 corrige légitimement l'hôte d'un fournisseur. Cette surface relève de l'autorisation admin et
 de l'audit sur `external_domains`, pas de la cryptographie.
 
-### Conséquence de la décision de report
+### Ce qui a été livré le 2026-08-04
 
-Tant que ce n'est pas corrigé, **le commentaire en tête de `ConnectedAccountCipher` affiche une
-garantie que le code ne tient pas** : une compromission en écriture de la base rend les mots de
-passe des fournisseurs externes récupérables en clair. La pire issue serait qu'un futur lecteur
-s'appuie sur cette phrase. À traiter au moment de la correction, ou par un amendement du
-commentaire si la correction est écartée durablement.
+Le format du chiffré devient `0x02 ‖ nonce(12) ‖ tag(16) ‖ ciphertext`, avec pour données
+associées `accountId | userId | domainId | email` — les quatre colonnes qui décident où part le
+secret et sous quelle identité. `MaxSecretLength` passe de 484 à 483, le blob remplissant
+toujours exactement les 512 octets de la colonne.
+
+**La migration est ce qui donne sa valeur au correctif.** Les lignes antérieures s'ouvrent
+toujours (pas de version, pas d'AAD) — refuser aurait coupé tous les comptes connectés le jour du
+déploiement, et ces mots de passe fournisseur ne sont pas les nôtres à redemander. Elles sont
+**reliées à leur ligne dès la première lecture réussie**, dans `AccountConnectionResolver`, en
+best-effort : une écriture qui échoue ne fait pas échouer l'ouverture de la boîte, la requête
+suivante réessaie. Le changement de mot de passe principal migre également tout le lot au
+passage. Sans cette reprise, seuls les comptes créés après le déploiement auraient été protégés.
+
+**Trois pièges rencontrés, tous fermés.** `ConnectedAccountStore.CreateAsync` générait l'`Id`
+*après* que le contrôleur avait chiffré : l'id est désormais frappé par l'appelant et le store ne
+l'écrase plus. Le store canonicalise l'email qu'il écrit, donc un contexte bâti sur la saisie
+brute aurait produit un chiffré ne se rouvrant jamais — `Context(row)` canonicalise lui-même. Et
+le marqueur de version est un **indice, jamais une décision** : une ligne antérieure commence sur
+un octet de nonce aléatoire, donc vaut `0x02` une fois sur 256 ; c'est le tag qui tranche, et une
+lecture liée qui échoue retombe sur la lecture non liée.
+
+**13 tests ajoutés** (suite 1927 → 1940) : altération de chacun des quatre champs — dont la
+variante « ligne repointée vers un autre domaine » que le remède du GUID seul aurait laissée
+passer — le cas local sans domaine, la lecture d'une ligne antérieure, celle dont le premier octet
+imite le marqueur, le refus d'une ligne antérieure sous une mauvaise clé, et la migration
+elle-même vue depuis le résolveur.
+
+Le commentaire de tête de `ConnectedAccountCipher` a été réécrit : il énonce désormais ce que le
+code tient réellement, à savoir que la liaison protège la **destination** du secret et non le
+secret lui-même.
+
+### Ce qui reste hors d'atteinte, et assumé
+
+Un attaquant qui modifie la ligne `external_domains` **elle-même** — changer l'hôte d'un
+fournisseur légitimement utilisé — n'est pas couvert : il faudrait hôte et port dans l'AAD, ce qui
+casserait tous les chiffrés le jour où un administrateur corrige légitimement un hôte. Cette
+surface relève de l'autorisation admin et de l'audit sur `external_domains`, pas de la
+cryptographie.
 
 ---
 
@@ -314,7 +348,8 @@ une bannière sur chaque message serait pire que le silence qu'elle corrige.
 forme plutôt que le comportement ; le reste de l'audit du projet n'en a pas non plus.
 
 Ce qui restait ouvert au §8 le reste : rien ici ne touche à la limite par IP de l'oracle, au cap
-de comptes connectés, à la version bêta de `HtmlSanitizer`, ni à l'AAD du §7.
+de comptes connectés ni à la version bêta de `HtmlSanitizer`. L'AAD du §7, laissé ouvert à cette
+date, a été livré le 2026-08-04.
 
 ---
 

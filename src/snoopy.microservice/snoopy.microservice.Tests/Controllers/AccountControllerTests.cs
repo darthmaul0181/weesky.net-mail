@@ -60,8 +60,13 @@ public sealed class AccountControllerTests
         return controller;
     }
 
-    private static ConnectedAccount Connected(string email, byte[] cipher) =>
-        new() { Id = Guid.NewGuid(), UserId = UserId, Email = email, Cipher = cipher };
+    /// <summary>The row is built before its cipher: the cipher is bound to the row's own columns.</summary>
+    private static ConnectedAccount Connected(string email, byte[] kek, string secret)
+    {
+        var row = new ConnectedAccount { Id = Guid.NewGuid(), UserId = UserId, Email = email };
+        row.Cipher = ConnectedAccountCipher.Encrypt(kek, secret, ConnectedAccountCipher.Context(row));
+        return row;
+    }
 
     [Fact]
     public async Task GetAccountInfo_WhenUserFound_Returns200WithAccountInfo()
@@ -224,8 +229,8 @@ public sealed class AccountControllerTests
     {
         _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
-        var first = Connected("a@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-a"));
-        var second = Connected("b@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-b"));
+        var first = Connected("a@external.com", OldKek, "secret-a");
+        var second = Connected("b@external.com", OldKek, "secret-b");
         _connectedAccounts.Setup(s => s.ListAsync(UserId, It.IsAny<CancellationToken>()))
                           .ReturnsAsync([first, second]);
         IReadOnlyDictionary<Guid, byte[]>? replaced = null;
@@ -237,8 +242,8 @@ public sealed class AccountControllerTests
 
         Assert.NotNull(replaced);
         Assert.Equal(2, replaced.Count);
-        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[first.Id]).Value);
-        Assert.Equal("secret-b", ConnectedAccountCipher.Decrypt(NewKek, replaced[second.Id]).Value);
+        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[first.Id], ConnectedAccountCipher.Context(first)).Value);
+        Assert.Equal("secret-b", ConnectedAccountCipher.Decrypt(NewKek, replaced[second.Id], ConnectedAccountCipher.Context(second)).Value);
     }
 
     // A row already orphaned by an out-of-band password change stays as it is: re-encrypting
@@ -248,8 +253,8 @@ public sealed class AccountControllerTests
     {
         _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
-        var live = Connected("a@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-a"));
-        var orphan = Connected("b@external.com", ConnectedAccountCipher.Encrypt(NewKek, "unreachable"));
+        var live = Connected("a@external.com", OldKek, "secret-a");
+        var orphan = Connected("b@external.com", NewKek, "unreachable");
         _connectedAccounts.Setup(s => s.ListAsync(UserId, It.IsAny<CancellationToken>()))
                           .ReturnsAsync([live, orphan]);
         IReadOnlyDictionary<Guid, byte[]>? replaced = null;
@@ -273,7 +278,7 @@ public sealed class AccountControllerTests
             .ReturnsAsync(Result.Success());
         _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
                     .Returns(Result.Success(new MailCredentialPayload(OldPassword, null)));
-        var account = Connected("a@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-a"));
+        var account = Connected("a@external.com", OldKek, "secret-a");
         _connectedAccounts.Setup(s => s.ListAsync(UserId, It.IsAny<CancellationToken>()))
                           .ReturnsAsync([account]);
         IReadOnlyDictionary<Guid, byte[]>? replaced = null;
@@ -284,7 +289,7 @@ public sealed class AccountControllerTests
         await CreateController().ChangePassword(new SecretChange { NewPassword = NewPassword, OldPassword = OldPassword }, CancellationToken.None);
 
         Assert.NotNull(replaced);
-        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[account.Id]).Value);
+        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[account.Id], ConnectedAccountCipher.Context(account)).Value);
     }
 
     [Fact]

@@ -46,13 +46,39 @@ internal sealed class AccountConnectionResolver(
 
         var kek = payload.Kek ?? await UpgradeCookieAsync(user, request, payload, cancellationToken);
 
-        var secret = ConnectedAccountCipher.Decrypt(kek, row.Cipher);
+        var context = ConnectedAccountCipher.Context(row);
+        var secret = ConnectedAccountCipher.Decrypt(kek, row.Cipher, context, out var bound);
         if (secret.IsFailure) return Result.Failure<MailAccountConnection>(secret.Error);
+
+        if (!bound) await BindCipherAsync(row, kek, secret.Value, context, cancellationToken);
 
         if (row.DomainId is null)
             return HomeConnection(row.Id.ToString(), row.Email, secret.Value);
 
         return await ExternalConnection(row, secret.Value, cancellationToken);
+    }
+
+    /// <summary>
+    /// Rewrites a pre-binding cipher bound to its row, on the first request that opens it — which
+    /// is what migrates the existing rows without asking anybody for a provider password again.
+    ///
+    /// Best effort on purpose: this sits on a read path, and the mailbox must open whether or not
+    /// the rewrite lands. A failure costs one more unbound read; the next request tries again.
+    /// </summary>
+    private async Task BindCipherAsync(
+        Data.Preferences.ConnectedAccount row, byte[] kek, string secret, byte[] context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await accounts.UpdateCipherAsync(
+                row, ConnectedAccountCipher.Encrypt(kek, secret, context), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex, "Could not bind the cipher of connected account {AccountId} to its row", row.Id);
+        }
     }
 
     /// <summary>The primary and the local shared mailboxes: endpoints from appsettings.</summary>

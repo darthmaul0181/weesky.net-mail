@@ -34,7 +34,9 @@ internal sealed class ConnectedAccountStore(PreferencesDbContext context)
             return Result.Failure<ConnectedAccount>(AlreadyConnected);
 
         var now = DateTime.UtcNow;
-        row.Id = Guid.NewGuid();
+        // An id the caller already chose is kept: the cipher is bound to it, so minting a new one
+        // here would leave a row whose own secret no longer authenticates against it.
+        if (row.Id == Guid.Empty) row.Id = Guid.NewGuid();
         row.Email = email;
         row.CreationDate = now;
         Set.Add(row);
