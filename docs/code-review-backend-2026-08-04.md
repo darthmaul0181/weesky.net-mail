@@ -252,3 +252,27 @@ les comptes connectés répondent 409 pour la durée de la session. L'effet est 
 | 5 | S4, S5, S6 — durcissements | Faible | ~1 h cumulé |
 | 6 | C3, C4 — cohérence casse et source du sel | Faible | ~1 h |
 | 7 | P1 — pagination IMAP sans tri complet | Moyen | à cadrer, non trivial |
+
+---
+
+## Suites données (même jour)
+
+Suite passée de 1940 à 1967 tests, tous verts, build toujours sans warning.
+
+| Constat | Statut | Commit |
+|---|---|---|
+| S1 — rate limiter derrière le proxy | **Corrigé** — `UseForwardedHeaders` un hop, proxies nommés en environnement, refus de démarrer sans | `Give the login limiter the caller's own address to partition on` |
+| S3 — révocation au changement de mot de passe admin | **Corrigé** — rotation du stamp + `Forget`, best-effort après commit, échec loggé en Error | `Cut the sessions when an administrator replaces a password` |
+| S2 / C2 — bornes du message sortant | **Corrigé** — destinataires (100 cumulés), sujet, corps, pièces jointes, references ; les bornes dimensionnelles en attributs, le cumul au contrôleur | `Bound every dimension of an outgoing message` |
+| S4 — rate limit sur `ChangeSecret` | **Corrigé** — partage la partition `login` | `Close the three hardening findings…` |
+| S5 — caractères de contrôle dans une règle Sieve | **Corrigé** — refusés à la validation, garde partagée par les deux providers | idem |
+| S6 — durcissements JWT | **Corrigé** — `ValidAlgorithms` épinglé, refus de démarrer sous 256 bits de clé (`ValidateOnStart`) | idem |
+| D1 — duplication des balayeurs | **Corrigé** — `PeriodicSweeper` commun | `Put the two background sweeps on one loop` |
+| C3 / C4 — casse et source du sel | **Corrigés** — `AuthToken.Email` porte l'adresse résolue ; `GetAliasesAsync` folde la casse comme ses voisines | `Read the account under one spelling on both sides of a login` |
+| C1 + détails | **Corrigés** — primary constructors, horloge injectée dans le middleware, répertoires de staging vidés | `Take the last three findings of the review` |
+| P1 — tri IMAP complet par page | **Ouvert** — change le comportement de pagination, à cadrer séparément |  |
+| P2, P3, P4 | **Ouverts** — classés faibles ; P3 dépend de ce que fait le proxy |  |
+
+**Action de déploiement obligatoire** : `ForwardedHeaders__KnownProxies__0` doit être ajouté à
+l'`EnvironmentFile` des deux units avant le prochain déploiement, sinon le service refuse de
+démarrer. Procédure : `docs/superpowers/reverse-proxy-prerequisite.md`.

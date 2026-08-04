@@ -105,7 +105,8 @@ internal static class SecurityConfiguration
             throw new InvalidOperationException(
                 "No reverse proxy is configured. Set ForwardedHeaders__KnownProxies__0 in the service's " +
                 "EnvironmentFile to the address the proxy connects from — 127.0.0.1 when it runs on this " +
-                "host, plus ::1 if Kestrel listens on the IPv6 loopback. Refusing to start rather than " +
+                "host, plus ::1 if Kestrel listens on the IPv6 loopback. See " +
+                "docs/superpowers/reverse-proxy-prerequisite.md. Refusing to start rather than " +
                 "rate-limiting every account against one shared bucket.");
         }
 
