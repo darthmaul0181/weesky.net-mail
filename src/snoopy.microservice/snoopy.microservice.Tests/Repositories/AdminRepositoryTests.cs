@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
@@ -16,9 +17,9 @@ public sealed class AdminRepositoryTests
     private static IMemoryCache CreateCache() => new MemoryCache(new MemoryCacheOptions());
 
     private static AdminRepository CreateRepository(TestDbContext ctx, IWebmailUserStore? webmailUsers = null,
-        IMemoryCache? cache = null) =>
+        IMemoryCache? cache = null, ISessionGuard? sessions = null) =>
         new(ctx, webmailUsers ?? new Mock<IWebmailUserStore>().Object, cache ?? CreateCache(),
-            NullLogger<AdminRepository>.Instance);
+            sessions ?? new Mock<ISessionGuard>().Object, NullLogger<AdminRepository>.Instance);
 
     private static MailDomain AddDomain(TestDbContext ctx, string id = "WSY", string name = "weesky.be")
     {
@@ -622,6 +623,63 @@ public sealed class AdminRepositoryTests
         var user = AddUser(ctx, "alice", "WSY");
         await CreateRepository(ctx).UpdateUserAsync(user.Id,
             new AdminUserRequest { UserName = "alice", Password = "newpass123", QuotaMb = 1024 }, CancellationToken.None);
+        Assert.Equal("newpass123", ctx.Users.First(u => u.Id == user.Id).Password);
+    }
+
+    // An administrator changes a password for one reason: the account is believed compromised.
+    // Leaving the stamp alone left the intruder's token valid for the rest of its 48-hour life on
+    // everything that does not go through IMAP — preferences, contacts, aliases, admin itself.
+    [Fact]
+    public async Task UpdateUser_WhenPasswordProvided_RevokesEverySessionOfTheAccount()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "Alice", "WSY");
+        var webmailUsers = new Mock<IWebmailUserStore>();
+        var sessions = new Mock<ISessionGuard>();
+
+        await CreateRepository(ctx, webmailUsers.Object, sessions: sessions.Object).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "Alice", Password = "newpass123" }, CancellationToken.None);
+
+        // Canonical, as every other writer of this row spells it: the store keys on the folded form.
+        webmailUsers.Verify(w => w.RotateSecurityStampAsync("alice@weesky.be", It.IsAny<CancellationToken>()),
+            Times.Once);
+        sessions.Verify(s => s.Forget("alice@weesky.be"), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateUser_WhenNoPasswordProvided_LeavesTheSessionsAlone()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY");
+        var webmailUsers = new Mock<IWebmailUserStore>();
+        var sessions = new Mock<ISessionGuard>();
+
+        await CreateRepository(ctx, webmailUsers.Object, sessions: sessions.Object).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "alice", QuotaMb = 4096 }, CancellationToken.None);
+
+        webmailUsers.Verify(w => w.RotateSecurityStampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        sessions.Verify(s => s.Forget(It.IsAny<string>()), Times.Never);
+    }
+
+    // The password is already committed when the revocation runs. A preferences database that is
+    // down must not answer "the change failed" to an administrator whose change did land.
+    [Fact]
+    public async Task UpdateUser_WhenRevocationThrows_StillReportsThePasswordChange()
+    {
+        using var ctx = CreateContext();
+        AddDomain(ctx);
+        var user = AddUser(ctx, "alice", "WSY");
+        var webmailUsers = new Mock<IWebmailUserStore>();
+        webmailUsers.Setup(w => w.RotateSecurityStampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new InvalidOperationException("preferences database is down"));
+
+        var result = await CreateRepository(ctx, webmailUsers.Object).UpdateUserAsync(user.Id,
+            new AdminUserRequest { UserName = "alice", Password = "newpass123" }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
         Assert.Equal("newpass123", ctx.Users.First(u => u.Id == user.Id).Password);
     }
 

@@ -13,6 +13,7 @@ internal sealed class AdminRepository(
     ApplicationDbContext context,
     IWebmailUserStore webmailUsers,
     IMemoryCache cache,
+    ISessionGuard sessions,
     ILogger<AdminRepository> logger) : IAdminRepository
 {
     private const int MinPasswordLength = PasswordPolicy.MinimumLength;
@@ -152,16 +153,49 @@ internal sealed class AdminRepository(
         if (request.Active is { } active) user.Active = State(active);
         if (request.Admin is { } admin) user.Admin = State(admin);
 
-        if (!string.IsNullOrEmpty(request.Password))
+        var passwordChanged = !string.IsNullOrEmpty(request.Password);
+        if (passwordChanged)
         {
-            user.Password = request.Password;
+            user.Password = request.Password!;
             user.LastUpdate = DateTime.UtcNow;
         }
 
         await context.SaveChangesAsync(cancellationToken);
         ForgetAdminFlags();
 
+        if (passwordChanged && domain is not null)
+            await RevokeSessionsAsync($"{user.Name}@{domain.Name}");
+
         return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
+    }
+
+    /// <summary>
+    /// Cuts every live session of an account whose password an administrator just replaced — the
+    /// one situation that call is made in is a mailbox believed to be in someone else's hands.
+    /// Without it the intruder's token stays valid for the rest of its lifetime on everything that
+    /// does not open IMAP: preferences, contacts, identities, aliases, and admin itself.
+    /// </summary>
+    /// <remarks>
+    /// Best effort, and deliberately after the commit: the password is already changed, so throwing
+    /// here would tell the administrator their change failed when it did not. It is logged at Error
+    /// rather than Warning because a revocation that did not happen is the thing they must act on —
+    /// the fallback is <c>DELETE /api/login/All</c> as the account holder, or a second attempt.
+    /// Not the caller's token, for the same reason <see cref="DeleteUserAsync"/> does not take it.
+    /// </remarks>
+    private async Task RevokeSessionsAsync(string email)
+    {
+        var canonical = email.Trim().ToLowerInvariant();
+        try
+        {
+            await webmailUsers.RotateSecurityStampAsync(canonical, CancellationToken.None);
+            sessions.Forget(canonical);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Password of {Email} was changed but its sessions could not be revoked: every token " +
+                "issued before this call stays valid until it expires", canonical);
+        }
     }
 
     public async Task<Result> DeleteUserAsync(int id, CancellationToken cancellationToken)
