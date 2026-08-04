@@ -230,8 +230,7 @@ commentaire si la correction est écartée durablement.
   cosmétique.
 - **`AllowInvalidCertificate`, `ClockSkew`, effacement mémoire de la KEK** : théoriques dans ce
   modèle de menace.
-- **`LCASE`/index** : maintenu écarté conformément à l'arbitrage du 2026-07-25, à ne rouvrir
-  qu'avec la base de production sous les yeux.
+- **`LCASE`/index — clos définitivement le 2026-08-04, ne pas rouvrir.** Voir §10.
 
 ### Restant ouvert, non planifié
 
@@ -316,3 +315,54 @@ forme plutôt que le comportement ; le reste de l'audit du projet n'en a pas non
 
 Ce qui restait ouvert au §8 le reste : rien ici ne touche à la limite par IP de l'oracle, au cap
 de comptes connectés, à la version bêta de `HtmlSanitizer`, ni à l'AAD du §7.
+
+---
+
+## 10. `LCASE`/index — clos définitivement le 2026-08-04
+
+**Décision : on ne touche à rien.** Ce constat a été soulevé par la revue du 2026-07-25 (écarté),
+re-signalé par celle du 2026-08-01 (🔴, sans connaître l'arbitrage précédent), puis ré-analysé le
+2026-08-04 avec les données de production sous les yeux. La réponse est la même. **Cette section
+existe pour qu'il ne remonte pas une quatrième fois.**
+
+### Ce que le code fait réellement
+
+`DatabaseConfiguration.cs:44` active `EnableStringComparisonTranslations()`, qui traduit
+`string.Equals(col, val, InvariantCultureIgnoreCase)` en `LCASE(col) = LCASE(@p)`. Une fonction
+sur la colonne rend le prédicat non-sargable : l'index `UNIQUE KEY (username, domain)` de `users`
+n'est pas utilisable, MySQL se restreint à un domaine via `KEY users_domain_foreign_key (domain)`
+puis évalue `LCASE()` ligne par ligne.
+
+### Les deux faits qui ferment le dossier
+
+**1. Le `LCASE()` n'est pas décoratif — c'est tout le mécanisme d'insensibilité à la casse au
+login.** Il n'existe aucun `ToLower` en C# sur ce chemin : `LoginController` →
+`UserAuthenticator` (passe-plat) → `VerifyCredentialsAsync` (`email.Split('@')`, parties brutes)
+→ `FindMailUserAsync`. Le repli se fait en SQL. **Le remède proposé par la revue du 2026-08-01 —
+remplacer par `==` tout court — aurait donc confié le login à la collation**, sans que personne
+l'ait vérifiée. C'est le piège que l'arbitrage du 2026-07-25 avait pressenti sans le nommer.
+
+**2. Une asymétrie existe déjà, et elle est bénigne.** Dans le même `where`, le domaine est
+comparé par `domain.Name == domainName` — **sans `LCASE`**. La moitié domaine dépend donc déjà de
+la collation, et fonctionne en production. Les deux moitiés d'une même adresse sont traitées par
+deux mécanismes différents ; rien ne le documente ailleurs qu'ici.
+
+### Le correctif qui aurait été sûr, et pourquoi il n'a pas été fait
+
+Vérifié en production le 2026-08-04 : **tous les `username` sont en minuscules, tous les
+`domains.id` en majuscules.** Le `LCASE()` côté colonne est donc un no-op pour toute ligne
+existante. Replier l'entrée en C# (`name.ToLowerInvariant()`) puis comparer par `==` aurait donné
+le même résultat, rendu l'index utilisable, et **supprimé toute dépendance à la collation** —
+laquelle n'a jamais pu être lue, les requêtes `information_schema` n'ayant rien renvoyé de
+concluant.
+
+Écarté malgré tout, et c'est le bon arbitrage : le `LCASE()` ne porte que sur les utilisateurs
+d'**un seul domaine**, soit une fraction de milliseconde à cette échelle. Le gain mesurable est
+nul, le risque n'est pas nul, et le chemin touché est celui du login. Rien ne justifie d'y toucher
+tant que la volumétrie ne change pas.
+
+### Ce qui rouvrirait légitimement le dossier
+
+Un domaine unique dépassant l'ordre de la dizaine de milliers de comptes, mesures de latence de
+login à l'appui. Rien d'autre. **Une revue statique qui re-signale ce constat sans ces mesures
+doit être renvoyée à cette section.**
