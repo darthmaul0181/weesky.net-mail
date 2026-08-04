@@ -13,47 +13,20 @@ internal sealed class TrustedSenderSweeper(
     IServiceScopeFactory scopes,
     IOptions<TrustedSenderOptions> options,
     ILogger<TrustedSenderSweeper> logger,
-    TimeSpan? startupJitterMax = null) : BackgroundService
+    TimeSpan? startupJitterMax = null)
+    : PeriodicSweeper(TimeSpan.FromDays(1), startupJitterMax ?? DefaultStartupJitterMax, logger)
 {
     // Every push restarts the process, so without a startup run the 365-day retention only ever
     // gets enforced after a full day of continuous uptime. The jitter staggers a restart storm.
     private static readonly TimeSpan DefaultStartupJitterMax = TimeSpan.FromSeconds(30);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromDays(1));
-        var isFirstRun = true;
-
-        while (isFirstRun || await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            var runningStartupSweep = isFirstRun;
-            isFirstRun = false;
-
-            try
-            {
-                if (runningStartupSweep)
-                {
-                    await Task.Delay(RandomJitter(startupJitterMax ?? DefaultStartupJitterMax), stoppingToken);
-                }
-
-                await SweepOnceAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                // A sweep that throws must not take the host down with it; the next tick retries.
-                logger.LogError(ex, "The trusted sender sweep failed");
-            }
-        }
-    }
-
-    private static TimeSpan RandomJitter(TimeSpan max) =>
-        TimeSpan.FromMilliseconds(Random.Shared.Next((int)Math.Max(0, max.TotalMilliseconds)));
+    protected override string SweepName => "trusted sender";
 
     /// <summary>
     /// One pass. Opens a scope of its own because the store and its DbContext are scoped while
     /// this service is a singleton — injecting the store directly compiles and throws here.
     /// </summary>
-    internal async Task SweepOnceAsync(CancellationToken cancellationToken)
+    protected internal override async Task SweepOnceAsync(CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ITrustedSenderStore>();
