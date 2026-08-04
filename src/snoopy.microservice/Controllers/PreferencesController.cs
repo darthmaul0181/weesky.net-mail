@@ -15,15 +15,8 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public sealed class PreferencesController : ApiBaseController
+public sealed class PreferencesController(IUserPreferenceStore store) : ApiBaseController
 {
-    private readonly IUserPreferenceStore _store;
-
-    public PreferencesController(IUserPreferenceStore store)
-    {
-        _store = store;
-    }
-
     /// <summary>Every known preference, with the account's value where it set one.</summary>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">Key/value map covering every known preference</response>
@@ -33,7 +26,7 @@ public sealed class PreferencesController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<IReadOnlyDictionary<string, string>>> GetPreferences(CancellationToken cancellationToken)
     {
-        var stored = await _store.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+        var stored = await store.GetAsync(AuthenticatedUser.WebmailUid, cancellationToken);
 
         return Ok(UserPreferences.Effective(stored));
     }
@@ -56,7 +49,7 @@ public sealed class PreferencesController : ApiBaseController
             return BadRequestEnveloppe(
                 $"'{request.Value}' is not a value '{request.Key}' accepts");
 
-        await _store.SetAsync(AuthenticatedUser.WebmailUid, request.Key!, request.Value!, cancellationToken);
+        await store.SetAsync(AuthenticatedUser.WebmailUid, request.Key!, request.Value!, cancellationToken);
 
         return StatusCode(StatusCodes.Status204NoContent);
     }

@@ -153,6 +153,11 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
                 if (tracked.Contains(path) || File.GetLastWriteTimeUtc(path) >= deadline.UtcDateTime) continue;
                 if (TryDeleteFile(path)) swept++;
             }
+
+            // The per-account directory outlives the files it held: one is created per account that
+            // ever staged anything, and nothing else ever removes them. Emptied, it is inodes.
+            foreach (var directory in Directory.EnumerateDirectories(_root))
+                TryDeleteEmptyDirectory(directory);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -184,6 +189,20 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
         {
             var remainingCount = _reservedCount.AddOrUpdate(accountId, 0, (_, current) => Math.Max(0, current - 1));
             if (remainingCount == 0) _reservedCount.TryRemove(new KeyValuePair<string, int>(accountId, 0));
+        }
+    }
+
+    /// <summary>Only when it is empty: a concurrent save may have just written into it, and
+    /// Directory.Delete without recursion refuses rather than taking that file with it.</summary>
+    private void TryDeleteEmptyDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            // Not empty, or gone already. Either way there is nothing to reclaim.
         }
     }
 

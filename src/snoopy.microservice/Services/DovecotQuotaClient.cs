@@ -11,18 +11,12 @@ namespace weesky.Snoopy.Microservice.Services;
 /// Queries a remote Dovecot server via its doveadm HTTP API.
 /// See https://doc.dovecot.org/admin_manual/doveadm_http_api/
 /// </summary>
-internal sealed class DovecotQuotaClient : IDovecotQuotaClient
+internal sealed class DovecotQuotaClient(
+    HttpClient http,
+    IOptions<DovecotOptions> options,
+    ILogger<DovecotQuotaClient> logger) : IDovecotQuotaClient
 {
-    private readonly HttpClient _http;
-    private readonly DovecotOptions _options;
-    private readonly ILogger<DovecotQuotaClient> _logger;
-
-    public DovecotQuotaClient(HttpClient http, IOptions<DovecotOptions> options, ILogger<DovecotQuotaClient> logger)
-    {
-        _http = http;
-        _options = options.Value;
-        _logger = logger;
-    }
+    private DovecotOptions Options => options.Value;
 
     public Task<Result<Quota>> GetQuotaAsync(User user, CancellationToken cancellationToken = default) =>
         CallDoveadmAsync(user, command: "quotaGet", tag: "q1",
@@ -51,9 +45,9 @@ internal sealed class DovecotQuotaClient : IDovecotQuotaClient
     {
         if (user == null) throw new ArgumentNullException(nameof(user));
 
-        if (string.IsNullOrWhiteSpace(_options.ApiUrl) || string.IsNullOrWhiteSpace(_options.ApiKey))
+        if (string.IsNullOrWhiteSpace(Options.ApiUrl) || string.IsNullOrWhiteSpace(Options.ApiKey))
         {
-            _logger.LogError("Dovecot API is not configured (ApiUrl/ApiKey missing)");
+            logger.LogError("Dovecot API is not configured (ApiUrl/ApiKey missing)");
             return Result.Failure<T>(notConfiguredMessage);
         }
 
@@ -62,19 +56,19 @@ internal sealed class DovecotQuotaClient : IDovecotQuotaClient
             new object[] { command, new { user = user.Email }, tag }
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.ApiUrl)
+        using var request = new HttpRequestMessage(HttpMethod.Post, Options.ApiUrl)
         {
             Content = JsonContent.Create(payload)
         };
-        var apiKeyB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_options.ApiKey));
+        var apiKeyB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(Options.ApiKey));
         request.Headers.TryAddWithoutValidation("Authorization", "X-Dovecot-API " + apiKeyB64);
 
         try
         {
-            using var response = await _http.SendAsync(request, cancellationToken);
+            using var response = await http.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Dovecot {Command} HTTP {Status} for user={User}", command, (int)response.StatusCode, user.Email);
+                logger.LogWarning("Dovecot {Command} HTTP {Status} for user={User}", command, (int)response.StatusCode, user.Email);
                 return Result.Failure<T>(failureMessage);
             }
 
@@ -93,7 +87,7 @@ internal sealed class DovecotQuotaClient : IDovecotQuotaClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Dovecot {Command} failed for user={User}", command, user.Email);
+            logger.LogError(ex, "Dovecot {Command} failed for user={User}", command, user.Email);
             return Result.Failure<T>(failureMessage);
         }
     }
@@ -114,7 +108,7 @@ internal sealed class DovecotQuotaClient : IDovecotQuotaClient
         var kind = first[0].GetString();
         if (kind == "error")
         {
-            _logger.LogWarning("Dovecot {Command} error for user={User}: {Payload}", command, user.Email, first[1].GetRawText());
+            logger.LogWarning("Dovecot {Command} error for user={User}: {Payload}", command, user.Email, first[1].GetRawText());
             return Result.Failure<JsonElement>(failureMessage);
         }
 

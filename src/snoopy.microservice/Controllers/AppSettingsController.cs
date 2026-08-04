@@ -17,15 +17,8 @@ namespace weesky.Snoopy.Microservice.Controllers;
 /// </summary>
 [Route("api/[controller]")]
 [ApiController]
-public sealed class AppSettingsController : ApiBaseController
+public sealed class AppSettingsController(IAppSettingStore store) : ApiBaseController
 {
-    private readonly IAppSettingStore _store;
-
-    public AppSettingsController(IAppSettingStore store)
-    {
-        _store = store;
-    }
-
     /// <summary>Every known setting, with the stored value where one exists.</summary>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">Key/value map covering every known setting</response>
@@ -35,7 +28,7 @@ public sealed class AppSettingsController : ApiBaseController
     public async Task<ActionResult<IReadOnlyDictionary<string, string>>> GetAppSettings(
         CancellationToken cancellationToken)
     {
-        var stored = await _store.GetAsync(cancellationToken);
+        var stored = await store.GetAsync(cancellationToken);
 
         return Ok(AppSettings.Effective(stored));
     }
@@ -64,7 +57,7 @@ public sealed class AppSettingsController : ApiBaseController
         if (!AppSettings.IsValid(key, value))
             return BadRequestEnveloppe($"'{value}' is not a value '{key}' accepts");
 
-        await _store.SetAsync(key, AppSettings.Normalize(key, value), cancellationToken);
+        await store.SetAsync(key, AppSettings.Normalize(key, value), cancellationToken);
 
         return StatusCode(StatusCodes.Status204NoContent);
     }

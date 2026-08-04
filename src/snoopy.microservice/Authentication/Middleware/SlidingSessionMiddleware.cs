@@ -21,11 +21,18 @@ public sealed class SlidingSessionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly IOptions<TokenConstants> _tokenConstants;
+    private readonly TimeProvider _clock;
 
-    public SlidingSessionMiddleware(RequestDelegate next, IOptions<TokenConstants> tokenConstants)
+    // Constructed by the pipeline, so the dependencies are the singletons; anything scoped arrives
+    // through InvokeAsync instead. The clock is the same one TokenManager stamps expiry with —
+    // this decides when that expiry is close enough to renew, and the two must not read
+    // different clocks.
+    public SlidingSessionMiddleware(
+        RequestDelegate next, IOptions<TokenConstants> tokenConstants, TimeProvider clock)
     {
         _next = next;
         _tokenConstants = tokenConstants;
+        _clock = clock;
     }
 
     public async Task InvokeAsync(
@@ -52,7 +59,7 @@ public sealed class SlidingSessionMiddleware
         if (!long.TryParse(expClaim, out var expiryUnix)) return;
 
         var lifetime = TimeSpan.FromMinutes(_tokenConstants.Value.ExpiryInMinutes);
-        var remaining = DateTimeOffset.FromUnixTimeSeconds(expiryUnix) - DateTimeOffset.UtcNow;
+        var remaining = DateTimeOffset.FromUnixTimeSeconds(expiryUnix) - _clock.GetUtcNow();
         if (remaining > lifetime / 2) return;
 
         // Renew both or neither. The payload is re-issued exactly as it came in: a v1 cookie stays

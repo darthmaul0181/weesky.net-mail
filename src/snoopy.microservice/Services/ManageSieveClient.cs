@@ -16,16 +16,10 @@ namespace weesky.Snoopy.Microservice.Services;
 /// <see cref="ManageSieveWire"/>, so nothing this class buffers past a line boundary is lost to
 /// the verbs behind it.
 /// </summary>
-internal sealed class ManageSieveClient : IManageSieveClient
+internal sealed class ManageSieveClient(
+    IOptions<SieveOptions> options, ILogger<ManageSieveClient> logger) : IManageSieveClient
 {
-    private readonly SieveOptions _options;
-    private readonly ILogger<ManageSieveClient> _logger;
-
-    public ManageSieveClient(IOptions<SieveOptions> options, ILogger<ManageSieveClient> logger)
-    {
-        _options = options.Value;
-        _logger = logger;
-    }
+    private SieveOptions Options => options.Value;
 
     public async Task<Result<IManageSieveSession>> OpenSessionAsync(SieveConnection connection, CancellationToken cancellationToken = default)
     {
@@ -34,7 +28,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
         // The authorization identity may legitimately be empty — that is the own-credentials shape.
         if (string.IsNullOrWhiteSpace(connection.Host) || string.IsNullOrWhiteSpace(connection.AuthenticationIdentity))
         {
-            _logger.LogError("ManageSieve target is incomplete: {Connection}", connection);
+            logger.LogError("ManageSieve target is incomplete: {Connection}", connection);
             return Result.Failure<IManageSieveSession>(SieveErrors.NotConfigured);
         }
 
@@ -44,15 +38,15 @@ internal sealed class ManageSieveClient : IManageSieveClient
         {
             tcp = new TcpClient
             {
-                ReceiveTimeout = _options.TimeoutSeconds * 1000,
-                SendTimeout = _options.TimeoutSeconds * 1000
+                ReceiveTimeout = Options.TimeoutSeconds * 1000,
+                SendTimeout = Options.TimeoutSeconds * 1000
             };
 
             // Those two socket timeouts bind synchronous calls only, and every step below is async:
             // this token is what stops a server that accepts and then goes silent from holding the
             // socket — and the request behind it — for good.
             using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            handshakeCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+            handshakeCts.CancelAfter(TimeSpan.FromSeconds(Options.TimeoutSeconds));
             var handshakeToken = handshakeCts.Token;
 
             await tcp.ConnectAsync(connection.Host, connection.Port, handshakeToken);
@@ -83,12 +77,12 @@ internal sealed class ManageSieveClient : IManageSieveClient
                 if (!postTlsStatus.IsOk)
                     return FailUnreachable("post-STARTTLS handshake", connection.Host, postTlsStatus.Message);
             }
-            else if (!_options.AllowCleartext)
+            else if (!Options.AllowCleartext)
             {
                 // The next thing on this socket is a password inside a SASL PLAIN payload. The
                 // banner that advertises STARTTLS arrives unencrypted, so a missing capability is
                 // indistinguishable from one an attacker stripped: refuse rather than downgrade.
-                _logger.LogError(
+                logger.LogError(
                     "ManageSieve host={Host} does not advertise STARTTLS. Refusing to send the " +
                     "credentials in the clear. Set Sieve:AllowCleartext only if the link is trusted.",
                     connection.Host);
@@ -103,11 +97,11 @@ internal sealed class ManageSieveClient : IManageSieveClient
             var authStatus = await ReadSimpleStatusAsync(wire, handshakeToken);
             if (!authStatus.IsOk)
             {
-                _logger.LogWarning("ManageSieve auth failed for {Connection}: {Message}", connection, authStatus.Message);
+                logger.LogWarning("ManageSieve auth failed for {Connection}: {Message}", connection, authStatus.Message);
                 return Fail(SieveErrors.AuthenticationFailed);
             }
 
-            var session = new ManageSieveSession(wire, TimeSpan.FromSeconds(_options.TimeoutSeconds));
+            var session = new ManageSieveSession(wire, TimeSpan.FromSeconds(Options.TimeoutSeconds));
             wire = null; // ownership transferred: disposing the session now closes the connection
             return Result.Success<IManageSieveSession>(session);
         }
@@ -117,7 +111,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unable to open ManageSieve session for {Connection}", connection);
+            logger.LogError(ex, "Unable to open ManageSieve session for {Connection}", connection);
             return Result.Failure<IManageSieveSession>(SieveErrors.Unreachable);
         }
         finally
@@ -132,12 +126,12 @@ internal sealed class ManageSieveClient : IManageSieveClient
     private bool ValidateCertificate(string host, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
     {
         if (sslPolicyErrors == SslPolicyErrors.None) return true;
-        if (_options.AllowInvalidCertificate)
+        if (Options.AllowInvalidCertificate)
         {
-            _logger.LogWarning("Ignoring TLS certificate error for ManageSieve host={Host}: {Errors}", host, sslPolicyErrors);
+            logger.LogWarning("Ignoring TLS certificate error for ManageSieve host={Host}: {Errors}", host, sslPolicyErrors);
             return true;
         }
-        _logger.LogError("TLS certificate validation failed for ManageSieve host={Host}: {Errors}", host, sslPolicyErrors);
+        logger.LogError("TLS certificate validation failed for ManageSieve host={Host}: {Errors}", host, sslPolicyErrors);
         return false;
     }
 
@@ -150,7 +144,7 @@ internal sealed class ManageSieveClient : IManageSieveClient
     /// </summary>
     private Result<IManageSieveSession> FailUnreachable(string step, string host, string? detail)
     {
-        _logger.LogWarning("ManageSieve {Step} failed on host={Host}: {Detail}", step, host, detail);
+        logger.LogWarning("ManageSieve {Step} failed on host={Host}: {Detail}", step, host, detail);
         return Fail(SieveErrors.Unreachable);
     }
 
