@@ -517,7 +517,7 @@ public sealed class MailComposeControllerTests
             .ReturnsAsync(Result.Success(prepared));
 
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+            new OpenDraftRequest { Folder = "Drafts", Uid = 7 }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var opened = Assert.IsType<OpenedDraft>(ok.Value);
@@ -544,7 +544,7 @@ public sealed class MailComposeControllerTests
             .ReturnsAsync(Result.Success(new PreparedQuote("<p>Hi</p>", [])));
 
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+            new OpenDraftRequest { Folder = "Drafts", Uid = 7 }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(MailPriority.High, Assert.IsType<OpenedDraft>(ok.Value).Priority);
@@ -561,7 +561,7 @@ public sealed class MailComposeControllerTests
             .ReturnsAsync(Result.Success(new PreparedQuote("<div>hello<br>there</div>", [])));
 
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+            new OpenDraftRequest { Folder = "Drafts", Uid = 7 }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal("hello\nthere", Assert.IsType<OpenedDraft>(ok.Value).TextBody);
@@ -577,7 +577,7 @@ public sealed class MailComposeControllerTests
             .ReturnsAsync(Result.Success(new PreparedQuote("<p>Hi</p>", [])));
 
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+            new OpenDraftRequest { Folder = "Drafts", Uid = 7 }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Null(Assert.IsType<OpenedDraft>(ok.Value).TextBody);
@@ -590,7 +590,7 @@ public sealed class MailComposeControllerTests
             .ReturnsAsync(Result.Failure<MimeMessage>(ImapSession.MessageNotFound));
 
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("Drafts", 9), CancellationToken.None);
+            new OpenDraftRequest { Folder = "Drafts", Uid = 9 }, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
@@ -604,7 +604,7 @@ public sealed class MailComposeControllerTests
             .ReturnsAsync(Result.Failure<PreparedQuote>("cap"));
 
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("Drafts", 7), CancellationToken.None);
+            new OpenDraftRequest { Folder = "Drafts", Uid = 7 }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
@@ -613,7 +613,7 @@ public sealed class MailComposeControllerTests
     public async Task OpenDraft_RequiresAFolder()
     {
         var result = await CreateController().OpenDraft(
-            new OpenDraftRequest("", 7), CancellationToken.None);
+            new OpenDraftRequest { Folder = "", Uid = 7 }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         _messages.Verify(m => m.GetMimeMessageAsync(

@@ -101,13 +101,13 @@ public sealed class MessageRequestValidationTests
     [Fact]
     public void OpenDraft_WithoutAFolder_IsRefused()
     {
-        Assert.Contains("A folder is required", RequestValidation.Messages(new OpenDraftRequest("", 5)));
+        Assert.Contains("A folder is required", RequestValidation.Messages(new OpenDraftRequest { Folder = "", Uid = 5 }));
     }
 
     [Fact]
     public void OpenDraft_WithAFolder_IsValid()
     {
-        Assert.Empty(RequestValidation.Messages(new OpenDraftRequest("Drafts", 5)));
+        Assert.Empty(RequestValidation.Messages(new OpenDraftRequest { Folder = "Drafts", Uid = 5 }));
     }
 
     // ── Outgoing message ceilings ───────────────────────────────────────
