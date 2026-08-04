@@ -65,14 +65,20 @@ systemctl restart snoopy.microservice snoopy.microservice-dev
    naming this fix, and crash-loops once a minute under `Restart=always` — visible and
    intentional, rather than a working-looking service whose limiter protects nobody.
 
-2. The request log carries client addresses rather than the proxy's:
+2. The **backend's own** HTTP log carries client addresses rather than the proxy's. Serilog writes
+   it to a file of its own — this is not the web server's access log, and not `journalctl`:
 
    ```bash
-   journalctl -u snoopy.microservice-dev --since "5 min ago" | grep RemoteIp
+   tail -f /var/log/snoopy.microservice/log*http*.log
    ```
 
-   Every line reading `127.0.0.1` while you browse from another machine means the header is not
-   being honoured — the proxy address named above does not match the one it really connects from.
+   Each line reads `HTTP GET /api/... from <address> responded 200 in … ms`. Browse from another
+   machine: the address must be that machine's. Every line reading `127.0.0.1` (or whatever the
+   proxy connects from) means the header is not being honoured — the address named above does not
+   match the one the proxy really uses.
+
+   The two files are `log-http-*.log` for requests and `log-*.log` for everything else, prefixed
+   with the environment name outside production (`log-development-http-*.log` on the dev unit).
 
 3. **The test that proves the partition works:** fail a login five times from one machine, then
    sign in normally from another. The second machine must not see `429`.

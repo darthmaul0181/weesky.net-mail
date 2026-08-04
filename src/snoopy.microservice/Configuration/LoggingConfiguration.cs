@@ -52,10 +52,25 @@ internal static class LoggingConfiguration
         });
     }
 
-    /// <summary>The health probe runs constantly; at Information it is the whole HTTP log.</summary>
+    /// <summary>
+    /// The health probe runs constantly; at Information it is the whole HTTP log.
+    ///
+    /// The caller's address is named in the line, which the default template does not carry: it is
+    /// what a 401 or a 429 has to be read against — one address failing five logins is a user who
+    /// forgot their password, five hundred addresses failing one each is not — and it is the value
+    /// the login limiter partitions on, so this log is also how one sees whether
+    /// <see cref="SecurityConfiguration.AddProxyForwardedHeaders"/> is doing its job. Set from the
+    /// connection rather than from the header, so what appears here is the address the limiter used.
+    /// </summary>
     public static IApplicationBuilder UseSnoopyRequestLogging(this IApplicationBuilder app) =>
         app.UseSerilogRequestLogging(options =>
         {
+            options.MessageTemplate =
+                "HTTP {RequestMethod} {RequestPath} from {ClientIp} responded {StatusCode} in {Elapsed:0.0000} ms";
+
+            options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+                diagnosticContext.Set("ClientIp", httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+
             options.GetLevel = (ctx, _, _) =>
                 ctx.Request.Path == "/health" ? LogEventLevel.Verbose : LogEventLevel.Information;
         });
