@@ -46,6 +46,13 @@ session key is in hand. This is what lets the refresh token be encrypted the sam
 and it is a constraint to respect rather than an accident: the day a background job needs a mailbox,
 the encryption key becomes the question again.
 
+**Not a re-consent on every password change.** `AccountController.ReKeyConnectedAccountsAsync`
+already re-encrypts every connected-account cipher under the key the new password derives, and it is
+generic over what the cipher holds: a refresh token rides through a password change exactly as a
+password does, provided `ConnectedAccountCipher.Context(row)` reads the mode off the row — which is
+one more reason the mode lives there rather than on the domain. Only a password changed *outside*
+the application orphans a cipher, as it does today.
+
 **Not a token vault.** No access token is ever written to the database. It lives in process memory
 for its hour and dies with the process.
 
@@ -234,9 +241,9 @@ alongside `DovecotQuotaClient`:
    refresh. When the response carries one, the row's cipher is re-encrypted and updated. This is a
    write on a read path, and it is not best-effort the way `BindCipherAsync` is: dropping a rotated
    token loses the account. It fails the resolution if it fails.
-5. **`invalid_grant`** — the consent was withdrawn, the token expired after 90 days of silence, or
-   the password change invalidated nothing but our ability to read it — resolves to
-   `ConnectedAccountErrors.CredentialsInvalid`, the existing **409**.
+5. **`invalid_grant`** — the consent was withdrawn at the provider, or the refresh token expired
+   after 90 days of silence — resolves to `ConnectedAccountErrors.CredentialsInvalid`, the existing
+   **409**.
 6. Any other failure — network, 5xx, a malformed response — resolves to a new
    `ConnectedAccountErrors.ProviderUnavailable`, mapped to **502** in
    `ApiBaseController.ConnectedAccountError`, beside the two constants already there.
