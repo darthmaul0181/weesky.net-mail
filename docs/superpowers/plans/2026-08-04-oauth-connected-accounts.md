@@ -22,6 +22,22 @@
 - The mail rules in `src/snoopy.microservice/CLAUDE.md` are binding, rule 4 above all: **401 credentials cookie, 404 account not found, 409 connected credentials invalid, 502 anything the server refused.** No new status is introduced by this plan.
 - Frontend: a token names a role, never a colour; test files sit beside what they test.
 
+## Packets
+
+The eight tasks below are grouped into **four packets**, and a packet is one worker's assignment:
+it is the unit that gets a fresh context and a review gate. The tasks inside a packet share a
+subject and are committed separately, so a reviewer can still reject one without the other.
+
+| packet | tasks | delivers |
+|---|---|---|
+| **1 — Room for a second credential** | 1, 2 | a connection carries a `MailCredential`; a cipher carries a mode and a token's worth of bytes |
+| **2 — The provider and the token** | 3, 4, 5 | an OAuth row resolves to a live access token |
+| **3 — The consent** | 6, 7 | a mailbox can be attached by consenting at the provider |
+| **4 — The screen** | 8 | the settings page offers it |
+
+Packets run in order: each consumes what the previous produced. Packet 2 is the heavy one — three
+tasks, the token service among them — and is the one to give the strongest model.
+
 ---
 
 ## File Structure
@@ -64,6 +80,11 @@
 - `src/api.js`, `src/modules/settings/accounts/useConnectedAccounts.ts`, `ConnectAccountForm.tsx`, `ConnectedAccountsPage.tsx`.
 
 ---
+
+# Packet 1 — Room for a second credential
+
+Two tasks, two commits. Nothing acquires or stores a token yet: this packet only makes the shape
+exist, and proves it by authenticating over XOAUTH2 against a fake server.
 
 ## Task 1: The closed credential type
 
@@ -517,6 +538,12 @@ EOF
 ```
 
 ---
+
+# Packet 2 — The provider and the token
+
+Three tasks, three commits, and the packet's whole claim is the last one: an OAuth connected
+account resolves to a live access token, or to the 409 or 502 that says why it could not. This is
+the heaviest packet; do the tasks in order and run the full suite at each commit.
 
 ## Task 3: The provider record
 
@@ -1503,6 +1530,11 @@ EOF
 
 ---
 
+# Packet 3 — The consent
+
+Two tasks, two commits. At the end of this packet the backend is complete: a mailbox can be
+attached, and re-attached, by consenting at the provider. Nothing offers it on screen yet.
+
 ## Task 6: The pending handshake
 
 **Files:**
@@ -2104,6 +2136,10 @@ EOF
 ```
 
 ---
+
+# Packet 4 — The screen
+
+One task, one commit.
 
 ## Task 8: The frontend
 
