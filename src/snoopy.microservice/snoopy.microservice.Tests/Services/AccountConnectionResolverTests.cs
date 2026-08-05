@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using MailKit.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -32,6 +33,7 @@ public sealed class AccountConnectionResolverTests
     private readonly ConnectedAccountStore _accounts;
     private readonly ExternalDomainStore _domains;
     private readonly byte[] _kek = ConnectedAccountCipher.DeriveKek(MainPassword, ConnectedAccountCipher.NewSalt());
+    private readonly Mock<IOAuthTokenService> _oauth = new();
 
     /// <summary>
     /// A second context over the same database, as production has one per request. The binding
@@ -57,7 +59,7 @@ public sealed class AccountConnectionResolverTests
         monitor.Setup(m => m.CurrentValue).Returns(options);
 
         return new AccountConnectionResolver(
-            _credentials, _accounts, _domains, _users, monitor.Object,
+            _credentials, _accounts, _domains, _users, _oauth.Object, monitor.Object,
             Options.Create(new TokenConstants { ExpiryInMinutes = 2880 }),
             NullLogger<AccountConnectionResolver>.Instance);
     }
@@ -75,7 +77,8 @@ public sealed class AccountConnectionResolverTests
     private DefaultHttpContext V2Context() => ContextWithCookie(new MailCredentialPayload(MainPassword, _kek));
 
     private async Task<ConnectedAccount> ConnectAccountAsync(
-        string email, string secret, Guid? domainId = null, Guid? ownerId = null, byte[]? kek = null)
+        string email, string secret, Guid? domainId = null, Guid? ownerId = null, byte[]? kek = null,
+        MailAuthMode authMode = MailAuthMode.Password)
     {
         // Id first, like the controller: the cipher is bound to the row it will live on.
         var row = new ConnectedAccount
@@ -83,7 +86,8 @@ public sealed class AccountConnectionResolverTests
             Id = Guid.NewGuid(),
             UserId = ownerId ?? _alice.WebmailUid,
             DomainId = domainId,
-            Email = email
+            Email = email,
+            AuthMode = authMode
         };
         row.Cipher = ConnectedAccountCipher.Encrypt(
             kek ?? _kek, secret, ConnectedAccountCipher.Context(row));
@@ -148,7 +152,7 @@ public sealed class AccountConnectionResolverTests
         var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("provider-pw", result.Value.Password);
+        Assert.Equal(new PasswordCredential("provider-pw"), result.Value.Credential);
 
         var stored = await _arrangedAccounts.FindAsync(_alice.WebmailUid, account.Id, CancellationToken.None);
         ConnectedAccountCipher.Decrypt(
@@ -169,7 +173,7 @@ public sealed class AccountConnectionResolverTests
         var again = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
 
         Assert.True(again.IsSuccess);
-        Assert.Equal("provider-pw", again.Value.Password);
+        Assert.Equal(new PasswordCredential("provider-pw"), again.Value.Credential);
     }
 
     [Fact]
@@ -304,7 +308,7 @@ public sealed class AccountConnectionResolverTests
             "imap.gmail.test", 993, SecureSocketOptions.SslOnConnect,
             "smtp.gmail.test", 587, SecureSocketOptions.StartTls,
             "sieve.gmail.test", 4190,
-            "alice@gmail.test", "gmailpw"), result.Value);
+            "alice@gmail.test", new PasswordCredential("gmailpw")), result.Value);
     }
 
     [Fact]
@@ -433,7 +437,7 @@ public sealed class AccountConnectionResolverTests
         var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("sharedpw", result.Value.Password);
+        Assert.Equal(new PasswordCredential("sharedpw"), result.Value.Credential);
 
         // The response now carries the upgraded cookie, KEK included.
         var reread = new DefaultHttpContext();
@@ -453,6 +457,90 @@ public sealed class AccountConnectionResolverTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(context.Response.Headers["Set-Cookie"].ToArray());
+    }
+
+    /// <summary>An OAuth provider with all five columns filled, as the admin screen will write it.</summary>
+    private static void MakeOAuth(ExternalDomain domain)
+    {
+        domain.AuthMode = MailAuthMode.OAuth2;
+        domain.OAuthAuthorizationUrl = "https://provider.test/authorize";
+        domain.OAuthTokenUrl = "https://provider.test/token";
+        domain.OAuthScopes = "offline_access";
+        domain.OAuthClientId = "client-id";
+        domain.OAuthClientSecret = [1, 2, 3];
+    }
+
+    private async Task<(ConnectedAccount Account, DefaultHttpContext Context)> ConnectOAuthAccountAsync(
+        Action<ExternalDomain>? mutate = null)
+    {
+        var domain = await CreateDomainAsync(d => { MakeOAuth(d); mutate?.Invoke(d); });
+        var account = await ConnectAccountAsync(
+            "alice@outlook.test", "rt-1", domain.Id, authMode: MailAuthMode.OAuth2);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+        return (account, context);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_OfAnOAuthAccount_CarriesTheAccessToken()
+    {
+        var (account, context) = await ConnectOAuthAccountAsync();
+        _oauth.Setup(o => o.GetAccessTokenAsync(
+                It.Is<ConnectedAccount>(r => r.Id == account.Id), It.IsAny<OAuthProviderConfig>(),
+                It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success("at-1"));
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new OAuthCredential("at-1"), result.Value.Credential);
+        Assert.False(result.Value.IsHomeServer);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenTheProviderRefusesTheRefreshToken_Answers409()
+    {
+        var (_, context) = await ConnectOAuthAccountAsync();
+        _oauth.Setup(o => o.GetAccessTokenAsync(
+                It.IsAny<ConnectedAccount>(), It.IsAny<OAuthProviderConfig>(),
+                It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<string>(ConnectedAccountErrors.CredentialsInvalid));
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.CredentialsInvalid, result.Error);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenTheProviderIsUnreachable_AnswersProviderUnavailable()
+    {
+        var (_, context) = await ConnectOAuthAccountAsync();
+        _oauth.Setup(o => o.GetAccessTokenAsync(
+                It.IsAny<ConnectedAccount>(), It.IsAny<OAuthProviderConfig>(),
+                It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<string>(ConnectedAccountErrors.ProviderUnavailable));
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.ProviderUnavailable, result.Error);
+    }
+
+    // Administrator error, not user error: the same 404 an unusable security value answers, and
+    // the token service is never asked to work with a half-described provider.
+    [Fact]
+    public async Task ResolveAsync_AnIncompleteOAuthDomain_FailsAccountNotFoundWithoutExchanging()
+    {
+        var (_, context) = await ConnectOAuthAccountAsync(d => d.OAuthTokenUrl = null);
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.AccountNotFound, result.Error);
+        _oauth.Verify(o => o.GetAccessTokenAsync(
+            It.IsAny<ConnectedAccount>(), It.IsAny<OAuthProviderConfig>(),
+            It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static string ExtractCookieValue(HttpResponse response)

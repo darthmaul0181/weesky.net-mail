@@ -51,6 +51,7 @@ function connected(over: Record<string, unknown> = {}) {
     id: 'g1', email: 'support@acme.com', displayName: 'Support',
     domainId: 'd1', domainName: 'acme.com',
     sieveSupported: true, credentialsValid: true, creationDate: '2026-07-01',
+    authMode: 'Password',
     ...over,
   }
 }
@@ -228,6 +229,18 @@ describe('IdentityMenu', () => {
     expect(path()).toBe('/settings/accounts')
     expect(localStorage.getItem('mail.activeAccount')).toBeNull()
     expect(screen.getByText('mick@weesky.be')).toBeInTheDocument()
+  })
+
+  // Same dead end, different repair: a provider mailbox has no password to re-enter.
+  it('names the repair a provider mailbox actually needs', async () => {
+    mocks.getConnectedAccounts.mockResolvedValue(
+      [connected({ credentialsValid: false, authMode: 'OAuth2' })])
+    renderMenu()
+    await openMenu()
+
+    const row = await screen.findByRole('menuitem', { name: /support@acme\.com/ })
+    expect(row).toHaveTextContent('Sign-in needed')
+    expect(row).not.toHaveTextContent('Password needed')
   })
 
   it('navigates to the linked accounts page from Connected accounts…', async () => {

@@ -120,19 +120,34 @@ public sealed class ImapSessionListFoldersTests
 internal sealed class FakeImapServer : IDisposable
 {
     private readonly bool _condStore;
+    private readonly bool _oauth;
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
 
-    public FakeImapServer(bool condStore = false) => _condStore = condStore;
+    public FakeImapServer(bool condStore = false, bool oauth = false)
+    {
+        _condStore = condStore;
+        _oauth = oauth;
+    }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
     /// <summary>Raw STATUS command lines, so tests can assert what was actually requested.</summary>
     public List<string> StatusRequests { get; } = new();
 
-    private string Caps => _condStore
-        ? "IMAP4rev1 NAMESPACE SPECIAL-USE CONDSTORE"
-        : "IMAP4rev1 NAMESPACE SPECIAL-USE";
+    /// <summary>The SASL mechanism the client actually chose.</summary>
+    public string? AuthenticateMechanism { get; private set; }
+
+    private string Caps
+    {
+        get
+        {
+            var baseCaps = _condStore
+                ? "IMAP4rev1 NAMESPACE SPECIAL-USE CONDSTORE"
+                : "IMAP4rev1 NAMESPACE SPECIAL-USE";
+            return _oauth ? $"{baseCaps} AUTH=XOAUTH2 LOGINDISABLED" : baseCaps;
+        }
+    }
 
     public void Start()
     {
@@ -200,6 +215,15 @@ internal sealed class FakeImapServer : IDisposable
                         await writer.WriteLineAsync("* BYE logging out");
                         await writer.WriteLineAsync($"{tag} OK LOGOUT completed");
                         return;
+
+                    case "AUTHENTICATE":
+                        AuthenticateMechanism = parts.Length > 2
+                            ? parts[2].Split(' ')[0].ToUpperInvariant()
+                            : string.Empty;
+                        // The client sends the payload with the command (SASL-IR); nothing here
+                        // reads it, since what is under test is the mechanism, not the secret.
+                        await writer.WriteLineAsync($"{tag} OK [CAPABILITY {Caps}] AUTHENTICATE completed");
+                        break;
 
                     default:
                         await writer.WriteLineAsync($"{tag} BAD unhandled command in fake server: {command}");

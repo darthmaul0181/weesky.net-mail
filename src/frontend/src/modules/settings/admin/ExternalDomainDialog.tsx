@@ -29,6 +29,17 @@ function isValidPort(value: string): boolean {
   return port >= 1 && port <= 65535
 }
 
+// Mirrors OAuthProviderConfig.IsHttps: an endpoint reached in the clear would put the client
+// secret on the wire, so there is no opt-in the way there is for IMAP.
+function isHttpsUrl(value: string): boolean {
+  if (!value || value.length > 512) return false
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 interface Props {
   domain?: ExternalDomain | null
   onSave: () => void
@@ -54,6 +65,13 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
   const [smtpSecurity, setSmtpSecurity] = useState(domain?.smtpSecurity ?? 'StartTls')
   const [sieveHost, setSieveHost] = useState(domain?.sieveHost ?? '')
   const [sievePort, setSievePort] = useState(domain?.sievePort != null ? String(domain.sievePort) : '')
+  const [authMode, setAuthMode] = useState<'Password' | 'OAuth2'>(domain?.authMode ?? 'Password')
+  const [oauthAuthorizationUrl, setOauthAuthorizationUrl] = useState(domain?.oauthAuthorizationUrl ?? '')
+  const [oauthTokenUrl, setOauthTokenUrl] = useState(domain?.oauthTokenUrl ?? '')
+  const [oauthScopes, setOauthScopes] = useState(domain?.oauthScopes ?? '')
+  const [oauthClientId, setOauthClientId] = useState(domain?.oauthClientId ?? '')
+  // Always seeded empty: the stored secret is write-only and never comes back from the API.
+  const [oauthClientSecret, setOauthClientSecret] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const nameValid = name.trim() !== '' && name.length <= 100
@@ -68,8 +86,18 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
   const sieveHostValid = !sieveHostFilled || isValidHost(sieveHost)
   const sievePortValid = !sievePortFilled || isValidPort(sievePort)
 
+  const isOAuth = authMode === 'OAuth2'
+  const secretStored = !!domain?.oauthClientSecretSet
+  const authUrlValid = isHttpsUrl(oauthAuthorizationUrl.trim())
+  const tokenUrlValid = isHttpsUrl(oauthTokenUrl.trim())
+  const scopesValid = oauthScopes.trim() !== '' && oauthScopes.length <= 1024
+  const clientIdValid = oauthClientId.trim() !== '' && oauthClientId.length <= 255
+  const secretValid = (oauthClientSecret !== '' && oauthClientSecret.length <= 512) || secretStored
+  const oauthValid = !isOAuth
+    || (authUrlValid && tokenUrlValid && scopesValid && clientIdValid && secretValid)
+
   const canSubmit = nameValid && imapHostValid && imapPortValid && smtpHostValid && smtpPortValid
-    && !sieveMismatch && sieveHostValid && sievePortValid
+    && !sieveMismatch && sieveHostValid && sievePortValid && oauthValid
 
   const pending = createDomain.isPending || updateDomain.isPending
 
@@ -87,6 +115,13 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
       smtpSecurity,
       sieveHost: sieveHostFilled ? sieveHost.trim() : null,
       sievePort: sievePortFilled ? Number(sievePort) : null,
+      authMode,
+      oauthAuthorizationUrl: isOAuth ? oauthAuthorizationUrl.trim() : null,
+      oauthTokenUrl: isOAuth ? oauthTokenUrl.trim() : null,
+      oauthScopes: isOAuth ? oauthScopes.trim() : null,
+      oauthClientId: isOAuth ? oauthClientId.trim() : null,
+      // Empty on an edit means "keep the stored secret" — the dialog has nothing to send back.
+      oauthClientSecret: isOAuth && oauthClientSecret !== '' ? oauthClientSecret : null,
     }
     try {
       if (isEdit) {
@@ -158,6 +193,55 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
               {SECURITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+
+          <div className="field-h">
+            <label htmlFor="ext-domain-auth-mode">Authentication</label>
+            <select id="ext-domain-auth-mode" value={authMode}
+              onChange={e => setAuthMode(e.target.value as 'Password' | 'OAuth2')}>
+              <option value="Password">Password</option>
+              <option value="OAuth2">OAuth 2.0</option>
+            </select>
+          </div>
+
+          {isOAuth && (
+            <>
+              <div className="field-h">
+                <label htmlFor="ext-domain-oauth-auth-url">Authorization URL</label>
+                <input id="ext-domain-oauth-auth-url" type="text" value={oauthAuthorizationUrl}
+                  className={oauthAuthorizationUrl && !authUrlValid ? 'is-error' : undefined}
+                  onChange={e => setOauthAuthorizationUrl(e.target.value)} />
+              </div>
+              <div className="field-h">
+                <label htmlFor="ext-domain-oauth-token-url">Token URL</label>
+                <input id="ext-domain-oauth-token-url" type="text" value={oauthTokenUrl}
+                  className={oauthTokenUrl && !tokenUrlValid ? 'is-error' : undefined}
+                  onChange={e => setOauthTokenUrl(e.target.value)} />
+              </div>
+              <div className="field-h">
+                <label htmlFor="ext-domain-oauth-scopes">Scopes</label>
+                <input id="ext-domain-oauth-scopes" type="text" value={oauthScopes}
+                  className={oauthScopes && !scopesValid ? 'is-error' : undefined}
+                  onChange={e => setOauthScopes(e.target.value)} />
+              </div>
+              <div className="field-h">
+                <label htmlFor="ext-domain-oauth-client-id">Client id</label>
+                <input id="ext-domain-oauth-client-id" type="text" value={oauthClientId}
+                  className={oauthClientId && !clientIdValid ? 'is-error' : undefined}
+                  onChange={e => setOauthClientId(e.target.value)} />
+              </div>
+              <div className="field-h">
+                <label htmlFor="ext-domain-oauth-secret">Client secret</label>
+                <input id="ext-domain-oauth-secret" type="password" autoComplete="new-password"
+                  value={oauthClientSecret} placeholder={secretStored ? 'Unchanged' : undefined}
+                  onChange={e => setOauthClientSecret(e.target.value)} />
+              </div>
+              <p className="settings-note">
+                {secretStored
+                  ? 'A client secret is stored. It is never shown; leave the field empty to keep it.'
+                  : 'The secret is stored encrypted and never shown again. Both URLs must be https.'}
+              </p>
+            </>
+          )}
 
           <p className="admin-list-title" style={{ marginTop: '16px', marginBottom: '8px' }}>
             Sieve filters (optional)

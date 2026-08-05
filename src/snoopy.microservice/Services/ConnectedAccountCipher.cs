@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CSharpFunctionalExtensions;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
 
@@ -10,7 +11,7 @@ namespace weesky.Snoopy.Microservice.Services;
 /// the server alone can never decrypt what it stores. Pure and static: no state, no DI.
 ///
 /// Each ciphertext is additionally bound to the row it belongs to — see
-/// <see cref="Context(Guid, Guid, Guid?, string)"/>. The key
+/// <see cref="Context(Guid, Guid, Guid?, string, MailAuthMode)"/>. The key
 /// is per-user, not per-account, so without that binding write access to the database is enough to
 /// point a row at another host — or to move one account's cipher onto another's row — and have the
 /// server hand that host the password it faithfully decrypted. SASL PLAIN sends the credentials
@@ -28,8 +29,9 @@ internal static class ConnectedAccountCipher
     /// <summary>Marks a blob carrying associated data; a pre-binding one opens straight on its nonce.</summary>
     private const byte BoundVersion = 0x02;
 
-    // connected_accounts.cipher is VARBINARY(512); 512 - 1 (version) - 12 (nonce) - 16 (tag) = 483.
-    public const int MaxSecretLength = 483;
+    // connected_accounts.cipher is VARBINARY(8192); 8192 - 1 (version) - 12 (nonce) - 16 (tag) = 8163.
+    // Not a precaution: a Microsoft refresh token is an encrypted blob that routinely exceeds 1 KB.
+    public const int MaxSecretLength = 8163;
 
     /// <summary>AES-256: any other length is not a key this cipher can ever have produced.</summary>
     public const int KekLength = 32;
@@ -47,10 +49,17 @@ internal static class ConnectedAccountCipher
     ///
     /// The guids cannot contain the separator and the address comes last, so no two different
     /// rows can produce the same context.
+    ///
+    /// The mode segment is written only for OAuth, and before the address: every row bound before
+    /// the mode existed still opens, and the address stays last so no two rows can collide.
     /// </summary>
-    public static byte[] Context(Guid accountId, Guid userId, Guid? domainId, string email) =>
+    public static byte[] Context(
+        Guid accountId, Guid userId, Guid? domainId, string email,
+        MailAuthMode authMode = MailAuthMode.Password) =>
         Encoding.UTF8.GetBytes(
-            $"{accountId:D}|{userId:D}|{domainId?.ToString("D") ?? string.Empty}|{email}");
+            $"{accountId:D}|{userId:D}|{domainId?.ToString("D") ?? string.Empty}|"
+            + (authMode is MailAuthMode.OAuth2 ? "oauth2|" : string.Empty)
+            + email);
 
     /// <summary>
     /// The context of a row — one definition, so the five call sites cannot drift. The address is
@@ -58,8 +67,11 @@ internal static class ConnectedAccountCipher
     /// raw spelling at creation time would bind the cipher to an address the row never holds, and
     /// it would never open again.
     /// </summary>
-    public static byte[] Context(ConnectedAccount row) =>
-        Context(row.Id, row.UserId, row.DomainId, IdentityResolver.Canonical(row.Email));
+    public static byte[] Context(ConnectedAccount row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return Context(row.Id, row.UserId, row.DomainId, IdentityResolver.Canonical(row.Email), row.AuthMode);
+    }
 
     public static byte[] Encrypt(byte[] kek, string secret, byte[] context)
     {

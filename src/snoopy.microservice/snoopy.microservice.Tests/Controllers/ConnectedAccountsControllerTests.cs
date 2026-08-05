@@ -65,8 +65,9 @@ public sealed class ConnectedAccountsControllerTests
         monitor.Setup(m => m.CurrentValue).Returns(TestConnections.HomeOptions());
 
         var controller = new ConnectedAccountsController(
-            _accounts, _domains, _identities, _credentials, _users, _imap.Object, monitor.Object,
-            NullLogger<ConnectedAccountsController>.Instance)
+            _accounts, _domains, _identities, _credentials, _users, _imap.Object,
+            new Mock<IOAuthHandshakeStore>().Object, new Mock<IOAuthTokenService>().Object,
+            monitor.Object, NullLogger<ConnectedAccountsController>.Instance)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", Uid)
         };
@@ -144,8 +145,9 @@ public sealed class ConnectedAccountsControllerTests
         monitor.Setup(m => m.CurrentValue).Returns(TestConnections.HomeOptions());
 
         var controller = new ConnectedAccountsController(
-            _accounts, _domains, identities, _credentials, _users, _imap.Object, monitor.Object,
-            NullLogger<ConnectedAccountsController>.Instance)
+            _accounts, _domains, identities, _credentials, _users, _imap.Object,
+            new Mock<IOAuthHandshakeStore>().Object, new Mock<IOAuthTokenService>().Object,
+            monitor.Object, NullLogger<ConnectedAccountsController>.Instance)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", Uid)
         };
@@ -350,7 +352,8 @@ public sealed class ConnectedAccountsControllerTests
         _imap.Verify(f => f.OpenAsync(
             It.Is<MailAccountConnection>(c =>
                 c.ImapHost == "imap.gmail.test" && c.ImapPort == 993 &&
-                c.Username == "alice@gmail.test" && c.Password == "gmailpw" && !c.IsHomeServer),
+                c.Username == "alice@gmail.test" && c.Credential == new PasswordCredential("gmailpw") &&
+                !c.IsHomeServer),
             It.IsAny<CancellationToken>()), Times.Once);
         session.Verify(s => s.DisposeAsync(), Times.Once);
     }
@@ -571,7 +574,8 @@ public sealed class ConnectedAccountsControllerTests
             account.Id, new ConnectedAccountPasswordRequest("newpw"), CancellationToken.None);
 
         _imap.Verify(f => f.OpenAsync(
-            It.Is<MailAccountConnection>(c => c.Password == "newpw" && c.Username == "shared@weesky.be"),
+            It.Is<MailAccountConnection>(c =>
+                c.Credential == new PasswordCredential("newpw") && c.Username == "shared@weesky.be"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

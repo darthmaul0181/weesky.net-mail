@@ -1,3 +1,4 @@
+using System.Text;
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,20 +23,27 @@ public sealed class AdminController : ApiBaseController
 
     private static readonly HashSet<string> EncryptedSecurities = ["StartTls", "SslOnConnect"];
 
+    /// <summary>Bounds the protected blob under oauth_client_secret's VARBINARY(1024): 512 bytes
+    /// of plaintext stay well inside it once Data Protection adds its framing.</summary>
+    private const int MaxClientSecretBytes = 512;
+
     private readonly IAdminRepository _adminRepository;
     private readonly IDovecotQuotaClient _dovecotQuotaClient;
     private readonly IExternalDomainStore _externalDomains;
+    private readonly IClientSecretProtector _secretProtector;
     private readonly IOptionsMonitor<MailOptions> _mailOptions;
 
     public AdminController(
         IAdminRepository adminRepository,
         IDovecotQuotaClient dovecotQuotaClient,
         IExternalDomainStore externalDomains,
+        IClientSecretProtector secretProtector,
         IOptionsMonitor<MailOptions> mailOptions)
     {
         _adminRepository = adminRepository;
         _dovecotQuotaClient = dovecotQuotaClient;
         _externalDomains = externalDomains;
+        _secretProtector = secretProtector;
         _mailOptions = mailOptions;
     }
 
@@ -270,10 +278,11 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult<ExternalDomainResponse>> CreateExternalDomain(
         ExternalDomainRequest request, CancellationToken cancellationToken)
     {
-        var validated = Validate(request, _mailOptions.CurrentValue.AllowCleartext);
+        var validated = Validate(request, _mailOptions.CurrentValue.AllowCleartext, requireSecret: true);
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
-        var created = await _externalDomains.CreateAsync(ToEntity(Guid.Empty, request), cancellationToken);
+        var created = await _externalDomains.CreateAsync(
+            ToEntity(Guid.Empty, request, ProtectedSecret(request, existing: null)), cancellationToken);
         if (created.IsFailure) return BadRequestEnveloppe(created.Error);
         return Ok(Describe(created.Value));
     }
@@ -293,10 +302,19 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult> UpdateExternalDomain(
         Guid id, ExternalDomainRequest request, CancellationToken cancellationToken)
     {
-        var validated = Validate(request, _mailOptions.CurrentValue.AllowCleartext);
+        // Read first: an empty secret on an edit means "keep the stored one" — the secret is
+        // write-only, so the edit screen has nothing to send back — and validation must still
+        // refuse an OAuth2 row that would end up with no secret at all.
+        var existing = await _externalDomains.FindAsync(id, cancellationToken);
+        if (existing is null) return NotFoundEnveloppe(ExternalDomainStore.NotFound);
+
+        var validated = Validate(
+            request, _mailOptions.CurrentValue.AllowCleartext,
+            requireSecret: existing.OAuthClientSecret is not { Length: > 0 });
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
-        var result = await _externalDomains.UpdateAsync(ToEntity(id, request), cancellationToken);
+        var result = await _externalDomains.UpdateAsync(
+            ToEntity(id, request, ProtectedSecret(request, existing.OAuthClientSecret)), cancellationToken);
         if (result.IsFailure)
             return result.Error == ExternalDomainStore.NotFound
                 ? NotFoundEnveloppe(result.Error)
@@ -324,20 +342,51 @@ public sealed class AdminController : ApiBaseController
 
     private static ExternalDomainResponse Describe(ExternalDomain domain) => new(
         domain.Id, domain.Name, domain.ImapHost, domain.ImapPort, domain.ImapSecurity,
-        domain.SmtpHost, domain.SmtpPort, domain.SmtpSecurity, domain.SieveHost, domain.SievePort);
+        domain.SmtpHost, domain.SmtpPort, domain.SmtpSecurity, domain.SieveHost, domain.SievePort,
+        domain.AuthMode, domain.OAuthAuthorizationUrl, domain.OAuthTokenUrl,
+        domain.OAuthScopes, domain.OAuthClientId,
+        OAuthClientSecretSet: domain.OAuthClientSecret is { Length: > 0 });
 
-    private static ExternalDomain ToEntity(Guid id, ExternalDomainRequest request) => new()
+    /// <summary>A Password row carries no OAuth column at all, so a later flip back to OAuth2
+    /// starts clean rather than resurrecting whatever an earlier configuration held.</summary>
+    private static ExternalDomain ToEntity(Guid id, ExternalDomainRequest request, byte[]? protectedSecret)
     {
-        Id = id,
-        Name = request.Name,
-        ImapHost = request.ImapHost,
-        ImapPort = request.ImapPort,
-        ImapSecurity = request.ImapSecurity,
-        SmtpHost = request.SmtpHost,
-        SmtpPort = request.SmtpPort,
-        SmtpSecurity = request.SmtpSecurity,
-        SieveHost = request.SieveHost,
-        SievePort = request.SievePort
+        var oauth = ParsedAuthMode(request) is MailAuthMode.OAuth2;
+        return new()
+        {
+            Id = id,
+            Name = request.Name,
+            ImapHost = request.ImapHost,
+            ImapPort = request.ImapPort,
+            ImapSecurity = request.ImapSecurity,
+            SmtpHost = request.SmtpHost,
+            SmtpPort = request.SmtpPort,
+            SmtpSecurity = request.SmtpSecurity,
+            SieveHost = request.SieveHost,
+            SievePort = request.SievePort,
+            AuthMode = oauth ? MailAuthMode.OAuth2 : MailAuthMode.Password,
+            OAuthAuthorizationUrl = oauth ? request.OAuthAuthorizationUrl!.Trim() : null,
+            OAuthTokenUrl = oauth ? request.OAuthTokenUrl!.Trim() : null,
+            OAuthScopes = oauth ? request.OAuthScopes!.Trim() : null,
+            OAuthClientId = oauth ? request.OAuthClientId!.Trim() : null,
+            OAuthClientSecret = oauth ? protectedSecret : null
+        };
+    }
+
+    /// <summary>Null for a Password domain, the stored bytes when the edit left the field empty,
+    /// the freshly protected plaintext otherwise.</summary>
+    private byte[]? ProtectedSecret(ExternalDomainRequest request, byte[]? existing) =>
+        ParsedAuthMode(request) is not MailAuthMode.OAuth2 ? null
+        : string.IsNullOrEmpty(request.OAuthClientSecret) ? existing
+        : _secretProtector.Protect(request.OAuthClientSecret);
+
+    /// <summary>Exact-literal rule, like the securities; null when unrecognised, and a null
+    /// request value means Password so pre-OAuth callers keep their exact meaning.</summary>
+    private static MailAuthMode? ParsedAuthMode(ExternalDomainRequest request) => request.AuthMode switch
+    {
+        null or "Password" => MailAuthMode.Password,
+        "OAuth2" => MailAuthMode.OAuth2,
+        _ => null
     };
 
     /// <summary>
@@ -346,7 +395,7 @@ public sealed class AdminController : ApiBaseController
     /// admin never typed reach the resolver that reads this row back. The cleartext opt-in is the
     /// same one the resolver applies, so a row that saves here is a row that resolves there.
     /// </summary>
-    private static Result Validate(ExternalDomainRequest request, bool allowCleartext)
+    private static Result Validate(ExternalDomainRequest request, bool allowCleartext, bool requireSecret)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 100)
             return Result.Failure("Name must be between 1 and 100 characters");
@@ -370,6 +419,35 @@ public sealed class AdminController : ApiBaseController
             if (request.SievePort is < 1 or > 65535) return Result.Failure("Sieve port must be between 1 and 65535");
         }
 
+        return ValidateOAuth(request, requireSecret);
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="OAuthProviderConfig.TryFrom"/> field for field, plus the column widths:
+    /// an OAuth2 row that saves here is one the consent flow will accept, so an operator cannot
+    /// store a half-configured provider and discover it at consent time.
+    /// </summary>
+    private static Result ValidateOAuth(ExternalDomainRequest request, bool requireSecret)
+    {
+        var mode = ParsedAuthMode(request);
+        if (mode is null)
+            return Result.Failure("Auth mode must be exactly one of Password, OAuth2");
+        if (mode is MailAuthMode.Password) return Result.Success();
+
+        if (!OAuthProviderConfig.IsHttps(request.OAuthAuthorizationUrl) || request.OAuthAuthorizationUrl!.Length > 512)
+            return Result.Failure("Authorization URL must be an absolute https URL of at most 512 characters");
+        if (!OAuthProviderConfig.IsHttps(request.OAuthTokenUrl) || request.OAuthTokenUrl!.Length > 512)
+            return Result.Failure("Token URL must be an absolute https URL of at most 512 characters");
+        if (string.IsNullOrWhiteSpace(request.OAuthScopes) || request.OAuthScopes.Length > 1024)
+            return Result.Failure("Scopes must be between 1 and 1024 characters");
+        if (string.IsNullOrWhiteSpace(request.OAuthClientId) || request.OAuthClientId.Length > 255)
+            return Result.Failure("Client id must be between 1 and 255 characters");
+
+        if (requireSecret && string.IsNullOrEmpty(request.OAuthClientSecret))
+            return Result.Failure("A client secret is required for an OAuth2 domain");
+        if (request.OAuthClientSecret is { } secret
+            && Encoding.UTF8.GetByteCount(secret) > MaxClientSecretBytes)
+            return Result.Failure($"The client secret may not exceed {MaxClientSecretBytes} bytes");
         return Result.Success();
     }
 

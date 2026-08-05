@@ -570,6 +570,10 @@ body {
 }
 .connected-account-warn { font-size: 12px; color: var(--danger); }
 
+/* The tile's repair action is a word rather than a glyph for an OAuth row; the icon buttons beside
+   it set the row's height, so it takes their measure and not a form submit's. */
+.connected-account-list .admin-list-item-actions .btn { padding: 5px 10px; font-size: 13px; }
+
 /* The connect form is revealed in place, so it is boxed like a tile — otherwise three field
    rows appear to belong to the list under them. */
 .connect-account-panel {

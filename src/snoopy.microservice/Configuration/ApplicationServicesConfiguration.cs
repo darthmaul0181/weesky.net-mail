@@ -56,6 +56,10 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
         services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
         services.AddSingleton<IQuotePreparer, QuotePreparer>();
+        services.AddSingleton<IClientSecretProtector, ClientSecretProtector>();
+        // Singleton: a scoped store would forget every handshake at the end of the request that
+        // started it.
+        services.AddSingleton<IOAuthHandshakeStore, OAuthHandshakeStore>();
 
         // Scoped, so the whole request shares one authenticated IMAP connection and the container
         // closes it when the request ends. See ScopedImapSessionProvider.
@@ -75,6 +79,14 @@ internal static class ApplicationServicesConfiguration
         {
             client.Timeout = TimeSpan.FromSeconds(5);
         });
+
+        services.AddHttpClient<IOAuthTokenService, OAuthTokenService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(10);
+            })
+            // A 307/308 from the token endpoint would re-POST the client secret and the refresh
+            // token to wherever it points; a redirecting provider is a refusal, not a destination.
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
         return services;
     }

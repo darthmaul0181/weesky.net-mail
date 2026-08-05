@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
@@ -9,7 +10,8 @@ import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import ConnectAccountForm from './ConnectAccountForm'
 import {
-  errorText, useConnectedAccounts, useDeleteConnectedAccount,
+  errorText, leaveTo, oauthCompleteErrorText, PROVIDER_REFUSED, useCompleteOAuthConnect,
+  useConnectedAccounts, useDeleteConnectedAccount, useStartOAuthConnect,
   useUpdateConnectedAccountPassword, type ConnectedAccount,
 } from './useConnectedAccounts'
 
@@ -84,11 +86,46 @@ export default function ConnectedAccountsPage() {
   const { data: accounts, isLoading, isError } = useConnectedAccounts()
   const updatePassword = useUpdateConnectedAccountPassword()
   const disconnect = useDeleteConnectedAccount()
+  const startConnect = useStartOAuthConnect()
+  const complete = useCompleteOAuthConnect()
   const { toasts, addToast, removeToast } = useToasts()
+  const [params, setParams] = useSearchParams()
   const [connecting, setConnecting] = useState(false)
   const [reentering, setReentering] = useState<ConnectedAccount | null>(null)
   const [deleting, setDeleting] = useState<ConnectedAccount | null>(null)
   const [dialogError, setDialogError] = useState<string | null>(null)
+  const [reconnecting, setReconnecting] = useState<string | null>(null)
+  const resumed = useRef(false)
+
+  // The provider's redirect lands here with the handshake handle. Strip it before completing:
+  // a refresh must not replay a consumed state, nor a shared URL re-raise a stale error.
+  useEffect(() => {
+    if (resumed.current) return
+    const state = params.get('oauthState')
+    const failed = params.get('oauthError')
+    if (!state && !failed) return
+
+    resumed.current = true
+    setParams(new URLSearchParams(), { replace: true })
+    if (failed) { addToast('The sign-in did not complete. Try again.', 'error'); return }
+
+    complete.mutateAsync(state!)
+      .then(account => addToast(`${account.email} is connected`))
+      .catch(failure => addToast(oauthCompleteErrorText(failure), 'error'))
+    // Mount only: the parameter is stripped above, so a params change must not re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function reconnect(account: ConnectedAccount) {
+    setReconnecting(account.id)
+    try {
+      const { authorizationUrl } = await startConnect.mutateAsync({ accountId: account.id })
+      leaveTo(authorizationUrl)
+    } catch (failure) {
+      addToast(errorText(failure, PROVIDER_REFUSED), 'error')
+      setReconnecting(null)
+    }
+  }
 
   async function savePassword(password: string) {
     if (!reentering) return
@@ -123,6 +160,9 @@ export default function ConnectedAccountsPage() {
       <p className="settings-note">
         Read and send mail from other mailboxes without signing out.
       </p>
+      {/* The return from the provider is a plain page load: without this the list simply sits
+          there, one mailbox short, for the width of the exchange. */}
+      {complete.isPending && <p className="settings-note">Finishing the sign-in…</p>}
 
       {isLoading && <LoadingBlock />}
       {/* Only when there is nothing to show: a failed background refetch must not blank a list
@@ -159,18 +199,33 @@ export default function ConnectedAccountsPage() {
                   <span className="admin-list-item-name">{subtitleOf(account)}</span>
                   {!account.credentialsValid && (
                     <span className="connected-account-warn">
-                      Your main password changed — enter this account&apos;s password again.
+                      {account.authMode === 'OAuth2'
+                        ? 'This mailbox needs to be reconnected.'
+                        : 'Your main password changed — enter this account’s password again.'}
                     </span>
                   )}
                 </span>
                 <div className="admin-list-item-actions">
-                  {!account.credentialsValid && (
-                    <button type="button" className="admin-icon-btn" title="Re-enter password"
-                      aria-label={`Re-enter the password for ${account.email}`}
-                      onClick={() => { setDialogError(null); setReentering(account) }}>
-                      <KeyIcon />
-                    </button>
-                  )}
+                  {/* Offered on every OAuth row, not only an invalid one: `credentialsValid` says
+                      the cipher still opens, never that the provider still honours the token, so a
+                      revoked consent leaves the row looking healthy while the mailbox refuses.
+                      Re-consenting is idempotent and keeps the row's id, identities and roles. */}
+                  {account.authMode === 'OAuth2'
+                    ? (
+                      <button type="button" className="btn btn-ghost" title="Sign in again"
+                        aria-label={`Reconnect ${account.email}`}
+                        disabled={reconnecting === account.id}
+                        onClick={() => reconnect(account)}>
+                        {reconnecting === account.id ? <span className="spinner" /> : 'Reconnect'}
+                      </button>
+                    )
+                    : !account.credentialsValid && (
+                      <button type="button" className="admin-icon-btn" title="Re-enter password"
+                        aria-label={`Re-enter the password for ${account.email}`}
+                        onClick={() => { setDialogError(null); setReentering(account) }}>
+                        <KeyIcon />
+                      </button>
+                    )}
                   <button type="button" className="admin-icon-btn is-danger" title="Disconnect"
                     aria-label={`Disconnect ${account.email}`}
                     onClick={() => setDeleting(account)}>

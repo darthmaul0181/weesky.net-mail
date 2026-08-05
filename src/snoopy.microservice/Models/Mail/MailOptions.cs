@@ -63,6 +63,14 @@ public sealed class MailOptions
     /// </summary>
     public bool AllowCleartext { get; set; }
 
+    /// <summary>Where the callback sends the browser back to, e.g. https://account.mail.weesky.net.
+    /// The settings page's path is appended by the controller.</summary>
+    public string WebmailBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>The redirect URI registered with every provider. Must match byte for byte, which
+    /// is why it is configured rather than rebuilt from the incoming request.</summary>
+    public string OAuthRedirectUri { get; set; } = string.Empty;
+
     /// <summary>True when enough is configured to attempt an IMAP connection.</summary>
     public bool IsImapConfigured => !string.IsNullOrWhiteSpace(ImapHost);
 

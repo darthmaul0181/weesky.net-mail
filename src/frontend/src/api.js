@@ -354,6 +354,14 @@ export const api = {
   getConnectableDomains: () =>
     request('GET', '/api/ConnectedAccounts/Domains'),
 
+  // Typed here because the defaults alone would infer `null` and refuse a real id.
+  /** @param {{ domainId?: string | null, accountId?: string | null }} target */
+  startOAuthConnect: ({ domainId = null, accountId = null }) =>
+    request('POST', '/api/ConnectedAccounts/OAuth/Start', { domainId, accountId }),
+
+  completeOAuthConnect: (state) =>
+    request('POST', '/api/ConnectedAccounts/OAuth/Complete', { state }),
+
   adminGetExternalDomains: () =>
     request('GET', '/api/Admin/domains/external'),
 

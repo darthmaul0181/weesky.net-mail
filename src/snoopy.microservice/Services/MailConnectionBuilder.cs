@@ -14,11 +14,11 @@ internal static class MailConnectionBuilder
 {
     /// <summary>The primary mailbox and every local shared one: endpoints from appsettings.</summary>
     public static MailAccountConnection Home(
-        MailOptions home, string accountId, string username, string password) =>
+        MailOptions home, string accountId, string username, MailCredential credential) =>
         new(accountId, IsHomeServer: true,
             home.ImapHost, home.ImapPort, home.ImapSecurity,
             home.SmtpHost, home.SmtpPort, home.SmtpSecurity,
-            SieveHost: null, SievePort: null, username, password);
+            SieveHost: null, SievePort: null, username, credential);
 
     /// <summary>
     /// False when a stored security value is not one the admin screens can write, or names no
@@ -27,10 +27,16 @@ internal static class MailConnectionBuilder
     /// off so a caller that has no <see cref="MailOptions"/> to hand refuses the downgrade.
     /// </summary>
     public static bool TryExternal(
-        ExternalDomain domain, string accountId, string username, string password,
+        ExternalDomain domain, string accountId, string username, MailCredential credential,
         [NotNullWhen(true)] out MailAccountConnection? connection, bool allowCleartext = false)
     {
         connection = null;
+
+        // An OAuth domain the admin left half-configured is as unusable as one whose security
+        // value does not parse, and answers the same way — the caller logs and 404s.
+        if (domain.AuthMode is MailAuthMode.OAuth2 && !OAuthProviderConfig.TryFrom(domain, out _))
+            return false;
+
         if (!TryParseSecurity(domain.ImapSecurity, allowCleartext, out var imapSecurity)
             || !TryParseSecurity(domain.SmtpSecurity, allowCleartext, out var smtpSecurity))
             return false;
@@ -39,7 +45,7 @@ internal static class MailConnectionBuilder
             accountId, IsHomeServer: false,
             domain.ImapHost, domain.ImapPort, imapSecurity,
             domain.SmtpHost, domain.SmtpPort, smtpSecurity,
-            domain.SieveHost, domain.SievePort, username, password);
+            domain.SieveHost, domain.SievePort, username, credential);
         return true;
     }
 

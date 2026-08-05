@@ -50,7 +50,7 @@ export default function MailLayout() {
   const composing = useMatch('/mail/compose') != null
   const navigate = useNavigate()
   const accountId = useAccountId()
-  const { accountsLoading } = useAuth()
+  const { accountsLoading, activeAccount } = useAuth()
   // Until the list lands, a stored connected id may yet turn out to be stale, and a mailbox drawn
   // from it would be the wrong one. The primary can never be stale, so it never waits.
   const settling = accountsLoading && accountId !== PRIMARY_ACCOUNT_ID
@@ -263,12 +263,19 @@ export default function MailLayout() {
   // columns would only frame three copies of the same failure. Never over an open composer: this
   // replaces the subtree by re-render, which no leave guard can see, so a poll answering 409
   // would discard an unsaved draft without asking. It waits until the composer is left.
+  // An OAuth mailbox reaches the same 409 with no password anywhere in the story: the consent was
+  // withdrawn at the provider, or the cipher holding its refresh token no longer opens.
   if (!composing && needsAccountPassword(error)) {
+    const byConsent = activeAccount?.authMode === 'OAuth2'
     return (
       <div className="mail-full-pane">
-        <h2>Password needed</h2>
-        <p>Your main password changed, so this account&apos;s password must be entered again.</p>
-        <Link className="btn btn-primary" to="/settings/accounts">Enter the password</Link>
+        <h2>{byConsent ? 'Sign-in needed' : 'Password needed'}</h2>
+        <p>{byConsent
+          ? 'Weesky can no longer sign in to this mailbox, so you need to grant it access again.'
+          : "Your main password changed, so this account's password must be entered again."}</p>
+        <Link className="btn btn-primary" to="/settings/accounts">
+          {byConsent ? 'Reconnect this account' : 'Enter the password'}
+        </Link>
       </div>
     )
   }

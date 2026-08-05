@@ -17,9 +17,19 @@ export interface ExternalDomain {
   smtpSecurity: string
   sieveHost: string | null
   sievePort: number | null
+  authMode: 'Password' | 'OAuth2'
+  oauthAuthorizationUrl: string | null
+  oauthTokenUrl: string | null
+  oauthScopes: string | null
+  oauthClientId: string | null
+  /** The secret itself never leaves the backend: this flag is all a reader learns. */
+  oauthClientSecretSet: boolean
 }
 
-export type ExternalDomainPayload = Omit<ExternalDomain, 'id'>
+export type ExternalDomainPayload = Omit<ExternalDomain, 'id' | 'oauthClientSecretSet'> & {
+  /** Write-only: null on an edit keeps the stored secret. */
+  oauthClientSecret: string | null
+}
 
 const EXTERNAL_DOMAINS_KEY = ['adminExternalDomains'] as const
 

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, hasSession, clearSession, setUnauthorizedHandler, setIsAdmin } from '../api.js'
 import { deriveIdentity, type Account, type AccountIdentity } from '../lib/accountIdentity'
 import { forgetNotificationClaim } from '../modules/mail/notify/channels'
+import type { MailAuthMode } from '../modules/settings/accounts/useConnectedAccounts'
 
 const ACTIVE_ACCOUNT_KEY = 'mail.activeAccount'
 /** The account every session starts on; the one id that can never turn out to be stale. */
@@ -18,9 +19,12 @@ export interface ActiveAccount {
   isPrimary: boolean
   /** null for the primary account and for local shared mailboxes. */
   domainName: string | null
-  /** false → the stored password no longer decrypts: shown as "Password needed", not switchable. */
+  /** false → the stored credential no longer decrypts: not switchable, and the repair it is sent
+   *  to depends on `authMode`. */
   credentialsValid: boolean
   sieveSupported: boolean
+  /** Which repair an unusable mailbox needs: a password, or a fresh consent at the provider. */
+  authMode: MailAuthMode
 }
 
 interface ConnectedAccountRow {
@@ -32,6 +36,7 @@ interface ConnectedAccountRow {
   sieveSupported: boolean
   credentialsValid: boolean
   creationDate: string
+  authMode: MailAuthMode
 }
 
 interface AuthContextValue {
@@ -65,6 +70,7 @@ function mapRow(row: ConnectedAccountRow): ActiveAccount {
     domainName: row.domainName,
     credentialsValid: row.credentialsValid,
     sieveSupported: row.sieveSupported,
+    authMode: row.authMode,
   }
 }
 
@@ -170,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const primaryAccount: ActiveAccount | null = identity
     ? {
       id: PRIMARY_ACCOUNT_ID, email: identity.email, displayName: identity.displayName, isPrimary: true,
-      domainName: null, credentialsValid: true, sieveSupported: true,
+      domainName: null, credentialsValid: true, sieveSupported: true, authMode: 'Password',
     }
     : null
   const accounts: ActiveAccount[] = primaryAccount

@@ -18,7 +18,7 @@ internal sealed class ScopedImapSessionProvider(
     : IImapSessionProvider, IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private (string Host, int Port, string Username, string Password)? _key;
+    private (string Host, int Port, string Username, MailCredential Credential)? _key;
     private Result<IImapSession>? _session;
     private bool _disposed;
 
@@ -27,7 +27,7 @@ internal sealed class ScopedImapSessionProvider(
         ArgumentNullException.ThrowIfNull(connection);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var key = (connection.ImapHost, connection.ImapPort, connection.Username, connection.Password);
+        var key = (connection.ImapHost, connection.ImapPort, connection.Username, connection.Credential);
 
         await _gate.WaitAsync(cancellationToken);
         try

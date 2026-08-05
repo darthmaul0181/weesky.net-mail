@@ -34,12 +34,14 @@ vi.mock('../../api.js', async () => ({
 vi.mock('./list/useListRefresh', () => ({ useListRefresh: mocks.useListRefresh }))
 
 // Mutable so a test can switch accounts the way the account menu does.
-const auth = vi.hoisted(() => ({ activeAccountId: 'primary', accountsLoading: false }))
+const auth = vi.hoisted(() => ({
+  activeAccountId: 'primary', accountsLoading: false, authMode: 'Password',
+}))
 
 vi.mock('../../contexts/AuthContext', () => ({
   PRIMARY_ACCOUNT_ID: 'primary',
   useAuth: () => ({
-    activeAccount: { id: auth.activeAccountId },
+    activeAccount: { id: auth.activeAccountId, authMode: auth.authMode },
     activeAccountId: auth.activeAccountId,
     accountsLoading: auth.accountsLoading,
   }),
@@ -55,6 +57,7 @@ vi.mock('./compose/ComposeView', () => ({
 beforeEach(() => {
   auth.activeAccountId = 'primary'
   auth.accountsLoading = false
+  auth.authMode = 'Password'
 })
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
@@ -350,6 +353,23 @@ describe('an account whose stored password no longer decrypts', () => {
     expect(await screen.findByTestId('compose-view')).toBeInTheDocument()
     await settle()
     expect(screen.queryByText('Password needed')).toBeNull()
+  })
+
+  // The same 409 reaches a provider mailbox when the consent is withdrawn or its cipher stops
+  // opening. There is no password anywhere in that story, so every word of the prompt would be
+  // false and its instruction impossible to follow.
+  it('asks a provider mailbox for a fresh sign-in, not for a password', async () => {
+    auth.authMode = 'OAuth2'
+    renderAt('/mail?folder=INBOX', refused())
+
+    expect(await screen.findByText('Sign-in needed')).toBeInTheDocument()
+    expect(screen.getByText(
+      'Weesky can no longer sign in to this mailbox, so you need to grant it access again.',
+    )).toBeInTheDocument()
+    expect(screen.queryByText('Password needed')).toBeNull()
+
+    const link = screen.getByRole('link', { name: 'Reconnect this account' })
+    expect(link).toHaveAttribute('href', '/settings/accounts')
   })
 
   // Not a catch-all: an ordinary failure is a folder tree that did not load, not a broken account.

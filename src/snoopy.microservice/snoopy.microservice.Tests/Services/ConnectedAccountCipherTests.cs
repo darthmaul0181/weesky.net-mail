@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -119,14 +120,14 @@ public sealed class ConnectedAccountCipherTests
         Assert.Equal(secret, result.Value);
     }
 
-    /// <summary>The whole blob has to fit connected_accounts.cipher, VARBINARY(512).</summary>
+    /// <summary>The whole blob has to fit connected_accounts.cipher, VARBINARY(8192).</summary>
     [Fact]
     public void Encrypt_FillsTheColumnExactlyAtTheMaxLength()
     {
         var cipher = ConnectedAccountCipher.Encrypt(
             Kek, SecretOfByteLength(ConnectedAccountCipher.MaxSecretLength), Context());
 
-        Assert.Equal(512, cipher.Length);
+        Assert.Equal(8192, cipher.Length);
     }
 
     [Fact]
@@ -287,5 +288,71 @@ public sealed class ConnectedAccountCipherTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(ConnectedAccountErrors.CredentialsInvalid, result.Error);
+    }
+
+    // ── The auth mode ─────────────────────────────────────
+
+    [Fact]
+    public void Context_OfAPasswordRow_IsUnchangedFromTheBoundFormat()
+    {
+        var accountId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var userId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var domainId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var row = new ConnectedAccount
+        {
+            Id = accountId, UserId = userId, DomainId = domainId,
+            Email = "alice@example.test", AuthMode = MailAuthMode.Password
+        };
+
+        Assert.Equal(
+            $"{accountId:D}|{userId:D}|{domainId:D}|alice@example.test",
+            Encoding.UTF8.GetString(ConnectedAccountCipher.Context(row)));
+    }
+
+    [Fact]
+    public void Context_OfAnOAuthRow_CarriesTheModeBeforeTheAddress()
+    {
+        var accountId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var userId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var domainId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var row = new ConnectedAccount
+        {
+            Id = accountId, UserId = userId, DomainId = domainId,
+            Email = "alice@example.test", AuthMode = MailAuthMode.OAuth2
+        };
+
+        Assert.Equal(
+            $"{accountId:D}|{userId:D}|{domainId:D}|oauth2|alice@example.test",
+            Encoding.UTF8.GetString(ConnectedAccountCipher.Context(row)));
+    }
+
+    [Fact]
+    public void Decrypt_UnderTheWrongMode_Fails()
+    {
+        var kek = ConnectedAccountCipher.DeriveKek("main", ConnectedAccountCipher.NewSalt());
+        var row = new ConnectedAccount
+        {
+            Id = Guid.NewGuid(), UserId = Guid.NewGuid(), DomainId = Guid.NewGuid(),
+            Email = "alice@example.test", AuthMode = MailAuthMode.OAuth2
+        };
+        var cipher = ConnectedAccountCipher.Encrypt(kek, "refresh-token", ConnectedAccountCipher.Context(row));
+
+        row.AuthMode = MailAuthMode.Password;
+
+        Assert.True(ConnectedAccountCipher.Decrypt(kek, cipher, ConnectedAccountCipher.Context(row)).IsFailure);
+    }
+
+    [Fact]
+    public void Encrypt_AcceptsARefreshTokenSizedSecret()
+    {
+        var kek = ConnectedAccountCipher.DeriveKek("main", ConnectedAccountCipher.NewSalt());
+        var context = ConnectedAccountCipher.Context(Guid.NewGuid(), Guid.NewGuid(), null, "a@b.test");
+        var secret = new string('t', ConnectedAccountCipher.MaxSecretLength);
+
+        var cipher = ConnectedAccountCipher.Encrypt(kek, secret, context);
+
+        Assert.Equal(secret, ConnectedAccountCipher.Decrypt(kek, cipher, context).Value);
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ConnectedAccountCipher.Encrypt(kek, secret + "t", context));
     }
 }

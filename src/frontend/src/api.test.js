@@ -679,6 +679,27 @@ describe('connected accounts', () => {
     )
   })
 
+  it('startOAuthConnect POSTs the target to the Start sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.startOAuthConnect({ domainId: 'd1' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/OAuth/Start'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ domainId: 'd1', accountId: null }),
+      })
+    )
+  })
+
+  it('completeOAuthConnect POSTs the state to the Complete sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.completeOAuthConnect('s1')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/OAuth/Complete'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ state: 's1' }) })
+    )
+  })
+
   it('getConnectableDomains calls GET /api/ConnectedAccounts/Domains', async () => {
     const { api } = await import('./api.js')
     await api.getConnectableDomains()

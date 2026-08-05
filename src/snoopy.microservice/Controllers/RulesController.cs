@@ -35,6 +35,11 @@ public sealed class RulesController(
         var account = resolved.Value;
         var sieve = sieveOptions.Value;
 
+        // ManageSieve here is SASL PLAIN, hand-assembled: an access token is not a password, and
+        // no provider reached over OAuth offers ManageSieve anyway.
+        if (account.Credential is not PasswordCredential mailbox)
+            return AccountResolution<SieveConnection>.Failure(NotFoundEnveloppe(SieveErrors.Unsupported));
+
         if (account.AccountId == MailAccountConnection.Primary)
         {
             // A blank master password would still open a session and offer the mailbox with an
@@ -51,13 +56,13 @@ public sealed class RulesController(
         // resolver leaves SieveHost null for home connections, since there is nothing to store.
         if (account.IsHomeServer)
             return AccountResolution<SieveConnection>.Success(new SieveConnection(
-                sieve.Host, sieve.Port, string.Empty, account.Username, account.Password));
+                sieve.Host, sieve.Port, string.Empty, account.Username, mailbox.Password));
 
         if (account.SieveHost == null || account.SievePort == null)
             return AccountResolution<SieveConnection>.Failure(NotFoundEnveloppe(SieveErrors.Unsupported));
 
         return AccountResolution<SieveConnection>.Success(new SieveConnection(
-            account.SieveHost, account.SievePort.Value, string.Empty, account.Username, account.Password));
+            account.SieveHost, account.SievePort.Value, string.Empty, account.Username, mailbox.Password));
     }
 
     /// <summary>

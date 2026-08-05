@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Security;
 using CSharpFunctionalExtensions;
 using MailKit;
@@ -99,7 +100,14 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
                         endpoint.Protocol, endpoint.Host, endpoint.Port);
                 }
 
-                await client.AuthenticateAsync(connection.Username, connection.Password, connectCts.Token);
+                await (connection.Credential switch
+                {
+                    OAuthCredential oauth => client.AuthenticateAsync(
+                        new SaslMechanismOAuth2(connection.Username, oauth.AccessToken), connectCts.Token),
+                    PasswordCredential password => client.AuthenticateAsync(
+                        connection.Username, password.Password, connectCts.Token),
+                    _ => throw new UnreachableException()
+                });
             }
 
             var session = CreateSession(client);

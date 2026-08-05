@@ -1,5 +1,8 @@
-import { useState, type FormEvent } from 'react'
-import { errorText, useConnectableDomains, useConnectAccount } from './useConnectedAccounts'
+import { useCallback, useRef, useState, type FormEvent } from 'react'
+import {
+  errorText, leaveTo, PROVIDER_REFUSED, useConnectableDomains, useConnectAccount,
+  useStartOAuthConnect,
+} from './useConnectedAccounts'
 
 interface Props {
   onConnected: (email: string) => void
@@ -14,13 +17,31 @@ interface Props {
 export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
   const { data: domains } = useConnectableDomains()
   const connect = useConnectAccount()
+  const startConnect = useStartOAuthConnect()
   const [domainId, setDomainId] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Not startConnect.isPending: that goes false the instant the URL arrives, re-enabling the
+  // button under the finger while the browser is already leaving.
+  const [leaving, setLeaving] = useState(false)
+
+  const selected = (domains ?? []).find(d => d.id === domainId)
+  const isOAuth = selected?.authMode === 'OAuth2'
+
+  // First mount only, never autoFocus: this field remounts when the server flips back from a
+  // provider domain, and refocusing then would steal the select mid keyboard-navigation.
+  const focusedOnce = useRef(false)
+  const focusOnFirstMount = useCallback((node: HTMLInputElement | null) => {
+    if (node && !focusedOnce.current) {
+      focusedOnce.current = true
+      node.focus()
+    }
+  }, [])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (isOAuth) return startOAuth()
     setError(null)
     const address = email.trim()
     try {
@@ -28,6 +49,18 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
       onConnected(address)
     } catch (failure) {
       setError(errorText(failure))
+    }
+  }
+
+  async function startOAuth() {
+    setError(null)
+    setLeaving(true)
+    try {
+      const { authorizationUrl } = await startConnect.mutateAsync({ domainId })
+      leaveTo(authorizationUrl)
+    } catch (failure) {
+      setError(errorText(failure, PROVIDER_REFUSED))
+      setLeaving(false)
     }
   }
 
@@ -45,7 +78,9 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
             has no accessible name. */}
         <div className="field-h">
           <label htmlFor="connect-server">Server</label>
-          <select id="connect-server" value={domainId} onChange={e => setDomainId(e.target.value)}>
+          {/* The refusal named the fields that are about to disappear, so it cannot outlive them. */}
+          <select id="connect-server" value={domainId}
+            onChange={e => { setError(null); setDomainId(e.target.value) }}>
             <option value="">Weesky (local)</option>
             {(domains ?? []).map(domain => (
               <option key={domain.id} value={domain.id}>{domain.name}</option>
@@ -53,24 +88,40 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
           </select>
         </div>
 
-        <div className="field-h">
-          <label htmlFor="connect-email">Email</label>
-          <input id="connect-email" type="email" autoComplete="off" autoFocus
-            value={email} onChange={e => setEmail(e.target.value)} />
-        </div>
+        {!isOAuth && (
+          <>
+            <div className="field-h">
+              <label htmlFor="connect-email">Email</label>
+              <input id="connect-email" type="email" autoComplete="off" ref={focusOnFirstMount}
+                value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
 
-        <div className="field-h">
-          <label htmlFor="connect-password">Password</label>
-          <input id="connect-password" type="password" autoComplete="new-password"
-            value={password} onChange={e => setPassword(e.target.value)} />
-        </div>
+            <div className="field-h">
+              <label htmlFor="connect-password">Password</label>
+              <input id="connect-password" type="password" autoComplete="new-password"
+                value={password} onChange={e => setPassword(e.target.value)} />
+            </div>
+          </>
+        )}
 
-        <p className="settings-note">The connection is verified before the account is saved.</p>
+        <p className="settings-note">
+          {isOAuth
+            ? `Weesky never sees your password — you sign in at ${selected!.name} and grant access.`
+            : 'The connection is verified before the account is saved.'}
+        </p>
 
-        <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}
-          disabled={connect.isPending || !email.trim() || password === ''}>
-          {connect.isPending ? <span className="spinner" /> : 'Connect'}
-        </button>
+        {isOAuth
+          ? (
+            <button type="submit" className="btn btn-primary btn-auto" disabled={leaving}>
+              {leaving ? <span className="spinner" /> : `Sign in with ${selected!.name}`}
+            </button>
+          )
+          : (
+            <button type="submit" className="btn btn-primary btn-auto"
+              disabled={connect.isPending || !email.trim() || password === ''}>
+              {connect.isPending ? <span className="spinner" /> : 'Connect'}
+            </button>
+          )}
       </form>
     </div>
   )

@@ -62,14 +62,16 @@ public abstract class ApiBaseController : ControllerBase
         StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message));
 
     /// <summary>
-    /// Rule 4's status for a failed account resolution — the single place the three are produced:
+    /// Rule 4's status for a failed account resolution — the single place the four are produced:
     /// 404 for an account that is not there, 409 for a connected account whose stored secret no
-    /// longer decrypts (never 401, which the client reads as "sign out"), 401 for everything else.
+    /// longer decrypts (never 401, which the client reads as "sign out"), 502 for an identity
+    /// provider that would not answer, 401 for everything else.
     /// </summary>
     protected ActionResult ConnectedAccountError(string resolverError) => resolverError switch
     {
         ConnectedAccountErrors.AccountNotFound => NotFoundEnveloppe(resolverError),
         ConnectedAccountErrors.CredentialsInvalid => ConflictEnveloppe(resolverError),
+        ConnectedAccountErrors.ProviderUnavailable => BadGatewayEnveloppe(resolverError),
         _ => UnauthorizedEnveloppe(resolverError),
     };
 }
