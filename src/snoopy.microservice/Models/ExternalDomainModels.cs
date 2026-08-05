@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Models;
@@ -5,12 +6,20 @@ namespace weesky.Snoopy.Microservice.Models;
 /// <summary>
 /// An admin-curated external mail provider, as the settings UI sees it. The client secret has no
 /// shape in which it may leave this service: <c>OAuthClientSecretSet</c> is all a reader learns.
+///
+/// The five OAuth names are spelled out because the camelCase policy stops at the last capital of
+/// a run and would ship <c>oAuthTokenUrl</c>, which no client reads. Deserialization hides the
+/// mismatch — it is case-insensitive — so only reading back breaks.
 /// </summary>
 public sealed record ExternalDomainResponse(
     Guid Id, string Name, string ImapHost, int ImapPort, string ImapSecurity,
     string SmtpHost, int SmtpPort, string SmtpSecurity, string? SieveHost, int? SievePort,
-    MailAuthMode AuthMode, string? OAuthAuthorizationUrl, string? OAuthTokenUrl,
-    string? OAuthScopes, string? OAuthClientId, bool OAuthClientSecretSet);
+    MailAuthMode AuthMode,
+    [property: JsonPropertyName("oauthAuthorizationUrl")] string? OAuthAuthorizationUrl,
+    [property: JsonPropertyName("oauthTokenUrl")] string? OAuthTokenUrl,
+    [property: JsonPropertyName("oauthScopes")] string? OAuthScopes,
+    [property: JsonPropertyName("oauthClientId")] string? OAuthClientId,
+    [property: JsonPropertyName("oauthClientSecretSet")] bool OAuthClientSecretSet);
 
 /// <summary>
 /// Registers or edits an external mail provider. <c>ImapSecurity</c>/<c>SmtpSecurity</c> must be
