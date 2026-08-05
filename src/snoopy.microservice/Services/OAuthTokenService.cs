@@ -196,15 +196,59 @@ internal sealed class OAuthTokenService(
         HttpResponseMessage response, OAuthProviderConfig provider, CancellationToken cancellationToken)
     {
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        var invalidGrant = body.Contains("\"invalid_grant\"", StringComparison.Ordinal);
+        var (error, code) = ReadRefusal(body);
+        var invalidGrant = error is not null
+            ? error == "invalid_grant"
+            : body.Contains("\"invalid_grant\"", StringComparison.Ordinal);
 
-        // The body carries the provider's own error code and nothing of the user's.
+        // Without these two a wrong client secret and a revoked consent read identically, and only
+        // the second is the user's to fix. Both are the provider's own vocabulary, never the user's.
         logger.LogWarning(
-            "Token endpoint {TokenUrl} refused with {Status}; invalid_grant={InvalidGrant}",
-            provider.TokenUrl, (int)response.StatusCode, invalidGrant);
+            "Token endpoint {TokenUrl} refused with {Status}; error={ProviderError}, code={ProviderCode}, invalid_grant={InvalidGrant}",
+            provider.TokenUrl, (int)response.StatusCode, error ?? "unknown", code ?? "none", invalidGrant);
 
         return invalidGrant
             ? ConnectedAccountErrors.CredentialsInvalid
             : ConnectedAccountErrors.ProviderUnavailable;
+    }
+
+    /// <summary>
+    /// RFC 6749's error code, and the identifier the description leads with — Microsoft's
+    /// `AADSTS7000215` names a bad secret where the bare `invalid_client` only says which side
+    /// failed. The description itself is left unread: a provider may echo what was sent to it.
+    /// </summary>
+    private static (string? Error, string? Code) ReadRefusal(string body)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            var error = ReadString(json.RootElement, "error");
+            return (error, ReadIdentifier(ReadString(json.RootElement, "error_description")));
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    private static string? ReadString(JsonElement root, string name) =>
+        root.ValueKind == JsonValueKind.Object
+        && root.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    /// <summary>The leading letters-then-digits token of a description, or nothing.</summary>
+    private static string? ReadIdentifier(string? description)
+    {
+        if (string.IsNullOrEmpty(description)) return null;
+
+        var letters = 0;
+        while (letters < description.Length && char.IsAsciiLetterUpper(description[letters])) letters++;
+
+        var digits = letters;
+        while (digits < description.Length && char.IsAsciiDigit(description[digits])) digits++;
+
+        return letters > 0 && digits > letters ? description[..digits] : null;
     }
 }

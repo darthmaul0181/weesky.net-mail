@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
@@ -48,6 +49,32 @@ public sealed class OAuthTokenServiceTests
 
         return (service, accounts);
     }
+
+    private static (OAuthTokenService Service, Mock<ILogger<OAuthTokenService>> Logger) CreateWithLogger(
+        StubHttpMessageHandler handler)
+    {
+        var protector = new Mock<IClientSecretProtector>();
+        protector.Setup(p => p.Unprotect(It.IsAny<byte[]>())).Returns("client-secret");
+        var logger = new Mock<ILogger<OAuthTokenService>>();
+
+        var service = new OAuthTokenService(
+            new HttpClient(handler),
+            new MemoryCache(new MemoryCacheOptions()),
+            new Mock<IConnectedAccountStore>().Object,
+            protector.Object,
+            logger.Object);
+
+        return (service, logger);
+    }
+
+    private static void VerifyWarned(
+        Mock<ILogger<OAuthTokenService>> logger, Func<string, bool> matches, Times times) =>
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => matches(state.ToString()!)),
+                It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
 
     [Fact]
     public async Task GetAccessTokenAsync_RefreshesAndAnswersTheAccessToken()
@@ -138,6 +165,34 @@ public sealed class OAuthTokenServiceTests
             Row("rt-1"), Provider(), Kek, CancellationToken.None);
 
         Assert.Equal(ConnectedAccountErrors.CredentialsInvalid, result.Error);
+    }
+
+    [Fact]
+    public async Task GetAccessTokenAsync_OnARefusal_LogsTheProvidersErrorCodeAndIdentifier()
+    {
+        var handler = new StubHttpMessageHandler(StubHttpMessageHandler.Json(
+            HttpStatusCode.Unauthorized,
+            """{"error":"invalid_client","error_description":"AADSTS7000215: Invalid client secret."}"""));
+        var (service, logger) = CreateWithLogger(handler);
+
+        var result = await service.GetAccessTokenAsync(
+            Row("rt-1"), Provider(), Kek, CancellationToken.None);
+
+        Assert.Equal(ConnectedAccountErrors.ProviderUnavailable, result.Error);
+        VerifyWarned(logger, m => m.Contains("invalid_client") && m.Contains("AADSTS7000215"), Times.Once());
+    }
+
+    [Fact]
+    public async Task GetAccessTokenAsync_OnARefusal_NeverLogsTheProvidersDescription()
+    {
+        var handler = new StubHttpMessageHandler(StubHttpMessageHandler.Json(
+            HttpStatusCode.Unauthorized,
+            """{"error":"invalid_client","error_description":"AADSTS7000215: rt-1 was refused."}"""));
+        var (service, logger) = CreateWithLogger(handler);
+
+        await service.GetAccessTokenAsync(Row("rt-1"), Provider(), Kek, CancellationToken.None);
+
+        VerifyWarned(logger, m => m.Contains("refused.") || m.Contains("rt-1"), Times.Never());
     }
 
     [Fact]
