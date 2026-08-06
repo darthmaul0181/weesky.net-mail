@@ -5,27 +5,16 @@ using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class SieveRepository : ISieveRepository
+internal sealed class SieveRepository(
+    IManageSieveClient client,
+    IRuleProviderRegistry registry,
+    ILogger<SieveRepository> logger) : ISieveRepository
 {
-    private readonly IManageSieveClient _client;
-    private readonly IRuleProviderRegistry _registry;
-    private readonly ILogger<SieveRepository> _logger;
-
-    public SieveRepository(
-        IManageSieveClient client,
-        IRuleProviderRegistry registry,
-        ILogger<SieveRepository> logger)
-    {
-        _client = client;
-        _registry = registry;
-        _logger = logger;
-    }
-
     public async Task<Result<SieveRuleSet>> GetRuleSetAsync(SieveConnection connection, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
+        var sessionResult = await client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure<SieveRuleSet>(sessionResult.Error);
         await using var session = sessionResult.Value;
 
@@ -40,8 +29,8 @@ internal sealed class SieveRepository : ISieveRepository
             return Result.Success(new SieveRuleSet
             {
                 Kind = SieveScriptKind.Structured,
-                ProviderId = _registry.NewAccountDefault.Id,
-                ScriptName = _registry.NewAccountDefault.DefaultScriptName
+                ProviderId = registry.NewAccountDefault.Id,
+                ScriptName = registry.NewAccountDefault.DefaultScriptName
             });
         }
 
@@ -65,8 +54,8 @@ internal sealed class SieveRepository : ISieveRepository
         if (rules == null) return Result.Failure("Rules collection is required");
 
         var provider = providerId != null
-            ? _registry.GetById(providerId)
-            : _registry.Default;
+            ? registry.GetById(providerId)
+            : registry.Default;
         if (provider == null) return Result.Failure($"Unknown rule provider: {providerId}");
 
         var compiled = provider.Compile(rules);
@@ -74,21 +63,21 @@ internal sealed class SieveRepository : ISieveRepository
 
         var targetName = string.IsNullOrEmpty(scriptName) ? provider.DefaultScriptName : scriptName;
 
-        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
+        var sessionResult = await client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
         await using var session = sessionResult.Value;
 
         var put = await session.PutScriptAsync(targetName, compiled.Value, cancellationToken);
         if (put.IsFailure)
         {
-            _logger.LogWarning("PUTSCRIPT rejected for {Connection} script={Script}: {Error}", connection, targetName, put.Error);
+            logger.LogWarning("PUTSCRIPT rejected for {Connection} script={Script}: {Error}", connection, targetName, put.Error);
             return put;
         }
 
         var activate = await session.SetActiveAsync(targetName, cancellationToken);
         if (activate.IsFailure)
         {
-            _logger.LogWarning("SETACTIVE failed for {Connection} script={Script}: {Error}", connection, targetName, activate.Error);
+            logger.LogWarning("SETACTIVE failed for {Connection} script={Script}: {Error}", connection, targetName, activate.Error);
             return activate;
         }
 
@@ -109,7 +98,7 @@ internal sealed class SieveRepository : ISieveRepository
         var list = await session.ListScriptsAsync(cancellationToken);
         if (list.IsFailure) return;
 
-        var managedNames = _registry.All
+        var managedNames = registry.All
             .Select(p => p.DefaultScriptName)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -121,14 +110,14 @@ internal sealed class SieveRepository : ISieveRepository
 
             var del = await session.DeleteScriptAsync(entry.Name, cancellationToken);
             if (del.IsFailure)
-                _logger.LogWarning("Failed to delete superseded script {Script}: {Error}", entry.Name, del.Error);
+                logger.LogWarning("Failed to delete superseded script {Script}: {Error}", entry.Name, del.Error);
         }
     }
 
     public Task<Result> SaveRawScriptAsync(SieveConnection connection, string content, string? scriptName, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        var targetName = string.IsNullOrEmpty(scriptName) ? _registry.Default.DefaultScriptName : scriptName;
+        var targetName = string.IsNullOrEmpty(scriptName) ? registry.Default.DefaultScriptName : scriptName;
         return PutAndActivateAsync(connection, targetName, content ?? string.Empty, cancellationToken);
     }
 
@@ -136,7 +125,7 @@ internal sealed class SieveRepository : ISieveRepository
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
+        var sessionResult = await client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
         await using var session = sessionResult.Value;
 
@@ -166,7 +155,7 @@ internal sealed class SieveRepository : ISieveRepository
     {
         if (scripts.Count == 0) return null;
 
-        foreach (var provider in _registry.All)
+        foreach (var provider in registry.All)
         {
             var match = scripts.FirstOrDefault(e => string.Equals(e.Name, provider.DefaultScriptName, StringComparison.Ordinal));
             if (match != null) return match.Name;
@@ -178,7 +167,7 @@ internal sealed class SieveRepository : ISieveRepository
 
     private SieveRuleSet DecodeScript(string scriptContent, string scriptName)
     {
-        var provider = _registry.Detect(scriptContent);
+        var provider = registry.Detect(scriptContent);
         if (provider == null)
         {
             return new SieveRuleSet
@@ -192,7 +181,7 @@ internal sealed class SieveRepository : ISieveRepository
         var parsed = provider.Parse(scriptContent);
         if (parsed.IsFailure)
         {
-            _logger.LogWarning("Provider {Provider} failed to parse script {Script}: {Error}", provider.Id, scriptName, parsed.Error);
+            logger.LogWarning("Provider {Provider} failed to parse script {Script}: {Error}", provider.Id, scriptName, parsed.Error);
             return new SieveRuleSet
             {
                 Kind = SieveScriptKind.Advanced,
@@ -214,21 +203,21 @@ internal sealed class SieveRepository : ISieveRepository
 
     private async Task<Result> PutAndActivateAsync(SieveConnection connection, string scriptName, string scriptContent, CancellationToken cancellationToken)
     {
-        var sessionResult = await _client.OpenSessionAsync(connection, cancellationToken);
+        var sessionResult = await client.OpenSessionAsync(connection, cancellationToken);
         if (sessionResult.IsFailure) return Result.Failure(sessionResult.Error);
         await using var session = sessionResult.Value;
 
         var put = await session.PutScriptAsync(scriptName, scriptContent, cancellationToken);
         if (put.IsFailure)
         {
-            _logger.LogWarning("PUTSCRIPT rejected for {Connection} script={Script}: {Error}", connection, scriptName, put.Error);
+            logger.LogWarning("PUTSCRIPT rejected for {Connection} script={Script}: {Error}", connection, scriptName, put.Error);
             return put;
         }
 
         var activate = await session.SetActiveAsync(scriptName, cancellationToken);
         if (activate.IsFailure)
         {
-            _logger.LogWarning("SETACTIVE failed for {Connection} script={Script}: {Error}", connection, scriptName, activate.Error);
+            logger.LogWarning("SETACTIVE failed for {Connection} script={Script}: {Error}", connection, scriptName, activate.Error);
         }
         return activate;
     }

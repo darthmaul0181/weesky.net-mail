@@ -10,10 +10,17 @@ Les FK exigent que `users`, `folder_role_overrides` et `sending_identities` exis
 
 Tranche 2d : un utilisateur peut relier d'autres boîtes à sa session (un domaine externe autorisé
 par l'admin, ou une boîte partagée locale du même serveur). `external_domains` est le registre de
-ces domaines ; `connected_accounts` relie un utilisateur à chacune de ses boîtes connectées, mot de
-passe chiffré (AES-256-GCM) sous une clé dérivée par utilisateur — `users.kdf_salt` porte le sel de
-cette dérivation. `folder_role_overrides` et `sending_identities` se re-scopent par compte via une
-colonne `account_id` à valeur sentinelle (voir plus bas).
+ces domaines ; `connected_accounts` relie un utilisateur à chacune de ses boîtes connectées, secret
+chiffré (AES-256-GCM) sous une clé dérivée par utilisateur — mot de passe sur une ligne `Password`,
+refresh token OAuth sur une ligne `OAuth2` — `users.kdf_salt` porte le sel de cette dérivation.
+`folder_role_overrides` et `sending_identities` se re-scopent par compte via une colonne
+`account_id` à valeur sentinelle (voir plus bas).
+
+Un domaine peut décrire un fournisseur OAuth (colonnes `auth_mode` et `oauth_*` ci-dessous) ;
+l'inscription Entra et la ligne Outlook sont documentées dans
+`mail-oauth-provider-prerequisite.md`, qui porte aussi les `ALTER TABLE` pour un schéma déjà
+installé. Le `oauth_client_secret` s'écrit via l'écran admin, jamais directement dans la colonne :
+elle contient des octets protégés par Data Protection, pas du texte.
 
 ## DDL
 
@@ -37,6 +44,12 @@ CREATE TABLE IF NOT EXISTS external_domains (
   smtp_security VARCHAR(16)  NOT NULL,
   sieve_host    VARCHAR(255) NULL COMMENT 'NULL = le domaine ne supporte pas Sieve',
   sieve_port    SMALLINT UNSIGNED NULL,
+  auth_mode     VARCHAR(16)  NOT NULL DEFAULT 'Password' COMMENT 'Password | OAuth2',
+  oauth_authorization_url VARCHAR(512)  NULL,
+  oauth_token_url         VARCHAR(512)  NULL,
+  oauth_scopes            VARCHAR(1024) NULL COMMENT 'Séparés par des espaces, envoyés tels quels',
+  oauth_client_id         VARCHAR(255)  NULL,
+  oauth_client_secret     VARBINARY(1024) NULL COMMENT 'Protégé par Data Protection — jamais du texte',
   creation_date DATETIME     NOT NULL COMMENT 'UTC, posée par le code',
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -48,7 +61,8 @@ CREATE TABLE IF NOT EXISTS connected_accounts (
   user_id       CHAR(36)     NOT NULL,
   domain_id     CHAR(36)     NULL COMMENT 'NULL = serveur maison (boîte partagée locale)',
   email         VARCHAR(255) NOT NULL COMMENT 'Login IMAP/SMTP/Sieve et adresse de l''identité par défaut',
-  cipher        VARBINARY(512) NOT NULL COMMENT 'nonce(12) + tag(16) + AES-256-GCM(mot de passe)',
+  cipher        VARBINARY(8192) NOT NULL COMMENT 'version(1) + nonce(12) + tag(16) + AES-256-GCM(mot de passe ou refresh token)',
+  auth_mode     VARCHAR(16)  NOT NULL DEFAULT 'Password' COMMENT 'Password | OAuth2 — le mode de la ligne, pas celui du domaine',
   creation_date DATETIME     NOT NULL COMMENT 'UTC, posée par le code',
   PRIMARY KEY (id),
   UNIQUE KEY uq_connected_accounts_target (user_id, domain_id, email),

@@ -230,8 +230,10 @@ export const api = {
   adminUpdateDomain: (id, payload) =>
     request('PUT', `/api/Admin/domains/${id}`, payload),
 
-  adminDeleteDomain: (id) =>
-    request('DELETE', `/api/Admin/domains/${id}`),
+  // deleteAliases acknowledges the cascade: the aliases anchored on the domain go with it. Sent
+  // only once the user has confirmed, so an unacknowledged call is refused server-side too.
+  adminDeleteDomain: (id, deleteAliases = false) =>
+    request('DELETE', `/api/Admin/domains/${id}${deleteAliases ? '?deleteAliases=true' : ''}`),
 
   adminGetUserQuota: (id) =>
     request('GET', `/api/Admin/users/${id}/quota`),
@@ -351,6 +353,14 @@ export const api = {
 
   getConnectableDomains: () =>
     request('GET', '/api/ConnectedAccounts/Domains'),
+
+  // Typed here because the defaults alone would infer `null` and refuse a real id.
+  /** @param {{ domainId?: string | null, accountId?: string | null }} target */
+  startOAuthConnect: ({ domainId = null, accountId = null }) =>
+    request('POST', '/api/ConnectedAccounts/OAuth/Start', { domainId, accountId }),
+
+  completeOAuthConnect: (state) =>
+    request('POST', '/api/ConnectedAccounts/OAuth/Complete', { state }),
 
   adminGetExternalDomains: () =>
     request('GET', '/api/Admin/domains/external'),

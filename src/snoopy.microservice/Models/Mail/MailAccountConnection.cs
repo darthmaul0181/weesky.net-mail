@@ -12,7 +12,7 @@ public sealed record MailAccountConnection(
     string ImapHost, int ImapPort, SecureSocketOptions ImapSecurity,
     string SmtpHost, int SmtpPort, SecureSocketOptions SmtpSecurity,
     string? SieveHost, int? SievePort,
-    string Username, string Password)
+    string Username, MailCredential Credential)
 {
     /// <summary>The wire spelling of the primary account ("" in the database, see StorageAccountId).</summary>
     public const string Primary = "primary";

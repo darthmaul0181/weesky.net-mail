@@ -17,6 +17,7 @@ internal sealed class AccountConnectionResolver(
     IConnectedAccountStore accounts,
     IExternalDomainStore domains,
     IWebmailUserStore users,
+    IOAuthTokenService oauth,
     IOptionsMonitor<MailOptions> options,
     IOptions<TokenConstants> tokenConstants,
     ILogger<AccountConnectionResolver> logger) : IAccountConnectionResolver
@@ -33,7 +34,7 @@ internal sealed class AccountConnectionResolver(
 
         var accountId = IAccountConnectionResolver.AccountIdFrom(request);
         if (accountId is null)
-            return HomeConnection(MailAccountConnection.Primary, user.Email, payload.Password);
+            return HomeConnection(MailAccountConnection.Primary, user.Email, new PasswordCredential(payload.Password));
 
         // An id that parses into nothing of the user's is simply not found — a foreign account
         // resolves to null by store scoping, indistinguishable from an unknown one by design.
@@ -46,36 +47,92 @@ internal sealed class AccountConnectionResolver(
 
         var kek = payload.Kek ?? await UpgradeCookieAsync(user, request, payload, cancellationToken);
 
-        var secret = ConnectedAccountCipher.Decrypt(kek, row.Cipher);
+        var context = ConnectedAccountCipher.Context(row);
+        var secret = ConnectedAccountCipher.Decrypt(kek, row.Cipher, context, out var bound);
         if (secret.IsFailure) return Result.Failure<MailAccountConnection>(secret.Error);
 
-        if (row.DomainId is null)
-            return HomeConnection(row.Id.ToString(), row.Email, secret.Value);
+        if (!bound) await BindCipherAsync(row, kek, secret.Value, context, cancellationToken);
 
-        return await ExternalConnection(row, secret.Value, cancellationToken);
+        if (row.DomainId is null)
+            return HomeConnection(row.Id.ToString(), row.Email, new PasswordCredential(secret.Value));
+
+        return await ExternalConnection(row, secret.Value, kek, cancellationToken);
+    }
+
+    /// <summary>
+    /// Rewrites a pre-binding cipher bound to its row, on the first request that opens it — which
+    /// is what migrates the existing rows without asking anybody for a provider password again.
+    ///
+    /// Best effort on purpose: this sits on a read path, and the mailbox must open whether or not
+    /// the rewrite lands. A failure costs one more unbound read; the next request tries again.
+    /// </summary>
+    private async Task BindCipherAsync(
+        Data.Preferences.ConnectedAccount row, byte[] kek, string secret, byte[] context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await accounts.UpdateCipherAsync(
+                row, ConnectedAccountCipher.Encrypt(kek, secret, context), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex, "Could not bind the cipher of connected account {AccountId} to its row", row.Id);
+        }
     }
 
     /// <summary>The primary and the local shared mailboxes: endpoints from appsettings.</summary>
-    private MailAccountConnection HomeConnection(string accountId, string username, string password) =>
-        MailConnectionBuilder.Home(options.CurrentValue, accountId, username, password);
+    private MailAccountConnection HomeConnection(string accountId, string username, MailCredential credential) =>
+        MailConnectionBuilder.Home(options.CurrentValue, accountId, username, credential);
 
     private async Task<Result<MailAccountConnection>> ExternalConnection(
-        Data.Preferences.ConnectedAccount row, string secret, CancellationToken cancellationToken)
+        Data.Preferences.ConnectedAccount row, string secret, byte[] kek,
+        CancellationToken cancellationToken)
     {
         var domain = await domains.FindAsync(row.DomainId!.Value, cancellationToken);
         if (domain is null)
             return Result.Failure<MailAccountConnection>(ConnectedAccountErrors.AccountNotFound);
 
+        var credential = await CredentialFor(row, domain, secret, kek, cancellationToken);
+        if (credential.IsFailure) return Result.Failure<MailAccountConnection>(credential.Error);
+
         if (!MailConnectionBuilder.TryExternal(
-                domain, row.Id.ToString(), row.Email, secret, out var connection))
+                domain, row.Id.ToString(), row.Email, credential.Value, out var connection,
+                options.CurrentValue.AllowCleartext))
         {
             logger.LogError(
-                "External domain {DomainName} ({DomainId}) holds an unusable security value",
+                "External domain {DomainName} ({DomainId}) holds an unusable security or OAuth value",
                 domain.Name, domain.Id);
             return Result.Failure<MailAccountConnection>(ConnectedAccountErrors.AccountNotFound);
         }
 
         return connection;
+    }
+
+    /// <summary>
+    /// The stored secret is a password on a password row and a refresh token on an OAuth one, so
+    /// the row's own mode decides — never the domain's, which an admin may have flipped since.
+    /// </summary>
+    private async Task<Result<MailCredential>> CredentialFor(
+        Data.Preferences.ConnectedAccount row, Data.Preferences.ExternalDomain domain, string secret,
+        byte[] kek, CancellationToken cancellationToken)
+    {
+        if (row.AuthMode is not MailAuthMode.OAuth2)
+            return Result.Success<MailCredential>(new PasswordCredential(secret));
+
+        if (!OAuthProviderConfig.TryFrom(domain, out var provider))
+        {
+            logger.LogError(
+                "External domain {DomainName} ({DomainId}) is OAuth but incompletely configured",
+                domain.Name, domain.Id);
+            return Result.Failure<MailCredential>(ConnectedAccountErrors.AccountNotFound);
+        }
+
+        var token = await oauth.GetAccessTokenAsync(row, provider, kek, cancellationToken);
+        return token.IsSuccess
+            ? Result.Success<MailCredential>(new OAuthCredential(token.Value))
+            : Result.Failure<MailCredential>(token.Error);
     }
 
     /// <summary>

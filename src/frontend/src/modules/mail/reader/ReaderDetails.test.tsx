@@ -13,7 +13,7 @@ const message: MailMessageDetail = {
   authentication: null, spamScore: null,
   mailingList: '<news.weesky.net>', sentBy: 'a547955.bnc3.mailjet.com', signedBy: 'weesky.net',
   unsubscribeUrl: 'https://news.weesky.net/unsub', tlsReceived: true,
-  htmlBody: '', textBody: '', blockedImageCount: 0, attachments: [], priority: 'normal',
+  htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false, attachments: [], priority: 'normal',
 }
 
 describe('ReaderDetails', () => {

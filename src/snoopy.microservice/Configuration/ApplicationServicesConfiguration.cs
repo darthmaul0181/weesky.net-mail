@@ -1,3 +1,5 @@
+using System.Text;
+using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -13,7 +15,18 @@ internal static class ApplicationServicesConfiguration
 {
     public static IServiceCollection AddSnoopyOptions(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddOptions<TokenConstants>().Bind(configuration.GetSection("TokenConstants"));
+        // The signing key is the whole of this API's authentication, and a short one is not refused
+        // by the handler — HMAC takes any length. Validated on start rather than on first use, so
+        // a misconfigured deployment fails where an operator is watching instead of on a 500 the
+        // first user meets. Same refusal AddFrontendCors and AddCredentialKeyRing make.
+        services.AddOptions<TokenConstants>()
+            .Bind(configuration.GetSection("TokenConstants"))
+            .Validate(
+                constants => Encoding.UTF8.GetByteCount(constants.Key ?? string.Empty)
+                             >= AuthorizationExtension.MinimumSigningKeyBytes,
+                $"TokenConstants:Key must be at least {AuthorizationExtension.MinimumSigningKeyBytes} bytes " +
+                "to sign with HMAC-SHA256. Set TokenConstants__Key in the service's EnvironmentFile.")
+            .ValidateOnStart();
         services.AddOptions<DovecotOptions>().Bind(configuration.GetSection("Dovecot"));
         services.AddOptions<SieveOptions>().Bind(configuration.GetSection("Sieve"));
         services.AddOptions<MailOptions>().Bind(configuration.GetSection("Mail"));
@@ -29,6 +42,8 @@ internal static class ApplicationServicesConfiguration
             options.MultipartBodyLengthLimit = (long)maxMessageSizeMb * 1024 * 1024 + 1024 * 1024;
         });
 
+        services.AddEnveloppeModelStateResponse();
+
         return services;
     }
 
@@ -41,6 +56,10 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
         services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
         services.AddSingleton<IQuotePreparer, QuotePreparer>();
+        services.AddSingleton<IClientSecretProtector, ClientSecretProtector>();
+        // Singleton: a scoped store would forget every handshake at the end of the request that
+        // started it.
+        services.AddSingleton<IOAuthHandshakeStore, OAuthHandshakeStore>();
 
         // Scoped, so the whole request shares one authenticated IMAP connection and the container
         // closes it when the request ends. See ScopedImapSessionProvider.
@@ -60,6 +79,14 @@ internal static class ApplicationServicesConfiguration
         {
             client.Timeout = TimeSpan.FromSeconds(5);
         });
+
+        services.AddHttpClient<IOAuthTokenService, OAuthTokenService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(10);
+            })
+            // A 307/308 from the token endpoint would re-POST the client secret and the refresh
+            // token to wherever it points; a redirecting provider is a refusal, not a destination.
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
         return services;
     }

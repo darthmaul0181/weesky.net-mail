@@ -1,3 +1,5 @@
+using weesky.Snoopy.Microservice.Models.Mail;
+
 namespace weesky.Snoopy.Microservice.Models;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace weesky.Snoopy.Microservice.Models;
 /// </summary>
 public sealed record ConnectedAccountResponse(
     Guid Id, string Email, string DisplayName, Guid? DomainId, string? DomainName,
-    bool SieveSupported, bool CredentialsValid, DateTime CreationDate);
+    bool SieveSupported, bool CredentialsValid, DateTime CreationDate, MailAuthMode AuthMode);
 
 /// <summary>
 /// Attaching a mailbox. No host, port or security field exists here by design — endpoints come
@@ -33,4 +35,4 @@ public sealed record ConnectedAccountPasswordRequest(string Password)
 /// An external domain in the connect form's choice list. Names and ids only: hosts, ports and
 /// transport security are administrator information.
 /// </summary>
-public sealed record ExternalDomainChoice(Guid Id, string Name);
+public sealed record ExternalDomainChoice(Guid Id, string Name, MailAuthMode AuthMode);

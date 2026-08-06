@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.RuleProviders;
 
 namespace weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 
@@ -201,7 +202,7 @@ internal sealed class RainloopRuleProvider : IRuleProvider
         if (requires.Count > 0)
         {
             sb.Append("require [");
-            sb.Append(string.Join(", ", requires.Select(QuoteSimple)));
+            sb.Append(string.Join(", ", requires.Select(SieveQuoting.Quote)));
             sb.Append("];\r\n");
         }
         sb.Append("\r\n");
@@ -290,6 +291,9 @@ internal sealed class RainloopRuleProvider : IRuleProvider
         if (string.IsNullOrWhiteSpace(rule.Name)) return Result.Failure<RainloopFilter>("Name is required");
         if (rule.Conditions == null || rule.Conditions.Count == 0) return Result.Failure<RainloopFilter>("At least one condition is required");
         if (rule.Actions == null || rule.Actions.Count == 0) return Result.Failure<RainloopFilter>("At least one action is required");
+
+        var printable = SieveQuoting.RejectControlCharacters(rule);
+        if (printable.IsFailure) return Result.Failure<RainloopFilter>(printable.Error);
 
         var primaries = rule.Actions
             .Where(a => a.Type is SieveActionType.FileInto or SieveActionType.Redirect or SieveActionType.Reject or SieveActionType.Discard)
@@ -465,9 +469,9 @@ internal sealed class RainloopRuleProvider : IRuleProvider
 
         switch (filter.ActionType)
         {
-            case "MoveTo": sb.Append("    fileinto ").Append(QuoteSimple(filter.ActionValue)).Append(";\r\n"); break;
-            case "Forward": sb.Append("    redirect ").Append(QuoteSimple(filter.ActionValue)).Append(";\r\n"); break;
-            case "Reject": sb.Append("    reject ").Append(QuoteSimple(filter.ActionValue)).Append(";\r\n"); break;
+            case "MoveTo": sb.Append("    fileinto ").Append(SieveQuoting.Quote(filter.ActionValue)).Append(";\r\n"); break;
+            case "Forward": sb.Append("    redirect ").Append(SieveQuoting.Quote(filter.ActionValue)).Append(";\r\n"); break;
+            case "Reject": sb.Append("    reject ").Append(SieveQuoting.Quote(filter.ActionValue)).Append(";\r\n"); break;
             case "Discard": sb.Append("    discard;\r\n"); break;
         }
 
@@ -494,7 +498,7 @@ internal sealed class RainloopRuleProvider : IRuleProvider
 
         string expr;
         if (c.Field == SieveConditionField.Recipient)
-            expr = $"header {matchOp} [\"To\", \"CC\"] {QuoteSimple(c.Value)}";
+            expr = $"header {matchOp} [\"To\", \"CC\"] {SieveQuoting.Quote(c.Value)}";
         else
         {
             var name = c.Field switch
@@ -506,22 +510,9 @@ internal sealed class RainloopRuleProvider : IRuleProvider
                 SieveConditionField.Header => c.HeaderName!,
                 _ => throw new InvalidOperationException()
             };
-            expr = $"header {matchOp} [{QuoteSimple(name)}] {QuoteSimple(c.Value)}";
+            expr = $"header {matchOp} [{SieveQuoting.Quote(name)}] {SieveQuoting.Quote(c.Value)}";
         }
         return negate ? $"not {expr}" : expr;
-    }
-
-    private static string QuoteSimple(string s)
-    {
-        var sb = new StringBuilder(s.Length + 2);
-        sb.Append('"');
-        foreach (var c in s)
-        {
-            if (c == '"' || c == '\\') sb.Append('\\');
-            sb.Append(c);
-        }
-        sb.Append('"');
-        return sb.ToString();
     }
 
     private static string GenerateRainloopId(Guid g) =>

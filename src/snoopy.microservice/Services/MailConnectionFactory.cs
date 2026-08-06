@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Security;
 using CSharpFunctionalExtensions;
 using MailKit;
@@ -57,6 +58,13 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
             return Result.Failure<TSession>("Mail service is not configured");
         }
 
+        // The configuration-level notice, independent of whether the server ever answers. What
+        // actually crossed the wire is decided after the connect, below.
+        if (endpoint.Security is SecureSocketOptions.None)
+            Logger.LogWarning(
+                "{Protocol} endpoint {Host}:{Port} is configured without transport security",
+                endpoint.Protocol, endpoint.Host, endpoint.Port);
+
         TClient? client = null;
 
         try
@@ -70,7 +78,36 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
             {
                 connectCts.CancelAfter(TimeSpan.FromSeconds(options.CurrentValue.TimeoutSeconds));
                 await client.ConnectAsync(endpoint.Host, endpoint.Port, endpoint.Security, connectCts.Token);
-                await client.AuthenticateAsync(connection.Username, connection.Password, connectCts.Token);
+
+                // Only the connected client knows whether TLS actually happened: Auto and
+                // StartTlsWhenAvailable negotiate, so a server that drops STARTTLS — or an attacker
+                // stripping it from the pre-auth banner — lands here with the configured value intact.
+                // AuthenticateAsync sends the password whether or not the login succeeds.
+                if (!client.IsSecure)
+                {
+                    if (!options.CurrentValue.AllowCleartext)
+                    {
+                        Logger.LogError(
+                            "Refusing to authenticate over an unencrypted {Protocol} connection to {Host}:{Port}; " +
+                            "set Mail:AllowCleartext if the link is genuinely trusted",
+                            endpoint.Protocol, endpoint.Host, endpoint.Port);
+                        return Result.Failure<TSession>("Unable to connect to the mail service");
+                    }
+
+                    Logger.LogWarning(
+                        "Authenticating over an unencrypted {Protocol} connection to {Host}:{Port} — " +
+                        "the mail password crosses this link in the clear",
+                        endpoint.Protocol, endpoint.Host, endpoint.Port);
+                }
+
+                await (connection.Credential switch
+                {
+                    OAuthCredential oauth => client.AuthenticateAsync(
+                        new SaslMechanismOAuth2(connection.Username, oauth.AccessToken), connectCts.Token),
+                    PasswordCredential password => client.AuthenticateAsync(
+                        connection.Username, password.Password, connectCts.Token),
+                    _ => throw new UnreachableException()
+                });
             }
 
             var session = CreateSession(client);

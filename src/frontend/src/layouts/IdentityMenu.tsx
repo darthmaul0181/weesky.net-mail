@@ -119,9 +119,14 @@ export default function IdentityMenu() {
                   <span>{label}</span>
                   {label !== acc.email && <span className="identity-account-sub">{acc.email}</span>}
                 </span>
-                {/* The row is a dead end until the password is re-entered: without the chip the
-                    click looks like a switch that silently did nothing. */}
-                {!acc.credentialsValid && <span className="row-tag is-warn">Password needed</span>}
+                {/* The row is a dead end until it is repaired: without the chip the click looks
+                    like a switch that silently did nothing. It names the repair, which is a fresh
+                    consent rather than a password on a provider mailbox. */}
+                {!acc.credentialsValid && (
+                  <span className="row-tag is-warn">
+                    {acc.authMode === 'OAuth2' ? 'Sign-in needed' : 'Password needed'}
+                  </span>
+                )}
               </button>
             )
           })}

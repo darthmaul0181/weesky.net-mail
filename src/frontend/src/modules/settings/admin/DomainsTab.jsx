@@ -31,7 +31,10 @@ export function DomainsTab({ addToast }) {
   async function handleDelete() {
     setDeleting(true)
     try {
-      await api.adminDeleteDomain(domainToDelete.id)
+      // The count came with the listing, so confirming here is the acknowledgement the API asks
+      // for: without it the call is refused, which is what keeps a stale list from deleting
+      // aliases nobody was shown.
+      await api.adminDeleteDomain(domainToDelete.id, domainToDelete.aliasCount > 0)
       addToast(`Domain ${domainToDelete.name} deleted`)
       setDomainToDelete(null)
       load()
@@ -80,6 +83,14 @@ export function DomainsTab({ addToast }) {
       )}
       {domainToDelete && (
         <DeleteConfirmModal entityLabel={domainToDelete.name}
+          message={domainToDelete.aliasCount > 0 ? (
+            <>
+              Delete <strong>{domainToDelete.name}</strong>? Its{' '}
+              <strong>{domainToDelete.aliasCount} alias{domainToDelete.aliasCount > 1 ? 'es' : ''}</strong>{' '}
+              will be deleted with it and mail sent to {domainToDelete.aliasCount > 1 ? 'those addresses' : 'that address'} will
+              stop being delivered. This action cannot be undone.
+            </>
+          ) : undefined}
           onConfirm={handleDelete} onClose={() => setDomainToDelete(null)} loading={deleting} />
       )}
     </div>

@@ -73,18 +73,28 @@ public sealed class RulesControllerTests
         Assert.Same(ruleSet, ok.Value);
     }
 
-    [Fact]
-    public async Task Get_WhenTheRulesServiceIsDown_Returns502WithErrorEnvelope()
+    /// <summary>
+    /// Every way the rules service can let us down, and none of them is the caller's mistake: a
+    /// silent peer and an oversized response are outages exactly as a refused connection is.
+    /// </summary>
+    [Theory]
+    [InlineData(SieveErrors.Unreachable)]
+    [InlineData(SieveErrors.NotConfigured)]
+    [InlineData(SieveErrors.AuthenticationFailed)]
+    [InlineData(SieveErrors.NotSecure)]
+    [InlineData(SieveErrors.TimedOut)]
+    [InlineData(SieveErrors.ResponseTooLarge)]
+    public async Task Get_WhenTheRulesServiceIsDown_Returns502WithErrorEnvelope(string error)
     {
         _repo.Setup(r => r.GetRuleSetAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(Result.Failure<SieveRuleSet>(SieveErrors.Unreachable));
+             .ReturnsAsync(Result.Failure<SieveRuleSet>(error));
 
         var result = await CreateController().Get(CancellationToken.None);
 
         var bad = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status502BadGateway, bad.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(bad.Value);
-        Assert.Equal(SieveErrors.Unreachable, envelope.Message);
+        Assert.Equal(error, envelope.Message);
     }
 
     // ----- PUT /api/Rules -----

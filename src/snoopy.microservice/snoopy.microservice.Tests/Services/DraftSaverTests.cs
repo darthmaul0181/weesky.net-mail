@@ -29,7 +29,7 @@ public sealed class DraftSaverTests
 
     private DraftSaver CreateSaver()
     {
-        _users.Setup(u => u.FindByEmailAsync("mick@weesky.be"))
+        _users.Setup(u => u.FindByEmailAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new User("mick@weesky.be") { FullName = "Mick" });
         _sanitizer.Setup(s => s.Prepare(It.IsAny<string>()))
             .Returns(new OutgoingBody("<div>hi</div>", "hi"));
@@ -43,7 +43,7 @@ public sealed class DraftSaverTests
         _messages.Setup(m => m.SaveDraftAsync(_user, Conn, "Drafts", It.IsAny<MimeMessage>(), It.IsAny<uint?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(7u));
 
-        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>()))
+        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Alias { Name = "michel", Domain = "weesky.be" }]);
         _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);

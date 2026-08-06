@@ -5,40 +5,50 @@ namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
 /// ManageSieve (RFC 5804) protocol session built on top of an already-connected and
-/// authenticated <see cref="Stream"/>. The transport (TCP/TLS) and the SASL handshake
+/// authenticated <see cref="ManageSieveWire"/>. The transport (TCP/TLS) and the SASL handshake
 /// are handled by <see cref="ManageSieveClient"/>; this class only speaks the
 /// post-authentication command set.
+///
+/// It owns the wire it is handed: disposing the session closes the connection.
 /// </summary>
 internal sealed class ManageSieveSession : IManageSieveSession
 {
-    private static readonly UTF8Encoding Utf8 = new(false);
-    private static readonly byte[] CrLf = { 0x0D, 0x0A };
+    private const string ControlCharacterInName = "Script name contains a forbidden control character";
 
-    private readonly Stream _stream;
-    private readonly Func<ValueTask>? _onDisposeAsync;
-    private readonly byte[] _readBuffer = new byte[8192];
-    private int _readBufferLen;
-    private int _readBufferPos;
+    private static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>The socket is closing either way: a LOGOUT the peer never reads must not hold the
+    /// response back, since disposal is the request's last act.</summary>
+    private static readonly TimeSpan LogoutTimeout = TimeSpan.FromSeconds(2);
+
+    private readonly ManageSieveWire _wire;
+    private readonly TimeSpan _operationTimeout;
     private bool _disposed;
 
-    public ManageSieveSession(Stream stream, Func<ValueTask>? onDisposeAsync = null)
+    public ManageSieveSession(ManageSieveWire wire, TimeSpan? operationTimeout = null)
     {
-        _stream = stream ?? throw new ArgumentNullException(nameof(stream));
-        _onDisposeAsync = onDisposeAsync;
+        ArgumentNullException.ThrowIfNull(wire);
+        _wire = wire;
+        _operationTimeout = operationTimeout is { } timeout && timeout > TimeSpan.Zero ? timeout : DefaultOperationTimeout;
     }
 
-    public async Task<Result<IReadOnlyList<SieveScriptListEntry>>> ListScriptsAsync(CancellationToken cancellationToken = default)
+    public Task<Result<IReadOnlyList<SieveScriptListEntry>>> ListScriptsAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        await SendLineAsync("LISTSCRIPTS", cancellationToken);
+        return BoundedAsync(cancellationToken, ListScriptsCoreAsync);
+    }
+
+    private async Task<Result<IReadOnlyList<SieveScriptListEntry>>> ListScriptsCoreAsync(CancellationToken cancellationToken)
+    {
+        await _wire.WriteLineAsync("LISTSCRIPTS", cancellationToken);
 
         var entries = new List<SieveScriptListEntry>();
         while (true)
         {
-            var line = await ReadLineAsync(cancellationToken);
+            var line = await _wire.ReadLineAsync(cancellationToken);
             if (line == null)
-                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>("Connection closed");
-            if (IsTerminator(line, out var status))
+                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>(_wire.ReadFailure);
+            if (ManageSieveWire.TryParseStatus(line, out var status))
             {
                 return status.IsOk
                     ? Result.Success<IReadOnlyList<SieveScriptListEntry>>(entries)
@@ -46,232 +56,197 @@ internal sealed class ManageSieveSession : IManageSieveSession
             }
 
             var entry = await ParseListEntryAsync(line, cancellationToken);
-            if (entry != null) entries.Add(entry);
+            if (entry.IsFailure)
+                return Result.Failure<IReadOnlyList<SieveScriptListEntry>>(entry.Error);
+            if (entry.Value != null) entries.Add(entry.Value);
         }
     }
 
-    public async Task<Result<string>> GetScriptAsync(string name, CancellationToken cancellationToken = default)
+    public Task<Result<string>> GetScriptAsync(string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(name))
-            return Result.Failure<string>("Script name is required");
+            return Task.FromResult(Result.Failure<string>("Script name is required"));
 
-        await SendLineAsync($"GETSCRIPT {QuoteString(name)}", cancellationToken);
+        var quoted = QuoteName(name);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure<string>(quoted.Error));
 
-        var first = await ReadLineAsync(cancellationToken);
+        return BoundedAsync(cancellationToken, token => GetScriptCoreAsync(quoted.Value, token));
+    }
+
+    private async Task<Result<string>> GetScriptCoreAsync(string quotedName, CancellationToken cancellationToken)
+    {
+        await _wire.WriteLineAsync($"GETSCRIPT {quotedName}", cancellationToken);
+
+        var first = await _wire.ReadLineAsync(cancellationToken);
         if (first == null)
-            return Result.Failure<string>("Connection closed");
+            return Result.Failure<string>(_wire.ReadFailure);
 
-        if (IsTerminator(first, out var status))
+        if (ManageSieveWire.TryParseStatus(first, out var status))
             return status.IsOk
                 ? Result.Success(string.Empty)
                 : Result.Failure<string>(status.Message ?? "Script not found");
 
         // Expect a literal payload: {N} or {N+}
-        if (!TryParseLiteralPrefix(first, out var size))
+        if (!ManageSieveWire.TryParseLiteralPrefix(first, out var size))
             return Result.Failure<string>("Unexpected response from server");
 
-        var bytes = await ReadExactlyAsync(size, cancellationToken);
+        var payload = await _wire.ReadExactlyAsync(size, cancellationToken);
+        if (payload.IsFailure)
+            return Result.Failure<string>(payload.Error);
+
         // After the literal, the server sends a CRLF then the final OK/NO line.
         // We consume the CRLF by reading one (possibly empty) line.
-        await ReadLineAsync(cancellationToken);
-        var dataLines = new List<string>();
-        var final = await ReadTerminatorAsync(dataLines, cancellationToken);
+        await _wire.ReadLineAsync(cancellationToken);
+        var final = await ReadTerminatorAsync(cancellationToken);
         if (!final.IsOk)
             return Result.Failure<string>(final.Message ?? "Unable to fetch script");
 
-        return Result.Success(Utf8.GetString(bytes));
+        return Result.Success(ManageSieveWire.Utf8.GetString(payload.Value));
     }
 
-    public async Task<Result> PutScriptAsync(string name, string content, CancellationToken cancellationToken = default)
+    public Task<Result> PutScriptAsync(string name, string content, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(name))
-            return Result.Failure("Script name is required");
-        content ??= string.Empty;
+            return Task.FromResult(Result.Failure("Script name is required"));
 
-        var contentBytes = Utf8.GetBytes(content);
-        var header = Utf8.GetBytes($"PUTSCRIPT {QuoteString(name)} {{{contentBytes.Length}+}}\r\n");
+        var quoted = QuoteName(name);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure(quoted.Error));
 
-        await _stream.WriteAsync(header, cancellationToken);
-        await _stream.WriteAsync(contentBytes, cancellationToken);
-        await _stream.WriteAsync(CrLf, cancellationToken);
-        await _stream.FlushAsync(cancellationToken);
+        return BoundedAsync(cancellationToken, token => PutScriptCoreAsync(quoted.Value, content ?? string.Empty, token));
+    }
 
-        var response = await ReadResponseAsync(cancellationToken);
-        return response.IsOk
+    private async Task<Result> PutScriptCoreAsync(string quotedName, string content, CancellationToken cancellationToken)
+    {
+        await _wire.WriteLiteralCommandAsync($"PUTSCRIPT {quotedName}", ManageSieveWire.Utf8.GetBytes(content), cancellationToken);
+
+        var status = await ReadTerminatorAsync(cancellationToken);
+        return status.IsOk
             ? Result.Success()
-            : Result.Failure(response.Message ?? "Unable to save script");
+            : Result.Failure(status.Message ?? "Unable to save script");
     }
 
     public Task<Result> SetActiveAsync(string name, CancellationToken cancellationToken = default)
-        => SendSimpleAsync($"SETACTIVE {QuoteString(name ?? string.Empty)}", "Unable to change active script", cancellationToken);
+    {
+        ThrowIfDisposed();
+        var quoted = QuoteName(name ?? string.Empty);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure(quoted.Error));
+
+        return BoundedAsync(cancellationToken,
+            token => SendSimpleAsync($"SETACTIVE {quoted.Value}", "Unable to change active script", token));
+    }
 
     public Task<Result> DeleteScriptAsync(string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(name))
             return Task.FromResult(Result.Failure("Script name is required"));
-        return SendSimpleAsync($"DELETESCRIPT {QuoteString(name)}", "Unable to delete script", cancellationToken);
+
+        var quoted = QuoteName(name);
+        if (quoted.IsFailure) return Task.FromResult(Result.Failure(quoted.Error));
+
+        return BoundedAsync(cancellationToken,
+            token => SendSimpleAsync($"DELETESCRIPT {quoted.Value}", "Unable to delete script", token));
     }
 
     private async Task<Result> SendSimpleAsync(string command, string failureFallback, CancellationToken cancellationToken)
     {
-        ThrowIfDisposed();
-        await SendLineAsync(command, cancellationToken);
-        var response = await ReadResponseAsync(cancellationToken);
-        return response.IsOk
+        await _wire.WriteLineAsync(command, cancellationToken);
+        var status = await ReadTerminatorAsync(cancellationToken);
+        return status.IsOk
             ? Result.Success()
-            : Result.Failure(response.Message ?? failureFallback);
+            : Result.Failure(status.Message ?? failureFallback);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
-        try
+        using (var logoutCts = new CancellationTokenSource(LogoutTimeout))
         {
-            await SendLineAsync("LOGOUT", CancellationToken.None);
+            try
+            {
+                await _wire.WriteLineAsync("LOGOUT", logoutCts.Token);
+            }
+            catch
+            {
+                // best-effort
+            }
         }
-        catch
-        {
-            // best-effort
-        }
-        if (_onDisposeAsync != null)
-        {
-            try { await _onDisposeAsync(); } catch { /* swallow */ }
-        }
+        await _wire.DisposeAsync();
     }
 
     // ---------- Protocol helpers ----------
 
-    private async Task SendLineAsync(string line, CancellationToken cancellationToken)
+    /// <summary>
+    /// Every read and write below is async, so the socket-level ReceiveTimeout/SendTimeout the
+    /// transport sets bind none of them: this is the only thing keeping a silent peer from holding
+    /// the request open. A timeout the caller did not ask for is a failure, never an exception.
+    /// </summary>
+    private async Task<Result<T>> BoundedAsync<T>(CancellationToken cancellationToken, Func<CancellationToken, Task<Result<T>>> operation)
     {
-        var bytes = Utf8.GetBytes(line);
-        await _stream.WriteAsync(bytes, cancellationToken);
-        await _stream.WriteAsync(CrLf, cancellationToken);
-        await _stream.FlushAsync(cancellationToken);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(_operationTimeout);
+        try
+        {
+            return await operation(cts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Result.Failure<T>(SieveErrors.TimedOut);
+        }
     }
 
-    private async Task<Response> ReadResponseAsync(CancellationToken cancellationToken)
+    private async Task<Result> BoundedAsync(CancellationToken cancellationToken, Func<CancellationToken, Task<Result>> operation)
     {
-        var dataLines = new List<string>();
-        var status = await ReadTerminatorAsync(dataLines, cancellationToken);
-        return new Response(status.IsOk, status.Message, dataLines);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(_operationTimeout);
+        try
+        {
+            return await operation(cts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Result.Failure(SieveErrors.TimedOut);
+        }
     }
 
-    private async Task<Status> ReadTerminatorAsync(List<string> dataLines, CancellationToken cancellationToken)
+    private async Task<ManageSieveWire.Status> ReadTerminatorAsync(CancellationToken cancellationToken)
     {
         while (true)
         {
-            var line = await ReadLineAsync(cancellationToken);
-            if (line == null) return new Status(false, "Connection closed");
+            var line = await _wire.ReadLineAsync(cancellationToken);
+            if (line == null) return new ManageSieveWire.Status(false, _wire.ReadFailure);
 
-            if (IsTerminator(line, out var status)) return status;
-            dataLines.Add(line);
+            if (ManageSieveWire.TryParseStatus(line, out var status)) return status;
         }
-    }
-
-    private static bool IsTerminator(string line, out Status status)
-    {
-        if (StartsWithKeyword(line, "OK"))
-        {
-            status = new Status(true, ExtractResponseMessage(line, 2));
-            return true;
-        }
-        if (StartsWithKeyword(line, "NO"))
-        {
-            status = new Status(false, ExtractResponseMessage(line, 2) ?? "Operation rejected by server");
-            return true;
-        }
-        if (StartsWithKeyword(line, "BYE"))
-        {
-            status = new Status(false, ExtractResponseMessage(line, 3) ?? "Server closed the connection");
-            return true;
-        }
-        status = default;
-        return false;
-    }
-
-    private static bool StartsWithKeyword(string line, string keyword)
-    {
-        if (!line.StartsWith(keyword, StringComparison.Ordinal)) return false;
-        return line.Length == keyword.Length || line[keyword.Length] == ' ';
     }
 
     /// <summary>
-    /// Extracts the human-readable message from an OK/NO/BYE line, skipping the optional
-    /// "(code)" prefix and unquoting the trailing quoted string if present.
+    /// The single path from a caller-supplied script name to the wire. ManageSieve is line
+    /// oriented, so a name carrying CR/LF would split the command and inject another one;
+    /// returning a <see cref="Result{T}"/> is what stops a new verb from quoting unchecked.
     /// </summary>
-    private static string? ExtractResponseMessage(string line, int keywordLength)
+    private static Result<string> QuoteName(string name)
     {
-        if (line.Length <= keywordLength + 1) return null;
-        var rest = line.Substring(keywordLength + 1).TrimStart();
-        if (rest.Length == 0) return null;
-
-        // Skip optional "(code)" response code.
-        if (rest[0] == '(')
-        {
-            var close = rest.IndexOf(')');
-            if (close < 0) return rest;
-            rest = rest.Substring(close + 1).TrimStart();
-            if (rest.Length == 0) return null;
-        }
-
-        if (rest[0] == '"')
-        {
-            var unquoted = TryUnquote(rest);
-            if (unquoted != null) return unquoted;
-        }
-
-        return rest;
-    }
-
-    private static string? TryUnquote(string s)
-    {
-        if (s.Length < 2 || s[0] != '"') return null;
-        var sb = new StringBuilder(s.Length - 2);
-        bool escape = false;
-        for (int i = 1; i < s.Length; i++)
-        {
-            var c = s[i];
-            if (escape)
-            {
-                sb.Append(c);
-                escape = false;
-            }
-            else if (c == '\\')
-            {
-                escape = true;
-            }
-            else if (c == '"')
-            {
-                return sb.ToString();
-            }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-        return null;
-    }
-
-    private static string QuoteString(string s)
-    {
-        var sb = new StringBuilder(s.Length + 2);
+        var sb = new StringBuilder(name.Length + 2);
         sb.Append('"');
-        foreach (var c in s)
+        foreach (var c in name)
         {
+            if (char.IsControl(c)) return Result.Failure<string>(ControlCharacterInName);
             if (c == '"' || c == '\\') sb.Append('\\');
             sb.Append(c);
         }
         sb.Append('"');
-        return sb.ToString();
+        return Result.Success(sb.ToString());
     }
 
-    private async Task<SieveScriptListEntry?> ParseListEntryAsync(string line, CancellationToken cancellationToken)
+    /// <summary>A null value is a line this parser does not recognise and skips; a failure is the
+    /// stream itself giving up, which the listing must not survive.</summary>
+    private async Task<Result<SieveScriptListEntry?>> ParseListEntryAsync(string line, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(line)) return null;
+        if (string.IsNullOrEmpty(line)) return Result.Success<SieveScriptListEntry?>(null);
 
         // Quoted form: "name" [ACTIVE]
         if (line[0] == '"')
@@ -282,92 +257,32 @@ internal sealed class ManageSieveSession : IManageSieveSession
                 if (line[i] == '\\' && i + 1 < line.Length) { i++; continue; }
                 if (line[i] == '"') { end = i; break; }
             }
-            if (end < 0) return null;
-            var name = TryUnquote(line.Substring(0, end + 1)) ?? string.Empty;
-            var rest = line.Substring(end + 1).Trim();
-            return new SieveScriptListEntry(name, IsActiveKeyword(rest));
+            if (end < 0) return Result.Success<SieveScriptListEntry?>(null);
+            var name = ManageSieveWire.Unquote(line[..(end + 1)]) ?? string.Empty;
+            var rest = line[(end + 1)..].Trim();
+            return Result.Success<SieveScriptListEntry?>(new SieveScriptListEntry(name, IsActiveKeyword(rest)));
         }
 
         // Literal form: {N} or {N+} on its own line, then N bytes of name, then maybe " ACTIVE\r\n"
-        if (line[0] == '{' && TryParseLiteralPrefix(line, out var size))
+        if (line[0] == '{' && ManageSieveWire.TryParseLiteralPrefix(line, out var size))
         {
-            var nameBytes = await ReadExactlyAsync(size, cancellationToken);
-            var name = Utf8.GetString(nameBytes);
-            var trailing = await ReadLineAsync(cancellationToken);
-            return new SieveScriptListEntry(name, trailing != null && IsActiveKeyword(trailing.Trim()));
+            var nameBytes = await _wire.ReadExactlyAsync(size, cancellationToken);
+            if (nameBytes.IsFailure) return Result.Failure<SieveScriptListEntry?>(nameBytes.Error);
+
+            var name = ManageSieveWire.Utf8.GetString(nameBytes.Value);
+            var trailing = await _wire.ReadLineAsync(cancellationToken);
+            return Result.Success<SieveScriptListEntry?>(
+                new SieveScriptListEntry(name, trailing != null && IsActiveKeyword(trailing.Trim())));
         }
 
-        return null;
+        return Result.Success<SieveScriptListEntry?>(null);
     }
 
     private static bool IsActiveKeyword(string s) =>
         s.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
 
-    private static bool TryParseLiteralPrefix(string line, out int size)
-    {
-        size = 0;
-        if (line.Length < 3 || line[0] != '{') return false;
-        int close = line.IndexOf('}');
-        if (close < 0) return false;
-        var inside = line.Substring(1, close - 1);
-        if (inside.EndsWith("+", StringComparison.Ordinal)) inside = inside[..^1];
-        return int.TryParse(inside, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out size);
-    }
-
-    // ---------- Low-level read helpers ----------
-
-    private async Task<string?> ReadLineAsync(CancellationToken cancellationToken)
-    {
-        using var ms = new MemoryStream();
-        while (true)
-        {
-            if (_readBufferPos >= _readBufferLen)
-            {
-                _readBufferLen = await _stream.ReadAsync(_readBuffer, cancellationToken);
-                _readBufferPos = 0;
-                if (_readBufferLen == 0)
-                    return ms.Length == 0 ? null : Utf8.GetString(ms.ToArray());
-            }
-            byte b = _readBuffer[_readBufferPos++];
-            if (b == 0x0A)
-            {
-                var bytes = ms.ToArray();
-                int len = bytes.Length;
-                if (len > 0 && bytes[len - 1] == 0x0D) len--;
-                return Utf8.GetString(bytes, 0, len);
-            }
-            ms.WriteByte(b);
-        }
-    }
-
-    private async Task<byte[]> ReadExactlyAsync(int count, CancellationToken cancellationToken)
-    {
-        var result = new byte[count];
-        int read = 0;
-        while (read < count)
-        {
-            if (_readBufferPos >= _readBufferLen)
-            {
-                _readBufferLen = await _stream.ReadAsync(_readBuffer, cancellationToken);
-                _readBufferPos = 0;
-                if (_readBufferLen == 0)
-                    throw new IOException("Unexpected end of stream while reading literal payload");
-            }
-            int available = _readBufferLen - _readBufferPos;
-            int toCopy = Math.Min(count - read, available);
-            Buffer.BlockCopy(_readBuffer, _readBufferPos, result, read, toCopy);
-            _readBufferPos += toCopy;
-            read += toCopy;
-        }
-        return result;
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(ManageSieveSession));
     }
-
-    private readonly record struct Status(bool IsOk, string? Message);
-
-    private sealed record Response(bool IsOk, string? Message, IReadOnlyList<string> DataLines);
 }

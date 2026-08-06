@@ -360,6 +360,25 @@ describe('admin api methods', () => {
     )
   })
 
+  // Absent by default rather than false: the API treats the flag's presence as the acknowledgement.
+  it('adminDeleteDomain omits the alias acknowledgement unless it is given', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteDomain('WSY')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.not.stringContaining('deleteAliases'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('adminDeleteDomain carries the alias acknowledgement when confirmed', async () => {
+    const { api } = await import('./api.js')
+    await api.adminDeleteDomain('WSY', true)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/Admin/domains/WSY?deleteAliases=true'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
   it('adminGetUserQuota calls GET /api/Admin/users/:id/quota', async () => {
     const { api } = await import('./api.js')
     await api.adminGetUserQuota(5)
@@ -657,6 +676,27 @@ describe('connected accounts', () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/ConnectedAccounts/acct-1'),
       expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('startOAuthConnect POSTs the target to the Start sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.startOAuthConnect({ domainId: 'd1' })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/OAuth/Start'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ domainId: 'd1', accountId: null }),
+      })
+    )
+  })
+
+  it('completeOAuthConnect POSTs the state to the Complete sub-route', async () => {
+    const { api } = await import('./api.js')
+    await api.completeOAuthConnect('s1')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/ConnectedAccounts/OAuth/Complete'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ state: 's1' }) })
     )
   })
 

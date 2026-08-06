@@ -4,23 +4,26 @@ using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Authentication.Authorization;
 
-public sealed class AdminRequirementHandler : AuthorizationHandler<AdminRequirement>
+/// <summary>
+/// Runs on every request to an admin endpoint; the flag itself is cached by
+/// <see cref="IAdminRepository.IsAdminAsync"/> for the same window a session check uses.
+/// </summary>
+public sealed class AdminRequirementHandler(IAdminRepository adminRepository)
+    : AuthorizationHandler<AdminRequirement>
 {
-    private readonly IAdminRepository _adminRepository;
-
-    public AdminRequirementHandler(IAdminRepository adminRepository)
-    {
-        _adminRepository = adminRepository;
-    }
-
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, AdminRequirement requirement)
     {
         var name = context.User.FindFirst(ClaimTypes.Upn)?.Value;
         var domain = context.User.FindFirst(ClaimTypes.Dns)?.Value;
 
+        // The authorization middleware hands the HttpContext through as the resource, which is the
+        // only request-scoped token this handler ever sees. A policy evaluated outside a request
+        // has no request to abandon, so None is the honest answer there.
+        var cancellationToken = (context.Resource as HttpContext)?.RequestAborted ?? CancellationToken.None;
+
         if (!string.IsNullOrWhiteSpace(name) &&
             !string.IsNullOrWhiteSpace(domain) &&
-            await _adminRepository.IsAdminAsync(name, domain))
+            await adminRepository.IsAdminAsync(name, domain, cancellationToken))
         {
             context.Succeed(requirement);
         }

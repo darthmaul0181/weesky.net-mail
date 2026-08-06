@@ -9,7 +9,7 @@ const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail =
   fromName: 'Alice', fromAddress: 'alice@ext.example',
   to: [{ name: '', address: 'me@weesky.be' }], cc: [], date: '2026-07-25T10:00:00Z',
   authentication: null, spamScore: null, mailingList: null, sentBy: null, signedBy: null,
-  unsubscribeUrl: null, tlsReceived: null, htmlBody: '', textBody: '', blockedImageCount: 0,
+  unsubscribeUrl: null, tlsReceived: null, htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false,
   attachments: [], messageId: 'm@x', references: [], inReplyTo: null, replyTo: [], bcc: [],
   priority: 'normal',
   ...overrides,

@@ -9,7 +9,7 @@ public sealed class ManageSieveSessionTests
     private static ManageSieveSession CreateSut(string serverScript, out FakeDuplexStream stream)
     {
         stream = new FakeDuplexStream(serverScript);
-        return new ManageSieveSession(stream);
+        return new ManageSieveSession(new ManageSieveWire(stream));
     }
 
     // ----- LISTSCRIPTS -----
@@ -219,16 +219,122 @@ public sealed class ManageSieveSessionTests
     // ----- Dispose -----
 
     [Fact]
-    public async Task DisposeAsync_SendsLogoutAndInvokesCallback()
+    public async Task DisposeAsync_SendsLogoutAndClosesTheTransport()
     {
-        var stream = new FakeDuplexStream("OK\r\n");
         var disposed = false;
-        var session = new ManageSieveSession(stream, onDisposeAsync: () => { disposed = true; return ValueTask.CompletedTask; });
+        var stream = new FakeDuplexStream("OK\r\n", onDispose: () => disposed = true);
+        var session = new ManageSieveSession(new ManageSieveWire(stream));
 
         await session.DisposeAsync();
 
         Assert.True(disposed);
         Assert.Equal("LOGOUT\r\n", stream.ClientWritesAsString);
+    }
+
+    /// <summary>
+    /// QuoteName guards the outbound path, so a hostile server can still hand us a name carrying
+    /// CRLF through a literal — the listing reads it verbatim. What must hold is that replaying it
+    /// cannot become a second command: the guard fires before a byte is written, so the socket has
+    /// seen nothing but the original LISTSCRIPTS.
+    /// </summary>
+    [Fact]
+    public async Task ANameListedWithAControlCharacter_CannotBeReplayedOntoTheWire()
+    {
+        const string hostile = "evil\r\nDELETESCRIPT \"weesky-rules\"";
+        var server = $"{{{Encoding.UTF8.GetByteCount(hostile)}+}}\r\n{hostile}\r\nOK\r\n";
+        var sut = CreateSut(server, out var stream);
+
+        var listed = await sut.ListScriptsAsync();
+        Assert.True(listed.IsSuccess);
+        Assert.Equal(hostile, Assert.Single(listed.Value).Name);
+
+        var replay = await sut.DeleteScriptAsync(listed.Value[0].Name);
+
+        Assert.True(replay.IsFailure);
+        Assert.Contains("control character", replay.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("LISTSCRIPTS\r\n", stream.ClientWritesAsString);
+    }
+
+    // ----- Server-driven allocation -----
+
+    /// <summary>
+    /// The literal size is the server's word, and an external endpoint is only admin-configured:
+    /// it must never be allocated on trust.
+    /// </summary>
+    [Fact]
+    public async Task GetScriptAsync_WithAnOversizedLiteral_FailsBeforeAllocating()
+    {
+        var sut = CreateSut($"{{{int.MaxValue}+}}\r\n", out _);
+
+        var result = await sut.GetScriptAsync("weesky-rules");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SieveErrors.ResponseTooLarge, result.Error);
+    }
+
+    [Fact]
+    public async Task ListScriptsAsync_WithAnOversizedLiteralName_FailsBeforeAllocating()
+    {
+        var sut = CreateSut($"{{{int.MaxValue}+}}\r\n", out _);
+
+        var result = await sut.ListScriptsAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SieveErrors.ResponseTooLarge, result.Error);
+    }
+
+    /// <summary>A line the server never terminates is the same unbounded growth spelled differently.</summary>
+    [Fact]
+    public async Task ListScriptsAsync_WhenTheServerStreamsALineThatNeverEnds_StopsAtTheCeiling()
+    {
+        var sut = CreateSut(new string('x', (1024 * 1024) + 8), out _);
+
+        var result = await sut.ListScriptsAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SieveErrors.ResponseTooLarge, result.Error);
+    }
+
+    // ----- Timeouts -----
+
+    [Fact]
+    public async Task ListScriptsAsync_WhenTheServerNeverAnswers_FailsOnTheOperationTimeout()
+    {
+        await using var stream = new SilentStream();
+        var sut = new ManageSieveSession(new ManageSieveWire(stream), TimeSpan.FromMilliseconds(200));
+
+        var result = await sut.ListScriptsAsync().WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SieveErrors.TimedOut, result.Error);
+    }
+
+    [Fact]
+    public async Task GetScriptAsync_WhenTheServerNeverAnswers_FailsOnTheOperationTimeout()
+    {
+        await using var stream = new SilentStream();
+        var sut = new ManageSieveSession(new ManageSieveWire(stream), TimeSpan.FromMilliseconds(200));
+
+        var result = await sut.GetScriptAsync("weesky-rules").WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SieveErrors.TimedOut, result.Error);
+    }
+
+    /// <summary>
+    /// Disposal is the request's last act — `await using` in SieveRepository — so a LOGOUT the peer
+    /// never reads must not be what holds the response back.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_WhenThePeerStoppedReading_StillCompletesAndClosesTheTransport()
+    {
+        var released = false;
+        await using var stream = new SilentStream(blockWrites: true, onDispose: () => released = true);
+        var session = new ManageSieveSession(new ManageSieveWire(stream));
+
+        await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(released);
     }
 
     // ----- Name escaping -----
@@ -243,14 +349,131 @@ public sealed class ManageSieveSessionTests
         Assert.Equal("DELETESCRIPT \"weird\\\"name\"\r\n", stream.ClientWritesAsString);
     }
 
+    // ----- Command injection: a control character in a name must never reach the wire -----
+
+    public static TheoryData<string> InjectingNames => new()
+    {
+        "weesky-rules\r\nDELETESCRIPT \"rainloop.user\"",
+        "weesky-rules\nSETACTIVE \"\"",
+        "weesky-rules\rX",
+        "weesky-rules\0",
+        "weesky\u007Frules",
+        "weesky\trules",
+    };
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task GetScriptAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.GetScriptAsync(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task PutScriptAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.PutScriptAsync(name, "stop;");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task SetActiveAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.SetActiveAsync(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    [Theory]
+    [MemberData(nameof(InjectingNames))]
+    public async Task DeleteScriptAsync_WithControlCharacterInName_FailsWithoutWriting(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.DeleteScriptAsync(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("control character", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(string.Empty, stream.ClientWritesAsString);
+    }
+
+    // The providers' real default names, plus a name a foreign webmail leaves behind.
+    [Theory]
+    [InlineData("weesky-rules")]
+    [InlineData("rainloop.user")]
+    [InlineData("rainloop.sieve.0")]
+    [InlineData("Filtres perso")]
+    public async Task DeleteScriptAsync_WithLegitimateName_ReachesTheWire(string name)
+    {
+        var sut = CreateSut("OK\r\n", out var stream);
+
+        var result = await sut.DeleteScriptAsync(name);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal($"DELETESCRIPT \"{name}\"\r\n", stream.ClientWritesAsString);
+    }
+
+    /// <summary>A peer that accepted the socket and then stopped talking — and, optionally, stopped reading.</summary>
+    private sealed class SilentStream(bool blockWrites = false, Action? onDispose = null) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() { }
+
+        public override Task FlushAsync(CancellationToken cancellationToken) =>
+            blockWrites ? Task.Delay(Timeout.Infinite, cancellationToken) : Task.CompletedTask;
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (blockWrites) await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing) => onDispose?.Invoke();
+    }
+
     private sealed class FakeDuplexStream : Stream
     {
         private readonly MemoryStream _serverToClient;
         private readonly MemoryStream _clientToServer = new();
+        private readonly Action? _onDispose;
 
-        public FakeDuplexStream(string serverScript)
+        public FakeDuplexStream(string serverScript, Action? onDispose = null)
         {
             _serverToClient = new MemoryStream(Encoding.UTF8.GetBytes(serverScript));
+            _onDispose = onDispose;
         }
 
         public string ClientWritesAsString => Encoding.UTF8.GetString(_clientToServer.ToArray());
@@ -276,5 +499,8 @@ public sealed class ManageSieveSessionTests
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
+
+        // MemoryStream.ToArray still answers after Close, so ClientWritesAsString survives disposal.
+        protected override void Dispose(bool disposing) => _onDispose?.Invoke();
     }
 }

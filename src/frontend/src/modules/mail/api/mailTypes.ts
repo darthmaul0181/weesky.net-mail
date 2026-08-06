@@ -126,6 +126,8 @@ export interface MailMessageDetail {
   htmlBody: string
   textBody: string
   blockedImageCount: number
+  /** The backend cut the body at one of its ceilings: what is shown is not the whole message. */
+  truncated: boolean
   attachments: MailAttachmentInfo[]
 }
 

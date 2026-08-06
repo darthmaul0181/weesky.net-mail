@@ -42,6 +42,6 @@ public sealed class Alias
 
     public override int GetHashCode()
     {
-        return $"{Name}@{Domain}".GetHashCode();
+        return StringComparer.InvariantCultureIgnoreCase.GetHashCode($"{Name}@{Domain}");
     }
 }

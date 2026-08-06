@@ -6,11 +6,17 @@ namespace weesky.Snoopy.Microservice.Services;
 
 internal sealed class SmtpSession : ISmtpSession
 {
+    /// <summary>Disposal runs after the response is produced: a QUIT round trip a half-dead peer
+    /// never answers must not be what the user waits on.</summary>
+    private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(2);
+
     private readonly SmtpClient _client;
     private readonly ILogger _logger;
 
     public SmtpSession(SmtpClient client, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(logger);
         _client = client;
         _logger = logger;
     }
@@ -35,7 +41,19 @@ internal sealed class SmtpSession : ISmtpSession
 
     public async ValueTask DisposeAsync()
     {
-        try { await _client.DisconnectAsync(quit: true); } catch { /* connection already gone */ }
+        try
+        {
+            if (_client.IsConnected)
+            {
+                using var cts = new CancellationTokenSource(DisconnectTimeout);
+                await _client.DisconnectAsync(quit: true, cts.Token);
+            }
+        }
+        catch
+        {
+            // Best effort — the connection is being torn down anyway.
+        }
+
         _client.Dispose();
     }
 

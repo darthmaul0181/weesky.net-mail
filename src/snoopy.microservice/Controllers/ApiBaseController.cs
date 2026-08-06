@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -59,4 +60,18 @@ public abstract class ApiBaseController : ControllerBase
     /// <summary>502 carrying the error envelope — anything the mail server refused.</summary>
     protected ActionResult BadGatewayEnveloppe(string message) =>
         StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message));
+
+    /// <summary>
+    /// Rule 4's status for a failed account resolution — the single place the four are produced:
+    /// 404 for an account that is not there, 409 for a connected account whose stored secret no
+    /// longer decrypts (never 401, which the client reads as "sign out"), 502 for an identity
+    /// provider that would not answer, 401 for everything else.
+    /// </summary>
+    protected ActionResult ConnectedAccountError(string resolverError) => resolverError switch
+    {
+        ConnectedAccountErrors.AccountNotFound => NotFoundEnveloppe(resolverError),
+        ConnectedAccountErrors.CredentialsInvalid => ConflictEnveloppe(resolverError),
+        ConnectedAccountErrors.ProviderUnavailable => BadGatewayEnveloppe(resolverError),
+        _ => UnauthorizedEnveloppe(resolverError),
+    };
 }

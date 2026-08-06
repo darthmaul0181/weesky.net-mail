@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using MailKit.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -25,27 +26,40 @@ public sealed class AccountConnectionResolverTests
     private const string MainPassword = "hunter2";
 
     private readonly User _alice = new("alice@weesky.be") { WebmailUid = Guid.NewGuid() };
-    private readonly PreferencesTestDbContext _db = new(Guid.NewGuid().ToString());
+    private readonly string _databaseName = Guid.NewGuid().ToString();
+    private readonly PreferencesTestDbContext _db;
     private readonly MailCredentialStore _credentials = new(new EphemeralDataProtectionProvider());
     private readonly WebmailUserStore _users;
     private readonly ConnectedAccountStore _accounts;
     private readonly ExternalDomainStore _domains;
     private readonly byte[] _kek = ConnectedAccountCipher.DeriveKek(MainPassword, ConnectedAccountCipher.NewSalt());
+    private readonly Mock<IOAuthTokenService> _oauth = new();
+
+    /// <summary>
+    /// A second context over the same database, as production has one per request. The binding
+    /// upgrade attaches the row it was handed, which the arrange context would already be tracking.
+    /// </summary>
+    private readonly ConnectedAccountStore _arrangedAccounts;
 
     public AccountConnectionResolverTests()
     {
+        _db = new PreferencesTestDbContext(_databaseName);
         _users = new WebmailUserStore(_db);
         _accounts = new ConnectedAccountStore(_db);
         _domains = new ExternalDomainStore(_db);
+        _arrangedAccounts = new ConnectedAccountStore(new PreferencesTestDbContext(_databaseName));
     }
 
-    private AccountConnectionResolver CreateSut()
+    private AccountConnectionResolver CreateSut(bool allowCleartext = false)
     {
+        var options = TestConnections.HomeOptions();
+        options.AllowCleartext = allowCleartext;
+
         var monitor = new Mock<IOptionsMonitor<MailOptions>>();
-        monitor.Setup(m => m.CurrentValue).Returns(TestConnections.HomeOptions());
+        monitor.Setup(m => m.CurrentValue).Returns(options);
 
         return new AccountConnectionResolver(
-            _credentials, _accounts, _domains, _users, monitor.Object,
+            _credentials, _accounts, _domains, _users, _oauth.Object, monitor.Object,
             Options.Create(new TokenConstants { ExpiryInMinutes = 2880 }),
             NullLogger<AccountConnectionResolver>.Instance);
     }
@@ -63,15 +77,22 @@ public sealed class AccountConnectionResolverTests
     private DefaultHttpContext V2Context() => ContextWithCookie(new MailCredentialPayload(MainPassword, _kek));
 
     private async Task<ConnectedAccount> ConnectAccountAsync(
-        string email, string secret, Guid? domainId = null, Guid? ownerId = null, byte[]? kek = null)
+        string email, string secret, Guid? domainId = null, Guid? ownerId = null, byte[]? kek = null,
+        MailAuthMode authMode = MailAuthMode.Password)
     {
-        var created = await _accounts.CreateAsync(new ConnectedAccount
+        // Id first, like the controller: the cipher is bound to the row it will live on.
+        var row = new ConnectedAccount
         {
+            Id = Guid.NewGuid(),
             UserId = ownerId ?? _alice.WebmailUid,
             DomainId = domainId,
             Email = email,
-            Cipher = ConnectedAccountCipher.Encrypt(kek ?? _kek, secret)
-        }, CancellationToken.None);
+            AuthMode = authMode
+        };
+        row.Cipher = ConnectedAccountCipher.Encrypt(
+            kek ?? _kek, secret, ConnectedAccountCipher.Context(row));
+
+        var created = await _accounts.CreateAsync(row, CancellationToken.None);
         return created.Value;
     }
 
@@ -86,6 +107,73 @@ public sealed class AccountConnectionResolverTests
         };
         mutate?.Invoke(domain);
         return (await _domains.CreateAsync(domain, CancellationToken.None)).Value;
+    }
+
+    /// <summary>
+    /// A row as it exists today: nonce, tag, ciphertext, no version byte and no associated data.
+    /// Written straight through the store, since the cipher is exactly what is being aged.
+    /// </summary>
+    private async Task<ConnectedAccount> ConnectUnboundAccountAsync(string email, string secret)
+    {
+        var plaintext = System.Text.Encoding.UTF8.GetBytes(secret);
+        var nonce = System.Security.Cryptography.RandomNumberGenerator.GetBytes(
+            ConnectedAccountCipher.NonceLength);
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[ConnectedAccountCipher.TagLength];
+
+        using (var aes = new System.Security.Cryptography.AesGcm(_kek, ConnectedAccountCipher.TagLength))
+            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+
+        var blob = new byte[nonce.Length + tag.Length + ciphertext.Length];
+        nonce.CopyTo(blob, 0);
+        tag.CopyTo(blob, nonce.Length);
+        ciphertext.CopyTo(blob, nonce.Length + tag.Length);
+
+        var created = await _arrangedAccounts.CreateAsync(new ConnectedAccount
+        {
+            Id = Guid.NewGuid(),
+            UserId = _alice.WebmailUid,
+            Email = email,
+            Cipher = blob
+        }, CancellationToken.None);
+        return created.Value;
+    }
+
+    // The migration, and the reason the binding is worth anything on an existing deployment: no
+    // user is asked for a provider password again, so an old row has to bind itself the first
+    // time it is opened. Without this, only accounts created after the deploy are protected.
+    [Fact]
+    public async Task Resolve_BindsAPreBindingCipherOnFirstUse()
+    {
+        var account = await ConnectUnboundAccountAsync("legacy@weesky.be", "provider-pw");
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new PasswordCredential("provider-pw"), result.Value.Credential);
+
+        var stored = await _arrangedAccounts.FindAsync(_alice.WebmailUid, account.Id, CancellationToken.None);
+        ConnectedAccountCipher.Decrypt(
+            _kek, stored!.Cipher, ConnectedAccountCipher.Context(stored), out var bound);
+        Assert.True(bound);
+    }
+
+    // Binding must not change what the row means: the same secret comes back on the next request,
+    // now through the bound path.
+    [Fact]
+    public async Task Resolve_StillOpensTheAccountAfterItHasBeenBound()
+    {
+        var account = await ConnectUnboundAccountAsync("legacy@weesky.be", "provider-pw");
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+        await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        var again = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(again.IsSuccess);
+        Assert.Equal(new PasswordCredential("provider-pw"), again.Value.Credential);
     }
 
     [Fact]
@@ -220,7 +308,7 @@ public sealed class AccountConnectionResolverTests
             "imap.gmail.test", 993, SecureSocketOptions.SslOnConnect,
             "smtp.gmail.test", 587, SecureSocketOptions.StartTls,
             "sieve.gmail.test", 4190,
-            "alice@gmail.test", "gmailpw"), result.Value);
+            "alice@gmail.test", new PasswordCredential("gmailpw")), result.Value);
     }
 
     [Fact]
@@ -269,6 +357,56 @@ public sealed class AccountConnectionResolverTests
         Assert.Equal(ConnectedAccountErrors.AccountNotFound, result.Error);
     }
 
+    // A row an admin wrote as None would put the mail password on an unencrypted socket: it is
+    // refused like any other unusable value, and lands on the same 404 for the same reason.
+    [Theory]
+    [InlineData("None", "StartTls")]
+    [InlineData("SslOnConnect", "None")]
+    public async Task Resolve_ACleartextDomain_FailsAccountNotFoundWithoutTheOptIn(string imap, string smtp)
+    {
+        var domain = await CreateDomainAsync(d => (d.ImapSecurity, d.SmtpSecurity) = (imap, smtp));
+        var account = await ConnectAccountAsync("alice@gmail.test", "gmailpw", domain.Id);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.AccountNotFound, result.Error);
+    }
+
+    [Fact]
+    public async Task Resolve_ACleartextDomain_IsUsableWhenAllowCleartextIsOn()
+    {
+        var domain = await CreateDomainAsync(d => (d.ImapSecurity, d.SmtpSecurity) = ("None", "None"));
+        var account = await ConnectAccountAsync("alice@gmail.test", "gmailpw", domain.Id);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut(allowCleartext: true)
+            .ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SecureSocketOptions.None, result.Value.ImapSecurity);
+        Assert.Equal(SecureSocketOptions.None, result.Value.SmtpSecurity);
+    }
+
+    [Theory]
+    [InlineData("StartTls")]
+    [InlineData("SslOnConnect")]
+    public async Task Resolve_AnEncryptedDomain_IsUnaffectedByTheOptIn(string security)
+    {
+        var domain = await CreateDomainAsync(d => (d.ImapSecurity, d.SmtpSecurity) = (security, security));
+        var account = await ConnectAccountAsync("alice@gmail.test", "gmailpw", domain.Id);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(Enum.Parse<SecureSocketOptions>(security), result.Value.ImapSecurity);
+    }
+
     [Fact]
     public async Task Resolve_ACipherTheKekNoLongerOpens_FailsCredentialsInvalid()
     {
@@ -299,7 +437,7 @@ public sealed class AccountConnectionResolverTests
         var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("sharedpw", result.Value.Password);
+        Assert.Equal(new PasswordCredential("sharedpw"), result.Value.Credential);
 
         // The response now carries the upgraded cookie, KEK included.
         var reread = new DefaultHttpContext();
@@ -319,6 +457,90 @@ public sealed class AccountConnectionResolverTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(context.Response.Headers["Set-Cookie"].ToArray());
+    }
+
+    /// <summary>An OAuth provider with all five columns filled, as the admin screen will write it.</summary>
+    private static void MakeOAuth(ExternalDomain domain)
+    {
+        domain.AuthMode = MailAuthMode.OAuth2;
+        domain.OAuthAuthorizationUrl = "https://provider.test/authorize";
+        domain.OAuthTokenUrl = "https://provider.test/token";
+        domain.OAuthScopes = "offline_access";
+        domain.OAuthClientId = "client-id";
+        domain.OAuthClientSecret = [1, 2, 3];
+    }
+
+    private async Task<(ConnectedAccount Account, DefaultHttpContext Context)> ConnectOAuthAccountAsync(
+        Action<ExternalDomain>? mutate = null)
+    {
+        var domain = await CreateDomainAsync(d => { MakeOAuth(d); mutate?.Invoke(d); });
+        var account = await ConnectAccountAsync(
+            "alice@outlook.test", "rt-1", domain.Id, authMode: MailAuthMode.OAuth2);
+        var context = V2Context();
+        context.Request.Headers[IAccountConnectionResolver.HeaderName] = account.Id.ToString();
+        return (account, context);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_OfAnOAuthAccount_CarriesTheAccessToken()
+    {
+        var (account, context) = await ConnectOAuthAccountAsync();
+        _oauth.Setup(o => o.GetAccessTokenAsync(
+                It.Is<ConnectedAccount>(r => r.Id == account.Id), It.IsAny<OAuthProviderConfig>(),
+                It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success("at-1"));
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new OAuthCredential("at-1"), result.Value.Credential);
+        Assert.False(result.Value.IsHomeServer);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenTheProviderRefusesTheRefreshToken_Answers409()
+    {
+        var (_, context) = await ConnectOAuthAccountAsync();
+        _oauth.Setup(o => o.GetAccessTokenAsync(
+                It.IsAny<ConnectedAccount>(), It.IsAny<OAuthProviderConfig>(),
+                It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<string>(ConnectedAccountErrors.CredentialsInvalid));
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.CredentialsInvalid, result.Error);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenTheProviderIsUnreachable_AnswersProviderUnavailable()
+    {
+        var (_, context) = await ConnectOAuthAccountAsync();
+        _oauth.Setup(o => o.GetAccessTokenAsync(
+                It.IsAny<ConnectedAccount>(), It.IsAny<OAuthProviderConfig>(),
+                It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<string>(ConnectedAccountErrors.ProviderUnavailable));
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.ProviderUnavailable, result.Error);
+    }
+
+    // Administrator error, not user error: the same 404 an unusable security value answers, and
+    // the token service is never asked to work with a half-described provider.
+    [Fact]
+    public async Task ResolveAsync_AnIncompleteOAuthDomain_FailsAccountNotFoundWithoutExchanging()
+    {
+        var (_, context) = await ConnectOAuthAccountAsync(d => d.OAuthTokenUrl = null);
+
+        var result = await CreateSut().ResolveAsync(_alice, context.Request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConnectedAccountErrors.AccountNotFound, result.Error);
+        _oauth.Verify(o => o.GetAccessTokenAsync(
+            It.IsAny<ConnectedAccount>(), It.IsAny<OAuthProviderConfig>(),
+            It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static string ExtractCookieValue(HttpResponse response)

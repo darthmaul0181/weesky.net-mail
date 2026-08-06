@@ -60,17 +60,22 @@ public sealed class AccountControllerTests
         return controller;
     }
 
-    private static ConnectedAccount Connected(string email, byte[] cipher) =>
-        new() { Id = Guid.NewGuid(), UserId = UserId, Email = email, Cipher = cipher };
+    /// <summary>The row is built before its cipher: the cipher is bound to the row's own columns.</summary>
+    private static ConnectedAccount Connected(string email, byte[] kek, string secret)
+    {
+        var row = new ConnectedAccount { Id = Guid.NewGuid(), UserId = UserId, Email = email };
+        row.Cipher = ConnectedAccountCipher.Encrypt(kek, secret, ConnectedAccountCipher.Context(row));
+        return row;
+    }
 
     [Fact]
     public async Task GetAccountInfo_WhenUserFound_Returns200WithAccountInfo()
     {
         var accountInfo = new AccountInfo { UserId = 1, UserName = "john" };
-        _usersRepo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>()))
+        _usersRepo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(accountInfo));
 
-        var result = await CreateController().GetAccountInfo();
+        var result = await CreateController().GetAccountInfo(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(accountInfo, ok.Value);
@@ -79,10 +84,10 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task GetAccountInfo_WhenUserNotFound_Returns404WithEnvelope()
     {
-        _usersRepo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>()))
+        _usersRepo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure<AccountInfo>("Account not found"));
 
-        var result = await CreateController().GetAccountInfo();
+        var result = await CreateController().GetAccountInfo(CancellationToken.None);
 
         var obj = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(404, obj.StatusCode);
@@ -147,7 +152,7 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_WhenSuccess_Returns204()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
         var result = await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "OldPass" }, CancellationToken.None);
@@ -159,7 +164,7 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_WhenFailed_Returns400WithEnvelope()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Invalid password"));
 
         var result = await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" }, CancellationToken.None);
@@ -171,7 +176,7 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_WhenFailed_EnvelopeContainsErrorMessage()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Invalid password"));
 
         var result = await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" }, CancellationToken.None);
@@ -188,7 +193,7 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_WhenSuccess_ReissuesTheCredentialsCookieWithTheNewPassword()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
         await CreateController().ChangePassword(new SecretChange { NewPassword = NewPassword, OldPassword = OldPassword }, CancellationToken.None);
@@ -204,7 +209,7 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_StoresTheNewPayload()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
         MailCredentialPayload? stored = null;
         _credentials.Setup(c => c.Store(It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()))
@@ -222,10 +227,10 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_ReEncryptsEveryConnectedAccountCipher()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
-        var first = Connected("a@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-a"));
-        var second = Connected("b@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-b"));
+        var first = Connected("a@external.com", OldKek, "secret-a");
+        var second = Connected("b@external.com", OldKek, "secret-b");
         _connectedAccounts.Setup(s => s.ListAsync(UserId, It.IsAny<CancellationToken>()))
                           .ReturnsAsync([first, second]);
         IReadOnlyDictionary<Guid, byte[]>? replaced = null;
@@ -237,8 +242,8 @@ public sealed class AccountControllerTests
 
         Assert.NotNull(replaced);
         Assert.Equal(2, replaced.Count);
-        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[first.Id]).Value);
-        Assert.Equal("secret-b", ConnectedAccountCipher.Decrypt(NewKek, replaced[second.Id]).Value);
+        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[first.Id], ConnectedAccountCipher.Context(first)).Value);
+        Assert.Equal("secret-b", ConnectedAccountCipher.Decrypt(NewKek, replaced[second.Id], ConnectedAccountCipher.Context(second)).Value);
     }
 
     // A row already orphaned by an out-of-band password change stays as it is: re-encrypting
@@ -246,10 +251,10 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_LeavesAnUndecryptableCipherUntouched()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
-        var live = Connected("a@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-a"));
-        var orphan = Connected("b@external.com", ConnectedAccountCipher.Encrypt(NewKek, "unreachable"));
+        var live = Connected("a@external.com", OldKek, "secret-a");
+        var orphan = Connected("b@external.com", NewKek, "unreachable");
         _connectedAccounts.Setup(s => s.ListAsync(UserId, It.IsAny<CancellationToken>()))
                           .ReturnsAsync([live, orphan]);
         IReadOnlyDictionary<Guid, byte[]>? replaced = null;
@@ -269,11 +274,11 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_DerivesTheOldKekWhenTheCookieIsStillV1()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
         _credentials.Setup(c => c.Retrieve(It.IsAny<HttpRequest>()))
                     .Returns(Result.Success(new MailCredentialPayload(OldPassword, null)));
-        var account = Connected("a@external.com", ConnectedAccountCipher.Encrypt(OldKek, "secret-a"));
+        var account = Connected("a@external.com", OldKek, "secret-a");
         _connectedAccounts.Setup(s => s.ListAsync(UserId, It.IsAny<CancellationToken>()))
                           .ReturnsAsync([account]);
         IReadOnlyDictionary<Guid, byte[]>? replaced = null;
@@ -284,13 +289,13 @@ public sealed class AccountControllerTests
         await CreateController().ChangePassword(new SecretChange { NewPassword = NewPassword, OldPassword = OldPassword }, CancellationToken.None);
 
         Assert.NotNull(replaced);
-        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[account.Id]).Value);
+        Assert.Equal("secret-a", ConnectedAccountCipher.Decrypt(NewKek, replaced[account.Id], ConnectedAccountCipher.Context(account)).Value);
     }
 
     [Fact]
     public async Task ChangePassword_WhenFailed_LeavesTheCredentialsCookieAlone()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Invalid password"));
 
         await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" }, CancellationToken.None);
@@ -305,7 +310,7 @@ public sealed class AccountControllerTests
     public async Task ChangePassword_WhenSuccess_RevokesEverySessionButReissuesThisOne()
     {
         var rotated = Guid.NewGuid();
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
         _webmailUsers.Setup(s => s.RotateSecurityStampAsync("john@example.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(rotated);
@@ -323,7 +328,7 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangePassword_WhenFailed_RevokesNothing()
     {
-        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("Invalid password"));
 
         await CreateController().ChangePassword(new SecretChange { NewPassword = "NewPass123!", OldPassword = "Wrong" }, CancellationToken.None);
@@ -335,10 +340,10 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangeFullName_WhenSuccess_Returns204()
     {
-        _usersRepo.Setup(r => r.ChangeFullNameAsync(It.IsAny<User>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangeFullNameAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
-        var result = await CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
+        var result = await CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" }, CancellationToken.None);
 
         var status = Assert.IsType<StatusCodeResult>(result);
         Assert.Equal(204, status.StatusCode);
@@ -347,14 +352,36 @@ public sealed class AccountControllerTests
     [Fact]
     public async Task ChangeFullName_WhenFailed_Returns400WithEnvelope()
     {
-        _usersRepo.Setup(r => r.ChangeFullNameAsync(It.IsAny<User>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.ChangeFullNameAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Failure("User not found"));
 
-        var result = await CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" });
+        var result = await CreateController().ChangeFullName(new FullNameChange { FullName = "John Doe" }, CancellationToken.None);
 
         var obj = Assert.IsType<ObjectResult>(result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
         Assert.Equal("User not found", envelope.Message);
+    }
+
+    // A password that is already committed cannot be left with cookies holding the old one: the
+    // caller's token governs the write, and nothing after it.
+    [Fact]
+    public async Task ChangePassword_WhenTheCallerDisconnects_StillRunsTheCompensatingWork()
+    {
+        _usersRepo.Setup(r => r.ChangePasswordAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await CreateController().ChangePassword(
+            new SecretChange { NewPassword = NewPassword, OldPassword = OldPassword }, cts.Token);
+
+        _usersRepo.Verify(r => r.ChangePasswordAsync(It.IsAny<User>(), NewPassword, OldPassword, cts.Token), Times.Once);
+        _webmailUsers.Verify(s => s.RotateSecurityStampAsync(
+            It.IsAny<string>(), It.Is<CancellationToken>(t => !t.IsCancellationRequested)), Times.Once);
+        _connectedAccounts.Verify(s => s.ListAsync(
+            UserId, It.Is<CancellationToken>(t => !t.IsCancellationRequested)), Times.Once);
+        _credentials.Verify(c => c.Store(
+            It.IsAny<HttpResponse>(), It.IsAny<MailCredentialPayload>(), It.IsAny<TimeSpan>()), Times.Once);
     }
 }

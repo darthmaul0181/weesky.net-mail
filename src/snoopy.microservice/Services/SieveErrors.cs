@@ -15,11 +15,19 @@ public static class SieveErrors
     public const string AuthenticationFailed = "The rules service refused our credentials";
     public const string NotSecure = "Rules service refused: the connection could not be secured";
 
+    /// <summary>The endpoint took the socket and then stopped answering inside the operation's
+    /// budget. An outage: there is no smaller request the caller could have sent.</summary>
+    public const string TimedOut = "The rules service stopped responding";
+
+    /// <summary>The endpoint announced more bytes than a Sieve script can plausibly hold, so the
+    /// read was refused before allocating. Also the service misbehaving, not the caller.</summary>
+    public const string ResponseTooLarge = "The rules service sent an oversized response";
+
     /// <summary>The active account's domain has no Sieve endpoint at all. A 404, not a service
     /// failure: the frontend hides the Rules tab on this code rather than reporting an outage.</summary>
     public const string Unsupported = "sieve_unsupported";
 
     /// <summary>True when the failure is the service's and not the caller's — a 502, not a 400.</summary>
     public static bool IsServiceFailure(string? error) =>
-        error is NotConfigured or Unreachable or AuthenticationFailed or NotSecure;
+        error is NotConfigured or Unreachable or AuthenticationFailed or NotSecure or TimedOut or ResponseTooLarge;
 }

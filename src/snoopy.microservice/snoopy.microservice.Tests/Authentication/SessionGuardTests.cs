@@ -24,7 +24,7 @@ public sealed class SessionGuardTests
 
     private void Account(Guid? storedStamp, bool usable = true)
     {
-        _users.Setup(u => u.FindByEmailAsync(Email))
+        _users.Setup(u => u.FindByEmailAsync(Email, It.IsAny<CancellationToken>()))
               .ReturnsAsync(usable ? new User(Email) : null);
         _webmailUsers.Setup(s => s.FindByEmailAsync(Email, It.IsAny<CancellationToken>()))
                      .ReturnsAsync(storedStamp is { } stamp ? new WebmailAccount(Guid.NewGuid(), stamp) : null);
@@ -77,7 +77,7 @@ public sealed class SessionGuardTests
         for (var i = 0; i < 5; i++)
             await sut.IsCurrentAsync(Email, stamp, CancellationToken.None);
 
-        _users.Verify(u => u.FindByEmailAsync(Email), Times.Once);
+        _users.Verify(u => u.FindByEmailAsync(Email, It.IsAny<CancellationToken>()), Times.Once);
         _webmailUsers.Verify(s => s.FindByEmailAsync(Email, It.IsAny<CancellationToken>()), Times.Once);
     }
 

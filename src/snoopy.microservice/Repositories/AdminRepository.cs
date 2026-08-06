@@ -1,73 +1,101 @@
+using System.Diagnostics;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Data;
 using weesky.Snoopy.Microservice.Models;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class AdminRepository : IAdminRepository
+internal sealed class AdminRepository(
+    ApplicationDbContext context,
+    IWebmailUserStore webmailUsers,
+    IMemoryCache cache,
+    ISessionGuard sessions,
+    ILogger<AdminRepository> logger) : IAdminRepository
 {
-    private const int MinPasswordLength = 8;
+    private const int MinPasswordLength = PasswordPolicy.MinimumLength;
     private const int DefaultQuotaMb = 1024;
 
-    private readonly ApplicationDbContext _context;
-    private readonly IWebmailUserStore _webmailUsers;
-    private readonly ILogger<AdminRepository> _logger;
+    /// <summary>
+    /// How long the admin flag is reused across requests, kept equal to
+    /// <see cref="SessionGuard.CacheWindow"/>: both bound how long an
+    /// account state change made outside this process keeps being answered from memory. Changes
+    /// made through this repository take effect on the next request.
+    /// </summary>
+    internal static readonly TimeSpan CacheWindow = SessionGuard.CacheWindow;
 
-    public AdminRepository(ApplicationDbContext context, IWebmailUserStore webmailUsers, ILogger<AdminRepository> logger)
+    private const string EpochKey = "admin-flag:epoch";
+
+    public async Task<bool> IsAdminAsync(string username, string domainName, CancellationToken cancellationToken)
     {
-        _context = context;
-        _webmailUsers = webmailUsers;
-        _logger = logger;
+        // Read before the query, stored with its answer: a write that commits while the query is
+        // in flight has no entry to remove yet, so the epoch is what makes that answer unusable.
+        var epoch = CurrentEpoch();
+        var key = AdminFlagKey(username, domainName);
+
+        if (cache.TryGetValue(key, out CachedAdminFlag cached) && cached.Epoch == epoch)
+            return cached.IsAdmin;
+
+        var isAdmin = await ReadAdminFlagAsync(username, domainName, cancellationToken);
+
+        // Publishing after the await, never through a cache factory: an abandoned read throws here
+        // and leaves no entry behind, where a factory would store the answer — or the faulted task.
+        cache.Set(key, new CachedAdminFlag(isAdmin, epoch), CacheWindow);
+        return isAdmin;
     }
 
-    public async Task<bool> IsAdminAsync(string username, string domainName)
+    /// <summary>
+    /// The domain resolves to a single row, as the two-step lookup this replaces did: joining every
+    /// row bearing the name would let an admin namesake in a second one answer for this account.
+    /// </summary>
+    internal static IQueryable<bool> AdminFlagQuery(ApplicationDbContext context, string username, string domainName) =>
+        context.Users.AsNoTracking()
+            .Where(u => u.DomainId == context.Domains.Where(d => d.Name == domainName).Select(d => d.Id).FirstOrDefault() &&
+                        string.Equals(u.Name, username, StringComparison.InvariantCultureIgnoreCase))
+            .Select(u => u.Admin == ActiveState.Y);
+
+    private Task<bool> ReadAdminFlagAsync(string username, string domainName, CancellationToken cancellationToken) =>
+        AdminFlagQuery(context, username, domainName).FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync(CancellationToken cancellationToken)
     {
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Name == domainName);
-        if (domain == null) return false;
-
-        var user = await _context.Users.FirstOrDefaultAsync(u =>
-            string.Equals(u.Name, username, StringComparison.InvariantCultureIgnoreCase) &&
-            u.DomainId == domain.Id);
-
-        return user?.Admin == ActiveState.Y;
-    }
-
-    public async Task<IEnumerable<AdminUserInfo>> GetAllUsersAsync()
-    {
-        var users = await (from user in _context.Users
-                           join domain in _context.Domains on user.DomainId equals domain.Id
-                           select new { user, domainName = domain.Name })
-            .ToListAsync();
+        // Projected, not materialised as entities: the admin list needs eight columns and the
+        // password is not one of them, so it never reaches memory or the change tracker.
+        var users = await (from user in context.Users.AsNoTracking()
+                           join domain in context.Domains on user.DomainId equals domain.Id
+                           select new AdminUserRow(user.Id, user.Name, user.DomainId, domain.Name,
+                               user.FullName, user.QuotaMb, user.Active, user.Admin))
+            .ToListAsync(cancellationToken);
 
         // LastLogins keys on the full email; only fetch rows for users we are returning
         // (skips stale rows of deleted accounts instead of loading the whole table).
-        var emails = users.Select(x => x.user.Name + "@" + x.domainName).ToList();
-        var loginsByUser = (await _context.LastLogins
+        var emails = users.Select(u => u.Email).ToList();
+        var loginsByUser = (await context.LastLogins.AsNoTracking()
                 .Where(l => emails.Contains(l.UserId))
-                .ToListAsync())
+                .ToListAsync(cancellationToken))
             .GroupBy(l => l.UserId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         return users
-            .Select(x => MapToAdminUserInfo(x.user, x.domainName,
-                BuildLastLogins(loginsByUser, $"{x.user.Name}@{x.domainName}")))
+            .Select(u => u.ToInfo(BuildLastLogins(loginsByUser, u.Email)))
             .ToList();
     }
 
-    public async Task<AdminUserInfo?> GetUserByIdAsync(int id)
+    public async Task<AdminUserInfo?> GetUserByIdAsync(int id, CancellationToken cancellationToken)
     {
-        var row = await (from user in _context.Users
-                         join domain in _context.Domains on user.DomainId equals domain.Id
+        var row = await (from user in context.Users
+                         join domain in context.Domains on user.DomainId equals domain.Id
                          where user.Id == id
                          select new { user, domain })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         return row == null ? null : MapToAdminUserInfo(row.user, row.domain.Name);
     }
 
-    public async Task<Result<AdminUserInfo>> CreateUserAsync(AdminUserRequest request)
+    public async Task<Result<AdminUserInfo>> CreateUserAsync(AdminUserRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.UserName))
             return Result.Failure<AdminUserInfo>("Username is required");
@@ -78,13 +106,13 @@ internal sealed class AdminRepository : IAdminRepository
         if (request.Password.Length < MinPasswordLength)
             return Result.Failure<AdminUserInfo>($"Password must contain at least {MinPasswordLength} characters");
 
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == request.DomainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == request.DomainId, cancellationToken);
         if (domain == null)
             return Result.Failure<AdminUserInfo>($"Domain '{request.DomainId}' not found");
 
-        bool duplicate = await _context.Users.AnyAsync(u =>
+        bool duplicate = await context.Users.AnyAsync(u =>
             string.Equals(u.Name, request.UserName, StringComparison.InvariantCultureIgnoreCase) &&
-            u.DomainId == request.DomainId);
+            u.DomainId == request.DomainId, cancellationToken);
         if (duplicate)
             return Result.Failure<AdminUserInfo>($"User '{request.UserName}@{domain.Name}' already exists");
 
@@ -100,22 +128,23 @@ internal sealed class AdminRepository : IAdminRepository
             LastUpdate = DateTime.UtcNow
         };
 
-        _context.Users.Add(newUser);
-        await _context.SaveChangesAsync();
+        context.Users.Add(newUser);
+        await context.SaveChangesAsync(cancellationToken);
+        ForgetAdminFlags();
 
         return Result.Success(MapToAdminUserInfo(newUser, domain.Name));
     }
 
-    public async Task<Result<AdminUserInfo>> UpdateUserAsync(int id, AdminUserRequest request)
+    public async Task<Result<AdminUserInfo>> UpdateUserAsync(int id, AdminUserRequest request, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(request.Password) && request.Password.Length < MinPasswordLength)
             return Result.Failure<AdminUserInfo>($"Password must contain at least {MinPasswordLength} characters");
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         if (user == null)
             return Result.Failure<AdminUserInfo>($"User with id {id} not found");
 
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId, cancellationToken);
 
         // Absent means "leave it alone", never "set it to the default": a PUT that omits
         // quota or the admin flag must not reset the quota nor revoke the role.
@@ -124,54 +153,99 @@ internal sealed class AdminRepository : IAdminRepository
         if (request.Active is { } active) user.Active = State(active);
         if (request.Admin is { } admin) user.Admin = State(admin);
 
-        if (!string.IsNullOrEmpty(request.Password))
+        var passwordChanged = !string.IsNullOrEmpty(request.Password);
+        if (passwordChanged)
         {
-            user.Password = request.Password;
+            user.Password = request.Password!;
             user.LastUpdate = DateTime.UtcNow;
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
+        ForgetAdminFlags();
+
+        if (passwordChanged && domain is not null)
+            await RevokeSessionsAsync($"{user.Name}@{domain.Name}");
 
         return Result.Success(MapToAdminUserInfo(user, domain?.Name ?? user.DomainId));
     }
 
-    public async Task<Result> DeleteUserAsync(int id)
+    /// <summary>
+    /// Cuts every live session of an account whose password an administrator just replaced — the
+    /// one situation that call is made in is a mailbox believed to be in someone else's hands.
+    /// Without it the intruder's token stays valid for the rest of its lifetime on everything that
+    /// does not open IMAP: preferences, contacts, identities, aliases, and admin itself.
+    /// </summary>
+    /// <remarks>
+    /// Best effort, and deliberately after the commit: the password is already changed, so throwing
+    /// here would tell the administrator their change failed when it did not. It is logged at Error
+    /// rather than Warning because a revocation that did not happen is the thing they must act on —
+    /// the fallback is <c>DELETE /api/login/All</c> as the account holder, or a second attempt.
+    /// Not the caller's token, for the same reason <see cref="DeleteUserAsync"/> does not take it.
+    /// </remarks>
+    private async Task RevokeSessionsAsync(string email)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        var canonical = email.Trim().ToLowerInvariant();
+        try
+        {
+            await webmailUsers.RotateSecurityStampAsync(canonical, CancellationToken.None);
+            sessions.Forget(canonical);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Password of {Email} was changed but its sessions could not be revoked: every token " +
+                "issued before this call stays valid until it expires", canonical);
+        }
+    }
+
+    public async Task<Result> DeleteUserAsync(int id, CancellationToken cancellationToken)
+    {
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         if (user == null)
             return Result.Failure($"User with id {id} not found");
 
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == user.DomainId, cancellationToken);
 
-        _context.Users.Remove(user);
-        await _context.SaveChangesAsync();
+        context.Users.Remove(user);
+        await context.SaveChangesAsync(cancellationToken);
+        ForgetAdminFlags();
 
         if (domain is not null)
         {
             var email = $"{user.Name}@{domain.Name}".Trim().ToLowerInvariant();
             try
             {
-                await _webmailUsers.DeleteByEmailAsync(email, CancellationToken.None);
+                // Not the caller's token: the dovecot rows are already committed, so a client
+                // disconnect here would orphan the webmail row with nothing left to retry it.
+                await webmailUsers.DeleteByEmailAsync(email, CancellationToken.None);
             }
             catch (Exception ex)
             {
                 // Best-effort: the dovecot account is already gone; a webmail-DB failure must not
                 // fail the deletion. Orphan preference rows are recoverable; a failed request is not.
-                _logger.LogWarning(ex, "Webmail user row for {Email} could not be deleted after account removal", email);
+                logger.LogWarning(ex, "Webmail user row for {Email} could not be deleted after account removal", email);
             }
         }
 
         return Result.Success();
     }
 
-    public async Task<IEnumerable<Domain>> GetAllDomainsAsync()
+    public async Task<IEnumerable<Domain>> GetAllDomainsAsync(CancellationToken cancellationToken)
     {
-        return await _context.Domains
-            .Select(d => new Domain { Id = d.Id, Name = d.Name })
-            .ToListAsync();
+        // The alias count rides on the listing rather than on a lookup of its own: the delete
+        // confirmation is the only consumer, and a second round trip per domain to answer a
+        // question the list is already fetching would be the N+1 this repository just lost.
+        return await context.Domains
+            .Select(d => new Domain
+            {
+                Id = d.Id,
+                Name = d.Name,
+                AliasCount = context.Aliases.Count(a => a.Domain == d.Id)
+            })
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<Result<Domain>> CreateDomainAsync(AdminDomainRequest request)
+    public async Task<Result<Domain>> CreateDomainAsync(AdminDomainRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Id) || request.Id.Length > 3)
             return Result.Failure<Domain>("Domain id must be 1-3 characters");
@@ -179,60 +253,80 @@ internal sealed class AdminRepository : IAdminRepository
         if (string.IsNullOrWhiteSpace(request.Name))
             return Result.Failure<Domain>("Domain name is required");
 
-        if (await _context.Domains.AnyAsync(d => d.Id == request.Id))
+        if (await context.Domains.AnyAsync(d => d.Id == request.Id, cancellationToken))
             return Result.Failure<Domain>($"Domain id '{request.Id}' already exists");
 
         var domain = new MailDomain { Id = request.Id.ToUpperInvariant(), Name = request.Name };
-        _context.Domains.Add(domain);
-        await _context.SaveChangesAsync();
+        context.Domains.Add(domain);
+        await context.SaveChangesAsync(cancellationToken);
+        ForgetAdminFlags();
 
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
 
-    public async Task<Result<Domain>> UpdateDomainAsync(string id, AdminDomainRequest request)
+    public async Task<Result<Domain>> UpdateDomainAsync(string id, AdminDomainRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return Result.Failure<Domain>("Domain name is required");
 
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == id);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (domain == null)
             return Result.Failure<Domain>($"Domain '{id}' not found");
 
+        // The domain name is half the cache key: a rename moves every flag under it to a key
+        // nothing has cached yet, and leaves the old key answering for a name that no longer maps.
         domain.Name = request.Name;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
+        ForgetAdminFlags();
 
         return Result.Success(new Domain { Id = domain.Id, Name = domain.Name });
     }
 
-    public async Task<Result> DeleteDomainAsync(string id)
+    public async Task<Result> DeleteDomainAsync(string id, bool deleteAliases, CancellationToken cancellationToken)
     {
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == id);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (domain == null)
             return Result.Failure($"Domain '{id}' not found");
 
-        if (await _context.Users.AnyAsync(u => u.DomainId == id))
+        if (await context.Users.AnyAsync(u => u.DomainId == id, cancellationToken))
             return Result.Failure($"Cannot delete domain '{id}': it still has associated users");
 
-        _context.Domains.Remove(domain);
-        await _context.SaveChangesAsync();
+        // aliases.source_domain is ON DELETE CASCADE where the users FK is not: the database
+        // refuses the case above on its own, and would take these rows with it without a word.
+        // Taking them is what the cascade is deliberately for — an alias domain holds aliases by
+        // definition, and refusing outright would leave one undeletable, since no screen in this
+        // application lists another user's aliases. So this asks, and says how many.
+        var aliasCount = await context.Aliases.CountAsync(a => a.Domain == id, cancellationToken);
+        if (aliasCount > 0 && !deleteAliases)
+            return Result.Failure(
+                $"Deleting domain '{id}' would also delete {aliasCount} alias{(aliasCount == 1 ? string.Empty : "es")}");
+
+        context.Domains.Remove(domain);
+        await context.SaveChangesAsync(cancellationToken);
+        ForgetAdminFlags();
+
+        // The rows are gone and nothing else records them: the count is the only trace left.
+        if (aliasCount > 0)
+            logger.LogInformation(
+                "Audit: delete_domain domain={Domain} aliases_deleted={Count} outcome=success", id, aliasCount);
+
         return Result.Success();
     }
 
-    public async Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync()
+    public async Task<IEnumerable<VirtualDomainInfo>> GetAllVirtualDomainsAsync(CancellationToken cancellationToken)
     {
-        var primaryDomainIds = (await _context.Users.Select(u => u.DomainId).Distinct().ToListAsync()).ToHashSet();
-        var ownedDomainIds = (await _context.DomainsOwnerships.Select(o => o.DomainId).ToListAsync()).ToHashSet();
-
-        var aliasDomains = (await _context.Domains
-                .Select(d => new { d.Id, d.Name })
-                .ToListAsync())
-            .Where(d => !primaryDomainIds.Contains(d.Id) || ownedDomainIds.Contains(d.Id))
-            .ToList();
+        // "No mailbox lives here, or someone was given it" as two EXISTS: the equivalent client-side
+        // filter read the whole users and ownerships tables to answer it.
+        var aliasDomains = await context.Domains
+            .Where(d => !context.Users.Any(u => u.DomainId == d.Id) ||
+                        context.DomainsOwnerships.Any(o => o.DomainId == d.Id))
+            .Select(d => new { d.Id, d.Name })
+            .ToListAsync(cancellationToken);
 
         // One query for every owner, grouped in memory: the per-domain lookup this replaces
         // issued a round trip per alias domain.
         var ids = aliasDomains.Select(d => d.Id).ToList();
-        var ownersByDomain = (await OwnersQuery(o => ids.Contains(o.DomainId)).ToListAsync())
+        var ownersByDomain = (await OwnersQuery(o => ids.Contains(o.DomainId)).ToListAsync(cancellationToken))
             .GroupBy(x => x.DomainId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Owner).ToList(), StringComparer.Ordinal);
 
@@ -246,37 +340,37 @@ internal sealed class AdminRepository : IAdminRepository
             .ToList();
     }
 
-    public async Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId)
+    public async Task<Result<VirtualDomainInfo>> AddVirtualDomainOwnerAsync(string domainId, int userId, CancellationToken cancellationToken)
     {
-        var domain = await _context.Domains.FirstOrDefaultAsync(d => d.Id == domainId);
+        var domain = await context.Domains.FirstOrDefaultAsync(d => d.Id == domainId, cancellationToken);
         if (domain == null)
             return Result.Failure<VirtualDomainInfo>($"Domain '{domainId}' not found");
 
-        if (!await _context.Users.AnyAsync(u => u.Id == userId))
+        if (!await context.Users.AnyAsync(u => u.Id == userId, cancellationToken))
             return Result.Failure<VirtualDomainInfo>($"User with id {userId} not found");
 
-        if (!await _context.DomainsOwnerships.AnyAsync(o => o.DomainId == domainId && o.UserId == userId))
+        if (!await context.DomainsOwnerships.AnyAsync(o => o.DomainId == domainId && o.UserId == userId, cancellationToken))
         {
-            _context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
-            await _context.SaveChangesAsync();
+            context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = domainId, UserId = userId });
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         return Result.Success(new VirtualDomainInfo
         {
             DomainId = domain.Id,
             DomainName = domain.Name,
-            Owners = await GetDomainOwnersAsync(domainId)
+            Owners = await GetDomainOwnersAsync(domainId, cancellationToken)
         });
     }
 
-    public async Task<Result> RemoveVirtualDomainOwnerAsync(string domainId, int userId)
+    public async Task<Result> RemoveVirtualDomainOwnerAsync(string domainId, int userId, CancellationToken cancellationToken)
     {
-        var ownership = await _context.DomainsOwnerships.FirstOrDefaultAsync(o => o.DomainId == domainId && o.UserId == userId);
+        var ownership = await context.DomainsOwnerships.FirstOrDefaultAsync(o => o.DomainId == domainId && o.UserId == userId, cancellationToken);
         if (ownership == null)
             return Result.Failure($"No ownership found for domain '{domainId}' and user {userId}");
 
-        _context.DomainsOwnerships.Remove(ownership);
-        await _context.SaveChangesAsync();
+        context.DomainsOwnerships.Remove(ownership);
+        await context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
@@ -284,19 +378,59 @@ internal sealed class AdminRepository : IAdminRepository
 
     private static ActiveState State(bool on) => on ? ActiveState.Y : ActiveState.N;
 
-    private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null)
+    /// <summary>
+    /// One key per account, folding exactly what the query folds and nothing more: the username
+    /// because it is compared lower-cased on both sides, the domain not at all since it is compared
+    /// under the database collation. A name differing by a space is another row, so another key.
+    /// The halves cannot run together because <see cref="Models.User"/> refuses an address that is
+    /// not exactly two '@'-separated parts, and every claim is built from one.
+    /// </summary>
+    private static string AdminFlagKey(string username, string domainName) =>
+        $"admin-flag:{username.ToLowerInvariant()}@{domainName}";
+
+    /// <summary>
+    /// Invalidates every cached flag, including answers still being computed. One epoch for all of
+    /// them: a write here is rare, and a per-key removal cannot reach an entry that does not exist
+    /// yet, which is exactly the entry a revocation must not leave behind.
+    /// </summary>
+    private void ForgetAdminFlags() =>
+        cache.Set(EpochKey, Stopwatch.GetTimestamp(), new MemoryCacheEntryOptions { Priority = CacheItemPriority.NeverRemove });
+
+    /// <summary>
+    /// A timestamp rather than a counter, so nothing has to be read before it is written: two
+    /// writers cannot lose each other's bump, and an epoch that went missing comes back larger than
+    /// any a live entry carries, which costs a re-read instead of serving a revoked flag.
+    /// </summary>
+    private long CurrentEpoch() => cache.GetOrCreate(EpochKey, entry =>
     {
-        return new AdminUserInfo
+        entry.Priority = CacheItemPriority.NeverRemove;
+        return Stopwatch.GetTimestamp();
+    });
+
+    private readonly record struct CachedAdminFlag(bool IsAdmin, long Epoch);
+
+    private static AdminUserInfo MapToAdminUserInfo(MailUser user, string domainName, List<LastLoginEntry>? lastLogins = null) =>
+        new AdminUserRow(user.Id, user.Name, user.DomainId, domainName,
+            user.FullName, user.QuotaMb, user.Active, user.Admin).ToInfo(lastLogins);
+
+    /// <summary>The columns <see cref="AdminUserInfo"/> is built from, and nothing else.</summary>
+    private sealed record AdminUserRow(
+        int Id, string Name, string DomainId, string DomainName,
+        string? FullName, int QuotaMb, ActiveState Active, ActiveState Admin)
+    {
+        public string Email => $"{Name}@{DomainName}";
+
+        public AdminUserInfo ToInfo(List<LastLoginEntry>? lastLogins = null) => new()
         {
-            Id = user.Id,
-            UserName = user.Name,
-            DomainId = user.DomainId,
-            DomainName = domainName,
-            FullName = user.FullName,
-            QuotaMb = user.QuotaMb,
-            Active = user.Active == ActiveState.Y,
-            Admin = user.Admin == ActiveState.Y,
-            LastLogins = lastLogins ?? new List<LastLoginEntry>()
+            Id = Id,
+            UserName = Name,
+            DomainId = DomainId,
+            DomainName = DomainName,
+            FullName = FullName,
+            QuotaMb = QuotaMb,
+            Active = Active == ActiveState.Y,
+            Admin = Admin == ActiveState.Y,
+            LastLogins = lastLogins ?? []
         };
     }
 
@@ -315,8 +449,8 @@ internal sealed class AdminRepository : IAdminRepository
             .ToList();
     }
 
-    private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId) =>
-        OwnersQuery(o => o.DomainId == domainId).Select(x => x.Owner).ToListAsync();
+    private Task<List<OwnerInfo>> GetDomainOwnersAsync(string domainId, CancellationToken cancellationToken) =>
+        OwnersQuery(o => o.DomainId == domainId).Select(x => x.Owner).ToListAsync(cancellationToken);
 
     /// <summary>
     /// Owners of the ownerships matching <paramref name="scope"/>, each carrying the domain it
@@ -325,9 +459,9 @@ internal sealed class AdminRepository : IAdminRepository
     /// </summary>
     private IQueryable<DomainOwner> OwnersQuery(
         System.Linq.Expressions.Expression<Func<MailDomainOwnership, bool>> scope) =>
-        from ownership in _context.DomainsOwnerships.Where(scope)
-        join user in _context.Users on ownership.UserId equals user.Id
-        join domain in _context.Domains on user.DomainId equals domain.Id
+        from ownership in context.DomainsOwnerships.Where(scope)
+        join user in context.Users on ownership.UserId equals user.Id
+        join domain in context.Domains on user.DomainId equals domain.Id
         select new DomainOwner(
             ownership.DomainId,
             new OwnerInfo { OwnerId = ownership.UserId, OwnerEmail = user.Name + "@" + domain.Name });

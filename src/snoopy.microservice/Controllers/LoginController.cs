@@ -14,31 +14,14 @@ namespace weesky.Snoopy.Microservice.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public sealed class LoginController : ApiBaseController
+public sealed class LoginController(
+    IUserAuthenticator authenticator,
+    IOptions<TokenConstants> tokenConstants,
+    IMailCredentialStore credentialStore,
+    IWebmailUserStore webmailUsers,
+    ISessionGuard sessions,
+    ILogger<LoginController> logger) : ApiBaseController
 {
-    private readonly IUserAuthenticator _authenticator;
-    private readonly IOptions<TokenConstants> _tokenConstants;
-    private readonly IMailCredentialStore _credentialStore;
-    private readonly IWebmailUserStore _webmailUsers;
-    private readonly ISessionGuard _sessions;
-    private readonly ILogger<LoginController> _logger;
-
-    public LoginController(
-        IUserAuthenticator authenticator,
-        IOptions<TokenConstants> tokenConstants,
-        IMailCredentialStore credentialStore,
-        IWebmailUserStore webmailUsers,
-        ISessionGuard sessions,
-        ILogger<LoginController> logger)
-    {
-        _authenticator = authenticator;
-        _tokenConstants = tokenConstants;
-        _credentialStore = credentialStore;
-        _webmailUsers = webmailUsers;
-        _sessions = sessions;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Login with user credentials and cookie generation.
     /// </summary>
@@ -47,38 +30,48 @@ public sealed class LoginController : ApiBaseController
     /// credentials cookie the mail endpoints need to open IMAP on the user's behalf.
     /// The password is unrecoverable from the database, so this is the only moment it
     /// can be captured.
+    /// The JWT itself is never in the body — it exists only in the HttpOnly cookie, and the
+    /// response carries just the session's inactivity window so the client can plan its renewal.
     /// </remarks>
     /// <param name="credentials">user credentials</param>
     /// <param name="cancellationToken">cancellation token</param>
-    /// <returns></returns>
+    /// <returns>The issued session's expiry, in minutes.</returns>
     /// <response code="200">Login successful</response>
     /// <response code="401">Invalid credentials</response>
     /// <response code="429">Too many authentication attempts</response>
     [HttpPost]
     [EnableRateLimiting("login")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ResultEnveloppe), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-    public async Task<ActionResult<AuthToken>> Login(Credentials credentials, CancellationToken cancellationToken)
+    public async Task<ActionResult<LoginResponse>> Login(Credentials credentials, CancellationToken cancellationToken)
     {
-        Result<AuthToken> result = await _authenticator.AuthenticateAsync(credentials.Email, credentials.Password);
+        Result<AuthToken> result = await authenticator.AuthenticateAsync(credentials.Email, credentials.Password, cancellationToken);
 
-        if (result.IsSuccess && !string.IsNullOrEmpty(result.Value.Token))
+        if (result.IsFailure)
+            return FromResult(result.ConvertFailure<LoginResponse>(), errorStatusCode: StatusCodes.Status401Unauthorized);
+
+        if (!string.IsNullOrEmpty(result.Value.Token))
         {
-            HttpContext.Response.WriteAuthCookie(_tokenConstants.Value, result.Value.Token);
+            HttpContext.Response.WriteAuthCookie(tokenConstants.Value, result.Value.Token);
 
             // The only moment the 600k-iteration key derivation is affordable: the cookie carries
             // the result so no later request has to pay it again.
-            var salt = await _webmailUsers.GetOrCreateKdfSaltAsync(credentials.Email, cancellationToken);
+            //
+            // The salt is fetched under the address the account was resolved to, never the one the
+            // caller typed: the row this reads is the row RegisterLoginAsync just wrote, and a
+            // spelling that missed it would hand back a salt nobody persisted — a key that opens
+            // none of the connected accounts, for the whole life of the session.
+            var salt = await webmailUsers.GetOrCreateKdfSaltAsync(result.Value.Email, cancellationToken);
             var kek = ConnectedAccountCipher.DeriveKek(credentials.Password, salt);
 
-            _credentialStore.Store(
+            credentialStore.Store(
                 HttpContext.Response,
                 new MailCredentialPayload(credentials.Password, kek),
-                TimeSpan.FromMinutes(_tokenConstants.Value.ExpiryInMinutes));
+                TimeSpan.FromMinutes(tokenConstants.Value.ExpiryInMinutes));
         }
 
-        return FromResult(result, errorStatusCode: StatusCodes.Status401Unauthorized);
+        return Ok(new LoginResponse(result.Value.ExpiresIn));
     }
 
     /// <summary>
@@ -93,9 +86,9 @@ public sealed class LoginController : ApiBaseController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult Logout()
     {
-        HttpContext.Response.ClearAuthCookie(_tokenConstants.Value);
+        HttpContext.Response.ClearAuthCookie(tokenConstants.Value);
 
-        _credentialStore.Clear(HttpContext.Response);
+        credentialStore.Clear(HttpContext.Response);
 
         return NoContent();
     }
@@ -120,13 +113,13 @@ public sealed class LoginController : ApiBaseController
     {
         var email = AuthenticatedUser.Email;
 
-        await _webmailUsers.RotateSecurityStampAsync(email, cancellationToken);
-        _sessions.Forget(email);
+        await webmailUsers.RotateSecurityStampAsync(email, cancellationToken);
+        sessions.Forget(email);
 
-        HttpContext.Response.ClearAuthCookie(_tokenConstants.Value);
-        _credentialStore.Clear(HttpContext.Response);
+        HttpContext.Response.ClearAuthCookie(tokenConstants.Value);
+        credentialStore.Clear(HttpContext.Response);
 
-        _logger.LogInformation("Audit: logout_everywhere email={Email} outcome=success", email);
+        logger.LogInformation("Audit: logout_everywhere email={Email} outcome=success", email);
 
         return NoContent();
     }

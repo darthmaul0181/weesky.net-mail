@@ -5,5 +5,5 @@ namespace weesky.Snoopy.Microservice.Authentication.Services;
 
 public interface IUserAuthenticator
 {
-    Task<Result<AuthToken>> AuthenticateAsync(string email, string password);
+    Task<Result<AuthToken>> AuthenticateAsync(string email, string password, CancellationToken cancellationToken);
 }

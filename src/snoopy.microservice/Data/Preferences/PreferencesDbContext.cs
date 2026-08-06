@@ -71,8 +71,16 @@ public class PreferencesDbContext : DbContext
 
         modelBuilder.Entity<ExternalDomain>().HasKey(d => d.Id);
         modelBuilder.Entity<ExternalDomain>().HasIndex(d => d.Name).IsUnique();
+        modelBuilder.Entity<ExternalDomain>()
+            .Property(d => d.AuthMode)
+            .HasConversion<string>()
+            .HasMaxLength(16);
         modelBuilder.Entity<ConnectedAccount>().HasKey(a => a.Id);
         modelBuilder.Entity<ConnectedAccount>().HasIndex(a => new { a.UserId, a.DomainId, a.Email }).IsUnique();
+        modelBuilder.Entity<ConnectedAccount>()
+            .Property(a => a.AuthMode)
+            .HasConversion<string>()
+            .HasMaxLength(16);
         // Same mechanism again: "connected_accounts" sorts before both parents.
         modelBuilder.Entity<ConnectedAccount>()
             .HasOne<WebmailUser>()

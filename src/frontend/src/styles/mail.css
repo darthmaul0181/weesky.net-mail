@@ -953,6 +953,18 @@
   background: color-mix(in oklab, var(--success), var(--danger) calc(var(--gauge-ratio) * 100%));
 }
 
+/* Same banner shape as the blocked-images one below, without its actions: there is nothing to
+   grant here, only something to say. */
+.reader-truncated {
+  margin: 12px 22px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .reader-blocked-images {
   display: flex;
   align-items: center;

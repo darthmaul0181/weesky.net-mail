@@ -20,7 +20,13 @@ public sealed class TokenManagerTests
         AuthCookieName = "BearerAuth"
     };
 
-    private static TokenManager CreateSut() => new(Options.Create(Constants));
+    private static TokenManager CreateSut(TimeProvider? timeProvider = null) =>
+        new(Options.Create(Constants), timeProvider ?? TimeProvider.System);
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     [Fact]
     public void Generate_ReturnsAuthTokenWithCorrectExpiresIn()
@@ -84,5 +90,31 @@ public sealed class TokenManagerTests
 
         var jwt = new JsonWebToken(token.Token);
         Assert.Equal(uid.ToString(), jwt.Claims.First(c => c.Type == WebmailClaimTypes.Uid).Value);
+    }
+
+    [Fact]
+    public void Generate_UsesInjectedTimeProvider_ExpiryMovesWithTheClock()
+    {
+        var fixedNow = new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var sut = CreateSut(new FixedTimeProvider(fixedNow));
+
+        var token = sut.Generate(new User("john@example.com"));
+
+        var jwt = new JsonWebToken(token.Token);
+        Assert.Equal(fixedNow.UtcDateTime.AddMinutes(Constants.ExpiryInMinutes), jwt.ValidTo);
+    }
+
+    [Fact]
+    public void Generate_WithADifferentClockInstant_ProducesADifferentExpiry()
+    {
+        var earlier = CreateSut(new FixedTimeProvider(new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero)))
+            .Generate(new User("john@example.com"));
+        var later = CreateSut(new FixedTimeProvider(new DateTimeOffset(2030, 1, 2, 12, 0, 0, TimeSpan.Zero)))
+            .Generate(new User("john@example.com"));
+
+        var earlierExpiry = new JsonWebToken(earlier.Token).ValidTo;
+        var laterExpiry = new JsonWebToken(later.Token).ValidTo;
+
+        Assert.Equal(TimeSpan.FromDays(1), laterExpiry - earlierExpiry);
     }
 }

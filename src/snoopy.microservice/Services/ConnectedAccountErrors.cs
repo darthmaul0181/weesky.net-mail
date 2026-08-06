@@ -10,4 +10,8 @@ public static class ConnectedAccountErrors
     /// <summary>Unparseable id, unknown id, another user's id, or an unusable domain row —
     /// deliberately indistinguishable. Mapped to 404.</summary>
     public const string AccountNotFound = "account_not_found";
+
+    /// <summary>The identity provider would not answer, or answered something unusable. Mapped to
+    /// 502, like anything else refused by a server we merely talk to.</summary>
+    public const string ProviderUnavailable = "oauth_provider_unavailable";
 }

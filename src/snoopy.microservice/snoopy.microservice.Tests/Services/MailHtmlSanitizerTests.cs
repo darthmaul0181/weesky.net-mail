@@ -460,6 +460,352 @@ public sealed class MailHtmlSanitizerTests
         Assert.DoesNotContain("alert", result, StringComparison.OrdinalIgnoreCase);
     }
 
+    // AngleSharp's default formatter (InnerHtml) leaves < and > unescaped in attribute values,
+    // so a payload smuggled in a title came back as live markup wherever the value is re-read
+    // as HTML. The final serialisation must use Ganss's formatter, like OutgoingMailSanitizer.
+    [Fact]
+    public void Sanitize_EscapesAngleBracketsInAttributeValues()
+    {
+        var result = _sut.Sanitize("<p title=\"<img src=x onerror=alert(1)>\">hi</p>").Html;
+
+        Assert.DoesNotContain("<img", result);
+        Assert.Contains("&lt;img", result);
+        Assert.Contains("hi", result);
+    }
+
+    // The ceiling is applied before any parse, so the kept part crosses the whole pipeline:
+    // a script inside it is still removed, and nothing past the cut survives.
+    [Fact]
+    public void Sanitize_TruncatesAnOversizedBodyAndStillSanitisesIt()
+    {
+        var html = "<script>alert(1)</script><p>hi</p><p>"
+            + new string('a', MailHtmlSanitizer.MaxInputLength)
+            + "</p><img src=\"https://tail.example/z.png\">";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.DoesNotContain("script", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("alert", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hi", result.Html);
+        Assert.DoesNotContain("tail.example", result.Html);
+        Assert.InRange(result.Html.Length, 1, MailHtmlSanitizer.MaxInputLength + 1024);
+    }
+
+    [Fact]
+    public void Sanitize_DoesNotFlagANormalBodyAsTruncated()
+    {
+        var result = _sut.Sanitize("<p>hi</p>");
+
+        Assert.False(result.Truncated);
+        Assert.Contains("hi", result.Html);
+    }
+
+    // The width ceiling bounds characters; the pipeline's cost is proportional to nodes. 2M
+    // characters of <div>x</div> is ~175 000 of them, measured between 22.7 s and 71.5 s with the
+    // width ceiling alone. What is asserted is the bound, not a duration: the timings belong to
+    // the measurement harness, and a millisecond threshold only ever encodes the runner's speed.
+    [Fact]
+    public void Sanitize_BoundsTheCostOfAnElementDenseBody()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>x</div>", MailHtmlSanitizer.MaxInputLength / 12));
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.Equal(20_000, Regex.Matches(result.Html, "<div>").Count);
+    }
+
+    // A comment is a node the parser builds and an element ceiling never sees. 233 000 of them
+    // inside kept levels measured 55 s, against 0.5 s for the same count of elements: removing
+    // them is quadratic in siblings, so the ceiling has to count them too.
+    [Theory]
+    [InlineData("<div></1>")]
+    [InlineData("<div><!--x-->")]
+    public void Sanitize_BoundsTheCostOfACommentDenseBody(string unit)
+    {
+        var html = string.Concat(Enumerable.Repeat(unit, MailHtmlSanitizer.MaxInputLength / unit.Length));
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.Equal(1024, Regex.Matches(result.Html, "<div>").Count);
+    }
+
+    // The cut keeps the leading part and flags it, exactly as the width ceiling does — and what
+    // it keeps has still crossed every pass.
+    [Fact]
+    public void Sanitize_CutsAtTheElementCeilingAndStillSanitisesWhatItKeeps()
+    {
+        var html = "<script>alert(1)</script><p>hi</p>"
+                   + string.Concat(Enumerable.Repeat("<div>x</div>", 30_000))
+                   + "<img src=\"https://tail.example/z.png\">";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.True(result.Truncated);
+        Assert.Contains("hi", result.Html);
+        Assert.DoesNotContain("alert", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tail.example", result.Html);
+    }
+
+    [Fact]
+    public void Sanitize_DoesNotCutAnOrdinaryElementCount()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>x</div>", 2_000));
+
+        var result = _sut.Sanitize(html);
+
+        Assert.False(result.Truncated);
+        Assert.Equal(2_000, Regex.Matches(result.Html, "<div>").Count);
+    }
+
+    // A tag that closes a peer is a sibling, not a level. Counted as a level, 1024 unclosed
+    // paragraphs or table cells would flatten the rest of a perfectly ordinary newsletter.
+    [Theory]
+    [InlineData("<p>", "<p>")]
+    [InlineData("<tr><td>x", "<td>")]
+    public void Sanitize_DoesNotReadAPeerTagAsALevel(string unit, string expected)
+    {
+        var html = "<table>" + string.Concat(Enumerable.Repeat(unit, 3_000)) + "</table>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.False(result.Truncated);
+        Assert.Equal(3_000, Regex.Matches(result.Html, expected).Count);
+    }
+
+    // AngleSharp's tree construction is superlinear in nesting depth: measured on this runtime,
+    // parsing 50 000 nested divs takes 6.5 s and 100 000 takes 43.6 s, and the pipeline parses
+    // three times. 200 000 levels fit in a body a sender chooses freely.
+    [Fact]
+    public void Sanitize_SurvivesADocumentTooDeepForTheParser()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 200_000)) + "deep";
+
+        var result = _sut.Sanitize(html).Html;
+
+        // The tree the parser is handed is what matters, and it is countable: 1024 levels, never
+        // the 200 000 the sender chose.
+        Assert.Contains("deep", result);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsNestingRealMailReaches()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 200)) + "deep"
+                   + string.Concat(Enumerable.Repeat("</div>", 200));
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Equal(200, Regex.Matches(result, "<div>").Count);
+    }
+
+    // The over-deep wrappers go, their content stays — rule 6(b)'s unwrap applied to depth.
+    [Fact]
+    public void Sanitize_FlattensNestingPastTheCapWithoutLosingContent()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 5_000)) + "<p>the whole message</p>"
+                   + string.Concat(Enumerable.Repeat("</div>", 5_000));
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("the whole message", result);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
+    }
+
+    // HTML has no self-closing syntax outside void elements: <div/> opens a level, and honouring
+    // its slash would let a sender nest past the cap uncounted.
+    [Theory]
+    [InlineData("<div/>")]
+    [InlineData("<DIV>")]
+    public void Sanitize_CountsTagsThatOnlyLookSelfClosingOrLowercase(string open)
+    {
+        var result = _sut.Sanitize(string.Concat(Enumerable.Repeat(open, 5_000)) + "deep").Html;
+
+        Assert.Contains("deep", result);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
+    }
+
+    // A quote opens an attribute value only right after '='. Read as a delimiter anywhere, a
+    // stray apostrophe would let one tag swallow the document and the nesting inside it.
+    [Fact]
+    public void Sanitize_CountsNestingBehindAStrayApostrophe()
+    {
+        var html = "<p title=it's>" + string.Concat(Enumerable.Repeat("<div>", 5_000)) + "deep'";
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("deep", result);
+        Assert.Equal(1024, Regex.Matches(result, "<div>").Count);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsAQuotedAngleBracketInsideAnAttribute()
+    {
+        var result = _sut.Sanitize("<div title=\"a>b\"><p>hi</p></div>").Html;
+
+        Assert.Contains("<p>hi</p>", result);
+    }
+
+    [Fact]
+    public void Sanitize_DoesNotCountVoidTagsAsNesting()
+    {
+        var result = _sut.Sanitize(string.Concat(Enumerable.Repeat("<br>", 2_000)) + "<p>hi</p>").Html;
+
+        Assert.Equal(2_000, Regex.Matches(result, "<br>").Count);
+        Assert.Contains("<p>hi</p>", result);
+    }
+
+    // A comparison inside a script is text, not a start tag; counting it would flatten the
+    // markup that follows a perfectly ordinary message.
+    [Fact]
+    public void Sanitize_DoesNotReadScriptTextAsNesting()
+    {
+        var script = "<script>" + string.Concat(Enumerable.Repeat("if(a<b){}", 2_000)) + "</script>";
+
+        var result = _sut.Sanitize(script + "<div><p>hi</p></div>").Html;
+
+        Assert.Contains("<div><p>hi</p></div>", result);
+    }
+
+    // Where a tag name ends is the one thing the scan and the tokeniser must agree on for every
+    // input. Each of these reads as a name the scan once acted on and the tokeniser never emits,
+    // and each left the scan seeing no depth at all while the parser built the whole tree:
+    // <script_x> as raw-text `script` whose skip swallowed the document, <br_x> as a void tag,
+    // <p_x> as a peer, </1> as an end tag closing a level nothing opened, and the two comment
+    // terminators the scan did not know, which skipped every element up to the next `-->`.
+    [Theory]
+    [InlineData("<script_x>")]
+    [InlineData("<style:x>")]
+    [InlineData("<iframe.x>")]
+    [InlineData("<textarea1>")]
+    [InlineData("<!-- x --!>")]
+    [InlineData("<!-->")]
+    [InlineData("<!--->")]
+    public void Sanitize_DoesNotLetAPrefixThatOnlyLooksKnownHideTheDocument(string prefix)
+    {
+        // 1 100 levels, not 60 000: what discriminates is the count that survives, so the payload
+        // only has to cross the cap. A prefix the scan mis-reads leaves all 1 100 standing.
+        var html = prefix + string.Concat(Enumerable.Repeat("<div>", 1_100)) + "deep";
+
+        var result = _sut.Sanitize(html).Html;
+
+        // 1023 where the prefix is an element the parser nests — it holds the first level itself —
+        // and 1024 where it is a comment, which opens nothing.
+        Assert.Contains("deep", result);
+        Assert.InRange(Regex.Matches(result, "<div>").Count, 1023, 1024);
+    }
+
+    [Theory]
+    [InlineData("<br_x>")]
+    [InlineData("<p_x>")]
+    [InlineData("<td:x>")]
+    [InlineData("<div></1>")]
+    public void Sanitize_CountsDepthATagOnlyLookingLikeAVoidPeerOrEndTagWouldHide(string unit)
+    {
+        var html = string.Concat(Enumerable.Repeat(unit, 1_100)) + "<b>marker</b>";
+
+        var result = _sut.Sanitize(html).Html;
+
+        // Past the cap a wrapper is elided and its content kept. A unit the scan reads as opening
+        // no level leaves the marker inside the cap, still wrapped — which is the whole tell.
+        Assert.Contains("marker", result);
+        Assert.DoesNotContain("<b>", result);
+    }
+
+    // The tokeniser's whitespace set, not Unicode's: a no-break space does not separate
+    // attributes, so a quote after one opens no value and the tag still ends at its first '>'.
+    [Fact]
+    public void Sanitize_DoesNotLetANoBreakSpaceOpenAnAttributeValue()
+    {
+        var html = "<div title= \"x><p>hi</p>\">" + string.Concat(Enumerable.Repeat("<div>", 5_000)) + "deep";
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains("hi", result);
+        Assert.Contains("deep", result);
+        Assert.InRange(Regex.Matches(result, "<div>").Count, 1023, 1024);
+    }
+
+    // Conditional comments carry markup Outlook alone reads. It is comment text to everyone else,
+    // and reading it as elements would spend a real message's depth and element budget on it.
+    [Fact]
+    public void Sanitize_TreatsAConditionalCommentAsComment()
+    {
+        var html = "<!--[if mso]>" + string.Concat(Enumerable.Repeat("<table><tr><td>x</td></tr></table>", 500))
+                   + "<![endif]--><p>hi</p>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.False(result.Truncated);
+        Assert.Contains("<p>hi</p>", result.Html);
+        Assert.DoesNotContain("<table>", result.Html);
+    }
+
+    // What survives the cap crosses the whole pipeline unchanged — the guard runs before it,
+    // never instead of it, so rule 6's three sub-rules still decide the outcome.
+    [Theory]
+    [InlineData("<script>alert(1)</script>", "alert(1)")]
+    [InlineData("<img src=x onerror=\"alert(1)\">", "onerror")]
+    [InlineData("<a href=\"javascript:alert(1)\">x</a>", "javascript:")]
+    [InlineData("<p style=\"border-image: url(https://evil.example/a.png)\">x</p>", "evil.example")]
+    [InlineData("<p style=\"background-image: \\75 rl(https://evil.example/a.png)\">x</p>", "evil.example")]
+    public void Sanitize_StillStripsHostileContentJustInsideTheCap(string hostile, string forbidden)
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 1_000)) + hostile;
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain(forbidden, result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Sanitize_StillWithholdsARemoteBackgroundJustInsideTheCap()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 1_000))
+                   + "<p style=\"background-image: url(https://cdn.example/logo.png)\">x</p>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/logo.png\"", result.Html);
+        Assert.DoesNotContain("url(", result.Html);
+    }
+
+    // The cap runs before the pipeline, never instead of it.
+    [Theory]
+    [InlineData("<script>alert(1)</script>", "alert(1)")]
+    [InlineData("<style>body{color:red}</style>", "color:red")]
+    [InlineData("<img src=x onerror=\"alert(1)\">", "onerror")]
+    [InlineData("<a href=\"javascript:alert(1)\">x</a>", "javascript:")]
+    [InlineData("<p style=\"border-image: url(https://evil.example/a.png)\">x</p>", "evil.example")]
+    [InlineData("<p style=\"background-image: \\75 rl(https://evil.example/a.png)\">x</p>", "evil.example")]
+    public void Sanitize_StillStripsHostileContentBuriedPastTheCap(string hostile, string forbidden)
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 5_000)) + hostile;
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain(forbidden, result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // A peer tag is never elided, so an over-deep document still carries elements the CSS pass
+    // must judge: a remote background there is withheld, not left fetchable in the style.
+    [Fact]
+    public void Sanitize_StillWithholdsARemoteBackgroundPastTheCap()
+    {
+        var html = string.Concat(Enumerable.Repeat("<div>", 5_000))
+                   + "<p style=\"background-image: url(https://cdn.example/logo.png)\">x</p>";
+
+        var result = _sut.Sanitize(html);
+
+        Assert.Equal(1, result.BlockedImageCount);
+        Assert.Contains("data-blocked-bg=\"https://cdn.example/logo.png\"", result.Html);
+        Assert.DoesNotContain("url(", result.Html);
+    }
+
     // A withheld URL is meant to appear in data-blocked-bg; what must never appear is the URL
     // still inside the CSS, which is the only place a leak can fetch from.
     private static string StyleOf(string html) =>

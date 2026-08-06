@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Data.Preferences;
 
@@ -42,6 +43,27 @@ public sealed class ExternalDomain
 
     [Column("sieve_port")]
     public int? SievePort { get; set; }
+
+    /// <summary>Password unless an admin declared this provider an OAuth one.</summary>
+    [Column("auth_mode")]
+    public MailAuthMode AuthMode { get; set; }
+
+    [Column("oauth_authorization_url")]
+    public string? OAuthAuthorizationUrl { get; set; }
+
+    [Column("oauth_token_url")]
+    public string? OAuthTokenUrl { get; set; }
+
+    /// <summary>Space-separated, sent to the provider verbatim.</summary>
+    [Column("oauth_scopes")]
+    public string? OAuthScopes { get; set; }
+
+    [Column("oauth_client_id")]
+    public string? OAuthClientId { get; set; }
+
+    /// <summary>Data-Protection-protected. Never logged, never returned by any endpoint.</summary>
+    [Column("oauth_client_secret")]
+    public byte[]? OAuthClientSecret { get; set; }
 
     [Column("creation_date")]
     public DateTime CreationDate { get; set; }

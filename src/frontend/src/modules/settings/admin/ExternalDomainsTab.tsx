@@ -60,6 +60,7 @@ export default function ExternalDomainsTab({ addToast }: Props) {
             {domains.map(domain => (
               <div key={domain.id} className="admin-list-item">
                 <span className="admin-list-item-name">{domain.name}</span>
+                {domain.authMode === 'OAuth2' && <span className="row-tag">OAuth</span>}
                 <div className="admin-list-item-actions">
                   <button type="button" className="admin-icon-btn" title="Edit"
                     onClick={() => setEditing(domain)}>

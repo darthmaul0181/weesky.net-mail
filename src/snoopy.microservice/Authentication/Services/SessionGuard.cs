@@ -26,7 +26,7 @@ internal sealed class SessionGuard(
 
             // FindByEmailAsync answers null for a deleted *or* deactivated mailbox, so this one
             // read covers both — see UsersRepository.
-            var usable = await users.FindByEmailAsync(email) != null;
+            var usable = await users.FindByEmailAsync(email, cancellationToken) != null;
             var account = usable ? await webmailUsers.FindByEmailAsync(email, cancellationToken) : null;
 
             return new AccountState(usable, account?.SecurityStamp);

@@ -36,7 +36,7 @@ internal sealed class OutgoingMessageFactory(
         var stored = await LoadIdentitiesAsync(userId, connection.StorageAccountId, cancellationToken);
 
         var from = isPrimary
-            ? await ResolvePrimaryFromAsync(user, request.FromAddress)
+            ? await ResolvePrimaryFromAsync(user, request.FromAddress, cancellationToken)
             : ResolveConnectedFrom(connection, stored, request.FromAddress);
         if (from.IsFailure) return Result.Failure<MimeMessage>(from.Error);
         var fromAddress = from.Value;
@@ -64,7 +64,8 @@ internal sealed class OutgoingMessageFactory(
     }
 
     /// <summary>The home mailbox: its own address, or one of its live aliases.</summary>
-    private async Task<Result<string>> ResolvePrimaryFromAsync(User user, string? requestedFrom)
+    private async Task<Result<string>> ResolvePrimaryFromAsync(
+        User user, string? requestedFrom, CancellationToken cancellationToken)
     {
         var fromAddress = IdentityResolver.Canonical(user.Email);
         if (string.IsNullOrWhiteSpace(requestedFrom)) return fromAddress;
@@ -74,7 +75,7 @@ internal sealed class OutgoingMessageFactory(
         // beyond it, the alias list — not the identity table — says what the user really owns.
         if (requested != fromAddress)
         {
-            var owned = await aliases.GetAliasesAsync(user);
+            var owned = await aliases.GetAliasesAsync(user, cancellationToken);
             if (!IdentityResolver.Owns(owned.ToAddresses(), user.Email, requested))
                 return Result.Failure<string>(IOutgoingMessageFactory.ForbiddenFrom);
         }
@@ -147,7 +148,7 @@ internal sealed class OutgoingMessageFactory(
         }
 
         var message = new MimeMessage();
-        var label = await LabelForAsync(user, isPrimary, stored, fromAddress);
+        var label = await LabelForAsync(user, isPrimary, stored, fromAddress, cancellationToken);
         // LabelFor falls back to the address itself; on the wire that would be a redundant "a@x <a@x>".
         message.From.Add(new MailboxAddress(label == fromAddress ? string.Empty : label, fromAddress));
         AddAddresses(message.To, request.To);
@@ -185,13 +186,14 @@ internal sealed class OutgoingMessageFactory(
     /// a blank one) means the address travels alone rather than borrowing the main account's name.
     /// </summary>
     private async Task<string> LabelForAsync(
-        User user, bool isPrimary, IReadOnlyList<SendingIdentity> stored, string fromAddress)
+        User user, bool isPrimary, IReadOnlyList<SendingIdentity> stored, string fromAddress,
+        CancellationToken cancellationToken)
     {
         if (!isPrimary)
             return stored.FirstOrDefault(i => IdentityResolver.Canonical(i.Address) == fromAddress)?.DisplayName
                    ?? string.Empty;
 
-        var dbUser = await users.FindByEmailAsync(user.Email);
+        var dbUser = await users.FindByEmailAsync(user.Email, cancellationToken);
         return IdentityResolver.LabelFor(stored, fromAddress, dbUser?.FullName, user.Email);
     }
 

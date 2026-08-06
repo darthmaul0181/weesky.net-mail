@@ -1,33 +1,25 @@
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>Hourly GC over the staged store, so abandoned uploads never accumulate.</summary>
-internal sealed class StagedAttachmentSweeper : BackgroundService
+internal sealed class StagedAttachmentSweeper(
+    IStagedAttachmentStore store,
+    ILogger<StagedAttachmentSweeper> logger,
+    TimeSpan? startupJitterMax = null)
+    : PeriodicSweeper(TimeSpan.FromHours(1), startupJitterMax ?? DefaultStartupJitterMax, logger)
 {
-    private readonly IStagedAttachmentStore _store;
-    private readonly ILogger<StagedAttachmentSweeper> _logger;
+    // A restart drops the in-memory staged entries, orphaning every file already staged; without
+    // a startup run the orphan sweep could only reclaim them an hour later. The jitter is short
+    // because reclaiming disk promptly matters more here than for the trusted-sender sweep.
+    private static readonly TimeSpan DefaultStartupJitterMax = TimeSpan.FromSeconds(5);
 
-    public StagedAttachmentSweeper(IStagedAttachmentStore store, ILogger<StagedAttachmentSweeper> logger)
-    {
-        _store = store;
-        _logger = logger;
-    }
+    protected override string SweepName => "staged attachment";
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected internal override Task SweepOnceAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                // Every tick logs, zero included: the line is also the sweeper's heartbeat.
-                var removed = _store.SweepExpired();
-                _logger.LogInformation("Staged attachment sweep: {Count} file(s) removed", removed);
-            }
-            catch (Exception ex)
-            {
-                // A sweep that throws must not take the host down with it; the next tick retries.
-                _logger.LogError(ex, "The staged attachment sweep failed");
-            }
-        }
+        // Every tick logs, zero included: the line is also the sweeper's heartbeat.
+        var removed = store.SweepExpired();
+        logger.LogInformation("Staged attachment sweep: {Count} file(s) removed", removed);
+
+        return Task.CompletedTask;
     }
 }

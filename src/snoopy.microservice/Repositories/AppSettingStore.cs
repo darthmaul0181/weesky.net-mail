@@ -3,40 +3,19 @@ using weesky.Snoopy.Microservice.Data.Preferences;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class AppSettingStore : IAppSettingStore
+internal sealed class AppSettingStore(PreferencesDbContext context)
+    : ScopedStore<AppSetting>(context), IAppSettingStore
 {
-    private readonly PreferencesDbContext _context;
-
-    public AppSettingStore(PreferencesDbContext context)
-    {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
-    }
-
+    // Unscoped on purpose: an application setting belongs to no user.
     public async Task<IReadOnlyList<AppSetting>> GetAsync(CancellationToken cancellationToken)
-        => await _context.AppSettings.AsNoTracking()
+        => await Untracked
             .OrderBy(s => s.SettingKey)
             .ToListAsync(cancellationToken);
 
-    public async Task SetAsync(string key, string value, CancellationToken cancellationToken)
-    {
-        var existing = await _context.AppSettings
-            .FirstOrDefaultAsync(s => s.SettingKey == key, cancellationToken);
-
-        if (existing is null)
-        {
-            _context.AppSettings.Add(new AppSetting
-            {
-                SettingKey = key,
-                SettingValue = value,
-                UpdatedAt = DateTime.UtcNow
-            });
-        }
-        else
-        {
-            existing.SettingValue = value;
-            existing.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-    }
+    public Task SetAsync(string key, string value, CancellationToken cancellationToken)
+        => UpsertByKeyAsync(
+            s => s.SettingKey == key,
+            now => new AppSetting { SettingKey = key, SettingValue = value, UpdatedAt = now },
+            (s, now) => { s.SettingValue = value; s.UpdatedAt = now; },
+            cancellationToken);
 }

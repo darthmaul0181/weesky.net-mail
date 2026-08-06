@@ -10,7 +10,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 
 /// <summary>
 /// Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
-/// no credentials cookie: both verbs are database reads, so this lives outside MailController.
+/// no credentials cookie: both verbs are database reads, so this lives outside the mail controllers.
 /// The account id is decoded by <see cref="IAccountConnectionResolver.AccountIdFrom"/>, the same
 /// reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
 /// they do there; a connected account's set is validated against the account address itself,
@@ -89,8 +89,8 @@ public sealed class IdentitiesController(
         LoadSourcesAsync(CancellationToken cancellationToken)
     {
         var stored = await store.GetAsync(AuthenticatedUser.WebmailUid, AccountScope.Primary, cancellationToken);
-        var aliasList = await aliases.GetAliasesAsync(AuthenticatedUser);
-        var dbUser = await users.FindByEmailAsync(AuthenticatedUser.Email);
+        var aliasList = await aliases.GetAliasesAsync(AuthenticatedUser, cancellationToken);
+        var dbUser = await users.FindByEmailAsync(AuthenticatedUser.Email, cancellationToken);
         return (stored, aliasList.ToAddresses(), dbUser?.FullName);
     }
 
@@ -107,11 +107,11 @@ public sealed class IdentitiesController(
         if (accountId is null) return (null, null);
 
         if (!Guid.TryParse(accountId, out var id))
-            return (null, NotFoundEnveloppe(ConnectedAccountErrors.AccountNotFound));
+            return (null, ConnectedAccountError(ConnectedAccountErrors.AccountNotFound));
 
         var account = await accounts.FindAsync(AuthenticatedUser.WebmailUid, id, cancellationToken);
         return account is null
-            ? (null, NotFoundEnveloppe(ConnectedAccountErrors.AccountNotFound))
+            ? (null, ConnectedAccountError(ConnectedAccountErrors.AccountNotFound))
             : (account, null);
     }
 }

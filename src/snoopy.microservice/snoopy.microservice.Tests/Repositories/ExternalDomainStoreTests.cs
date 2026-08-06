@@ -1,4 +1,5 @@
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -86,6 +87,32 @@ public sealed class ExternalDomainStoreTests
         Assert.Equal("Gmail renamed", stored!.Name);
         Assert.Equal("sieve.gmail.com", stored.SieveHost);
         Assert.Equal(4190, stored.SievePort);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_RewritesTheOAuthProviderColumns()
+    {
+        var db = nameof(UpdateAsync_RewritesTheOAuthProviderColumns);
+        var created = await CreateStore(db).CreateAsync(Domain(), CancellationToken.None);
+
+        var edited = Domain();
+        edited.Id = created.Value.Id;
+        edited.AuthMode = MailAuthMode.OAuth2;
+        edited.OAuthAuthorizationUrl = "https://login.test/authorize";
+        edited.OAuthTokenUrl = "https://login.test/token";
+        edited.OAuthScopes = "openid email";
+        edited.OAuthClientId = "client-1";
+        edited.OAuthClientSecret = [1, 2, 3];
+        var result = await CreateStore(db).UpdateAsync(edited, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var stored = await CreateStore(db).FindAsync(created.Value.Id, CancellationToken.None);
+        Assert.Equal(MailAuthMode.OAuth2, stored!.AuthMode);
+        Assert.Equal("https://login.test/authorize", stored.OAuthAuthorizationUrl);
+        Assert.Equal("https://login.test/token", stored.OAuthTokenUrl);
+        Assert.Equal("openid email", stored.OAuthScopes);
+        Assert.Equal("client-1", stored.OAuthClientId);
+        Assert.Equal(new byte[] { 1, 2, 3 }, stored.OAuthClientSecret);
     }
 
     [Fact]

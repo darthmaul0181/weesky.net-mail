@@ -59,6 +59,12 @@ internal sealed class ExternalDomainStore(PreferencesDbContext context) : IExter
         existing.SmtpSecurity = domain.SmtpSecurity;
         existing.SieveHost = domain.SieveHost;
         existing.SievePort = domain.SievePort;
+        existing.AuthMode = domain.AuthMode;
+        existing.OAuthAuthorizationUrl = domain.OAuthAuthorizationUrl;
+        existing.OAuthTokenUrl = domain.OAuthTokenUrl;
+        existing.OAuthScopes = domain.OAuthScopes;
+        existing.OAuthClientId = domain.OAuthClientId;
+        existing.OAuthClientSecret = domain.OAuthClientSecret;
         existing.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
 

@@ -18,7 +18,7 @@ public sealed class UserAuthenticatorTests
     private readonly Mock<IWebmailUserStore> _webmailUsers = new();
 
     private void SetupCheck(CredentialCheck check) =>
-        _usersRepo.Setup(r => r.VerifyCredentialsAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _usersRepo.Setup(r => r.VerifyCredentialsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(check);
 
     private UserAuthenticator CreateSut() =>
@@ -31,14 +31,14 @@ public sealed class UserAuthenticatorTests
         ExpiryInMinutes = 30,
         Key = "test-signing-key-long-enough-for-hmac256",
         AuthCookieName = "BearerAuth"
-    }));
+    }), TimeProvider.System);
 
     [Fact]
     public async Task Authenticate_WithUnknownUser_ReturnsFailure()
     {
         SetupCheck(CredentialCheck.Failed(CredentialResult.UnknownAccount));
 
-        var result = await CreateSut().AuthenticateAsync("unknown@example.com", "password");
+        var result = await CreateSut().AuthenticateAsync("unknown@example.com", "password", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -48,7 +48,7 @@ public sealed class UserAuthenticatorTests
     {
         SetupCheck(CredentialCheck.Failed(CredentialResult.WrongPassword));
 
-        var result = await CreateSut().AuthenticateAsync("john@example.com", "wrong");
+        var result = await CreateSut().AuthenticateAsync("john@example.com", "wrong", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -61,7 +61,7 @@ public sealed class UserAuthenticatorTests
         SetupCheck(CredentialCheck.Success(user));
         _tokenManager.Setup(t => t.Generate(user)).Returns(token);
 
-        var result = await CreateSut().AuthenticateAsync("john@example.com", "correct");
+        var result = await CreateSut().AuthenticateAsync("john@example.com", "correct", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
     }
@@ -74,7 +74,7 @@ public sealed class UserAuthenticatorTests
         SetupCheck(CredentialCheck.Success(user));
         _tokenManager.Setup(t => t.Generate(user)).Returns(expected);
 
-        var result = await CreateSut().AuthenticateAsync("john@example.com", "correct");
+        var result = await CreateSut().AuthenticateAsync("john@example.com", "correct", CancellationToken.None);
 
         Assert.Same(expected, result.Value);
     }
@@ -84,7 +84,7 @@ public sealed class UserAuthenticatorTests
     {
         SetupCheck(CredentialCheck.Failed(CredentialResult.UnknownAccount));
 
-        await CreateSut().AuthenticateAsync("unknown@example.com", "password");
+        await CreateSut().AuthenticateAsync("unknown@example.com", "password", CancellationToken.None);
 
         _tokenManager.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
     }
@@ -94,7 +94,7 @@ public sealed class UserAuthenticatorTests
     {
         SetupCheck(CredentialCheck.Failed(CredentialResult.WrongPassword));
 
-        await CreateSut().AuthenticateAsync("john@example.com", "wrong");
+        await CreateSut().AuthenticateAsync("john@example.com", "wrong", CancellationToken.None);
 
         _tokenManager.Verify(t => t.Generate(It.IsAny<User>()), Times.Never);
     }
@@ -119,11 +119,31 @@ public sealed class UserAuthenticatorTests
 
         var sut = new UserAuthenticator(_usersRepo.Object, RealTokenManager(), _webmailUsers.Object,
             Mock.Of<ILogger<UserAuthenticator>>());
-        var result = await sut.AuthenticateAsync("mick@weesky.be", "pw");
+        var result = await sut.AuthenticateAsync("mick@weesky.be", "pw", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var jwt = new JsonWebToken(result.Value.Token);
         Assert.Equal(uid.ToString(), jwt.Claims.First(c => c.Type == WebmailClaimTypes.Uid).Value);
         _webmailUsers.Verify(s => s.RegisterLoginAsync("mick@weesky.be", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Both database calls of a login are the caller's to abandon: the credential check, and the
+    // upsert that precedes the cookies and whose id and stamp the token is built from.
+    [Fact]
+    public async Task Authenticate_ForwardsItsTokenToBothStores()
+    {
+        using var cts = new CancellationTokenSource();
+        _webmailUsers.Setup(s => s.RegisterLoginAsync("mick@weesky.be", cts.Token))
+            .ReturnsAsync(new WebmailAccount(Guid.NewGuid(), Guid.NewGuid()));
+        _usersRepo.Setup(r => r.VerifyCredentialsAsync("mick@weesky.be", "pw", cts.Token))
+            .ReturnsAsync(CredentialCheck.Success(new User("mick@weesky.be")));
+
+        var sut = new UserAuthenticator(_usersRepo.Object, RealTokenManager(), _webmailUsers.Object,
+            Mock.Of<ILogger<UserAuthenticator>>());
+        var result = await sut.AuthenticateAsync("mick@weesky.be", "pw", cts.Token);
+
+        Assert.True(result.IsSuccess);
+        _usersRepo.Verify(r => r.VerifyCredentialsAsync("mick@weesky.be", "pw", cts.Token), Times.Once);
+        _webmailUsers.Verify(s => s.RegisterLoginAsync("mick@weesky.be", cts.Token), Times.Once);
     }
 }

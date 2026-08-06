@@ -11,4 +11,10 @@ public sealed class SanitizedHtml
     /// message was opened, which is why they are withheld until the user asks.
     /// </summary>
     public int BlockedImageCount { get; set; }
+
+    /// <summary>
+    /// True when the body exceeded the sanitiser's input ceiling and only its leading part
+    /// was kept (then fully sanitised). Lets the client signal the cut to the reader.
+    /// </summary>
+    public bool Truncated { get; set; }
 }

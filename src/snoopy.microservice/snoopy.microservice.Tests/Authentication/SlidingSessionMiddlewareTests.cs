@@ -65,7 +65,7 @@ public sealed class SlidingSessionMiddlewareTests
     }
 
     private SlidingSessionMiddleware CreateSut(RequestDelegate? next = null)
-        => new(next ?? (_ => Task.CompletedTask), Options.Create(_constants));
+        => new(next ?? (_ => Task.CompletedTask), Options.Create(_constants), TimeProvider.System);
 
     [Fact]
     public async Task Invoke_RenewsBothCookiesPastHalfLife()

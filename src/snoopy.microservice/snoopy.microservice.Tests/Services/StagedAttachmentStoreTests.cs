@@ -35,6 +35,9 @@ public sealed class StagedAttachmentStoreTests : IDisposable
     private Task<Result<StagedAttachmentInfo>> SaveMegabyteAsync(string name) =>
         _store.SaveAsync("me", name, "application/octet-stream", Bytes(1024 * 1024), CancellationToken.None);
 
+    private Task<Result<StagedAttachmentInfo>> SaveTinyAsync(string accountId, string name) =>
+        _store.SaveAsync(accountId, name, "application/octet-stream", Bytes(1), CancellationToken.None);
+
     private long StagedBytesOnDisk() =>
         Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
 
@@ -153,6 +156,55 @@ public sealed class StagedAttachmentStoreTests : IDisposable
 
         Assert.True(results.Count(r => r.IsSuccess) <= 4, $"{results.Count(r => r.IsSuccess)} uploads passed the ceiling");
         Assert.True(StagedBytesOnDisk() <= 4L * 1024 * 1024, $"{StagedBytesOnDisk()} bytes staged");
+    }
+
+    [Fact]
+    public async Task SaveAsync_RefusesAfterFiftyEntriesEvenWellUnderTheByteCeiling()
+    {
+        for (var i = 0; i < 50; i++)
+            Assert.True((await SaveTinyAsync("me", $"f{i}.bin")).IsSuccess);
+
+        var overCap = await SaveTinyAsync("me", "f50.bin");
+
+        Assert.True(overCap.IsFailure);
+        Assert.Contains("Too many staged attachments", overCap.Error);
+    }
+
+    [Fact]
+    public async Task Delete_FreesAnEntryCountSlotAtTheCap()
+    {
+        StagedAttachmentInfo? first = null;
+        for (var i = 0; i < 50; i++)
+        {
+            var saved = await SaveTinyAsync("me", $"f{i}.bin");
+            first ??= saved.Value;
+        }
+
+        _store.Delete("me", first!.Id);
+
+        Assert.True((await SaveTinyAsync("me", "f50.bin")).IsSuccess);
+    }
+
+    [Fact]
+    public async Task SweepExpired_FreesEntryCountSlotsAtTheCap()
+    {
+        for (var i = 0; i < 50; i++)
+            Assert.True((await SaveTinyAsync("me", $"f{i}.bin")).IsSuccess);
+
+        _clock.Now = _clock.Now.AddHours(13);
+
+        Assert.Equal(50, _store.SweepExpired());
+        Assert.True((await SaveTinyAsync("me", "after.bin")).IsSuccess);
+    }
+
+    [Fact]
+    public async Task SaveAsync_TheEntryCountCapIsPerAccount()
+    {
+        for (var i = 0; i < 50; i++)
+            Assert.True((await SaveTinyAsync("me", $"f{i}.bin")).IsSuccess);
+        Assert.True((await SaveTinyAsync("me", "over.bin")).IsFailure);
+
+        Assert.True((await SaveTinyAsync("someone-else", "b.bin")).IsSuccess);
     }
 
     [Fact]

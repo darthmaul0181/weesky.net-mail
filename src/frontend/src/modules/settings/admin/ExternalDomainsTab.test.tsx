@@ -21,6 +21,15 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const addToast = vi.fn()
 
+const NO_OAUTH = {
+  authMode: 'Password' as const,
+  oauthAuthorizationUrl: null,
+  oauthTokenUrl: null,
+  oauthScopes: null,
+  oauthClientId: null,
+  oauthClientSecretSet: false,
+}
+
 const GMAIL: ExternalDomain = {
   id: '11111111-1111-1111-1111-111111111111',
   name: 'Gmail',
@@ -32,6 +41,7 @@ const GMAIL: ExternalDomain = {
   smtpSecurity: 'StartTls',
   sieveHost: null,
   sievePort: null,
+  ...NO_OAUTH,
 }
 
 const OUTLOOK: ExternalDomain = {
@@ -45,6 +55,21 @@ const OUTLOOK: ExternalDomain = {
   smtpSecurity: 'StartTls',
   sieveHost: 'sieve.office365.com',
   sievePort: 4190,
+  ...NO_OAUTH,
+}
+
+const OUTLOOK_OAUTH: ExternalDomain = {
+  ...OUTLOOK,
+  id: '33333333-3333-3333-3333-333333333333',
+  name: 'Outlook (OAuth)',
+  sieveHost: null,
+  sievePort: null,
+  authMode: 'OAuth2',
+  oauthAuthorizationUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  oauthTokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  oauthScopes: 'offline_access openid email profile',
+  oauthClientId: 'client-123',
+  oauthClientSecretSet: true,
 }
 
 function renderTab(domains: ExternalDomain[] = [GMAIL, OUTLOOK]) {
@@ -109,6 +134,12 @@ describe('ExternalDomainsTab — create', () => {
       smtpSecurity: 'SslOnConnect',
       sieveHost: null,
       sievePort: null,
+      authMode: 'Password',
+      oauthAuthorizationUrl: null,
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthClientId: null,
+      oauthClientSecret: null,
     }))
   })
 
@@ -251,6 +282,117 @@ describe('ExternalDomainsTab — sieve both-or-neither', () => {
     expect(screen.queryByText('Sieve host and port must both be present or both be absent'))
       .not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
+  })
+})
+
+describe('ExternalDomainsTab — OAuth provider configuration', () => {
+  async function fillBaseFields() {
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    await userEvent.type(screen.getByLabelText('Display name'), 'Outlook')
+    await userEvent.type(screen.getByLabelText('IMAP host'), 'outlook.office365.com')
+    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.office365.com')
+  }
+
+  it('shows the OAuth tag on an OAuth2 tile, and nothing on a password one', async () => {
+    renderTab([GMAIL, OUTLOOK_OAUTH])
+    await screen.findByText('Gmail')
+    expect(screen.getByText('OAuth')).toBeInTheDocument()
+    expect(screen.getByText('Outlook (OAuth)')).toBeInTheDocument()
+  })
+
+  it('reveals the provider fields on OAuth 2.0 and requires them before submitting', async () => {
+    renderTab()
+    await screen.findByText('Gmail')
+    await fillBaseFields()
+
+    expect(screen.queryByLabelText('Client secret')).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'OAuth2')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+
+    await userEvent.type(screen.getByLabelText('Authorization URL'), 'https://login.test/authorize')
+    await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
+    await userEvent.type(screen.getByLabelText('Scopes'), 'offline_access openid email')
+    await userEvent.type(screen.getByLabelText('Client id'), 'client-123')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Client secret'), 'shh-secret')
+    expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
+
+    mocks.adminCreateExternalDomain.mockResolvedValue({ ...OUTLOOK_OAUTH })
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await waitFor(() => expect(mocks.adminCreateExternalDomain).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authMode: 'OAuth2',
+        oauthAuthorizationUrl: 'https://login.test/authorize',
+        oauthTokenUrl: 'https://login.test/token',
+        oauthScopes: 'offline_access openid email',
+        oauthClientId: 'client-123',
+        oauthClientSecret: 'shh-secret',
+      })
+    ))
+  })
+
+  it('refuses an http authorization URL client-side', async () => {
+    renderTab()
+    await screen.findByText('Gmail')
+    await fillBaseFields()
+    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'OAuth2')
+
+    await userEvent.type(screen.getByLabelText('Authorization URL'), 'http://login.test/authorize')
+    await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
+    await userEvent.type(screen.getByLabelText('Scopes'), 'openid')
+    await userEvent.type(screen.getByLabelText('Client id'), 'client-123')
+    await userEvent.type(screen.getByLabelText('Client secret'), 'shh')
+
+    expect(screen.getByLabelText('Authorization URL')).toHaveClass('is-error')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
+  })
+
+  it('never echoes the stored secret and keeps it when the field stays empty on an edit', async () => {
+    mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
+    renderTab([OUTLOOK_OAUTH])
+    await screen.findByText('Outlook (OAuth)')
+    await userEvent.click(screen.getByTitle('Edit'))
+
+    expect(screen.getByLabelText('Authentication')).toHaveValue('OAuth2')
+    expect(screen.getByLabelText('Authorization URL'))
+      .toHaveValue('https://login.microsoftonline.com/common/oauth2/v2.0/authorize')
+    const secret = screen.getByLabelText('Client secret')
+    expect(secret).toHaveValue('')
+    expect(secret).toHaveAttribute('placeholder', 'Unchanged')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(mocks.adminUpdateExternalDomain).toHaveBeenCalledWith(
+      OUTLOOK_OAUTH.id, expect.objectContaining({ authMode: 'OAuth2', oauthClientSecret: null })
+    ))
+  })
+
+  it('sends a newly typed secret on an edit', async () => {
+    mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
+    renderTab([OUTLOOK_OAUTH])
+    await screen.findByText('Outlook (OAuth)')
+    await userEvent.click(screen.getByTitle('Edit'))
+    await userEvent.type(screen.getByLabelText('Client secret'), 'rotated-secret')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(mocks.adminUpdateExternalDomain).toHaveBeenCalledWith(
+      OUTLOOK_OAUTH.id, expect.objectContaining({ oauthClientSecret: 'rotated-secret' })
+    ))
+  })
+
+  it('a brand-new OAuth domain cannot be saved without a secret', async () => {
+    renderTab([OUTLOOK_OAUTH])
+    await screen.findByText('Outlook (OAuth)')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    await userEvent.type(screen.getByLabelText('Display name'), 'Provider')
+    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.provider.test')
+    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.provider.test')
+    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'OAuth2')
+    await userEvent.type(screen.getByLabelText('Authorization URL'), 'https://login.test/authorize')
+    await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
+    await userEvent.type(screen.getByLabelText('Scopes'), 'openid')
+    await userEvent.type(screen.getByLabelText('Client id'), 'client-123')
+
+    expect(screen.getByLabelText('Client secret')).not.toHaveAttribute('placeholder')
+    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
   })
 })
 
