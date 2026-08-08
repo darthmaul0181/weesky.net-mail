@@ -1,0 +1,83 @@
+{
+  "layout": {
+    "add": "+ Ajouter un contact",
+    "loading": "Chargement des contacts…",
+    "loadFailed": "Impossible de charger les contacts.",
+    "notFound": "Contact introuvable",
+    "saved": "Contact enregistré",
+    "saveFailed": "Impossible d’enregistrer le contact",
+    "deleted": "Contact supprimé : {{name}}",
+    "deleteFailed": "Impossible de supprimer le contact",
+    "favouriteFailed": "Impossible d’enregistrer le favori"
+  },
+  "scopes": {
+    "all": "Tous les contacts",
+    "favourites": "Favoris"
+  },
+  "fields": {
+    "nickname": "Surnom",
+    "addresses": "Adresses",
+    "primary": "principale"
+  },
+  "favourites": {
+    "add": "Ajouter aux favoris",
+    "remove": "Retirer des favoris",
+    "addNamed": "Ajouter {{name}} aux favoris",
+    "removeNamed": "Retirer {{name}} des favoris"
+  },
+  "list": {
+    "searchLabel": "Rechercher un contact",
+    "searchPlaceholder": "Rechercher un contact…",
+    "empty": "Aucun contact pour l’instant",
+    "noMatch": "Aucun contact correspondant",
+    "edit": "Modifier {{name}}",
+    "delete": "Supprimer {{name}}"
+  },
+  "card": {
+    "invite": "Sélectionnez un contact pour voir sa fiche"
+  },
+  "editor": {
+    "editTitle": "Modifier le contact",
+    "newTitle": "Nouveau contact",
+    "save": "Enregistrer le contact",
+    "close": "Fermer l’éditeur",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "addressLabel": "Adresse {{index}}",
+    "addressPlaceholder": "nom@exemple.com",
+    "makePrimary": "Définir comme adresse principale",
+    "moveUp": "Monter l’adresse {{index}}",
+    "removeAddress": "Supprimer l’adresse {{index}}",
+    "addAddress": "+ Ajouter une adresse",
+    "favourite": "Favori"
+  },
+  "transfer": {
+    "importHint": "Fusionner un fichier CSV dans ce carnet",
+    "import": "Importer…",
+    "nothingToExport": "Rien à exporter",
+    "exportHint": "Télécharger ce carnet au format CSV",
+    "export": "Exporter",
+    "tooLarge": "Ce fichier est trop volumineux — la limite est de 5 Mo.",
+    "importFailed": "Impossible d’importer le fichier",
+    "exportFailed": "Impossible d’exporter les contacts"
+  },
+  "import": {
+    "title": "Importation terminée",
+    "added_one": "ajouté",
+    "added_many": "ajoutés",
+    "added_other": "ajoutés",
+    "updated_one": "mis à jour",
+    "updated_many": "mis à jour",
+    "updated_other": "mis à jour",
+    "skipped_one": "ignoré",
+    "skipped_many": "ignorés",
+    "skipped_other": "ignorés",
+    "refused_one": "refusé",
+    "refused_many": "refusés",
+    "refused_other": "refusés",
+    "line": "Ligne {{line}}",
+    "more_one": "et {{count}} autre",
+    "more_many": "et {{count}} autres",
+    "more_other": "et {{count}} autres"
+  }
+}

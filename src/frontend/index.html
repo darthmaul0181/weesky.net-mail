@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,6 +15,17 @@
         var p=localStorage.getItem('appearance_palette');
         if(['night','classic','forest','slate','plum','ink','azure','indigo'].indexOf(p)<0)p='night';
         document.documentElement.setAttribute('data-palette',p);
+        var langs=['en','fr'];
+        var l=localStorage.getItem('ui_language');
+        if(langs.indexOf(l)<0){
+          var nav=navigator.languages||[navigator.language||'en'];
+          l='en';
+          for(var i=0;i<nav.length;i++){
+            var c=String(nav[i]).split('-')[0].toLowerCase();
+            if(langs.indexOf(c)>=0){l=c;break}
+          }
+        }
+        document.documentElement.lang=l;
       })();
     </script>
   </head>

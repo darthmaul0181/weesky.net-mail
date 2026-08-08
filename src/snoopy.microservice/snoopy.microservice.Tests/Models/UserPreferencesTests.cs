@@ -18,6 +18,7 @@ public sealed class UserPreferencesTests
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailReadingPane);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailComposeFormat);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowFolderIcons);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.UiLanguage);
     }
 
     [Theory]
@@ -30,6 +31,7 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailReadingPane, "right")]
     [InlineData(UserPreferences.MailComposeFormat, "html")]
     [InlineData(UserPreferences.MailShowFolderIcons, "false")]
+    [InlineData(UserPreferences.UiLanguage, "auto")]
     public void Default_IsTheValueAnAccountWithNoRowsGets(string key, string expected)
     {
         Assert.Equal(expected, UserPreferences.All.Single(p => p.Key == key).Default);
@@ -203,5 +205,17 @@ public sealed class UserPreferencesTests
         var effective = UserPreferences.Effective([Row(UserPreferences.MailRowActions, "seen,snooze")]);
 
         Assert.Equal("seen,archive,delete", effective[UserPreferences.MailRowActions]);
+    }
+
+    [Theory]
+    [InlineData("auto", true)]
+    [InlineData("en", true)]
+    [InlineData("fr", true)]
+    [InlineData("de", false)]
+    [InlineData("", false)]
+    [InlineData("EN", false)]
+    public void UiLanguage_AcceptsOnlyTheShippedLocalesAndAuto(string value, bool expected)
+    {
+        Assert.Equal(expected, UserPreferences.IsValid(UserPreferences.UiLanguage, value));
     }
 }

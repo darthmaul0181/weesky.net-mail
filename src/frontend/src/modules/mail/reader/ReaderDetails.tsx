@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { MailMessageDetail } from '../api/mailTypes'
 import LockIcon from '../../../icons/LockIcon'
 import { AddressList } from './AddressLabel'
@@ -10,41 +11,45 @@ interface Props {
 
 /** The grid the header chevron expands into. A row whose datum is absent renders nothing. */
 export default function ReaderDetails({ message }: Props) {
+  const { t } = useTranslation('mail')
   const named = message.fromName && message.fromName !== message.fromAddress
   const isWeb = isWebUnsubscribe(message.unsubscribeUrl)
 
   return (
     <dl className="reader-details">
-      <dt>From:</dt>
+      <dt>{t('reader.details.from')}</dt>
       <dd>
         {named
           ? <>{message.fromName} <span className="detail-muted">&lt;{message.fromAddress}&gt;</span></>
           : message.fromAddress}
       </dd>
-      {message.to.length > 0 && <><dt>To:</dt><dd><AddressList addresses={message.to} /></dd></>}
-      {message.cc.length > 0 && <><dt>Cc:</dt><dd><AddressList addresses={message.cc} /></dd></>}
-      <dt>Date:</dt>
+      {message.to.length > 0
+        && <><dt>{t('reader.details.to')}</dt><dd><AddressList addresses={message.to} /></dd></>}
+      {message.cc.length > 0
+        && <><dt>{t('reader.details.cc')}</dt><dd><AddressList addresses={message.cc} /></dd></>}
+      <dt>{t('reader.details.date')}</dt>
       <dd>{formatReaderDate(message.date)}</dd>
-      {message.mailingList && <><dt>Mailing list:</dt><dd>{message.mailingList}</dd></>}
-      {message.sentBy && <><dt>Mailed by:</dt><dd>{message.sentBy}</dd></>}
-      {message.signedBy && <><dt>Signed by:</dt><dd>{message.signedBy}</dd></>}
+      {message.mailingList
+        && <><dt>{t('reader.details.mailingList')}</dt><dd>{message.mailingList}</dd></>}
+      {message.sentBy && <><dt>{t('reader.details.mailedBy')}</dt><dd>{message.sentBy}</dd></>}
+      {message.signedBy && <><dt>{t('reader.details.signedBy')}</dt><dd>{message.signedBy}</dd></>}
       {message.unsubscribeUrl && (
         <>
-          <dt>Unsubscribe:</dt>
+          <dt>{t('reader.details.unsubscribe')}</dt>
           <dd>
             <a href={message.unsubscribeUrl} {...(isWeb ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
-              Unsubscribe from this mailing list
+              {t('reader.details.unsubscribeLink')}
             </a>
           </dd>
         </>
       )}
       {typeof message.tlsReceived === 'boolean' && (
         <>
-          <dt>Security:</dt>
+          <dt>{t('reader.details.security')}</dt>
           <dd>
             {message.tlsReceived
-              ? <span className="reader-security"><LockIcon /> Standard encryption (TLS)</span>
-              : 'No encryption'}
+              ? <span className="reader-security"><LockIcon /> {t('reader.details.tls')}</span>
+              : t('reader.details.noTls')}
           </dd>
         </>
       )}

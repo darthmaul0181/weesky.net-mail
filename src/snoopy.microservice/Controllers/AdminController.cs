@@ -17,10 +17,6 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Authorize(Policy = AdminRequirement.PolicyName)]
 public sealed class AdminController : ApiBaseController
 {
-    /// <summary>Fixed rather than a live count: the store's <c>domain_in_use</c> check does not
-    /// carry one, and adding a method just for it is not worth it for an admin-only error.</summary>
-    private const string AccountsStillConnected = "Accounts are still connected to this domain";
-
     private static readonly HashSet<string> EncryptedSecurities = ["StartTls", "SslOnConnect"];
 
     /// <summary>Bounds the protected blob under oauth_client_secret's VARBINARY(1024): 512 bytes
@@ -324,7 +320,7 @@ public sealed class AdminController : ApiBaseController
 
     /// <summary>Removes an external mail provider</summary>
     /// <response code="204">Domain deleted</response>
-    /// <response code="400">Accounts are still connected to this domain</response>
+    /// <response code="400">The domain still has connected accounts (domain_in_use)</response>
     /// <response code="401">Unauthenticated</response>
     /// <response code="403">Not an admin</response>
     [HttpDelete("domains/external/{id:guid}")]
@@ -335,8 +331,7 @@ public sealed class AdminController : ApiBaseController
     public async Task<ActionResult> DeleteExternalDomain(Guid id, CancellationToken cancellationToken)
     {
         var result = await _externalDomains.DeleteAsync(id, cancellationToken);
-        if (result.IsFailure)
-            return BadRequestEnveloppe(result.Error == ExternalDomainStore.InUse ? AccountsStillConnected : result.Error);
+        if (result.IsFailure) return BadRequestEnveloppe(result.Error);
         return NoContent();
     }
 

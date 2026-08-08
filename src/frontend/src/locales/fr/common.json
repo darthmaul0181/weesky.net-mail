@@ -1,0 +1,34 @@
+{
+  "actions": {
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "saveChanges": "Enregistrer les modifications",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "add": "Ajouter",
+    "edit": "Modifier",
+    "remove": "Retirer"
+  },
+  "loading": "Chargement",
+  "sizes": { "b": "{{value}} o", "kb": "{{value}} Ko", "mb": "{{value}} Mo", "gb": "{{value}} Go" },
+  "rail": {
+    "label": "Modules",
+    "mail": "Courrier",
+    "calendar": "Agenda",
+    "contacts": "Contacts",
+    "settings": "Paramètres"
+  },
+  "comingSoon": "Ce module arrive bientôt.",
+  "deleteConfirm": {
+    "title": "Confirmer la suppression",
+    "message": "Supprimer <name/> ? Cette action est irréversible."
+  },
+  "identity": {
+    "loading": "Chargement…",
+    "menu": "Menu du compte",
+    "passwordNeeded": "Mot de passe requis",
+    "signInNeeded": "Reconnexion requise",
+    "connectedAccounts": "Comptes connectés…",
+    "signOut": "Se déconnecter"
+  }
+}

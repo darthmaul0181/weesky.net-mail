@@ -1,3 +1,5 @@
+import { Trans, useTranslation } from 'react-i18next'
+
 // Closing is the ✕ alone, as in the admin dialogs — no Cancel button. `message` overrides the
 // default one-liner (e.g. the emptying warning). The danger fallback (var(--danger, #dc2626)) is
 // kept — --danger is defined in every theme, so it renders identically everywhere.
@@ -10,20 +12,25 @@
  * @param {import('react').ReactNode} [props.message]
  */
 export function DeleteConfirmModal({ entityLabel, onConfirm, onClose, loading, message }) {
+  const { t } = useTranslation()
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Confirm deletion</span>
+          <span className="modal-title">{t('deleteConfirm.title')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
-          {message ?? <>Delete <strong>{entityLabel}</strong>? This action cannot be undone.</>}
+          {/* Self-closing <name/>: entityLabel is a node, so it travels as a component rather
+              than as an interpolated value. */}
+          {message ?? (
+            <Trans i18nKey="deleteConfirm.message" components={{ name: <strong>{entityLabel}</strong> }} />
+          )}
         </p>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
             onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Delete'}
+            {loading ? <span className="spinner" /> : t('actions.delete')}
           </button>
         </div>
       </div>

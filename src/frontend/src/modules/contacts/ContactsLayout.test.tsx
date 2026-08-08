@@ -203,12 +203,13 @@ describe('ContactsLayout', () => {
   })
 
   // A refusal belongs to the form it happened in: the next contact's editor must open clean.
+  // Server prose never reaches the alert; the local fallback does — see apiErrorMessage.
   it('does not carry a refused save into the next contact edited', async () => {
     api.updateContact.mockRejectedValue(new Error("'nope' is not a valid email address"))
     const router = renderRouter('/contacts/b/edit')
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not a valid email/i))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save the contact'))
 
     await goTo(router, '/contacts')
     await goTo(router, '/contacts/a/edit')
@@ -224,8 +225,9 @@ describe('ContactsLayout', () => {
   })
 
   // A refused save has to leave the user in the form with the reason, never bounce them back to
-  // a list that silently kept nothing.
-  it('keeps the editor open and shows the reason when a save is refused', async () => {
+  // a list that silently kept nothing. Server prose never reaches the alert; the local fallback
+  // does — see apiErrorMessage.
+  it('keeps the editor open and shows the local fallback when a save is refused', async () => {
     api.createContact.mockRejectedValue(new Error("'nope' is not a valid email address"))
     renderAt('/contacts/new')
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toBeInTheDocument())
@@ -233,7 +235,7 @@ describe('ContactsLayout', () => {
     await userEvent.type(screen.getByLabelText(/first name/i), 'Bruno')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not a valid email/i))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save the contact'))
     expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument()
   })
 
@@ -307,7 +309,8 @@ describe('the transfer footer', () => {
     expect(await screen.findByRole('button', { name: 'Import…' })).toBeInTheDocument()
   })
 
-  it('surfaces an import failure as a toast', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('surfaces an import failure carrying no code as the local fallback toast', async () => {
     api.getContacts.mockResolvedValue({ contacts: [] })
     api.importContacts.mockRejectedValue(new Error('No recognised column in this file.'))
     renderAt('/contacts')
@@ -316,7 +319,24 @@ describe('the transfer footer', () => {
     fireEvent.change(screen.getByTestId('contacts-import-input'),
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
 
-    expect(await screen.findByText('No recognised column in this file.')).toBeInTheDocument()
+    expect(await screen.findByText('Could not import the file')).toBeInTheDocument()
+  })
+
+  // csv_no_recognised_column is a named stable code: the refusal must stay specific, translated
+  // rather than shown as the generic fallback above.
+  it('surfaces the translated csv_no_recognised_column toast', async () => {
+    api.getContacts.mockResolvedValue({ contacts: [] })
+    api.importContacts.mockRejectedValue(
+      Object.assign(new Error('csv_no_recognised_column'), { code: 'csv_no_recognised_column' }))
+    renderAt('/contacts')
+
+    await screen.findByRole('button', { name: 'Import…' })
+    fireEvent.change(screen.getByTestId('contacts-import-input'),
+      { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
+
+    expect(await screen.findByText(
+      'No recognised column in this file. It needs a header row naming a name or an e-mail column.'))
+      .toBeInTheDocument()
   })
 
   // Settled, not success: a refused import must leave the screen on the server's book.

@@ -206,6 +206,7 @@ describe('ConnectedAccountsPage', () => {
     await waitFor(() => expect(mocks.getConnectedAccounts).toHaveBeenCalledTimes(2))
   })
 
+  // Server prose never reaches the dialog; the local fallback does — see apiErrorMessage.
   it('keeps the password dialog open on a refusal, with the reason', async () => {
     renderPage()
     mocks.updateConnectedAccountPassword.mockRejectedValue(new Error('The mail server refused'))
@@ -216,7 +217,8 @@ describe('ConnectedAccountsPage', () => {
     await userEvent.type(screen.getByLabelText('Password'), 'still-wrong')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('The mail server refused')
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('Could not sign in to this mailbox. Check the address and the password.')
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 

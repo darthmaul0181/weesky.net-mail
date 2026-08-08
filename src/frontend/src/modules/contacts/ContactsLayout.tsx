@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
+import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from '../mail/split/PaneSplitter'
 import { usePaneSize } from '../mail/split/usePaneSize'
 import ContactCard from './ContactCard'
@@ -24,6 +26,7 @@ import {
  * part, without which the scroll escapes to the whole column and the pinned heading drifts away.
  */
 export default function ContactsLayout() {
+  const { t } = useTranslation('contacts')
   const [params, setParams] = useSearchParams()
   const { id: routeId } = useParams()
   const navigate = useNavigate()
@@ -72,10 +75,10 @@ export default function ContactsLayout() {
 
   useEffect(() => {
     if (!missing) return
-    addToast('Contact not found', 'error')
+    addToast(t('layout.notFound'), 'error')
     // Replace: Back must leave the module, not bounce off the dead route.
     navigate('/contacts', { replace: true })
-  }, [missing, addToast, navigate])
+  }, [missing, addToast, navigate, t])
 
   function changeScope(next: ContactScope) {
     // Dropping the selected id: a contact filtered out of the new scope must not stay open, the
@@ -93,11 +96,11 @@ export default function ContactsLayout() {
       if (edited) await updateContact.mutateAsync({ id: edited.id, contact: draft })
       else await createContact.mutateAsync(draft)
       navigate('/contacts')
-      addToast('Contact saved', 'success')
+      addToast(t('layout.saved'), 'success')
     } catch (error) {
       // Stay in the form carrying the reason: bouncing back to a list that kept nothing is how a
       // user loses what they typed without being told why.
-      setSaveError((error as Error).message || 'Could not save the contact')
+      setSaveError(apiErrorMessage(error, t('layout.saveFailed')))
     }
   }
 
@@ -108,9 +111,9 @@ export default function ContactsLayout() {
       await deleteContact.mutateAsync(pendingDelete.id)
       // The open card must not survive its contact.
       if (selectedId === pendingDelete.id) setParams(scope === 'favorites' ? { scope } : {})
-      addToast(`${name} deleted`, 'success')
+      addToast(t('layout.deleted', { name }), 'success')
     } catch (error) {
-      addToast((error as Error).message || 'Could not delete the contact', 'error')
+      addToast(apiErrorMessage(error, t('layout.deleteFailed')), 'error')
     } finally {
       setPendingDelete(null)
     }
@@ -118,7 +121,7 @@ export default function ContactsLayout() {
 
   function toggleFavorite(contact: Contact) {
     setFavorite.mutate({ id: contact.id, isFavorite: !contact.isFavorite }, {
-      onError: error => addToast((error as Error).message || 'Could not save the favourite', 'error'),
+      onError: error => addToast(apiErrorMessage(error, t('layout.favouriteFailed')), 'error'),
     })
   }
 
@@ -128,7 +131,7 @@ export default function ContactsLayout() {
         <div className="contacts-scopes-add">
           <button type="button" className="btn btn-primary contacts-add-btn"
             onClick={() => navigate('/contacts/new')}>
-            + Add contact
+            {t('layout.add')}
           </button>
         </div>
         <div className="contacts-scopes-scroll">
@@ -140,8 +143,8 @@ export default function ContactsLayout() {
 
       {inEditor ? (
         <div className="contacts-editor" data-testid="contact-editor">
-          {!editorReady && isLoading && <p className="contacts-empty">Loading contacts…</p>}
-          {!editorReady && isError && <p className="contacts-empty">Could not load contacts.</p>}
+          {!editorReady && isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
+          {!editorReady && isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
           {editorReady && (
             /* Keyed on the contact being edited so switching from one edit to another reseeds the
                form rather than carrying the previous contact's values into it. */
@@ -153,8 +156,8 @@ export default function ContactsLayout() {
       ) : (
         <div className="contacts-row">
           <div className="contacts-list" style={{ width: listWidth }} data-testid="contact-list">
-            {isLoading && <p className="contacts-empty">Loading contacts…</p>}
-            {isError && <p className="contacts-empty">Could not load contacts.</p>}
+            {isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
+            {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
             {contacts && (
               <ContactList contacts={scoped} selectedId={selectedId} onSelect={select}
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}

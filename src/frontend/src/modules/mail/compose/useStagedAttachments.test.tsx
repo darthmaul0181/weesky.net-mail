@@ -69,13 +69,27 @@ describe('useStagedAttachments', () => {
     expect(result.current.uploading).toBe(false)
   })
 
-  it('keeps the backend message on a refused file', async () => {
+  // Server prose never reaches the tray; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback on a refused file carrying no code', async () => {
     vi.mocked(uploadAttachment).mockRejectedValue(new Error('The attachment exceeds the 25 MB limit'))
     const { result } = renderHook(() => useStagedAttachments('primary'))
 
     await act(async () => { result.current.addFiles([file]) })
 
-    expect(result.current.items[0].error).toBe('The attachment exceeds the 25 MB limit')
+    expect(result.current.items[0].error).toBe('Could not upload the attachment')
+    expect(result.current.ids).toEqual([])
+  })
+
+  // attachment_too_large is a named stable code: the refusal must stay specific, translated
+  // rather than shown as the generic fallback above.
+  it('shows the translated attachment_too_large message', async () => {
+    vi.mocked(uploadAttachment).mockRejectedValue(
+      Object.assign(new Error('attachment_too_large'), { code: 'attachment_too_large' }))
+    const { result } = renderHook(() => useStagedAttachments('primary'))
+
+    await act(async () => { result.current.addFiles([file]) })
+
+    expect(result.current.items[0].error).toBe('This attachment is larger than the upload limit.')
     expect(result.current.ids).toEqual([])
   })
 

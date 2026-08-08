@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 /** The collapsible quick-search band. Enter searches subject OR sender in the open folder. */
 export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClose }: Props) {
+  const { t } = useTranslation('mail')
   const [text, setText] = useState('')
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -24,7 +26,7 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
       <input
         type="text"
         className="search-bar-input"
-        placeholder={`Search in ${folderTitle}`}
+        placeholder={t('search.placeholder', { folder: folderTitle })}
         value={text}
         autoFocus
         onChange={event => setText(event.target.value)}
@@ -33,8 +35,8 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
       <button
         type="button"
         className="search-bar-advanced"
-        aria-label="Advanced search"
-        title="Advanced search"
+        aria-label={t('search.advanced.title')}
+        title={t('search.advanced.title')}
         onClick={() => onOpenAdvanced(text)}
       >
         <ChevronRightIcon size={16} />

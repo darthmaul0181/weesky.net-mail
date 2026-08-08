@@ -886,6 +886,8 @@ public sealed class AdminControllerTests
         var obj = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Equal(400, obj.StatusCode);
         var envelope = Assert.IsType<ResultEnveloppe>(obj.Value);
-        Assert.Contains("connected", envelope.Message, StringComparison.OrdinalIgnoreCase);
+        // The stable code travels straight through — the client resolves it to a translated
+        // sentence, so the server no longer produces English prose for it.
+        Assert.Equal(ExternalDomainStore.InUse, envelope.Message);
     }
 }

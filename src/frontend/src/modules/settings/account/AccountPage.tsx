@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../api.js'
 import QuotaBlock from '../../../components/QuotaBlock.jsx'
@@ -34,6 +35,7 @@ function XIcon(): JSX.Element {
 
 export default function AccountPage() {
   const { identity, account, refreshAccount } = useAuth()
+  const { t } = useTranslation('settings')
   const { toasts, addToast, removeToast } = useToasts()
   const [quota, setQuota] = useState<Quota | null>(null)
   const [editingName, setEditingName] = useState(false)
@@ -59,9 +61,9 @@ export default function AccountPage() {
       await api.changeFullName(nameValue.trim())
       await refreshAccount()
       setEditingName(false)
-      addToast('Name updated')
+      addToast(t('account.nameUpdated'))
     } catch {
-      addToast('Failed to update name', 'error')
+      addToast(t('account.nameUpdateFailed'), 'error')
     } finally {
       setSaving(false)
     }
@@ -72,11 +74,11 @@ export default function AccountPage() {
   return (
     <div className="settings-page account-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><UserIcon size={17} />Account</h1>
+        <h1 className="settings-page-title"><UserIcon size={17} />{t('nav.account')}</h1>
       </div>
 
       <section className="account-section">
-        <h2>Identity</h2>
+        <h2>{t('account.identity')}</h2>
         {editingName ? (
           <div className="panel-fullname-edit">
             <input
@@ -92,8 +94,8 @@ export default function AccountPage() {
               className="panel-fullname-btn panel-fullname-confirm"
               onClick={saveName}
               disabled={saving}
-              aria-label="Save"
-              title="Save"
+              aria-label={t('actions.save', { ns: 'common' })}
+              title={t('actions.save', { ns: 'common' })}
             >
               {saving ? <span className="spinner spinner-sm" /> : <CheckIcon />}
             </button>
@@ -101,8 +103,8 @@ export default function AccountPage() {
               className="panel-fullname-btn panel-fullname-cancel"
               onClick={cancelEdit}
               disabled={saving}
-              aria-label="Cancel"
-              title="Cancel"
+              aria-label={t('actions.cancel', { ns: 'common' })}
+              title={t('actions.cancel', { ns: 'common' })}
             >
               <XIcon />
             </button>
@@ -113,15 +115,15 @@ export default function AccountPage() {
             <button
               className="panel-fullname-pencil"
               onClick={startEdit}
-              aria-label="Edit name"
-              title="Edit name"
+              aria-label={t('account.editName')}
+              title={t('account.editName')}
             >
               <PencilIcon />
             </button>
           </div>
         )}
         <div className="panel-mailbox-row">
-          <span className="panel-mailbox-label">Primary email</span>
+          <span className="panel-mailbox-label">{t('account.primaryEmail')}</span>
           <span className="panel-mailbox-sep">&nbsp;:&nbsp;</span>
           <span className="panel-mailbox-value">{identity.email}</span>
         </div>
@@ -129,7 +131,7 @@ export default function AccountPage() {
 
       {identity.subDomains.length > 0 && (
         <section className="account-section">
-          <h2>Other domains</h2>
+          <h2>{t('account.otherDomains')}</h2>
           <ul className="account-domains">
             {identity.subDomains.map(d => <li key={d.id}>{d.name}</li>)}
           </ul>
@@ -137,13 +139,13 @@ export default function AccountPage() {
       )}
 
       <section className="account-section">
-        <h2>Storage</h2>
+        <h2>{t('account.storage')}</h2>
         <QuotaBlock quota={quota} />
       </section>
 
       <section className="account-section">
-        <h2>Password</h2>
-        <ChangePasswordSection onDone={() => addToast('Password changed')} />
+        <h2>{t('account.password')}</h2>
+        <ChangePasswordSection onDone={() => addToast(t('account.passwordChanged'))} />
       </section>
 
       <Toasts toasts={toasts} onRemove={removeToast} />

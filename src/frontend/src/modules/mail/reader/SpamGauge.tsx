@@ -1,15 +1,17 @@
 import type { CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import Tooltip from '../../../components/Tooltip'
 import type { MailSpamScore } from '../api/mailTypes'
 import { spamRatio } from './spamRatio'
 
 export default function SpamGauge({ spamScore }: { spamScore: MailSpamScore | null | undefined }) {
+  const { t } = useTranslation('mail')
   const ratio = spamRatio(spamScore)
   if (ratio === null || !spamScore) return null
 
   return (
     <div className="reader-spam">
-      Spam score:{' '}
+      {t('reader.spamScore')}{' '}
       <Tooltip content={spamScore.raw} placement="bottom-left">
         <span className="spam-gauge" tabIndex={0}>
           <span

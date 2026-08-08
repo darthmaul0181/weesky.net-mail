@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ComponentType } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
@@ -17,43 +19,37 @@ import JunkIcon from '../../../icons/JunkIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import SlidersIcon from '../../../icons/SlidersIcon'
 import TrashIcon from '../../../icons/TrashIcon'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
-const PAGE_SIZE_OPTIONS = [
-  { value: '10', label: '10' },
-  { value: '20', label: '20' },
-  { value: '30', label: '30' },
-  { value: '50', label: '50' },
-  { value: '100', label: '100' },
-  { value: ALL, label: 'All' },
-]
+const PAGE_SIZES = ['10', '20', '30', '50', '100']
 
-function pageSizeToast(value: string): string {
+function pageSizeToast(value: string, t: TFunction<'settings'>): string {
   return value === ALL
-    ? 'The message list now shows every message'
-    : `The message list now shows ${value} per page`
+    ? t('general.pageSize.toastAll')
+    : t('general.pageSize.toast', { value })
 }
 
 /** Listed in ROW_ACTIONS order, which is the order the row draws them — the page has to show
     the arrangement it is configuring. */
-const ROW_ACTION_CHOICES: { value: RowAction; label: string; Icon: ComponentType<{ size?: number }> }[] = [
-  { value: 'seen', label: 'Read / unread', Icon: MailOpenIcon },
-  { value: 'archive', label: 'Archive', Icon: ArchiveIcon },
-  { value: 'junk', label: 'Report as junk', Icon: JunkIcon },
-  { value: 'delete', label: 'Delete', Icon: TrashIcon },
-]
+const ROW_ACTION_CHOICES = [
+  { value: 'seen', labelKey: 'general.rowActions.seen', Icon: MailOpenIcon },
+  { value: 'archive', labelKey: 'general.rowActions.archive', Icon: ArchiveIcon },
+  { value: 'junk', labelKey: 'general.rowActions.junk', Icon: JunkIcon },
+  { value: 'delete', labelKey: 'general.rowActions.delete', Icon: TrashIcon },
+] as const satisfies { value: RowAction; labelKey: string; Icon: ComponentType<{ size?: number }> }[]
 
-const READING_PANES: { value: ReadingPane; label: string; toast: string }[] = [
-  { value: 'right', label: 'Right', toast: 'The reader sits beside the message list' },
-  { value: 'bottom', label: 'Bottom', toast: 'The reader sits below the message list' },
-  { value: 'none', label: 'Hidden', toast: 'Messages will open in place of the list' },
-]
+const READING_PANES = [
+  { value: 'right', labelKey: 'general.readingPane.right', toastKey: 'general.readingPane.rightToast' },
+  { value: 'bottom', labelKey: 'general.readingPane.bottom', toastKey: 'general.readingPane.bottomToast' },
+  { value: 'none', labelKey: 'general.readingPane.none', toastKey: 'general.readingPane.noneToast' },
+] as const satisfies { value: ReadingPane; labelKey: string; toastKey: string }[]
 
 /** No glyph beside these two: PaneGlyph draws three arrangements, a shape a miniature can carry.
     Two editors are not, and a decorative square would say nothing the label does not. */
-const COMPOSE_FORMATS: { value: ComposeFormat; label: string; toast: string }[] = [
-  { value: 'html', label: 'Formatted', toast: 'New messages will open in the formatted editor' },
-  { value: 'text', label: 'Plain text', toast: 'New messages will open in the plain-text editor' },
-]
+const COMPOSE_FORMATS = [
+  { value: 'html', labelKey: 'general.composeFormat.html', toastKey: 'general.composeFormat.htmlToast' },
+  { value: 'text', labelKey: 'general.composeFormat.text', toastKey: 'general.composeFormat.textToast' },
+] as const satisfies { value: ComposeFormat; labelKey: string; toastKey: string }[]
 
 /** A miniature of the arrangement — the glyph is the description, like Appearance's
     palette thumbnails. */
@@ -111,6 +107,7 @@ function ToggleRow(
  * its defaults already filled in, so this page never has to know what a default is.
  */
 export default function GeneralPage() {
+  const { t } = useTranslation('settings')
   const { data: preferences, isLoading, isError } = usePreferences()
   const setPreference = useSetPreference()
   const { toasts, addToast, removeToast } = useToasts()
@@ -138,12 +135,12 @@ export default function GeneralPage() {
     // both the chime and an error toast.
     if (on) playNewMailSound()
     await save(PREFERENCE_KEYS.notifySound, String(on),
-      on ? 'New mail will play a sound' : 'New mail will be silent')
+      t(on ? 'general.notifySound.on' : 'general.notifySound.off'))
   }
 
   async function toggleDesktop(on: boolean) {
     if (!on) {
-      await save(PREFERENCE_KEYS.notifyDesktop, 'false', 'Desktop notifications are off')
+      await save(PREFERENCE_KEYS.notifyDesktop, 'false', t('general.notifyDesktop.off'))
       return
     }
 
@@ -152,7 +149,7 @@ export default function GeneralPage() {
     const answer = await requestDesktopPermission()
     setPermission(answer)
     if (answer === 'granted') {
-      await save(PREFERENCE_KEYS.notifyDesktop, 'true', 'New mail will raise a notification')
+      await save(PREFERENCE_KEYS.notifyDesktop, 'true', t('general.notifyDesktop.on'))
     }
   }
 
@@ -161,33 +158,31 @@ export default function GeneralPage() {
       await setPreference.mutateAsync({ key, value })
       addToast(message)
     } catch (error) {
-      addToast(error instanceof Error ? error.message : 'Could not save the setting', 'error')
+      addToast(apiErrorMessage(error, t('general.saveFailed')), 'error')
     }
   }
 
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><SlidersIcon size={17} />General</h1>
+        <h1 className="settings-page-title"><SlidersIcon size={17} />{t('nav.general')}</h1>
       </div>
 
       {isLoading && <LoadingBlock />}
-      {!isLoading && (isError || !preferences) && <p>Could not load the settings.</p>}
+      {!isLoading && (isError || !preferences) && <p>{t('general.loadFailed')}</p>}
 
       {!isLoading && !isError && preferences && (
         <>
           <section className="account-section">
-            <h2>Layout</h2>
+            <h2>{t('general.layout')}</h2>
 
             <div className="field-h is-setting is-stacked">
               <span className="setting-label">
-                <span id="reading-pane-label">Reading pane</span>
-                <span className="setting-hint">
-                  Where a message opens — beside the list, under it, or full width.
-                </span>
+                <span id="reading-pane-label">{t('general.readingPane.label')}</span>
+                <span className="setting-hint">{t('general.readingPane.hint')}</span>
               </span>
               <div className="layout-cards" role="radiogroup" aria-labelledby="reading-pane-label">
-                {READING_PANES.map(({ value, label, toast }) => (
+                {READING_PANES.map(({ value, labelKey, toastKey }) => (
                   <label key={value} className="layout-card">
                     <PaneGlyph variant={value} />
                     <span className="layout-card-name">
@@ -197,9 +192,9 @@ export default function GeneralPage() {
                         value={value}
                         checked={readingPaneOf(preferences) === value}
                         disabled={setPreference.isPending}
-                        onChange={() => save(PREFERENCE_KEYS.readingPane, value, toast)}
+                        onChange={() => save(PREFERENCE_KEYS.readingPane, value, t(toastKey))}
                       />
-                      {label}
+                      {t(labelKey)}
                     </span>
                   </label>
                 ))}
@@ -208,54 +203,52 @@ export default function GeneralPage() {
 
             <div className="field-h is-setting">
               <span className="setting-label">
-                <label htmlFor="page-size">Messages per page</label>
-                <span className="setting-hint">How many rows the list loads at a time.</span>
+                <label htmlFor="page-size">{t('general.pageSize.label')}</label>
+                <span className="setting-hint">{t('general.pageSize.hint')}</span>
               </span>
               <select
                 id="page-size"
                 value={preferences[PREFERENCE_KEYS.pageSize]}
                 disabled={setPreference.isPending}
                 onChange={event =>
-                  save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value))}
+                  save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value, t))}
               >
-                {PAGE_SIZE_OPTIONS.map(option =>
-                  <option key={option.value} value={option.value}>{option.label}</option>)}
+                {PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
+                <option value={ALL}>{t('general.pageSize.all')}</option>
               </select>
             </div>
 
             <ToggleRow
               id="show-preview"
-              label="Preview in the message list"
-              hint="Show the first line of each message under its subject."
+              label={t('general.preview.label')}
+              hint={t('general.preview.hint')}
               checked={showPreviewOf(preferences)}
               disabled={setPreference.isPending}
               onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
-                on ? 'Previews are shown' : 'Previews are hidden')}
+                t(on ? 'general.preview.on' : 'general.preview.off'))}
             />
 
             <ToggleRow
               id="show-folder-icons"
-              label="Folder icons"
-              hint="Show an icon beside each folder in the mail column."
+              label={t('general.folderIcons.label')}
+              hint={t('general.folderIcons.hint')}
               checked={showFolderIconsOf(preferences)}
               disabled={setPreference.isPending}
               onChange={on => save(PREFERENCE_KEYS.showFolderIcons, String(on),
-                on ? 'Folder icons are shown' : 'Folder icons are hidden')}
+                t(on ? 'general.folderIcons.on' : 'general.folderIcons.off'))}
             />
 
             <div className="field-h is-setting is-stacked">
               <span className="setting-label">
-                <span id="row-actions-label">Quick actions on a message</span>
-                <span className="setting-hint">
-                  The icons a message row offers on hover. Everything here stays available from the
-                  toolbar once messages are selected.
-                </span>
+                <span id="row-actions-label">{t('general.rowActions.label')}</span>
+                <span className="setting-hint">{t('general.rowActions.hint')}</span>
               </span>
               {/* The fill is the state, so there is no box to tick: aria-pressed is what carries
                   that to anything not looking at the colour. */}
               <div className="action-chips" role="group" aria-labelledby="row-actions-label">
-                {ROW_ACTION_CHOICES.map(({ value, label, Icon }) => {
+                {ROW_ACTION_CHOICES.map(({ value, labelKey, Icon }) => {
                   const on = chosenActions.includes(value)
+                  const label = t(labelKey)
                   return (
                     <button
                       key={value}
@@ -268,7 +261,7 @@ export default function GeneralPage() {
                         // Rebuilt from the canonical order, never from click order, so the stored
                         // string is the one the list already renders.
                         ROW_ACTIONS.filter(a => a === value ? !on : chosenActions.includes(a)).join(','),
-                        on ? `${label} is no longer a quick action` : `${label} is now a quick action`)}
+                        t(on ? 'general.rowActions.off' : 'general.rowActions.on', { action: label }))}
                     >
                       <Icon size={16} />
                       {label}
@@ -280,56 +273,53 @@ export default function GeneralPage() {
           </section>
 
           <section className="account-section">
-            <h2>Privacy &amp; security</h2>
+            <h2>{t('general.privacy')}</h2>
 
             <ToggleRow
               id="always-show-images"
-              label="Always show remote images"
-              hint="Loading them tells the sender you opened the message."
+              label={t('general.remoteImages.label')}
+              hint={t('general.remoteImages.hint')}
               checked={alwaysShowImagesOf(preferences)}
               disabled={setPreference.isPending}
               onChange={on => save(PREFERENCE_KEYS.alwaysShowImages, String(on),
-                on ? 'Remote images will always load' : 'Remote images stay blocked until you ask')}
+                t(on ? 'general.remoteImages.on' : 'general.remoteImages.off'))}
             />
 
             <ToggleRow
               id="trust-contacts"
-              label="Always show images from my contacts"
-              hint={alwaysShowImagesOf(preferences)
-                ? 'Already covered by the setting above.'
-                : 'Images load without asking when the sender is in your address book.'}
+              label={t('general.trustContacts.label')}
+              hint={t(alwaysShowImagesOf(preferences)
+                ? 'general.trustContacts.hintCovered'
+                : 'general.trustContacts.hint')}
               nested
               covered={alwaysShowImagesOf(preferences)}
               checked={trustContactsOf(preferences)}
               disabled={setPreference.isPending || alwaysShowImagesOf(preferences)}
               onChange={on => save(PREFERENCE_KEYS.trustContacts, String(on),
-                on ? 'Images from your contacts will load' : 'Images from your contacts stay blocked')}
+                t(on ? 'general.trustContacts.on' : 'general.trustContacts.off'))}
             />
 
             <ToggleRow
               id="show-spam-score"
-              label="Show the spam score in the message reader"
-              hint="Adds a score bar under the recipients when the server sends one."
+              label={t('general.spamScore.label')}
+              hint={t('general.spamScore.hint')}
               checked={showSpamScoreOf(preferences)}
               disabled={setPreference.isPending}
               onChange={on => save(PREFERENCE_KEYS.showSpamScore, String(on),
-                on ? 'The spam score is shown' : 'The spam score is hidden')}
+                t(on ? 'general.spamScore.on' : 'general.spamScore.off'))}
             />
           </section>
 
           <section className="account-section">
-            <h2>Composing</h2>
+            <h2>{t('general.composing')}</h2>
 
             <div className="field-h is-setting is-stacked">
               <span className="setting-label">
-                <span id="compose-format-label">Default editor</span>
-                <span className="setting-hint">
-                  Applies to new messages, replies and forwards. A saved draft reopens in the
-                  editor it was written in, and the toolbar switches any one message.
-                </span>
+                <span id="compose-format-label">{t('general.composeFormat.label')}</span>
+                <span className="setting-hint">{t('general.composeFormat.hint')}</span>
               </span>
               <div className="layout-cards" role="radiogroup" aria-labelledby="compose-format-label">
-                {COMPOSE_FORMATS.map(({ value, label, toast }) => (
+                {COMPOSE_FORMATS.map(({ value, labelKey, toastKey }) => (
                   <label key={value} className="layout-card">
                     <span className="layout-card-name">
                       <input
@@ -338,9 +328,9 @@ export default function GeneralPage() {
                         value={value}
                         checked={composeFormatOf(preferences) === value}
                         disabled={setPreference.isPending}
-                        onChange={() => save(PREFERENCE_KEYS.composeFormat, value, toast)}
+                        onChange={() => save(PREFERENCE_KEYS.composeFormat, value, t(toastKey))}
                       />
-                      {label}
+                      {t(labelKey)}
                     </span>
                   </label>
                 ))}
@@ -349,22 +339,22 @@ export default function GeneralPage() {
 
             <ToggleRow
               id="capture-recipients"
-              label="Save new recipients to my contacts"
-              hint="Anyone you write to for the first time joins your address book."
+              label={t('general.captureRecipients.label')}
+              hint={t('general.captureRecipients.hint')}
               checked={captureRecipientsOf(preferences)}
               disabled={setPreference.isPending}
               onChange={on => save(PREFERENCE_KEYS.captureRecipients, String(on),
-                on ? 'New recipients will be saved' : 'New recipients will not be saved')}
+                t(on ? 'general.captureRecipients.on' : 'general.captureRecipients.off'))}
             />
           </section>
 
           <section className="account-section">
-            <h2>Notifications</h2>
+            <h2>{t('general.notifications.heading')}</h2>
 
             <ToggleRow
               id="notify-sound"
-              label="Sound on new mail"
-              hint="Plays a short chime when mail reaches the inbox."
+              label={t('general.notifySound.label')}
+              hint={t('general.notifySound.hint')}
               checked={notifySoundOf(preferences)}
               disabled={setPreference.isPending}
               onChange={toggleSound}
@@ -374,8 +364,8 @@ export default function GeneralPage() {
                 no-op. The visibility refresh above is what makes it reachable again. */}
             <ToggleRow
               id="notify-desktop"
-              label="Desktop notification on new mail"
-              hint="Your browser will ask for permission the first time."
+              label={t('general.notifyDesktop.label')}
+              hint={t('general.notifyDesktop.hint')}
               checked={notifyDesktopOf(preferences) && permission === 'granted'}
               disabled={setPreference.isPending || blocked || unsupported || insecure}
               locked={blocked || unsupported || insecure}
@@ -383,22 +373,13 @@ export default function GeneralPage() {
             />
 
             {blocked && (
-              <p className="settings-note">
-                Notifications are blocked by your browser for this site. Allow them in its site
-                settings, then switch this back on.
-              </p>
+              <p className="settings-note">{t('general.notifications.blocked')}</p>
             )}
             {insecure && (
-              <p className="settings-note">
-                Desktop notifications need a secure connection. Open this site over HTTPS to switch
-                them on.
-              </p>
+              <p className="settings-note">{t('general.notifications.insecure')}</p>
             )}
             {unsupported && (
-              <p className="settings-note">
-                This browser does not support desktop notifications. On iPhone and iPad they work
-                only once the site is added to the home screen.
-              </p>
+              <p className="settings-note">{t('general.notifications.unsupported')}</p>
             )}
           </section>
         </>

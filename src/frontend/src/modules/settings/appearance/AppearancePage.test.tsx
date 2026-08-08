@@ -1,28 +1,38 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ThemeProvider, PALETTE_IDS } from '../../../contexts/ThemeContext'
 import AppearancePage from './AppearancePage'
 
+const setPreference = vi.fn()
+vi.mock('../../../contexts/LocaleContext', () => ({
+  useLocale: () => ({ locale: 'en', preference: 'auto', setPreference, saving: false }),
+}))
+
+function renderPage() {
+  return render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+}
+
 describe('AppearancePage', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); setPreference.mockClear() })
 
   // By role, not by label text: the loupe's own label names the palette too — deliberately, so
   // twelve of them are told apart by a screen reader — which makes getByLabelText ambiguous.
   it('reflects current preferences', () => {
-    render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    renderPage()
     expect(screen.getByLabelText('System')).toBeChecked()
     expect(screen.getByRole('radio', { name: /Night & coral/ })).toBeChecked()
   })
 
   it('changes the theme', () => {
-    render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    renderPage()
     fireEvent.click(screen.getByLabelText('Dark'))
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     expect(localStorage.getItem('appearance_theme')).toBe('dark')
   })
 
   it('changes the palette', () => {
-    render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    renderPage()
     fireEvent.click(screen.getByLabelText('Sea breeze'))
     expect(document.documentElement.getAttribute('data-palette')).toBe('classic')
     expect(localStorage.getItem('appearance_palette')).toBe('classic')
@@ -30,7 +40,7 @@ describe('AppearancePage', () => {
 
   // Selected by group rather than by a regex over every label, which had to grow with the list.
   it('offers every palette the app knows, in order', () => {
-    render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    renderPage()
 
     const radios = screen.getAllByRole('radio')
       .filter(r => (r as HTMLInputElement).name === 'palette') as HTMLInputElement[]
@@ -39,7 +49,7 @@ describe('AppearancePage', () => {
   })
 
   it('changes to a new palette', () => {
-    render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    renderPage()
 
     fireEvent.click(screen.getByLabelText('Plum & gold'))
 
@@ -50,7 +60,7 @@ describe('AppearancePage', () => {
   // Each thumbnail declares the palette it advertises, which is the only thing standing between
   // twelve previews and twelve copies of the active one.
   it('previews each palette in its own colours', () => {
-    const { container } = render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    const { container } = renderPage()
 
     const previews = Array.from(container.querySelectorAll('.palette-preview'))
     expect(previews.map(p => p.getAttribute('data-palette'))).toEqual([...PALETTE_IDS])
@@ -59,7 +69,7 @@ describe('AppearancePage', () => {
   // The accent is what tells two palettes apart, and it reaches the running app mostly through
   // the compose button and the attachment chips. A preview without them was twelve near-greys.
   it('shows the accent surfaces the app actually carries', () => {
-    const { container } = render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    const { container } = renderPage()
 
     const first = container.querySelector('.palette-preview')!
     expect(first.querySelector('.pp-compose')).not.toBeNull()
@@ -81,7 +91,7 @@ describe('AppearancePage', () => {
       })),
     })
 
-    const { container } = render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    const { container } = renderPage()
 
     Array.from(container.querySelectorAll('.palette-preview'))
       .forEach(p => expect(p.getAttribute('data-theme')).toBe('dark'))
@@ -91,10 +101,24 @@ describe('AppearancePage', () => {
 
   // The label already names the palette; a screen reader has no use for a picture of colours.
   it('hides the thumbnails from assistive technology', () => {
-    const { container } = render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    const { container } = renderPage()
 
     Array.from(container.querySelectorAll('.palette-preview'))
       .forEach(p => expect(p).toHaveAttribute('aria-hidden', 'true'))
+  })
+
+  it('offers Automatic, English and Français, and writes the chosen one', async () => {
+    renderPage()
+
+    expect(screen.getByRole('radio', { name: 'Automatic (browser)' })).toBeChecked()
+    // Written in their own language: someone stranded in an English interface does not look
+    // for "French".
+    expect(screen.getByRole('radio', { name: 'English' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Français' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Français' }))
+
+    expect(setPreference).toHaveBeenCalledWith('fr')
   })
 })
 
@@ -102,7 +126,7 @@ describe('AppearancePage — the enlarged preview', () => {
   beforeEach(() => localStorage.clear())
 
   const open = (name: string) => {
-    const rendered = render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    const rendered = renderPage()
     fireEvent.click(screen.getByRole('button', { name: `Enlarge the ${name} preview` }))
     return rendered
   }
@@ -142,7 +166,7 @@ describe('AppearancePage — the enlarged preview', () => {
   })
 
   it('offers a loupe per palette', () => {
-    render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+    renderPage()
 
     expect(screen.getAllByRole('button', { name: /^Enlarge the .* preview$/ }))
       .toHaveLength(PALETTE_IDS.length)

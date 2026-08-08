@@ -1,3 +1,4 @@
+import i18next from 'i18next'
 import type { MailMessageSummary } from '../api/mailTypes'
 
 export interface NotifySettings {
@@ -46,8 +47,9 @@ export function allArrivalsRead(arrivals: MailMessageSummary[], count: number): 
 export function notifyBody(messages: MailMessageSummary[], count: number): string {
   if (count === 1 && messages.length === 1) {
     const [message] = messages
-    return `${message.fromName || message.fromAddress} — ${message.subject || '(no subject)'}`
+    const subject = message.subject || i18next.t('mail:list.noSubject')
+    return `${message.fromName || message.fromAddress} — ${subject}`
   }
 
-  return count === 1 ? '1 new message' : `${count} new messages`
+  return i18next.t('mail:notify.newMessages', { count })
 }

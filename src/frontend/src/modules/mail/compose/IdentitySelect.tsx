@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -16,6 +17,7 @@ interface Props {
     when a refetch turns it stale mid-compose: the send would carry that address, so the line says
     so, flagged `unavailable` the way the identities settings page flags it. */
 export default function IdentitySelect({ identities, value, onChange }: Props) {
+  const { t } = useTranslation('compose')
   const { identity } = useAuth()
   // The primary's name is the live account FullName, like the identities settings page.
   const nameOf = (i: SendingIdentity) => (i.isPrimary ? identity?.displayName ?? i.displayName : i.displayName)
@@ -25,7 +27,7 @@ export default function IdentitySelect({ identities, value, onChange }: Props) {
   const current = identities.find(i => i.address === value)
   const caption = current ? label(current) : value
   const tag = !current || current.stale
-    ? <span className="row-tag">unavailable</span>
+    ? <span className="row-tag">{t('identity.unavailable')}</span>
     : null
 
   // A menu wherever it can change something, the stale case included: its usable rows are the
@@ -37,7 +39,7 @@ export default function IdentitySelect({ identities, value, onChange }: Props) {
   return (
     <>
       <DropdownMenu
-        ariaLabel="From identity"
+        ariaLabel={t('identity.menu')}
         className="compose-from-select"
         // The trigger sits at the left of the From row, with the whole composer to its right.
         align="left"

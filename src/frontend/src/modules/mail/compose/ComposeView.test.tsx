@@ -280,6 +280,7 @@ describe('ComposeView', () => {
     expect(onNotify).toHaveBeenCalledWith('Message sent — no Sent copy could be filed')
   })
 
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
   it('keeps the view and its staged files when the send fails', async () => {
     mocks.sendMessage.mockRejectedValue(new Error('Bad gateway'))
     const { onNotify, router } = renderCompose()
@@ -289,7 +290,7 @@ describe('ComposeView', () => {
     addRecipient('To', 'a@b.c')
     fireEvent.click(sendButton())
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Bad gateway', 'error'))
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not send the message', 'error'))
     expect(router.state.location.pathname).toBe('/mail/compose')
     expect(screen.getByTestId('compose-view')).toBeInTheDocument()
     expect(screen.getByText('a.txt')).toBeInTheDocument()
@@ -1528,7 +1529,7 @@ describe('inline images, staged-id lifetime', () => {
     const { onNotify, router } = renderCompose('INBOX', seed)
 
     pasteImage()
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Too large', 'error'))
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not insert the image', 'error'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByText('Save this draft?')).toBeNull()

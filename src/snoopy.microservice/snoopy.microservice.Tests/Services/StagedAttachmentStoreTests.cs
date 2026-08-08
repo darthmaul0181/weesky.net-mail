@@ -91,7 +91,9 @@ public sealed class StagedAttachmentStoreTests : IDisposable
             Bytes(1024 * 1024 + 1), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Contains("1 MB", result.Error);
+        // A stable code, not prose carrying the configured limit — the client resolves it to a
+        // translated sentence, so the number itself is no longer part of the wire contract.
+        Assert.Equal(StagedAttachmentErrors.TooLarge, result.Error);
     }
 
     [Fact]

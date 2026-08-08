@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import ContactsIcon from '../../icons/ContactsIcon'
 import StarIcon from '../../icons/StarIcon'
 
@@ -21,20 +22,22 @@ interface Props {
  * against the rail.
  */
 export default function ContactScopes({ scope, total, favorites, onScope }: Props) {
+  const { t } = useTranslation('contacts')
+
   return (
     <nav className="contact-scopes">
       <button type="button" className={`contact-scope${scope === 'all' ? ' is-active' : ''}`}
         aria-current={scope === 'all' ? 'true' : undefined}
         onClick={() => onScope('all')}>
         <ContactsIcon size={15} />
-        <span className="contact-scope-label">All contacts</span>
+        <span className="contact-scope-label">{t('scopes.all')}</span>
         <span className="contact-scope-count">{total}</span>
       </button>
       <button type="button" className={`contact-scope${scope === 'favorites' ? ' is-active' : ''}`}
         aria-current={scope === 'favorites' ? 'true' : undefined}
         onClick={() => onScope('favorites')}>
         <StarIcon size={15} />
-        <span className="contact-scope-label">Favourites</span>
+        <span className="contact-scope-label">{t('scopes.favourites')}</span>
         <span className="contact-scope-count">{favorites}</span>
       </button>
     </nav>

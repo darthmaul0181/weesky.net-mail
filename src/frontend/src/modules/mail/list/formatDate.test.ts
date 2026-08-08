@@ -30,4 +30,12 @@ describe('formatListDate', () => {
   it('returns an empty string for an empty value', () => {
     expect(formatListDate('', now)).toBe('')
   })
+
+  // The dates used to pass `undefined`, so they followed the *browser* — a French interface on an
+  // English browser printed English months.
+  it('follows the given locale rather than the ambient one', () => {
+    const now = new Date('2026-06-15T12:00:00Z')
+    expect(formatListDate('2026-03-04T09:00:00Z', now, 'fr')).toMatch(/mars/)
+    expect(formatListDate('2026-03-04T09:00:00Z', now, 'en')).toMatch(/Mar/)
+  })
 })

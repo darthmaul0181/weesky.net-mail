@@ -1,5 +1,7 @@
+import i18next from 'i18next'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, uploadAttachment } from '../../../api.js'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
 export interface StagedItem {
   key: string
@@ -91,7 +93,8 @@ export function useStagedAttachments(
       uploadAttachment(file,
         { accountId, onProgress: (ratio: number) => patch(key, { progress: ratio }) })
         .then((info: { id: string; size: number }) => patch(key, { id: info.id, size: info.size, progress: 1 }))
-        .catch((error: Error) => patch(key, { error: error.message, progress: 1 }))
+        .catch((error: Error) =>
+          patch(key, { error: apiErrorMessage(error, i18next.t('compose:attachments.uploadFailed')), progress: 1 }))
     }
   }, [apply, patch, accountId])
 

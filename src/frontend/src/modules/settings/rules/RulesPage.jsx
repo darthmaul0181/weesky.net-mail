@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
+import i18next from 'i18next'
 import { api } from '../../../api.js'
 import { useAccountId } from '../../../hooks/useAccountId'
 import { useToasts } from '../../../hooks/useToasts.js'
@@ -70,62 +72,72 @@ function GripIcon() {
   )
 }
 
-const EXTENDED_RULES_HELP =
-  'Rules created in extended mode are not compatible with the Rainloop rules editor and will no longer be visible there.'
-
 // ── Constants ─────────────────────────────────────────────────
 
 const TEXT_OPS = ['Contains', 'NotContains', 'Equals', 'NotEquals', 'Regex']
 
 const CONDITION_FIELDS = [
-  { value: 'From',            label: 'From',              operators: TEXT_OPS },
-  { value: 'Recipient',       label: 'To / Cc',           operators: TEXT_OPS },
-  { value: 'Subject',         label: 'Subject',           operators: TEXT_OPS },
-  { value: 'Header',          label: 'Custom header',     operators: TEXT_OPS },
-  { value: 'Size',            label: 'Size (bytes)',       operators: ['Larger', 'Smaller'] },
-  { value: 'Body',            label: 'Body',              extendedOnly: true, operators: ['Contains', 'NotContains', 'Regex'] },
-  { value: 'EnvelopeFrom',    label: 'Envelope from',     extendedOnly: true, operators: TEXT_OPS },
-  { value: 'EnvelopeTo',      label: 'Envelope to',       extendedOnly: true, operators: TEXT_OPS },
-  { value: 'RecipientDetail', label: 'Recipient +detail', extendedOnly: true, operators: TEXT_OPS },
-  { value: 'Duplicate',       label: 'Duplicate message', extendedOnly: true, noOperator: true },
-  { value: 'CurrentDate',    label: 'Current date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
-  { value: 'MessageDate',    label: 'Message date',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
-  { value: 'CurrentWeekday', label: 'Current weekday',   extendedOnly: true, noOperator: true, inputType: 'weekday' },
-  { value: 'CurrentHour',    label: 'Current hour',      extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'hour' },
+  { value: 'From',            operators: TEXT_OPS },
+  { value: 'Recipient',       operators: TEXT_OPS },
+  { value: 'Subject',         operators: TEXT_OPS },
+  { value: 'Header',          operators: TEXT_OPS },
+  { value: 'Size',            operators: ['Larger', 'Smaller'] },
+  { value: 'Body',            extendedOnly: true, operators: ['Contains', 'NotContains', 'Regex'] },
+  { value: 'EnvelopeFrom',    extendedOnly: true, operators: TEXT_OPS },
+  { value: 'EnvelopeTo',      extendedOnly: true, operators: TEXT_OPS },
+  { value: 'RecipientDetail', extendedOnly: true, operators: TEXT_OPS },
+  { value: 'Duplicate',       extendedOnly: true, noOperator: true },
+  { value: 'CurrentDate',     extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
+  { value: 'MessageDate',     extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'date' },
+  { value: 'CurrentWeekday',  extendedOnly: true, noOperator: true, inputType: 'weekday' },
+  { value: 'CurrentHour',     extendedOnly: true, operators: ['Before', 'OnOrAfter', 'Equals'], inputType: 'hour' },
 ]
 
-const WEEKDAY_OPTIONS = [
-  { value: '1,2,3,4,5', label: 'Weekday (Mon–Fri)' },
-  { value: '0,6',       label: 'Weekend (Sat–Sun)' },
-  { value: '1', label: 'Monday' },
-  { value: '2', label: 'Tuesday' },
-  { value: '3', label: 'Wednesday' },
-  { value: '4', label: 'Thursday' },
-  { value: '5', label: 'Friday' },
-  { value: '6', label: 'Saturday' },
-  { value: '0', label: 'Sunday' },
-]
+const WEEKDAY_VALUES = ['1,2,3,4,5', '0,6', '1', '2', '3', '4', '5', '6', '0']
+
+/** The nine keys are written out rather than held on the options: a key that reaches `t()` only
+    as a variable is invisible to `src/locales/keys.test.ts`, the only guard over this .jsx file. */
+function weekdayLabel(value, t) {
+  switch (value) {
+    case '1,2,3,4,5': return t('rules.weekdays.workweek')
+    case '0,6': return t('rules.weekdays.weekend')
+    case '1': return t('rules.weekdays.monday')
+    case '2': return t('rules.weekdays.tuesday')
+    case '3': return t('rules.weekdays.wednesday')
+    case '4': return t('rules.weekdays.thursday')
+    case '5': return t('rules.weekdays.friday')
+    case '6': return t('rules.weekdays.saturday')
+    case '0': return t('rules.weekdays.sunday')
+    default: return null
+  }
+}
 
 const CONDITION_OPERATORS = [
-  { value: 'Contains',    label: 'contains' },
-  { value: 'NotContains', label: 'not contains' },
-  { value: 'Equals',      label: 'equals' },
-  { value: 'NotEquals',   label: 'not equal to' },
-  { value: 'Matches',     label: 'matches (wildcard)' }, // kept for display of legacy rules only
-  { value: 'Regex',       label: 'matches (regex)' },
-  { value: 'Larger',      label: 'is larger than' },
-  { value: 'Smaller',     label: 'is smaller than' },
-  { value: 'Before',      label: 'is before',         extendedOnly: true },
-  { value: 'OnOrAfter',   label: 'is on or after',    extendedOnly: true },
+  { value: 'Contains' },
+  { value: 'NotContains' },
+  { value: 'Equals' },
+  { value: 'NotEquals' },
+  { value: 'Matches' }, // kept for display of legacy rules only
+  { value: 'Regex' },
+  { value: 'Larger' },
+  { value: 'Smaller' },
+  { value: 'Before',    extendedOnly: true },
+  { value: 'OnOrAfter', extendedOnly: true },
 ]
 
 const ACTION_TYPES = [
-  { value: 'FileInto', label: 'Move to',             hasArg: true,  argPlaceholder: 'Folder name' },
-  { value: 'Redirect', label: 'Redirect to',         hasArg: true,  argPlaceholder: 'email@address.com' },
-  { value: 'Discard',  label: 'Discard',             hasArg: false, argPlaceholder: '' },
-  { value: 'Reject',   label: 'Reject with message', hasArg: true,  argPlaceholder: 'Message (optional)' },
-  { value: 'Keep',     label: 'Keep in inbox',       hasArg: false, argPlaceholder: '', extendedOnly: true },
+  { value: 'FileInto', hasArg: true },
+  { value: 'Redirect', hasArg: true },
+  { value: 'Discard',  hasArg: false },
+  { value: 'Reject',   hasArg: true },
+  { value: 'Keep',     hasArg: false, extendedOnly: true },
 ]
+
+// The labels live in the catalogue under the wire value, so one lookup serves every list.
+const fieldLabel = (value, t) =>
+  CONDITION_FIELDS.some(f => f.value === value) ? t(`rules.fields.${value}`) : value
+const operatorLabel = (value, t) =>
+  CONDITION_OPERATORS.some(o => o.value === value) ? t(`rules.operators.${value}`) : value
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -139,24 +151,26 @@ function extractError(err) {
   }
 }
 
-function summarizeCondition(c) {
+function summarizeCondition(c, t) {
   if (c.field === 'Duplicate')
-    return c.value ? `Duplicate (within ${c.value}s)` : 'Duplicate message'
-  const fieldLabel = CONDITION_FIELDS.find(f => f.value === c.field)?.label ?? c.field
-  const opLabel = CONDITION_OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator
-  const name = c.field === 'Header' ? (c.headerName ?? 'Header') : fieldLabel
+    return c.value
+      ? t('rules.summary.duplicateWithin', { seconds: c.value })
+      : t('rules.fields.Duplicate')
+  const operator = operatorLabel(c.operator, t)
+  const name = c.field === 'Header'
+    ? (c.headerName ?? t('rules.summary.header'))
+    : fieldLabel(c.field, t)
   if (c.field === 'CurrentDate' || c.field === 'MessageDate')
-    return `${name} ${opLabel} ${c.value}`
+    return t('rules.summary.plain', { name, operator, value: c.value })
   if (c.field === 'CurrentWeekday') {
-    const wLabel = WEEKDAY_OPTIONS.find(o => o.value === c.value)?.label ?? c.value
-    return `Weekday is ${wLabel}`
+    return t('rules.summary.weekdayIs', { day: weekdayLabel(c.value, t) ?? c.value })
   }
   if (c.field === 'CurrentHour')
-    return `Hour ${opLabel} ${c.value}:00`
-  return `${name} ${opLabel} "${c.value}"`
+    return t('rules.summary.hour', { operator, value: c.value })
+  return t('rules.summary.quoted', { name, operator, value: c.value })
 }
 
-function summarizeAction(a, compact = false) {
+function summarizeAction(a, compact, t) {
   switch (a.type) {
     case 'FileInto': {
       const label = `${a.argument ?? '?'}${a.autoCreate ? ' ✚' : ''}`
@@ -164,12 +178,12 @@ function summarizeAction(a, compact = false) {
     }
     case 'Redirect': return `⇥ ${a.argument ?? '?'}`
     case 'SetFlag':
-      if (a.argument === '\\Seen'    || a.argument === '\\\\Seen')    return 'Mark as read'
-      if (a.argument === '\\Flagged' || a.argument === '\\\\Flagged') return '⭐ Flagged'
-      return `Flag: ${a.argument}`
-    case 'Keep':    return 'Keep in inbox'
-    case 'Discard': return 'Discard'
-    case 'Reject':  return 'Reject'
+      if (a.argument === '\\Seen'    || a.argument === '\\\\Seen')    return t('rules.markAsRead')
+      if (a.argument === '\\Flagged' || a.argument === '\\\\Flagged') return t('rules.summary.flagged')
+      return t('rules.summary.flag', { flag: a.argument })
+    case 'Keep':    return t('rules.actionTypes.Keep')
+    case 'Discard': return t('rules.actionTypes.Discard')
+    case 'Reject':  return t('rules.summary.reject')
     default:        return a.type
   }
 }
@@ -214,6 +228,7 @@ function makeEmptyRule() {
 // ── RuleCard ──────────────────────────────────────────────────
 
 export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isLast, onMoveUp, onMoveDown, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) {
+  const { t } = useTranslation('settings')
   const [collapsed, setCollapsed] = useState(true)
   const hasActions = rule.actions.length > 0
 
@@ -227,8 +242,8 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
       onDragEnd={onDragEnd}
     >
       <div className="rule-card-header">
-        <span className="rule-card-drag" title="Drag to reorder"><GripIcon /></span>
-        <label className="toggle-switch" title={rule.enabled ? 'Disable' : 'Enable'}>
+        <span className="rule-card-drag" title={t('rules.dragToReorder')}><GripIcon /></span>
+        <label className="toggle-switch" title={t(rule.enabled ? 'rules.disable' : 'rules.enable')}>
           <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)} />
           <span className="toggle-track" />
         </label>
@@ -236,17 +251,17 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
         {collapsed && hasActions && (
           <div className="rule-card-inline-actions">
             {rule.actions.map((a, i) => (
-              <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a, true)}</span>
+              <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a, true, t)}</span>
             ))}
           </div>
         )}
         <div className="rule-card-btns">
-          <button className="admin-icon-btn" title="Move up" disabled={isFirst} onClick={e => { e.stopPropagation(); onMoveUp() }}><ArrowUpIcon /></button>
-          <button className="admin-icon-btn" title="Move down" disabled={isLast} onClick={e => { e.stopPropagation(); onMoveDown() }}><ArrowDownIcon /></button>
-          <button className="admin-icon-btn" title="Edit" onClick={e => { e.stopPropagation(); onEdit() }}><PencilIcon /></button>
-          <button className="admin-icon-btn is-danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}><TrashIcon size={13} /></button>
+          <button className="admin-icon-btn" title={t('rules.moveUp')} disabled={isFirst} onClick={e => { e.stopPropagation(); onMoveUp() }}><ArrowUpIcon /></button>
+          <button className="admin-icon-btn" title={t('rules.moveDown')} disabled={isLast} onClick={e => { e.stopPropagation(); onMoveDown() }}><ArrowDownIcon /></button>
+          <button className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })} onClick={e => { e.stopPropagation(); onEdit() }}><PencilIcon /></button>
+          <button className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })} onClick={e => { e.stopPropagation(); onDelete() }}><TrashIcon size={13} /></button>
           <span className="rule-card-btns-sep" aria-hidden="true" />
-          <button className="admin-icon-btn" title={collapsed ? 'Expand' : 'Collapse'} onClick={e => { e.stopPropagation(); setCollapsed(c => !c) }}>
+          <button className="admin-icon-btn" title={t(collapsed ? 'rules.expand' : 'rules.collapse')} onClick={e => { e.stopPropagation(); setCollapsed(c => !c) }}>
             {collapsed ? <ChevronDownIcon /> : <ChevronUpIcon />}
           </button>
         </div>
@@ -255,10 +270,10 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
       {!collapsed && (
         <div className="rule-card-body">
           <div className="rule-card-side">
-            <span className="rule-card-badge">{rule.matchAll ? 'ALL' : 'ANY'}</span>
+            <span className="rule-card-badge">{t(rule.matchAll ? 'rules.badgeAll' : 'rules.badgeAny')}</span>
             <div className="rule-card-conditions">
               {rule.conditions.map((c, i) => (
-                <span key={i} className="rule-card-pill">{summarizeCondition(c)}</span>
+                <span key={i} className="rule-card-pill">{summarizeCondition(c, t)}</span>
               ))}
             </div>
           </div>
@@ -266,12 +281,12 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
             <div className="rule-card-side">
               <div className="rule-card-actions">
                 {rule.actions.map((a, i) => (
-                  <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a, true)}</span>
+                  <span key={i} className="rule-card-pill rule-card-pill-action">{summarizeAction(a, true, t)}</span>
                 ))}
               </div>
             </div>
           )}
-          {rule.stopAfter && <span className="rule-card-stop">stop</span>}
+          {rule.stopAfter && <span className="rule-card-stop">{t('rules.stop')}</span>}
         </div>
       )}
     </div>
@@ -281,6 +296,7 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
 // ── ConditionRow ──────────────────────────────────────────────
 
 export function ConditionRow({ condition, onChange, onRemove, extended = false }) {
+  const { t } = useTranslation('settings')
   const availableFields = extended ? CONDITION_FIELDS : CONDITION_FIELDS.filter(f => !f.extendedOnly)
   const fieldDef = CONDITION_FIELDS.find(f => f.value === condition.field)
   const baseOps = extended ? CONDITION_OPERATORS : CONDITION_OPERATORS.filter(o => !o.extendedOnly)
@@ -311,21 +327,22 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
           })
         }}
       >
-        {availableFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        {availableFields.map(f => <option key={f.value} value={f.value}>{fieldLabel(f.value, t)}</option>)}
       </select>
       {!isDuplicate && !isWeekday && (
         <select
           value={condition.operator}
           onChange={e => onChange({ ...condition, operator: e.target.value })}
         >
-          {availableOperators.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {availableOperators.map(o =>
+            <option key={o.value} value={o.value}>{operatorLabel(o.value, t)}</option>)}
         </select>
       )}
       {condition.field === 'Header' && (
         <input
           type="text"
           className="rule-row-input"
-          placeholder="Header name"
+          placeholder={t('rules.headerNamePlaceholder')}
           value={condition.headerName ?? ''}
           onChange={e => onChange({ ...condition, headerName: e.target.value })}
           style={{ width: '130px', flexShrink: 0 }}
@@ -336,18 +353,18 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
           type="number"
           min="1"
           className="rule-row-input"
-          placeholder="Seconds window (optional)"
+          placeholder={t('rules.secondsPlaceholder')}
           value={condition.value}
           onChange={e => onChange({ ...condition, value: e.target.value })}
           style={{ flex: 1 }}
         />
       ) : isWeekday ? (
         <select
-          value={WEEKDAY_OPTIONS.some(o => o.value === condition.value) ? condition.value : WEEKDAY_OPTIONS[0].value}
+          value={WEEKDAY_VALUES.includes(condition.value) ? condition.value : WEEKDAY_VALUES[0]}
           onChange={e => onChange({ ...condition, value: e.target.value })}
           style={{ flex: 1 }}
         >
-          {WEEKDAY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {WEEKDAY_VALUES.map(v => <option key={v} value={v}>{weekdayLabel(v, t)}</option>)}
         </select>
       ) : isDateField ? (
         <input
@@ -372,13 +389,14 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
         <input
           type="text"
           className="rule-row-input"
-          placeholder="Value"
+          placeholder={t('rules.valuePlaceholder')}
           value={condition.value}
           onChange={e => onChange({ ...condition, value: e.target.value })}
           style={{ flex: 1 }}
         />
       )}
-      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Remove">
+      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove}
+        title={t('actions.remove', { ns: 'common' })}>
         <TrashIcon size={13} />
       </button>
     </div>
@@ -388,6 +406,7 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
 // ── ActionRow ─────────────────────────────────────────────────
 
 export function ActionRow({ action, onChange, onRemove, foldersDatalistId, extended = false }) {
+  const { t } = useTranslation('settings')
   const availableTypes = extended ? ACTION_TYPES : ACTION_TYPES.filter(t => !t.extendedOnly)
   const def = availableTypes.find(t => t.value === action.type) ?? availableTypes[0]
   return (
@@ -400,13 +419,14 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId, exten
           onChange({ type, argument: arg })
         }}
       >
-        {availableTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        {availableTypes.map(type =>
+          <option key={type.value} value={type.value}>{t(`rules.actionTypes.${type.value}`)}</option>)}
       </select>
       {def.hasArg && (
         <input
           type="text"
           className="rule-row-input"
-          placeholder={def.argPlaceholder}
+          placeholder={t(`rules.actionArgs.${def.value}`)}
           value={action.argument ?? ''}
           onChange={e => onChange({ ...action, argument: e.target.value })}
           list={action.type === 'FileInto' && foldersDatalistId ? foldersDatalistId : undefined}
@@ -420,10 +440,11 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId, exten
             checked={action.autoCreate ?? false}
             onChange={e => onChange({ ...action, autoCreate: e.target.checked })}
           />
-          Create
+          {t('rules.autoCreate')}
         </label>
       )}
-      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove} title="Remove">
+      <button className="admin-icon-btn is-danger" type="button" onClick={onRemove}
+        title={t('actions.remove', { ns: 'common' })}>
         <TrashIcon size={13} />
       </button>
     </div>
@@ -432,83 +453,96 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId, exten
 
 // ── RuleHelpModal ─────────────────────────────────────────────
 
+// The badge is an inline element inside one description, so it travels as a component too.
+const HELP_TAGS = { code: <code />, em: <em />, badge: <span className="rule-help-badge" /> }
+
+function Badge() {
+  const { t } = useTranslation('settings')
+  return <span className="rule-help-badge">{t('rules.help.badge')}</span>
+}
+
 function RuleHelpModal({ onClose }) {
+  const { t } = useTranslation('settings')
+  // Built from the keys the dropdowns themselves read: restating the wording here is how the
+  // help dialog ends up contradicting the control it documents.
+  const pair = (a, b) => t('rules.help.termPair', { a, b })
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal rule-help-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Rule editor — help</span>
+          <span className="modal-title">{t('rules.help.title')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="rule-help-body">
 
           <section className="rule-help-section">
-            <h3 className="rule-help-heading">Conditions</h3>
+            <h3 className="rule-help-heading">{t('rules.stepConditions')}</h3>
             <dl className="rule-help-dl">
-              <dt>From / To·Cc / Subject</dt>
-              <dd>Match against the corresponding email header.</dd>
-              <dt>Custom header</dt>
-              <dd>Match any header by name (e.g. <code>X-Spam-Score</code>).</dd>
-              <dt>Size</dt>
-              <dd>Message size in bytes — use <em>is larger than</em> / <em>is smaller than</em>.</dd>
-              <dt>Body <span className="rule-help-badge">Extended</span></dt>
-              <dd>Search inside the message body text.</dd>
-              <dt>Envelope from / Envelope to <span className="rule-help-badge">Extended</span></dt>
-              <dd>Match the real SMTP sender/recipient, ignoring display headers.</dd>
-              <dt>Recipient +detail <span className="rule-help-badge">Extended</span></dt>
-              <dd>Match the <code>+tag</code> part of an address like <code>you+shopping@…</code>.</dd>
-              <dt>Duplicate <span className="rule-help-badge">Extended</span></dt>
-              <dd>Fires when a similar message was already received within the given time window (seconds).</dd>
-              <dt>Current date / Message date <span className="rule-help-badge">Extended</span></dt>
-              <dd>Compare the current date or the date in the message header against a fixed date.</dd>
-              <dt>Current weekday / Current hour <span className="rule-help-badge">Extended</span></dt>
-              <dd>Filter by the day of the week or the hour of the day when the message arrives.</dd>
+              <dt>{t('rules.help.headerTerms')}</dt>
+              <dd><Trans i18nKey="rules.help.headerDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.fields.Header')}</dt>
+              <dd><Trans i18nKey="rules.help.customHeaderDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.help.sizeTerm')}</dt>
+              <dd><Trans i18nKey="rules.help.sizeDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.fields.Body')} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.bodyDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{pair(t('rules.fields.EnvelopeFrom'), t('rules.fields.EnvelopeTo'))} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.envelopeDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.fields.RecipientDetail')} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.detailDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.help.duplicateTerm')} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.duplicateDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{pair(t('rules.fields.CurrentDate'), t('rules.fields.MessageDate'))} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.dateDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{pair(t('rules.fields.CurrentWeekday'), t('rules.fields.CurrentHour'))} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.whenDesc" ns="settings" components={HELP_TAGS} /></dd>
             </dl>
           </section>
 
           <section className="rule-help-section">
-            <h3 className="rule-help-heading">Operators</h3>
+            <h3 className="rule-help-heading">{t('rules.help.operators')}</h3>
             <dl className="rule-help-dl">
-              <dt>contains</dt>
-              <dd>The field includes the text anywhere (case-insensitive).</dd>
-              <dt>equals</dt>
-              <dd>Exact match of the entire field value.</dd>
-              <dt>matches (wildcard)</dt>
-              <dd>Glob pattern — <code>*</code> matches any sequence of characters, <code>?</code> matches exactly one.</dd>
-              <dt>matches (regex) <span className="rule-help-badge">Extended</span></dt>
-              <dd>Full POSIX regular expression.</dd>
-              <dt>is larger than / is smaller than</dt>
-              <dd>Numeric comparison, for the <em>Size</em> field only.</dd>
-              <dt>is before / is on or after</dt>
-              <dd>Date comparison, for date and time fields only.</dd>
+              <dt>{t('rules.operators.Contains')}</dt>
+              <dd><Trans i18nKey="rules.help.containsDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.operators.Equals')}</dt>
+              <dd><Trans i18nKey="rules.help.equalsDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.operators.Matches')}</dt>
+              <dd><Trans i18nKey="rules.help.wildcardDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.operators.Regex')} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.regexDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{pair(t('rules.operators.Larger'), t('rules.operators.Smaller'))}</dt>
+              <dd><Trans i18nKey="rules.help.sizeCompareDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{pair(t('rules.operators.Before'), t('rules.operators.OnOrAfter'))}</dt>
+              <dd><Trans i18nKey="rules.help.dateCompareDesc" ns="settings" components={HELP_TAGS} /></dd>
             </dl>
           </section>
 
           <section className="rule-help-section">
-            <h3 className="rule-help-heading">Actions</h3>
+            <h3 className="rule-help-heading">{t('rules.stepActions')}</h3>
             <dl className="rule-help-dl">
-              <dt>Move to</dt>
-              <dd>Move the message into the specified folder. Enable <em>Create</em> to auto-create the folder if it doesn&apos;t exist <span className="rule-help-badge">Extended</span>.</dd>
-              <dt>Redirect to</dt>
-              <dd>Forward a copy of the message to another address.</dd>
-              <dt>Reject with message</dt>
-              <dd>Refuse the message at delivery with an optional error text sent back to the sender.</dd>
-              <dt>Discard</dt>
-              <dd>Silently drop the message — no bounce, no copy kept.</dd>
-              <dt>Keep in inbox <span className="rule-help-badge">Extended</span></dt>
-              <dd>Explicitly keep a copy in the inbox, useful when combined with another action.</dd>
+              <dt>{t('rules.actionTypes.FileInto')}</dt>
+              <dd><Trans i18nKey="rules.help.fileIntoDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.actionTypes.Redirect')}</dt>
+              <dd><Trans i18nKey="rules.help.redirectDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.actionTypes.Reject')}</dt>
+              <dd><Trans i18nKey="rules.help.rejectDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.actionTypes.Discard')}</dt>
+              <dd><Trans i18nKey="rules.help.discardDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.actionTypes.Keep')} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.keepDesc" ns="settings" components={HELP_TAGS} /></dd>
             </dl>
           </section>
 
           <section className="rule-help-section">
-            <h3 className="rule-help-heading">Options</h3>
+            <h3 className="rule-help-heading">{t('rules.stepOptions')}</h3>
             <dl className="rule-help-dl">
-              <dt>Mark as read</dt>
-              <dd>Automatically mark the message as read upon delivery.</dd>
-              <dt>Mark as flagged ⭐ <span className="rule-help-badge">Extended</span></dt>
-              <dd>Add the starred/flagged flag to the message.</dd>
-              <dt>Stop processing after this rule</dt>
-              <dd>If this rule matches, no further rules in the list are evaluated. Without this, all matching rules apply in order.</dd>
+              <dt>{t('rules.markAsRead')}</dt>
+              <dd><Trans i18nKey="rules.help.markReadDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.markAsFlagged')} <Badge /></dt>
+              <dd><Trans i18nKey="rules.help.markFlaggedDesc" ns="settings" components={HELP_TAGS} /></dd>
+              <dt>{t('rules.stopAfter')}</dt>
+              <dd><Trans i18nKey="rules.help.stopAfterDesc" ns="settings" components={HELP_TAGS} /></dd>
             </dl>
           </section>
 
@@ -521,6 +555,7 @@ function RuleHelpModal({ onClose }) {
 // ── RuleEditorModal ───────────────────────────────────────────
 
 export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended = false }) {
+  const { t } = useTranslation('settings')
   const isNew = !initialRule
   const accountId = useAccountId()
   const [rule, setRule] = useState(() => {
@@ -590,9 +625,9 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!rule.name.trim()) { setError('Name is required'); return }
-    if (rule.conditions.length === 0) { setError('At least one condition is required'); return }
-    if (rule.actions.length === 0) { setError('At least one action is required'); return }
+    if (!rule.name.trim()) { setError(t('rules.nameRequired')); return }
+    if (rule.conditions.length === 0) { setError(t('rules.conditionRequired')); return }
+    if (rule.actions.length === 0) { setError(t('rules.actionRequired')); return }
     setError(null)
     const flagActions = [
       ...(markAsRead    ? [{ type: 'SetFlag', argument: '\\Seen' }]    : []),
@@ -605,8 +640,9 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isNew ? 'New rule' : 'Edit rule'}</span>
-          <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)} title="Help">?</button>
+          <span className="modal-title">{t(isNew ? 'rules.newRule' : 'rules.editRule')}</span>
+          <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)}
+            title={t('rules.helpTitle')}>?</button>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
@@ -627,7 +663,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                 <div className="rule-wizard-line" />
               </div>
               <div className="rule-wizard-body">
-                <div className="rule-wizard-title">Name</div>
+                <div className="rule-wizard-title">{t('rules.stepName')}</div>
                 <input
                   type="text"
                   className="rule-wizard-input"
@@ -646,18 +682,18 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
               </div>
               <div className={`rule-wizard-body${step2Unlocked ? '' : ' rule-wizard-body--locked'}`}>
                 <div className="rule-wizard-step-header">
-                  <span className="rule-wizard-title">Conditions</span>
+                  <span className="rule-wizard-title">{t('rules.stepConditions')}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <select
                       className="rule-wizard-select"
                       value={rule.matchAll ? 'all' : 'any'}
                       onChange={e => setField('matchAll', e.target.value === 'all')}
                     >
-                      <option value="any">Any (anyof)</option>
-                      <option value="all">All (allof)</option>
+                      <option value="any">{t('rules.anyOf')}</option>
+                      <option value="all">{t('rules.allOf')}</option>
                     </select>
                     <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
-                      <PlusIcon /> Add
+                      <PlusIcon /> {t('actions.add', { ns: 'common' })}
                     </button>
                   </div>
                 </div>
@@ -668,11 +704,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                     extended={extended} />
                 ))}
                 {rule.conditions.length === 0 && (
-                  <p className="rule-editor-empty">No conditions — applies to all messages.</p>
+                  <p className="rule-editor-empty">{t('rules.noConditions')}</p>
                 )}
                 <p className="rule-wizard-hint">
-                  <strong>Any</strong> — fires if at least one condition matches.&ensp;
-                  <strong>All</strong> — every condition must match.
+                  <Trans i18nKey="rules.matchHint" ns="settings" />
                 </p>
               </div>
             </div>
@@ -684,10 +719,10 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
               </div>
               <div className={`rule-wizard-body${step3Unlocked ? '' : ' rule-wizard-body--locked'}`}>
                 <div className="rule-wizard-step-header">
-                  <span className="rule-wizard-title">Actions</span>
+                  <span className="rule-wizard-title">{t('rules.stepActions')}</span>
                   {(extended || rule.actions.length === 0) && (
                     <button type="button" className="rule-editor-add-btn" onClick={addAction}>
-                      <PlusIcon /> Add
+                      <PlusIcon /> {t('actions.add', { ns: 'common' })}
                     </button>
                   )}
                 </div>
@@ -699,7 +734,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                     foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
                 ))}
                 {rule.actions.length === 0 && (
-                  <p className="rule-editor-empty">No actions defined.</p>
+                  <p className="rule-editor-empty">{t('rules.noActions')}</p>
                 )}
               </div>
             </div>
@@ -709,14 +744,14 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                 <div className={circleClass(step4Unlocked, step4Unlocked)}>4</div>
               </div>
               <div className={`rule-wizard-body${step4Unlocked ? '' : ' rule-wizard-body--locked'}`}>
-                <div className="rule-wizard-title">Options</div>
+                <div className="rule-wizard-title">{t('rules.stepOptions')}</div>
                 <div className="rule-wizard-toggle-row">
                   <label className="toggle-switch">
                     <input type="checkbox" checked={markAsRead}
                       onChange={e => setMarkAsRead(e.target.checked)} />
                     <span className="toggle-track" />
                   </label>
-                  <span className="rule-wizard-toggle-label">Mark as read</span>
+                  <span className="rule-wizard-toggle-label">{t('rules.markAsRead')}</span>
                 </div>
                 {extended && (
                   <div className="rule-wizard-toggle-row">
@@ -725,7 +760,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                         onChange={e => setMarkAsFlagged(e.target.checked)} />
                       <span className="toggle-track" />
                     </label>
-                    <span className="rule-wizard-toggle-label">Mark as flagged ⭐</span>
+                    <span className="rule-wizard-toggle-label">{t('rules.markAsFlagged')}</span>
                   </div>
                 )}
                 <div className="rule-wizard-toggle-row">
@@ -735,8 +770,8 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
                     <span className="toggle-track" />
                   </label>
                   <span className="rule-wizard-toggle-label">
-                    Stop processing after this rule
-                    <span className="rule-wizard-hint rule-wizard-hint--inline">If this rule matches, the remaining rules are skipped.</span>
+                    {t('rules.stopAfter')}
+                    <span className="rule-wizard-hint rule-wizard-hint--inline">{t('rules.stopAfterHint')}</span>
                   </span>
                 </div>
               </div>
@@ -745,9 +780,11 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
           </div>
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
+              {t('actions.cancel', { ns: 'common' })}
+            </button>
             <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={!canSubmit}>
-              {isNew ? 'Create rule' : 'Save changes'}
+              {isNew ? t('rules.createRule') : t('actions.saveChanges', { ns: 'common' })}
             </button>
           </div>
         </form>
@@ -759,31 +796,33 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 // ── ConvertConfirmModal (weesky → rainloop, lists rules that will be lost) ──
 
 export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading }) {
+  const { t } = useTranslation('settings')
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Turn off extended rules?</span>
+          <span className="modal-title">{t('rules.convertTitle')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <p style={{ margin: '0 0 12px', fontSize: '14px' }}>
-          The following {incompatible.length} rule{incompatible.length !== 1 ? 's' : ''} use
-          features the Rainloop format can&apos;t store and will be <strong>deleted</strong>:
+          <Trans i18nKey="rules.convertBody" ns="settings" count={incompatible.length} />
         </p>
         <ul className="convert-lost-list">
           {incompatible.map(r => (
             <li key={r.id}>
-              <span className="convert-lost-name">{r.name || '(unnamed rule)'}</span>
+              <span className="convert-lost-name">{r.name || t('rules.unnamed')}</span>
               <span className="convert-lost-reason">{r.reason}</span>
             </li>
           ))}
         </ul>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>
+            {t('actions.cancel', { ns: 'common' })}
+          </button>
           <button className="btn btn-primary"
             style={{ width: 'auto', background: 'var(--danger)', borderColor: 'var(--danger)' }}
             onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Delete & switch'}
+            {loading ? <span className="spinner" /> : t('rules.deleteAndSwitch')}
           </button>
         </div>
       </div>
@@ -794,6 +833,7 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
 // ── RulesPage ─────────────────────────────────────────────────
 
 export default function RulesPage() {
+  const { t } = useTranslation('settings')
   const { toasts, addToast, removeToast } = useToasts()
   // The script belongs to the active mailbox: the backend swaps the ManageSieve target on it.
   const accountId = useAccountId()
@@ -829,7 +869,7 @@ export default function RulesPage() {
       setRules(data.rules ?? [])
       setLoadedFor(accountId)
     } catch (err) {
-      addToast(extractError(err) || 'Failed to load rules', 'error')
+      addToast(extractError(err) || i18next.t('settings:rules.loadFailed'), 'error')
     } finally {
       setLoading(false)
     }
@@ -841,7 +881,7 @@ export default function RulesPage() {
   // on screen for a render. A write refuses whenever it no longer belongs to the active account.
   function belongsToActiveAccount() {
     if (loadedFor === accountId) return true
-    addToast('These rules are not the selected account’s — reload the page', 'error')
+    addToast(t('rules.wrongAccount'), 'error')
     return false
   }
 
@@ -851,9 +891,9 @@ export default function RulesPage() {
     try {
       await api.saveRules(updatedRules, ruleSet?.providerId, ruleSet?.scriptName, { accountId })
       setRules(updatedRules)
-      addToast('Rules saved')
+      addToast(t('rules.saved'))
     } catch (err) {
-      addToast(extractError(err) || 'Failed to save rules', 'error')
+      addToast(extractError(err) || t('rules.saveFailed'), 'error')
     } finally {
       setSaving(false)
     }
@@ -867,9 +907,9 @@ export default function RulesPage() {
       setRules([])
       setRuleSet(prev => prev ? { ...prev, kind: 'Structured', rules: [] } : prev)
       setConfirmDeleteAll(false)
-      addToast('Script deleted')
+      addToast(t('rules.scriptDeleted'))
     } catch (err) {
-      addToast(extractError(err) || 'Failed to delete script', 'error')
+      addToast(extractError(err) || t('rules.deleteScriptFailed'), 'error')
     } finally {
       setDeleting(false)
     }
@@ -885,9 +925,9 @@ export default function RulesPage() {
       await api.saveRules(rulesToSave, targetProviderId, null, { accountId })
       setRules(rulesToSave)
       setRuleSet(prev => prev ? { ...prev, providerId: targetProviderId, scriptName: null } : prev)
-      addToast(targetProviderId === 'weesky' ? 'Extended rules enabled' : 'Switched to Rainloop')
+      addToast(t(targetProviderId === 'weesky' ? 'rules.extendedEnabled' : 'rules.switchedRainloop'))
     } catch (err) {
-      addToast(extractError(err) || 'Failed to switch rule format', 'error')
+      addToast(extractError(err) || t('rules.switchFailed'), 'error')
     } finally {
       setSwitching(false)
     }
@@ -913,7 +953,7 @@ export default function RulesPage() {
       }
     } catch (err) {
       setSwitching(false)
-      addToast(extractError(err) || 'Failed to check compatibility', 'error')
+      addToast(extractError(err) || t('rules.compatFailed'), 'error')
     }
   }
 
@@ -985,26 +1025,24 @@ export default function RulesPage() {
         <div className="settings-page-header">
           <h1 className="settings-page-title">
             <FunnelIcon size={17} />
-            Rules
+            {t('nav.rules')}
             {providerLabel && <span className="provider-badge">{providerLabel}</span>}
           </h1>
         </div>
         <div className="rules-modal-body">
-            <p className="rules-modal-desc">
-              Create and manage rules that define how your incoming messages are handled. Rules are processed from top to bottom.
-            </p>
+            <p className="rules-modal-desc">{t('rules.intro')}</p>
 
             {loading ? (
               <div className="loading-center"><span className="spinner" /></div>
             ) : ruleSet?.kind === 'Advanced' ? (
               <div className="rules-notice">
-                <p>The current script cannot be parsed as structured rules.</p>
-                <p>Delete it to start fresh with the rule editor.</p>
+                <p>{t('rules.advancedUnparsable')}</p>
+                <p>{t('rules.advancedDeleteHint')}</p>
                 <div style={{ marginTop: '16px' }}>
                   <button className="btn"
                     style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
                     onClick={() => setConfirmDeleteAll(true)}>
-                    Delete script
+                    {t('rules.deleteScript')}
                   </button>
                 </div>
               </div>
@@ -1012,11 +1050,11 @@ export default function RulesPage() {
               <div>
                 <div className="rules-toolbar">
                   <span className="rules-count">
-                    {rules.length} rule{rules.length !== 1 ? 's' : ''}
+                    {t('rules.count', { count: rules.length })}
                     {saving && <span className="spinner" style={{ marginLeft: '8px' }} />}
                   </span>
                   <div className="extended-rules-toggle" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label className="toggle-switch" title="Extended rules">
+                    <label className="toggle-switch" title={t('rules.extended')}>
                       <input
                         type="checkbox"
                         checked={extended}
@@ -1025,8 +1063,8 @@ export default function RulesPage() {
                       />
                       <span className="toggle-track" />
                     </label>
-                    <span className="rule-wizard-toggle-label">Extended rules</span>
-                    <HelpTooltip text={EXTENDED_RULES_HELP} />
+                    <span className="rule-wizard-toggle-label">{t('rules.extended')}</span>
+                    <HelpTooltip text={t('rules.extendedHelp')} />
                     {switching && <span className="spinner" />}
                   </div>
                   <button
@@ -1034,13 +1072,13 @@ export default function RulesPage() {
                     style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}
                     onClick={() => setRuleToEdit(null)}
                   >
-                    <PlusIcon /> New rule
+                    <PlusIcon /> {t('rules.newRule')}
                   </button>
                 </div>
 
                 {rules.length === 0 ? (
                   <div className="rules-empty">
-                    No rules yet. Click <strong>New rule</strong> to get started.
+                    <Trans i18nKey="rules.empty" ns="settings" />
                   </div>
                 ) : (
                   <div className="rules-list">
@@ -1089,7 +1127,7 @@ export default function RulesPage() {
 
       {ruleToDelete && (
         <DeleteConfirmModal
-          entityLabel={`rule "${ruleToDelete.name}"`}
+          entityLabel={t('rules.ruleEntity', { name: ruleToDelete.name })}
           onConfirm={handleDeleteRule}
           onClose={() => setRuleToDelete(null)}
           loading={deleting}
@@ -1098,7 +1136,7 @@ export default function RulesPage() {
 
       {confirmDeleteAll && (
         <DeleteConfirmModal
-          entityLabel="script"
+          entityLabel={t('rules.scriptEntity')}
           onConfirm={handleDeleteAll}
           onClose={() => setConfirmDeleteAll(false)}
           loading={deleting}

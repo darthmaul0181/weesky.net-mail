@@ -722,13 +722,14 @@ describe('opening a draft from the drafts folder', () => {
     expect(mocks.openDraft).toHaveBeenCalledTimes(1)
   })
 
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
   it('toasts instead of navigating when the draft cannot be opened', async () => {
     mocks.openDraft.mockRejectedValue(new Error('Draft is gone'))
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
 
     fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
 
-    expect(await screen.findByText('Draft is gone')).toBeInTheDocument()
+    expect(await screen.findByText('Could not open the draft')).toBeInTheDocument()
     expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/)
   })
 })

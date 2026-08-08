@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
 } from '../../../hooks/usePreferences'
@@ -51,10 +52,6 @@ interface Props {
   onOpenResult?: (uid: number, folderPath: string) => void
 }
 
-const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
-const NO_JUNK = 'Assign the junk folder in Settings → Folders'
-const NO_TRASH = 'Assign the trash folder in Settings → Folders'
-
 /**
  * Three bands: a heading, the rows, and the footer. Only the middle one scrolls — the pager
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
@@ -62,6 +59,7 @@ const NO_TRASH = 'Assign the trash folder in Settings → Folders'
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
     onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
+  const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
   const showsPreview = preferences ? showPreviewOf(preferences) : true
@@ -115,15 +113,16 @@ export default function MessageList(
   const [draggingUids, setDraggingUids] = useState<number[] | null>(null)
   const inTrash = folderRole === 'trash'
   const archiveOff = !roles.archive || folderRole === 'archive'
-  const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
+  const archiveReason = t(folderRole === 'archive' ? 'actions.alreadyArchived' : 'actions.noArchiveFolder')
   const junkOff = !roles.junk || folderRole === 'junk'
-  const junkReason = folderRole === 'junk' ? 'Already in the junk folder' : NO_JUNK
+  const junkReason = t(folderRole === 'junk' ? 'actions.alreadyJunk' : 'actions.noJunkFolder')
   const trashOff = !inTrash && !roles.trash
-  const deleteLabel = inTrash ? 'Delete permanently' : 'Delete'
+  const deleteLabel = inTrash
+    ? t('actions.deletePermanently') : t('actions.delete', { ns: 'common' })
   const purges = folderRole === 'trash' || folderRole === 'junk'
   const emptyReason = total === 0
-    ? 'This folder is already empty'
-    : (!purges && !roles.trash ? NO_TRASH : undefined)
+    ? t('list.alreadyEmpty')
+    : (!purges && !roles.trash ? t('actions.noTrashFolder') : undefined)
 
   // The hook keeps no row list; the effective selection is what it holds intersected with what
   // is on screen, so a departed row stops counting on its own. resetKey clears on folder change
@@ -297,16 +296,18 @@ export default function MessageList(
     onRows?.(crossFolder ? [] : messages.map(message => message.uid))
   }, [messages, crossFolder, onRows])
 
-  if (!folderPath) return <p className="mail-empty">Select a folder</p>
+  if (!folderPath) return <p className="mail-empty">{t('list.selectFolder')}</p>
 
   // The drafts folder has no sender worth showing — it's always the account itself — so the row
   // names who the draft is going to instead, with a marker calling out that it isn't sent mail.
   const drafts = folderRole === 'drafts'
 
   function rows() {
-    if (isLoading) return <p className="mail-empty">{searching ? 'Searching…' : 'Loading messages…'}</p>
-    if (isError) return <p className="mail-empty">Could not load messages.</p>
-    if (messages.length === 0) return <p className="mail-empty">{searching ? 'No results.' : 'No messages'}</p>
+    if (isLoading) return <p className="mail-empty">{t(searching ? 'search.searching' : 'list.loading')}</p>
+    if (isError) return <p className="mail-empty">{t('list.loadFailed')}</p>
+    if (messages.length === 0) {
+      return <p className="mail-empty">{t(searching ? 'list.noResults' : 'list.noMessages')}</p>
+    }
 
     const sentinelRow = streaming?.hasMore ? sentinelIndexOf(messages.length) : -1
 
@@ -323,26 +324,32 @@ export default function MessageList(
             const from = drafts
               ? (message.to.length > 0
                   ? message.to.map(a => a.name || a.address).join(', ')
-                  : '(no recipient)')
+                  : t('list.noRecipient'))
               : (message.fromName || message.fromAddress)
-            const subject = message.subject || '(no subject)'
+            const subject = message.subject || t('list.noSubject')
             const when = formatListDate(message.date)
-            const seenLabel = message.seen ? 'Mark as unread' : 'Mark as read'
-            const priorityLabel = message.priority === 'high' ? 'High priority'
-              : message.priority === 'low' ? 'Low priority' : null
+            const seenLabel = t(message.seen ? 'toolbar.markUnread' : 'toolbar.markRead')
+            const priorityLabel = message.priority === 'high' ? t('list.highPriority')
+              : message.priority === 'low' ? t('list.lowPriority') : null
             // A word in the Draft badge's slot, not a glyph in the subject line: a glyph there sat
             // in the text flow, so a marked row started its subject 17px right of every other one
             // and the column lost the axis the eye scans down.
             const priorityMark = priorityLabel && (
               <span className={`message-row-priority is-${message.priority}`} title={priorityLabel}>
-                {message.priority === 'high' ? 'High' : 'Low'}
+                {t(message.priority === 'high' ? 'list.high' : 'list.low')}
               </span>
             )
             // role=button is children-presentational: nothing inside the row is exposed on its
             // own, so everything the row states visually has to be said in its name.
-            const label = `${message.seen ? '' : 'Unread. '}${drafts ? 'Draft. ' : ''}`
-              + `${priorityLabel ? priorityLabel + '. ' : ''}${from}: ${subject}`
-              + `${message.hasAttachments ? ', has attachments' : ''}, ${when}`
+            const label = t('list.rowLabel', {
+              prefix: `${message.seen ? '' : t('list.aria.unread')}`
+                + `${drafts ? t('list.aria.draft') : ''}`
+                + `${priorityLabel ? t('list.aria.priority', { label: priorityLabel }) : ''}`,
+              from,
+              subject,
+              attachments: message.hasAttachments ? t('list.aria.hasAttachments') : '',
+              when,
+            })
 
             // Cross-folder results neutralize row selection and actions: the row lives in another
             // folder, so a checkbox, star or cluster acting on this one would act on the wrong mailbox.
@@ -350,7 +357,7 @@ export default function MessageList(
               <input
                 type="checkbox"
                 className="message-row-check"
-                aria-label={`Select message from ${from}`}
+                aria-label={t('list.selectMessage', { from })}
                 checked={selection.has(message.uid)}
                 onClick={event => {
                   event.stopPropagation()
@@ -365,7 +372,7 @@ export default function MessageList(
               <button
                 type="button"
                 className={`row-btn row-star${message.flagged ? ' is-on' : ''}`}
-                aria-label={message.flagged ? 'Unstar' : 'Star'}
+                aria-label={t(message.flagged ? 'list.unstar' : 'list.star')}
                 onClick={event => { event.stopPropagation(); toggle(message, 'flagged') }}
               >
                 <StarIcon filled={message.flagged} size={18} />
@@ -393,9 +400,9 @@ export default function MessageList(
                   key="archive"
                   type="button"
                   className="row-btn"
-                  aria-label="Archive"
+                  aria-label={t('toolbar.archive')}
                   disabled={archiveOff}
-                  title={archiveOff ? archiveReason : 'Archive'}
+                  title={archiveOff ? archiveReason : t('toolbar.archive')}
                   onClick={event => { event.stopPropagation(); moveTo(roles.archive, message.uid) }}
                 >
                   <ArchiveIcon size={18} />
@@ -406,9 +413,9 @@ export default function MessageList(
                   key="junk"
                   type="button"
                   className="row-btn"
-                  aria-label="Report as junk"
+                  aria-label={t('toolbar.junk')}
                   disabled={junkOff}
-                  title={junkOff ? junkReason : 'Report as junk'}
+                  title={junkOff ? junkReason : t('toolbar.junk')}
                   onClick={event => { event.stopPropagation(); moveTo(roles.junk, message.uid) }}
                 >
                   <JunkIcon size={18} />
@@ -421,7 +428,7 @@ export default function MessageList(
                   className="row-btn is-danger"
                   aria-label={deleteLabel}
                   disabled={trashOff}
-                  title={trashOff ? NO_TRASH : deleteLabel}
+                  title={trashOff ? t('actions.noTrashFolder') : deleteLabel}
                   onClick={event => {
                     event.stopPropagation()
                     if (inTrash) setExpunging(message)
@@ -460,10 +467,10 @@ export default function MessageList(
                     <>
                       {check}
                       {!message.seen && <span className="message-row-unread-dot" />}
-                      {drafts && <span className="message-row-draft">Draft</span>}
+                      {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
                       {priorityMark}
                       <span className="message-row-from">{from}</span>
-                      {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
+                      {message.hasAttachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
                       <span className="message-row-line">
                         {subject}
                         {showsPreview && message.preview && (
@@ -479,10 +486,10 @@ export default function MessageList(
                       {check}
                       <div className="message-row-top">
                         {!message.seen && <span className="message-row-unread-dot" />}
-                        {drafts && <span className="message-row-draft">Draft</span>}
+                        {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
                         {priorityMark}
                         <span className="message-row-from">{from}</span>
-                        {message.hasAttachments && <PaperclipIcon size={13} title="Has attachments" />}
+                        {message.hasAttachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
                         <span className="message-row-date">{when}</span>
                         {star}
                       </div>
@@ -500,11 +507,11 @@ export default function MessageList(
           })}
         </ul>
 
-        {streaming?.isLoadingMore && <p className="mail-block-state">Loading more…</p>}
+        {streaming?.isLoadingMore && <p className="mail-block-state">{t('list.loadingMore')}</p>}
         {streaming?.loadMoreFailed && (
           <p className="mail-block-state">
-            Could not load more.{' '}
-            <button type="button" className="mail-retry" onClick={streaming.loadMore}>Retry</button>
+            {t('list.loadMoreFailed')}{' '}
+            <button type="button" className="mail-retry" onClick={streaming.loadMore}>{t('list.retry')}</button>
           </p>
         )}
       </>
@@ -526,7 +533,7 @@ export default function MessageList(
         deleteLabel={deleteLabel}
         archive={{ onRun: () => bulkMove(roles.archive, false), disabledReason: archiveOff ? archiveReason : undefined }}
         junk={{ onRun: () => bulkMove(roles.junk, false), disabledReason: junkOff ? junkReason : undefined }}
-        del={{ onRun: bulkDelete, disabledReason: trashOff ? NO_TRASH : undefined }}
+        del={{ onRun: bulkDelete, disabledReason: trashOff ? t('actions.noTrashFolder') : undefined }}
         move={{ onRun: () => setPicker({ mode: 'move' }) }}
         copy={{ onRun: () => setPicker({ mode: 'copy' }) }}
         markRead={{ onRun: () => bulkMark(true) }}
@@ -534,7 +541,7 @@ export default function MessageList(
         emptyFolder={{ onRun: requestEmpty,
           // Emptying acts on the whole real folder, so it is off under a search: its reason would
           // otherwise read off the search total, and the non-purge branch fires with no confirm.
-          disabledReason: searching ? 'Clear the search first' : emptyReason }}
+          disabledReason: searching ? t('list.clearSearchFirst') : emptyReason }}
         searchOpen={searchOpen}
         onToggleSearch={toggleSearch}
         starred={starred}
@@ -578,7 +585,7 @@ export default function MessageList(
       {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
       {expunging && (
         <DeleteConfirmModal
-          entityLabel={expunging.subject || '(no subject)'}
+          entityLabel={expunging.subject || t('list.noSubject')}
           onConfirm={expunge}
           onClose={() => setExpunging(null)}
           loading={deleteMessages.isPending}
@@ -598,7 +605,7 @@ export default function MessageList(
       {/* Bulk in-trash expunge: the same modal as a single row, named for the whole batch. */}
       {confirmingBulk && (
         <DeleteConfirmModal
-          entityLabel={`${count} message${count === 1 ? '' : 's'}`}
+          entityLabel={t('list.bulkLabel', { count })}
           onConfirm={expungeBulk}
           onClose={() => setConfirmingBulk(false)}
           loading={deleteMessages.isPending}
@@ -612,9 +619,9 @@ export default function MessageList(
           entityLabel={folderName || folderPath}
           message={
             <>
-              This action will permanently delete all emails from the {folderName || folderPath} folder.
+              {t('list.emptyConfirmLine1', { folder: folderName || folderPath })}
               <br />
-              This action cannot be interrupted or undone.
+              {t('list.emptyConfirmLine2')}
             </>
           }
           onConfirm={confirmEmpty}

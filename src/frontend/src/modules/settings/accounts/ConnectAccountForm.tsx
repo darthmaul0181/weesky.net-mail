@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
-  errorText, leaveTo, PROVIDER_REFUSED, useConnectableDomains, useConnectAccount,
+  errorText, leaveTo, providerRefused, useConnectableDomains, useConnectAccount,
   useStartOAuthConnect,
 } from './useConnectedAccounts'
 
@@ -15,6 +16,7 @@ interface Props {
  * server, which travels as a null domain.
  */
 export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
+  const { t } = useTranslation('settings')
   const { data: domains } = useConnectableDomains()
   const connect = useConnectAccount()
   const startConnect = useStartOAuthConnect()
@@ -59,7 +61,7 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
       const { authorizationUrl } = await startConnect.mutateAsync({ domainId })
       leaveTo(authorizationUrl)
     } catch (failure) {
-      setError(errorText(failure, PROVIDER_REFUSED))
+      setError(errorText(failure, providerRefused()))
       setLeaving(false)
     }
   }
@@ -67,8 +69,9 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
   return (
     <div className="connect-account-panel">
       <div className="admin-list-header">
-        <span className="admin-list-title">Connect an account</span>
-        <button type="button" className="modal-close" aria-label="Close" onClick={onCancel}>✕</button>
+        <span className="admin-list-title">{t('accounts.connect')}</span>
+        <button type="button" className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
+          onClick={onCancel}>✕</button>
       </div>
 
       <form onSubmit={submit}>
@@ -77,11 +80,11 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
         {/* .field-h puts the label beside its control: without the htmlFor/id pair the control
             has no accessible name. */}
         <div className="field-h">
-          <label htmlFor="connect-server">Server</label>
+          <label htmlFor="connect-server">{t('accounts.server')}</label>
           {/* The refusal named the fields that are about to disappear, so it cannot outlive them. */}
           <select id="connect-server" value={domainId}
             onChange={e => { setError(null); setDomainId(e.target.value) }}>
-            <option value="">Weesky (local)</option>
+            <option value="">{t('accounts.localServer')}</option>
             {(domains ?? []).map(domain => (
               <option key={domain.id} value={domain.id}>{domain.name}</option>
             ))}
@@ -91,13 +94,13 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
         {!isOAuth && (
           <>
             <div className="field-h">
-              <label htmlFor="connect-email">Email</label>
+              <label htmlFor="connect-email">{t('accounts.email')}</label>
               <input id="connect-email" type="email" autoComplete="off" ref={focusOnFirstMount}
                 value={email} onChange={e => setEmail(e.target.value)} />
             </div>
 
             <div className="field-h">
-              <label htmlFor="connect-password">Password</label>
+              <label htmlFor="connect-password">{t('accounts.password')}</label>
               <input id="connect-password" type="password" autoComplete="new-password"
                 value={password} onChange={e => setPassword(e.target.value)} />
             </div>
@@ -106,20 +109,20 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
 
         <p className="settings-note">
           {isOAuth
-            ? `Weesky never sees your password — you sign in at ${selected!.name} and grant access.`
-            : 'The connection is verified before the account is saved.'}
+            ? t('accounts.oauthNote', { provider: selected!.name })
+            : t('accounts.verifyNote')}
         </p>
 
         {isOAuth
           ? (
             <button type="submit" className="btn btn-primary btn-auto" disabled={leaving}>
-              {leaving ? <span className="spinner" /> : `Sign in with ${selected!.name}`}
+              {leaving ? <span className="spinner" /> : t('accounts.signInWith', { provider: selected!.name })}
             </button>
           )
           : (
             <button type="submit" className="btn btn-primary btn-auto"
               disabled={connect.isPending || !email.trim() || password === ''}>
-              {connect.isPending ? <span className="spinner" /> : 'Connect'}
+              {connect.isPending ? <span className="spinner" /> : t('accounts.connectButton')}
             </button>
           )}
       </form>

@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18next from 'i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 import { mailKeys, useAccountId } from '../../mail/queries'
 import { useToasts } from '../../../hooks/useToasts.js'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import Toasts from '../../../components/Toasts.jsx'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import AtSignIcon from '../../../icons/AtSignIcon'
 
 export default function AliasesPage() {
+  const { t } = useTranslation('settings')
   const { toasts, addToast, removeToast } = useToasts()
   const queryClient = useQueryClient()
   const accountId = useAccountId()
@@ -64,7 +68,7 @@ export default function AliasesPage() {
       const data = await api.getAliases()
       setAliases(data ?? [])
     } catch {
-      setListError('Failed to load aliases.')
+      setListError(i18next.t('settings:aliases.loadFailed'))
     } finally {
       setLoadingList(false)
     }
@@ -99,9 +103,9 @@ export default function AliasesPage() {
       await api.deleteAlias(name, domain)
       setAliases(prev => prev.filter(a => !(a.name === name && a.domain === domain)))
       invalidateAliasCaches()
-      addToast(`${key} deleted`)
+      addToast(t('aliases.deleted', { alias: key }))
     } catch (err) {
-      addToast(err.message || 'Failed to delete alias.', 'error')
+      addToast(apiErrorMessage(err, t('aliases.deleteFailed')), 'error')
       fetchAliases()
     } finally {
       setDeletingKey(null)
@@ -114,12 +118,12 @@ export default function AliasesPage() {
       await api.createAlias(search, selectedDomain)
       const key = `${search}@${selectedDomain}`
       invalidateAliasCaches()
-      addToast(`${key} added`)
+      addToast(t('aliases.added', { alias: key }))
       setSearch('')
       await fetchAliases()
       setHighlightedKey(key)
     } catch (err) {
-      addToast(err.message || 'Failed to create alias.', 'error')
+      addToast(apiErrorMessage(err, t('aliases.createFailed')), 'error')
     } finally {
       setAdding(false)
     }
@@ -147,13 +151,13 @@ export default function AliasesPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><AtSignIcon size={17} />Aliases</h1>
+        <h1 className="settings-page-title"><AtSignIcon size={17} />{t('nav.aliases')}</h1>
       </div>
 
       <div className="domain-toolbar">
         {domains.length > 1 && (
           <>
-            <label htmlFor="domain-select" className="domain-label">Domain</label>
+            <label htmlFor="domain-select" className="domain-label">{t('aliases.domain')}</label>
             <select
               id="domain-select"
               className="domain-select"
@@ -169,12 +173,12 @@ export default function AliasesPage() {
         <input
           className={`search-input${search.length > 30 ? ' is-error' : ''}`}
           type="search"
-          placeholder="Search or create…"
+          placeholder={t('aliases.searchPlaceholder')}
           value={search}
           onChange={e => {
             const val = e.target.value
             if (val.length > 30 && search.length <= 30) {
-              addToast('An alias cannot exceed 30 characters', 'error')
+              addToast(t('aliases.tooLong'), 'error')
             }
             setSearch(val)
           }}
@@ -189,10 +193,10 @@ export default function AliasesPage() {
           onClick={handleAdd}
           disabled={adding || !selectedDomain || !search.trim() || search.length > 30}
         >
-          {adding ? <span className="spinner" /> : 'Create alias'}
+          {adding ? <span className="spinner" /> : t('aliases.create')}
         </button>
         <label className="toggle-row alias-alpha-toggle" style={{ marginLeft: 'auto' }}>
-          <span className="toggle-label">Alphabetical</span>
+          <span className="toggle-label">{t('aliases.alphabetical')}</span>
           <span className="toggle-switch">
             <input
               type="checkbox"
@@ -211,7 +215,7 @@ export default function AliasesPage() {
           <span className="spinner" />
         </div>
       ) : visibleAliases.length === 0 ? (
-        <div className="alias-empty-grid">No aliases for this domain.</div>
+        <div className="alias-empty-grid">{t('aliases.empty')}</div>
       ) : alphaMode ? (
         <div className="alias-view-wrapper">
           <div className="alias-scroll-area" ref={scrollRef} onScroll={handleScroll}>
@@ -239,7 +243,7 @@ export default function AliasesPage() {
                         <button
                           className="alias-tile-delete"
                           onClick={() => setPendingDelete({ name: a.name, domain: a.domain })}
-                          title="Delete"
+                          title={t('actions.delete', { ns: 'common' })}
                         >
                           <TrashIcon />
                         </button>
@@ -278,7 +282,7 @@ export default function AliasesPage() {
                 <button
                   className="alias-tile-delete"
                   onClick={() => setPendingDelete({ name: a.name, domain: a.domain })}
-                  title="Delete"
+                  title={t('actions.delete', { ns: 'common' })}
                 >
                   <TrashIcon />
                 </button>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import {
   APP_SETTING_KEYS, installableOf, useAppSettings, useSetAppSetting,
 } from '../../../hooks/useAppSettings'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
 interface Props {
   addToast: (message: string, kind?: string) => void
@@ -16,6 +18,7 @@ interface Props {
  * app stays installed, it simply stops being offered to others.
  */
 export default function ApplicationTab({ addToast }: Props) {
+  const { t } = useTranslation('admin')
   const { data: settings, isLoading, isError } = useAppSettings()
   const setSetting = useSetAppSetting()
   const [name, setName] = useState('')
@@ -30,7 +33,7 @@ export default function ApplicationTab({ addToast }: Props) {
   }, [settings])
 
   if (isLoading) return <LoadingBlock />
-  if (isError || !settings) return <p>Could not load the settings.</p>
+  if (isError || !settings) return <p>{t('application.loadFailed')}</p>
 
   // Narrowed once, here: a nested function below closes over this rather than over `settings`
   // itself, since TypeScript's narrowing from the guard above does not reach into a closure.
@@ -42,7 +45,7 @@ export default function ApplicationTab({ addToast }: Props) {
       await setSetting.mutateAsync({ key, value })
       addToast(message)
     } catch (error) {
-      addToast(error instanceof Error ? error.message : 'Could not save the setting', 'error')
+      addToast(apiErrorMessage(error, t('application.saveFailed')), 'error')
     }
   }
 
@@ -54,7 +57,7 @@ export default function ApplicationTab({ addToast }: Props) {
       nameSaved = true
       await setSetting.mutateAsync({ key: APP_SETTING_KEYS.shortName, value: shortName })
       shortNameSaved = true
-      addToast('The app name was saved')
+      addToast(t('application.nameSaved'))
     } catch (error) {
       // Revert only the field(s) whose own save did not go through. The two calls are
       // sequential, so a refusal on the second one leaves the first already accepted by the
@@ -65,7 +68,7 @@ export default function ApplicationTab({ addToast }: Props) {
       // same object reference and the effect above never re-runs.
       if (!nameSaved) setName(s[APP_SETTING_KEYS.name] ?? '')
       if (!shortNameSaved) setShortName(s[APP_SETTING_KEYS.shortName] ?? '')
-      addToast(error instanceof Error ? error.message : 'Could not save the name', 'error')
+      addToast(apiErrorMessage(error, t('application.nameSaveFailed')), 'error')
     }
   }
 
@@ -74,7 +77,7 @@ export default function ApplicationTab({ addToast }: Props) {
       {/* .field-h puts the label beside its control: without the htmlFor/id pair the control
           has no accessible name. */}
       <div className="field-h is-setting">
-        <label htmlFor="app-installable">Enable app installation</label>
+        <label htmlFor="app-installable">{t('application.installable')}</label>
         <label className="toggle-switch">
           <input
             id="app-installable"
@@ -83,16 +86,16 @@ export default function ApplicationTab({ addToast }: Props) {
             disabled={setSetting.isPending}
             onChange={event => save(
               APP_SETTING_KEYS.installable, String(event.target.checked),
-              event.target.checked
-                ? 'The webmail can now be installed as an app'
-                : 'The webmail is no longer offered for installation')}
+              t(event.target.checked
+                ? 'application.installableOn'
+                : 'application.installableOff'))}
           />
           <span className="toggle-track" />
         </label>
       </div>
 
       <div className="field-h is-setting">
-        <label htmlFor="app-name">Application name</label>
+        <label htmlFor="app-name">{t('application.name')}</label>
         <input
           id="app-name"
           type="text"
@@ -104,7 +107,7 @@ export default function ApplicationTab({ addToast }: Props) {
       </div>
 
       <div className="field-h is-setting">
-        <label htmlFor="app-short-name">Short name</label>
+        <label htmlFor="app-short-name">{t('application.shortName')}</label>
         <input
           id="app-short-name"
           type="text"
@@ -123,7 +126,7 @@ export default function ApplicationTab({ addToast }: Props) {
         disabled={!enabled || setSetting.isPending}
         onClick={saveNames}
       >
-        {setSetting.isPending ? <span className="spinner" /> : 'Save'}
+        {setSetting.isPending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
       </button>
     </>
   )

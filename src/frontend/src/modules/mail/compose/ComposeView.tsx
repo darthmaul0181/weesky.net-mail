@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useContacts } from '../../contacts/queries'
@@ -6,6 +8,7 @@ import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, composeFormatOf, usePreferences } from '../../../hooks/usePreferences'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
@@ -31,18 +34,23 @@ const NO_FORMATS: ActiveFormats = {
 }
 
 // Edit-as-new is left out on purpose: it starts a message of its own, threaded to nothing.
-const TITLES: Record<ComposeAction, string> = {
-  reply: 'Reply', replyAll: 'Reply', forward: 'Forward', editAsNew: 'New message', draft: 'Draft',
+// The keys are written out rather than held in a map: one that reaches `t()` only as a variable
+// is invisible to `src/locales/keys.test.ts`.
+function composeTitle(action: ComposeAction | undefined, t: TFunction<'compose'>): string {
+  return action === 'reply' || action === 'replyAll' ? t('titles.reply')
+    : action === 'forward' ? t('titles.forward')
+      : action === 'draft' ? t('titles.draft') : t('titles.newMessage')
 }
 
 /** The single predicate for "goes in the body", so the drop overlay and routeFiles cannot drift. */
 const isImage = (type: string) => type.startsWith('image/')
 
-const PRIORITIES: { value: MailPriority; label: string }[] = [
-  { value: 'high', label: 'High' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'low', label: 'Low' },
-]
+const PRIORITIES: MailPriority[] = ['high', 'normal', 'low']
+
+function priorityLabel(value: MailPriority, t: TFunction<'compose'>): string {
+  return value === 'high' ? t('priority.high')
+    : value === 'low' ? t('priority.low') : t('priority.normal')
+}
 
 interface Props {
   onNotify: (
@@ -56,6 +64,7 @@ interface Props {
  * A reply/forward/draft arrives as `location.state.seed`; a plain new message carries none.
  */
 export default function ComposeView({ onNotify }: Props) {
+  const { t } = useTranslation('compose')
   const { identity } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -70,7 +79,7 @@ export default function ComposeView({ onNotify }: Props) {
   // drops per-call callbacks once the observer unmounts. A silent failure would leave a
   // re-sendable draft of a message that has already gone out.
   const deleteDraft = useDeleteMessages(
-    () => onNotify('Message sent — the draft could not be removed', 'error'), accountId)
+    () => onNotify(t('toast.sentDraftKept'), 'error'), accountId)
   // Pinned like the send: an address only the newly active account owns would be refused by the
   // one this draft is bound to, leaving it neither sendable nor savable.
   const { data: identityList } = useIdentities(accountId)
@@ -190,12 +199,12 @@ export default function ComposeView({ onNotify }: Props) {
         // and a composer dirtied by it would still ask to save on the way out.
         markDirty()
       } catch (error) {
-        onNotify((error as Error).message, 'error')
+        onNotify(apiErrorMessage(error, t('toast.imageFailed')), 'error')
       } finally {
         setInlineUploads(n => n - 1)
       }
     }
-  }, [markDirty, accountId, addInline, editor, onNotify])
+  }, [markDirty, accountId, addInline, editor, onNotify, t])
 
   // An image goes in the body, anything else in the tray. Plain text has no body to put one in,
   // so there everything is an attachment.
@@ -381,12 +390,12 @@ export default function ComposeView({ onNotify }: Props) {
     void capture.create(candidates).then(created => {
       if (created.length === 0) return
       const message = created.length === 1
-        ? `${displayNameOf(created[0])} added to contacts`
-        : `${created.length} contacts added`
+        ? t('toast.captured', { name: displayNameOf(created[0]) })
+        : t('toast.capturedMany', { count: created.length })
       onNotify(message, 'success', {
-        label: 'Undo',
+        label: t('toast.undo'),
         onClick: () => void capture.remove(created.map(c => c.id))
-          .then(ok => { if (!ok) onNotify('Could not undo', 'error') }),
+          .then(ok => { if (!ok) onNotify(t('toast.undoFailed'), 'error') }),
       })
     })
   }
@@ -394,13 +403,13 @@ export default function ComposeView({ onNotify }: Props) {
   function submit() {
     send.mutate(buildPayload(), {
       onSuccess: (result) => {
-        onNotify(result.appendedToSent ? 'Message sent' : 'Message sent — no Sent copy could be filed')
+        onNotify(t(result.appendedToSent ? 'toast.sent' : 'toast.sentNoCopy'))
         // The draft is now a duplicate of a message that already left.
         if (draftRef) deleteDraft.mutate({ folderPath: draftRef.folderPath, uids: [draftRef.uid] })
         captureNewRecipients()
         leave()
       },
-      onError: (error: Error) => onNotify(error.message || 'Could not send the message', 'error'),
+      onError: (error: Error) => onNotify(apiErrorMessage(error, t('toast.sendFailed')), 'error'),
     })
   }
 
@@ -412,10 +421,10 @@ export default function ComposeView({ onNotify }: Props) {
           setDraftRef({ folderPath: saved.folderPath, uid: saved.uid })
           setChanged(false)
           dirtyRef.current = false
-          onNotify('Draft saved')
+          onNotify(t('toast.draftSaved'))
           onSaved?.()
         },
-        onError: (error: Error) => onNotify(error.message || 'Could not save the draft', 'error'),
+        onError: (error: Error) => onNotify(apiErrorMessage(error, t('toast.draftSaveFailed')), 'error'),
       },
     )
   }
@@ -437,19 +446,19 @@ export default function ComposeView({ onNotify }: Props) {
     <div className="compose-view" data-testid="compose-view"
       onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <div className="compose-header">
-        <span className="modal-title">{(seed && TITLES[seed.action]) || 'New message'}</span>
+        <span className="modal-title">{composeTitle(seed?.action, t)}</span>
         <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
-          <RocketIcon size={15} /> {send.isPending ? 'Sending…' : 'Send'}
+          <RocketIcon size={15} /> {t(send.isPending ? 'header.sending' : 'header.send')}
         </button>
         <button type="button" className="btn btn-ghost" disabled={!canSaveDraft} onClick={() => saveDraft()}>
-          {saveDraftMutation.isPending ? 'Saving…' : 'Save draft'}
+          {t(saveDraftMutation.isPending ? 'header.saving' : 'header.saveDraft')}
         </button>
-        <button className="modal-close" aria-label="Close" onClick={close}>✕</button>
+        <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={close}>✕</button>
       </div>
 
       <div className="compose-fields">
         <div className="compose-from">
-          <span className="compose-from-label">From</span>
+          <span className="compose-from-label">{t('fields.from')}</span>
           {effectiveFrom ? (
             // The whole list, not the usable one: the select keeps stale rows out of the menu
             // itself, and needs them to name a choice that went stale under the composer.
@@ -461,38 +470,38 @@ export default function ComposeView({ onNotify }: Props) {
           )}
         </div>
         <div className="compose-to-row">
-          <RecipientsField id="compose-to" label="To" tokens={to} onChange={changeTo}
+          <RecipientsField id="compose-to" label={t('fields.to')} tokens={to} onChange={changeTo}
             autoFocus={!seed} contacts={contacts} />
           <span className="compose-cc-links">
-            {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>Cc</button>}
-            {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>Bcc</button>}
+            {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>{t('fields.cc')}</button>}
+            {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>{t('fields.bcc')}</button>}
             {!showPriority && (
-              <button type="button" className="compose-link-btn" onClick={() => setShowPriority(true)}>Priority</button>
+              <button type="button" className="compose-link-btn" onClick={() => setShowPriority(true)}>{t('fields.priority')}</button>
             )}
           </span>
         </div>
-        {showCc && <RecipientsField id="compose-cc" label="Cc" tokens={cc} onChange={changeCc}
+        {showCc && <RecipientsField id="compose-cc" label={t('fields.cc')} tokens={cc} onChange={changeCc}
           contacts={contacts} />}
-        {showBcc && <RecipientsField id="compose-bcc" label="Bcc" tokens={bcc} onChange={changeBcc}
+        {showBcc && <RecipientsField id="compose-bcc" label={t('fields.bcc')} tokens={bcc} onChange={changeBcc}
           contacts={contacts} />}
         {/* Stays open while the value is not Normal: folding it would take a live setting off the
             screen while it kept riding on the message. Cc and Bcc are safe to fold — their tokens
             stay visible either way. */}
         {(showPriority || priority !== 'normal') && (
           <div className="compose-priority">
-            <span className="compose-priority-label">Priority</span>
+            <span className="compose-priority-label">{t('fields.priority')}</span>
             <DropdownMenu
-              ariaLabel="Priority"
+              ariaLabel={t('fields.priority')}
               className="compose-priority-select"
               align="left"
-              // Fallback guards a render-time throw: an out-of-union value would blank the whole app.
-              trigger={<>{PRIORITIES.find(p => p.value === priority)?.label ?? 'Normal'} <ChevronDownIcon size={13} /></>}
-              items={PRIORITIES.map(p => ({ label: p.label, onSelect: () => changePriority(p.value) }))}
+              // priorityLabel falls back to Normal, so an out-of-union value cannot blank the app.
+              trigger={<>{priorityLabel(priority, t)} <ChevronDownIcon size={13} /></>}
+              items={PRIORITIES.map(p => ({ label: priorityLabel(p, t), onSelect: () => changePriority(p) }))}
             />
           </div>
         )}
         <div className="field-h">
-          <label htmlFor="compose-subject">Subject</label>
+          <label htmlFor="compose-subject">{t('fields.subject')}</label>
           <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />
         </div>
       </div>
@@ -506,7 +515,7 @@ export default function ComposeView({ onNotify }: Props) {
         {text === null ? (
           <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
         ) : (
-          <textarea className="compose-editor" data-testid="compose-text-editor" aria-label="Message body"
+          <textarea className="compose-editor" data-testid="compose-text-editor" aria-label={t('fields.body')}
             value={text} onChange={e => { setText(e.target.value); touchBody() }} />
         )}
       </div>
@@ -517,11 +526,11 @@ export default function ComposeView({ onNotify }: Props) {
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              <span className="modal-title">Save this draft?</span>
+              <span className="modal-title">{t('leave.title')}</span>
             </div>
-            <p>Your message has unsaved changes.</p>
+            <p>{t('leave.body')}</p>
             <div className="folder-pick-submit">
-              <button type="button" className="btn btn-ghost" onClick={keepEditing}>Keep editing</button>
+              <button type="button" className="btn btn-ghost" onClick={keepEditing}>{t('leave.keepEditing')}</button>
               {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
               <button type="button" className="btn btn-ghost" disabled={busy}
                 onClick={() => {
@@ -529,16 +538,16 @@ export default function ComposeView({ onNotify }: Props) {
                   attachments.discardAll()
                   leaveBehind()
                 }}>
-                Discard
+                {t('leave.discard')}
               </button>
               {/* Locked on an invalid token too, where the reason is not on screen: say it. */}
               <button type="button" className="btn btn-primary" disabled={!canSaveDraft}
-                title={allValid ? undefined : 'Fix the invalid address first'}
+                title={allValid ? undefined : t('leave.fixAddress')}
                 onClick={() => saveDraft(() => {
                   attachments.discardAll()
                   leaveBehind()
                 })}>
-                Save draft
+                {t('leave.saveDraft')}
               </button>
             </div>
           </div>
@@ -550,14 +559,14 @@ export default function ComposeView({ onNotify }: Props) {
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              <span className="modal-title">Switch to plain text?</span>
+              <span className="modal-title">{t('plainText.title')}</span>
             </div>
-            <p>Formatting will be removed, and images in the message become attachments.</p>
+            <p>{t('plainText.body')}</p>
             <div className="folder-pick-submit">
               <button type="button" className="btn btn-ghost" onClick={() => setConfirmPlain(false)}>
-                Keep formatting
+                {t('plainText.keepFormatting')}
               </button>
-              <button type="button" className="btn btn-primary" onClick={switchToPlainText}>Switch</button>
+              <button type="button" className="btn btn-primary" onClick={switchToPlainText}>{t('plainText.confirm')}</button>
             </div>
           </div>
         </div>
@@ -565,7 +574,7 @@ export default function ComposeView({ onNotify }: Props) {
 
       {dropTarget && (
         <div className="compose-drop-overlay">
-          {bodyInsert ? 'Drop image into the message' : 'Drop files to attach'}
+          {t(bodyInsert ? 'drop.image' : 'drop.files')}
         </div>
       )}
     </div>

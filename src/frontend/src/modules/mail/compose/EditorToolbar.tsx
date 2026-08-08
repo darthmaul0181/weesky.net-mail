@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import type { ActiveFormats, EditorHandle } from './SquireEditor'
 import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
@@ -37,17 +39,30 @@ const SWATCHES = [
   '#4a90d9', '#182238', '#9013fe', '#bd10e0', '#8b572a', '#50e3c2',
 ]
 const FONTS = ['Arial', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Courier New']
-const SIZES = [
-  { label: 'Small', value: '12px' }, { label: 'Normal', value: '14px' },
-  { label: 'Large', value: '18px' }, { label: 'Huge', value: '24px' },
+const SIZES: { key: string; value: string }[] = [
+  { key: 'small', value: '12px' }, { key: 'normal', value: '14px' },
+  { key: 'large', value: '18px' }, { key: 'huge', value: '24px' },
 ]
 type Alignment = 'left' | 'center' | 'right' | 'justify'
-const ALIGNMENTS: { label: string; value: Alignment; Icon: typeof AlignLeftIcon }[] = [
-  { label: 'Left', value: 'left', Icon: AlignLeftIcon },
-  { label: 'Center', value: 'center', Icon: AlignCentreIcon },
-  { label: 'Right', value: 'right', Icon: AlignRightIcon },
-  { label: 'Justify', value: 'justify', Icon: AlignJustifyIcon },
+const ALIGNMENTS: { value: Alignment; Icon: typeof AlignLeftIcon }[] = [
+  { value: 'left', Icon: AlignLeftIcon },
+  { value: 'center', Icon: AlignCentreIcon },
+  { value: 'right', Icon: AlignRightIcon },
+  { value: 'justify', Icon: AlignJustifyIcon },
 ]
+
+/** Both labels are written out rather than held on the rows: a key that reaches `t()` only as a
+    variable is invisible to `src/locales/keys.test.ts`. */
+function sizeLabel(key: string, t: TFunction<'compose'>): string {
+  return key === 'small' ? t('toolbar.sizes.small')
+    : key === 'large' ? t('toolbar.sizes.large')
+      : key === 'huge' ? t('toolbar.sizes.huge') : t('toolbar.sizes.normal')
+}
+function alignLabel(value: Alignment, t: TFunction<'compose'>): string {
+  return value === 'center' ? t('toolbar.align.center')
+    : value === 'right' ? t('toolbar.align.right')
+      : value === 'justify' ? t('toolbar.align.justify') : t('toolbar.align.left')
+}
 
 function Popover({ open, children }: { open: boolean; children: ReactNode }) {
   if (!open) return null
@@ -67,6 +82,7 @@ interface Props {
 
 export default function EditorToolbar(
   { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages }: Props) {
+  const { t } = useTranslation('compose')
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
   // The editor reports no font, size or colour at the caret, so these are the last choice made
@@ -123,30 +139,30 @@ export default function EditorToolbar(
     <div className="compose-toolbar" ref={container}>
       {/* Stays when everything else folds away: it is the only way back to the editor. */}
       <div className="compose-tool-group">
-        {btn('Plain text', <PlainTextIcon size={ICON} />, onTogglePlainText, plainText, switchLocked)}
+        {btn(t('toolbar.plainText'), <PlainTextIcon size={ICON} />, onTogglePlainText, plainText, switchLocked)}
       </div>
       {plainText ? null : (
       <>
       <div className="compose-tool-group">
-        {btn('Undo', <UndoIcon size={ICON} />, () => editor?.command('undo'))}
-        {btn('Redo', <RedoIcon size={ICON} />, () => editor?.command('redo'))}
+        {btn(t('toolbar.undo'), <UndoIcon size={ICON} />, () => editor?.command('undo'))}
+        {btn(t('toolbar.redo'), <RedoIcon size={ICON} />, () => editor?.command('redo'))}
       </div>
       <div className="compose-tool-group">
-        {btn('Bold', <b>B</b>, () => editor?.command('bold'), active?.bold)}
-        {btn('Italic', <i>I</i>, () => editor?.command('italic'), active?.italic)}
-        {btn('Underline', <u>U</u>, () => editor?.command('underline'), active?.underline)}
-        {btn('Strikethrough', <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
+        {btn(t('toolbar.bold'), <b>B</b>, () => editor?.command('bold'), active?.bold)}
+        {btn(t('toolbar.italic'), <i>I</i>, () => editor?.command('italic'), active?.italic)}
+        {btn(t('toolbar.underline'), <u>U</u>, () => editor?.command('underline'), active?.underline)}
+        {btn(t('toolbar.strikethrough'), <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
       </div>
       <div className="compose-tool-group">
         <span className="compose-popover-anchor">
-          {btn('Text colour', inked(<TextColourIcon size={INK_ICON} />, textColour),
+          {btn(t('toolbar.textColour'), inked(<TextColourIcon size={INK_ICON} />, textColour),
             () => setOpenPopover(p => p === 'text' ? null : 'text'))}
           <Popover open={openPopover === 'text'}>
             {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) })}
           </Popover>
         </span>
         <span className="compose-popover-anchor">
-          {btn('Highlight colour', inked(<HighlighterIcon size={INK_ICON} />, highlight),
+          {btn(t('toolbar.highlightColour'), inked(<HighlighterIcon size={INK_ICON} />, highlight),
             () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
           <Popover open={openPopover === 'highlight'}>
             {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) })}
@@ -158,53 +174,56 @@ export default function EditorToolbar(
             so it re-flowed under the user at the moment of choosing. The choice moved into the
             menu, which is the one place it was ever read from — the bar cannot see the format at
             the caret and only ever echoed the last pick. */}
-        <DropdownMenu ariaLabel="Font" align="left" className="compose-tool-select"
+        <DropdownMenu ariaLabel={t('toolbar.font')} align="left" className="compose-tool-select"
           trigger={<><FontIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={FONTS.map(name => ({
             label: name,
             node: chosen(<span style={{ fontFamily: name }}>{name}</span>, name === font),
             onSelect: () => { setFont(name); editor?.setFontFace(name) },
           }))} />
-        <DropdownMenu ariaLabel="Size" align="left" className="compose-tool-select"
+        <DropdownMenu ariaLabel={t('toolbar.size')} align="left" className="compose-tool-select"
           trigger={<><TextSizeIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={SIZES.map(entry => ({
-            label: entry.label,
-            node: chosen(<span style={{ fontSize: entry.value }}>{entry.label}</span>, entry.label === size.label),
+            label: sizeLabel(entry.key, t),
+            node: chosen(
+              <span style={{ fontSize: entry.value }}>{sizeLabel(entry.key, t)}</span>,
+              entry.key === size.key),
             onSelect: () => { setSize(entry); editor?.setFontSize(entry.value) },
           }))} />
-        <DropdownMenu ariaLabel="Alignment" align="left" className="compose-tool-select"
+        <DropdownMenu ariaLabel={t('toolbar.alignment')} align="left" className="compose-tool-select"
           trigger={<><alignment.Icon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={ALIGNMENTS.map(entry => ({
-            label: entry.label,
+            label: alignLabel(entry.value, t),
             icon: <entry.Icon size={14} />,
             onSelect: () => { setAlignment(entry); editor?.setAlignment(entry.value) },
           }))} />
       </div>
       <div className="compose-tool-group">
-        {btn('Bulleted list', <ListBulletIcon size={ICON} />, () => editor?.command('unorderedList'), active?.unorderedList)}
-        {btn('Numbered list', <ListOrderedIcon size={ICON} />, () => editor?.command('orderedList'), active?.orderedList)}
+        {btn(t('toolbar.bulletedList'), <ListBulletIcon size={ICON} />, () => editor?.command('unorderedList'), active?.unorderedList)}
+        {btn(t('toolbar.numberedList'), <ListOrderedIcon size={ICON} />, () => editor?.command('orderedList'), active?.orderedList)}
         {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
-        {btn('Increase quote', <IndentIcon size={ICON} />, () => editor?.command('increaseQuote'))}
-        {btn('Decrease quote', <OutdentIcon size={ICON} />, () => editor?.command('decreaseQuote'))}
+        {btn(t('toolbar.increaseQuote'), <IndentIcon size={ICON} />, () => editor?.command('increaseQuote'))}
+        {btn(t('toolbar.decreaseQuote'), <OutdentIcon size={ICON} />, () => editor?.command('decreaseQuote'))}
       </div>
       <div className="compose-tool-group">
         <span className="compose-popover-anchor">
-          {btn('Link', <LinkIcon size={ICON} />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
+          {btn(t('toolbar.link'), <LinkIcon size={ICON} />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
           <Popover open={openPopover === 'link'}>
             <div className="compose-link-form">
-              <label htmlFor="compose-link-url">Link URL</label>
+              <label htmlFor="compose-link-url">{t('toolbar.linkUrl')}</label>
               <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
               <button type="button" className="btn btn-primary" disabled={!url}
                 onClick={() => { editor?.makeLink(url); setUrl(''); setOpenPopover(null) }}>
-                Apply
+                {t('toolbar.apply')}
               </button>
             </div>
           </Popover>
         </span>
-        {btn('Remove link', <UnlinkIcon size={ICON} />, () => editor?.command('removeLink'))}
+        {btn(t('toolbar.removeLink'), <UnlinkIcon size={ICON} />, () => editor?.command('removeLink'))}
         {/* Not built from btn: that one stamps aria-pressed on everything, and this opens a picker
             rather than holding a state. */}
-        <button type="button" className="compose-tool" aria-label="Insert image" title="Insert image"
+        <button type="button" className="compose-tool"
+          aria-label={t('toolbar.insertImage')} title={t('toolbar.insertImage')}
           onClick={() => picker.current?.click()}>
           <ImageIcon size={ICON} />
         </button>
@@ -215,7 +234,7 @@ export default function EditorToolbar(
             // Cleared straight away: an input keeping its value fires no change for the same file twice.
             if (files?.length) { onPickImages(Array.from(files)); e.target.value = '' }
           }} />
-        {btn('Clear formatting', <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
+        {btn(t('toolbar.clearFormatting'), <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
       </div>
       </>
       )}

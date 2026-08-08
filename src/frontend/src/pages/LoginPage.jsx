@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, markLoggedIn } from '../api.js'
 
 export default function LoginPage({ onLogin }) {
+  const { t } = useTranslation('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
@@ -16,7 +18,7 @@ export default function LoginPage({ onLogin }) {
       markLoggedIn()
       onLogin()
     } catch {
-      setError('Invalid credentials.')
+      setError(t('login.invalidCredentials'))
     } finally {
       setLoading(false)
     }
@@ -33,7 +35,7 @@ export default function LoginPage({ onLogin }) {
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="Email address"
+              placeholder={t('login.email')}
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
@@ -45,7 +47,7 @@ export default function LoginPage({ onLogin }) {
               id="password"
               type="password"
               autoComplete="current-password"
-              placeholder="Password"
+              placeholder={t('login.password')}
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
@@ -53,7 +55,7 @@ export default function LoginPage({ onLogin }) {
           </div>
 
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Sign in'}
+            {loading ? <span className="spinner" /> : t('login.submit')}
           </button>
         </form>
       </div>

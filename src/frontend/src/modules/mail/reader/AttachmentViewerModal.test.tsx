@@ -49,10 +49,11 @@ describe('AttachmentViewerModal', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
   })
 
-  it('shows the error inside the modal when the fetch fails', async () => {
+  // Server prose never reaches the modal; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback inside the modal when the fetch fails', async () => {
     vi.mocked(requestBlob).mockRejectedValue(new Error('boom'))
     renderModal()
-    await screen.findByText('boom')
+    await screen.findByText('Could not load the image')
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 

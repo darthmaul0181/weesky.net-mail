@@ -113,17 +113,18 @@ describe('SystemFoldersModal', () => {
     await waitFor(() => expect(mocks.clearFolderRole).toHaveBeenCalledWith('trash', { accountId: 'primary' }))
   })
 
-  it('surfaces the backend message when the assignment fails', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('surfaces the local fallback when the assignment fails', async () => {
     mocks.setFolderRole.mockRejectedValue(new Error('This folder already holds another role'))
     renderModal()
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: 'Corbeille' } })
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('This folder already holds another role', 'error'))
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not save the folder role', 'error'))
   })
 
-  it('surfaces the backend message when clearing a role fails', async () => {
-    mocks.clearFolderRole.mockRejectedValue(new Error('Could not clear this role'))
+  it('surfaces the local fallback when clearing a role fails', async () => {
+    mocks.clearFolderRole.mockRejectedValue(new Error('Server refused'))
     mocks.getMailFolders.mockResolvedValue(folders)
     mocks.getFolderRoles.mockResolvedValue([
       ...roles.filter(r => r.role !== 'trash'),
@@ -133,7 +134,7 @@ describe('SystemFoldersModal', () => {
 
     fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not clear this role', 'error'))
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not save the folder role', 'error'))
   })
 
   // A stale override is kept and signalled (§ 5.3) — the notice and the discovery-resolved

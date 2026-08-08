@@ -1,3 +1,4 @@
+import { collator } from '../../lib/intl'
 import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
 
@@ -30,7 +31,7 @@ export function filterContacts(contacts: Contact[], query: string): Contact[] {
     folder list uses it: a codepoint sort files every accented name after 'Z'. */
 export function compareContacts(a: Contact, b: Contact): number {
   if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1
-  return displayNameOf(a).localeCompare(displayNameOf(b), undefined, { sensitivity: 'base' })
+  return collator({ sensitivity: 'base' }).compare(displayNameOf(a), displayNameOf(b))
 }
 
 export interface AddressSuggestion {
@@ -89,7 +90,7 @@ export function suggestionsFor(
     .sort((left, right) =>
       Number(right.favorite) - Number(left.favorite)
       || Number(right.primary) - Number(left.primary)
-      || left.address.localeCompare(right.address, undefined, { sensitivity: 'base' }))
+      || collator({ sensitivity: 'base' }).compare(left.address, right.address))
     .slice(0, limit)
     .map(({ address, names }) => ({ address, names }))
 }

@@ -1,4 +1,5 @@
 import type { KeyboardEvent, PointerEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface PaneSplitterProps {
   orientation: 'vertical' | 'horizontal'
@@ -19,6 +20,7 @@ const NUDGE = 16
 export default function PaneSplitter(
   { orientation, size, defaultSize, min, reserve, onResize }: PaneSplitterProps,
 ) {
+  const { t } = useTranslation('mail')
   const vertical = orientation === 'vertical'
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
@@ -59,7 +61,7 @@ export default function PaneSplitter(
     <div
       role="separator"
       aria-orientation={orientation}
-      aria-label="Resize the panes"
+      aria-label={t('splitter.label')}
       tabIndex={0}
       className={`pane-splitter is-${orientation}`}
       onPointerDown={startDrag}

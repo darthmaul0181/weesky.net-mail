@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import IdentityMenu from '../../layouts/IdentityMenu'
@@ -19,22 +20,23 @@ function paneClass({ isActive }: { isActive: boolean }) {
 
 export default function SettingsLayout() {
   const { isAdmin, activeAccount } = useAuth()
+  const { t } = useTranslation('settings')
   // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the
   // primary nav must stay full during that window rather than flash away and back.
   const isPrimary = activeAccount?.isPrimary !== false
   const rulesAvailable = isPrimary || activeAccount?.sieveSupported !== false
   return (
     <div className="settings-layout">
-      <nav className="context-pane" aria-label="Settings">
-        {isPrimary && <NavLink to="/settings/account" end className={paneClass}><UserIcon size={16} />Account</NavLink>}
-        <NavLink to="/settings/general" className={paneClass}><SlidersIcon size={16} />General</NavLink>
-        <NavLink to="/settings/accounts" className={paneClass}><PersonPlusIcon size={16} />Connected accounts</NavLink>
-        <NavLink to="/settings/appearance" className={paneClass}><DropletIcon size={16} />Appearance</NavLink>
-        <NavLink to="/settings/folders" className={paneClass}><FolderIcon size={16} />Folders</NavLink>
-        {isPrimary && <NavLink to="/settings/aliases" className={paneClass}><AtSignIcon size={16} />Aliases</NavLink>}
-        <NavLink to="/settings/identities" className={paneClass}><MailIcon size={16} />Identities</NavLink>
-        {rulesAvailable && <NavLink to="/settings/rules" className={paneClass}><FunnelIcon size={16} />Rules</NavLink>}
-        {isAdmin && isPrimary && <NavLink to="/settings/admin" className={paneClass}><ShieldIcon size={16} />Administration</NavLink>}
+      <nav className="context-pane" aria-label={t('nav.label')}>
+        {isPrimary && <NavLink to="/settings/account" end className={paneClass}><UserIcon size={16} />{t('nav.account')}</NavLink>}
+        <NavLink to="/settings/general" className={paneClass}><SlidersIcon size={16} />{t('nav.general')}</NavLink>
+        <NavLink to="/settings/accounts" className={paneClass}><PersonPlusIcon size={16} />{t('nav.accounts')}</NavLink>
+        <NavLink to="/settings/appearance" className={paneClass}><DropletIcon size={16} />{t('nav.appearance')}</NavLink>
+        <NavLink to="/settings/folders" className={paneClass}><FolderIcon size={16} />{t('nav.folders')}</NavLink>
+        {isPrimary && <NavLink to="/settings/aliases" className={paneClass}><AtSignIcon size={16} />{t('nav.aliases')}</NavLink>}
+        <NavLink to="/settings/identities" className={paneClass}><MailIcon size={16} />{t('nav.identities')}</NavLink>
+        {rulesAvailable && <NavLink to="/settings/rules" className={paneClass}><FunnelIcon size={16} />{t('nav.rules')}</NavLink>}
+        {isAdmin && isPrimary && <NavLink to="/settings/admin" className={paneClass}><ShieldIcon size={16} />{t('nav.admin')}</NavLink>}
         {/* Switching mailbox from settings: the same menu the folder column carries. */}
         <div className="settings-nav-foot"><IdentityMenu /></div>
       </nav>

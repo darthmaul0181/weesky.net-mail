@@ -179,23 +179,17 @@ describe('IdentitiesPage', () => {
       expect.anything())
   })
 
-  it('a refused save shows the message and puts the server state back on screen', () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('a refused save shows the local fallback and puts the server state back on screen', () => {
     mutate.mockImplementation((_rows, options) => options.onError(new Error('gone@weesky.be is not yours')))
     render(<IdentitiesPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Edit michel@weesky.be' }))
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Michel D.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(screen.getByText('gone@weesky.be is not yours')).toBeInTheDocument()
+    expect(screen.getByText('Could not save your identities')).toBeInTheDocument()
     expect(screen.getByText('Michel')).toBeInTheDocument()
     expect(screen.queryByText('Michel D.')).toBeNull()
-  })
-
-  it('falls back to its own wording when the refusal carries no message', () => {
-    mutate.mockImplementation((_rows, options) => options.onError(new Error('')))
-    render(<IdentitiesPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Remove gone@weesky.be' }))
-    expect(screen.getByText('Could not save your identities')).toBeInTheDocument()
   })
 
   it('fills the primary star when the alias holding the default is removed', () => {

@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18next from 'i18next'
 import { api } from '../../../api.js'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
 export function VirtualDomainsTab({ addToast }) {
+  const { t } = useTranslation('admin')
   const [virtualDomains, setVirtualDomains] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -20,7 +24,7 @@ export function VirtualDomainsTab({ addToast }) {
       setVirtualDomains(o ?? [])
       setUsers(u ?? [])
     } catch {
-      addToast('Failed to load virtual domains', 'error')
+      addToast(i18next.t('admin:virtual.loadFailed'), 'error')
     } finally {
       setLoading(false)
     }
@@ -47,7 +51,7 @@ export function VirtualDomainsTab({ addToast }) {
       setSearchQuery('')
       setVirtualDomains(prev => prev.map(o => o.domainId === domainId ? updated : o))
     } catch (err) {
-      addToast(err.message || 'Failed to set owner', 'error')
+      addToast(apiErrorMessage(err, t('virtual.setOwnerFailed')), 'error')
     } finally {
       setSaving(false)
     }
@@ -63,7 +67,7 @@ export function VirtualDomainsTab({ addToast }) {
           : o
       ))
     } catch (err) {
-      addToast(err.message || 'Failed to remove owner', 'error')
+      addToast(apiErrorMessage(err, t('virtual.removeOwnerFailed')), 'error')
     } finally {
       setSaving(false)
     }
@@ -87,12 +91,12 @@ export function VirtualDomainsTab({ addToast }) {
   return (
     <div>
       <div className="admin-list-header">
-        <span className="admin-list-title">Virtual alias domains ({virtualDomains.length})</span>
+        <span className="admin-list-title">{t('virtual.title', { total: virtualDomains.length })}</span>
       </div>
       <div className="admin-list">
         {virtualDomains.length === 0 && (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No virtual alias domains
+            {t('virtual.empty')}
           </div>
         )}
         {virtualDomains.map(o => (
@@ -107,7 +111,7 @@ export function VirtualDomainsTab({ addToast }) {
                         {own.ownerEmail}
                         <button
                           className="ownership-tile-remove"
-                          title="Remove owner"
+                          title={t('virtual.removeOwner')}
                           disabled={saving}
                           onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId, own.ownerId) }}
                         >
@@ -121,7 +125,7 @@ export function VirtualDomainsTab({ addToast }) {
                   <input
                     className="search-input"
                     type="text"
-                    placeholder="Search user…"
+                    placeholder={t('virtual.searchUser')}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     autoFocus
@@ -159,7 +163,7 @@ export function VirtualDomainsTab({ addToast }) {
             )}
             <div className="admin-list-item-actions">
               {editingDomainId !== o.domainId && (
-                <button className="admin-icon-btn" title="Edit owner" onClick={() => {
+                <button className="admin-icon-btn" title={t('virtual.editOwner')} onClick={() => {
                   setEditingDomainId(o.domainId)
                   setSearchQuery('')
                 }}>

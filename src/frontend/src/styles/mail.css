@@ -1286,9 +1286,16 @@
 /* ── Empty folder banner ─────────────────────────────────── */
 
 /* Pinned strip between toolbar and scroll area; stays put while rows scroll. */
+/* The link takes a whole line rather than being clipped. It is `flex: none` — it has to be, since
+   an ellipsised action names a different action — so on a narrow column it used to run past the
+   band's right edge, and `.mail-list` is `overflow: hidden`, so it was cut off rather than
+   scrollable. Measured: the French `Vider les indésirables maintenant` (189px against the English
+   `Empty junk now`'s 92px) overflowed at every list width from the 240px splitter floor up to
+   320px. Wrapping costs nothing above that — everything still sits on one line. */
 .empty-folder-banner {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 8px 12px;

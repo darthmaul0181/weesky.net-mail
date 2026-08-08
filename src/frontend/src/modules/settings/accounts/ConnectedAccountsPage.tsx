@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import i18next from 'i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import LoadingBlock from '../../../components/LoadingBlock'
@@ -8,9 +10,10 @@ import { useToasts } from '../../../hooks/useToasts.js'
 import KeyIcon from '../../../icons/KeyIcon'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
+import { dateFormat } from '../../../lib/intl'
 import ConnectAccountForm from './ConnectAccountForm'
 import {
-  errorText, leaveTo, oauthCompleteErrorText, PROVIDER_REFUSED, useCompleteOAuthConnect,
+  errorText, leaveTo, oauthCompleteErrorText, providerRefused, useCompleteOAuthConnect,
   useConnectedAccounts, useDeleteConnectedAccount, useStartOAuthConnect,
   useUpdateConnectedAccountPassword, type ConnectedAccount,
 } from './useConnectedAccounts'
@@ -26,9 +29,9 @@ function subtitleOf(account: ConnectedAccount): string {
   const parts = [account.email, account.domainName ?? domainOf(account.email)]
   const date = new Date(account.creationDate)
   if (!Number.isNaN(date.getTime())) {
-    parts.push(`connected on ${date.toLocaleDateString(undefined, {
-      year: 'numeric', month: 'short', day: 'numeric',
-    })}`)
+    parts.push(i18next.t('settings:accounts.connectedOn', {
+      date: dateFormat({ year: 'numeric', month: 'short', day: 'numeric' }).format(date),
+    }))
   }
   return parts.join(' · ')
 }
@@ -41,6 +44,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
   onSubmit: (password: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation('settings')
   const [password, setPassword] = useState('')
 
   function submit(event: FormEvent) {
@@ -52,23 +56,21 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title"><KeyIcon /> Re-enter password</span>
-          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <span className="modal-title"><KeyIcon /> {t('accounts.reenterPassword')}</span>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={submit}>
           {error && <div className="alert alert-error" role="alert">{error}</div>}
-          <p className="settings-note">
-            Enter the current password of {email} so Weesky can open this mailbox again.
-          </p>
+          <p className="settings-note">{t('accounts.reenterHint', { email })}</p>
           <div className="field-h">
-            <label htmlFor="reenter-password">Password</label>
+            <label htmlFor="reenter-password">{t('accounts.password')}</label>
             <input id="reenter-password" type="password" autoComplete="new-password" autoFocus
               value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           <div className="identity-modal-actions">
             <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}
               disabled={pending || password === ''}>
-              {pending ? <span className="spinner" /> : 'Save'}
+              {pending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
             </button>
           </div>
         </form>
@@ -83,6 +85,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
  */
 export default function ConnectedAccountsPage() {
   const { activeAccountId } = useAuth()
+  const { t } = useTranslation('settings')
   const { data: accounts, isLoading, isError } = useConnectedAccounts()
   const updatePassword = useUpdateConnectedAccountPassword()
   const disconnect = useDeleteConnectedAccount()
@@ -107,10 +110,12 @@ export default function ConnectedAccountsPage() {
 
     resumed.current = true
     setParams(new URLSearchParams(), { replace: true })
-    if (failed) { addToast('The sign-in did not complete. Try again.', 'error'); return }
+    // Client-side: the provider itself reported the failure, before any call reached the
+    // backend — same wording as errors:oauthHandshakeIncomplete, kept as one copy via the key.
+    if (failed) { addToast(i18next.t('errors:oauthHandshakeIncomplete'), 'error'); return }
 
     complete.mutateAsync(state!)
-      .then(account => addToast(`${account.email} is connected`))
+      .then(account => addToast(t('accounts.connected', { email: account.email })))
       .catch(failure => addToast(oauthCompleteErrorText(failure), 'error'))
     // Mount only: the parameter is stripped above, so a params change must not re-run this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,7 +127,7 @@ export default function ConnectedAccountsPage() {
       const { authorizationUrl } = await startConnect.mutateAsync({ accountId: account.id })
       leaveTo(authorizationUrl)
     } catch (failure) {
-      addToast(errorText(failure, PROVIDER_REFUSED), 'error')
+      addToast(errorText(failure, providerRefused()), 'error')
       setReconnecting(null)
     }
   }
@@ -132,7 +137,7 @@ export default function ConnectedAccountsPage() {
     setDialogError(null)
     try {
       await updatePassword.mutateAsync({ id: reentering.id, password })
-      addToast(`${reentering.email} is connected again`)
+      addToast(t('accounts.connectedAgain', { email: reentering.email }))
       setReentering(null)
     } catch (failure) {
       setDialogError(errorText(failure))
@@ -144,9 +149,9 @@ export default function ConnectedAccountsPage() {
     const { id, email } = deleting
     try {
       await disconnect.mutateAsync(id)
-      addToast(`${email} was disconnected`)
+      addToast(t('accounts.disconnected', { email }))
     } catch (failure) {
-      addToast(errorText(failure, 'Could not disconnect this account'), 'error')
+      addToast(errorText(failure, t('accounts.disconnectFailed')), 'error')
     } finally {
       setDeleting(null)
     }
@@ -155,40 +160,38 @@ export default function ConnectedAccountsPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><PersonPlusIcon size={17} />Connected accounts</h1>
+        <h1 className="settings-page-title"><PersonPlusIcon size={17} />{t('nav.accounts')}</h1>
       </div>
-      <p className="settings-note">
-        Read and send mail from other mailboxes without signing out.
-      </p>
+      <p className="settings-note">{t('accounts.intro')}</p>
       {/* The return from the provider is a plain page load: without this the list simply sits
           there, one mailbox short, for the width of the exchange. */}
-      {complete.isPending && <p className="settings-note">Finishing the sign-in…</p>}
+      {complete.isPending && <p className="settings-note">{t('accounts.finishing')}</p>}
 
       {isLoading && <LoadingBlock />}
       {/* Only when there is nothing to show: a failed background refetch must not blank a list
           that is already on screen and still perfectly usable. */}
-      {!isLoading && !accounts && <p>Could not load your connected accounts.</p>}
+      {!isLoading && !accounts && <p>{t('accounts.loadFailed')}</p>}
       {!isLoading && accounts && (
         <div className="connected-accounts">
           {connecting
             ? (
               <ConnectAccountForm
                 onCancel={() => setConnecting(false)}
-                onConnected={email => { setConnecting(false); addToast(`${email} is connected`) }}
+                onConnected={email => { setConnecting(false); addToast(t('accounts.connected', { email })) }}
               />
             )
             : (
               <div className="admin-list-header">
                 <button className="btn btn-primary" style={{ width: 'auto' }}
                   onClick={() => setConnecting(true)}>
-                  <PersonPlusIcon /> Connect an account
+                  <PersonPlusIcon /> {t('accounts.connect')}
                 </button>
               </div>
             )}
 
-          {isError && <p className="settings-note">Could not refresh this list — it may be out of date.</p>}
+          {isError && <p className="settings-note">{t('refreshFailed')}</p>}
           {accounts.length === 0 && (
-            <p className="settings-note">No other mailbox is connected yet.</p>
+            <p className="settings-note">{t('accounts.empty')}</p>
           )}
 
           <div className="admin-list connected-account-list">
@@ -199,9 +202,9 @@ export default function ConnectedAccountsPage() {
                   <span className="admin-list-item-name">{subtitleOf(account)}</span>
                   {!account.credentialsValid && (
                     <span className="connected-account-warn">
-                      {account.authMode === 'OAuth2'
-                        ? 'This mailbox needs to be reconnected.'
-                        : 'Your main password changed — enter this account’s password again.'}
+                      {t(account.authMode === 'OAuth2'
+                        ? 'accounts.needsReconnect'
+                        : 'accounts.needsPassword')}
                     </span>
                   )}
                 </span>
@@ -212,22 +215,22 @@ export default function ConnectedAccountsPage() {
                       Re-consenting is idempotent and keeps the row's id, identities and roles. */}
                   {account.authMode === 'OAuth2'
                     ? (
-                      <button type="button" className="btn btn-ghost" title="Sign in again"
-                        aria-label={`Reconnect ${account.email}`}
+                      <button type="button" className="btn btn-ghost" title={t('accounts.signInAgain')}
+                        aria-label={t('accounts.reconnectAria', { email: account.email })}
                         disabled={reconnecting === account.id}
                         onClick={() => reconnect(account)}>
-                        {reconnecting === account.id ? <span className="spinner" /> : 'Reconnect'}
+                        {reconnecting === account.id ? <span className="spinner" /> : t('accounts.reconnect')}
                       </button>
                     )
                     : !account.credentialsValid && (
-                      <button type="button" className="admin-icon-btn" title="Re-enter password"
-                        aria-label={`Re-enter the password for ${account.email}`}
+                      <button type="button" className="admin-icon-btn" title={t('accounts.reenterPassword')}
+                        aria-label={t('accounts.reenterAria', { email: account.email })}
                         onClick={() => { setDialogError(null); setReentering(account) }}>
                         <KeyIcon />
                       </button>
                     )}
-                  <button type="button" className="admin-icon-btn is-danger" title="Disconnect"
-                    aria-label={`Disconnect ${account.email}`}
+                  <button type="button" className="admin-icon-btn is-danger" title={t('accounts.disconnect')}
+                    aria-label={t('accounts.disconnectAria', { email: account.email })}
                     onClick={() => setDeleting(account)}>
                     <TrashIcon />
                   </button>
@@ -251,11 +254,10 @@ export default function ConnectedAccountsPage() {
         <DeleteConfirmModal
           loading={disconnect.isPending}
           message={<>
-            Disconnect <strong>{deleting.email}</strong>? Nothing in that mailbox is deleted — Weesky
-            simply stops opening it.
+            <Trans i18nKey="accounts.disconnectConfirm" ns="settings"
+              components={{ name: <strong>{deleting.email}</strong> }} />
             {/* The session falls back on its own, but silently: say so before it happens. */}
-            {deleting.id === activeAccountId
-              && ' You are reading this mailbox right now, so you will be taken back to your own.'}
+            {deleting.id === activeAccountId && <>{' '}{t('accounts.disconnectActive')}</>}
           </>}
           onConfirm={confirmDisconnect}
           onClose={() => setDeleting(null)}

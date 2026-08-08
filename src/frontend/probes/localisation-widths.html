@@ -1,0 +1,377 @@
+<!doctype html>
+<!--
+  Probe: does any French label overrun the box its English original fitted?
+
+  Serving the real app was not an option: the frontend talks to https://api.mail.weesky.net and
+  the dev API carries no `localhost` origin, so a locally served build cannot get past the login
+  screen and none of the targets is reachable. This page reproduces the exact markup of each
+  target with its real class names, loads the REAL stylesheets, and fills it with the REAL strings
+  imported from src/locales — no string is retyped here, so a catalogue edit changes what is
+  measured. It needs no session because it needs no data.
+
+  Served by the Vite dev server (npm run dev) at /probes/localisation-widths.html. #out holds the
+  JSON; document.title becomes 'probe-done' when every case has been measured.
+
+  Reading the numbers:
+  - `text` is a Range over the label's own text node, so it is the ink, not the box around it.
+  - `lines` is that Range's client-rect count: 1 is one line box, 2+ means the label wrapped.
+  - `avail` is the row's content box less the icon and the gap — the width a label may spend.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- main.tsx's order, exactly: the cascade is what decides several of these boxes. -->
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/tooltip.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    #stage { position: absolute; top: 0; left: 0; visibility: hidden; }
+    #out { position: relative; padding: 16px; white-space: pre; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <pre id="out">measuring…</pre>
+  <script type="module">
+    import enSettings from '/src/locales/en/settings.json'
+    import frSettings from '/src/locales/fr/settings.json'
+    import enMail from '/src/locales/en/mail.json'
+    import frMail from '/src/locales/fr/mail.json'
+    import enCompose from '/src/locales/en/compose.json'
+    import frCompose from '/src/locales/fr/compose.json'
+    import enContacts from '/src/locales/en/contacts.json'
+    import frContacts from '/src/locales/fr/contacts.json'
+
+    const CAT = {
+      en: { settings: enSettings, mail: enMail, compose: enCompose, contacts: enContacts },
+      fr: { settings: frSettings, mail: frMail, compose: frCompose, contacts: frContacts },
+    }
+    // `ns:group.key`, optionally with {{var}} filled from `vars` — the only interpolation the
+    // measured strings need, and it keeps the catalogue the single source of the text.
+    function s(lang, path, vars) {
+      const [ns, rest] = path.split(':')
+      let v = rest.split('.').reduce((a, k) => a && a[k], CAT[lang][ns])
+      if (typeof v !== 'string') throw new Error('missing ' + lang + ' ' + path)
+      if (vars) for (const [k, val] of Object.entries(vars)) v = v.replaceAll('{{' + k + '}}', val)
+      return v
+    }
+
+    const stage = document.getElementById('stage')
+    const px = n => Math.round(n * 10) / 10
+    const icon = size => `<svg width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/></svg>`
+
+    /** Ink width and line-box count of one text node, measured without touching the DOM. */
+    function ink(textNode) {
+      const r = document.createRange()
+      r.selectNode(textNode)
+      const rects = [...r.getClientRects()]
+      return { text: px(Math.max(...rects.map(b => b.width))), lines: rects.length }
+    }
+    function lastText(el) {
+      for (const n of [...el.childNodes].reverse()) if (n.nodeType === 3 && n.textContent.trim()) return n
+      return null
+    }
+    function mount(html, width) {
+      const host = document.createElement('div')
+      if (width) host.style.width = width + 'px'
+      host.innerHTML = html
+      stage.appendChild(host)
+      return host
+    }
+
+    const rows = []
+    const add = r => rows.push(r)
+
+    // ── 1. Settings navigation ────────────────────────────────────────────────
+    // SettingsLayout.tsx: nav.context-pane > a.pane-item > svg(16) + label text node.
+    // Every row is measured in the active weight (600) as well, since any row can be the active
+    // one and 600 is the wider of the two.
+    const NAV = ['account', 'general', 'accounts', 'appearance', 'folders', 'aliases', 'identities', 'rules', 'admin']
+    for (const active of [false, true]) {
+      for (const lang of ['en', 'fr']) {
+        const html = `<div class="settings-layout"><nav class="context-pane">` +
+          NAV.map(k => `<a class="pane-item${active ? ' is-active' : ''}">${icon(16)}${s(lang, 'settings:nav.' + k)}</a>`).join('') +
+          `</nav></div>`
+        const host = mount(html, 1280)
+        host.style.height = '700px'
+        const items = [...host.querySelectorAll('.pane-item')]
+        items.forEach((row, i) => {
+          const cs = getComputedStyle(row)
+          const svg = row.querySelector('svg').getBoundingClientRect().width
+          const avail = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - svg - parseFloat(cs.columnGap)
+          const m = ink(lastText(row))
+          add({
+            target: 'settings nav' + (active ? ' (active, 600)' : ' (normal, 400)'),
+            lang, label: s(lang, 'settings:nav.' + NAV[i]),
+            ...m, avail: px(avail), pane: px(host.querySelector('.context-pane').getBoundingClientRect().width),
+            fits: m.lines === 1 && m.text <= avail,
+          })
+        })
+      }
+    }
+
+    // ── 2. rules.badgeAny on .rule-card-badge ─────────────────────────────────
+    // RulesPage.jsx: .rule-card-body > .rule-card-side > .rule-card-badge + .rule-card-conditions.
+    // Measured inside a real .settings-content at 1280px and again at 1024px, the narrower of the
+    // two window widths this app is used at.
+    for (const winW of [1280, 1024]) {
+      for (const lang of ['en', 'fr']) {
+        for (const key of ['badgeAny', 'badgeAll']) {
+          const pills = ['De contient « facture »', 'Objet contient « commande »', 'Corps contient « livraison »']
+          const html = `<div class="settings-layout"><nav class="context-pane"></nav><div class="settings-content">
+            <div class="rule-card"><div class="rule-card-body"><div class="rule-card-side">
+              <span class="rule-card-badge">${s(lang, 'settings:rules.' + key)}</span>
+              <div class="rule-card-conditions">${pills.map(p => `<span class="rule-card-pill">${p}</span>`).join('')}</div>
+            </div></div></div></div></div>`
+          const host = mount(html, winW)
+          host.style.height = '700px'
+          const badge = host.querySelector('.rule-card-badge')
+          const conds = host.querySelector('.rule-card-conditions')
+          const side = host.querySelector('.rule-card-side')
+          const m = ink(lastText(badge))
+          add({
+            target: `.rule-card-badge @${winW}`, lang, label: s(lang, 'settings:rules.' + key),
+            ...m, badgeBox: px(badge.getBoundingClientRect().width),
+            badgeHeight: px(badge.getBoundingClientRect().height),
+            avail: px(side.clientWidth), condsWidth: px(conds.getBoundingClientRect().width),
+            sideHeight: px(side.getBoundingClientRect().height),
+            fits: m.lines === 1 && badge.scrollWidth <= badge.clientWidth + 1,
+          })
+        }
+      }
+    }
+
+    // ── 3a. Quick-action chips (GeneralPage) ──────────────────────────────────
+    // .field-h.is-setting.is-stacked > .setting-label + .action-chips > button.action-chip.
+    // Measured inside .account-section, the 560px box GeneralPage's groups sit in.
+    const CHIPS = ['seen', 'archive', 'junk', 'delete']
+    for (const lang of ['en', 'fr']) {
+      const html = `<div class="settings-layout"><nav class="context-pane"></nav><div class="settings-content">
+        <div class="account-section"><div class="field-h is-setting is-stacked">
+          <span class="setting-label"><span>${s(lang, 'settings:general.rowActions.label')}</span>
+          <span class="setting-hint">${s(lang, 'settings:general.rowActions.hint')}</span></span>
+          <div class="action-chips">${CHIPS.map((c, i) =>
+            `<button type="button" class="action-chip${i < 3 ? ' is-on' : ''}">${icon(16)}${s(lang, 'settings:general.rowActions.' + c)}</button>`).join('')}
+          </div></div></div></div></div>`
+      const host = mount(html, 1280)
+      host.style.height = '700px'
+      const wrap = host.querySelector('.action-chips')
+      const chips = [...host.querySelectorAll('.action-chip')]
+      chips.forEach((chip, i) => {
+        const m = ink(lastText(chip))
+        add({
+          target: '.action-chip', lang, label: s(lang, 'settings:general.rowActions.' + CHIPS[i]),
+          ...m, chipBox: px(chip.getBoundingClientRect().width), avail: px(wrap.clientWidth),
+          fits: m.lines === 1 && chip.getBoundingClientRect().width <= wrap.clientWidth + 1,
+        })
+      })
+      add({
+        target: '.action-chips row', lang, label: '(4 chips, wrapping container)',
+        text: px(Math.max(...chips.map(c => c.getBoundingClientRect().right)) - wrap.getBoundingClientRect().left),
+        lines: new Set(chips.map(c => Math.round(c.getBoundingClientRect().top))).size,
+        avail: px(wrap.clientWidth),
+        fits: wrap.scrollWidth <= wrap.clientWidth + 1,
+      })
+    }
+
+    // ── 3b. SelectionToolbar's selected-count band ────────────────────────────
+    // MessageList's heading band. Two arrangements: `bottom`, where the list spans the window less
+    // the 240px folder column, and `right` with the splitter on its 240px floor — the genuinely
+    // narrow one, since `bottom` is where the list is widest.
+    for (const [arr, listW] of [['bottom', 1280 - 240], ['right (min 240)', 240]]) {
+      for (const lang of ['en', 'fr']) {
+        for (const [what, label] of [
+          ['count', s(lang, 'mail:toolbar.selected_other', { count: '128' })],
+          ['folder title', lang === 'fr' ? 'Courrier indésirable' : 'Junk'],
+        ]) {
+          const html = `<div class="mail-list"><div class="selection-toolbar">
+            <input type="checkbox" class="selection-master" />
+            <span class="selection-heading"><span class="selection-title">${label}</span>
+            <button class="selection-btn selection-star">${icon(18)}</button></span>
+            <div class="selection-actions">${[20, 20, 20, 20].map(n => `<button class="selection-btn">${icon(n)}</button>`).join('')}
+            <button class="selection-btn">${icon(20)}</button></div></div></div>`
+          const host = mount(html, listW)
+          const title = host.querySelector('.selection-title')
+          const m = ink(lastText(title))
+          add({
+            target: `.selection-title ${what} @${arr}`, lang, label,
+            ...m, avail: px(title.clientWidth), listWidth: listW,
+            fits: m.lines === 1 && title.scrollWidth <= title.clientWidth + 1,
+          })
+        }
+      }
+    }
+
+    // ── 4. The nine Task 4 flagged as tight ───────────────────────────────────
+    // Each is the real markup of its row, at the real width of the column or dialog it sits in.
+
+    // 4.1 Composer header: title · Send · Save draft · ✕, inside the compose column.
+    // `right` is not a case here — the composer replaces list AND reader, so it always spans the
+    // window less the 240px folder column.
+    for (const winW of [1280, 1024]) {
+      for (const lang of ['en', 'fr']) {
+        const html = `<div class="compose-view"><div class="compose-header">
+          <span class="modal-title">${s(lang, 'compose:titles.newMessage')}</span>
+          <button class="btn btn-primary compose-send">${icon(15)} ${s(lang, 'compose:header.send')}</button>
+          <button class="btn btn-ghost">${s(lang, 'compose:header.saveDraft')}</button>
+          <button class="modal-close">✕</button></div></div>`
+        const host = mount(html, winW - 240)
+        const header = host.querySelector('.compose-header')
+        const ghost = host.querySelector('.btn-ghost')
+        const used = [...header.children].reduce((a, el) => a + el.getBoundingClientRect().width, 0) +
+          parseFloat(getComputedStyle(header).columnGap) * (header.children.length - 1)
+        const cs = getComputedStyle(header)
+        const avail = header.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+        add({
+          target: `.compose-header @${winW}`, lang, label: s(lang, 'compose:header.saveDraft'),
+          ...ink(lastText(ghost)), rowUsed: px(used), avail: px(avail),
+          fits: used <= avail + 1 && header.scrollWidth <= header.clientWidth + 1,
+        })
+      }
+    }
+
+    // 4.2 Leave guard: three buttons in one .folder-pick-submit row inside a .modal.
+    for (const lang of ['en', 'fr']) {
+      const html = `<div class="modal-overlay"><div class="modal">
+        <div class="modal-header"><span class="modal-title">${s(lang, 'compose:leave.title')}</span></div>
+        <p>${s(lang, 'compose:leave.body')}</p>
+        <div class="folder-pick-submit">
+          <button class="btn btn-ghost">${s(lang, 'compose:leave.keepEditing')}</button>
+          <button class="btn btn-ghost">${s(lang, 'compose:leave.discard')}</button>
+          <button class="btn btn-primary">${s(lang, 'compose:leave.saveDraft')}</button>
+        </div></div></div>`
+      const host = mount(html, 1280)
+      host.style.height = '700px'
+      const row = host.querySelector('.folder-pick-submit')
+      const btns = [...row.children]
+      const used = btns.reduce((a, b) => a + b.getBoundingClientRect().width, 0) +
+        parseFloat(getComputedStyle(row).columnGap) * (btns.length - 1)
+      add({
+        target: '.folder-pick-submit (leave guard)', lang,
+        label: btns.map(b => b.textContent.trim()).join(' | '),
+        text: px(used), lines: new Set(btns.map(b => Math.round(b.getBoundingClientRect().top))).size,
+        avail: px(row.clientWidth), modalWidth: px(host.querySelector('.modal').getBoundingClientRect().width),
+        fits: used <= row.clientWidth + 1,
+      })
+    }
+
+    // 4.3 MailLayout's compose button, in the 240px folder column beside RefreshButton.
+    for (const lang of ['en', 'fr']) {
+      const html = `<div class="mail-folders"><div class="mail-folders-compose">
+        <button class="btn btn-primary mail-compose-btn">${icon(15)} ${s(lang, 'mail:layout.newMessage')}</button>
+        <button class="mail-refresh-btn">${icon(18)}</button></div></div>`
+      const host = mount(html, 240)
+      const btn = host.querySelector('.mail-compose-btn')
+      const m = ink(lastText(btn))
+      add({
+        target: '.mail-compose-btn (240px column)', lang, label: s(lang, 'mail:layout.newMessage'),
+        ...m, buttonBox: px(btn.getBoundingClientRect().width),
+        avail: px(btn.clientWidth - parseFloat(getComputedStyle(btn).paddingLeft) * 2 - 15 - parseFloat(getComputedStyle(btn).columnGap || 0)),
+        fits: m.lines === 1 && btn.scrollWidth <= btn.clientWidth + 1,
+      })
+    }
+
+    // 4.4 EmptyFolderBanner, pinned above a list column that can be 240px wide.
+    for (const listW of [240, 1280 - 240]) {
+      for (const lang of ['en', 'fr']) {
+        const role = s(lang, 'mail:list.emptyBanner.roleJunk')
+        const html = `<div class="mail-list"><div class="empty-folder-banner">${icon(16)}
+          <span class="empty-folder-banner-text">${s(lang, 'mail:list.emptyBanner.junk')}</span>
+          <button class="empty-folder-banner-link">${s(lang, 'mail:list.emptyBanner.action', { role })}</button>
+          </div></div>`
+        const host = mount(html, listW)
+        const link = host.querySelector('.empty-folder-banner-link')
+        const banner = host.querySelector('.empty-folder-banner')
+        const m = ink(lastText(link))
+        add({
+          target: `.empty-folder-banner @${listW}`, lang, label: s(lang, 'mail:list.emptyBanner.action', { role }),
+          ...m, bannerHeight: px(banner.getBoundingClientRect().height), avail: px(banner.clientWidth),
+          fits: m.lines === 1 && banner.scrollWidth <= banner.clientWidth + 1,
+        })
+      }
+    }
+
+    // 4.5 MoveMessagesModal submit, inside a dialog measured by --field-w: 34ch.
+    for (const lang of ['en', 'fr']) {
+      const html = `<div class="modal-overlay"><div class="modal">
+        <div class="modal-header"><span class="modal-title">${s(lang, 'mail:move.actionMove')}</span></div>
+        <div class="folder-pick-filter"><input class="search-input" /></div>
+        <div class="folder-pick-submit"><button class="btn btn-primary">${s(lang, 'mail:move.submitMove', { name: 'Courrier indésirable' })}</button></div>
+      </div></div>`
+      const host = mount(html, 1280)
+      host.style.height = '700px'
+      const btn = host.querySelector('.folder-pick-submit .btn-primary')
+      const row = host.querySelector('.folder-pick-submit')
+      const m = ink(lastText(btn))
+      add({
+        target: '.folder-pick-submit (move)', lang, label: s(lang, 'mail:move.submitMove', { name: 'Courrier indésirable' }),
+        ...m, buttonBox: px(btn.getBoundingClientRect().width), avail: px(row.clientWidth),
+        modalWidth: px(host.querySelector('.modal').getBoundingClientRect().width),
+        fits: m.lines === 1 && btn.scrollWidth <= btn.clientWidth + 1,
+      })
+    }
+
+    // 4.6 ContactsLayout's add button, in the 240px scopes column.
+    for (const lang of ['en', 'fr']) {
+      const html = `<div class="contacts-scopes-column"><div class="contacts-scopes-add">
+        <button class="btn btn-primary contacts-add-btn">${s(lang, 'contacts:layout.add')}</button></div></div>`
+      const host = mount(html, 240)
+      const btn = host.querySelector('.contacts-add-btn')
+      const m = ink(lastText(btn))
+      add({
+        target: '.contacts-add-btn (240px column)', lang, label: s(lang, 'contacts:layout.add'),
+        ...m, buttonBox: px(btn.getBoundingClientRect().width),
+        avail: px(btn.clientWidth - parseFloat(getComputedStyle(btn).paddingLeft) - parseFloat(getComputedStyle(btn).paddingRight)),
+        fits: m.lines === 1 && btn.scrollWidth <= btn.clientWidth + 1,
+      })
+    }
+
+    // 4.7 AdvancedSearchModal's date <select> — exempt from --field-w, so its widest option sets
+    // the dialog's width. `Deux dernières semaines` is the widest French option.
+    const DATES = ['allTime', 'last7', 'last14', 'last30', 'last90', 'last180', 'thisYear']
+    for (const lang of ['en', 'fr']) {
+      const html = `<div class="modal-overlay"><div class="modal">
+        <div class="modal-header"><span class="modal-title">${s(lang, 'mail:search.advanced.title')}</span></div>
+        <form>${['from', 'to', 'subject', 'body'].map(f =>
+          `<div class="field-h"><label>${s(lang, 'mail:search.advanced.' + f)}</label><input type="text" /></div>`).join('')}
+        <div class="field-h"><label>${s(lang, 'mail:search.advanced.date')}</label>
+        <select>${DATES.map(d => `<option>${s(lang, 'mail:search.advanced.' + d)}</option>`).join('')}</select></div>
+        <div class="field-h"><label>${s(lang, 'mail:search.advanced.scope')}</label>
+        <select><option>${s(lang, 'mail:search.advanced.thisFolder', { folder: 'Courrier indésirable' })}</option>
+        <option>${s(lang, 'mail:search.advanced.allFolders')}</option></select></div>
+        <div class="folder-pick-submit"><button class="btn btn-primary">${icon(15)} ${s(lang, 'mail:search.advanced.submit')}</button></div>
+        </form></div></div>`
+      const host = mount(html, 1280)
+      host.style.height = '700px'
+      const modal = host.querySelector('.modal')
+      const sel = host.querySelector('select')
+      add({
+        target: 'AdvancedSearchModal <select>', lang, label: s(lang, 'mail:search.advanced.last14'),
+        text: px(sel.getBoundingClientRect().width), lines: 1,
+        avail: px(modal.clientWidth), modalWidth: px(modal.getBoundingClientRect().width),
+        fits: modal.scrollWidth <= modal.clientWidth + 1,
+      })
+    }
+
+    document.fonts.ready.then(() => requestAnimationFrame(() => {
+      const cols = ['target', 'lang', 'label', 'text', 'lines', 'avail', 'fits']
+      const extra = ['pane', 'badgeBox', 'badgeHeight', 'condsWidth', 'sideHeight', 'chipBox',
+        'listWidth', 'rowUsed', 'modalWidth', 'buttonBox', 'bannerHeight']
+      const header = [...cols, ...extra]
+      const table = rows.map(r => header.map(c => r[c] === undefined ? '' : String(r[c])))
+      const w = header.map((h, i) => Math.max(h.length, ...table.map(t => t[i].length)))
+      const line = a => a.map((v, i) => v.padEnd(w[i])).join('  ')
+      document.getElementById('out').textContent =
+        'font: ' + getComputedStyle(document.body).fontFamily + '  |  dpr ' + window.devicePixelRatio + '\n\n' +
+        line(header) + '\n' + w.map(n => '-'.repeat(n)).join('  ') + '\n' + table.map(line).join('\n')
+      window.__probe = rows
+      document.title = 'probe-done'
+    }))
+  </script>
+</body>
+</html>

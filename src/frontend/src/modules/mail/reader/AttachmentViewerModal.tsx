@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { requestBlob } from '../../../api.js'
 import LoadingBlock from '../../../components/LoadingBlock'
 import ChevronLeftIcon from '../../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { formatSize } from './formatSize'
 
 export interface ViewerImage {
@@ -29,9 +31,12 @@ interface Props {
  * keyboard's ArrowLeft/ArrowRight move through the message's images; the ends do not wrap.
  */
 export default function AttachmentViewerModal({ images, initialIndex, onDownload, onClose }: Props) {
+  const { t } = useTranslation('mail')
   const [index, setIndex] = useState(initialIndex)
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // The failure, not its wording: worded here the effect would close over `t` and refetch the
+  // bytes on a language change. Translated at render, so it follows the language on its own.
+  const [error, setError] = useState<unknown>(null)
   const image = images[index]
   const several = images.length > 1
 
@@ -47,7 +52,7 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
         setObjectUrl(url)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the image')
+        if (!cancelled) setError(err)
       })
     return () => {
       cancelled = true
@@ -73,24 +78,28 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
           <span className="modal-title">{image.fileName}</span>
           {several && <span className="attachment-viewer-count">{index + 1} / {images.length}</span>}
           <span className="attachment-viewer-size">{formatSize(image.size)}</span>
-          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         <div className="attachment-viewer-body">
           {several && (
-            <button type="button" className="attachment-viewer-nav" aria-label="Previous image"
+            <button type="button" className="attachment-viewer-nav" aria-label={t('viewer.previous')}
               disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))}>
               <ChevronLeftIcon size={18} />
             </button>
           )}
           <div className="attachment-viewer-stage">
             {error
-              ? <span className="attachment-viewer-error" role="alert">{error}</span>
+              ? (
+                <span className="attachment-viewer-error" role="alert">
+                  {apiErrorMessage(error, t('viewer.loadFailed'))}
+                </span>
+              )
               : objectUrl
                 ? <img src={objectUrl} alt={image.fileName} className="attachment-viewer-img" />
                 : <LoadingBlock />}
           </div>
           {several && (
-            <button type="button" className="attachment-viewer-nav" aria-label="Next image"
+            <button type="button" className="attachment-viewer-nav" aria-label={t('viewer.next')}
               disabled={index === images.length - 1}
               onClick={() => setIndex(i => Math.min(images.length - 1, i + 1))}>
               <ChevronRightIcon size={18} />
@@ -98,7 +107,7 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
           )}
         </div>
         <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={() => onDownload(image)}>Download</button>
+          <button type="button" className="btn btn-ghost" onClick={() => onDownload(image)}>{t('reader.download')}</button>
         </div>
       </div>
     </div>

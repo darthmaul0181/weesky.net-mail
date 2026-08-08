@@ -191,7 +191,7 @@ public sealed class ConnectedAccountsOAuthTests
 
         var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal(
-            "This provider sign-in is not available right now. Contact your administrator.",
+            ConnectedAccountErrors.ProviderConfigIncomplete,
             Assert.IsType<ResultEnveloppe>(refused.Value).Message);
         logger.Verify(
             l => l.Log(
@@ -213,7 +213,7 @@ public sealed class ConnectedAccountsOAuthTests
 
         var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal(
-            "This server does not sign in with a provider account",
+            ConnectedAccountErrors.NotAProviderDomain,
             Assert.IsType<ResultEnveloppe>(refused.Value).Message);
         logger.Verify(
             l => l.Log(
@@ -236,7 +236,7 @@ public sealed class ConnectedAccountsOAuthTests
             new OAuthStartRequest(Guid.NewGuid(), null), CancellationToken.None);
 
         var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal("Unknown domain", Assert.IsType<ResultEnveloppe>(refused.Value).Message);
+        Assert.Equal(ConnectedAccountErrors.UnknownDomain, Assert.IsType<ResultEnveloppe>(refused.Value).Message);
     }
 
     [Fact]

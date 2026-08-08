@@ -72,13 +72,28 @@ describe('ContactsTransfer', () => {
     await waitFor(() => expect(input.value).toBe(''))
   })
 
-  it('reports a refused import to its caller', async () => {
+  // Server prose never reaches the caller; the local fallback does — see apiErrorMessage.
+  it('reports the local fallback for a refused import carrying no code', async () => {
     api.importContacts.mockRejectedValue(new Error('No recognised column in this file.'))
     const onError = renderTransfer(book)
 
     choose(new File(['x'], 'contacts.csv', { type: 'text/csv' }))
 
-    await waitFor(() => expect(onError).toHaveBeenCalledWith('No recognised column in this file.'))
+    await waitFor(() => expect(onError).toHaveBeenCalledWith('Could not import the file'))
+    expect(screen.queryByText(/added/i)).not.toBeInTheDocument()
+  })
+
+  // csv_no_recognised_column is a named stable code: the refusal must stay specific, translated
+  // rather than shown as the generic fallback above.
+  it('reports the translated csv_no_recognised_column message', async () => {
+    api.importContacts.mockRejectedValue(
+      Object.assign(new Error('csv_no_recognised_column'), { code: 'csv_no_recognised_column' }))
+    const onError = renderTransfer(book)
+
+    choose(new File(['x'], 'contacts.csv', { type: 'text/csv' }))
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(
+      'No recognised column in this file. It needs a header row naming a name or an e-mail column.'))
     expect(screen.queryByText(/added/i)).not.toBeInTheDocument()
   })
 
@@ -117,12 +132,13 @@ describe('ContactsTransfer', () => {
     expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled()
   })
 
+  // Server prose never reaches the caller; the local fallback does — see apiErrorMessage.
   it('reports a refused export to its caller', async () => {
     api.exportContacts.mockRejectedValue(new Error('Server error'))
     const onError = renderTransfer(book)
 
     await userEvent.click(screen.getByRole('button', { name: 'Export' }))
 
-    await waitFor(() => expect(onError).toHaveBeenCalledWith('Server error'))
+    await waitFor(() => expect(onError).toHaveBeenCalledWith('Could not export the contacts'))
   })
 })

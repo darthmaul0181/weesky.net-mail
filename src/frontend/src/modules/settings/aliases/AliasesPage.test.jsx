@@ -130,13 +130,14 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('new@weesky.be added')).toBeInTheDocument()
   })
 
-  it('shows an error toast when alias creation fails', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when alias creation fails', async () => {
     api.createAlias.mockRejectedValue(new Error('Alias exists'))
     renderPage()
     await screen.findByText('alias1')
     await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
     await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
-    expect(await screen.findByText('Alias exists')).toBeInTheDocument()
+    expect(await screen.findByText('Failed to create alias.')).toBeInTheDocument()
   })
 
   // Both caches hold a 5-minute staleTime, so without these the identity picker misses a
@@ -201,23 +202,15 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('alias1')).toBeInTheDocument()
   })
 
-  it('reports the reason and reloads aliases when delete fails', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback and reloads aliases when delete fails', async () => {
     api.deleteAlias.mockRejectedValue(new Error('Not found'))
     renderPage()
     await screen.findByText('alias1')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
     await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
-    expect(await screen.findByText('Not found')).toBeInTheDocument()
-    await waitFor(() => expect(api.getAliases).toHaveBeenCalledTimes(2))
-  })
-
-  it('uses fallback error message when alias deletion error has no message', async () => {
-    api.deleteAlias.mockRejectedValue(new Error())
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0])
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
     expect(await screen.findByText('Failed to delete alias.')).toBeInTheDocument()
+    await waitFor(() => expect(api.getAliases).toHaveBeenCalledTimes(2))
   })
 
   it('fires alpha nav letter click (scrollToLetter)', async () => {
@@ -302,18 +295,10 @@ describe('AliasesPage', () => {
     await screen.findByText('alias1')
     await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
     await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    await screen.findByText('Failed to create alias.')
     const closeBtn = await screen.findByRole('button', { name: '✕' })
     await userEvent.click(closeBtn)
-    await waitFor(() => expect(screen.queryByText('Alias exists')).not.toBeInTheDocument())
-  })
-
-  it('uses fallback error message when alias creation error has no message', async () => {
-    api.createAlias.mockRejectedValue(new Error())
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
-    expect(await screen.findByText('Failed to create alias.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Failed to create alias.')).not.toBeInTheDocument())
   })
 
   it('handles getAliases returning null', async () => {

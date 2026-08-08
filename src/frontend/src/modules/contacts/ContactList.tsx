@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
 import StarIcon from '../../icons/StarIcon'
@@ -27,6 +28,7 @@ interface Props {
 export default function ContactList({
   contacts, selectedId, onSelect, onToggleFavorite, onEdit, onDelete,
 }: Props) {
+  const { t } = useTranslation('contacts')
   const [query, setQuery] = useState('')
   const shown = useMemo(() => filterContacts(contacts, query), [contacts, query])
   const filtering = query.trim() !== ''
@@ -36,8 +38,8 @@ export default function ContactList({
       <div className="contacts-list-heading">
         <span className="contacts-search">
           <SearchIcon size={14} />
-          <input type="search" className="search-input" aria-label="Search contacts"
-            placeholder="Search contacts…" value={query}
+          <input type="search" className="search-input" aria-label={t('list.searchLabel')}
+            placeholder={t('list.searchPlaceholder')} value={query}
             onChange={event => setQuery(event.target.value)} />
         </span>
         {/* Matching over total while filtering, the bare count otherwise: "2 / 2" reads as though
@@ -48,9 +50,9 @@ export default function ContactList({
       </div>
 
       <div className="contacts-list-scroll">
-        {contacts.length === 0 && <p className="contacts-empty">No contacts yet</p>}
+        {contacts.length === 0 && <p className="contacts-empty">{t('list.empty')}</p>}
         {contacts.length > 0 && shown.length === 0 && (
-          <p className="contacts-empty">No matching contacts</p>
+          <p className="contacts-empty">{t('list.noMatch')}</p>
         )}
 
         <div className="contact-tiles">
@@ -73,9 +75,9 @@ export default function ContactList({
                   {/* The star leads on the far left and the actions close on the far right — the
                       tile anatomy, identical to the admin and identities lists. */}
                   <button type="button" className={`contact-star${contact.isFavorite ? ' is-on' : ''}`}
-                    title={contact.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
-                    aria-label={contact.isFavorite
-                      ? `Remove ${name} from favourites` : `Add ${name} to favourites`}
+                    title={t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
+                    aria-label={t(
+                      contact.isFavorite ? 'favourites.removeNamed' : 'favourites.addNamed', { name })}
                     onClick={event => { event.stopPropagation(); onToggleFavorite(contact) }}>
                     <StarIcon size={14} filled={contact.isFavorite} />
                   </button>
@@ -83,13 +85,13 @@ export default function ContactList({
                   <span className="contact-tile-name">{name}</span>
 
                   <span className="contact-tile-actions">
-                    <button type="button" className="admin-icon-btn" title="Edit"
-                      aria-label={`Edit ${name}`}
+                    <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
+                      aria-label={t('list.edit', { name })}
                       onClick={event => { event.stopPropagation(); onEdit(contact.id) }}>
                       <PencilIcon size={14} />
                     </button>
-                    <button type="button" className="admin-icon-btn is-danger" title="Delete"
-                      aria-label={`Delete ${name}`}
+                    <button type="button" className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })}
+                      aria-label={t('list.delete', { name })}
                       onClick={event => { event.stopPropagation(); onDelete(contact) }}>
                       <TrashIcon size={14} />
                     </button>

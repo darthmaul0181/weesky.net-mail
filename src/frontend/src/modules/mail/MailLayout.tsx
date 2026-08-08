@@ -1,5 +1,6 @@
 ﻿import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { Link, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import type { SearchCriteria } from './list/searchCriteria'
 import { PRIMARY_ACCOUNT_ID, useAuth } from '../../contexts/AuthContext'
@@ -23,6 +24,7 @@ import RefreshButton from './folders/RefreshButton'
 import { buildDraftSeed } from './compose/composeSeed'
 import { roleLabel } from './roleLabel'
 import { readingPaneOf, showFolderIconsOf, usePreferences } from '../../hooks/usePreferences'
+import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from './split/PaneSplitter'
 import { usePaneSize } from './split/usePaneSize'
 
@@ -46,6 +48,7 @@ function needsAccountPassword(error: unknown): boolean {
  * the back button still work.
  */
 export default function MailLayout() {
+  const { t } = useTranslation('mail')
   const [params, setParams] = useSearchParams()
   const composing = useMatch('/mail/compose') != null
   const navigate = useNavigate()
@@ -117,7 +120,7 @@ export default function MailLayout() {
     ? flatten(folders).find(entry => entry.node.path === folder)?.node
     : undefined
   const folderName = folderNode
-    ? (folderNode.specialUse ? roleLabel(folderNode.specialUse) : folderNode.name)
+    ? (folderNode.specialUse ? roleLabel(folderNode.specialUse, t) : folderNode.name)
     : undefined
 
   // Landing on three empty columns asks the user to pick the one folder everybody starts in.
@@ -170,7 +173,7 @@ export default function MailLayout() {
         opened, identities, { folderPath: folder!, uid: draftUid }, accountId)
       navigate('/mail/compose', { state: { from: folder, seed } })
     } catch (error) {
-      addToast((error as Error).message || 'Could not open the draft', 'error')
+      addToast(apiErrorMessage(error, t('layout.draftOpenFailed')), 'error')
     }
   }
 
@@ -269,12 +272,10 @@ export default function MailLayout() {
     const byConsent = activeAccount?.authMode === 'OAuth2'
     return (
       <div className="mail-full-pane">
-        <h2>{byConsent ? 'Sign-in needed' : 'Password needed'}</h2>
-        <p>{byConsent
-          ? 'Weesky can no longer sign in to this mailbox, so you need to grant it access again.'
-          : "Your main password changed, so this account's password must be entered again."}</p>
+        <h2>{t(byConsent ? 'identity.signInNeeded' : 'identity.passwordNeeded', { ns: 'common' })}</h2>
+        <p>{t(byConsent ? 'blocked.consentBody' : 'blocked.passwordBody')}</p>
         <Link className="btn btn-primary" to="/settings/accounts">
-          {byConsent ? 'Reconnect this account' : 'Enter the password'}
+          {t(byConsent ? 'blocked.reconnect' : 'blocked.enterPassword')}
         </Link>
       </div>
     )
@@ -287,7 +288,7 @@ export default function MailLayout() {
       <div className="mail-folders">
         <div className="mail-folders-compose">
           <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
-            <RocketIcon size={15} /> New message
+            <RocketIcon size={15} /> {t('layout.newMessage')}
           </button>
           <RefreshButton fetching={refreshFetching} onRefresh={refresh} />
         </div>
@@ -296,8 +297,8 @@ export default function MailLayout() {
               icons on gets a column that appears late and pushes every name sideways. The two
               queries leave together, so it costs nothing in the ordinary case — and an errored
               preferences query still resolves, leaving the tree to draw without icons. */}
-          {(isLoading || preferencesLoading) && <p className="mail-empty">Loading folders…</p>}
-          {isError && <p className="mail-empty">Could not load folders.</p>}
+          {(isLoading || preferencesLoading) && <p className="mail-empty">{t('folders.loading')}</p>}
+          {isError && <p className="mail-empty">{t('folders.loadFailed')}</p>}
           {folders && !preferencesLoading && (
             <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder}
               onDropMessages={dropMessages}

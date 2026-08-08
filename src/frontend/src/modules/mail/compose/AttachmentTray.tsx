@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import { formatSize } from '../reader/formatSize'
 import type { StagedItem } from './useStagedAttachments'
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function AttachmentTray({ items, onAddFiles, onRemove }: Props) {
+  const { t } = useTranslation('compose')
   const picker = useRef<HTMLInputElement>(null)
 
   return (
@@ -20,13 +22,15 @@ export default function AttachmentTray({ items, onAddFiles, onRemove }: Props) {
           {item.error
             ? <span className="compose-attachment-error" role="alert">{item.error}</span>
             : item.progress < 1
-              ? <progress value={item.progress} max={1} aria-label={`Uploading ${item.fileName}`} />
+              ? <progress value={item.progress} max={1}
+                  aria-label={t('attachments.uploading', { name: item.fileName })} />
               : <span className="compose-attachment-size">{formatSize(item.size)}</span>}
-          <button type="button" aria-label={`Remove ${item.fileName}`} onClick={() => onRemove(item.key)}>✕</button>
+          <button type="button" aria-label={t('attachments.remove', { name: item.fileName })}
+            onClick={() => onRemove(item.key)}>✕</button>
         </span>
       ))}
       <button type="button" className="btn btn-ghost compose-attach-btn" onClick={() => picker.current?.click()}>
-        <PaperclipIcon size={16} /> Attach files
+        <PaperclipIcon size={16} /> {t('attachments.attach')}
       </button>
       <input ref={picker} type="file" multiple hidden data-testid="attachment-input"
         onChange={e => {

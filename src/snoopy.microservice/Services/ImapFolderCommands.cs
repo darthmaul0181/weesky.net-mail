@@ -87,7 +87,7 @@ internal sealed class ImapFolderCommands(ImapSession session, ImapClient client,
         {
             if (!ImapSession.IsValidLeafName(name, session.DirectorySeparator))
             {
-                return Result.Failure<string>($"A folder name cannot be empty or contain '{session.DirectorySeparator}'");
+                return Result.Failure<string>(ImapSession.InvalidFolderName);
             }
 
             var parent = string.IsNullOrEmpty(parentPath)
@@ -110,7 +110,7 @@ internal sealed class ImapFolderCommands(ImapSession session, ImapClient client,
         {
             if (!ImapSession.IsValidLeafName(newName, session.DirectorySeparator))
             {
-                return Result.Failure<string>($"A folder name cannot be empty or contain '{session.DirectorySeparator}'");
+                return Result.Failure<string>(ImapSession.InvalidFolderName);
             }
 
             var folder = await client.GetFolderAsync(path, cancellationToken);

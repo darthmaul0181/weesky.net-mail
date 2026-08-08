@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { useDeleteFolder, useRenameFolder, useSetFolderSubscription } from '../queries'
 import { roleLabel } from '../roleLabel'
 import { flatten, isSystemFolder, parentOf, sortFolders } from './folderNodes'
@@ -18,6 +20,7 @@ interface Props {
  * and read as a rendering fault. Its role is changed in the system-folders dialog.
  */
 export default function FolderManager({ folders, onNotify }: Props) {
+  const { t } = useTranslation('mail')
   const [renaming, setRenaming] = useState<MailFolderNode | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingDelete, setPendingDelete] = useState<MailFolderNode | null>(null)
@@ -32,7 +35,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
       onNotify(success)
       return true
     } catch (error) {
-      onNotify(error instanceof Error ? error.message : failure, 'error')
+      onNotify(apiErrorMessage(error, failure), 'error')
       return false
     }
   }
@@ -53,7 +56,9 @@ export default function FolderManager({ folders, onNotify }: Props) {
             >
               <label
                 className={`toggle-switch${isSystem ? ' is-locked' : ''}`}
-                title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be hidden` : undefined}
+                title={isSystem
+                  ? t('folders.manage.cannotHide', { role: roleLabel(node.specialUse!, t) })
+                  : undefined}
               >
                 <input
                   type="checkbox"
@@ -62,11 +67,12 @@ export default function FolderManager({ folders, onNotify }: Props) {
                   // as hidden with no way to show it.
                   checked={isSystem ? true : node.subscribed}
                   disabled={isSystem}
-                  aria-label={`Show ${node.name}`}
+                  aria-label={t('folders.manage.show', { name: node.name })}
                   onChange={e => run(
                     () => setSubscription.mutateAsync({ path: node.path, subscribed: e.target.checked }),
-                    e.target.checked ? `"${node.name}" is now visible` : `"${node.name}" is now hidden`,
-                    'Could not change the folder visibility')}
+                    t(e.target.checked ? 'folders.manage.nowVisible' : 'folders.manage.nowHidden',
+                      { name: node.name }),
+                    t('folders.manage.visibilityFailed'))}
                 />
                 <span className="toggle-track" />
               </label>
@@ -76,7 +82,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
               {/* Beside the name: parked in its own column it reads as a row status. Now that
                   every tile's name is bold, this badge alone says a folder holds a role. */}
               {isSystem && (
-                <span className="row-tag">{roleLabel(node.specialUse!)}</span>
+                <span className="row-tag">{roleLabel(node.specialUse!, t)}</span>
               )}
 
               {/* `disabled`, so no click or key reaches the handler. The API refuses these
@@ -85,8 +91,10 @@ export default function FolderManager({ folders, onNotify }: Props) {
                 <button
                   type="button"
                   className="admin-icon-btn"
-                  aria-label={`Rename ${node.name}`}
-                  title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be renamed` : 'Rename'}
+                  aria-label={t('folders.manage.rename', { name: node.name })}
+                  title={isSystem
+                    ? t('folders.manage.cannotRename', { role: roleLabel(node.specialUse!, t) })
+                    : t('folders.manage.renameAction')}
                   disabled={isSystem}
                   onClick={() => { setRenaming(node); setRenameValue(node.name) }}
                 >
@@ -95,8 +103,10 @@ export default function FolderManager({ folders, onNotify }: Props) {
                 <button
                   type="button"
                   className="admin-icon-btn is-danger"
-                  aria-label={`Delete ${node.name}`}
-                  title={isSystem ? `The ${roleLabel(node.specialUse!)} folder cannot be deleted` : 'Delete'}
+                  aria-label={t('folders.manage.delete', { name: node.name })}
+                  title={isSystem
+                    ? t('folders.manage.cannotDelete', { role: roleLabel(node.specialUse!, t) })
+                    : t('actions.delete', { ns: 'common' })}
                   disabled={isSystem}
                   onClick={() => setPendingDelete(node)}
                 >
@@ -112,8 +122,8 @@ export default function FolderManager({ folders, onNotify }: Props) {
         <div className="modal-overlay" onClick={() => setRenaming(null)}>
           <div className="modal" onClick={event => event.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title"><PencilIcon />Rename folder</span>
-              <button className="modal-close" aria-label="Close" onClick={() => setRenaming(null)}>✕</button>
+              <span className="modal-title"><PencilIcon />{t('folders.manage.renameTitle')}</span>
+              <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={() => setRenaming(null)}>✕</button>
             </div>
 
             <form
@@ -125,12 +135,12 @@ export default function FolderManager({ folders, onNotify }: Props) {
                     newParentPath: parentOf(renaming),
                     newName: renameValue.trim(),
                   }),
-                  'Folder renamed', 'Could not rename the folder')
+                  t('folders.manage.renamed'), t('folders.manage.renameFailed'))
                 if (ok) setRenaming(null)
               }}
             >
               <div className="field-h">
-                <label htmlFor="rename-folder-name">New name</label>
+                <label htmlFor="rename-folder-name">{t('folders.manage.newName')}</label>
                 <input
                   id="rename-folder-name"
                   type="text"
@@ -146,7 +156,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
                 style={{ marginTop: '8px' }}
                 disabled={!renameValue.trim() || renameFolder.isPending}
               >
-                {renameFolder.isPending ? <span className="spinner" /> : 'Rename'}
+                {renameFolder.isPending ? <span className="spinner" /> : t('folders.manage.renameAction')}
               </button>
             </form>
           </div>
@@ -161,7 +171,8 @@ export default function FolderManager({ folders, onNotify }: Props) {
           onConfirm={async () => {
             const ok = await run(
               () => deleteFolder.mutateAsync({ path: pendingDelete.path }),
-              `Folder "${pendingDelete.name}" deleted`, 'Could not delete the folder')
+              t('folders.manage.deleted', { name: pendingDelete.name }),
+              t('folders.manage.deleteFailed'))
             if (ok) setPendingDelete(null)
           }}
         />

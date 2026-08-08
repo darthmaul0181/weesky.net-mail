@@ -26,8 +26,8 @@ internal sealed record ContactCsvRow(
 /// </summary>
 internal static partial class ContactCsvMapper
 {
-    internal const string NoRecognisedColumn =
-        "No recognised column in this file. It needs a header row naming a name or an e-mail column.";
+    /// <summary>Stable code: no header row named a recognised name or e-mail column. Mapped to 400.</summary>
+    internal const string NoRecognisedColumn = "csv_no_recognised_column";
 
     private enum Column { Unknown, FirstName, LastName, Nickname, DisplayName, Address, Favorite }
 
