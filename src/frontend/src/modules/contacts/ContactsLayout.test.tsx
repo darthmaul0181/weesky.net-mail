@@ -357,6 +357,12 @@ describe('the transfer footer', () => {
   })
 })
 
+/** `ContactsLayout` holds a loading line until `useContacts()` answers, and every case below reads
+    something the book produced. `settle()` drains a single macrotask — it covered that query on an
+    idle machine and raced it under load, which is exactly the distinction CLAUDE.md draws between
+    the two; it stays the right tool only where the assertion is that nothing happened. */
+const bookLoaded = () => screen.findAllByText(/^(Alice|Bruno)$/)
+
 describe('ContactsLayout on a phone', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -371,7 +377,7 @@ describe('ContactsLayout on a phone', () => {
   it('puts the scope column in a drawer and renders no splitter', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts')
-    await settle()
+    await bookLoaded()
 
     expect(container.querySelector('.context-drawer .contacts-scopes-column')).toBeTruthy()
     // Once, not twice: an implementation drawing it inline as well would pass the line above.
@@ -382,7 +388,7 @@ describe('ContactsLayout on a phone', () => {
   it('shows the list alone until a contact is picked', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts')
-    await settle()
+    await bookLoaded()
 
     expect(container.querySelector('[data-testid="contact-list"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
@@ -395,7 +401,7 @@ describe('ContactsLayout on a phone', () => {
   it('gives the card the screen once a contact is picked', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
-    await settle()
+    await bookLoaded()
 
     expect(container.querySelector('[data-testid="contact-card"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
@@ -406,8 +412,10 @@ describe('ContactsLayout on a phone', () => {
   it('keeps the list search across opening a contact and coming back', async () => {
     mockViewport('phone')
     renderAt('/contacts')
-    await settle()
-    await userEvent.type(screen.getByLabelText(/search contacts/i), 'bru')
+    // findBy, not settle(): the heading holding this box only exists once `useContacts()` has
+    // answered, and settle() drains one macrotask — it covered the query on this machine and
+    // raced it under load, which is the distinction CLAUDE.md draws between the two.
+    await userEvent.type(await screen.findByLabelText(/search contacts/i), 'bru')
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByText('Bruno'))
@@ -422,7 +430,7 @@ describe('ContactsLayout on a phone', () => {
   it('gives the card a way back, on the button and on Escape', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
-    await settle()
+    await bookLoaded()
     expect(screen.getByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
@@ -440,7 +448,7 @@ describe('ContactsLayout on a phone', () => {
   it('keeps the scope when the card is closed', async () => {
     mockViewport('phone')
     renderAt('/contacts?scope=favorites&id=a')
-    await settle()
+    await bookLoaded()
 
     await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
 
@@ -453,7 +461,7 @@ describe('ContactsLayout on a phone', () => {
   it('withholds the card back while the delete confirm is open', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
-    await settle()
+    await bookLoaded()
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
 
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
@@ -466,7 +474,7 @@ describe('ContactsLayout on a phone', () => {
   it('draws no back control on a desktop', async () => {
     mockViewport('desktop')
     renderAt('/contacts?id=b')
-    await settle()
+    await bookLoaded()
 
     expect(screen.queryByRole('button', { name: /back to the list/i })).not.toBeInTheDocument()
   })
@@ -476,7 +484,7 @@ describe('ContactsLayout on a phone', () => {
   it('hands the list the hamburger and opens the drawer with it', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts')
-    await settle()
+    await bookLoaded()
 
     await userEvent.click(screen.getByRole('button', { name: /open navigation/i }))
 
@@ -488,7 +496,7 @@ describe('ContactsLayout on a phone', () => {
   it('floats the add action outside the editor and withholds it inside', async () => {
     mockViewport('phone')
     const { container, unmount } = renderAt('/contacts')
-    await settle()
+    await bookLoaded()
     expect(container.querySelector('.floating-action')).toBeTruthy()
     unmount()
 
@@ -501,7 +509,7 @@ describe('ContactsLayout on a phone', () => {
   it('keeps the scope column inline on a desktop', async () => {
     mockViewport('desktop')
     const { container } = renderAt('/contacts')
-    await settle()
+    await bookLoaded()
 
     expect(container.querySelector('.context-drawer')).toBeNull()
     expect(container.querySelector('.contacts-layout > .contacts-scopes-column')).toBeTruthy()
