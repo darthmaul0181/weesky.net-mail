@@ -656,6 +656,53 @@
       touch: '.contact-card-btn',
     })
 
+    // The same card, bottom-anchored the way the shell anchors it, with .floating-action on the
+    // screen beside it. `.contact-card-actions` is a bottom BAND where mail keeps the reader's
+    // actions in its header, so on a phone the FAB lands in the same corner — and none of the four
+    // metrics above can see an occlusion: nothing overflows, nothing is clipped, and both boxes
+    // are at the touch floor while one is unreachable under the other. Only `overlap` answers it.
+    //
+    // The wrapper is what makes the question askable at all: `.floating-action` is position: fixed
+    // and the card is not, so the card has to sit where the shell puts it — filling the viewport
+    // above `.app-bottom-nav`, whose own height is 56px of `.bottom-nav-item` plus its 1px
+    // border-top (shell.css's phone block). Read the two rects rather than the boolean when this
+    // moves: the numbers say by how much, which is what a padding is chosen from.
+    CASES.push({
+      name: 'contacts-card vs. floating add',
+      html: `
+        <div style="position:fixed;left:0;right:0;top:0;bottom:57px">
+          <div class="contacts-layout" style="height:100%">
+            <div class="contacts-row">
+              <div class="contacts-card">
+                <div class="contact-card">
+                  <div class="contact-card-head">
+                    <button class="contact-card-back"><svg width="16" height="16"></svg></button>
+                    <h2 class="contact-card-name">Marie-Christine Vandenbroucke</h2>
+                  </div>
+                  <div class="contact-card-body">
+                    <div class="contact-card-row">
+                      <span class="contact-card-label">Addresses</span>
+                      <span class="contact-card-values">
+                        <span class="contact-card-value"><a href="#">mc@example.be</a></span>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="contact-card-actions">
+                    <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
+                    <span class="actions-rule"></span>
+                    <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
+                    <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="floating-action" aria-label="Add contact">+</button>`,
+      touch: '.contact-card-btn, .contact-card-back',
+      overlap: ['.contact-card-btn.is-danger', '.floating-action'],
+    })
+
     // The scope band as the drawer actually draws it: inside .context-drawer-panel, which is what
     // gives the column its width (min(320px, 86vw)) and drops its own 240px. .contacts-scopes-add
     // is present in the markup because the phone rule that hides it is the thing under test.

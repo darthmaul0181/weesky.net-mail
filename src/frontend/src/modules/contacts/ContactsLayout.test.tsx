@@ -374,6 +374,8 @@ describe('ContactsLayout on a phone', () => {
     await settle()
 
     expect(container.querySelector('.context-drawer .contacts-scopes-column')).toBeTruthy()
+    // Once, not twice: an implementation drawing it inline as well would pass the line above.
+    expect(container.querySelectorAll('.contacts-scopes-column')).toHaveLength(1)
     expect(container.querySelector('.pane-splitter')).toBeNull()
   })
 
@@ -383,18 +385,90 @@ describe('ContactsLayout on a phone', () => {
     await settle()
 
     expect(container.querySelector('[data-testid="contact-list"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
     expect(container.querySelector('[data-testid="contact-card"]')).toBeNull()
   })
 
   // The other half of taking turns: the card owns the screen once an id is in the URL, or the two
-  // would share a 360px row and neither would be readable.
+  // would share a 360px row and neither would be readable. Hidden, never unmounted — MailLayout's
+  // rule, and the next case is what it buys.
   it('gives the card the screen once a contact is picked', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
     await settle()
 
     expect(container.querySelector('[data-testid="contact-card"]')).toBeTruthy()
-    expect(container.querySelector('[data-testid="contact-list"]')).toBeNull()
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+  })
+
+  // The search lives in ContactList's own state: unmounting the column to show the card throws it
+  // away, and the user comes back to the whole book with their query gone.
+  it('keeps the list search across opening a contact and coming back', async () => {
+    mockViewport('phone')
+    renderAt('/contacts')
+    await settle()
+    await userEvent.type(screen.getByLabelText(/search contacts/i), 'bru')
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Bruno'))
+    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+
+    expect(screen.getByLabelText(/search contacts/i)).toHaveValue('bru')
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+  })
+
+  // The card replaced the list, and with it the hamburger: without a ← the only ways out are the
+  // browser's own Back and the tab bar.
+  it('gives the card a way back, on the button and on Escape', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await settle()
+    expect(screen.getByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+    expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
+
+    await userEvent.click(screen.getByText('Bruno'))
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
+  })
+
+  // A scope survives the trip too: backing out of a favourite must not silently widen the list to
+  // the whole book.
+  it('keeps the scope when the card is closed', async () => {
+    mockViewport('phone')
+    renderAt('/contacts?scope=favorites&id=a')
+    await settle()
+
+    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.queryByText('Bruno')).not.toBeInTheDocument()
+  })
+
+  // The confirm owns Escape while it is open: backing out from under it would leave a dialog
+  // acting on a contact the screen no longer shows.
+  it('withholds the card back while the delete confirm is open', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await settle()
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+  })
+
+  // Desktop never draws it: the list is right there, so a ← would be a second way to do nothing.
+  it('draws no back control on a desktop', async () => {
+    mockViewport('desktop')
+    renderAt('/contacts?id=b')
+    await settle()
+
+    expect(screen.queryByRole('button', { name: /back to the list/i })).not.toBeInTheDocument()
   })
 
   // The hamburger is the only way back to the scopes once the column is behind the drawer, and it

@@ -12,9 +12,13 @@ export default function AppShell() {
   // Same reason: the tab names the mailbox from every section, not only the mail one.
   useTabTitle()
   useFaviconBadge()
-  // Composing is a full-screen task with its own send bar, and a tab bar under a software
-  // keyboard serves nobody.
+  // Composing and writing a contact are full-screen tasks with their own action bars, and a tab
+  // bar under a software keyboard serves nobody. Three separate calls, never `a() || b()`: a
+  // short-circuit would make the later useMatch a conditional hook.
   const composing = useMatch('/mail/compose') != null
+  const newContact = useMatch('/contacts/new') != null
+  const editingContact = useMatch('/contacts/:id/edit') != null
+  const writing = composing || newContact || editingContact
 
   return (
     <div className="app-shell">
@@ -25,7 +29,7 @@ export default function AppShell() {
           <Outlet />
         </main>
       </div>
-      {!composing && <BottomNav />}
+      {!writing && <BottomNav />}
     </div>
   )
 }

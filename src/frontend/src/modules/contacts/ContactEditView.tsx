@@ -82,7 +82,6 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
     <form className="contact-editor-form" onSubmit={submit}>
       <div className="contact-editor-head">
         <h2 className="contact-editor-title">
-          {/* PersonPlusIcon takes no size prop today (fixed 15px); PencilIcon does. */}
           {contact ? <PencilIcon size={16} /> : <PersonPlusIcon />}
           {t(contact ? 'editor.editTitle' : 'editor.newTitle')}
         </h2>

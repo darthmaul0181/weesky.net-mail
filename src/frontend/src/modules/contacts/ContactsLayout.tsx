@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
@@ -96,6 +96,17 @@ export default function ContactsLayout() {
     setParams(scope === 'favorites' ? { scope, id } : { id })
   }
 
+  // Dropping the open contact is what puts the list back on screen where the card had replaced it.
+  // The scope is read off the URL rather than closed over, so the callback stays stable and the
+  // card's Escape listener is bound once instead of on every render.
+  const backToList = useCallback(() => {
+    setParams(previous => {
+      const next: Record<string, string> = {}
+      if (previous.get('scope') === 'favorites') next.scope = 'favorites'
+      return next
+    })
+  }, [setParams])
+
   async function save(draft: ContactDraft) {
     setSaveError(null)
     try {
@@ -169,26 +180,30 @@ export default function ContactsLayout() {
         /* One pane at a time on a phone: 360px split between a tile list and a reading card
            leaves neither readable. Elsewhere the two share the row as they always have. */
         <div className="contacts-row">
-          {!(phone && selectedId) && (
-            <div className="contacts-list" style={phone ? undefined : { width: listWidth }}
-              data-testid="contact-list">
-              {isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
-              {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
-              {contacts && (
-                <ContactList contacts={scoped} selectedId={selectedId} onSelect={select}
-                  leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
-                  onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
-                  onEdit={id => navigate(`/contacts/${id}/edit`)} />
-              )}
-            </div>
-          )}
+          {/* Hidden, never unmounted — MailLayout's rule for the same swap: the search query is
+              ContactList's own state and the scroll offset is the DOM's, and opening a contact
+              and coming back would throw both away. */}
+          <div className={`contacts-list${phone && selectedId ? ' is-hidden' : ''}`}
+            style={phone ? undefined : { width: listWidth }} data-testid="contact-list">
+            {isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
+            {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
+            {contacts && (
+              <ContactList contacts={scoped} selectedId={selectedId} onSelect={select}
+                leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
+                onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
+                onEdit={id => navigate(`/contacts/${id}/edit`)} />
+            )}
+          </div>
           {!phone && (
             <PaneSplitter orientation="vertical" size={listWidth} defaultSize={380} min={240}
               reserve={320} onResize={setListWidth} />
           )}
           {!(phone && !selectedId) && (
             <div className="contacts-card" data-testid="contact-card">
+              {/* Withheld while the confirm is open so its Escape does not back out from under
+                  the dialog — the ← is behind the overlay by then and comes back with it. */}
               <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
+                onBack={phone && !pendingDelete ? backToList : undefined}
                 onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)} />
             </div>
           )}

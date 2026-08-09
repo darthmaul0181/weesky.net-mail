@@ -2242,6 +2242,9 @@ body {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
 }
 .contacts-list { flex: none; }
+/* Hidden rather than unmounted where the card takes the screen — see ContactsLayout, and
+   .mail-list.is-hidden, which exists for the identical reason. */
+.contacts-list.is-hidden { display: none; }
 .contacts-card { flex: 1; min-width: 0; }
 .contacts-editor { flex: 1; min-width: 0; }
 .contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
@@ -2295,7 +2298,20 @@ body {
 
 .contact-card { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .contacts-card-invite { margin: auto; }
-.contact-card-head { flex: none; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+.contact-card-head {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+}
+/* .reader-back's box, and it is only ever drawn where the card has replaced the list. It grows to
+   the touch floor as a painted box rather than a pseudo hit area, unlike the reader's: nothing
+   here sits inline with wrapping text, so there is no baseline to keep. */
+.contact-card-back {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.contact-card-back:hover { background: var(--list-row-hover); color: var(--text); }
 .contact-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
 
 .contact-card-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px; }
@@ -2404,6 +2420,30 @@ body {
   /* Contacts' own primary action becomes the floating button below 1024px, the way compose does
      in mail: opening a drawer to add a contact is one gesture too many. */
   .context-drawer-panel .contacts-scopes-add { display: none; }
+
+  /* The card's own actions are a bottom band, where mail keeps the reader's in the header — so
+     from here down .floating-action lands on them: 56px on a 16px inset spans the last 72px of
+     the row, and Delete ended at the band's 18px padding, 54px of it under a button that wins on
+     z-index. The corner is reserved instead (16 + 56 + 16), and the band wraps rather than
+     crushing three labels into what is left of a 360px screen. */
+  .contact-card-actions { flex-wrap: wrap; padding-right: 88px; }
+
+  /* A container only below 1024px, and that is the whole point of putting the declaration here:
+     the same splitter gives this column the same 380px on a desktop that it gives a tablet, so an
+     unconditional container would take the tile's hover actions away from a mouse as well. */
+  .contacts-list { container-type: inline-size; }
+}
+
+/* There is no hover on a touch screen, and on several touch browsers :hover sticks after a tap,
+   so the tile's action cluster would appear and stay. It is the two REVEALING selectors that have
+   to be named, not the cluster: the base declaration is already `visibility: hidden`, a container
+   query adds no specificity, and a bare .contact-tile-actions (0,1,0) would lose to them (0,2,0).
+   Nothing is lost — a tap opens the card, whose Edit and Delete are at the touch floor.
+   480px is not a third breakpoint: this measures .contacts-list's own inline size, which the
+   splitter sets, and the column only becomes a container below 1024px (above). */
+@container (max-width: 480px) {
+  .contact-tile:hover .contact-tile-actions,
+  .contact-tile:focus-within .contact-tile-actions { display: none; }
 }
 
 @media (max-width: 639px) {
@@ -2415,13 +2455,14 @@ body {
      57px tab bar: 73px inset plus 56px of button is 129px, plus the same 8px gap. */
   .toast-container { bottom: 137px; }
 
-  /* List and card take turns here, so whichever one is on screen owns the row: the base rule's
-     flex: none sized .contacts-list from the splitter's stored width, and that width leaves with
-     the splitter — measured at 320px, the column then takes its 387px max-content and runs 67px
-     past the row. .contacts-card already carries flex: 1, and min-width: 0 is inert on either:
-     the heading's search box and every tile line already carry their own, so the column's
-     min-content is ~108px and never reaches the floor this would lower. */
+  /* The list has the row to itself here, and the splitter's stored width left with the splitter:
+     measured at 320px, the base rule's flex: none then takes the column's 387px max-content and
+     runs 67px past the row. */
   .contacts-list { flex: 1; }
+
+  /* The card is the whole screen, so its ← is a primary control rather than the reader's inline
+     26px arrow. */
+  .contact-card-back { width: var(--touch); height: var(--touch); }
 
   /* 31px on its own 7px padding, and the only navigation the drawer holds. */
   .contact-scope { min-height: var(--touch); }
@@ -2468,6 +2509,11 @@ body {
   /* stretch is what widens the inputs; the favourite row's control is a 20px star and must not
      become a full-width slab with a glyph in the corner. */
   .contact-editor-body .field-h > .contact-star { align-self: flex-start; }
+  /* The tile's insets do not transfer here. This star is 20px rather than 18, and it sits at the
+     content edge of .contact-editor-body, which is overflow-y: auto — so its overflow-x computes
+     to auto too and clips at the padding box 14px away: the tile's 17px left overhang lost 3px
+     and the target measured 41. 14 + 20 + 10 is the same 44 with nothing outside the box. */
+  .contact-editor-body .contact-star::before { right: -10px; left: -14px; }
 
   /* The header band's three items — title, Save contact, ✕ — measure 312px against the 284px a
      320px screen leaves inside its 18px padding, and .contacts-editor is overflow: hidden, so the

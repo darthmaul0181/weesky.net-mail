@@ -34,7 +34,8 @@
     "delete": "Supprimer {{name}}"
   },
   "card": {
-    "invite": "Sélectionnez un contact pour voir sa fiche"
+    "invite": "Sélectionnez un contact pour voir sa fiche",
+    "back": "Retour à la liste"
   },
   "editor": {
     "editTitle": "Modifier le contact",

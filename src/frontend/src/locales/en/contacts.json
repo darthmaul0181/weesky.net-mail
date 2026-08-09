@@ -34,7 +34,8 @@
     "delete": "Delete {{name}}"
   },
   "card": {
-    "invite": "Select a contact to see its details"
+    "invite": "Select a contact to see its details",
+    "back": "Back to the list"
   },
   "editor": {
     "editTitle": "Edit contact",
