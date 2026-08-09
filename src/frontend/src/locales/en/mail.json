@@ -113,6 +113,8 @@
     "retry": "Retry",
     "noSubject": "(no subject)",
     "noRecipient": "(no recipient)",
+    "pull": "Pull to refresh",
+    "release": "Release to refresh",
     "draft": "Draft",
     "star": "Star",
     "unstar": "Unstar",

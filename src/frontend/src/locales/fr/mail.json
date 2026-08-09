@@ -113,6 +113,8 @@
     "retry": "Réessayer",
     "noSubject": "(sans objet)",
     "noRecipient": "(sans destinataire)",
+    "pull": "Tirer pour rafraîchir",
+    "release": "Relâcher pour rafraîchir",
     "draft": "Brouillon",
     "star": "Suivre",
     "unstar": "Ne plus suivre",

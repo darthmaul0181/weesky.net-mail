@@ -33,6 +33,7 @@ import SelectionToolbar from './SelectionToolbar'
 import { useSelection } from './useSelection'
 import { useMessageList } from './useMessageList'
 import { useLongPress } from '../../../hooks/useLongPress'
+import { usePullToRefresh } from '../../../hooks/usePullToRefresh'
 
 /**
  * The row's box, lifted out only so the long-press hook has a component to live in — a hook
@@ -142,6 +143,7 @@ export default function MessageList(
     : list
   const { messages, total, isLoading, isError, paging, streaming } = view
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { pull, armed } = usePullToRefresh(scrollRef, () => onRefresh?.())
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
@@ -618,7 +620,14 @@ export default function MessageList(
       {/* The empty-folder offer belongs to the folder itself, not to a search laid over it. */}
       {!searching && <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />}
 
-      <div className="mail-list-scroll" ref={scrollRef}>{rows()}</div>
+      <div className="mail-list-scroll" ref={scrollRef}>
+        {pull > 0 && (
+          <div className="mail-pull" style={{ height: pull }} aria-live="polite">
+            {t(armed ? 'list.release' : 'list.pull')}
+          </div>
+        )}
+        {rows()}
+      </div>
 
       {/* The footer is the pager's alone. Streaming has no page to go to, so it carries no band:
           the rows take the height back, and the loaded count is already the scrollbar's job. */}
