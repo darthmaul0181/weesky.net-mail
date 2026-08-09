@@ -461,6 +461,40 @@
       touch: READER_TOUCH,
     })
 
+    // Task 10: the 24rem floor overflowed a 360px screen because min-width always beats
+    // max-width. Read at 360x640 AND 320x640 — a 320px viewport is a real device (iPhone SE
+    // 1st gen, an Android split-screen pane) that earlier tasks found trips over widths 360
+    // leaves clean.
+    CASES.push({
+      name: 'modal-360',
+      html: `<div class="modal-overlay" style="position:static">
+               <div class="modal">
+                 <div class="modal-header"><span class="modal-title">Move to…</span>
+                   <button class="modal-close">✕</button></div>
+                 <div class="field-h"><label>Folder</label><select><option>INBOX.Archive</option></select></div>
+               </div>
+             </div>`,
+      touch: '.modal-close',
+    })
+
+    // A dialog whose content is genuinely narrow: does width:100% stretch a two-line confirm
+    // across the whole screen? Markup mirrors DeleteConfirmModal.jsx exactly — its own single
+    // action button is a touch target too.
+    CASES.push({
+      name: 'modal-confirm-360',
+      html: `<div class="modal-overlay" style="position:static">
+               <div class="modal">
+                 <div class="modal-header"><span class="modal-title">Delete this message?</span>
+                   <button class="modal-close">✕</button></div>
+                 <p style="margin:0 0 20px;font-size:14px">This cannot be undone.</p>
+                 <div style="display:flex;gap:8px;justify-content:flex-end">
+                   <button class="btn btn-primary" style="width:auto">Delete</button>
+                 </div>
+               </div>
+             </div>`,
+      touch: '.modal-close, .btn',
+    })
+
     window.addEventListener('resize', measure)
     measure()
   </script>

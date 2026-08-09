@@ -25,3 +25,19 @@ describe('modal roots', () => {
     expect(inlineWidths()).toEqual([])
   })
 })
+
+const modalCss = (import.meta.glob('./modal.css', {
+  query: '?raw', import: 'default', eager: true,
+}) as Record<string, string>)['./modal.css']
+
+describe('dialogs on a narrow screen', () => {
+  // min-width always beats max-width: a 384px floor inside a 312px slot overflows the page.
+  it('drops the 24rem floor below 640px', () => {
+    const phone = modalCss.slice(modalCss.indexOf('@media (max-width: 639px)'))
+    expect(phone).toMatch(/--modal-w:\s*0/)
+  })
+
+  it('keeps the content-sized contract above 640px', () => {
+    expect(modalCss).toMatch(/min-width:\s*var\(--modal-w,\s*24rem\)/)
+  })
+})

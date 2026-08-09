@@ -122,3 +122,18 @@
   width: var(--field-w, 34ch);
   max-width: 100%;
 }
+
+/* A 360px viewport leaves 312px inside the overlay's 24px padding, and min-width always beats
+   max-width — the 24rem floor put a 384px box in a 312px slot and scrolled the page sideways.
+   Below 640px a dialog simply takes the width it is given; the content-sized contract above is
+   untouched. The scroll is already the overlay's. */
+@media (max-width: 639px) {
+  .modal-overlay { padding: 12px; }
+
+  .modal {
+    --modal-w: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 18px;
+  }
+}
