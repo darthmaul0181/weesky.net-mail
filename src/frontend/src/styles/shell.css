@@ -819,6 +819,38 @@ a.dropdown-item { text-decoration: none; }
     cursor: pointer;
   }
   .drawer-toggle:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
+
+  /* The settings module is the only one that needs a band of its own: its nine pages each draw
+     their own .settings-page-header, so a hamburger placed there would be written nine times.
+     The negative margin pulls the band out to .settings-content's own padding edges — it spans
+     exactly that box's padding width, so it adds nothing to the scrollable area.
+     44px spelled out rather than var(--touch): the token is declared in the 639px block alone
+     (styles/responsive.test.ts pins it there) and does not resolve at a tablet width. */
+  .settings-mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    margin: -24px -28px 12px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-mobile-title { font-size: 14px; font-weight: 600; }
+}
+
+/* Two settings controls answer to the input device rather than to the window, and neither can be
+   folded into the 639px block below: that block reaches a narrow DESKTOP window, which needs
+   neither of these, and misses a touch tablet, which needs both. The union is deliberate — the
+   width rules there still floor .pane-item for a 400px desktop window, and these two reach the
+   640-1023px touch tier where --touch does not resolve at all, hence 44px spelled out. */
+@media (hover: none) {
+  /* ~34px rows, and the only navigation the settings drawer holds. */
+  .pane-item { min-height: 44px; }
+
+  /* The loupe is `opacity: 0` until :hover/:focus-within, and the enlarged preview it opens is
+     the only way to read a palette that is not the active one — on a touch screen it would be
+     reachable only by tabbing onto the radio beside it. */
+  .palette-zoom { opacity: 1; }
 }
 
 @media (max-width: 639px) {
@@ -868,5 +900,45 @@ a.dropdown-item { text-decoration: none; }
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Comfort, and recorded as such: nothing clips without it once the rules below are in place.
+     It returns 24px of a 320px screen to the measure every settings page is read in, and the
+     band's negative margin has to follow the padding it is cancelling. */
+  .settings-content { padding: 14px 16px; }
+  .settings-mobile-bar { margin: -14px -16px 12px; }
+
+  /* index.css's phone block stacks .field-h and resets `label:first-child` — an ELEMENT selector,
+     which a settings row's <span class="setting-label"> never matches, so the 300px wrapper
+     survived the rotation: measured, 104px and 78px of clip inside a 274px section at 360, and
+     42px still at 320 with everything else in place.
+     .field-h.is-setting's OWN 260px label column needs no companion rule here, and that was
+     measured rather than assumed: 260 fits the 273px a 320px screen leaves, the narrowest box
+     any of these rows sits in — the Application tab's bare labels and a phone dialog's 260px
+     measure both — so a `width: auto` beside this one would change nothing anywhere. */
+  .field-h.is-setting > .setting-label { width: auto; }
+
+  /* Three 86-92px cards and two 12px gaps. At 360 they fit the rotated row and this changes
+     nothing; at 320 they run 30px past it, measured with every other rule here in place. */
+  .layout-cards { flex-wrap: wrap; }
+
+  /* A 36px chip and a 29px radio row, each the whole of the control it carries. */
+  .action-chip { min-height: var(--touch); }
+  .radio-row { min-height: var(--touch); }
+
+  /* The loupe keeps its painted box and grows an inset ::before — .reader-back's idiom, because a
+     44px chip covers a fifth of a 168px thumbnail. The insets are measured from the button's
+     PADDING box, which its own 1px border makes 22px — 22 + 6 + 16 on each axis is the 44, and
+     the first attempt at -6/-14 read 42. The button sits at top/right 6px, so -6px there stops
+     1px inside .palette-card's padding edge and nothing overhangs a card that is overflow:
+     hidden. The 16px falls over the thumbnail, where a tap picks the palette — the one action the
+     loupe is deliberately not part of. */
+  .palette-zoom::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    bottom: -16px;
+    left: -16px;
   }
 }

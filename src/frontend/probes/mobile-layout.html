@@ -792,6 +792,214 @@
       touch: '.contact-save-btn, .contact-editor-head .modal-close, .contact-address-row .admin-icon-btn, .contact-editor-body .contact-star',
     })
 
+    // ── Settings ───────────────────────────────────────────────────────────────────────────────
+    // Nine pages plus five admin tabs cannot all be probed, so these five are the ones whose
+    // LAYOUT is genuinely different from each other. Everything not listed here reuses one of
+    // these five skins: Account and Rules are `.field-h` forms, Identities / Connected accounts /
+    // Folders are `.admin-list` pages, and the four other admin tabs are the tab case's content.
+    //
+    // Every case is wrapped in a real `.settings-content` — the band's negative margin is read
+    // against that box's own padding, and it is the element that would carry the scrollbar.
+    const settingsPage = (inner) => `
+      <div class="settings-layout" style="height:560px">
+        <div class="settings-content">
+          <div class="settings-mobile-bar">
+            <button class="drawer-toggle">&#9776;</button>
+            <span class="settings-mobile-title">Appearance</span>
+          </div>
+          ${inner}
+        </div>
+      </div>`
+
+    // 1. The form-heavy page (General; Account and the rule wizard wear the same rows). Three
+    //    different `.field-h` shapes at once, because they fail differently: `.is-stacked` gives
+    //    the row to a `.layout-cards` flex line that carries no wrap of its own, `.is-setting`
+    //    holds a 300px `.setting-label` that index.css's `label:first-child` reset cannot reach,
+    //    and the plain row is the 110px-label admin shape. The toggle is the module's most-used
+    //    control and its painted box is 36x20.
+    CASES.push({
+      name: 'settings-general',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>General</h1></div>
+          <section class="account-section">
+            <h2>Layout</h2>
+            <div class="field-h is-setting is-stacked">
+              <span class="setting-label"><span>Reading pane</span>
+                <span class="setting-hint">Where the message opens beside the list.</span></span>
+              <div class="layout-cards" role="radiogroup">
+                <label class="layout-card"><span class="pane-glyph"></span>
+                  <span class="layout-card-name"><input type="radio" name="rp" />Right</span></label>
+                <label class="layout-card"><span class="pane-glyph"></span>
+                  <span class="layout-card-name"><input type="radio" name="rp" />Bottom</span></label>
+                <label class="layout-card"><span class="pane-glyph"></span>
+                  <span class="layout-card-name"><input type="radio" name="rp" />No pane</span></label>
+              </div>
+            </div>
+            <div class="field-h is-setting">
+              <span class="setting-label"><label for="ps">Messages per page</label>
+                <span class="setting-hint">How many rows a page of the list holds.</span></span>
+              <select id="ps"><option>30</option></select>
+            </div>
+            <div class="field-h is-setting">
+              <span class="setting-label"><label for="sp">Message list preview</label>
+                <span class="setting-hint">A line of the body under each subject.</span></span>
+              <label class="toggle-switch"><input id="sp" type="checkbox" /><span class="toggle-track"></span></label>
+            </div>
+            <div class="field-h is-setting is-stacked">
+              <span class="setting-label"><span>Quick actions</span>
+                <span class="setting-hint">The icons a row carries.</span></span>
+              <div class="action-chips" role="group">
+                <button class="action-chip is-on"><svg width="14" height="14"></svg>Mark as read</button>
+                <button class="action-chip"><svg width="14" height="14"></svg>Report as junk</button>
+              </div>
+            </div>
+          </section>
+          <section class="account-section">
+            <h2>Identity</h2>
+            <div class="field-h"><label for="dn">Display name</label><input id="dn" type="text" /></div>
+            <form class="change-password-form">
+              <div class="field-h"><label for="pw">New password</label><input id="pw" type="password" /></div>
+              <button class="btn btn-primary">Change password</button>
+            </form>
+          </section>
+        </div>`),
+      touch: '.drawer-toggle, .toggle-switch, .action-chip, .layout-card, select, input[type="text"], input[type="password"], .change-password-form .btn',
+    })
+
+    // 2. The list page. `.admin-list-item-email` is `width: 40ch; flex-shrink: 0` — over 300px of
+    //    a 320px screen before the tile's own padding — and the two row actions are 28px squares.
+    //    The header's search box carries an inline `width: 180px` plus a 30px inline margin, which
+    //    no stylesheet can reach, so the header is drawn with them.
+    CASES.push({
+      name: 'settings-admin-list',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="admin-list-header">
+            <span class="admin-list-title">Accounts (42)</span>
+            <input class="search-input" type="search" placeholder="Search"
+              style="margin-left:30px;width:180px;padding:6px 10px;font-size:13px" />
+            <button class="btn btn-primary" style="margin-left:auto;width:auto;display:inline-flex;align-items:center;gap:6px">
+              <svg width="15" height="15"></svg> Add</button>
+          </div>
+          <div class="admin-list">
+            <div class="admin-list-item">
+              <span class="admin-list-item-email">marie-christine.vandenbroucke@example.be</span>
+              <span class="admin-list-item-name" style="padding-left:30px">Marie-Christine Vandenbroucke</span>
+              <div class="admin-list-item-quota">1.2 GB</div>
+              <div class="admin-list-item-actions">
+                <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </div>
+            <div class="admin-list-item">
+              <span class="admin-list-item-email">bob@example.be</span>
+              <span class="admin-list-item-name" style="padding-left:30px">Bob</span>
+              <div class="admin-list-item-actions">
+                <button class="btn btn-ghost">Reconnect</button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>`),
+      touch: '.admin-icon-btn, .admin-list-item-actions .btn, .admin-list-header .btn, .search-input',
+    })
+
+    // 3. The admin tabs. `.admin-tab-bar` is a 140px vertical column beside a scrolling body —
+    //    140 of the 288px a 320px screen leaves inside `.settings-content` — and `.admin-tab` is
+    //    ~33px tall. Five tabs, which is what makes wrapping the strip worse than scrolling it.
+    CASES.push({
+      name: 'settings-admin-tabs',
+      html: settingsPage(`
+        <div class="settings-page admin-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Administration</h1></div>
+          <div class="admin-modal-body">
+            <nav class="admin-tab-bar">
+              <button class="admin-tab is-active">Accounts</button>
+              <button class="admin-tab">Domains</button>
+              <button class="admin-tab">Virtual domains</button>
+              <button class="admin-tab">External domains</button>
+              <button class="admin-tab">Application</button>
+            </nav>
+            <div class="admin-tab-content">
+              <div class="admin-list-header"><span class="admin-list-title">Accounts (42)</span></div>
+              <div class="admin-list"><div class="admin-list-item">
+                <span class="admin-list-item-email">bob@example.be</span>
+                <div class="admin-list-item-actions">
+                  <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                </div>
+              </div></div>
+              <!-- The Application tab's own shape: an .is-setting row headed by a BARE label
+                   rather than by a .setting-label wrapper, which is the one place the 260px
+                   label column is reached by an element selector. -->
+              <div class="field-h is-setting">
+                <label for="app-name">Application name</label>
+                <input id="app-name" type="text" />
+              </div>
+            </div>
+          </div>
+        </div>`),
+      touch: '.admin-tab, .admin-icon-btn, .admin-tab-content input',
+    })
+
+    // 4. Appearance. Its palette cards are the module's only grid, and `.palette-zoom` is its only
+    //    hover-revealed control: `opacity: 0` until `:hover`/`:focus-within`, 24px square, and the
+    //    single route to the enlarged preview. The radio rows above it are ~25px label boxes.
+    CASES.push({
+      name: 'settings-appearance',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Appearance</h1></div>
+          <section class="account-section"><h2>Theme</h2>
+            <label class="radio-row"><input type="radio" name="th" />Follow the system</label>
+            <label class="radio-row"><input type="radio" name="th" />Light</label>
+          </section>
+          <section class="account-section"><h2>Palette</h2>
+            <div class="palette-grid">
+              <div class="palette-card">
+                <label class="palette-pick">
+                  <span class="palette-preview"><span class="pp-bar"></span><span class="pp-body">
+                    <span class="pp-rail"><span class="pp-rail-item is-on"></span><span class="pp-rail-item"></span></span>
+                    <span class="pp-pane"><span class="pp-compose"></span><span class="pp-folder is-on"></span></span>
+                    <span class="pp-rows"><span class="pp-row is-unread"></span><span class="pp-row"></span>
+                      <span class="pp-attachments"><span class="pp-chip"></span></span></span>
+                  </span></span>
+                  <span class="palette-name"><input type="radio" name="pal" />Night &amp; coral (default)</span>
+                </label>
+                <button class="palette-zoom"><svg width="14" height="14"></svg></button>
+              </div>
+            </div>
+          </section>
+        </div>`),
+      touch: '.radio-row, .palette-zoom',
+    })
+
+    // 5. The navigation as the drawer draws it, which is the one place below 1024px it appears.
+    //    `.pane-item` is ~34px and `shell.css` floors it in the 639px block alone, so this case is
+    //    the tablet's own reading too — drive it at 768x1024 as well as at 360 and 320.
+    CASES.push({
+      name: 'settings-drawer',
+      html: `
+        <div class="context-drawer is-open">
+          <div class="context-drawer-panel" style="position:absolute">
+            <nav class="context-pane" aria-label="Settings">
+              <a class="pane-item is-active" href="#"><svg width="16" height="16"></svg>Account</a>
+              <a class="pane-item" href="#"><svg width="16" height="16"></svg>Connected accounts</a>
+              <a class="pane-item" href="#"><svg width="16" height="16"></svg>Administration</a>
+              <div class="settings-nav-foot">
+                <div class="identity-root">
+                  <span class="identity-pill">MV</span>
+                  <span class="identity-text"><span class="identity-name">Mick</span>
+                    <span class="identity-email">mick@weesky.be</span></span>
+                  <button class="identity-toggle"><svg width="14" height="14"></svg></button>
+                </div>
+              </div>
+            </nav>
+          </div>
+        </div>`,
+      touch: '.pane-item',
+    })
+
     window.addEventListener('resize', measure)
     measure()
   </script>

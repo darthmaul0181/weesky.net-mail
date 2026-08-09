@@ -2444,6 +2444,12 @@ body {
 @media (hover: none) {
   .contact-tile:hover .contact-tile-actions,
   .contact-tile:focus-within .contact-tile-actions { display: none; }
+
+  /* 31px, and the only navigation the contacts drawer holds. The 639px block below floors it
+     through var(--touch) for a narrow window; this reaches the 640-1023px touch tablet, where the
+     token is not declared at all — hence the number spelled out rather than a second declaration
+     of it. Neither condition contains the other, so both rules are live. */
+  .contact-scope { min-height: 44px; }
 }
 
 @media (max-width: 639px) {
@@ -2466,9 +2472,6 @@ body {
 
   /* 31px on its own 7px padding, and the only navigation the drawer holds. */
   .contact-scope { min-height: var(--touch); }
-  /* .btn's 9px padding puts both at 38px: the band's two file actions, and the card's three,
-     which are the only route to editing or deleting a contact from a phone. */
-  .contacts-transfer .btn, .contact-card-btn { min-height: var(--touch); }
 
   /* The star grows a hit area rather than a painted box — .reader-back's idiom, and for the same
      reason: at 44px square it would push the name 26px right and desync .contact-tile-address's
@@ -2522,10 +2525,81 @@ body {
      any width, which spends 189px on "Modifier le contact" and 163px on "Enregistrer le contact"
      — the ✕ takes a second line instead of the surface's own name being ellipsised. */
   .contact-editor-head { flex-wrap: wrap; }
-  .contact-save-btn { min-height: var(--touch); }
   /* Make-primary and remove-address: 28px squares, and the only way to reorder or drop an address.
      The input beside them carries min-width: 0, so the width they take comes out of it. */
   .contact-address-row .admin-icon-btn { min-width: var(--touch); min-height: var(--touch); }
   /* A 22px text link, and the only way to add a second address. */
   .contact-address-add { min-height: var(--touch); }
+
+  /* ── Forms and lists, shared by the settings pages, the admin tabs and the dialogs ────────── */
+
+  /* The label above its control rather than beside it. .field-h's inputs carry no min-width: 0,
+     so an input's ~177px intrinsic width is its flex floor, and beside a 110px label column plus
+     a 16px gap that does not fit: measured at 360, every plain .field-h clipped by 38px inside a
+     274px section. gap: 4px is the composer's and the contact editor's own number for the same
+     rotation — the base 16px was the space between a label and the control BESIDE it, and turned
+     sideways it exceeds the 12px between one row and the next. */
+  .field-h { flex-direction: column; align-items: stretch; gap: 4px; }
+  /* The reset is not about clipping — 110px never overflows anything — it is about the caption
+     wrapping inside a ribbon it no longer needs: measured at 320, "Confirm new password" is two
+     lines and a 87px row against one line and 68px with the column released. */
+  .field-h > label:first-child { width: auto; }
+
+  /* Title, search box and Add on one line ran 48px past a 289px header, and 24px still with the
+     rest of this block in place. */
+  .admin-list-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Measured at 360: the tile ran 285px past the list. Wrapping alone does not close it — the
+     address is `width: 40ch; flex-shrink: 0`, over 300px before the tile's own padding, so it
+     overflows a line it has to itself. Two pages already carry exactly this pair for themselves
+     (.identity-list, .connected-account-text); here it is the skin's own answer. */
+  .admin-list-item { flex-wrap: wrap; }
+  .admin-list-item-email { width: auto; max-width: 100%; }
+  /* No metric moves for this pair and the row is the same height either way — measured, the
+     actions already had the wrapped line to themselves. What moves is where they sit on it: 29-121
+     without, 29-276 with, i.e. the site's own right edge rather than under the address. */
+  .admin-list-item-actions { width: 100%; justify-content: flex-end; }
+
+  /* 28px squares, and the only route to editing or deleting a row. */
+  .admin-icon-btn { min-height: var(--touch); min-width: var(--touch); }
+
+  /* Measured 39px, and global: login, settings, toolbars, dialogs. It is also the only control on
+     the composer's two dialogs, which carry no ✕ to fall back on. This is what floors
+     .contacts-transfer's file actions, the contact card's three actions and .contact-save-btn —
+     all three are .btn, and their own rules were dropped as duplicates of this one. */
+  .btn { min-height: var(--touch); }
+
+  /* Every typed control at the floor, the same breadth as the 16px rule at the head of this block
+     and for a related reason: measured, a .field-h text box is 39px and a select 41px on their
+     9px padding. Checkboxes and radios are out — both are hit through the label around them — and
+     so is the quota range, which is dragged rather than tapped. */
+  input[type="text"], input[type="password"], input[type="email"],
+  input[type="number"], input[type="search"], select, textarea {
+    min-height: var(--touch);
+  }
+
+  /* The painted switch stays 36x20: .toggle-track is `inset: 0`, so growing the box grows the
+     switch itself, and a 44px slab beside a 14px label is not the control this page draws. It
+     takes .reader-back's idiom instead — 4px each side and 12px above and below make 44x44. The
+     12px above falls on the row's own <label>, which toggles the same input, and the 4px sideways
+     stay inside .settings-content's 16px padding. */
+  .toggle-switch::before { content: ''; position: absolute; inset: -12px -4px; }
+
+  /* Measured at 320: the 140px column left .admin-tab-content 133px of the screen, and the five
+     tabs stacked 261px tall inside it. Horizontal and WRAPPING rather than scrolling sideways:
+     the labels come to 561px against 313px, so a scroller would carry the last two off-screen
+     with nothing to scroll the active one back into view. It costs a three-line, 149px strip —
+     still 112px shorter than the column it replaces, and it hands the content 273px. */
+  .admin-modal-body { display: block; overflow: visible; }
+  .admin-tab-bar {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 0 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-tab { min-height: var(--touch); white-space: nowrap; }
+  .admin-tab-content { padding: 14px 0 0; overflow: visible; }
 }

@@ -1,11 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../contexts/AuthContext'
 import { LocaleProvider } from '../../contexts/LocaleContext'
 import { ThemeProvider } from '../../contexts/ThemeContext'
 import { routes } from '../../routes'
+import { mockViewport, resetViewport, settle } from '../../test-utils'
+
+afterEach(resetViewport)
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
@@ -201,5 +205,76 @@ describe('settings section', () => {
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: false })])
     const router = renderAt('/settings/rules')
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+  })
+})
+
+describe('SettingsLayout below 1024px', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    mocks.hasSession.mockReturnValue(true)
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+    mocks.getQuota.mockResolvedValue(null)
+    mocks.adminGetUsers.mockResolvedValue([])
+    mocks.adminGetDomains.mockResolvedValue([])
+    mocks.getConnectedAccounts.mockResolvedValue([])
+    mocks.getMailFolders.mockResolvedValue([])
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
+  })
+
+  // Both narrow tiers, not just the tablet: the drawer's boundary is 1024px, and a rule keyed on
+  // the phone width alone would leave a tablet with no way to reach the navigation at all.
+  it.each(['tablet', 'phone'] as const)('puts its navigation in a drawer behind a toggle (%s)', async tier => {
+    mockViewport(tier)
+    renderAt('/settings/appearance')
+    await settle()
+    expect(document.querySelector('.context-drawer .context-pane')).toBeTruthy()
+    expect(document.querySelector('.drawer-toggle')).toBeTruthy()
+    // The pane is rendered through a ternary, never twice: a second copy would sit behind the
+    // drawer, out of reach and duplicating every NavLink in the accessibility tree.
+    expect(document.querySelectorAll('.context-pane')).toHaveLength(1)
+  })
+
+  it('leaves the navigation inline on a desktop', async () => {
+    mockViewport('desktop')
+    renderAt('/settings/appearance')
+    await settle()
+    expect(document.querySelector('.context-drawer')).toBeNull()
+    expect(document.querySelector('.drawer-toggle')).toBeNull()
+    expect(document.querySelector('.settings-mobile-bar')).toBeNull()
+  })
+
+  // The bar names the page, and it takes that name from the nav's own row rather than from a
+  // second copy of the labels — the drift guard is that both come out of one array.
+  it('names the section in its bar, not the module', async () => {
+    mockViewport('phone')
+    renderAt('/settings/appearance')
+    await settle()
+    const bar = document.querySelector('.settings-mobile-title')
+    expect(bar?.textContent).toBe('Appearance')
+    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    expect(nav.getByText('Appearance')).toBeInTheDocument()
+  })
+
+  it('opens the drawer from the hamburger', async () => {
+    mockViewport('tablet')
+    renderAt('/settings/general')
+    await settle()
+    expect(document.querySelector('.context-drawer.is-open')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    expect(document.querySelector('.context-drawer.is-open')).toBeTruthy()
+  })
+
+  // Picking a row closes the drawer and retitles the bar. The close is ContextDrawer's own route
+  // effect, and it only fires because `onClose` is `drawer.close` by reference: an inline arrow
+  // gets a fresh identity every render, which the drawer would read as a route change.
+  it('closes the drawer on a pick and follows the section name', async () => {
+    mockViewport('tablet')
+    renderAt('/settings/general')
+    await settle()
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Appearance' }))
+    await waitFor(() => expect(document.querySelector('.context-drawer.is-open')).toBeNull())
+    expect(document.querySelector('.settings-mobile-title')?.textContent).toBe('Appearance')
   })
 })
