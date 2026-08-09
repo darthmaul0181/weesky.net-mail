@@ -2400,6 +2400,10 @@ body {
      inside the button's. The toast stack clears the button's top edge instead — the button is
      56px tall on a 16px inset, so 72px, plus the 8px the stack already puts between toasts. */
   .toast-container { bottom: 80px; }
+
+  /* Contacts' own primary action becomes the floating button below 1024px, the way compose does
+     in mail: opening a drawer to add a contact is one gesture too many. */
+  .context-drawer-panel .contacts-scopes-add { display: none; }
 }
 
 @media (max-width: 639px) {
@@ -2410,4 +2414,72 @@ body {
   /* Same clearance against the button in its phone position, which is itself lifted over the
      57px tab bar: 73px inset plus 56px of button is 129px, plus the same 8px gap. */
   .toast-container { bottom: 137px; }
+
+  /* List and card take turns here, so whichever one is on screen owns the row: the base rule's
+     flex: none sized .contacts-list from the splitter's stored width, and that width leaves with
+     the splitter — measured at 320px, the column then takes its 387px max-content and runs 67px
+     past the row. .contacts-card already carries flex: 1, and min-width: 0 is inert on either:
+     the heading's search box and every tile line already carry their own, so the column's
+     min-content is ~108px and never reaches the floor this would lower. */
+  .contacts-list { flex: 1; }
+
+  /* 31px on its own 7px padding, and the only navigation the drawer holds. */
+  .contact-scope { min-height: var(--touch); }
+  /* .btn's 9px padding puts both at 38px: the band's two file actions, and the card's three,
+     which are the only route to editing or deleting a contact from a phone. */
+  .contacts-transfer .btn, .contact-card-btn { min-height: var(--touch); }
+
+  /* The star grows a hit area rather than a painted box — .reader-back's idiom, and for the same
+     reason: at 44px square it would push the name 26px right and desync .contact-tile-address's
+     25px indent, on a tile that is already at the floor. The 18x18 button needs 26px on each axis;
+     both splits are biased into space no other control claims. Sideways: 17px left reaches the
+     list scroll's own 8px padding (9px tile padding + 1px border + 8px), where nothing else is
+     hittable, leaving 9px right — the heading's 7px gap plus 2px of the name's leading edge.
+     Vertically: 8px up lands exactly on the tile's top border edge and 18px down fills the address
+     line, which is not a target of its own. */
+  .contact-star { position: relative; }
+  .contact-star::before {
+    content: ''; position: absolute; top: -8px; right: -9px; bottom: -18px; left: -17px;
+  }
+
+  /* There is no hover on a touch screen, so the cluster is 58px of a 309px tile line reserved for
+     two 28px buttons no finger can reach — and on several touch browsers :hover sticks after a tap,
+     which would then reveal them permanently. display, not visibility: the base rule and its two
+     :hover/:focus-within reveals all set visibility, so this wins on a different property whatever
+     their specificity, and it returns the reserve to the name. Nothing is lost — a tap opens the
+     card, which carries Edit and Delete at the touch floor above. */
+  .contact-tile-actions { display: none; }
+
+  /* The label above its control instead of beside it. A 110px label column plus its 16px gap
+     leaves 151px of a 320px screen for an input whose own intrinsic width is ~177px, and
+     .field-h's inputs carry no min-width: 0 — so the box ran past the row rather than shrinking
+     into it: measured, every .field-h clipped by 20px at 320. :first-child rather than
+     label:first-child: the addresses row heads with a .field-h-label span, and the one row that
+     would keep its 110px column is the one holding the longest values. The trimmed padding fixes
+     nothing on its own — the stacking already clears the clip — it returns 8px of a 320px screen
+     to the measure the fields are read in. */
+  .contact-editor-body { padding: 14px; }
+  /* gap: 4px, the composer's own number for the same rotation: .field-h's 16px was the space
+     between a label and the control BESIDE it, and turned sideways it exceeded the 12px
+     margin-bottom between one row and the next, so every label read as belonging to the field
+     above it. */
+  .contact-editor-body .field-h { flex-direction: column; align-items: stretch; gap: 4px; }
+  .contact-editor-body .field-h > :first-child { width: auto; }
+  /* stretch is what widens the inputs; the favourite row's control is a 20px star and must not
+     become a full-width slab with a glyph in the corner. */
+  .contact-editor-body .field-h > .contact-star { align-self: flex-start; }
+
+  /* The header band's three items — title, Save contact, ✕ — measure 312px against the 284px a
+     320px screen leaves inside its 18px padding, and .contacts-editor is overflow: hidden, so the
+     ✕ was cut off rather than scrolled to. Wrapping rather than shrinking the title: at 360 the
+     English row still fits on one line (312 of 324), and where it does not — 320px, or French at
+     any width, which spends 189px on "Modifier le contact" and 163px on "Enregistrer le contact"
+     — the ✕ takes a second line instead of the surface's own name being ellipsised. */
+  .contact-editor-head { flex-wrap: wrap; }
+  .contact-save-btn { min-height: var(--touch); }
+  /* Make-primary and remove-address: 28px squares, and the only way to reorder or drop an address.
+     The input beside them carries min-width: 0, so the width they take comes out of it. */
+  .contact-address-row .admin-icon-btn { min-width: var(--touch); min-height: var(--touch); }
+  /* A 22px text link, and the only way to add a second address. */
+  .contact-address-add { min-height: var(--touch); }
 }

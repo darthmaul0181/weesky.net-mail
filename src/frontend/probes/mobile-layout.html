@@ -564,6 +564,182 @@
       touch: '.recipient-token button, .compose-attachment button',
     })
 
+    // ── Contacts (Task 12) ──────────────────────────────────────────────────────────────────
+    // The list owns the whole row on a phone, so no explicit column width here: `.contacts-row`
+    // is a flex row inside `.contacts-layout` and the list is what fills it, which is exactly the
+    // arrangement the phone rules have to produce. The tiles are drawn LOADED — the widest tile
+    // is a long name beside a hidden-but-reserved action cluster, and the tile carrying only an
+    // address is the one that exercises `.contact-tile-address`'s reserved line.
+    //
+    // `.contact-tile-name` and `.contact-tile-address` both ellipsise and hold no elements, so
+    // `clipped` exempts them by design; what it can still see is a heading whose hamburger, search
+    // box and count do not fit, or a tile line pushed past the column.
+    const contactList = () => `
+      <div class="contacts-layout" style="height:520px">
+        <div class="contacts-row">
+          <div class="contacts-list">
+            <div class="contacts-list-heading">
+              <button class="drawer-toggle" style="display:inline-flex">&#9776;</button>
+              <span class="contacts-search">
+                <svg width="14" height="14"></svg>
+                <input type="search" class="search-input" placeholder="Search contacts" />
+              </span>
+              <span class="contacts-count">3 / 12</span>
+            </div>
+            <div class="contacts-list-scroll">
+              <div class="contact-tiles">
+                ${[
+                  ['Marie-Christine Vandenbroucke', 'marie-christine.vandenbroucke@example.be · +2', ' is-selected'],
+                  ['Bruno Weiss', 'bruno@x.be', ''],
+                  ['', 'someone-with-no-name@example.com', ''],
+                ].map(([name, address, selected]) => `
+                  <div class="contact-tile${selected}" role="button" tabindex="0">
+                    <div class="contact-tile-line">
+                      <button class="contact-star is-on"><svg width="14" height="14"></svg></button>
+                      <span class="contact-tile-name">${name || address}</span>
+                      <span class="contact-tile-actions">
+                        <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                        <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                      </span>
+                    </div>
+                    <div class="contact-tile-address">${name ? address : ''}</div>
+                  </div>`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`
+    // The tile is a target in its own right — tapping it is what opens the card, which on a phone
+    // is the only route to Edit and Delete. The two .admin-icon-btn are named on purpose even
+    // though the phone rules hide them: `sizes` drops what has no box, so if the hover rule below
+    // ever stops matching they come straight back into `undersized` rather than passing silently.
+    CASES.push({
+      name: 'contacts-list',
+      html: contactList(),
+      touch: '.contact-tile, .contact-star, .drawer-toggle, .contact-tile-actions .admin-icon-btn',
+    })
+
+    // The card takes the same row once a contact is picked. Its three actions are `.btn` boxes
+    // carrying an icon and a word each, and `Remove from favourites` is the long one — with the
+    // rule between them, that row is what decides whether `.contact-card-actions` fits.
+    CASES.push({
+      name: 'contacts-card',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-row">
+            <div class="contacts-card">
+              <div class="contact-card">
+                <div class="contact-card-head">
+                  <h2 class="contact-card-name">Marie-Christine Vandenbroucke</h2>
+                </div>
+                <div class="contact-card-body">
+                  <div class="contact-card-row">
+                    <span class="contact-card-label">Addresses</span>
+                    <span class="contact-card-values">
+                      <span class="contact-card-value">
+                        <a href="#">marie-christine.vandenbroucke@example.be</a>
+                        <span class="contact-card-primary">primary</span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div class="contact-card-actions">
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
+                  <span class="actions-rule"></span>
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
+                  <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      touch: '.contact-card-btn',
+    })
+
+    // The scope band as the drawer actually draws it: inside .context-drawer-panel, which is what
+    // gives the column its width (min(320px, 86vw)) and drops its own 240px. .contacts-scopes-add
+    // is present in the markup because the phone rule that hides it is the thing under test.
+    CASES.push({
+      name: 'contacts-drawer',
+      html: `
+        <div class="context-drawer is-open">
+          <div class="context-drawer-panel" style="position:absolute">
+            <div class="contacts-scopes-column">
+              <div class="contacts-scopes-add">
+                <button class="btn btn-primary contacts-add-btn">+ Add contact</button>
+              </div>
+              <div class="contacts-scopes-scroll">
+                <nav class="contact-scopes">
+                  <button class="contact-scope is-active"><svg width="15" height="15"></svg>
+                    <span class="contact-scope-label">All contacts</span>
+                    <span class="contact-scope-count">128</span></button>
+                  <button class="contact-scope"><svg width="15" height="15"></svg>
+                    <span class="contact-scope-label">Favourites</span>
+                    <span class="contact-scope-count">12</span></button>
+                </nav>
+              </div>
+              <div class="contacts-transfer">
+                <span class="tooltip-wrap"><button class="btn">Import…</button></span>
+                <span class="tooltip-wrap"><button class="btn">Export</button></span>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      touch: '.contact-scope, .contacts-transfer .btn, .contacts-add-btn',
+    })
+
+    // The full-width editor route. `.field-h`'s inputs carry no `min-width: 0`, so an input's own
+    // ~177px intrinsic width is its flex floor: beside a 110px label column plus a 16px gap it
+    // does not fit a 320px screen, and `.contact-editor-body` is inside an overflow:hidden column,
+    // so what it did was clip rather than scroll. The addresses row heads with a `.field-h-label`
+    // span rather than a `<label>` and is the row that would keep its 110px column if the reset
+    // named `label:first-child`.
+    //
+    // The two addresses are deliberately SHORT where the list and card fixtures above carry a long
+    // one: an `<input>` whose value is wider than its box scrolls its own text, and `scrollWidth -
+    // clientWidth` counts that as a clip — measured, `marie-christine@example.be` in the 177px box
+    // this row leaves at 320px reads 25 on its own and would mask a real 25px clip anywhere else in
+    // the case. Nothing about the row depends on the value's length: `.contact-address-row input`
+    // carries `min-width: 0`, so it absorbs the shrink whatever it holds.
+    CASES.push({
+      name: 'contacts-editor',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-editor">
+            <form class="contact-editor-form">
+              <div class="contact-editor-head">
+                <h2 class="contact-editor-title"><svg width="15" height="15"></svg>Edit contact</h2>
+                <button class="btn btn-primary contact-save-btn">Save contact</button>
+                <button class="modal-close">✕</button>
+              </div>
+              <div class="contact-editor-body">
+                <div class="field-h"><label>First name</label><input type="text" /></div>
+                <div class="field-h"><label>Last name</label><input type="text" /></div>
+                <div class="field-h contact-editor-addresses">
+                  <span class="field-h-label">Addresses</span>
+                  <div class="contact-address-list">
+                    <div class="contact-address-row">
+                      <input type="email" value="mc@example.be" />
+                      <span class="contact-address-primary">primary</span>
+                      <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                    </div>
+                    <div class="contact-address-row">
+                      <input type="email" value="mc@work.be" />
+                      <button class="admin-icon-btn">&#8593;</button>
+                      <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                    </div>
+                    <button class="contact-address-add">+ Add an address</button>
+                  </div>
+                </div>
+                <div class="field-h"><label>Favourite</label>
+                  <button class="contact-star is-on"><svg width="16" height="16"></svg></button></div>
+              </div>
+            </form>
+          </div>
+        </div>`,
+      touch: '.contact-save-btn, .contact-editor-head .modal-close, .contact-address-row .admin-icon-btn, .contact-editor-body .contact-star',
+    })
+
     window.addEventListener('resize', measure)
     measure()
   </script>

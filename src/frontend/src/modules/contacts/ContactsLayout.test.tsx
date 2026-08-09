@@ -2,9 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import ContactsLayout from './ContactsLayout'
 import type { Contact } from './contactTypes'
+import { mockViewport, resetViewport, settle } from '../../test-utils'
+
+afterEach(resetViewport)
 
 vi.mock('../../api.js', () => ({
   api: {
@@ -351,5 +354,83 @@ describe('the transfer footer', () => {
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
 
     await waitFor(() => expect(api.getContacts).toHaveBeenCalled())
+  })
+})
+
+describe('ContactsLayout on a phone', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.getContacts.mockResolvedValue({
+      contacts: [
+        contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+        contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+      ],
+    })
+  })
+
+  it('puts the scope column in a drawer and renders no splitter', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await settle()
+
+    expect(container.querySelector('.context-drawer .contacts-scopes-column')).toBeTruthy()
+    expect(container.querySelector('.pane-splitter')).toBeNull()
+  })
+
+  it('shows the list alone until a contact is picked', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await settle()
+
+    expect(container.querySelector('[data-testid="contact-list"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="contact-card"]')).toBeNull()
+  })
+
+  // The other half of taking turns: the card owns the screen once an id is in the URL, or the two
+  // would share a 360px row and neither would be readable.
+  it('gives the card the screen once a contact is picked', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await settle()
+
+    expect(container.querySelector('[data-testid="contact-card"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="contact-list"]')).toBeNull()
+  })
+
+  // The hamburger is the only way back to the scopes once the column is behind the drawer, and it
+  // is the list heading that has to carry it — the column it used to sit beside is gone.
+  it('hands the list the hamburger and opens the drawer with it', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await settle()
+
+    await userEvent.click(screen.getByRole('button', { name: /open navigation/i }))
+
+    expect(container.querySelector('.context-drawer.is-open')).toBeTruthy()
+  })
+
+  // The column's own Add button is behind the drawer from here down, so the floating one is the
+  // module's primary action — except over the editor, which is already that surface.
+  it('floats the add action outside the editor and withholds it inside', async () => {
+    mockViewport('phone')
+    const { container, unmount } = renderAt('/contacts')
+    await settle()
+    expect(container.querySelector('.floating-action')).toBeTruthy()
+    unmount()
+
+    const editor = renderAt('/contacts/new')
+    await settle()
+
+    expect(editor.container.querySelector('.floating-action')).toBeNull()
+  })
+
+  it('keeps the scope column inline on a desktop', async () => {
+    mockViewport('desktop')
+    const { container } = renderAt('/contacts')
+    await settle()
+
+    expect(container.querySelector('.context-drawer')).toBeNull()
+    expect(container.querySelector('.contacts-layout > .contacts-scopes-column')).toBeTruthy()
+    expect(container.querySelector('.pane-splitter')).toBeTruthy()
   })
 })

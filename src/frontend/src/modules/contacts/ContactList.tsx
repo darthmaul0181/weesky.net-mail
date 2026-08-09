@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
@@ -12,6 +12,8 @@ interface Props {
   /** Already scoped by the layout; the text query is this component's own state. */
   contacts: Contact[]
   selectedId: string | null
+  /** The drawer hamburger below 1024px, where the scope column is no longer beside this heading. */
+  leading?: ReactNode
   onSelect: (id: string) => void
   onToggleFavorite: (contact: Contact) => void
   onEdit: (id: string) => void
@@ -26,7 +28,7 @@ interface Props {
  * there; here the list always sits beside the card, so a wide skin would be unreachable code.
  */
 export default function ContactList({
-  contacts, selectedId, onSelect, onToggleFavorite, onEdit, onDelete,
+  contacts, selectedId, leading, onSelect, onToggleFavorite, onEdit, onDelete,
 }: Props) {
   const { t } = useTranslation('contacts')
   const [query, setQuery] = useState('')
@@ -36,6 +38,7 @@ export default function ContactList({
   return (
     <>
       <div className="contacts-list-heading">
+        {leading}
         <span className="contacts-search">
           <SearchIcon size={14} />
           <input type="search" className="search-input" aria-label={t('list.searchLabel')}
