@@ -1818,23 +1818,23 @@ textarea.compose-editor {
     min-height: var(--touch);
   }
 
-  /* Wrapped, never scrolled sideways: a scrolling toolbar hides tools behind an affordance
-     nobody can see, while wrapping costs two or three rows and keeps every tool reachable. */
-  .compose-toolbar { flex-wrap: wrap; }
+  /* .compose-toolbar already wraps at every width (the base rule, mail.css:1451-1458) — this
+     block only has to raise each tool to the touch floor; a repeated `flex-wrap: wrap` here would
+     read as what makes it wrap and invite deleting the base rule as "dead" the day someone checks
+     the desktop toolbar and finds it unaffected by this query. */
   .compose-tool, .compose-tool-select { min-height: var(--touch); }
 
-  /* From, To, Cc and Bcc each take the full measure; a label beside a token field leaves the
-     field about 200px, which is under two addresses. */
-  .compose-from, .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
+  /* From, To, Cc and Bcc: each field-h.recipients-field's own label moves above its box, widening
+     the recipients-box from 237px to 313px at 360px (measured, all three identical — see
+     task-11-report.md), and .compose-to-row's two children (the To field and the Cc/Bcc/Priority
+     links) stack instead of splitting the row, so To no longer shares its width with those links
+     either. */
+  .compose-from, .compose-to-row, .recipients-field { flex-direction: column; align-items: stretch; gap: 4px; }
   .compose-link-form input { width: 100%; }
 
-  /* Send stays reachable with the body scrolled and the keyboard up. */
-  .compose-header {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    background: var(--surface);
-  }
+  /* Send and Save draft are the surface's two primary actions; .compose-header is a fixed band
+     (flex: none), so flooring them only grows it once and spends no row budget. */
+  .compose-header .btn { min-height: var(--touch); }
 }
 
 /* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk

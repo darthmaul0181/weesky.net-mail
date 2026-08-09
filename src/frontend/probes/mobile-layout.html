@@ -501,6 +501,16 @@
       touch: '.modal-close, .btn',
     })
 
+    // `undersized: 14` here is known and accepted, not a defect this task missed: all 14 are
+    // `.compose-tool` buttons, floored to `var(--touch)` on height only, so each stays 31px wide
+    // and `smallest` (the lesser of a target's own width and height) reads 31. `.compose-send` is
+    // floored on both axes and is not one of the 14. Widening `.compose-tool` to 44px was measured
+    // and rejected: it packs the toolbar to 4 rows (231px, +56px over the shipped 175px), leaving
+    // ~130px of editor on a 640px screen with one attachment staged, and the usual hit-area escape
+    // (an inset `::before`, as `.reader-back` uses) does not transfer — `.compose-tool-group` packs
+    // its buttons on a 1px gap, so expanded pseudo-elements would steal each other's taps. The
+    // real fix is fewer visible tools behind an overflow group, which is design work outside this
+    // plan; see task-11-report.md.
     CASES.push({
       name: 'compose-360',
       html: `<div class="compose-view">
@@ -515,10 +525,11 @@
       touch: '.compose-tool, .compose-send',
     })
 
-    // Task 11's own rules never touch these two ✕ buttons — neither is named in the brief, and
-    // both are still their bare content-box size (no min-width/height of their own) at 360px.
-    // Kept as its own case rather than folded into compose-360 above, so a future fix for either
-    // one shows up as its own line instead of getting lost inside the toolbar's 15.
+    // `undersized: 2` here is likewise known and accepted: `.recipient-token` is deliberately
+    // `height: 22px` (see mail.css's own comment on it) and `.recipients-box` wraps tokens on a
+    // 4px gap, so an inset hit-area pseudo on either ✕ would overlap the token rows above and
+    // below it. Kept as its own case rather than folded into compose-360 above, so a future fix
+    // for either one shows up as its own line instead of getting lost inside the toolbar's 14.
     CASES.push({
       name: 'compose-remove-buttons-360',
       html: `<div class="compose-fields">
