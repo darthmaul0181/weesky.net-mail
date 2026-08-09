@@ -501,6 +501,42 @@
       touch: '.modal-close, .btn',
     })
 
+    CASES.push({
+      name: 'compose-360',
+      html: `<div class="compose-view">
+               <div class="compose-header"><button class="btn btn-primary compose-send">Send</button></div>
+               <div class="compose-fields">
+                 <div class="compose-to-row"><span>To</span><input class="rule-wizard-input" /></div>
+               </div>
+               <div class="compose-toolbar">
+                 ${Array.from({ length: 14 }, (_, i) => `<button class="compose-tool">${i}</button>`).join('')}
+               </div>
+             </div>`,
+      touch: '.compose-tool, .compose-send',
+    })
+
+    // Task 11's own rules never touch these two ✕ buttons — neither is named in the brief, and
+    // both are still their bare content-box size (no min-width/height of their own) at 360px.
+    // Kept as its own case rather than folded into compose-360 above, so a future fix for either
+    // one shows up as its own line instead of getting lost inside the toolbar's 15.
+    CASES.push({
+      name: 'compose-remove-buttons-360',
+      html: `<div class="compose-fields">
+               <div class="compose-to-row">
+                 <div class="field-h recipients-field"><label>To</label>
+                   <div class="recipients-box">
+                     <span class="recipient-token">alice@example.com <button type="button">&#10005;</button></span>
+                     <input />
+                   </div>
+                 </div>
+               </div>
+             </div>
+             <div class="compose-attachments">
+               <span class="compose-attachment">report.pdf <button type="button">&#10005;</button></span>
+             </div>`,
+      touch: '.recipient-token button, .compose-attachment button',
+    })
+
     window.addEventListener('resize', measure)
     measure()
   </script>
