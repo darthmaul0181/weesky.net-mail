@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
-import { settle } from '../../../test-utils'
+import { fireTouch as dispatchTouch, settle } from '../../../test-utils'
 import { DRAG_MIME, serializeDrag } from './dragMessages'
 
 const mocks = vi.hoisted(() => ({
@@ -823,12 +823,11 @@ describe('pull to refresh', () => {
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
-  // jsdom has no TouchEvent constructor; usePullToRefresh.test.ts's own helper, reused here so
-  // the two suites can't drift on what a touch event needs to carry.
+  // dispatchTouch is shared with usePullToRefresh.test.ts (test-utils.ts) so the two suites
+  // cannot drift on what a touch event needs to carry; act() wraps it here since MessageList,
+  // unlike the hook's own test, re-renders on every dispatch.
   function fireTouch(element: HTMLElement, type: string, y: number) {
-    const event = new Event(type, { bubbles: true, cancelable: true })
-    Object.defineProperty(event, 'touches', { value: [{ clientY: y }] })
-    act(() => { element.dispatchEvent(event) })
+    act(() => { dispatchTouch(element, type, y) })
   }
 
   it('draws the band and calls onRefresh once the pull passes the threshold', () => {

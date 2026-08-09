@@ -56,3 +56,16 @@ export function resetViewport() {
 export function viewportListenerCount() {
   return listeners.size
 }
+
+/**
+ * jsdom has no `TouchEvent` constructor; a plain `Event` carrying a `touches` array is what
+ * `usePullToRefresh` actually reads, and it dispatches through the same listeners. Shared between
+ * its own test and `MessageList`'s so the two cannot drift on what a touch event needs to carry —
+ * does not wrap in `act()` itself, since callers batch a whole gesture into one `act()` or split
+ * it across several depending on what they are testing.
+ */
+export function fireTouch(element: HTMLElement, type: string, y: number) {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'touches', { value: [{ clientY: y }] })
+  element.dispatchEvent(event)
+}

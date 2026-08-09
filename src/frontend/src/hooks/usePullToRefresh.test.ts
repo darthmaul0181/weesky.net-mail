@@ -2,20 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { createRef } from 'react'
 import { usePullToRefresh } from './usePullToRefresh'
+import { fireTouch as fire } from '../test-utils'
 
 function scroller(scrollTop: number) {
   const element = document.createElement('div')
   Object.defineProperty(element, 'scrollTop', { value: scrollTop, writable: true })
   document.body.appendChild(element)
   return element
-}
-
-// jsdom has no TouchEvent constructor; a plain Event carrying a `touches` array is what the
-// hook actually reads, and it dispatches through the same listeners.
-function fire(element: HTMLElement, type: string, y: number) {
-  const event = new Event(type, { bubbles: true, cancelable: true })
-  Object.defineProperty(event, 'touches', { value: [{ clientY: y }] })
-  element.dispatchEvent(event)
 }
 
 describe('usePullToRefresh', () => {
@@ -81,6 +74,25 @@ describe('usePullToRefresh', () => {
     // A scroll up, then back down, is not "released past the threshold": the list was never
     // held at rest the way a real pull starts.
     expect(onRefresh).not.toHaveBeenCalled()
+  })
+
+  // A frame whose clientY exactly repeats the start is routine on a real device — the thumb
+  // often arcs sideways before it moves vertically — and is zero travel, not a scroll. It must
+  // not end the gesture the way genuinely negative travel does.
+  it('survives a zero-travel frame on the way to the threshold', () => {
+    const element = scroller(0)
+    const ref = createRef<HTMLElement>()
+    // @ts-expect-error assigning a ref in a test
+    ref.current = element
+    const onRefresh = vi.fn()
+    renderHook(() => usePullToRefresh(ref, onRefresh))
+    act(() => {
+      fire(element, 'touchstart', 200)
+      fire(element, 'touchmove', 200) // zero travel — a sideways-first arc, not a scroll
+      fire(element, 'touchmove', 280)
+      fire(element, 'touchend', 280)
+    })
+    expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 
   // The only shape that catches a listener rebind mid-gesture: MessageList's real call site is
