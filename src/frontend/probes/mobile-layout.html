@@ -465,6 +465,12 @@
     // max-width. Read at 360x640 AND 320x640 — a 320px viewport is a real device (iPhone SE
     // 1st gen, an Android split-screen pane) that earlier tasks found trips over widths 360
     // leaves clean.
+    // `position:static` on the overlay (not the real `fixed`) is what makes `overflow` below
+    // load-bearing for this case: `.modal-overlay` carries `overflow-y: auto`, and per CSS
+    // Overflow 3 a non-visible value on one axis forces the other to `auto` too, so a REAL fixed
+    // overlay scrolls horizontally itself and `documentElement.scrollWidth` never grows — this
+    // page's `overflow` would read 0 whether or not the dialog fit. Static lets the case's own
+    // width overflow the page instead, which is what this metric can see.
     CASES.push({
       name: 'modal-360',
       html: `<div class="modal-overlay" style="position:static">
