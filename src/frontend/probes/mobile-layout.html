@@ -65,6 +65,22 @@
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
     four sizes the line above tells you to drive it at, which is how a metric gets ignored.
+  - `clipped` carries a known noise floor of 1: at some widths, one case's own `<input>` — the
+    bare recipients-box draft field in `compose-remove-buttons-360` — reports `scrollWidth` one
+    pixel ahead of `clientWidth` with no visible defect behind it. Traced (task-11-report.md's
+    addendum, Task 11's second follow-up) to the flex-distributed width Chromium hands that input
+    landing on a fractional value (measured: 152.40625px) that `clientWidth` and `scrollWidth`
+    round in opposite directions — CSSOM permits exactly this, since `scrollWidth` is allowed to
+    round up so a genuinely-scrollable box is never mis-reported as clean. What that fractional
+    value comes out to is sensitive to incidental prior layout work **in the same document** —
+    isolating the case (its own fresh page, nothing measured before it) reads 0; measuring it in
+    place among this file's other cases, on a fresh load, reads 1 reliably at 360px and 0 at
+    320px. It is not tied to a specific preceding case: replaying the same prefix of cases inside
+    an already-loaded page (rather than a fresh load) was observed to flip 1/0 for the identical
+    input, which is the engine's own sub-pixel text/layout accumulation, not a property of any
+    case's CSS. **A `clipped` of 1 alone is therefore not evidence of a defect** — every genuine
+    clip measured by this file so far reads far higher (55, 175, 215). Treat 1 as noise; treat
+    anything past a handful of pixels as real.
 -->
 <html data-palette="night" data-theme="light">
 <head>
