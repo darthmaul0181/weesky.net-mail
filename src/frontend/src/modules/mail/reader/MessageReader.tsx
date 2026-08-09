@@ -68,7 +68,20 @@ export default function MessageReader(
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
-  const narrow = useViewport() === 'phone'
+  const viewportNarrow = useViewport() === 'phone'
+  // Frozen per open message rather than tracking the viewport live: a changed srcDoc is a fresh
+  // iframe document load, and `narrow` crosses the 639px boundary on a phone rotation — reloading
+  // the body and throwing a reader midway through a long message back to the top. Adjusted during
+  // render rather than in an effect, per React's own pattern for resetting state when a prop
+  // changes: an effect fires after commit, so the message that just opened would paint one frame
+  // with the PREVIOUS message's padding before the effect corrected it. Calling setState here
+  // instead discards this render's output and replays the component immediately with the new
+  // state already in place — the freeze takes effect in the same render that opens the message,
+  // with no extra reload and no visible frame in between.
+  const readerKey = `${folderPath ?? ''}:${uid ?? ''}`
+  const [frozenNarrow, setFrozenNarrow] = useState(() => ({ key: readerKey, value: viewportNarrow }))
+  if (frozenNarrow.key !== readerKey) setFrozenNarrow({ key: readerKey, value: viewportNarrow })
+  const narrow = frozenNarrow.key === readerKey ? frozenNarrow.value : viewportNarrow
   const { data: preferences } = usePreferences()
   const { data: folders } = useFolders()
   const [imagesShown, setImagesShown] = useState(false)

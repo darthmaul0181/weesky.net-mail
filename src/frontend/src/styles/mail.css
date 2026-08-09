@@ -1766,15 +1766,47 @@ textarea.compose-editor {
   /* The actions sit under the address lines instead of beside them: at 360px, To, Cc and the
      spam gauge each need the full measure. */
   .reader-header { flex-direction: column; align-items: stretch; }
-  .reader-actions { align-self: flex-start; }
-  .reader-subject { font-size: 17px; }
+  /* flex-wrap, not a fixed layout: minimum cluster width is 6 * 44px controls + 7 * 2px gaps +
+     2 * (1px rule + 8px margin) ~= 296px. .reader-header keeps its 18px 22px padding at this
+     width, so a 360px phone has ~20px to spare but a 320px one (iPhone SE, an Android
+     split-screen pane) is ~20px short — and .mail-reader is overflow:hidden, so the kebab was
+     silently cut off rather than scrollable. Measured, probes/mobile-layout.html's
+     'reader header loaded-320' case. */
+  .reader-actions { align-self: flex-start; flex-wrap: wrap; }
+  /* display: flow-root is not decorative here: a float does not extend an ordinary block's own
+     auto height to include it (CSS2.1 10.6.7 reserves that for a box that establishes its own
+     block formatting context), so without this the h1 collapses to its text's height alone and
+     the floated .reader-back below overflows into .reader-meta underneath it. */
+  .reader-subject { font-size: 17px; display: flow-root; }
+  /* .reader-back's base rule (below) sizes it at 26x26 against the subject LINE, inline with its
+     text — "reads as part of it, not as a toolbar," per that rule's own comment. That stops being
+     true once it needs the 44px floor: an inline-level box that tall stretches the whole line box
+     it sits in to match it, so a wrapped subject's first line sat in a 44px line box while every
+     line after it sat in its own ~24px one, opening a 14px gap between them that no other line
+     had. Measured, probes/mobile-layout.html's 'reader header loaded' case: the wrapped text's
+     first-line glyphs bottomed out at y=2053 and the second line's topped out at y=2067 (14px
+     apart) against ~0px between every later pair. float takes the button out of the line-box
+     calculation entirely — the same mechanism a heading wraps around a dropped icon with — so the
+     wrapped text still steps around it but no line answers to its height. */
+  .reader-back { float: left; margin-bottom: 4px; }
   .reader-details { grid-template-columns: 1fr; }
-  .reader-details dt { text-align: left; }
-  /* Measured at 360x640 (probes/mobile-layout.html, 'reader header loaded'): .reader-back is not
-     the only undersized control here. Every .action-btn in ReaderActions — reply, reply-all,
-     forward, the colour toggle, delete and the kebab — sat at 30x30, and the details chevron at
-     20x20, all under the 44px floor this width enforces elsewhere. */
-  .reader-back, .action-btn, .details-toggle { min-width: var(--touch); min-height: var(--touch); }
+  /* One column turns each label:value pair into two consecutive rows instead of one, so the
+     grid's own 5px row-gap — previously only ever between one pair and the next, since a pair's
+     own dt/dd shared a row — now also falls between a label and its own value, and every row
+     reads as evenly spaced with no way to tell where one pair ends and the next begins. The
+     margin re-establishes that grouping: tight under its own label (the unchanged 5px row-gap),
+     looser before the next one. */
+  .reader-details dt { text-align: left; margin-top: 8px; }
+  .reader-details dt:first-of-type { margin-top: 0; }
+  /* Measured at 360x640 (probes/mobile-layout.html, 'reader header loaded'): .reader-back was
+     not the only undersized control here. Every .action-btn in ReaderActions — reply, reply-all,
+     forward, the colour toggle, delete and the kebab — sat at 30x30, the details chevron at
+     20x20, and the unsubscribe pill (padding: 4px 11px on 12px text, plus its border) at ~25px
+     tall, all under the 44px floor this width enforces elsewhere. */
+  .reader-back, .action-btn, .details-toggle, .unsub-btn {
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
 }
 
 /* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk

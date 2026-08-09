@@ -34,9 +34,13 @@
     exemption is per element and never spreads: when an ellipsised label pushes a sibling out of
     its parent, the box doing the clipping is that parent, which carries no `text-overflow` of its
     own and is still measured.
-  - `smallest` is the shortest measured touch target in the section, in CSS pixels.
-    `null` means the case named no `touch` selector; `'none rendered'` means it named one and
-    every match was hidden, which is a case measuring nothing rather than a case passing.
+  - `smallest` is the shortest of a target's own width and height, the smaller taken per target
+    before the section's minimum is read off — a target undersized in only one dimension used to
+    read as passing when the read axis happened to be the wider one: the reader's back button was
+    26px wide and reported `smallest: 44` under a rule that had only fixed its height, because
+    height was the only axis this ever measured. `null` means the case named no `touch` selector;
+    `'none rendered'` means it named one and every match was hidden, which is a case measuring
+    nothing rather than a case passing.
   - `undersized` counts targets under the floor, and **the floor is 44 only at or below 639px**.
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
@@ -108,7 +112,13 @@
         const targets = touch
           ? [...stage.querySelectorAll(touch)].filter(el => el.getClientRects().length)
           : []
-        const heights = targets.map(el => Math.round(el.getBoundingClientRect().height))
+        // The smaller of each target's own width and height: a target fixed tall but not wide (or
+        // the reverse) is still one finger can miss, and reading only height passed .reader-back
+        // at 26px wide under a rule that had fixed nothing but its height.
+        const sizes = targets.map(el => {
+          const rect = el.getBoundingClientRect()
+          return Math.round(Math.min(rect.width, rect.height))
+        })
         let pair = null
         if (overlap) {
           const [a, b] = overlap.map(selector => stage.querySelector(selector))
@@ -124,8 +134,8 @@
           clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
             .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
             .map(el => el.scrollWidth - el.clientWidth)),
-          smallest: !touch ? null : heights.length ? Math.min(...heights) : 'none rendered',
-          undersized: heights.filter(h => h < floor).length,
+          smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
+          undersized: sizes.filter(s => s < floor).length,
           ...(pair ? { overlap: pair } : {}),
         }
       })
@@ -243,57 +253,84 @@
     })
 
     // Task 9: the reader header at phone width. `.mail-reader` is `overflow: hidden`, so
-    // `overflow` above cannot see a control hanging outside it — only `clipped` can. Drawn
-    // LOADED, the same principle as the message row above: subject, a sender with an auth
-    // badge, both To and Cc, the spam gauge, and the full ReaderActions cluster (reply,
-    // reply-all, forward, the colour toggle, delete, the kebab), because a header missing any
-    // of those lines cannot show whether the actions wrap or the row overruns. Every control in
-    // the cluster is a touch target, so `touch` names the header's own controls plus the
-    // cluster's, not `.mail-reader` itself.
+    // `overflow` above cannot see a control hanging outside it — only `clipped` can. Drawn LOADED,
+    // the same principle as the message row above: subject, a sender with an auth badge, the
+    // unsubscribe pill (the header's most crowded real state — it sits right beside the details
+    // chevron whenever the message carries one), the spam gauge, and the full ReaderActions
+    // cluster, because a header missing any of those cannot show whether the actions wrap or the
+    // row overruns. `width` mirrors the viewport the case is read at, since a real phone gives
+    // `.mail-reader` the full screen rather than a fixed column; `detailsOpen` swaps the compact
+    // To/Cc lines for the `<dl>` ReaderDetails renders, which is the only thing that exercises the
+    // narrow-width grid override and its dt margin.
+    const readerHeader = ({ width, detailsOpen = false }) => `
+      <div class="mail-reader" style="width:${width}px">
+        <article>
+          <header class="reader-header">
+            <div class="reader-stack">
+              <h1 class="reader-subject">
+                <button type="button" class="reader-back" aria-label="Back">&larr;</button>
+                Réunion budget T3 — validation finale avant envoi au comité de direction
+              </h1>
+              <div class="reader-meta">
+                <div class="reader-from">
+                  <button type="button" class="address-label is-sender">Alice Martin</button>
+                  <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
+                  <span class="reader-date">(9 août 2026, 14:32)</span>
+                  <button type="button" class="details-toggle" aria-expanded="${detailsOpen}" aria-label="Show details">&rsaquo;</button>
+                  <a class="unsub-btn" href="#" target="_blank" rel="noopener noreferrer">&#8663; Se désabonner</a>
+                </div>
+                ${detailsOpen ? `
+                <dl class="reader-details">
+                  <dt>De</dt><dd>Alice Martin &lt;alice.martin@example.com&gt;</dd>
+                  <dt>À</dt><dd>moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</dd>
+                  <dt>Cc</dt><dd>Carole Petit &lt;carole@example.com&gt;</dd>
+                  <dt>Date</dt><dd>9 août 2026, 14:32:07</dd>
+                  <dt>Désabonnement</dt><dd><a href="#">Se désabonner</a></dd>
+                </dl>` : `
+                <div class="reader-recipients">To: <span class="address-label">moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</span></div>
+                <div class="reader-recipients">Cc: <span class="address-label">Carole Petit &lt;carole@example.com&gt;</span></div>`}
+                <div class="reader-spam">Score de spam :
+                  <span class="spam-gauge" tabindex="0">
+                    <span class="spam-gauge-track" style="--gauge-ratio:0.2"><span class="spam-gauge-fill"></span></span>
+                    <span class="spam-gauge-value">1.2 / 5.0</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="reader-actions">
+              <button type="button" class="action-btn" aria-label="Répondre">R</button>
+              <button type="button" class="action-btn" aria-label="Répondre à tous">RT</button>
+              <button type="button" class="action-btn" aria-label="Transférer">T</button>
+              <span class="actions-rule"></span>
+              <button type="button" class="action-btn" aria-label="Couleurs d'origine">S</button>
+              <span class="actions-rule"></span>
+              <button type="button" class="action-btn is-danger" aria-label="Supprimer">D</button>
+              <div class="dropdown-root">
+                <button type="button" class="action-btn" aria-label="Actions du message">&#8942;</button>
+              </div>
+            </div>
+          </header>
+        </article>
+      </div>`
+    // Every control in the header plus the ReaderActions cluster is a touch target.
+    const READER_TOUCH = '.reader-back, .details-toggle, .action-btn, .unsub-btn'
+    // 320 (iPhone SE 1st gen, an Android split-screen pane) needs no "(read at …)" annotation the
+    // way the 520-wide toolbar cases above do: that annotation exists only when a case's own
+    // width is WIDER than the viewport it would otherwise be read at, so the stage overflows the
+    // page and contaminates `overflow`. 320 is narrower than every one of the four widths this
+    // file says to drive it at, so — like 'toolbar-idle-240' above — it reads correctly at any of
+    // them; `.reader-actions`' fit-content sizing keys off this div's own definite width, not the
+    // window's.
+    for (const [name, width] of [
+      ['reader header loaded', 360],
+      ['reader header loaded-320', 320],
+    ]) {
+      CASES.push({ name, html: readerHeader({ width }), touch: READER_TOUCH })
+    }
     CASES.push({
-      name: 'reader header loaded',
-      html: `
-        <div class="mail-reader" style="width:360px">
-          <article>
-            <header class="reader-header">
-              <div class="reader-stack">
-                <h1 class="reader-subject">
-                  <button type="button" class="reader-back" aria-label="Back">&larr;</button>
-                  Réunion budget T3 — validation finale avant envoi au comité de direction
-                </h1>
-                <div class="reader-meta">
-                  <div class="reader-from">
-                    <button type="button" class="address-label is-sender">Alice Martin</button>
-                    <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
-                    <span class="reader-date">(9 août 2026, 14:32)</span>
-                    <button type="button" class="details-toggle" aria-expanded="false" aria-label="Show details">&rsaquo;</button>
-                  </div>
-                  <div class="reader-recipients">To: <span class="address-label">moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</span></div>
-                  <div class="reader-recipients">Cc: <span class="address-label">Carole Petit &lt;carole@example.com&gt;</span></div>
-                  <div class="reader-spam">Score de spam :
-                    <span class="spam-gauge" tabindex="0">
-                      <span class="spam-gauge-track" style="--gauge-ratio:0.2"><span class="spam-gauge-fill"></span></span>
-                      <span class="spam-gauge-value">1.2 / 5.0</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div class="reader-actions">
-                <button type="button" class="action-btn" aria-label="Répondre">R</button>
-                <button type="button" class="action-btn" aria-label="Répondre à tous">RT</button>
-                <button type="button" class="action-btn" aria-label="Transférer">T</button>
-                <span class="actions-rule"></span>
-                <button type="button" class="action-btn" aria-label="Couleurs d'origine">S</button>
-                <span class="actions-rule"></span>
-                <button type="button" class="action-btn is-danger" aria-label="Supprimer">D</button>
-                <div class="dropdown-root">
-                  <button type="button" class="action-btn" aria-label="Actions du message">&#8942;</button>
-                </div>
-              </div>
-            </header>
-          </article>
-        </div>`,
-      touch: '.reader-back, .details-toggle, .action-btn',
+      name: 'reader details open',
+      html: readerHeader({ width: 360, detailsOpen: true }),
+      touch: READER_TOUCH,
     })
 
     window.addEventListener('resize', measure)
