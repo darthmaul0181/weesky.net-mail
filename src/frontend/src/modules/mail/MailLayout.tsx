@@ -257,6 +257,7 @@ export default function MailLayout() {
       wide={wideRows}
       leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
       onRefresh={refresh}
+      inDrawer={drawer.inDrawer}
       onNotify={addToast}
       onRows={keepRows}
       onDeparted={departed}

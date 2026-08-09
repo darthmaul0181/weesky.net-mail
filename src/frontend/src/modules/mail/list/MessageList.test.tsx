@@ -847,6 +847,23 @@ describe('pull to refresh', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Release to refresh')).not.toBeInTheDocument()
   })
+
+  // The gesture and the kebab entry are two consumers of one handler, and only the second is
+  // gated: a touch laptop above 1024px keeps the pull while the folder column's RefreshButton is
+  // still on screen beside it, so a kebab entry there would be a second door onto the same action.
+  it('keeps the kebab free of Refresh while the folder column is not a drawer', () => {
+    renderList({ onRefresh: vi.fn(), inDrawer: false })
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.queryByRole('menuitem', { name: 'Refresh' })).not.toBeInTheDocument()
+  })
+
+  it('offers Refresh in the kebab once the folder column is a drawer', () => {
+    const onRefresh = vi.fn()
+    renderList({ onRefresh, inDrawer: true })
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }))
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
 })
 
 function streamingState(overrides = {}, count = 100) {

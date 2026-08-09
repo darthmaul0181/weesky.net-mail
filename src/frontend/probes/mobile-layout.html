@@ -374,6 +374,18 @@
       ['toolbar-selecting-520 (read at 540x900)', true, 520],
     ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
 
+    // The master checkbox's own threshold, which is 360 and not the 480 the group beside it keeps.
+    // 380 is `usePaneSize('mail.split.right', 380, 240)`'s default — the column every untouched
+    // desktop has — and hiding the master there made select-all a two-step. `touch` names the
+    // master ALONE in this pair, so `smallest` answers the presence question directly: a number is
+    // the box it draws, and 'none rendered' is the doc block's own word for a selector every match
+    // of which is hidden. Read at 768x1024: a 380px column cannot fit a 360px viewport, and there
+    // the stage overflowing the page is what `overflow` would be reporting.
+    for (const [name, width] of [
+      ['toolbar-master-380 (read at 768x1024)', 380],
+      ['toolbar-master-360 (read at 768x1024)', 360],
+    ]) CASES.push({ name, html: toolbar(false, width), touch: '.selection-master-hit' })
+
     // A row is a touch target in its own right — long-press is how a selection starts once the
     // container query has stopped :hover revealing the per-row checkbox — so the row itself is
     // what `touch` names here, not the controls inside it.
@@ -635,6 +647,12 @@
     // 4px gap, so an inset hit-area pseudo on either ✕ would overlap the token rows above and
     // below it. Kept as its own case rather than folded into compose-360 above, so a future fix
     // for either one shows up as its own line instead of getting lost inside the toolbar's 14.
+    //
+    // `.compose-attach-btn` is in the tray because AttachmentTray.tsx always ships it, after the
+    // chips, and the tray is a `flex-wrap` line: the chips and the button share one measure, so a
+    // fixture holding only chips cannot see the button pushed past the row. It is NOT in `touch` —
+    // it is a `.btn`, floored by index.css's phone block like every other one, and naming it here
+    // would mix a fixed defect into the two deferred numbers this case exists to hold steady.
     CASES.push({
       name: 'compose-remove-buttons-360',
       html: `<div class="compose-fields">
@@ -649,6 +667,9 @@
              </div>
              <div class="compose-attachments">
                <span class="compose-attachment">report.pdf <button type="button">&#10005;</button></span>
+               <button type="button" class="btn btn-ghost compose-attach-btn">
+                 <svg width="16" height="16"></svg> Attach a file
+               </button>
              </div>`,
       touch: '.recipient-token button, .compose-attachment button',
     })
@@ -748,6 +769,46 @@
           </div>
         </div>`,
       touch: '.contact-card-btn',
+    })
+
+    // The nameless contact, which the case above cannot see: `displayNameOf` falls back to the
+    // address, and an address is ONE word where `Marie-Christine Vandenbroucke` has three spaces
+    // to wrap on. Read at 320x640, with the back arrow the phone draws — 44px plus the head's 10px
+    // gap — since that is the width the h2 is actually short at. `.contact-card-name` carries no
+    // `text-overflow`, so `clipped` measures it directly rather than exempting it.
+    CASES.push({
+      name: 'contacts-card-nameless (read at 320x640)',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-row">
+            <div class="contacts-card">
+              <div class="contact-card">
+                <div class="contact-card-head">
+                  <button class="contact-card-back"><svg width="16" height="16"></svg></button>
+                  <h2 class="contact-card-name">marie-christine.vandenbroucke@example.be</h2>
+                </div>
+                <div class="contact-card-body">
+                  <div class="contact-card-row">
+                    <span class="contact-card-label">Addresses</span>
+                    <span class="contact-card-values">
+                      <span class="contact-card-value">
+                        <a href="#">marie-christine.vandenbroucke@example.be</a>
+                        <span class="contact-card-primary">primary</span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div class="contact-card-actions">
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
+                  <span class="actions-rule"></span>
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
+                  <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      touch: '.contact-card-btn, .contact-card-back',
     })
 
     // The same card, bottom-anchored the way the shell anchors it, with .floating-action on the

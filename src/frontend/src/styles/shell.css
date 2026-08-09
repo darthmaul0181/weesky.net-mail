@@ -6,10 +6,6 @@
   /* dvh follows the mobile URL bar; the vh line above is the fallback for a browser without it.
      With 100vh alone the bottom band — the tab bar — sits under the URL bar and off screen. */
   height: 100dvh;
-  /* Chrome for Android's own pull-to-refresh fires on an overscroll at the top of the page.
-     The page never scrolls here, but the gesture still reaches it, and it would run over the
-     list's own pull-to-refresh. */
-  overscroll-behavior-y: contain;
 }
 
 .app-topbar {

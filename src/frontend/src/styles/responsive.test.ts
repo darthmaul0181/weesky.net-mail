@@ -89,6 +89,25 @@ describe('responsive contract', () => {
       .toMatch(/\.contact-tile:hover \.contact-tile-actions/)
   })
 
+  // The master checkbox answers to 360 and the archive/junk/delete group to 480, because the
+  // default column is 380 (`usePaneSize('mail.split.right', 380, 240)`) and the two thresholds
+  // straddle it: at 480 the master was hidden on a stock desktop and select-all became a two-step.
+  // Text again for the reason the rest of this file is — the difference is a rendered box, which
+  // jsdom does not have. probes/mobile-layout.html's toolbar-master-380/-360 pair is the geometry.
+  it('splits the toolbar thresholds around the default column', () => {
+    const mail = all['./mail.css']
+    expect(mediaBlocks(mail, '@container (max-width: 480px)')).not.toMatch(/selection-master-hit/)
+    expect(mediaBlocks(mail, '@container (max-width: 360px)')).toMatch(/selection-master-hit/)
+  })
+
+  // Only the root's value propagates to the viewport, and `.app-shell` declares no `overflow`, so
+  // it is not a scroll container: the rule it used to carry could never contain Chrome for
+  // Android's own pull-to-refresh, whose reload takes an unsaved draft with it.
+  it('contains the native pull-to-refresh at the root', () => {
+    expect(all['../index.css']).toMatch(/html\s*\{[^}]*overscroll-behavior-y:\s*contain/)
+    expect(all['./shell.css']).not.toMatch(/overscroll-behavior/)
+  })
+
   it('declares the touch floor once, in the phone block', () => {
     const shell = all['./shell.css']
     expect([...shell.matchAll(/--touch:/g)]).toHaveLength(1)

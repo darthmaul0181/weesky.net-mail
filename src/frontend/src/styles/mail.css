@@ -113,11 +113,12 @@
 
 /* `overscroll-behavior-y` unconditional, not gated to a width: `usePullToRefresh`'s listeners
    bind at every width, and a rule that only fired below 1023px would leave a touch laptop above
-   it with the gesture live and uncontained. `.mail-list-scroll` is the only element this can ever
-   bind to — `.app-shell` declares no `overflow`, so it is not a scroll container and
-   `overscroll-behavior` cannot take hold there, whatever a shell rule may claim. Cheap insurance
-   either way: the hook's own `preventDefault` fires at 10px of travel, well under the distance
-   Chrome's native pull-to-refresh arms at, so the browser's own gesture rarely reaches this. */
+   it with the gesture live and uncontained. This is the only element in the module it can bind
+   to — `.app-shell` declares no `overflow`, so it is not a scroll container and the property
+   could never take hold there; the app-wide containment lives on `html` in index.css, where the
+   root's value is what propagates to the viewport. Cheap insurance either way: the hook's own
+   `preventDefault` fires at 10px of travel, well under the distance Chrome's native
+   pull-to-refresh arms at, so the browser's own gesture rarely reaches this. */
 .mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 
 /* The two columns show their scrollbar under the cursor only, each on its own hover — but the
@@ -1728,8 +1729,9 @@ textarea.compose-editor {
 
 @media (max-width: 1023px) {
   /* Compose and Refresh both leave the drawer: opening a drawer to write a message, or to
-     check for new mail, is one gesture too many. Compose becomes the floating button below.
-     Refresh has no home here yet — the list toolbar takes it in the next slice. */
+     check for new mail, is one gesture too many. Compose becomes the floating button below;
+     Refresh moves into the list toolbar's kebab, which MessageList adds under this same
+     condition (`inDrawer`) and nowhere else, so a desktop keeps one Refresh rather than two. */
   .context-drawer-panel .mail-folders-compose { display: none; }
 
   .floating-action {
@@ -1871,7 +1873,14 @@ textarea.compose-editor {
    this comment argues from because the column is what has to fit the controls and the splitter
    hands it any width it likes: on a tablet it can sit at its 240px floor, narrower than any
    phone, while the same tablet under readingPane:'none' gives the same column 960px. 480 is the
-   width below which the six controls stop fitting with a folder name still legible beside them. */
+   width below which the six controls stop fitting with a folder name still legible beside them.
+
+   Read the threshold against the DEFAULT column, which is 380px — `usePaneSize('mail.split.right',
+   380, 240)` — and not against that 240px floor: 480 fires on a stock desktop, so everything named
+   here is gone from an untouched installation. That is intended for the archive/junk/delete group,
+   measured at 48px of overflow without it, and was wrong for the master checkbox, which used to
+   hide here and made select-all a two-step (hover a row, tick it, watch the master come back). The
+   master answers to its own lower threshold in the block below instead. */
 @container (max-width: 480px) {
   /* The selecting state still spends six controls, and at the splitter's 240px floor they run
      48px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
@@ -1881,8 +1890,7 @@ textarea.compose-editor {
 
   .selection-toolbar:not(.is-selecting) .selection-archive,
   .selection-toolbar:not(.is-selecting) .selection-junk,
-  .selection-toolbar:not(.is-selecting) .selection-delete,
-  .selection-toolbar:not(.is-selecting) .selection-master-hit { display: none; }
+  .selection-toolbar:not(.is-selecting) .selection-delete { display: none; }
 
   .selection-toolbar.is-selecting .selection-search,
   .selection-toolbar.is-selecting .selection-star { display: none; }
@@ -1890,6 +1898,16 @@ textarea.compose-editor {
   /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
      wins over this whatever order the cascade reads the two blocks in. */
   .selection-btn { width: 40px; height: 40px; }
+}
+
+/* The master checkbox's own threshold, and the reason it is not the 480 above: at the default
+   380px column — `usePaneSize('mail.split.right', 380, 240)`, which every untouched desktop has —
+   44 (master) + the folder name + the star + 44 (search) + 44 (kebab) fit with room to spare, and
+   hiding the master there cost a stock desktop its select-all. It goes at 360 and below, where the
+   name has no measure left; the splitter's 240px floor is inside that. Same container as the block
+   above — `.mail-list`, the column rather than the window — for the same reason. */
+@container (max-width: 360px) {
+  .selection-toolbar:not(.is-selecting) .selection-master-hit { display: none; }
 }
 
 /* The reader's own column, and a second container query rather than more selectors in the one
@@ -1944,7 +1962,8 @@ textarea.compose-editor {
   /* The reserve that hover rule paid for, and it has to share its condition rather than a width:
      released while the cluster is still revealed, the row's last line would run under the buttons.
      `:has()` and `:nth-last-child()` both still match a `display: none` element, so hiding the
-     cluster does not release its 88px on its own: a stuck :hover would ellipsise a narrow row's
+     cluster does not release its reserve on its own — 116px on the four-action row the probe
+     draws (`--row-actions: 4`, so 4 × 28 + 4), and a stuck :hover would ellipsise a narrow row's
      last line around padding held for nothing. */
   .message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
   .message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {

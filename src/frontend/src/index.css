@@ -4,6 +4,11 @@
   padding: 0;
 }
 
+/* Chrome for Android's own pull-to-refresh arms on a downward overscroll of the viewport, and the
+   reload it runs takes an unsaved draft with it — the composer's leave guard covers router
+   navigations, not the browser. Only the root's value propagates to the viewport. */
+html { overscroll-behavior-y: contain; }
+
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -2312,7 +2317,15 @@ body {
   background: none; color: var(--text-muted); cursor: pointer;
 }
 .contact-card-back:hover { background: var(--list-row-hover); color: var(--text); }
-.contact-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
+/* A contact with no name falls back to its address (`displayNameOf`), which is one unbreakable
+   word: without `min-width: 0` the h2 is a flex item at its min-content width, and `.contacts-card`
+   is overflow:hidden, so at 320px — where the back arrow takes 54px of the row — the tail of the
+   address was cut off rather than wrapped. `break-word` and not `anywhere`: only the second feeds
+   its break points into min-content sizing, and this box is sized from exactly that. */
+.contact-card-name {
+  margin: 0; min-width: 0; overflow-wrap: break-word;
+  font-size: 18px; font-weight: 700; color: var(--text);
+}
 
 .contact-card-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px; }
 .contact-card-row { display: flex; gap: 14px; margin-bottom: 14px; }

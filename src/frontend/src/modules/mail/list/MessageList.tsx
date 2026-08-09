@@ -82,8 +82,11 @@ interface Props {
   wide?: boolean
   /** Rendered at the head of the toolbar: the drawer's hamburger below 1024px. */
   leading?: ReactNode
-  /** Refresh, which loses its home once the folder column is a drawer. */
+  /** The pull-to-refresh gesture's handler, bound at every width — a touch laptop has it too. */
   onRefresh?: () => void
+  /** The folder column is behind a drawer, so its RefreshButton is out of reach and the kebab
+      takes the action. On desktop that button is on screen and a second entry is a duplicate. */
+  inDrawer?: boolean
   onNotify?: (message: string) => void
   onRows?: (uids: number[]) => void
   /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
@@ -101,7 +104,8 @@ interface Props {
  */
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
-    onNotify, onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
+    inDrawer = false, onNotify, onRows, onDeparted, search = null, onSearchChange,
+    onOpenResult }: Props) {
   const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
@@ -571,7 +575,7 @@ export default function MessageList(
       {/* Replaces the old heading band: the toolbar names the folder until a selection is on. */}
       <SelectionToolbar
         leading={leading}
-        refresh={onRefresh ? { onRun: onRefresh } : undefined}
+        refresh={onRefresh && inDrawer ? { onRun: onRefresh } : undefined}
         title={folderName || folderPath}
         count={count}
         allSelected={allSelected}
