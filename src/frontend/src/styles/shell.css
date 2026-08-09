@@ -749,9 +749,70 @@ a.dropdown-item { text-decoration: none; }
    second refining the first through the ordinary cascade. Never invert this:
    wrapping the desktop rules in a min-width query makes the whole file conditional. */
 
+/* Desktop never draws the hamburger: the pane is right there. */
+.drawer-toggle { display: none; }
+
 @media (max-width: 1023px) {
   /* The context pane is a drawer from here down, so no module shows one inline. */
   .app-content { margin: 0; border-radius: 0; }
+
+  /* Closed is display:none, which takes the panel out of the tab order and the accessibility
+     tree in one move while React keeps its children mounted. */
+  .context-drawer { display: none; }
+  .context-drawer.is-open { display: block; }
+
+  .context-drawer-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .context-drawer-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    width: min(320px, 86vw);
+    background: var(--folders-bg);
+    border-right: 1px solid var(--border);
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.25);
+    animation: drawer-in 0.18s ease-out;
+  }
+
+  @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .context-drawer-panel { animation: none; }
+  }
+
+  /* The pane inside the drawer fills it: its own column width belongs to the desktop layout. */
+  .context-drawer-panel > .mail-folders,
+  .context-drawer-panel > .contacts-scopes-column,
+  .context-drawer-panel > .context-pane {
+    width: auto;
+    flex: 1;
+    min-height: 0;
+    border-right: none;
+  }
+
+  .drawer-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .drawer-toggle:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 }
 
 @media (max-width: 639px) {

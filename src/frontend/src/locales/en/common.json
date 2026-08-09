@@ -18,6 +18,11 @@
     "contacts": "Contacts",
     "settings": "Settings"
   },
+  "drawer": {
+    "label": "Navigation",
+    "open": "Open navigation",
+    "close": "Close navigation"
+  },
   "comingSoon": "This module is coming soon.",
   "deleteConfirm": {
     "title": "Confirm deletion",
