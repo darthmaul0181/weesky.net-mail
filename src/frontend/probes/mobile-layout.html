@@ -173,30 +173,54 @@
     ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
 
     // A row is a touch target in its own right — long-press is how a selection starts once the
-    // container query has taken the per-row checkbox away — so the row itself is what `touch`
-    // names here, not the controls inside it. The two variants are the same markup under the two
-    // list states: without `.has-selection` no checkbox is drawn, with it every one is, and the
-    // reserved 34px gutter is what keeps the second from shoving the sender line sideways.
+    // container query has stopped :hover revealing the per-row checkbox — so the row itself is
+    // what `touch` names here, not the controls inside it.
+    //
+    // The row is drawn LOADED rather than in its friendliest state, and that is the whole point of
+    // the case. `.message-row-top` is a flex line and every optional item in it — the unread dot,
+    // the Draft badge, the priority mark, the paperclip — competes with the date and the star for
+    // the width `.message-row-from` is trying to take with `flex: 1`. `.message-row-from` carries
+    // `text-overflow: ellipsis` and no element children, so `clipped` exempts it by design and it
+    // absorbs the shrink; anything that instead pushes the date or the star past the line's right
+    // edge lands on `.message-row-top`, which is measured. A row missing those items cannot fail,
+    // and a case that cannot fail is not a guard.
+    //
+    // `.mail-list-scroll` is here because the real list always has it and it is what owns the
+    // vertical scrollbar: without it the row is measured against a gutter the app never gives it.
+    // It is also the one box in this case with `overflow-y: auto`, so should `clipped` ever go
+    // non-zero, check it against that caveat before chasing a control.
+    //
+    // The two variants are the two list states. Note what the pair can and cannot prove: the box
+    // is absolutely positioned over the row's unconditional 34px gutter, so an identical row
+    // height across the two is a property of the base stylesheet and NOT evidence that revealing
+    // every checkbox reflows nothing. What the pair does prove is that neither state overflows or
+    // clips, and that the second draws a real box rather than nothing at all.
     const row = (selecting) => `
       <div class="mail-list" style="width:360px">
-        <ul class="message-list${selecting ? ' has-selection' : ''}">
-          <li><div role="button" class="message-row is-unread" style="--row-actions:3">
-            <input type="checkbox" class="message-row-check" />
-            <div class="message-row-top">
-              <span class="message-row-unread-dot"></span>
-              <span class="message-row-from">Alice Martin</span>
-              <span class="message-row-date">18 Jul</span>
-              <button class="row-btn row-star">★</button>
-            </div>
-            <div class="message-row-subject">Re: facture du mois de juillet</div>
-            <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
-            <div class="message-row-cluster">
-              <button class="row-btn">M</button>
-              <button class="row-btn">A</button>
-              <button class="row-btn is-danger">D</button>
-            </div>
-          </div></li>
-        </ul>
+        <div class="mail-list-scroll">
+          <ul class="message-list${selecting ? ' has-selection' : ''}">
+            <li><div role="button" class="message-row is-unread" style="--row-actions:4">
+              <input type="checkbox" class="message-row-check" />
+              <div class="message-row-top">
+                <span class="message-row-unread-dot"></span>
+                <span class="message-row-draft">Draft</span>
+                <span class="message-row-priority is-high">HIGH</span>
+                <span class="message-row-from">Alice Martin</span>
+                <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                <span class="message-row-date">18 Jul</span>
+                <button class="row-btn row-star">★</button>
+              </div>
+              <div class="message-row-subject">Re: facture du mois de juillet</div>
+              <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+              <div class="message-row-cluster">
+                <button class="row-btn">S</button>
+                <button class="row-btn">A</button>
+                <button class="row-btn">J</button>
+                <button class="row-btn is-danger">D</button>
+              </div>
+            </div></li>
+          </ul>
+        </div>
       </div>`
     for (const [name, selecting] of [['row-360', false], ['row-selecting-360', true]]) {
       CASES.push({ name, html: row(selecting), touch: '.message-row' })

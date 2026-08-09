@@ -85,6 +85,9 @@ function pagedState(paging = {}, overrides = {}) {
 
 type ListProps = Parameters<typeof MessageList>[0]
 
+// The only press useLongPress answers to. A mouse hold is deliberately inert — see its own suite.
+const FINGER = { pointerType: 'touch', isPrimary: true, button: 0 }
+
 function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record<string, string>) {
   if (preferencesOverride) {
     mocks.getPreferences.mockResolvedValue(
@@ -974,7 +977,7 @@ describe('multi-select', () => {
       renderWithRoles(undefined, { onSelect })
       const row = screen.getByRole('button', { name: /alice martin/i })
 
-      fireEvent.pointerDown(row)
+      fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
       fireEvent.click(row)
 
@@ -991,11 +994,52 @@ describe('multi-select', () => {
       renderWithRoles()
       const row = screen.getByRole('button', { name: /alice martin/i })
 
-      fireEvent.pointerDown(row)
+      fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
       fireEvent.click(within(row).getByRole('checkbox'))
 
       expect(screen.getByText('1 selected')).toBeInTheDocument()
+    } finally { vi.useRealTimers() }
+  })
+
+  // A mouse hold must leave the desktop exactly as it was: no selection, and the click it ends
+  // in still opens the message. Held past the delay and released without moving.
+  it('a mouse press held on a row neither selects nor loses its click', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, { pointerType: 'mouse', isPrimary: true, button: 0 })
+      act(() => { vi.advanceTimersByTime(600) })
+      fireEvent.pointerUp(row)
+      fireEvent.click(row)
+
+      expect(screen.queryByText('1 selected')).not.toBeInTheDocument()
+      expect(onSelect).toHaveBeenCalledWith(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  // The press that never ends in a click: a finger that lifts off the row, or a drag that began
+  // after the delay. The suppression flag has to be dropped by the next press rather than waiting
+  // for a click that is not coming, or the row's following tap is eaten instead.
+  it('a long press that produces no click does not eat the next one', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.pointerUp(row)  // lifted off the row: no click follows
+
+      fireEvent.pointerDown(row, FINGER)
+      fireEvent.pointerUp(row)
+      fireEvent.click(row)
+
+      expect(onSelect).toHaveBeenCalledWith(2)
     } finally { vi.useRealTimers() }
   })
 
@@ -1007,10 +1051,10 @@ describe('multi-select', () => {
       renderWithRoles(undefined, { onSelect })
       const row = screen.getByRole('button', { name: /alice martin/i })
 
-      fireEvent.pointerDown(row)
+      fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
       fireEvent.click(row)
-      fireEvent.pointerDown(row)
+      fireEvent.pointerDown(row, FINGER)
       fireEvent.pointerUp(row)
       fireEvent.click(row)
 
@@ -1316,7 +1360,7 @@ describe('MessageList searching', () => {
       renderList({ search: { folderPath: 'INBOX', allFolders: true, quick: 'x' }, onOpenResult })
       const row = screen.getByText('From archive').closest('.message-row') as HTMLElement
 
-      fireEvent.pointerDown(row)
+      fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
       fireEvent.click(row)
 

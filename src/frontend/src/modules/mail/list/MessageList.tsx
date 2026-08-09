@@ -59,6 +59,9 @@ function Row({ onLongPress, children, ...rest }:
       onClickCapture={event => {
         if (!fired.current) return
         fired.current = false
+        // Both are load-bearing and neither replaces the other: stopPropagation keeps the click
+        // from the checkbox's own listener, preventDefault is what cancels the input's native
+        // activation — without it the box still toggles and undoes the selection just made.
         event.preventDefault()
         event.stopPropagation()
       }}

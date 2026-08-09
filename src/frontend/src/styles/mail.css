@@ -1782,25 +1782,31 @@ textarea.compose-editor {
      tap — the cluster would appear and stay. These actions remain reachable by opening the
      message and through the selection toolbar.
 
-     The two revealing selectors have to be named rather than relying on the bare one: a
-     container query adds no specificity, so `.message-row-cluster` alone (0,1,0) still loses to
-     `.message-row:hover .message-row-cluster` (0,3,0) and the cluster would come back on the
-     very tap this rule exists for. Matching their specificity and sitting later wins. */
-  .message-row-cluster,
+     It is the two REVEALING selectors that have to be named, not the cluster on its own: the base
+     declaration above already says `display: none`, and a container query adds no specificity, so
+     a bare `.message-row-cluster` here (0,1,0) restates that base rule and still loses to
+     `.message-row:hover .message-row-cluster` (0,3,0) — the cluster would come back on the very
+     tap this exists to stop. Matching their specificity and sitting later is the whole rule. */
   .message-row:hover .message-row-cluster,
   .message-row:focus-within .message-row-cluster { display: none; }
 
-  /* Both of these reserved room for the cluster. With nothing drawn there, a stuck :hover would
-     otherwise leave a tapped wide row with no date at all, and a narrow row's last line
-     ellipsised around 100px of padding held for a control that is not there. */
-  .message-row.is-line:hover .message-row-date,
-  .message-row.is-line:focus-within .message-row-date { display: inline; }
+  /* The reserve that hover rule paid for. `:has()` and `:nth-last-child()` both still match a
+     `display: none` element, so hiding the cluster does not release its 88px on its own: a stuck
+     :hover would ellipsise a narrow row's last line around padding held for nothing. */
   .message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
   .message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
     padding-right: 0;
   }
 
-  /* A checkbox per row costs width nobody has. Long-pressing a row starts a selection, and
-     .has-selection — which the list already carries — brings every checkbox back. */
-  .message-list:not(.has-selection) .message-row-check { display: none; }
+  /* Same reason as the cluster, and visually only. `display: none` would also have taken the box
+     out of the tab order, and with the idle toolbar's master checkbox hidden too there was then
+     no keyboard route into a selection at all — reachable on an ordinary desktop by dragging the
+     splitter to its 240px floor, not a touch-only concern. So only :hover stops revealing it;
+     :focus-within, .has-selection and :checked all still do.
+     Costs no width either way: the 34px gutter is unconditional base padding and the box is
+     absolutely positioned over it. */
+  .message-list:not(.has-selection) .message-row:hover:not(:focus-within) .message-row-check {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
