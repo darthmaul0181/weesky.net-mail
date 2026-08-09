@@ -95,15 +95,19 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   return (
     <div className={`selection-toolbar${count > 0 ? ' is-selecting' : ''}`}>
       {props.leading}
-      <input
-        ref={master}
-        type="checkbox"
-        className="selection-master"
-        aria-label={t('toolbar.selectAll')}
-        checked={allSelected}
-        onChange={onToggleAll}
-        disabled={props.selectionDisabled}
-      />
+      {/* The finger-sized target on a phone is this label, not the box: a native checkbox paints
+          its whole border box, so sizing it to 44px draws a slab twice its neighbours' weight. */}
+      <label className="selection-master-hit">
+        <input
+          ref={master}
+          type="checkbox"
+          className="selection-master"
+          aria-label={t('toolbar.selectAll')}
+          checked={allSelected}
+          onChange={onToggleAll}
+          disabled={props.selectionDisabled}
+        />
+      </label>
       <span className="selection-heading">
         <span className="selection-title">
           {count > 0 ? t('toolbar.selected', { count }) : title}

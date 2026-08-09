@@ -22,13 +22,25 @@
     from the screen. Measured: the selection toolbar ran past a 240px list column and reported
     `overflow: 0` throughout. Read both; `clipped` above 0 means something is off-screen inside a
     column, `overflow` above 0 means the page itself scrolls sideways.
-    Elements carrying `text-overflow: ellipsis` are excluded, and that exclusion is what keeps the
-    number worth reading: an ellipsised folder name or subject clips by design and announces that
-    it did, so counting it reports a defect on every truncated label in the app — measured, the
-    list toolbar's own `.selection-title` alone raised `clipped` to 34 with nothing wrong.
-  - `smallest` is the shortest measured touch target in the section, in CSS pixels. Floor is 44.
+    Excluded from it: an element that carries `text-overflow: ellipsis` AND has no element
+    children. That exclusion is what keeps the number worth reading — an ellipsised folder name or
+    subject clips by design and announces that it did, so counting it reports a defect on every
+    truncated label in the app; measured, the list toolbar's own `.selection-title` alone raised
+    `clipped` to 34 with nothing wrong. Two limits on the exclusion are deliberate, because it
+    would otherwise blind the metric rather than sharpen it. It is restricted to **childless**
+    elements: an ellipsised box that wraps other elements (`.message-row-line` around
+    `.message-row-line-preview` is already this shape) can clip a real control the day one is put
+    inside it, so only leaf labels are exempt. And `text-overflow` does **not** inherit, so the
+    exemption is per element and never spreads: when an ellipsised label pushes a sibling out of
+    its parent, the box doing the clipping is that parent, which carries no `text-overflow` of its
+    own and is still measured.
+  - `smallest` is the shortest measured touch target in the section, in CSS pixels.
     `null` means the case named no `touch` selector; `'none rendered'` means it named one and
     every match was hidden, which is a case measuring nothing rather than a case passing.
+  - `undersized` counts targets under the floor, and **the floor is 44 only at or below 639px**.
+    `--touch` is declared in shell.css's phone block alone, so above that width the app draws
+    36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
+    four sizes the line above tells you to drive it at, which is how a metric gets ignored.
 -->
 <html data-palette="night" data-theme="light">
 <head>
@@ -57,7 +69,9 @@
   <pre id="out">measuring…</pre>
   <div id="stage"></div>
   <script type="module">
-    const TOUCH_FLOOR = 44
+    // Only where the app itself declares one: --touch lives in shell.css's phone block, so above
+    // 639px there is no floor to hold anything to. See the header.
+    const touchFloor = () => window.innerWidth <= 639 ? 44 : 0
     // Later tasks push their own {name, html} entries onto this array. One section per screen.
     // `overlap: [selectorA, selectorB]` additionally reports the two rectangles and whether they
     // intersect — for the fixed-position furniture that shares a screen corner.
@@ -85,6 +99,7 @@
 
     function measure() {
       const stage = document.getElementById('stage')
+      const floor = touchFloor()
       const report = CASES.map(({ name, html, touch, overlap }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
@@ -107,10 +122,10 @@
           viewport: `${window.innerWidth}x${window.innerHeight}`,
           overflow: doc.scrollWidth - doc.clientWidth,
           clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
-            .filter(el => getComputedStyle(el).textOverflow !== 'ellipsis')
+            .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
             .map(el => el.scrollWidth - el.clientWidth)),
           smallest: !touch ? null : heights.length ? Math.min(...heights) : 'none rendered',
-          undersized: heights.filter(h => h < TOUCH_FLOOR).length,
+          undersized: heights.filter(h => h < floor).length,
           ...(pair ? { overlap: pair } : {}),
         }
       })
@@ -128,7 +143,7 @@
       <div class="mail-list" style="width:${width}px">
         <div class="selection-toolbar${selecting ? ' is-selecting' : ''}">
           <button class="drawer-toggle" style="display:inline-flex">☰</button>
-          <input type="checkbox" class="selection-master" />
+          <label class="selection-master-hit"><input type="checkbox" class="selection-master" /></label>
           <span class="selection-heading">
             <span class="selection-title">${selecting ? '3 selected' : 'Inbox'}</span>
             <button class="selection-btn selection-star">★</button>
@@ -142,8 +157,8 @@
           </div>
         </div>
       </div>`
-    // The master checkbox is in the touch set because the selecting state is where it appears.
-    const TOOLBAR_TOUCH = '.selection-btn, .selection-master, .drawer-toggle'
+    // The master's target is its wrapping label, not the box it paints — see mail.css's phone block.
+    const TOOLBAR_TOUCH = '.selection-btn, .selection-master-hit, .drawer-toggle'
     for (const [name, selecting, width] of [
       ['toolbar-idle-360', false, 360],
       ['toolbar-selecting-360', true, 360],
@@ -156,6 +171,22 @@
       ['toolbar-idle-520 (read at 540x900)', false, 520],
       ['toolbar-selecting-520 (read at 540x900)', true, 520],
     ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
+
+    // The one mechanism in this repo that can catch this, and no unit test can stand in for it:
+    // jsdom computes no layout. `.mail-list` carries `container-type: inline-size`, and MessageList
+    // renders four dialogs INSIDE that column with no portal anywhere in the codebase. Layout
+    // containment would make the column the containing block for their `position: fixed` overlay
+    // and trap every one of them in a 240-380px box. Two independent Blink measurements say
+    // container-type does not apply it; this case is that claim left running, because the spec
+    // prose is read both ways and a citation settles nothing.
+    // Read it as: is `.modal-overlay` the viewport, or is it the column? The column is deliberately
+    // 240px so the two can never be confused. The overlay may be a scrollbar's width narrower than
+    // `viewport` says; what must never happen is its width matching `.mail-list`'s.
+    CASES.push({
+      name: 'list dialogs escape the container column',
+      html: '<div class="mail-list" style="width:240px"><div class="modal-overlay">dialog</div></div>',
+      overlap: ['.modal-overlay', '.mail-list'],
+    })
 
     window.addEventListener('resize', measure)
     measure()

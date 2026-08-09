@@ -68,12 +68,15 @@
    'right' the width is the splitter's inline style, at 'bottom' the stack's stretch, and at
    'none' a `flex: 1` whose basis is already 0. Nothing here has ever sized to its contents.
 
-   Do NOT add `contain` here. MessageList renders four dialogs inside this column and there are
-   no portals in this codebase, so `.modal-overlay`'s `position: fixed` resolves against the
-   viewport only for as long as nothing gives this element layout containment — which
-   `container-type` does not apply (css-conditional-5: style and inline-size only), and which
-   `contain: layout` or `contain: paint` would. Measured both ways in Chromium; no test in this
-   repo can see it, because jsdom computes no layout. */
+   Do NOT add `contain` here, and do not go looking for a spec line to settle it — two careful
+   readers have now read the prose opposite ways, so measure it instead. MessageList renders four
+   dialogs inside this column and there are no portals in this codebase, so `.modal-overlay`'s
+   `position: fixed` resolves against the viewport only for as long as nothing makes this element
+   the containing block for fixed descendants. Measured in Blink, twice, independently: with
+   `container-type: inline-size` the overlay is the viewport; with `contain: layout` or
+   `contain: paint` it collapses to this column and every dialog opened from the list is trapped
+   in it. The probe case 'list dialogs escape the container column' keeps that claim running,
+   because no test here can — jsdom computes no layout. */
 .mail-list {
   background: var(--surface);
   container-type: inline-size;
@@ -377,7 +380,15 @@
   background: var(--surface);
 }
 
-.selection-master { flex: none; }
+/* Wraps the master checkbox so a phone can grow the target without growing the drawn box.
+   Shrink-to-fit here, so off a phone it is exactly the checkbox's margin box and the band is
+   laid out as it always was. */
+.selection-master-hit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* The name and its filter travel together, so the star sits against the name rather than
    drifting to the actions on the far side. */
@@ -1730,13 +1741,11 @@ textarea.compose-editor {
   .selection-btn { min-width: var(--touch); min-height: var(--touch); }
 
   /* The one control on this band that is not a .selection-btn, and the one the selecting state
-     exists for. Padding rather than a bigger box: border-box keeps the drawn tick at the 16px
-     content size while the hit area becomes the square its neighbours are. */
-  .selection-master {
-    width: var(--touch);
-    height: var(--touch);
-    padding: calc((var(--touch) - 16px) / 2);
-  }
+     exists for. The target is the wrapper and the box stays its native size: padding on an
+     `appearance: auto` checkbox computes to 0 in Chrome — measured — so sizing the input itself
+     painted a 44px slab of accent colour beside 20px icons. */
+  .selection-master-hit { width: var(--touch); height: var(--touch); }
+  .selection-master { margin: 0; }
 }
 
 /* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk
@@ -1760,7 +1769,7 @@ textarea.compose-editor {
   .selection-toolbar:not(.is-selecting) .selection-archive,
   .selection-toolbar:not(.is-selecting) .selection-junk,
   .selection-toolbar:not(.is-selecting) .selection-delete,
-  .selection-toolbar:not(.is-selecting) .selection-master { display: none; }
+  .selection-toolbar:not(.is-selecting) .selection-master-hit { display: none; }
 
   .selection-toolbar.is-selecting .selection-search,
   .selection-toolbar.is-selecting .selection-star { display: none; }
