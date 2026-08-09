@@ -20,8 +20,7 @@
   },
   "drawer": {
     "label": "Navigation",
-    "open": "Ouvrir la navigation",
-    "close": "Fermer la navigation"
+    "open": "Ouvrir la navigation"
   },
   "comingSoon": "Ce module arrive bientôt.",
   "deleteConfirm": {

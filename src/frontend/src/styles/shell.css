@@ -749,8 +749,11 @@ a.dropdown-item { text-decoration: none; }
    second refining the first through the ordinary cascade. Never invert this:
    wrapping the desktop rules in a min-width query makes the whole file conditional. */
 
-/* Desktop never draws the hamburger: the pane is right there. */
+/* Desktop never draws the hamburger, and never shows the drawer: the pane is right there,
+   inline, so a consumer that renders <ContextDrawer> unconditionally cannot paint a duplicate
+   of it over the desktop layout. */
 .drawer-toggle { display: none; }
+.context-drawer { display: none; }
 
 @media (max-width: 1023px) {
   /* The context pane is a drawer from here down, so no module shows one inline. */

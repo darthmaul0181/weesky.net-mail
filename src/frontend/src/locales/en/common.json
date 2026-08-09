@@ -20,8 +20,7 @@
   },
   "drawer": {
     "label": "Navigation",
-    "open": "Open navigation",
-    "close": "Close navigation"
+    "open": "Open navigation"
   },
   "comingSoon": "This module is coming soon.",
   "deleteConfirm": {
