@@ -1878,9 +1878,17 @@ textarea.compose-editor {
    Read the threshold against the DEFAULT column, which is 380px — `usePaneSize('mail.split.right',
    380, 240)` — and not against that 240px floor: 480 fires on a stock desktop, so everything named
    here is gone from an untouched installation. That is intended for the archive/junk/delete group,
-   measured at 48px of overflow without it, and was wrong for the master checkbox, which used to
-   hide here and made select-all a two-step (hover a row, tick it, watch the master come back). The
-   master answers to its own lower threshold in the block below instead. */
+   measured at 48px of overflow without it.
+
+   The master checkbox is NOT among them, at any width, and that is the whole of its rule — there is
+   no second block below for it any more. It is the only discoverable door into the selecting state
+   the actions appear in: hidden, the way in is long-press, which nothing on screen announces. It
+   used to hide below 360, which made a 390px phone and a 360px one behave differently for no reason
+   the user could see. It costs nothing to keep at every width: a column that narrow is the
+   splitter's doing (a phone gets `effectivePane(…, 'phone') === 'none'` and no splitter at all), so
+   it is a tablet or a desktop drawing it, where `--touch` does not resolve and the master is the
+   13px box the browser paints — measured at the 240px floor, the toolbar still fits on one row at
+   rest with the folder name ellipsised. */
 @container (max-width: 480px) {
   /* The selecting state still spends six controls, and at the splitter's 240px floor they run
      48px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
@@ -1898,16 +1906,6 @@ textarea.compose-editor {
   /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
      wins over this whatever order the cascade reads the two blocks in. */
   .selection-btn { width: 40px; height: 40px; }
-}
-
-/* The master checkbox's own threshold, and the reason it is not the 480 above: at the default
-   380px column — `usePaneSize('mail.split.right', 380, 240)`, which every untouched desktop has —
-   44 (master) + the folder name + the star + 44 (search) + 44 (kebab) fit with room to spare, and
-   hiding the master there cost a stock desktop its select-all. It goes at 360 and below, where the
-   name has no measure left; the splitter's 240px floor is inside that. Same container as the block
-   above — `.mail-list`, the column rather than the window — for the same reason. */
-@container (max-width: 360px) {
-  .selection-toolbar:not(.is-selecting) .selection-master-hit { display: none; }
 }
 
 /* The reader's own column, and a second container query rather than more selectors in the one

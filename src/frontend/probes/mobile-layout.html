@@ -342,6 +342,18 @@
     // splitter allows, and 520 is the one column width on a phone that the query does NOT catch —
     // a 540px device, where the touch floor has to come from the viewport instead. All three hold
     // the same row of controls, and `clipped` rather than `overflow` is what says whether they fit.
+    //
+    // The 240 pair carries a "(read at …)" annotation for a reason of its own, and it is not the
+    // 520 pair's: 240 fits any viewport here, but a 240px column and the 44px touch floor cannot
+    // both exist. The floor is `--touch`, declared in shell.css's phone block alone; a phone gets
+    // `effectivePane(…, 'phone') === 'none'`, which draws no splitter and hands the list the whole
+    // viewport, so the only thing that can produce a 240px column is the splitter — and the
+    // splitter exists from 640px up, where there is no floor and `.selection-btn` is 40px. Read at
+    // 360x640 the pair measures a device that does not exist, and since Task 15 that is not
+    // harmless: the master checkbox is 44px there against 13px at the width the column really
+    // occurs at, and the difference alone crushes `.selection-heading` and paints the star over
+    // `.selection-actions` (`clipped: 34`, measured). 768x1024 is the tablet the floor question
+    // belongs to; the two 360 cases below it are where the 44px controls are measured.
     const toolbar = (selecting, width) => `
       <div class="mail-list" style="width:${width}px">
         <div class="selection-toolbar${selecting ? ' is-selecting' : ''}">
@@ -365,26 +377,38 @@
     for (const [name, selecting, width] of [
       ['toolbar-idle-360', false, 360],
       ['toolbar-selecting-360', true, 360],
-      ['toolbar-idle-240', false, 240],
+      ['toolbar-idle-240 (read at 768x1024)', false, 240],
       // The one configuration the container query's flex-wrap exists for: without it these six
-      // controls run 48px past the column and `.mail-list` clips the kebab off the screen.
-      ['toolbar-selecting-240', true, 240],
+      // controls run past the column and `.mail-list` clips the kebab off the screen. It still
+      // wraps to two rows at the tablet's own 40px controls — measured, 117px of band.
+      ['toolbar-selecting-240 (read at 768x1024)', true, 240],
       // Read these two at 540x900 only. A 520px column cannot fit a 360px viewport, so at 360
       // their `overflow` is the stage overflowing the page and says nothing about the toolbar.
       ['toolbar-idle-520 (read at 540x900)', false, 520],
       ['toolbar-selecting-520 (read at 540x900)', true, 520],
     ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
 
-    // The master checkbox's own threshold, which is 360 and not the 480 the group beside it keeps.
-    // 380 is `usePaneSize('mail.split.right', 380, 240)`'s default — the column every untouched
-    // desktop has — and hiding the master there made select-all a two-step. `touch` names the
-    // master ALONE in this pair, so `smallest` answers the presence question directly: a number is
-    // the box it draws, and 'none rendered' is the doc block's own word for a selector every match
-    // of which is hidden. Read at 768x1024: a 380px column cannot fit a 360px viewport, and there
-    // the stage overflowing the page is what `overflow` would be reporting.
+    // The master checkbox has no threshold of its own any more: it is drawn at every column width,
+    // and these three are the widths that had to prove it. 380 is `usePaneSize('mail.split.right',
+    // 380, 240)`'s default — the column every untouched desktop has — 360 is the commonest Android
+    // width, and 240 is that same call's floor, the narrowest column the splitter can produce.
+    // `touch` names the master ALONE, so `smallest` answers the presence question directly: a
+    // number is the box it draws, and 'none rendered' — the doc block's word for a selector every
+    // match of which is hidden — is the failure this trio now exists to catch. It is what 360 used
+    // to report, back when the master answered to a lower threshold than the actions beside it: a
+    // 390px phone could tap the master into the selecting state and watch archive/junk/delete
+    // appear, and a 360px one had only long-press, which nothing on screen announces.
+    //
+    // All three read at 768x1024, and the two narrow ones for the reason the 240 pair above
+    // carries: 380 cannot fit a 360px viewport at all, and 360 and 240 measure a 44px master
+    // against the 13px one the widths they name actually draw. `smallest` is 13 at all three
+    // here — the shrink-to-fit label off a phone — and the number that matters is that there is
+    // one. The 44px target is measured by 'toolbar-idle-360' above, at the viewport that has a
+    // touch floor to measure it against.
     for (const [name, width] of [
       ['toolbar-master-380 (read at 768x1024)', 380],
       ['toolbar-master-360 (read at 768x1024)', 360],
+      ['toolbar-master-240 (read at 768x1024)', 240],
     ]) CASES.push({ name, html: toolbar(false, width), touch: '.selection-master-hit' })
 
     // A row is a touch target in its own right — long-press is how a selection starts once the

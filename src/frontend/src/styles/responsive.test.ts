@@ -89,15 +89,26 @@ describe('responsive contract', () => {
       .toMatch(/\.contact-tile:hover \.contact-tile-actions/)
   })
 
-  // The master checkbox answers to 360 and the archive/junk/delete group to 480, because the
-  // default column is 380 (`usePaneSize('mail.split.right', 380, 240)`) and the two thresholds
-  // straddle it: at 480 the master was hidden on a stock desktop and select-all became a two-step.
+  // The archive/junk/delete group answers to 480; the master checkbox answers to nothing at all
+  // and is drawn at every column width, down to the 240px floor of `usePaneSize('mail.split.right',
+  // 380, 240)`. It is the only door into the selecting state those actions appear in that anything
+  // on screen announces — the other one is long-press — so hiding it is what made a 390px phone and
+  // a 360px one behave differently. The second assertion is the whole of that rule: a threshold of
+  // any width, not only the 360 this replaced, puts the door back behind a column measurement.
   // Text again for the reason the rest of this file is — the difference is a rendered box, which
-  // jsdom does not have. probes/mobile-layout.html's toolbar-master-380/-360 pair is the geometry.
-  it('splits the toolbar thresholds around the default column', () => {
+  // jsdom does not have. probes/mobile-layout.html's toolbar-master-380/-360/-240 trio is the
+  // geometry, and all three read a box rather than 'none rendered'.
+  it('keeps the master checkbox at every column width', () => {
     const mail = all['./mail.css']
-    expect(mediaBlocks(mail, '@container (max-width: 480px)')).not.toMatch(/selection-master-hit/)
-    expect(mediaBlocks(mail, '@container (max-width: 360px)')).toMatch(/selection-master-hit/)
+    // Every @container body in the file, not the 480 one alone: what is forbidden is the master
+    // answering to a column measurement at all, and a new block is exactly how that comes back.
+    // The trailing `(` is what keeps the prose out — four comments in mail.css name `@container`
+    // without a condition, and slicing from one of those would run this scan over whichever block
+    // happened to follow it. And the first assertion is the same guard the count above is: an
+    // empty slice would let the second pass over nothing at all.
+    const containers = mediaBlocks(mail, '@container (')
+    expect(containers).toMatch(/selection-archive/)
+    expect(containers).not.toMatch(/selection-master-hit/)
   })
 
   // Only the root's value propagates to the viewport, and `.app-shell` declares no `overflow`, so
