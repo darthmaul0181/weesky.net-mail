@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+  Probe: does anything overflow, and is anything too small to hit, below 1024px?
+
+  Serving the real app was not an option: the frontend talks to https://api.mail.weesky.net and
+  the dev API carries no `localhost` origin, so a locally served build cannot get past the login
+  screen. This page links the REAL stylesheets and restates only the markup, so a CSS edit changes
+  what is measured. It needs no session because it needs no data.
+
+  Served by the Vite dev server (npm run dev) at /probes/mobile-layout.html. Drive it in Chrome
+  under device emulation at 360x640, 390x844, 768x1024 and 1024x768. #out holds the JSON and
+  document.title becomes 'probe-done' once every case has been measured.
+
+  Reading the numbers:
+  - `overflow` is documentElement.scrollWidth - clientWidth. Anything above 0 is a horizontal
+    scrollbar on the page, which is the defect this whole plan exists to remove.
+  - `smallest` is the shortest measured touch target in the section, in CSS pixels. Floor is 44.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- main.tsx's order, exactly: the cascade decides several of these boxes. -->
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/tooltip.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    #out { padding: 12px; white-space: pre; font-family: monospace; font-size: 11px;
+           background: #fff; color: #111; }
+    .case { margin-bottom: 8px; }
+    .case > h2 { font: 700 11px monospace; padding: 2px 6px; background: #333; color: #fff; }
+  </style>
+</head>
+<body>
+  <pre id="out">measuring…</pre>
+  <div id="stage"></div>
+  <script type="module">
+    const TOUCH_FLOOR = 44
+    // Later tasks push their own {name, html} entries onto this array. One section per screen.
+    const CASES = []
+
+    function measure() {
+      const stage = document.getElementById('stage')
+      const report = CASES.map(({ name, html, touch }) => {
+        stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
+        const doc = document.documentElement
+        const targets = touch ? [...stage.querySelectorAll(touch)] : []
+        const heights = targets.map(el => Math.round(el.getBoundingClientRect().height))
+        return {
+          name,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          overflow: doc.scrollWidth - doc.clientWidth,
+          smallest: heights.length ? Math.min(...heights) : null,
+          undersized: heights.filter(h => h < TOUCH_FLOOR).length,
+        }
+      })
+      stage.innerHTML = ''
+      document.getElementById('out').textContent = JSON.stringify(report, null, 1)
+      document.title = 'probe-done'
+    }
+
+    window.addEventListener('resize', measure)
+    measure()
+  </script>
+</body>
+</html>

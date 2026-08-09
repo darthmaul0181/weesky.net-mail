@@ -3,7 +3,13 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  min-width: 1024px; /* desktop-first floor; below this the page scrolls */
+  /* dvh follows the mobile URL bar; the vh line above is the fallback for a browser without it.
+     With 100vh alone the bottom band — the tab bar — sits under the URL bar and off screen. */
+  height: 100dvh;
+  /* Chrome for Android's own pull-to-refresh fires on an overscroll at the top of the page.
+     The page never scrolls here, but the gesture still reaches it, and it would run over the
+     list's own pull-to-refresh. */
+  overscroll-behavior-y: contain;
 }
 
 .app-topbar {
@@ -736,4 +742,27 @@ a.dropdown-item { text-decoration: none; }
   height: calc(8px * var(--pp));
   border-radius: calc(2px * var(--pp));
   background: var(--action-primary);
+}
+
+/* ── Narrow tiers ─────────────────────────────────────────────────────────────
+   Desktop is the unqualified base above. These two blocks only override it, the
+   second refining the first through the ordinary cascade. Never invert this:
+   wrapping the desktop rules in a min-width query makes the whole file conditional. */
+
+@media (max-width: 1023px) {
+  /* The context pane is a drawer from here down, so no module shows one inline. */
+  .app-content { margin: 0; border-radius: 0; }
+}
+
+@media (max-width: 639px) {
+  :root { --touch: 44px; }
+
+  /* Brand only since the account block moved to the foot of the folder column: 44px of pure
+     decoration out of a 640px-tall viewport, returned to the message list. The brand stays
+     visible at the head of the drawer. */
+  .app-topbar { display: none; }
+
+  .rail-item { min-height: var(--touch); }
+  .dropdown-item { min-height: var(--touch); }
+  .pane-item { min-height: var(--touch); }
 }

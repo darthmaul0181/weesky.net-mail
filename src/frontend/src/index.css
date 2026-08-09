@@ -11,6 +11,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Text for assistive technology only. Clipped rather than `display: none`, which would take it
@@ -28,6 +29,7 @@ body {
 
 .page-center {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2391,3 +2393,9 @@ body {
 .import-errors li:last-child { border-bottom: 0; }
 .import-error-line { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .import-errors-more { color: var(--text-muted); }
+
+@media (max-width: 639px) {
+  /* iOS zooms the page in when a focused field's text is under 16px, and never zooms back out.
+     16px on the controls, not on body: the interface keeps its 14px scale. */
+  input, select, textarea { font-size: 16px; }
+}
