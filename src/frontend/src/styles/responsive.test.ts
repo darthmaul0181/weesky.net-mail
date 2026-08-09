@@ -106,6 +106,13 @@ describe('responsive contract', () => {
     // without a condition, and slicing from one of those would run this scan over whichever block
     // happened to follow it. And the first assertion is the same guard the count above is: an
     // empty slice would let the second pass over nothing at all.
+    //
+    // The hole this leaves, stated rather than left to be found twice: a NAMED container query —
+    // `@container mail-list (max-width: …)` — holds no `@container (` substring, so a block written
+    // that way is skipped silently, and `selection-archive` still matches off the two unnamed
+    // blocks, so the non-empty guard above would not notice either. Nothing in this codebase names
+    // a container today (both `container-type: inline-size` declarations carry no `container-name`);
+    // naming one is where this query string has to become a regex that tolerates the name.
     const containers = mediaBlocks(mail, '@container (')
     expect(containers).toMatch(/selection-archive/)
     expect(containers).not.toMatch(/selection-master-hit/)

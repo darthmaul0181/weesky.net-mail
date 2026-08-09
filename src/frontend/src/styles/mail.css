@@ -1884,11 +1884,25 @@ textarea.compose-editor {
    no second block below for it any more. It is the only discoverable door into the selecting state
    the actions appear in: hidden, the way in is long-press, which nothing on screen announces. It
    used to hide below 360, which made a 390px phone and a 360px one behave differently for no reason
-   the user could see. It costs nothing to keep at every width: a column that narrow is the
-   splitter's doing (a phone gets `effectivePane(…, 'phone') === 'none'` and no splitter at all), so
-   it is a tablet or a desktop drawing it, where `--touch` does not resolve and the master is the
-   13px box the browser paints — measured at the 240px floor, the toolbar still fits on one row at
-   rest with the folder name ellipsised. */
+   the user could see.
+
+   It costs nothing to keep **at or above the 320px viewport this product supports** — that bound is
+   the claim, and it is narrower than "at every width" on purpose. There are two regimes and only
+   one of them has a touch floor. A column narrower than the viewport is the splitter's doing (a
+   phone gets `effectivePane(…, 'phone') === 'none'` and no splitter at all), so a tablet or a
+   desktop is drawing it, `--touch` does not resolve, and the master is the 13px box the browser
+   paints: measured at the splitter's 240px floor, the idle toolbar still fits on one row with the
+   folder name ellipsised. On the phone tier the column IS the viewport, `--touch` does resolve, and
+   the 44px master fits down to a 274px column and no further — measured, 274 clips 0, 273 clips 1,
+   260 clips 14 and 240 clips 34, the star painting over `.selection-actions` rather than wrapping,
+   since `.selection-heading` is `flex: 1` from a 0 base and is crushed instead of breaking the
+   line. No shipping device is under 274 (the Galaxy Fold cover screen is 280), but page zoom
+   reaches it — a ~520px window at 200%, or Chrome for Android's own zoom setting on a 360px
+   handset — so the sub-274 crush is OUT OF CONTRACT, not impossible.
+
+   That matters to exactly one future change: flooring this master to 44px above the phone tier, for
+   the 640-1023px touch tablet where `--touch` does not resolve. Doing it recreates the crush above
+   at any narrow column, so it has to handle `.selection-heading`'s shrink at the same time. */
 @container (max-width: 480px) {
   /* The selecting state still spends six controls, and at the splitter's 240px floor they run
      48px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the

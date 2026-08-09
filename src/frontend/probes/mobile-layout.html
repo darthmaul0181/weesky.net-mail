@@ -344,16 +344,20 @@
     // the same row of controls, and `clipped` rather than `overflow` is what says whether they fit.
     //
     // The 240 pair carries a "(read at …)" annotation for a reason of its own, and it is not the
-    // 520 pair's: 240 fits any viewport here, but a 240px column and the 44px touch floor cannot
-    // both exist. The floor is `--touch`, declared in shell.css's phone block alone; a phone gets
-    // `effectivePane(…, 'phone') === 'none'`, which draws no splitter and hands the list the whole
-    // viewport, so the only thing that can produce a 240px column is the splitter — and the
-    // splitter exists from 640px up, where there is no floor and `.selection-btn` is 40px. Read at
-    // 360x640 the pair measures a device that does not exist, and since Task 15 that is not
-    // harmless: the master checkbox is 44px there against 13px at the width the column really
-    // occurs at, and the difference alone crushes `.selection-heading` and paints the star over
-    // `.selection-actions` (`clipped: 34`, measured). 768x1024 is the tablet the floor question
-    // belongs to; the two 360 cases below it are where the 44px controls are measured.
+    // 520 pair's. The 520 pair's number is contamination — a stage wider than the page, measuring
+    // nothing about the toolbar. The 240 pair's `clipped: 34` at 360x640 is a TRUE measurement of a
+    // reachable geometry, and it is annotated because that geometry is out of contract, not because
+    // it is a phantom: at 240 with the 44px touch floor the master crushes `.selection-heading` to
+    // 12px and the star paints over `.selection-actions`. A 240px column and that floor meet only
+    // below the 320px viewport this product supports — `--touch` lives in shell.css's phone block
+    // alone, and a phone gets `effectivePane(…, 'phone') === 'none'`, no splitter, the list at the
+    // full viewport, so on that tier the column IS the viewport and the pairing needs one under
+    // 274px (measured boundary; the Galaxy Fold cover screen is 280). Page zoom reaches it — a
+    // ~520px window at 200% — which is why the wording here is "out of contract" and not
+    // "impossible". 768x1024 is where a 240px column really occurs, so that is the reading these
+    // two are named for; the two 360 cases in the list below are where the 44px controls are read.
+    // The suffix stays in the case NAME rather than moving into this comment: the name travels in
+    // the JSON a reader actually looks at, and a comment does not.
     const toolbar = (selecting, width) => `
       <div class="mail-list" style="width:${width}px">
         <div class="selection-toolbar${selecting ? ' is-selecting' : ''}">
@@ -400,11 +404,12 @@
     // appear, and a 360px one had only long-press, which nothing on screen announces.
     //
     // All three read at 768x1024, and the two narrow ones for the reason the 240 pair above
-    // carries: 380 cannot fit a 360px viewport at all, and 360 and 240 measure a 44px master
-    // against the 13px one the widths they name actually draw. `smallest` is 13 at all three
-    // here — the shrink-to-fit label off a phone — and the number that matters is that there is
-    // one. The 44px target is measured by 'toolbar-idle-360' above, at the viewport that has a
-    // touch floor to measure it against.
+    // carries: 380 cannot fit a 360px viewport at all, and 360 and 240 would otherwise measure a
+    // 44px master against the 13px one the widths they name actually draw — at 240 that reads
+    // `clipped: 34`, the out-of-contract sub-274 crush the comment above records rather than a
+    // defect in this trio. `smallest` is 13 at all three here — the shrink-to-fit label off a
+    // phone — and the number that matters is that there is one. The 44px target is measured by
+    // 'toolbar-idle-360' above, at the viewport that has a touch floor to measure it against.
     for (const [name, width] of [
       ['toolbar-master-380 (read at 768x1024)', 380],
       ['toolbar-master-360 (read at 768x1024)', 360],
