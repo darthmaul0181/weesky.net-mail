@@ -340,7 +340,7 @@ export default function MailLayout() {
           {pane === 'right' && (
             <div className="mail-row">
               <div className="mail-list" style={{ width: listWidth }}>{list(uid)}</div>
-              {preferences && viewport !== 'phone' && (
+              {preferences && (
                 <PaneSplitter
                   orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
                   onResize={setListWidth}
@@ -356,12 +356,10 @@ export default function MailLayout() {
           {pane === 'bottom' && (
             <div className="mail-stack">
               <div className="mail-list" style={{ height: listHeight }}>{list(uid)}</div>
-              {viewport !== 'phone' && (
-                <PaneSplitter
-                  orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
-                  onResize={setListHeight}
-                />
-              )}
+              <PaneSplitter
+                orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
+                onResize={setListHeight}
+              />
               <div className="mail-reader">
                 <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
                   onDeparted={departed} onNotify={addToast} />

@@ -1680,8 +1680,8 @@ textarea.compose-editor {
 
 @media (max-width: 1023px) {
   /* Compose and Refresh both leave the drawer: opening a drawer to write a message, or to
-     check for new mail, is one gesture too many. Compose becomes the floating button below;
-     Refresh becomes the first entry of the list toolbar's kebab. */
+     check for new mail, is one gesture too many. Compose becomes the floating button below.
+     Refresh has no home here yet — the list toolbar takes it in the next slice. */
   .context-drawer-panel .mail-folders-compose { display: none; }
 
   .floating-action {

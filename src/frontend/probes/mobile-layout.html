@@ -45,21 +45,52 @@
   <script type="module">
     const TOUCH_FLOOR = 44
     // Later tasks push their own {name, html} entries onto this array. One section per screen.
-    const CASES = []
+    // `overlap: [selectorA, selectorB]` additionally reports the two rectangles and whether they
+    // intersect — for the fixed-position furniture that shares a screen corner.
+    const CASES = [{
+      name: 'floating compose vs. toast stack',
+      // Both are position:fixed, so the stage they sit in has no bearing on where they land.
+      html: `
+        <button type="button" class="floating-action" aria-label="New message">+</button>
+        <div class="toast-container"><div class="toast toast-success">Message sent</div></div>`,
+      overlap: ['.floating-action', '.toast-container'],
+    }]
+
+    // Rounded to whole pixels: a sub-pixel touch is a rendering artefact, not a collision.
+    function boxOf(el) {
+      const r = el.getBoundingClientRect()
+      return {
+        left: Math.round(r.left), top: Math.round(r.top),
+        right: Math.round(r.right), bottom: Math.round(r.bottom),
+      }
+    }
+
+    function intersects(a, b) {
+      return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+    }
 
     function measure() {
       const stage = document.getElementById('stage')
-      const report = CASES.map(({ name, html, touch }) => {
+      const report = CASES.map(({ name, html, touch, overlap }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
         const targets = touch ? [...stage.querySelectorAll(touch)] : []
         const heights = targets.map(el => Math.round(el.getBoundingClientRect().height))
+        let pair = null
+        if (overlap) {
+          const [a, b] = overlap.map(selector => stage.querySelector(selector))
+          const boxes = a && b ? [boxOf(a), boxOf(b)] : null
+          pair = boxes
+            ? { [overlap[0]]: boxes[0], [overlap[1]]: boxes[1], intersect: intersects(...boxes) }
+            : 'missing'
+        }
         return {
           name,
           viewport: `${window.innerWidth}x${window.innerHeight}`,
           overflow: doc.scrollWidth - doc.clientWidth,
           smallest: heights.length ? Math.min(...heights) : null,
           undersized: heights.filter(h => h < TOUCH_FLOOR).length,
+          ...(pair ? { overlap: pair } : {}),
         }
       })
       stage.innerHTML = ''

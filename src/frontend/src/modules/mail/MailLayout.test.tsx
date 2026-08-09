@@ -842,8 +842,9 @@ describe('searching from the layout', () => {
   })
 })
 
-// Below 1024px the folder column moves behind a drawer, and below 640px the splitter goes with
-// the second pane: there is no width to drag a boundary between two panes that never coexist.
+// A phone gets one pane at a time, so `effectivePane` forces the `none` arrangement whatever the
+// account stored — and that arrangement holds no second pane, which is why no splitter is drawn.
+// The folder column moves behind the drawer instead of taking 240px of a 360px screen.
 describe('MailLayout on a phone', () => {
   beforeEach(() => vi.clearAllMocks())
 

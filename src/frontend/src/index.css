@@ -2394,8 +2394,20 @@ body {
 .import-error-line { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .import-errors-more { color: var(--text-muted); }
 
+@media (max-width: 1023px) {
+  /* The mail module's floating compose button owns this corner below 1024px, and it loses:
+     .toast-container is z-index 300 against its 60, and its 24px inset puts its whole box
+     inside the button's. The toast stack clears the button's top edge instead — the button is
+     56px tall on a 16px inset, so 72px, plus the 8px the stack already puts between toasts. */
+  .toast-container { bottom: 80px; }
+}
+
 @media (max-width: 639px) {
   /* iOS zooms the page in when a focused field's text is under 16px, and never zooms back out.
      16px on the controls, not on body: the interface keeps its 14px scale. */
   input, select, textarea { font-size: 16px; }
+
+  /* Same clearance against the button in its phone position, which is itself lifted over the
+     57px tab bar: 73px inset plus 56px of button is 129px, plus the same 8px gap. */
+  .toast-container { bottom: 137px; }
 }
