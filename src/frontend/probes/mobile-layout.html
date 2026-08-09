@@ -38,9 +38,13 @@
     before the section's minimum is read off — a target undersized in only one dimension used to
     read as passing when the read axis happened to be the wider one: the reader's back button was
     26px wide and reported `smallest: 44` under a rule that had only fixed its height, because
-    height was the only axis this ever measured. `null` means the case named no `touch` selector;
-    `'none rendered'` means it named one and every match was hidden, which is a case measuring
-    nothing rather than a case passing.
+    height was the only axis this ever measured. Where a target grows its hit area with an inset
+    `::before` instead of growing its own painted box (`.reader-back` again, once fixed properly —
+    a 44px arrow misaligned a one-line subject, where the pseudo-element leaves the painted box at
+    its original 26x26), the larger of the pseudo's own resolved size and the element's is what
+    counts, since that is the box a finger actually has to clear. `null` means the case named no
+    `touch` selector; `'none rendered'` means it named one and every match was hidden, which is a
+    case measuring nothing rather than a case passing.
   - `undersized` counts targets under the floor, and **the floor is 44 only at or below 639px**.
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
@@ -115,9 +119,19 @@
         // The smaller of each target's own width and height: a target fixed tall but not wide (or
         // the reverse) is still one finger can miss, and reading only height passed .reader-back
         // at 26px wide under a rule that had fixed nothing but its height.
+        //
+        // A hit area can also be bigger than the box that paints it: .reader-back stays a 26x26
+        // arrow and grows only an inset ::before to reach the floor, so text beside it keeps its
+        // baseline. getComputedStyle resolves a used pixel size even for a pseudo-element, so
+        // where one exists, is out of flow and carries real content, the larger of its size and
+        // the element's own is what the finger actually has to clear.
         const sizes = targets.map(el => {
           const rect = el.getBoundingClientRect()
-          return Math.round(Math.min(rect.width, rect.height))
+          const before = getComputedStyle(el, '::before')
+          const hasHitArea = before.content !== 'none' && before.position === 'absolute'
+          const width = hasHitArea ? Math.max(rect.width, parseFloat(before.width) || 0) : rect.width
+          const height = hasHitArea ? Math.max(rect.height, parseFloat(before.height) || 0) : rect.height
+          return Math.round(Math.min(width, height))
         })
         let pair = null
         if (overlap) {
@@ -131,8 +145,20 @@
           name,
           viewport: `${window.innerWidth}x${window.innerHeight}`,
           overflow: doc.scrollWidth - doc.clientWidth,
+          // A second, narrower exclusion alongside the ellipsis one: CSSOM View's scrollWidth
+          // algorithm counts a positioned descendant's border box against its containing block,
+          // so .reader-back's inset ::before hit area — deliberately overhanging a 26px button by
+          // 10px a side to reach 44px — reads this element as "clipped" for doing exactly what it
+          // is built to do. Restricted to an EMPTY, absolutely positioned ::before specifically
+          // (content: '""', not just any pseudo) because that combination paints nothing: there is
+          // no visible content to be cut off, so nothing this field exists to catch can be
+          // hiding behind it. A pseudo carrying real content is still measured.
           clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
             .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
+            .filter(el => {
+              const before = getComputedStyle(el, '::before')
+              return !(before.content === '""' && before.position === 'absolute')
+            })
             .map(el => el.scrollWidth - el.clientWidth)),
           smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
           undersized: sizes.filter(s => s < floor).length,

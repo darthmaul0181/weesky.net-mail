@@ -80,8 +80,11 @@ export default function MessageReader(
   // with no extra reload and no visible frame in between.
   const readerKey = `${folderPath ?? ''}:${uid ?? ''}`
   const [frozenNarrow, setFrozenNarrow] = useState(() => ({ key: readerKey, value: viewportNarrow }))
+  // The guarded write means a committed render always has frozenNarrow.key === readerKey — the
+  // mismatched render it corrects is discarded before commit — so reading `.value` needs no
+  // fallback for the case that never reaches the screen.
   if (frozenNarrow.key !== readerKey) setFrozenNarrow({ key: readerKey, value: viewportNarrow })
-  const narrow = frozenNarrow.key === readerKey ? frozenNarrow.value : viewportNarrow
+  const narrow = frozenNarrow.value
   const { data: preferences } = usePreferences()
   const { data: folders } = useFolders()
   const [imagesShown, setImagesShown] = useState(false)
