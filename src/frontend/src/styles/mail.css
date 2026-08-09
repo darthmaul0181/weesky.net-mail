@@ -111,7 +111,14 @@
    element; !important is not needed once it is. */
 .mail-list.is-hidden { display: none; }
 
-.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+/* `overscroll-behavior-y` unconditional, not gated to a width: `usePullToRefresh`'s listeners
+   bind at every width, and a rule that only fired below 1023px would leave a touch laptop above
+   it with the gesture live and uncontained. `.mail-list-scroll` is the only element this can ever
+   bind to — `.app-shell` declares no `overflow`, so it is not a scroll container and
+   `overscroll-behavior` cannot take hold there, whatever a shell rule may claim. Cheap insurance
+   either way: the hook's own `preventDefault` fires at 10px of travel, well under the distance
+   Chrome's native pull-to-refresh arms at, so the browser's own gesture rarely reaches this. */
+.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 
 /* The two columns show their scrollbar under the cursor only, each on its own hover — but the
    gutter stays reserved whether the thumb is painted or not. Toggling `overflow` instead would
@@ -1737,10 +1744,6 @@ textarea.compose-editor {
     cursor: pointer;
   }
   .floating-action:hover { background: var(--action-primary-hover); }
-
-  /* Chrome for Android's own pull-to-refresh fires on the same gesture; contained here as well
-     as on the shell, or the browser's wins and ours never runs. */
-  .mail-list-scroll { overscroll-behavior-y: contain; }
 }
 
 @media (max-width: 639px) {

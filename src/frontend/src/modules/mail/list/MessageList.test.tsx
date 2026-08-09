@@ -815,6 +815,41 @@ describe('the preferences it obeys', () => {
   })
 })
 
+describe('pull to refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  // jsdom has no TouchEvent constructor; usePullToRefresh.test.ts's own helper, reused here so
+  // the two suites can't drift on what a touch event needs to carry.
+  function fireTouch(element: HTMLElement, type: string, y: number) {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'touches', { value: [{ clientY: y }] })
+    act(() => { element.dispatchEvent(event) })
+  }
+
+  it('draws the band and calls onRefresh once the pull passes the threshold', () => {
+    const onRefresh = vi.fn()
+    const { container } = renderList({ onRefresh })
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 0
+
+    fireTouch(band, 'touchstart', 0)
+    fireTouch(band, 'touchmove', 30)
+    expect(screen.getByText('Pull to refresh')).toBeInTheDocument()
+
+    fireTouch(band, 'touchmove', 90)
+    expect(screen.getByText('Release to refresh')).toBeInTheDocument()
+
+    fireTouch(band, 'touchend', 90)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Release to refresh')).not.toBeInTheDocument()
+  })
+})
+
 function streamingState(overrides = {}, count = 100) {
   return {
     messages: Array.from({ length: count }, (_, i) => ({

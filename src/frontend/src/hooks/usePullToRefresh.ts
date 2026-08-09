@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import { GESTURE_TRAVEL_PX } from './gestureThresholds'
 
 const THRESHOLD = 64
 const MAX = 96
@@ -14,6 +15,13 @@ const MAX = 96
  */
 export function usePullToRefresh(ref: RefObject<HTMLElement | null>, onRefresh: () => void) {
   const [pull, setPull] = useState(0)
+
+  // Held in a ref, like ContextDrawer's onCloseRef: the caller's real call site hands in a fresh
+  // arrow every render, and `setPull` below re-renders it on every touch frame. Depending on the
+  // callback directly re-ran the listener effect mid-gesture, resetting `origin`/`travelled` to
+  // nothing before the drag ever reached the threshold.
+  const onRefreshRef = useRef(onRefresh)
+  useEffect(() => { onRefreshRef.current = onRefresh })
 
   useEffect(() => {
     const element = ref.current
@@ -31,14 +39,19 @@ export function usePullToRefresh(ref: RefObject<HTMLElement | null>, onRefresh: 
     function move(event: TouchEvent) {
       if (origin === null) return
       const travel = event.touches[0].clientY - origin
-      if (travel <= 0) { travelled = 0; setPull(0); return }
-      // Only once it is really a pull: preventing default earlier would kill ordinary scrolling.
-      if (travel > 8 && event.cancelable) event.preventDefault()
+      // Negative travel is the list scrolling up under the finger; nulling origin ends the
+      // gesture rather than leaving it to resume from the original start point, which would let
+      // a later downward drag over the same touch read as a pull past a list that already moved.
+      if (travel <= 0) { origin = null; travelled = 0; setPull(0); return }
+      // Below the shared jitter floor, neither draw the band nor preventDefault: a 1-2px wobble
+      // during an ordinary tap must not re-render the list on every touch frame.
+      if (travel < GESTURE_TRAVEL_PX) { travelled = 0; setPull(0); return }
+      if (event.cancelable) event.preventDefault()
       travelled = Math.min(MAX, travel)
       setPull(travelled)
     }
     function end() {
-      if (origin !== null && travelled >= THRESHOLD) onRefresh()
+      if (origin !== null && travelled >= THRESHOLD) onRefreshRef.current()
       origin = null
       travelled = 0
       setPull(0)
@@ -55,7 +68,9 @@ export function usePullToRefresh(ref: RefObject<HTMLElement | null>, onRefresh: 
       element.removeEventListener('touchend', end)
       element.removeEventListener('touchcancel', end)
     }
-  }, [ref, onRefresh])
+    // onRefresh deliberately excluded: it is read through the ref above so the listeners survive
+    // every render this hook itself causes.
+  }, [ref])
 
   return { pull, armed: pull >= THRESHOLD }
 }

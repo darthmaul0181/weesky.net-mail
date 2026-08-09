@@ -621,8 +621,11 @@ export default function MessageList(
       {!searching && <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />}
 
       <div className="mail-list-scroll" ref={scrollRef}>
+        {/* Not aria-live: the region would carry its text before it ever changes, so most stacks
+            announce nothing, and where one does it fires on every wobble of a gesture a
+            screen-reader user in explore-by-touch cannot perform anyway. */}
         {pull > 0 && (
-          <div className="mail-pull" style={{ height: pull }} aria-live="polite">
+          <div className="mail-pull" style={{ height: pull }}>
             {t(armed ? 'list.release' : 'list.pull')}
           </div>
         )}

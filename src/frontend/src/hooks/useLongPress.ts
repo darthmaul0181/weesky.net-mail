@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent } from 'react'
-
-const TRAVEL = 10
+import { GESTURE_TRAVEL_PX } from './gestureThresholds'
 
 /**
  * A press held still for `ms`. The travel guard is what separates it from a scroll: a finger
@@ -36,7 +35,7 @@ export function useLongPress(onLongPress: () => void, ms = 500) {
     },
     onPointerMove(event: PointerEvent) {
       const { x, y } = origin.current
-      if (Math.hypot(event.clientX - x, event.clientY - y) > TRAVEL) cancel()
+      if (Math.hypot(event.clientX - x, event.clientY - y) > GESTURE_TRAVEL_PX) cancel()
     },
     onPointerUp: cancel,
     onPointerCancel: cancel,
