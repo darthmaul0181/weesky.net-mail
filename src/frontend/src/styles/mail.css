@@ -66,7 +66,14 @@
    tablet — narrower than any phone — while the same tablet under readingPane:'none' gives it
    960px. Safe in all three arrangements, which is what inline-size containment assumes: at
    'right' the width is the splitter's inline style, at 'bottom' the stack's stretch, and at
-   'none' a `flex: 1` whose basis is already 0. Nothing here has ever sized to its contents. */
+   'none' a `flex: 1` whose basis is already 0. Nothing here has ever sized to its contents.
+
+   Do NOT add `contain` here. MessageList renders four dialogs inside this column and there are
+   no portals in this codebase, so `.modal-overlay`'s `position: fixed` resolves against the
+   viewport only for as long as nothing gives this element layout containment — which
+   `container-type` does not apply (css-conditional-5: style and inline-size only), and which
+   `contain: layout` or `contain: paint` would. Measured both ways in Chromium; no test in this
+   repo can see it, because jsdom computes no layout. */
 .mail-list {
   background: var(--surface);
   container-type: inline-size;
@@ -1715,13 +1722,37 @@ textarea.compose-editor {
 @media (max-width: 639px) {
   /* Clear of the tab bar, which is 56px plus its border. */
   .floating-action { bottom: 73px; }
+
+  /* The touch floor answers to the device, so it cannot live in the container query below: the
+     two axes do not nest, and a 540px phone whose list column is wider than 480px would fall
+     through to the 36px base rule with a finger on it. min-* rather than width/height, so the
+     query can still own the layout size whatever order the two blocks are read in. */
+  .selection-btn { min-width: var(--touch); min-height: var(--touch); }
+
+  /* The one control on this band that is not a .selection-btn, and the one the selecting state
+     exists for. Padding rather than a bigger box: border-box keeps the drawn tick at the 16px
+     content size while the hit area becomes the square its neighbours are. */
+  .selection-master {
+    width: var(--touch);
+    height: var(--touch);
+    padding: calc((var(--touch) - 16px) / 2);
+  }
 }
 
-/* Six 44px controls do not fit across 360px. Nothing usable is lost: archive, junk and delete
-   are already disabled with an empty selection, so at rest they only rendered dead state. */
+/* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk
+   and delete are already disabled with an empty selection, so at rest they only rendered dead
+   state.
+
+   480px is NOT a third breakpoint and must not be "corrected" to 639px to satisfy the two-width
+   whitelist: this is a @container query, so it measures the inline size of `.mail-list` — the
+   column, not the window — and the two are routinely different numbers. 480 rather than the 360
+   this comment argues from because the column is what has to fit the controls and the splitter
+   hands it any width it likes: on a tablet it can sit at its 240px floor, narrower than any
+   phone, while the same tablet under readingPane:'none' gives the same column 960px. 480 is the
+   width below which the six controls stop fitting with a folder name still legible beside them. */
 @container (max-width: 480px) {
   /* The selecting state still spends six controls, and at the splitter's 240px floor they run
-     41px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
+     48px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
      kebab simply disappeared. EmptyFolderBanner's answer, for the same reason: a second line
      costs height nobody is short of, where dropping a control costs the action itself. */
   .selection-toolbar { flex-wrap: wrap; }
@@ -1734,7 +1765,7 @@ textarea.compose-editor {
   .selection-toolbar.is-selecting .selection-search,
   .selection-toolbar.is-selecting .selection-star { display: none; }
 
-  /* Square, so the phone's --touch has to floor both axes; off a phone the column can be this
-     narrow on a tablet, where the pointer is a mouse and 40px is the band's own proportion. */
-  .selection-btn { width: var(--touch, 40px); height: var(--touch, 40px); }
+  /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
+     wins over this whatever order the cascade reads the two blocks in. */
+  .selection-btn { width: 40px; height: 40px; }
 }

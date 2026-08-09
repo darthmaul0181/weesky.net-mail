@@ -195,9 +195,9 @@ describe('SelectionToolbar narrow states', () => {
   })
 
   // Nothing to refresh with means no entry: a dead row in the kebab reads as a broken action.
-  it('leaves Refresh out when no handler was supplied', () => {
+  it('leaves Refresh out when no handler was supplied', async () => {
     render(<SelectionToolbar {...props({ count: 0 })} />)
-    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     expect(screen.queryByRole('menuitem', { name: 'Refresh' })).toBeNull()
   })
 })

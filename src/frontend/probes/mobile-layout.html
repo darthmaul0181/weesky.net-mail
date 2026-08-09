@@ -14,7 +14,21 @@
   Reading the numbers:
   - `overflow` is documentElement.scrollWidth - clientWidth. Anything above 0 is a horizontal
     scrollbar on the page, which is the defect this whole plan exists to remove.
+  - `clipped` is the worst scrollWidth - clientWidth of any element in the section, and it is the
+    number most of these cases actually turn on. `overflow` alone cannot see the common defect:
+    mail.css puts `overflow: hidden` on .mail-folders, .mail-list and .mail-reader alike, and the
+    shell and the modal overlay clip too, so a control pushed past its column's right edge is cut
+    off rather than scrolled — the page never grows and `overflow` stays 0 while a button is gone
+    from the screen. Measured: the selection toolbar ran past a 240px list column and reported
+    `overflow: 0` throughout. Read both; `clipped` above 0 means something is off-screen inside a
+    column, `overflow` above 0 means the page itself scrolls sideways.
+    Elements carrying `text-overflow: ellipsis` are excluded, and that exclusion is what keeps the
+    number worth reading: an ellipsised folder name or subject clips by design and announces that
+    it did, so counting it reports a defect on every truncated label in the app — measured, the
+    list toolbar's own `.selection-title` alone raised `clipped` to 34 with nothing wrong.
   - `smallest` is the shortest measured touch target in the section, in CSS pixels. Floor is 44.
+    `null` means the case named no `touch` selector; `'none rendered'` means it named one and
+    every match was hidden, which is a case measuring nothing rather than a case passing.
 -->
 <html data-palette="night" data-theme="light">
 <head>
@@ -92,7 +106,10 @@
           name,
           viewport: `${window.innerWidth}x${window.innerHeight}`,
           overflow: doc.scrollWidth - doc.clientWidth,
-          smallest: heights.length ? Math.min(...heights) : null,
+          clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
+            .filter(el => getComputedStyle(el).textOverflow !== 'ellipsis')
+            .map(el => el.scrollWidth - el.clientWidth)),
+          smallest: !touch ? null : heights.length ? Math.min(...heights) : 'none rendered',
           undersized: heights.filter(h => h < TOUCH_FLOOR).length,
           ...(pair ? { overlap: pair } : {}),
         }
@@ -104,9 +121,11 @@
 
     // The list toolbar's two states. The column carries an explicit width because the container
     // query answers to it and not to the window: 360 is a phone, 240 is the narrowest the tablet
-    // splitter allows, and both have to hold the same row of controls.
-    const toolbar = (selecting) => `
-      <div class="mail-list" style="width:360px">
+    // splitter allows, and 520 is the one column width on a phone that the query does NOT catch —
+    // a 540px device, where the touch floor has to come from the viewport instead. All three hold
+    // the same row of controls, and `clipped` rather than `overflow` is what says whether they fit.
+    const toolbar = (selecting, width) => `
+      <div class="mail-list" style="width:${width}px">
         <div class="selection-toolbar${selecting ? ' is-selecting' : ''}">
           <button class="drawer-toggle" style="display:inline-flex">☰</button>
           <input type="checkbox" class="selection-master" />
@@ -123,13 +142,20 @@
           </div>
         </div>
       </div>`
-    CASES.push({ name: 'toolbar-idle-360', html: toolbar(false), touch: '.selection-btn, .drawer-toggle' })
-    CASES.push({ name: 'toolbar-selecting-360', html: toolbar(true), touch: '.selection-btn' })
-    CASES.push({
-      name: 'toolbar-idle-240',
-      html: toolbar(false).replace('width:360px', 'width:240px'),
-      touch: '.selection-btn, .drawer-toggle',
-    })
+    // The master checkbox is in the touch set because the selecting state is where it appears.
+    const TOOLBAR_TOUCH = '.selection-btn, .selection-master, .drawer-toggle'
+    for (const [name, selecting, width] of [
+      ['toolbar-idle-360', false, 360],
+      ['toolbar-selecting-360', true, 360],
+      ['toolbar-idle-240', false, 240],
+      // The one configuration the container query's flex-wrap exists for: without it these six
+      // controls run 48px past the column and `.mail-list` clips the kebab off the screen.
+      ['toolbar-selecting-240', true, 240],
+      // Read these two at 540x900 only. A 520px column cannot fit a 360px viewport, so at 360
+      // their `overflow` is the stage overflowing the page and says nothing about the toolbar.
+      ['toolbar-idle-520 (read at 540x900)', false, 520],
+      ['toolbar-selecting-520 (read at 540x900)', true, 520],
+    ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
 
     window.addEventListener('resize', measure)
     measure()
