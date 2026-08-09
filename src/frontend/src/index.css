@@ -2427,21 +2427,21 @@ body {
      z-index. The corner is reserved instead (16 + 56 + 16), and the band wraps rather than
      crushing three labels into what is left of a 360px screen. */
   .contact-card-actions { flex-wrap: wrap; padding-right: 88px; }
-
-  /* A container only below 1024px, and that is the whole point of putting the declaration here:
-     the same splitter gives this column the same 380px on a desktop that it gives a tablet, so an
-     unconditional container would take the tile's hover actions away from a mouse as well. */
-  .contacts-list { container-type: inline-size; }
 }
 
 /* There is no hover on a touch screen, and on several touch browsers :hover sticks after a tap,
    so the tile's action cluster would appear and stay. It is the two REVEALING selectors that have
-   to be named, not the cluster: the base declaration is already `visibility: hidden`, a container
+   to be named, not the cluster: the base declaration is already `visibility: hidden`, a media
    query adds no specificity, and a bare .contact-tile-actions (0,1,0) would lose to them (0,2,0).
    Nothing is lost — a tap opens the card, whose Edit and Delete are at the touch floor.
-   480px is not a third breakpoint: this measures .contacts-list's own inline size, which the
-   splitter sets, and the column only becomes a container below 1024px (above). */
-@container (max-width: 480px) {
+
+   `hover`, not a width: this block used to be `@container (max-width: 480px)` over a container
+   `.contacts-list` declared inside the 1023px block, which kept it off a desktop but also let a
+   tablet whose splitter sits past 480px have the cluster back with no way to reach it. Every rule
+   here is about the input device and none is about the column, so nothing is left needing a
+   container and the declaration went with the query. It carries no width, so the two-breakpoint
+   whitelist in styles/responsive.test.ts does not apply to it. */
+@media (hover: none) {
   .contact-tile:hover .contact-tile-actions,
   .contact-tile:focus-within .contact-tile-actions { display: none; }
 }

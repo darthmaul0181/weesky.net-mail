@@ -1866,34 +1866,46 @@ textarea.compose-editor {
   /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
      wins over this whatever order the cascade reads the two blocks in. */
   .selection-btn { width: 40px; height: 40px; }
+}
 
+/* Input modality, not width — and that distinction is the bug this block was extracted to fix.
+   These three rules used to sit in the @container above, where they read the column instead of the
+   device: `usePaneSize('mail.split.right', 380, 240)` puts `.mail-list` at 380px by default, so an
+   ordinary desktop already sits inside a 480px container query and a mouse user who switched
+   `mail.rowActions` on never saw the cluster at all. `hover` is the only feature that asks the
+   question these rules actually ask, and it carries no width at all, so the two-breakpoint
+   whitelist in `styles/responsive.test.ts` — which scans width queries, and scans them as raw
+   text, comments included — has nothing to say about it. The column's own two toolbar states stay
+   in the @container above, where a desktop dragged to the 240px floor still needs them. */
+@media (hover: none) {
   /* There is no hover on a touch screen, and on several touch browsers :hover sticks after a
      tap — the cluster would appear and stay. These actions remain reachable by opening the
      message and through the selection toolbar.
 
      It is the two REVEALING selectors that have to be named, not the cluster on its own: the base
-     declaration above already says `display: none`, and a container query adds no specificity, so
-     a bare `.message-row-cluster` here (0,1,0) restates that base rule and still loses to
+     declaration above already says `display: none`, and a media query adds no specificity, so a
+     bare `.message-row-cluster` here (0,1,0) restates that base rule and still loses to
      `.message-row:hover .message-row-cluster` (0,3,0) — the cluster would come back on the very
      tap this exists to stop. Matching their specificity and sitting later is the whole rule. */
   .message-row:hover .message-row-cluster,
   .message-row:focus-within .message-row-cluster { display: none; }
 
-  /* The reserve that hover rule paid for. `:has()` and `:nth-last-child()` both still match a
-     `display: none` element, so hiding the cluster does not release its 88px on its own: a stuck
-     :hover would ellipsise a narrow row's last line around padding held for nothing. */
+  /* The reserve that hover rule paid for, and it has to share its condition rather than a width:
+     released while the cluster is still revealed, the row's last line would run under the buttons.
+     `:has()` and `:nth-last-child()` both still match a `display: none` element, so hiding the
+     cluster does not release its 88px on its own: a stuck :hover would ellipsise a narrow row's
+     last line around padding held for nothing. */
   .message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
   .message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
     padding-right: 0;
   }
 
   /* Same reason as the cluster, and visually only. `display: none` would also have taken the box
-     out of the tab order, and with the idle toolbar's master checkbox hidden too there was then
-     no keyboard route into a selection at all — reachable on an ordinary desktop by dragging the
-     splitter to its 240px floor, not a touch-only concern. So only :hover stops revealing it;
-     :focus-within, .has-selection and :checked all still do.
-     Costs no width either way: the 34px gutter is unconditional base padding and the box is
-     absolutely positioned over it. */
+     out of the tab order, and a tablet driving this app from a keyboard would then have no route
+     into a selection at all, since the idle toolbar's master checkbox is hidden whenever the column
+     is narrow. So only :hover stops revealing it; :focus-within, .has-selection and :checked all
+     still do. Costs no width either way: the 34px gutter is unconditional base padding and the box
+     is absolutely positioned over it. */
   .message-list:not(.has-selection) .message-row:hover:not(:focus-within) .message-row-check {
     opacity: 0;
     pointer-events: none;
