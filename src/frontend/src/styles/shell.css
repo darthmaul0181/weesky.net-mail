@@ -762,7 +762,9 @@ a.dropdown-item { text-decoration: none; }
      visible at the head of the drawer. */
   .app-topbar { display: none; }
 
-  .rail-item { min-height: var(--touch); }
+  /* .rail-item is a fixed 40x40 square, not a full-width row: flooring only its height would
+     leave it 40px wide and 44px tall, no longer square. */
+  .rail-item { min-width: var(--touch); min-height: var(--touch); }
   .dropdown-item { min-height: var(--touch); }
   .pane-item { min-height: var(--touch); }
 }

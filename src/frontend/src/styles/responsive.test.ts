@@ -14,9 +14,29 @@ function widthsUsedBy(query: RegExp): string[] {
     [...css.matchAll(query)].map(match => `${path}: ${match[0]}`))
 }
 
+// Slices out one @media block's body by brace depth, the way palettes.test.ts's tokensIn slices
+// a selector block — a plain indexOf-to-next-'}' would stop at the first rule inside the query,
+// not at the query's own end.
+function mediaBlock(css: string, query: string): string {
+  const at = css.indexOf(query)
+  if (at < 0) return ''
+  let depth = 0
+  let i = css.indexOf('{', at)
+  const start = i
+  for (; i < css.length; i++) {
+    if (css[i] === '{') depth++
+    else if (css[i] === '}' && --depth === 0) break
+  }
+  return css.slice(start, i + 1)
+}
+
 describe('responsive contract', () => {
+  // A key count alone passes on 14 files all holding '' — exactly what an under-inclusive
+  // vite.config.js test.css.include mock produces. Real content is what proves the glob read.
   it('reads the stylesheets, not an empty glob', () => {
-    expect(Object.keys(all).length).toBeGreaterThan(5)
+    const lengths = Object.values(all).map(css => css.length)
+    expect(lengths.length).toBeGreaterThan(5)
+    expect(Math.min(...lengths)).toBeGreaterThan(0)
   })
 
   it('holds no desktop floor', () => {
@@ -43,6 +63,8 @@ describe('responsive contract', () => {
   })
 
   it('declares the touch floor once, in the phone block', () => {
-    expect([...all['./shell.css'].matchAll(/--touch:/g)]).toHaveLength(1)
+    const shell = all['./shell.css']
+    expect([...shell.matchAll(/--touch:/g)]).toHaveLength(1)
+    expect(mediaBlock(shell, '@media (max-width: 639px)')).toMatch(/--touch:/)
   })
 })

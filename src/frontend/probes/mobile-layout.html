@@ -29,10 +29,14 @@
   <link rel="stylesheet" href="/src/styles/tooltip.css" />
   <link rel="stylesheet" href="/src/styles/mail.css" />
   <style>
-    #out { padding: 12px; white-space: pre; font-family: monospace; font-size: 11px;
-           background: #fff; color: #111; }
+    /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
+       app's own dark-band tokens rather than inventing a colour of its own. */
+    #out { padding: 12px; white-space: pre; font-family: monospace; font-size: 11px; }
     .case { margin-bottom: 8px; }
-    .case > h2 { font: 700 11px monospace; padding: 2px 6px; background: #333; color: #fff; }
+    .case > h2 {
+      font: 700 11px monospace; padding: 2px 6px;
+      background: var(--topbar-bg); color: var(--topbar-fg);
+    }
   </style>
 </head>
 <body>
