@@ -64,6 +64,9 @@
 
 .rail-spacer { flex: 1; }
 
+/* Phone only. The media block below is what shows it; here it is simply absent. */
+.app-bottom-nav { display: none; }
+
 .app-content {
   flex: 1;
   min-width: 0;
@@ -831,4 +834,37 @@ a.dropdown-item { text-decoration: none; }
   .rail-item { min-width: var(--touch); min-height: var(--touch); }
   .dropdown-item { min-height: var(--touch); }
   .pane-item { min-height: var(--touch); }
+
+  .app-rail { display: none; }
+
+  .app-bottom-nav {
+    display: flex;
+    flex: none;
+    background: var(--rail-bg);
+    border-top: 1px solid var(--border);
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    min-width: 0;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    color: var(--rail-fg);
+    text-decoration: none;
+    font-size: 11px;
+  }
+
+  .bottom-nav-item.is-active { color: var(--rail-item-active-fg); }
+
+  .bottom-nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
