@@ -34,6 +34,15 @@
     exemption is per element and never spreads: when an ellipsised label pushes a sibling out of
     its parent, the box doing the clipping is that parent, which carries no `text-overflow` of its
     own and is still measured.
+    A second adjustment, not an exclusion: an inset `::before` hit area (`.reader-back`'s own,
+    below) inflates its host's scrollWidth by exactly its own overhang, per CSSOM View's own
+    algorithm — a pseudo the host does not scroll to, on a control doing nothing wrong. `pseudoBox`
+    computes that overhang and only THAT many pixels are subtracted from the element's excess
+    before it enters this scan, never the whole element: an earlier version of this file dropped
+    the whole element instead and it blinded two real cases immediately — a `.page-center`-shaped
+    login card, where the element it dropped was not even the pseudo's containing block and the
+    exclusion bought nothing, and any real overflowing child a childless-but-decorated wrapper
+    might one day hold.
   - `smallest` is the shortest of a target's own width and height, the smaller taken per target
     before the section's minimum is read off — a target undersized in only one dimension used to
     read as passing when the read axis happened to be the wider one: the reader's back button was
@@ -41,10 +50,17 @@
     height was the only axis this ever measured. Where a target grows its hit area with an inset
     `::before` instead of growing its own painted box (`.reader-back` again, once fixed properly —
     a 44px arrow misaligned a one-line subject, where the pseudo-element leaves the painted box at
-    its original 26x26), the larger of the pseudo's own resolved size and the element's is what
-    counts, since that is the box a finger actually has to clear. `null` means the case named no
+    its original 26x26), `pseudoHitBox` computes that pseudo's own rect and it is credited **only**
+    as the single rectangle it is — never as a bigger-of-two-axes composite describing a rectangle
+    that exists nowhere on screen — and **only** when it actually contains the element's own rect
+    and can be hit at all (`pointer-events` is not `none`; a `left: 100%` badge or a decorative
+    overlay must not inflate a real control's target next to it). `null` means the case named no
     `touch` selector; `'none rendered'` means it named one and every match was hidden, which is a
     case measuring nothing rather than a case passing.
+    Accepted, not fixed: once a hit area is credited, nothing here measures the PAINTED box
+    anymore. A control shrunk to 4px behind a 44px invisible target reads clean by this metric —
+    genuinely reachable by a finger, invisible to an eye. That is the shape of what this guard
+    checks, not a claim that a passing control is easy to find.
   - `undersized` counts targets under the floor, and **the floor is 44 only at or below 639px**.
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
@@ -105,6 +121,71 @@
       return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
     }
 
+    // An element's padding box — its border box inset by its own border — which is the edge both
+    // a positioned descendant's containing block AND clientWidth/scrollWidth are measured from.
+    // (clientWidth excludes border, and CSSOM View's scrollWidth algorithm sizes the scrollable
+    // overflow area from the padding edge too — using the border edge for either one silently
+    // undercounts a pseudo's overhang by exactly the element's own border width.)
+    function paddingBoxOf(el) {
+      const rect = el.getBoundingClientRect()
+      const host = getComputedStyle(el)
+      const bl = parseFloat(host.borderLeftWidth) || 0
+      const br = parseFloat(host.borderRightWidth) || 0
+      const bt = parseFloat(host.borderTopWidth) || 0
+      const bb = parseFloat(host.borderBottomWidth) || 0
+      return { left: rect.left + bl, right: rect.right - br, top: rect.top + bt, bottom: rect.bottom - bb }
+    }
+
+    // The viewport rect an absolutely positioned ::before actually paints to, computed rather
+    // than read: a pseudo-element is not a real node, so getBoundingClientRect cannot see it, but
+    // getComputedStyle resolves top/right/bottom/left to their USED (numeric) values for an
+    // out-of-flow box, which is enough to place it against its containing block by hand.
+    //
+    // Returns null — "this pseudo's box cannot be attributed to el" — when there is no box to
+    // place at all (`content: none`, not absolutely positioned), or — the case a future
+    // `.page-center`-shaped rule can hit — when `el` itself is not positioned: an absolutely
+    // positioned box's containing block is its nearest positioned ANCESTOR's padding edge, so an
+    // unpositioned host's own ::before belongs to some ancestor further up the tree and
+    // contributes nothing to *this* element, geometrically or in its scrollWidth, at all.
+    // Deliberately silent on `pointer-events` — that gates whether a rect can be CLICKED, not
+    // where it physically sits, and geometry is all this function answers.
+    function pseudoBox(el) {
+      const before = getComputedStyle(el, '::before')
+      if (before.content === 'none' || before.position !== 'absolute') return null
+      const host = getComputedStyle(el)
+      if (host.position === 'static') return null
+      const cb = paddingBoxOf(el)
+      const left = parseFloat(before.left)
+      const right = parseFloat(before.right)
+      const top = parseFloat(before.top)
+      const bottom = parseFloat(before.bottom)
+      if (![left, right, top, bottom].every(Number.isFinite)) return null
+      return { left: cb.left + left, right: cb.right - right, top: cb.top + top, bottom: cb.bottom - bottom }
+    }
+
+    // The stricter question `sizes` below actually needs: is this pseudo's box not just present,
+    // but genuinely a HIT area — able to receive a click at all? `pointer-events: none` says no;
+    // five existing rules in this codebase set exactly that to guarantee a decorative layer does
+    // NOT intercept clicks, the compose drop overlay among them, and crediting one of those toward
+    // a control's touch size would hide the opposite defect this metric exists to catch.
+    function pseudoHitBox(el) {
+      const before = getComputedStyle(el, '::before')
+      if (before.pointerEvents === 'none') return null
+      return pseudoBox(el)
+    }
+
+    // A hit area is one rectangle, not the larger of two independent axes: a 44x2 underline
+    // pseudo beside a 20x44 button must not read as a 44x44 target when no such rectangle exists
+    // anywhere on screen, and a badge or chevron sitting outside the element entirely (`left:
+    // 100%`) must not be credited just because it happens to have a resolvable box. Crediting only
+    // fires when the pseudo's rect actually CONTAINS the element's own — exactly the shape the
+    // inset-overhang idiom produces, and nothing else. A half-pixel tolerance absorbs sub-pixel
+    // rounding between the two independently-computed rects.
+    function containsRect(outer, inner, eps = 0.5) {
+      return outer.left <= inner.left + eps && outer.top <= inner.top + eps
+        && outer.right >= inner.right - eps && outer.bottom >= inner.bottom - eps
+    }
+
     function measure() {
       const stage = document.getElementById('stage')
       const floor = touchFloor()
@@ -122,15 +203,24 @@
         //
         // A hit area can also be bigger than the box that paints it: .reader-back stays a 26x26
         // arrow and grows only an inset ::before to reach the floor, so text beside it keeps its
-        // baseline. getComputedStyle resolves a used pixel size even for a pseudo-element, so
-        // where one exists, is out of flow and carries real content, the larger of its size and
-        // the element's own is what the finger actually has to clear.
+        // baseline. pseudoHitBox resolves that pseudo's own rect (getComputedStyle resolves used
+        // pixel offsets even for a pseudo-element); it is credited only when it actually CONTAINS
+        // the element's own rect — the shape an inset overhang produces — and only as the single
+        // rectangle it is, never as a bigger-of-two-axes composite that could describe a rectangle
+        // nothing on screen actually is. An empty `content: ''` is exactly the pattern this
+        // credits, same as `.reader-back`'s own; it is a decorative pseudo with `pointer-events:
+        // none` — unhittable by construction — that pseudoHitBox refuses instead.
+        //
+        // Nothing here measures the PAINTED box once a hit area is credited: a control shrunk to
+        // 4px behind a 44px invisible target would read clean by this metric — genuinely hittable,
+        // visually unfindable. Accepted for what this field exists to catch (can a finger hit it),
+        // not a claim that a control is easy to see.
         const sizes = targets.map(el => {
           const rect = el.getBoundingClientRect()
-          const before = getComputedStyle(el, '::before')
-          const hasHitArea = before.content !== 'none' && before.position === 'absolute'
-          const width = hasHitArea ? Math.max(rect.width, parseFloat(before.width) || 0) : rect.width
-          const height = hasHitArea ? Math.max(rect.height, parseFloat(before.height) || 0) : rect.height
+          const hit = pseudoHitBox(el)
+          const box = hit && containsRect(hit, rect) ? hit : rect
+          const width = box.right - box.left
+          const height = box.bottom - box.top
           return Math.round(Math.min(width, height))
         })
         let pair = null
@@ -145,21 +235,33 @@
           name,
           viewport: `${window.innerWidth}x${window.innerHeight}`,
           overflow: doc.scrollWidth - doc.clientWidth,
-          // A second, narrower exclusion alongside the ellipsis one: CSSOM View's scrollWidth
-          // algorithm counts a positioned descendant's border box against its containing block,
-          // so .reader-back's inset ::before hit area — deliberately overhanging a 26px button by
-          // 10px a side to reach 44px — reads this element as "clipped" for doing exactly what it
-          // is built to do. Restricted to an EMPTY, absolutely positioned ::before specifically
-          // (content: '""', not just any pseudo) because that combination paints nothing: there is
-          // no visible content to be cut off, so nothing this field exists to catch can be
-          // hiding behind it. A pseudo carrying real content is still measured.
+          // CSSOM View's scrollWidth algorithm counts a positioned descendant's border box against
+          // its containing block, so .reader-back's inset ::before hit area — deliberately
+          // overhanging its own 26px button to reach 44px — inflates scrollWidth for doing exactly
+          // what it is built to do. The fix is to subtract only the pseudo's own known overhang,
+          // never to drop the whole element from the scan the way an earlier version of this file
+          // did: `el.scrollWidth - el.clientWidth` measures whether ANYTHING inside `el` overflows
+          // it, so excluding `el` entirely would have hidden a real overflowing child right beside
+          // the forgiven pseudo. `pseudoBox` already answers null — no adjustment — for a pseudo
+          // that cannot be `el`'s own overhang in the first place: no box, or `el` itself
+          // unpositioned (a `position: static` override on something shaped like `.page-center`,
+          // whose own ::before then belongs to a positioned ancestor further up the tree and
+          // never touches `el`'s scrollWidth at all). Only the RIGHTWARD excess is subtracted —
+          // this metric is `scrollWidth - clientWidth`, which in a left-to-right, unscrolled
+          // document only grows from an edge past the right, never the left. And the overhang is
+          // measured from the PADDING edge, not the border edge `getBoundingClientRect` reports:
+          // measured directly against `.reader-back` (a 1px-bordered button), comparing to the
+          // border edge undercounted the true 10px overhang by exactly that 1px border and left a
+          // stray `clipped: 1` where the element's own scrollWidth/clientWidth (both padding-edge
+          // measurements) agreed on 0.
           clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
             .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
-            .filter(el => {
-              const before = getComputedStyle(el, '::before')
-              return !(before.content === '""' && before.position === 'absolute')
-            })
-            .map(el => el.scrollWidth - el.clientWidth)),
+            .map(el => {
+              const excess = el.scrollWidth - el.clientWidth
+              const box = pseudoBox(el)
+              const overhang = box ? Math.max(0, box.right - paddingBoxOf(el).right) : 0
+              return Math.max(0, excess - overhang)
+            })),
           smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
           undersized: sizes.filter(s => s < floor).length,
           ...(pair ? { overlap: pair } : {}),
