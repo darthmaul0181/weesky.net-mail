@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
@@ -32,6 +32,41 @@ import Pagination from './Pagination'
 import SelectionToolbar from './SelectionToolbar'
 import { useSelection } from './useSelection'
 import { useMessageList } from './useMessageList'
+import { useLongPress } from '../../../hooks/useLongPress'
+
+/**
+ * The row's box, lifted out only so the long-press hook has a component to live in — a hook
+ * cannot be called inside the `.map()` that draws the rows.
+ *
+ * A held press still ends in a click on every touch browser, so without `onClickCapture` a
+ * long press would both start a selection and open the message. Capturing on the row swallows
+ * that one click before it reaches anything: the row's own `onClick`, and the checkbox or star
+ * the finger happened to land on, which would otherwise undo the selection just made.
+ */
+function Row({ onLongPress, children, ...rest }:
+  { onLongPress?: () => void; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+  const fired = useRef(false)
+  const { onPointerDown, ...press } = useLongPress(() => {
+    if (!onLongPress) return  // A cross-folder result: no selection to enter, so no click to eat.
+    fired.current = true
+    onLongPress()
+  })
+  return (
+    <div
+      {...rest}
+      {...press}
+      onPointerDown={event => { fired.current = false; onPointerDown(event) }}
+      onClickCapture={event => {
+        if (!fired.current) return
+        fired.current = false
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+    >
+      {children}
+    </div>
+  )
+}
 
 interface Props {
   folderPath: string | null
@@ -455,7 +490,7 @@ export default function MessageList(
             return (
               <li key={message.uid}>
                 {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
-                <div
+                <Row
                   role="button"
                   tabIndex={0}
                   aria-label={label}
@@ -466,6 +501,8 @@ export default function MessageList(
                   onKeyDown={event => onRowKey(event, message)}
                   onDragStart={event => onRowDragStart(event, message.uid)}
                   onDragEnd={() => setDraggingUids(null)}
+                  // Entering selection with no visible checkbox to aim at: the row itself is the target.
+                  onLongPress={crossFolder ? undefined : () => selection.toggle(message.uid, index)}
                 >
                   {wide ? (
                     <>
@@ -505,7 +542,7 @@ export default function MessageList(
                       {cluster}
                     </>
                   )}
-                </div>
+                </Row>
               </li>
             )
           })}

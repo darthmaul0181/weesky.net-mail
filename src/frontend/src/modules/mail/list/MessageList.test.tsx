@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
@@ -964,6 +964,60 @@ describe('multi-select', () => {
     expect(bar().getByRole('button', { name: 'Archive' })).toBeEnabled()
   })
 
+  // Below 480px of list column the row carries no visible checkbox, so a held press is how a
+  // selection starts. A touch browser still sends a click after that press, and it must not also
+  // open the message — nor may it reach the checkbox under the finger and undo the selection.
+  it('a long press selects the row without opening it', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+      expect(onSelect).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  // The finger may well have been resting on the checkbox: its own click would toggle the very
+  // selection the press just made straight back off, so the capture has to eat that one too.
+  it('the swallowed click does not reach the control under the finger', () => {
+    vi.useFakeTimers()
+    try {
+      renderWithRoles()
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(within(row).getByRole('checkbox'))
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+    } finally { vi.useRealTimers() }
+  })
+
+  // The suppression lasts exactly one click: the next tap opens the message like any other.
+  it('a plain tap after a long press still opens the message', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+      fireEvent.pointerDown(row)
+      fireEvent.pointerUp(row)
+      fireEvent.click(row)
+
+      expect(onSelect).toHaveBeenCalledWith(2)
+    } finally { vi.useRealTimers() }
+  })
+
   it('a shift-click selects the range', () => {
     renderWithRoles()
     const boxes = screen.getAllByRole('checkbox', { name: /select message from/i })
@@ -1249,6 +1303,26 @@ describe('MessageList searching', () => {
 
     fireEvent.click(screen.getByText('From archive'))
     expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
+  })
+
+  // No checkbox, no selection, so no press to hold — and nothing may eat the tap that opens the
+  // row in the folder it actually lives in.
+  it('a long press on a cross-folder result neither selects nor swallows the tap', () => {
+    vi.useFakeTimers()
+    try {
+      const onOpenResult = vi.fn()
+      const cross = [{ ...results[0], uid: 20, subject: 'From archive', folderPath: 'Archive' }]
+      mocks.useSearchMessages.mockReturnValue(page({ total: 1, page: 0, pageSize: 50, results: cross }))
+      renderList({ search: { folderPath: 'INBOX', allFolders: true, quick: 'x' }, onOpenResult })
+      const row = screen.getByText('From archive').closest('.message-row') as HTMLElement
+
+      fireEvent.pointerDown(row)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+
+      expect(screen.queryByText('1 selected')).not.toBeInTheDocument()
+      expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
+    } finally { vi.useRealTimers() }
   })
 
   it('in a current-folder search the rows select and carry checkboxes', () => {

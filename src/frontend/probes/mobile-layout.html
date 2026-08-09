@@ -172,6 +172,36 @@
       ['toolbar-selecting-520 (read at 540x900)', true, 520],
     ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
 
+    // A row is a touch target in its own right — long-press is how a selection starts once the
+    // container query has taken the per-row checkbox away — so the row itself is what `touch`
+    // names here, not the controls inside it. The two variants are the same markup under the two
+    // list states: without `.has-selection` no checkbox is drawn, with it every one is, and the
+    // reserved 34px gutter is what keeps the second from shoving the sender line sideways.
+    const row = (selecting) => `
+      <div class="mail-list" style="width:360px">
+        <ul class="message-list${selecting ? ' has-selection' : ''}">
+          <li><div role="button" class="message-row is-unread" style="--row-actions:3">
+            <input type="checkbox" class="message-row-check" />
+            <div class="message-row-top">
+              <span class="message-row-unread-dot"></span>
+              <span class="message-row-from">Alice Martin</span>
+              <span class="message-row-date">18 Jul</span>
+              <button class="row-btn row-star">★</button>
+            </div>
+            <div class="message-row-subject">Re: facture du mois de juillet</div>
+            <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+            <div class="message-row-cluster">
+              <button class="row-btn">M</button>
+              <button class="row-btn">A</button>
+              <button class="row-btn is-danger">D</button>
+            </div>
+          </div></li>
+        </ul>
+      </div>`
+    for (const [name, selecting] of [['row-360', false], ['row-selecting-360', true]]) {
+      CASES.push({ name, html: row(selecting), touch: '.message-row' })
+    }
+
     // The one mechanism in this repo that can catch this, and no unit test can stand in for it:
     // jsdom computes no layout. `.mail-list` carries `container-type: inline-size`, and MessageList
     // renders four dialogs INSIDE that column with no portal anywhere in the codebase. Layout

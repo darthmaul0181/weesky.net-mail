@@ -1777,4 +1777,30 @@ textarea.compose-editor {
   /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
      wins over this whatever order the cascade reads the two blocks in. */
   .selection-btn { width: 40px; height: 40px; }
+
+  /* There is no hover on a touch screen, and on several touch browsers :hover sticks after a
+     tap — the cluster would appear and stay. These actions remain reachable by opening the
+     message and through the selection toolbar.
+
+     The two revealing selectors have to be named rather than relying on the bare one: a
+     container query adds no specificity, so `.message-row-cluster` alone (0,1,0) still loses to
+     `.message-row:hover .message-row-cluster` (0,3,0) and the cluster would come back on the
+     very tap this rule exists for. Matching their specificity and sitting later wins. */
+  .message-row-cluster,
+  .message-row:hover .message-row-cluster,
+  .message-row:focus-within .message-row-cluster { display: none; }
+
+  /* Both of these reserved room for the cluster. With nothing drawn there, a stuck :hover would
+     otherwise leave a tapped wide row with no date at all, and a narrow row's last line
+     ellipsised around 100px of padding held for a control that is not there. */
+  .message-row.is-line:hover .message-row-date,
+  .message-row.is-line:focus-within .message-row-date { display: inline; }
+  .message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
+  .message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
+    padding-right: 0;
+  }
+
+  /* A checkbox per row costs width nobody has. Long-pressing a row starts a selection, and
+     .has-selection — which the list already carries — brings every checkbox back. */
+  .message-list:not(.has-selection) .message-row-check { display: none; }
 }
