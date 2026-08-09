@@ -266,3 +266,21 @@ describe('renderBodyDocument', () => {
     expect(document).toContain('hi')
   })
 })
+
+describe('renderBodyDocument narrow', () => {
+  it('trims the body padding', () => {
+    expect(renderBodyDocument('<p>x</p>', { narrow: true })).toContain('padding: 12px 14px')
+    expect(renderBodyDocument('<p>x</p>')).toContain('padding: 18px 22px')
+  })
+
+  it('pins the text scale, which iOS otherwise inflates on its own', () => {
+    expect(renderBodyDocument('<p>x</p>', { narrow: true })).toContain('text-size-adjust: 100%')
+  })
+
+  it('keeps the existing width guards whatever the width', () => {
+    const narrow = renderBodyDocument('<p>x</p>', { narrow: true })
+    expect(narrow).toContain('img { max-width: 100%')
+    expect(narrow).toContain('table { max-width: 100%')
+    expect(narrow).toContain('overflow-wrap: break-word')
+  })
+})

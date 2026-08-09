@@ -6,6 +6,7 @@ import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
+import { useViewport } from '../../../hooks/useViewport'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import ChevronUpIcon from '../../../icons/ChevronUpIcon'
@@ -67,6 +68,7 @@ export default function MessageReader(
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
+  const narrow = useViewport() === 'phone'
   const { data: preferences } = usePreferences()
   const { data: folders } = useFolders()
   const [imagesShown, setImagesShown] = useState(false)
@@ -400,7 +402,7 @@ export default function MessageReader(
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
           title={t('reader.bodyTitle')}
-          srcDoc={renderBodyDocument(body, { dark: inverted })}
+          srcDoc={renderBodyDocument(body, { dark: inverted, narrow })}
         />
       ) : (
         <div className="reader-text">{data.textBody}</div>

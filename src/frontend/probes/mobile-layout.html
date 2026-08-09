@@ -242,6 +242,60 @@
       overlap: ['.modal-overlay', '.mail-list'],
     })
 
+    // Task 9: the reader header at phone width. `.mail-reader` is `overflow: hidden`, so
+    // `overflow` above cannot see a control hanging outside it — only `clipped` can. Drawn
+    // LOADED, the same principle as the message row above: subject, a sender with an auth
+    // badge, both To and Cc, the spam gauge, and the full ReaderActions cluster (reply,
+    // reply-all, forward, the colour toggle, delete, the kebab), because a header missing any
+    // of those lines cannot show whether the actions wrap or the row overruns. Every control in
+    // the cluster is a touch target, so `touch` names the header's own controls plus the
+    // cluster's, not `.mail-reader` itself.
+    CASES.push({
+      name: 'reader header loaded',
+      html: `
+        <div class="mail-reader" style="width:360px">
+          <article>
+            <header class="reader-header">
+              <div class="reader-stack">
+                <h1 class="reader-subject">
+                  <button type="button" class="reader-back" aria-label="Back">&larr;</button>
+                  Réunion budget T3 — validation finale avant envoi au comité de direction
+                </h1>
+                <div class="reader-meta">
+                  <div class="reader-from">
+                    <button type="button" class="address-label is-sender">Alice Martin</button>
+                    <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
+                    <span class="reader-date">(9 août 2026, 14:32)</span>
+                    <button type="button" class="details-toggle" aria-expanded="false" aria-label="Show details">&rsaquo;</button>
+                  </div>
+                  <div class="reader-recipients">To: <span class="address-label">moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</span></div>
+                  <div class="reader-recipients">Cc: <span class="address-label">Carole Petit &lt;carole@example.com&gt;</span></div>
+                  <div class="reader-spam">Score de spam :
+                    <span class="spam-gauge" tabindex="0">
+                      <span class="spam-gauge-track" style="--gauge-ratio:0.2"><span class="spam-gauge-fill"></span></span>
+                      <span class="spam-gauge-value">1.2 / 5.0</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="reader-actions">
+                <button type="button" class="action-btn" aria-label="Répondre">R</button>
+                <button type="button" class="action-btn" aria-label="Répondre à tous">RT</button>
+                <button type="button" class="action-btn" aria-label="Transférer">T</button>
+                <span class="actions-rule"></span>
+                <button type="button" class="action-btn" aria-label="Couleurs d'origine">S</button>
+                <span class="actions-rule"></span>
+                <button type="button" class="action-btn is-danger" aria-label="Supprimer">D</button>
+                <div class="dropdown-root">
+                  <button type="button" class="action-btn" aria-label="Actions du message">&#8942;</button>
+                </div>
+              </div>
+            </header>
+          </article>
+        </div>`,
+      touch: '.reader-back, .details-toggle, .action-btn',
+    })
+
     window.addEventListener('resize', measure)
     measure()
   </script>

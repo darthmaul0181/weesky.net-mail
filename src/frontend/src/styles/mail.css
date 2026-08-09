@@ -1762,6 +1762,19 @@ textarea.compose-editor {
      painted a 44px slab of accent colour beside 20px icons. */
   .selection-master-hit { width: var(--touch); height: var(--touch); }
   .selection-master { margin: 0; }
+
+  /* The actions sit under the address lines instead of beside them: at 360px, To, Cc and the
+     spam gauge each need the full measure. */
+  .reader-header { flex-direction: column; align-items: stretch; }
+  .reader-actions { align-self: flex-start; }
+  .reader-subject { font-size: 17px; }
+  .reader-details { grid-template-columns: 1fr; }
+  .reader-details dt { text-align: left; }
+  /* Measured at 360x640 (probes/mobile-layout.html, 'reader header loaded'): .reader-back is not
+     the only undersized control here. Every .action-btn in ReaderActions — reply, reply-all,
+     forward, the colour toggle, delete and the kebab — sat at 30x30, and the details chevron at
+     20x20, all under the 44px floor this width enforces elsewhere. */
+  .reader-back, .action-btn, .details-toggle { min-width: var(--touch); min-height: var(--touch); }
 }
 
 /* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk
