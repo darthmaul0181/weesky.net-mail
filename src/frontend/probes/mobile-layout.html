@@ -9,7 +9,10 @@
 
   Served by the Vite dev server (npm run dev) at /probes/mobile-layout.html. Drive it in Chrome
   under device emulation at 360x640, 390x844, 768x1024 and 1024x768. #out holds the JSON and
-  document.title becomes 'probe-done' once every case has been measured.
+  document.title becomes 'probe-done' once every case has been measured. The page suppresses its
+  own classic scrollbar (the `html` rule in the <style> below), so the reading is the same however
+  it is driven: a phone paints an overlay scrollbar and spends no width on it, while a desktop
+  Chrome opening this file directly spends 15 and hands every case that much phantom `overflow`.
 
   Reading the numbers:
   - `overflow` is documentElement.scrollWidth - clientWidth. Anything above 0 is a horizontal
@@ -65,26 +68,26 @@
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
     four sizes the line above tells you to drive it at, which is how a metric gets ignored.
-  - `clipped` carries a known noise floor of 1: at some widths, a case's own flex-distributed
-    `<input>` reports `scrollWidth` one pixel ahead of `clientWidth` with no visible defect behind
-    it. Four cases show it as of Task 14's full pass, and the mechanism is the same one in each —
-    measured directly, `compose-remove-buttons-360`'s recipients field at 152.40625px,
-    `contacts-list`'s search box at 225.34375, `settings-aliases`' at 252.40625, and
-    `contacts-editor`'s address input at 339.328125, each the only element in its case with any
-    excess at all. Traced (task-11-report.md's
-    addendum, Task 11's second follow-up) to the flex-distributed width Chromium hands such an
-    input landing on a fractional value that `clientWidth` and `scrollWidth` round in opposite
-    directions — CSSOM permits exactly this, since `scrollWidth` is allowed to round up so a
-    genuinely-scrollable box is never mis-reported as clean. What that fractional
-    value comes out to is sensitive to incidental prior layout work **in the same document** —
-    isolating the case (its own fresh page, nothing measured before it) reads 0; measuring it in
-    place among this file's other cases, on a fresh load, reads 1 reliably at 360px and 0 at
-    320px. It is not tied to a specific preceding case: replaying the same prefix of cases inside
-    an already-loaded page (rather than a fresh load) was observed to flip 1/0 for the identical
-    input, which is the engine's own sub-pixel text/layout accumulation, not a property of any
-    case's CSS. **A `clipped` of 1 alone is therefore not evidence of a defect** — every genuine
-    clip measured by this file so far reads far higher (55, 175, 215). Treat 1 as noise; treat
-    anything past a handful of pixels as real.
+    A third adjustment, also per element and for the same reason the other two are: an element
+    whose USED width is fractional reports `scrollWidth` one pixel ahead of `clientWidth` with no
+    visible defect behind it, because the two round in opposite directions (CSSOM allows
+    `scrollWidth` to round up, so a genuinely-scrollable box is never mis-reported as clean).
+    Traced first in task-11-report.md's addendum, Task 11's second follow-up, to the flex-
+    distributed width Chromium hands an `<input>`; four cases show it as of Task 14's full pass,
+    each on exactly one element and all four the same shape — `compose-remove-buttons-360`'s
+    recipients field at 152.40625px, `contacts-list`'s search box at 225.34375,
+    `settings-aliases`' at 252.40625, `contacts-editor`'s address input at 339.328125. What the
+    fraction comes out to is sensitive to incidental prior layout work **in the same document**,
+    so it is not reproducible per case: isolating one (its own fresh page, nothing measured before
+    it) reads 0, and replaying the same prefix of cases inside an already-loaded page was observed
+    to flip it for the identical input. `parseFloat(getComputedStyle(el).width) % 1` is what
+    identifies the shape rather than the value, so the pixel is subtracted **from that element
+    alone** and a genuine 1px clip on any integer-width box is still reported. This used to be
+    written up as a noise floor — "treat a `clipped` of 1 as noise" — which cost the metric its
+    resolution on four cases for the rest of the file's life; it is a per-element correction now,
+    and a `clipped` of 1 means something again. The fixtures must NOT be adjusted to stop
+    producing a fractional box: that is divergence from the component's markup, which this file
+    forbids for the reason recorded on `compose-360` below.
 -->
 <html data-palette="night" data-theme="light">
 <head>
@@ -101,6 +104,14 @@
   <style>
     /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
        app's own dark-band tokens rather than inventing a colour of its own. */
+    /* The classic scrollbar is what a desktop Chrome takes out of the viewport and a phone does
+       not: it leaves documentElement.clientWidth 15px short of the width being emulated, and
+       `overflow` — scrollWidth minus clientWidth — reads that as a defect in every case at once.
+       Suppressed here rather than in whatever drives the file, so an unaided run of this page
+       reports the same numbers a scripted one does. Media queries are unaffected either way:
+       Chrome resolves them against innerWidth, which includes the scrollbar (confirmed by reading
+       matchMedia against each tier while driving this file). */
+    html { scrollbar-width: none; }
     /* overflow-x on the report itself, and it is load-bearing rather than cosmetic: `white-space:
        pre` makes this block as wide as its longest JSON line, and the block is on the page while
        the NEXT measurement runs — so from the second reading onward it was the report, not any
@@ -280,13 +291,26 @@
           // border edge undercounted the true 10px overhang by exactly that 1px border and left a
           // stray `clipped: 1` where the element's own scrollWidth/clientWidth (both padding-edge
           // measurements) agreed on 0.
+          //
+          // The second adjustment is the sub-pixel one, and it is deliberately PER ELEMENT rather
+          // than a noise floor read off the whole number: a box whose used width is fractional has
+          // its clientWidth rounded down and its scrollWidth rounded up (CSSOM allows the second,
+          // so a genuinely scrollable box is never reported clean), which is one pixel of excess
+          // that no layout produced. `% 1` is what identifies it — an integer-width element is
+          // never forgiven, so a real 1px clip anywhere else in the app is still visible, which a
+          // blanket "treat 1 as noise" convention would have cost this metric for good. Four cases
+          // rely on it today, all four the same shape: a flex-distributed `<input>` that lands on
+          // 152.40625, 225.34375, 252.40625 or 339.328125px. Do NOT instead change a fixture to
+          // stop producing a fractional box — that means diverging from the component's markup,
+          // which is the one thing this file may never do.
           clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
             .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
             .map(el => {
               const excess = el.scrollWidth - el.clientWidth
               const box = pseudoBox(el)
               const overhang = box ? Math.max(0, box.right - paddingBoxOf(el).right) : 0
-              return Math.max(0, excess - overhang)
+              const subpixel = parseFloat(getComputedStyle(el).width) % 1 === 0 ? 0 : 1
+              return Math.max(0, excess - overhang - subpixel)
             })),
           smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
           undersized: sizes.filter(s => s < floor).length,
@@ -413,6 +437,14 @@
     // two rects, never the boolean: `.mail-reader` here holds nothing but a fixed child, so its
     // own box is zero-height at the top of the stage and `intersects` is false either way. The
     // overlay's width is the whole answer — the viewport's, or this 240px column's.
+    //
+    // The reading to carry away is that the spec and the engine disagree and the engine is what
+    // ships here: `container-type: inline-size` DOES apply layout containment, which by CSS
+    // Contain makes the element a containing block for its fixed descendants, and Blink lays the
+    // overlay out against the viewport regardless (measured here, and with elementFromPoint for
+    // the z-index half of the same question). Blink-only evidence, leaned on twice now — this
+    // case and the list's — which is why each container keeps its own live case rather than one
+    // standing for both.
     CASES.push({
       name: 'reader dialogs escape the container column',
       html: '<div class="mail-reader" style="width:240px"><div class="modal-overlay">dialog</div></div>',

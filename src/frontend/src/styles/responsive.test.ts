@@ -14,20 +14,29 @@ function widthsUsedBy(query: RegExp): string[] {
     [...css.matchAll(query)].map(match => `${path}: ${match[0]}`))
 }
 
-// Slices out one @media block's body by brace depth, the way palettes.test.ts's tokensIn slices
-// a selector block — a plain indexOf-to-next-'}' would stop at the first rule inside the query,
-// not at the query's own end.
-function mediaBlock(css: string, query: string): string {
-  const at = css.indexOf(query)
-  if (at < 0) return ''
-  let depth = 0
-  let i = css.indexOf('{', at)
-  const start = i
-  for (; i < css.length; i++) {
-    if (css[i] === '{') depth++
-    else if (css[i] === '}' && --depth === 0) break
+// Slices out an at-rule's body by brace depth, the way palettes.test.ts's tokensIn slices a
+// selector block — a plain indexOf-to-next-'}' would stop at the first rule inside the query, not
+// at the query's own end.
+//
+// EVERY occurrence, concatenated, and that is not tidiness: mail.css declares
+// `@container (max-width: 480px)` twice — once per container column, .mail-list's toolbar states
+// and .mail-reader's header — and a scan that stopped at the first would read one block and let a
+// hover-keyed rule dropped into the other ship green. That is the precise regression this file's
+// hover guard exists to catch, and it took several review rounds to find the first time.
+function mediaBlocks(css: string, query: string): string {
+  const blocks: string[] = []
+  for (let at = css.indexOf(query); at >= 0; at = css.indexOf(query, at + query.length)) {
+    let depth = 0
+    let i = css.indexOf('{', at)
+    if (i < 0) break
+    const start = i
+    for (; i < css.length; i++) {
+      if (css[i] === '{') depth++
+      else if (css[i] === '}' && --depth === 0) break
+    }
+    blocks.push(css.slice(start, i + 1))
   }
-  return css.slice(start, i + 1)
+  return blocks.join('\n')
 }
 
 describe('responsive contract', () => {
@@ -69,15 +78,15 @@ describe('responsive contract', () => {
   // probe can emulate `hover` — so the guard is on the text, the way the whitelist above is.
   it('keeps hover rules out of the column query', () => {
     const mail = all['./mail.css']
-    expect(mediaBlock(mail, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
-    expect(mediaBlock(mail, '@media (hover: none)')).toMatch(/\.message-row:hover \.message-row-cluster/)
-    expect(mediaBlock(all['../index.css'], '@media (hover: none)'))
+    expect(mediaBlocks(mail, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
+    expect(mediaBlocks(mail, '@media (hover: none)')).toMatch(/\.message-row:hover \.message-row-cluster/)
+    expect(mediaBlocks(all['../index.css'], '@media (hover: none)'))
       .toMatch(/\.contact-tile:hover \.contact-tile-actions/)
   })
 
   it('declares the touch floor once, in the phone block', () => {
     const shell = all['./shell.css']
     expect([...shell.matchAll(/--touch:/g)]).toHaveLength(1)
-    expect(mediaBlock(shell, '@media (max-width: 639px)')).toMatch(/--touch:/)
+    expect(mediaBlocks(shell, '@media (max-width: 639px)')).toMatch(/--touch:/)
   })
 })
