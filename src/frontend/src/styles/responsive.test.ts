@@ -78,6 +78,11 @@ describe('responsive contract', () => {
   // probe can emulate `hover` — so the guard is on the text, the way the whitelist above is.
   it('keeps hover rules out of the column query', () => {
     const mail = all['./mail.css']
+    // The .not.toMatch below passes vacuously on an empty string, so the count is pinned first:
+    // a named container, a lost space or a re-spelled width would empty the slice silently and
+    // this file would go on reporting green over a block nothing is reading. Two blocks, one per
+    // container column — a third is a deliberate change and should say so here.
+    expect([...mail.matchAll(/@container \(max-width: 480px\)/g)]).toHaveLength(2)
     expect(mediaBlocks(mail, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
     expect(mediaBlocks(mail, '@media (hover: none)')).toMatch(/\.message-row:hover \.message-row-cluster/)
     expect(mediaBlocks(all['../index.css'], '@media (hover: none)'))

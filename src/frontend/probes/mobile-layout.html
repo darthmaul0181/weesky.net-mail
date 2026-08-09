@@ -88,6 +88,18 @@
     and a `clipped` of 1 means something again. The fixtures must NOT be adjusted to stop
     producing a fractional box: that is divergence from the component's markup, which this file
     forbids for the reason recorded on `compose-360` below.
+    Two limits on it, both stated rather than papered over. **The cost is analytic, not measured**:
+    a case whose worst offender is itself a fractional-width box is under-reported by at most 1px
+    — a genuine 40px clip on such a box would read 39 — and nothing here exercises that case. The
+    bound is exact and one pixel, which is why it stands; what was measured is the other
+    direction, that a real 1px clip on an integer-width box still reports (injecting
+    `min-width: 361px` on `.selection-toolbar` inside its 360px column moves `toolbar-idle-360`
+    from 0 to 1). And **the test reads the CONTENT box while the excess is a padding-box
+    comparison**: `getComputedStyle(el).width` resolves to the content width, so fractional
+    padding over an integer content width is not forgiven (safe, it only under-forgives) while the
+    converse — an integer content width inside fractional padding — would be forgiven wrongly. All
+    four boxes above are integer-padding inputs, so nothing is live today; the next fixture is
+    where to check it.
 -->
 <html data-palette="night" data-theme="light">
 <head>
@@ -116,8 +128,10 @@
        pre` makes this block as wide as its longest JSON line, and the block is on the page while
        the NEXT measurement runs — so from the second reading onward it was the report, not any
        case, that grew documentElement.scrollWidth. Measured at 320x640, the width several cases
-       here tell you to read them at: every case reported `overflow: 24` at once, the same 24, with
-       nothing wrong in any of them. A scroller of its own keeps that width off the page. */
+       here tell you to read them at: it put a FLOOR of 24 under every case's `overflow` — 17 cases
+       read exactly 24 with nothing wrong in any of them, while a case whose own fixture is wider
+       than the viewport kept its larger number and hid the contamination inside it. A scroller of
+       its own keeps that width off the page. */
     #out { padding: 12px; white-space: pre; overflow-x: auto; font-family: monospace; font-size: 11px; }
     .case { margin-bottom: 8px; }
     .case > h2 {
