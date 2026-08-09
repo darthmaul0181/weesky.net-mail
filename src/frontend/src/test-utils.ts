@@ -1,4 +1,5 @@
 import { act } from '@testing-library/react'
+import type { Viewport } from './hooks/useViewport'
 
 /**
  * A macrotask boundary, which drains every pending microtask. TanStack v5 notifies its observers
@@ -8,8 +9,6 @@ import { act } from '@testing-library/react'
 export async function settle() {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
-
-export type Viewport = 'phone' | 'tablet' | 'desktop'
 
 const VIEWPORT_WIDTH: Record<Viewport, number> = { phone: 360, tablet: 768, desktop: 1280 }
 
@@ -50,4 +49,10 @@ export function resetViewport() {
   listeners.clear()
   installed = false
   width = VIEWPORT_WIDTH.desktop
+}
+
+/** How many subscribers the fake matchMedia is currently holding. A hook that leaks its
+    listener on unmount is invisible any other way: React 18 no longer warns on it. */
+export function viewportListenerCount() {
+  return listeners.size
 }

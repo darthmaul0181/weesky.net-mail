@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useViewport } from './useViewport'
-import { changeViewport, mockViewport, resetViewport } from '../test-utils'
+import { changeViewport, mockViewport, resetViewport, viewportListenerCount } from '../test-utils'
 
 afterEach(resetViewport)
 
@@ -39,8 +39,8 @@ describe('useViewport', () => {
   it('unsubscribes on unmount', () => {
     mockViewport('phone')
     const { unmount } = renderHook(() => useViewport())
+    expect(viewportListenerCount()).toBeGreaterThan(0)
     unmount()
-    // A listener left behind would setState on an unmounted hook at the next change.
-    expect(() => changeViewport('desktop')).not.toThrow()
+    expect(viewportListenerCount()).toBe(0)
   })
 })
