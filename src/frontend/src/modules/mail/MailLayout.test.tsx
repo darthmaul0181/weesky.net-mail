@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import { ApiError } from '../../api.js'
 import type { MailFolderNode } from './api/mailTypes'
-import { settle } from '../../test-utils'
+import { mockViewport, resetViewport, settle } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
 
 const mocks = vi.hoisted(() => ({
@@ -115,6 +115,9 @@ function renderAt(
   )
   return render(<MailLayout />, { wrapper })
 }
+
+// Every mockViewport call leaks its matchMedia stub into the rest of the file otherwise.
+afterEach(resetViewport)
 
 
 describe('MailLayout', () => {
@@ -503,10 +506,13 @@ describe('compose mode', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('')
   })
 
+  // Scoped to the column: the floating action carries the same label and is only hidden by CSS,
+  // which jsdom does not apply.
   it('opens the composer from the New message button in the folder column', async () => {
-    renderAt('/mail?folder=INBOX')
+    const { container } = renderAt('/mail?folder=INBOX')
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New message' }))
+    const column = container.querySelector('.mail-folders') as HTMLElement
+    fireEvent.click(await within(column).findByRole('button', { name: 'New message' }))
 
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
     expect(screen.getByTestId('compose-view')).toBeInTheDocument()
@@ -833,5 +839,33 @@ describe('searching from the layout', () => {
     await settle()
     expect(mocks.searchMessages).not.toHaveBeenCalled()
     expect(document.querySelector('.search-results-banner')).toBeNull()
+  })
+})
+
+// Below 1024px the folder column moves behind a drawer, and below 640px the splitter goes with
+// the second pane: there is no width to drag a boundary between two panes that never coexist.
+describe('MailLayout on a phone', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders no splitter', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.pane-splitter')).toBeNull()
+  })
+
+  it('puts the folder column in a drawer', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.context-drawer .mail-folders')).toBeTruthy()
+  })
+
+  it('leaves the folder column inline on a desktop', async () => {
+    mockViewport('desktop')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.context-drawer')).toBeNull()
+    expect(container.querySelector('.mail-folders')).toBeTruthy()
   })
 })

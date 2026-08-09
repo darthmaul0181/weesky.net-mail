@@ -7,6 +7,11 @@
   overflow: hidden;   /* .app-content sets overflow:auto; the columns scroll, not the page */
 }
 
+/* Desktop's compose button is in the folder column; this one would be a second copy of it.
+   A base rule, above the media block: CSS has no width-based specificity, so written after it
+   this would win at every width and the button would never appear at all. */
+.floating-action { display: none; }
+
 /* Every column is a stack of bands with one scrolling middle. min-height:0 on each is what
    lets that middle actually shrink — without it a flex child refuses to go below its content
    height and the scroll lands on the page instead of the band. */
@@ -1672,3 +1677,35 @@ textarea.compose-editor {
 
 .source-error { color: var(--text-muted); margin: 0 0 12px; }
 .source-truncated { margin: 10px 0 0; color: var(--text-muted); font-size: 0.8rem; }
+
+@media (max-width: 1023px) {
+  /* Compose and Refresh both leave the drawer: opening a drawer to write a message, or to
+     check for new mail, is one gesture too many. Compose becomes the floating button below;
+     Refresh becomes the first entry of the list toolbar's kebab. */
+  .context-drawer-panel .mail-folders-compose { display: none; }
+
+  .floating-action {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--action-primary);
+    color: var(--action-primary-fg);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    cursor: pointer;
+  }
+  .floating-action:hover { background: var(--action-primary-hover); }
+}
+
+@media (max-width: 639px) {
+  /* Clear of the tab bar, which is 56px plus its border. */
+  .floating-action { bottom: 73px; }
+}

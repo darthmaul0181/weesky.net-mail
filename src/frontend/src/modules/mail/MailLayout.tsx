@@ -27,6 +27,10 @@ import { readingPaneOf, showFolderIconsOf, usePreferences } from '../../hooks/us
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from './split/PaneSplitter'
 import { usePaneSize } from './split/usePaneSize'
+import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
+import FloatingAction from '../../components/FloatingAction'
+import { useViewport } from '../../hooks/useViewport'
+import { effectivePane } from './effectivePane'
 
 // Lazy: pulls in squire-rte, which every /mail visitor would otherwise download unread.
 const ComposeView = lazy(() => import('./compose/ComposeView'))
@@ -196,10 +200,12 @@ export default function MailLayout() {
     setParams({ folder, uid: String(nextUid) })
   }, [folder, setParams])
 
+  const viewport = useViewport()
   const { data: preferences, isLoading: preferencesLoading } = usePreferences()
   // Until the preferences answer, today's layout — the list already waits on the same query,
   // so nothing meaningful can flash in the wrong arrangement.
-  const pane = preferences ? readingPaneOf(preferences) : 'right'
+  const pane = effectivePane(preferences ? readingPaneOf(preferences) : 'right', viewport)
+  const drawer = useContextDrawer()
   const [listWidth, setListWidth] = usePaneSize('mail.split.right', 380, 240)
   const [listHeight, setListHeight] = usePaneSize('mail.split.bottom', 280, 120)
 
@@ -237,14 +243,20 @@ export default function MailLayout() {
     if (uid !== null && payload.uids.includes(uid)) departed(uid, payload.uids)
   }, [moveMessages, uid, departed])
 
-  const list = (selected: number | null, wide: boolean) => (
+  // `wide` is the one-line row layout, whose .message-row-from is pinned at 180px — half of a
+  // 360px screen for the sender alone. A phone always takes the stacked one.
+  const wideRows = viewport !== 'phone' && pane !== 'right'
+
+  const list = (selected: number | null) => (
     <MessageList
       folderPath={folder}
       folderName={folderName}
       folderRole={folderNode?.specialUse ?? null}
       selectedUid={selected}
       onSelect={selectMessage}
-      wide={wide}
+      wide={wideRows}
+      leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
+      onRefresh={refresh}
       onNotify={addToast}
       onRows={keepRows}
       onDeparted={departed}
@@ -281,36 +293,42 @@ export default function MailLayout() {
     )
   }
 
+  // Each column is a band stack: what scrolls is the middle band only, so the folder actions and
+  // the pager stay put instead of hiding below their own content.
+  const folderColumn = (
+    <div className="mail-folders">
+      <div className="mail-folders-compose">
+        <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
+          <RocketIcon size={15} /> {t('layout.newMessage')}
+        </button>
+        <RefreshButton fetching={refreshFetching} onRefresh={refresh} />
+      </div>
+      <div className="mail-folders-scroll">
+        {/* The tree waits on the preferences too: without that, an account that turned the
+            icons on gets a column that appears late and pushes every name sideways. The two
+            queries leave together, so it costs nothing in the ordinary case — and an errored
+            preferences query still resolves, leaving the tree to draw without icons. */}
+        {(isLoading || preferencesLoading) && <p className="mail-empty">{t('folders.loading')}</p>}
+        {isError && <p className="mail-empty">{t('folders.loadFailed')}</p>}
+        {folders && !preferencesLoading && (
+          <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder}
+            onDropMessages={dropMessages}
+            showIcons={preferences ? showFolderIconsOf(preferences) : false} />
+        )}
+      </div>
+
+      {/* Shows even while the tree loads: the account block does not depend on it. */}
+      <div className="mail-folders-footer">
+        <IdentityMenu />
+      </div>
+    </div>
+  )
+
   return (
     <div className={`mail-layout is-${pane}`}>
-      {/* Each column is a band stack: what scrolls is the middle band only, so the folder
-          actions and the pager stay put instead of hiding below their own content. */}
-      <div className="mail-folders">
-        <div className="mail-folders-compose">
-          <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
-            <RocketIcon size={15} /> {t('layout.newMessage')}
-          </button>
-          <RefreshButton fetching={refreshFetching} onRefresh={refresh} />
-        </div>
-        <div className="mail-folders-scroll">
-          {/* The tree waits on the preferences too: without that, an account that turned the
-              icons on gets a column that appears late and pushes every name sideways. The two
-              queries leave together, so it costs nothing in the ordinary case — and an errored
-              preferences query still resolves, leaving the tree to draw without icons. */}
-          {(isLoading || preferencesLoading) && <p className="mail-empty">{t('folders.loading')}</p>}
-          {isError && <p className="mail-empty">{t('folders.loadFailed')}</p>}
-          {folders && !preferencesLoading && (
-            <FolderTree folders={folders} selectedPath={folder} onSelect={selectFolder}
-              onDropMessages={dropMessages}
-              showIcons={preferences ? showFolderIconsOf(preferences) : false} />
-          )}
-        </div>
-
-        {/* Shows even while the tree loads: the account block does not depend on it. */}
-        <div className="mail-folders-footer">
-          <IdentityMenu />
-        </div>
-      </div>
+      {drawer.inDrawer
+        ? <ContextDrawer open={drawer.open} onClose={drawer.close}>{folderColumn}</ContextDrawer>
+        : folderColumn}
 
       {/* Composing takes the whole list+reader side; the folder tree stays where it was. */}
       {composing ? (
@@ -321,8 +339,8 @@ export default function MailLayout() {
         <>
           {pane === 'right' && (
             <div className="mail-row">
-              <div className="mail-list" style={{ width: listWidth }}>{list(uid, false)}</div>
-              {preferences && (
+              <div className="mail-list" style={{ width: listWidth }}>{list(uid)}</div>
+              {preferences && viewport !== 'phone' && (
                 <PaneSplitter
                   orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
                   onResize={setListWidth}
@@ -337,11 +355,13 @@ export default function MailLayout() {
 
           {pane === 'bottom' && (
             <div className="mail-stack">
-              <div className="mail-list" style={{ height: listHeight }}>{list(uid, true)}</div>
-              <PaneSplitter
-                orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
-                onResize={setListHeight}
-              />
+              <div className="mail-list" style={{ height: listHeight }}>{list(uid)}</div>
+              {viewport !== 'phone' && (
+                <PaneSplitter
+                  orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
+                  onResize={setListHeight}
+                />
+              )}
               <div className="mail-reader">
                 <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
                   onDeparted={departed} onNotify={addToast} />
@@ -353,7 +373,7 @@ export default function MailLayout() {
             <>
               {/* Hidden, never unmounted: the scroll position and the streamed blocks live in this
                   subtree. No selected row either — there is no message "open beside". */}
-              <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null, true)}</div>
+              <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null)}</div>
               {uid !== null && (
                 <div className="mail-reader">
                   <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
@@ -363,6 +383,12 @@ export default function MailLayout() {
             </>
           )}
         </>
+      )}
+
+      {!composing && (
+        <FloatingAction label={t('layout.newMessage')} onClick={openCompose}>
+          <RocketIcon size={22} />
+        </FloatingAction>
       )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />

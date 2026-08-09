@@ -41,6 +41,10 @@ interface Props {
   selectedUid: number | null
   onSelect: (uid: number) => void
   wide?: boolean
+  /** Rendered at the head of the toolbar: the drawer's hamburger below 1024px. */
+  leading?: ReactNode
+  /** Refresh, which loses its home once the folder column is a drawer. */
+  onRefresh?: () => void
   onNotify?: (message: string) => void
   onRows?: (uids: number[]) => void
   /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
@@ -57,6 +61,8 @@ interface Props {
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
  */
 export default function MessageList(
+  // `leading` and `onRefresh` are declared on Props but not destructured: the toolbar renders
+  // them in the next slice, and a binding read by nobody is a lint error here.
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
     onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
   const { t } = useTranslation('mail')
