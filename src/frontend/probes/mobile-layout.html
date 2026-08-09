@@ -574,10 +574,15 @@
     // `.contact-tile-name` and `.contact-tile-address` both ellipsise and hold no elements, so
     // `clipped` exempts them by design; what it can still see is a heading whose hamburger, search
     // box and count do not fit, or a tile line pushed past the column.
+    // ContactsLayout's own rule for this column: `style={phone ? undefined : { width: listWidth }}`,
+    // listWidth being usePaneSize('contacts.split.right', 380, 240). Left bare, the column fell to
+    // `flex: none; width: auto` at 768px and reported a 106px clip for a layout the app cannot
+    // produce — a guard people learn to discount. The phone arm stays bare, where `.contacts-list`
+    // takes `flex: 1` from the 639px block instead.
     const contactList = () => `
       <div class="contacts-layout" style="height:520px">
         <div class="contacts-row">
-          <div class="contacts-list">
+          <div class="contacts-list"${window.innerWidth <= 639 ? '' : ' style="width:380px"'}>
             <div class="contacts-list-heading">
               <button class="drawer-toggle" style="display:inline-flex">&#9776;</button>
               <span class="contacts-search">

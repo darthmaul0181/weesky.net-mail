@@ -1910,4 +1910,17 @@ textarea.compose-editor {
     opacity: 0;
     pointer-events: none;
   }
+
+  /* The wide skin's other half of the same swap, and it shares this condition for the reason the
+     reserve above does. The base rule takes the date away so the cluster can stand in its place in
+     the flex line; with the cluster hidden here nothing stands in it, and the row loses its date
+     while `.message-row-line` absorbs the space and reflows under the finger — permanently, on
+     whichever row a tap left focused. `is-line` rows are reachable on touch: `wideRows` is
+     `viewport !== 'phone' && pane !== 'right'`, so a tablet at bottom or none draws them, and the
+     row is role=button/tabIndex=0, so a tap satisfies :focus-within before sticky :hover does.
+     `inline` is the restore, not a new look: .message-row-date is a span declaring no display of
+     its own. Its used value here is `block` either way — an `is-line` row is a flex container and
+     blockifies its items — measured at both, so this reproduces the base exactly. */
+  .message-row.is-line:hover .message-row-date,
+  .message-row.is-line:focus-within .message-row-date { display: inline; }
 }

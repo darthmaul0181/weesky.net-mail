@@ -62,6 +62,19 @@ describe('responsive contract', () => {
     expect(all['../index.css']).toMatch(/min-height:\s*100dvh/)
   })
 
+  // Two concerns, two conditions: the list toolbar's states answer to the column it sits in, the
+  // row's hover-revealed controls answer to the input device. Folding the second back into the
+  // first is what put a 380px default column inside a 480px container query and took the row
+  // cluster away from every mouse. Nothing else can catch it — jsdom computes no layout and no
+  // probe can emulate `hover` — so the guard is on the text, the way the whitelist above is.
+  it('keeps hover rules out of the column query', () => {
+    const mail = all['./mail.css']
+    expect(mediaBlock(mail, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
+    expect(mediaBlock(mail, '@media (hover: none)')).toMatch(/\.message-row:hover \.message-row-cluster/)
+    expect(mediaBlock(all['../index.css'], '@media (hover: none)'))
+      .toMatch(/\.contact-tile:hover \.contact-tile-actions/)
+  })
+
   it('declares the touch floor once, in the phone block', () => {
     const shell = all['./shell.css']
     expect([...shell.matchAll(/--touch:/g)]).toHaveLength(1)
