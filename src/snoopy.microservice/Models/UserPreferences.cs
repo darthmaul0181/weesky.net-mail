@@ -40,6 +40,12 @@ public static class UserPreferences
     // how the mail reader treats remote images.
     public const string MailTrustContacts = "mail.trustContacts";
 
+    // ui., not mail.: the preference governs the whole interface, not one module. `auto` is a real
+    // stored value rather than the absence of a row — it says "follow the browser" explicitly, so
+    // an account that once chose French and went back to automatic is distinguishable from one that
+    // never chose at all.
+    public const string UiLanguage = "ui.language";
+
     private static readonly string[] Booleans = ["true", "false"];
 
     public static IReadOnlyList<PreferenceDefinition> All { get; } =
@@ -63,6 +69,7 @@ public static class UserPreferences
         new(MailShowFolderIcons, "false", Booleans),
         new(ContactsCaptureRecipients, "true", Booleans),
         new(MailTrustContacts, "false", Booleans),
+        new(UiLanguage, "auto", ["auto", "en", "fr"]),
     ];
 
     public static bool IsValid(string key, string value)

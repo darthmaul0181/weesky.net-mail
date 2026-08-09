@@ -2,6 +2,7 @@ import {
   useInfiniteQuery, useIsFetching, useMutation, useQuery, useQueryClient,
   type InfiniteData, type Query, type QueryClient, type QueryKey,
 } from '@tanstack/react-query'
+import i18next from 'i18next'
 import { useCallback } from 'react'
 import { ApiError, api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
@@ -267,9 +268,8 @@ export function useTrustSender(onError?: (message: string) => void) {
     // and a toast on top of a redirect is noise.
     onError: (error, { trusted }) => {
       if (error instanceof ApiError && error.status === 401) return
-      const generic = trusted
-        ? "Could not allow this sender's images"
-        : "Could not block this sender's images"
+      const generic = i18next.t(
+        trusted ? 'mail:mutations.trustFailed' : 'mail:mutations.untrustFailed')
       onError?.(error instanceof ApiError && error.status === 400 ? error.message : generic)
     },
     // Settled, not success: a refused call must leave the reader showing the server's state.
@@ -465,7 +465,7 @@ export function useSetFlags(onError?: (message: string) => void) {
 
     onError: (_error, _args, context) => {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
-      onError?.('Could not update the message')
+      onError?.(i18next.t('mail:mutations.updateFailed'))
     },
   })
 }
@@ -676,7 +676,7 @@ export function useMoveMessages(onError?: (message: string) => void) {
 
     onError: (_error, _args, context) => {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
-      onError?.(context?.copy ? 'Could not copy the message' : 'Could not move the message')
+      onError?.(i18next.t(context?.copy ? 'mail:mutations.copyFailed' : 'mail:mutations.moveFailed'))
     },
 
     // A removal shrank the active search page and left sibling pages a stale total, and no poll
@@ -725,7 +725,7 @@ export function useDeleteMessages(onError?: (message: string) => void, pinnedAcc
 
     onError: (_error, _args, context) => {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
-      onError?.('Could not delete the message')
+      onError?.(i18next.t('mail:mutations.deleteFailed'))
     },
 
     // The removal re-windows the active search page; reconcile it against the server (see move).
@@ -872,7 +872,7 @@ export function useEmptyFolder(onError?: (message: string) => void) {
 
     onError: (_error, _args, context) => {
       for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
-      onError?.('Could not empty the folder')
+      onError?.(i18next.t('mail:mutations.emptyFailed'))
     },
   })
 }

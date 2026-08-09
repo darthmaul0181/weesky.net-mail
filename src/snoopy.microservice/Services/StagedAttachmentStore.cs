@@ -72,7 +72,7 @@ internal sealed class StagedAttachmentStore : IStagedAttachmentStore
                 {
                     written += read;
                     if (written > limitBytes)
-                        return Result.Failure<StagedAttachmentInfo>($"The attachment exceeds the {limitMb} MB limit");
+                        return Result.Failure<StagedAttachmentInfo>(StagedAttachmentErrors.TooLarge);
                     await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                 }
             }

@@ -1,5 +1,6 @@
 ﻿import { cloneElement, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { downloadBlob } from '../../../lib/downloadBlob'
@@ -19,6 +20,7 @@ import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import Tooltip from '../../../components/Tooltip'
 import ImageOffIcon from '../../../icons/ImageOffIcon'
 import CodeIcon from '../../../icons/CodeIcon'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import {
   useAccountId, useAliases, useDeleteMessages, useFolders, useIdentities, useMessage,
   useMoveMessages, usePrepareQuote, useSetFlags, useTrustSender, useTrustedSenders,
@@ -50,9 +52,6 @@ import { isImageType } from './mediaType'
 import { bodyInlineParts, useInlineImages } from './useInlineImages'
 import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
-const NO_ARCHIVE = 'Assign the archive folder in Settings → Folders'
-const NO_JUNK = 'Assign the junk folder in Settings → Folders'
-
 interface Props {
   folderPath: string | null
   uid: number | null
@@ -65,6 +64,7 @@ interface Props {
 
 export default function MessageReader(
   { folderPath, uid, folderRole, onBack, onNotify, onDeparted }: Props) {
+  const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
   const { data: preferences } = usePreferences()
@@ -152,7 +152,7 @@ export default function MessageReader(
         <button
           type="button"
           className="reader-back"
-          aria-label="Back to the message list"
+          aria-label={t('reader.back')}
           onClick={onBack}
         >
           <ArrowLeftIcon size={16} />
@@ -162,9 +162,9 @@ export default function MessageReader(
     </div>
   )
 
-  if (uid === null) return <p className="mail-empty">Select a message</p>
-  if (isLoading) return fallback('Loading message…')
-  if (isError || !data) return fallback('Could not load this message.')
+  if (uid === null) return <p className="mail-empty">{t('reader.selectMessage')}</p>
+  if (isLoading) return fallback(t('reader.loading'))
+  if (isError || !data) return fallback(t('reader.loadFailed'))
 
   // Recomputed on every re-render of THIS component — driven by its own useSetFlags settling
   // or by useMessage refetching, never by the menu opening (that toggles state inside
@@ -187,18 +187,19 @@ export default function MessageReader(
       const result = await requestBlob(mailAttachmentUrl(folderPath!, uid!, part, accountId))
       downloadBlob(result.blob, result.fileName || fileName)
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : 'Could not download the attachment')
+      setDownloadError(apiErrorMessage(error, t('reader.downloadFailed')))
     }
   }
 
   // Delete outside the trash is a move to it — the trash is the undo, so nothing to confirm.
   const inTrash = folderRole === 'trash'
-  const deleteLabel = inTrash ? 'Delete permanently' : 'Delete'
+  const deleteLabel = inTrash
+    ? t('actions.deletePermanently') : t('actions.delete', { ns: 'common' })
   const deleteDisabled = !inTrash && !roles.trash
   const archiveOff = !roles.archive || folderRole === 'archive'
-  const archiveReason = folderRole === 'archive' ? 'Already in the archive folder' : NO_ARCHIVE
+  const archiveReason = t(folderRole === 'archive' ? 'actions.alreadyArchived' : 'actions.noArchiveFolder')
   const junkOff = !roles.junk || folderRole === 'junk'
-  const junkReason = folderRole === 'junk' ? 'Already in the junk folder' : NO_JUNK
+  const junkReason = t(folderRole === 'junk' ? 'actions.alreadyJunk' : 'actions.noJunkFolder')
 
   function moveTo(target: string | null, copy: boolean) {
     if (!target) return
@@ -228,24 +229,24 @@ export default function MessageReader(
         [activeAccount?.email ?? null, identity?.email ?? null], accountId)
       navigate('/mail/compose', { state: { from: folderPath, seed } })
     } catch (error) {
-      onNotify?.(error instanceof Error ? error.message : 'Could not prepare the message')
+      onNotify?.(apiErrorMessage(error, t('reader.prepareFailed')))
     }
   }
 
   const actions: MenuEntry[] = [
     {
-      label: 'Archive', icon: <ArchiveIcon size={18} />,
+      label: t('toolbar.archive'), icon: <ArchiveIcon size={18} />,
       onSelect: () => moveTo(roles.archive, false),
       disabled: archiveOff, title: archiveOff ? archiveReason : undefined,
     },
     {
-      label: 'Report as junk', icon: <JunkIcon size={18} />,
+      label: t('toolbar.junk'), icon: <JunkIcon size={18} />,
       onSelect: () => moveTo(roles.junk, false),
       disabled: junkOff, title: junkOff ? junkReason : undefined,
     },
-    { label: 'Move to…', icon: <FolderMoveIcon size={18} />, onSelect: () => setPicker({ mode: 'move' }) },
-    { label: 'Copy to…', icon: <CopyIcon size={18} />, onSelect: () => setPicker({ mode: 'copy' }) },
-    { label: 'Edit as new', icon: <PencilIcon size={18} />, onSelect: () => void openCompose('editAsNew') },
+    { label: t('toolbar.moveTo'), icon: <FolderMoveIcon size={18} />, onSelect: () => setPicker({ mode: 'move' }) },
+    { label: t('toolbar.copyTo'), icon: <CopyIcon size={18} />, onSelect: () => setPicker({ mode: 'copy' }) },
+    { label: t('reader.editAsNew'), icon: <PencilIcon size={18} />, onSelect: () => void openCompose('editAsNew') },
   ]
 
   // Only for an approved sender, and only while nothing else is already showing the images: with
@@ -253,7 +254,7 @@ export default function MessageReader(
   // whose effect is invisible misleads.
   if (senderApproved && !alwaysShow && !contactTrusted) {
     actions.push('separator', {
-      label: "Block sender's images",
+      label: t('reader.blockSenderImages'),
       icon: <ImageOffIcon size={18} />,
       onSelect: () => setTrust.mutate({ address: senderAddress, trusted: false }),
     })
@@ -262,7 +263,7 @@ export default function MessageReader(
   // Its own group: this is neither a flag nor a move but a look at the bytes. A link rather
   // than a button so middle-click and Ctrl+click open the tab the entry promises.
   actions.push('separator', {
-    label: 'View source',
+    label: t('reader.viewSource'),
     icon: <CodeIcon size={18} />,
     href: `/mail/source?folder=${encodeURIComponent(folderPath!)}&uid=${uid}`,
   })
@@ -276,22 +277,20 @@ export default function MessageReader(
               <button
                 type="button"
                 className="reader-back"
-                aria-label="Back to the message list"
+                aria-label={t('reader.back')}
                 onClick={onBack}
               >
                 <ArrowLeftIcon size={16} />
               </button>
             )}
-            {data.subject || '(no subject)'}
+            {data.subject || t('list.noSubject')}
             {data.priority !== 'normal' && (
               <Tooltip
                 placement="bottom-left"
-                content={data.priority === 'high'
-                  ? 'The sender marked this message high priority'
-                  : 'The sender marked this message low priority'}
+                content={t(data.priority === 'high' ? 'reader.priorityHigh' : 'reader.priorityLow')}
               >
                 <span className={`reader-priority is-${data.priority}`}>
-                  {data.priority === 'high' ? 'High priority' : 'Low priority'}
+                  {t(data.priority === 'high' ? 'list.highPriority' : 'list.lowPriority')}
                 </span>
               </Tooltip>
             )}
@@ -305,7 +304,7 @@ export default function MessageReader(
                 type="button"
                 className={`details-toggle${detailsOpen ? ' is-open' : ''}`}
                 aria-expanded={detailsOpen}
-                aria-label={detailsOpen ? 'Hide details' : 'Show details'}
+                aria-label={t(detailsOpen ? 'reader.hideDetails' : 'reader.showDetails')}
                 onClick={() => setDetailsOpen(open => !open)}
               >
                 <ChevronRightIcon size={12} />
@@ -315,7 +314,7 @@ export default function MessageReader(
               {unsubscribe && (
                 <a className="unsub-btn" href={unsubscribe} target="_blank" rel="noopener noreferrer">
                   <ExternalLinkIcon />
-                  Unsubscribe
+                  {t('reader.unsubscribe')}
                 </a>
               )}
             </div>
@@ -324,10 +323,10 @@ export default function MessageReader(
             ) : (
               <>
                 {data.to.length > 0 && (
-                  <div className="reader-recipients">To: <AddressList addresses={data.to} /></div>
+                  <div className="reader-recipients">{t('reader.details.to')} <AddressList addresses={data.to} /></div>
                 )}
                 {data.cc.length > 0 && (
-                  <div className="reader-recipients">Cc: <AddressList addresses={data.cc} /></div>
+                  <div className="reader-recipients">{t('reader.details.cc')} <AddressList addresses={data.cc} /></div>
                 )}
               </>
             )}
@@ -360,26 +359,22 @@ export default function MessageReader(
           message ending mid-sentence reads as the sender's mistake. */}
       {data.truncated && (
         <div className="reader-truncated">
-          This message was too large to display in full. Some of it is not shown —
-          open “View source” to read the original.
+          {t('reader.truncated')}
         </div>
       )}
 
       {data.blockedImageCount > 0 && !showImages && (
         <div className="reader-blocked-images">
-          <span>
-            {data.blockedImageCount} remote image{data.blockedImageCount > 1 ? 's were' : ' was'} blocked.
-            Loading them tells the sender you opened this message.
-          </span>
+          <span>{t('reader.blockedImages', { count: data.blockedImageCount })}</span>
           {/* The chevron can only ever grant: an approved sender has no banner to hang it from. */}
           <span className="banner-split">
-            <button type="button" className="btn" onClick={() => setImagesShown(true)}>Show images</button>
+            <button type="button" className="btn" onClick={() => setImagesShown(true)}>{t('reader.showImages')}</button>
             <DropdownMenu
-              ariaLabel="More image options"
+              ariaLabel={t('reader.moreImageOptions')}
               className="banner-split-more"
               trigger={<ChevronDownIcon size={13} />}
               items={[{
-                label: 'Always show images from this sender',
+                label: t('reader.alwaysShowSender'),
                 // A malformed message can carry images and no parsable sender; posting an empty
                 // address would just earn a 400 nobody surfaces.
                 disabled: senderAddress === '',
@@ -404,7 +399,7 @@ export default function MessageReader(
         <iframe
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
-          title="Message body"
+          title={t('reader.bodyTitle')}
           srcDoc={renderBodyDocument(body, { dark: inverted })}
         />
       ) : (
@@ -438,12 +433,12 @@ export default function MessageReader(
                 {chip}
                 <DropdownMenu
                   direction="up"
-                  ariaLabel={`More actions for ${attachment.fileName}`}
+                  ariaLabel={t('reader.moreActionsFor', { name: attachment.fileName })}
                   className="attachment-split-more"
                   trigger={<ChevronUpIcon size={13} />}
                   items={[
-                    { label: 'Download', onSelect: () => download(attachment.part, attachment.fileName) },
-                    { label: 'View', onSelect: () => setViewed(attachment) },
+                    { label: t('reader.download'), onSelect: () => download(attachment.part, attachment.fileName) },
+                    { label: t('reader.view'), onSelect: () => setViewed(attachment) },
                   ]}
                 />
               </span>
@@ -479,7 +474,7 @@ export default function MessageReader(
       {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
       {confirmDelete && (
         <DeleteConfirmModal
-          entityLabel={data.subject || '(no subject)'}
+          entityLabel={data.subject || t('list.noSubject')}
           onConfirm={expunge}
           onClose={() => setConfirmDelete(false)}
           loading={deleteMessages.isPending}

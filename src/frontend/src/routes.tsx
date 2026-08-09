@@ -37,7 +37,7 @@ export const routes: RouteObject[] = [
           { path: 'mail', element: <Suspense fallback={null}><MailLayout /></Suspense> },
           // The composer lives inside the mail module: same layout, list and reader replaced.
           { path: 'mail/compose', element: <Suspense fallback={null}><MailLayout /></Suspense> },
-          { path: 'calendar', element: <ComingSoon module="Calendar" /> },
+          { path: 'calendar', element: <ComingSoon module="calendar" /> },
           { path: 'contacts', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
           // The editor lives inside the contacts module: same layout, the two content columns
           // replaced. A contact id is a GUID, so it travels safely in a route segment.

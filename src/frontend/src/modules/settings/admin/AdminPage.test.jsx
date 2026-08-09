@@ -102,13 +102,14 @@ describe('AddEditUserModal — create mode', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
   })
 
-  it('shows error message when api call fails', async () => {
+  // Server prose never reaches the screen; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when the api call fails', async () => {
     api.adminCreateUser.mockRejectedValue(new Error('Duplicate user'))
     const { container } = renderCreate()
     await userEvent.type(screen.getAllByRole('textbox')[0], 'alice')
     await userEvent.type(container.querySelector('input[type="password"]'), 'pw')
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
-    await waitFor(() => expect(screen.getByText('Duplicate user')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
 })
 
@@ -332,14 +333,15 @@ describe('AccountsTab', () => {
     await waitFor(() => expect(api.adminDeleteUser).toHaveBeenCalledWith(1))
   })
 
-  it('shows error toast when user delete fails', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when user delete fails', async () => {
     api.adminDeleteUser.mockRejectedValue(new Error('Cannot delete'))
     const addToast = vi.fn()
     render(<AccountsTab addToast={addToast} />)
     await screen.findByText('alice@weesky.be')
     await userEvent.click(screen.getByTitle('Delete'))
     await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Cannot delete', 'error'))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to delete user', 'error'))
   })
 
   it('shows error toast when loading fails', async () => {
@@ -566,14 +568,15 @@ describe('DomainsTab', () => {
     expect(screen.queryByText(/stop being delivered/)).not.toBeInTheDocument()
   })
 
-  it('shows error toast when delete fails', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when delete fails', async () => {
     api.adminDeleteDomain.mockRejectedValue(new Error('Has users'))
     const addToast = vi.fn()
     render(<DomainsTab addToast={addToast} />)
     await screen.findByText('WSY')
     await userEvent.click(screen.getByTitle('Delete'))
     await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Has users', 'error'))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to delete domain', 'error'))
   })
 
   it('✕ closes delete modal without deleting', async () => {
@@ -714,21 +717,22 @@ describe('AddEditUserModal — toggles and quota', () => {
 // ── AddEditDomainModal — error case ───────────────────────────
 
 describe('AddEditDomainModal — error handling', () => {
-  it('shows error when create API fails', async () => {
+  // Server prose never reaches the screen; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when create API fails', async () => {
     api.adminCreateDomain.mockRejectedValue(new Error('Invalid ID'))
     render(<AddEditDomainModal domain={null} onSave={vi.fn()} onClose={vi.fn()} />)
     const [idInput, nameInput] = screen.getAllByRole('textbox')
     await userEvent.type(idInput, 'TST')
     await userEvent.type(nameInput, 'test.com')
     await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
-    await waitFor(() => expect(screen.getByText('Invalid ID')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
 
-  it('shows error when update API fails', async () => {
+  it('shows the local fallback when update API fails', async () => {
     api.adminUpdateDomain.mockRejectedValue(new Error('Not found'))
     render(<AddEditDomainModal domain={{ id: 'WSY', name: 'weesky.be' }} onSave={vi.fn()} onClose={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(screen.getByText('Not found')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
 })
 
@@ -891,7 +895,8 @@ describe('VirtualDomainsTab', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load virtual domains', 'error'))
   })
 
-  it('shows error toast when add owner fails', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when add owner fails', async () => {
     api.adminAddVirtualDomainOwner.mockRejectedValue(new Error('Domain not found'))
     const addToast = vi.fn()
     render(<VirtualDomainsTab addToast={addToast} />)
@@ -900,7 +905,7 @@ describe('VirtualDomainsTab', () => {
     await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
     const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
     fireEvent.mouseDown(option)
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Domain not found', 'error'))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to set owner', 'error'))
   })
 
   it('handles null response from adminGetVirtualDomains gracefully', async () => {

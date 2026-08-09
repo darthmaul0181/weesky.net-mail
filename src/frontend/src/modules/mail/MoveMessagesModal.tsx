@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { flatten, indent, sortFolders } from './folders/folderNodes'
 import { folderMatches } from './folders/folderFilter'
 import { roleLabel } from './roleLabel'
@@ -24,6 +25,7 @@ interface Props {
  */
 export default function MoveMessagesModal(
   { mode, folders, currentFolderPath, onPick, onClose }: Props) {
+  const { t } = useTranslation('mail')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
 
@@ -45,7 +47,6 @@ export default function MoveMessagesModal(
 
   const rows = all.filter(row => folderMatches(row.node.name, query))
   const enabled = rows.filter(row => !row.disabledAs)
-  const verb = mode === 'move' ? 'Move' : 'Copy'
   // A selection filtered off-screen or since disabled (e.g. it became the current folder)
   // must not stay armed: acting on it would file the mail somewhere it can't be picked from.
   const target = enabled.find(row => row.node.path === selected)?.node ?? null
@@ -66,23 +67,25 @@ export default function MoveMessagesModal(
         <div className="modal-header">
           <span className="modal-title">
             {mode === 'move' ? <FolderMoveIcon size={17} /> : <CopyIcon size={17} />}
-            {verb} to folder
+            {t(mode === 'move' ? 'move.titleMove' : 'move.titleCopy')}
           </span>
-          <button type="button" className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <button type="button" className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
 
         <div className="admin-list-header">
           <span className="admin-list-title">
-            Destination
+            {t('move.destination')}
             <span className="folder-pick-count">
-              {query ? `${rows.length} of ${all.length} folders` : `${all.length} folders`}
+              {query
+                ? t('move.countFiltered', { shown: rows.length, count: all.length })
+                : t('move.count', { count: all.length })}
             </span>
           </span>
           <input
             className="search-input folder-pick-filter"
             type="search"
-            aria-label="Search folders"
-            placeholder="Search folders…"
+            aria-label={t('move.searchLabel')}
+            placeholder={t('move.searchPlaceholder')}
             value={query}
             autoFocus
             onChange={e => setQuery(e.target.value)}
@@ -94,7 +97,7 @@ export default function MoveMessagesModal(
 
         <div className="folder-pick-list">
           {rows.length === 0 && (
-            <div className="folder-pick-empty">No folder matches “{query}”.</div>
+            <div className="folder-pick-empty">{t('move.noMatch', { query })}</div>
           )}
           {rows.map(({ node, depth, disabledAs }) => (
             <button
@@ -106,9 +109,11 @@ export default function MoveMessagesModal(
             >
               <span className="folder-pick-indent">{indent(depth)}</span>
               <span className="folder-pick-name">{node.name}</span>
-              {(disabledAs ?? (node.specialUse && roleLabel(node.specialUse))) && (
+              {(disabledAs ?? (node.specialUse && roleLabel(node.specialUse, t))) && (
                 <span className="row-tag">
-                  {disabledAs ?? roleLabel(node.specialUse!)}
+                  {disabledAs
+                    ? t(disabledAs === 'current' ? 'move.tagCurrent' : 'move.tagContainer')
+                    : roleLabel(node.specialUse!, t)}
                 </span>
               )}
             </button>
@@ -117,7 +122,9 @@ export default function MoveMessagesModal(
 
         <div className="folder-pick-submit">
           <button className="btn btn-primary" type="submit" disabled={!target}>
-            {target ? `${verb} to ${target.name}` : verb}
+            {target
+              ? t(mode === 'move' ? 'move.submitMove' : 'move.submitCopy', { name: target.name })
+              : t(mode === 'move' ? 'move.actionMove' : 'move.actionCopy')}
           </button>
         </div>
       </form>

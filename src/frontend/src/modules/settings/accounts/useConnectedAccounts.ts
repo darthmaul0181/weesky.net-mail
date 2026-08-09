@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import i18next from 'i18next'
 import { api } from '../../../api.js'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
 /** How a row authenticates to its mail server. Frozen at creation on the backend. */
 export type MailAuthMode = 'Password' | 'OAuth2'
@@ -33,34 +35,34 @@ export interface OAuthStart {
 export const CONNECTED_ACCOUNTS_KEY = ['connectedAccounts'] as const
 const CONNECTABLE_DOMAINS_KEY = ['connectableDomains'] as const
 
-/** The mail server's own refusal is never relayed, so an empty message needs one of ours. */
-export const SERVER_REFUSED = 'Could not sign in to this mailbox. Check the address and the password.'
-export const THROTTLED = 'Too many attempts. Wait a moment and try again.'
-export const NO_LONGER_CONNECTED = 'This account is no longer connected.'
-/** A bodyless refusal from the OAuth endpoints: there is no password to check, so SERVER_REFUSED
+/** Read through i18next rather than held as constants: a module-level t() would freeze the
+ *  language the bundle was imported under. */
+const serverRefused = () => i18next.t('settings:accounts.serverRefused')
+/** A bodyless refusal from the OAuth endpoints: there is no password to check, so serverRefused
  *  would name the one thing the user cannot act on. */
-export const PROVIDER_REFUSED = 'Could not reach the sign-in provider. Try again in a moment.'
-export const HANDSHAKE_GONE = 'That sign-in took too long. Try connecting again.'
+export const providerRefused = () => i18next.t('settings:accounts.providerRefused')
 
 function statusOf(error: unknown): number | null {
   const status = (error as { status?: unknown } | null)?.status
   return typeof status === 'number' ? status : null
 }
 
-export function errorText(error: unknown, fallback = SERVER_REFUSED): string {
+export function errorText(error: unknown, fallback?: string): string {
   const status = statusOf(error)
   // The rate limiter answers with no body at all, and 404 answers with the bare code
   // `account_not_found` — both would otherwise read as "your password is wrong".
-  if (status === 429) return THROTTLED
-  if (status === 404) return NO_LONGER_CONNECTED
-  return error instanceof Error && error.message ? error.message : fallback
+  if (status === 429) return i18next.t('settings:accounts.throttled')
+  if (status === 404) return i18next.t('settings:accounts.noLongerConnected')
+  return apiErrorMessage(error, fallback ?? serverRefused())
 }
 
 /** Complete's 404 is the handshake being unknown, expired or already used — never the account.
  *  A first-time attach has no account to have been disconnected, and a reconnect's row is still
  *  there; both are told the truth, which is that the consent has to be started again. */
 export function oauthCompleteErrorText(error: unknown): string {
-  return statusOf(error) === 404 ? HANDSHAKE_GONE : errorText(error, PROVIDER_REFUSED)
+  return statusOf(error) === 404
+    ? i18next.t('settings:accounts.handshakeGone')
+    : errorText(error, providerRefused())
 }
 
 export function useConnectedAccounts() {

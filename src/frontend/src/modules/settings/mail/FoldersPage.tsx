@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
@@ -15,6 +16,7 @@ import SystemFoldersModal from './SystemFoldersModal'
  * The mail column keeps its own New folder button; its Manage button leads here.
  */
 export default function FoldersPage() {
+  const { t } = useTranslation('settings')
   const { data: folders, isLoading, isError } = useFolders()
   const { toasts, addToast, removeToast } = useToasts()
   const [creating, setCreating] = useState(false)
@@ -23,26 +25,22 @@ export default function FoldersPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><FolderIcon size={17} />Folders</h1>
+        <h1 className="settings-page-title"><FolderIcon size={17} />{t('nav.folders')}</h1>
       </div>
-      <p className="folders-page-hint">
-        Turning a folder off hides it from the mail view. Nothing in it is deleted. Folders
-        holding a system role are locked here — use System folders to change which folder plays
-        which role.
-      </p>
+      <p className="folders-page-hint">{t('folders.hint')}</p>
 
       <div className="folders-page-actions">
         <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-          <FolderPlusIcon size={15} />New folder
+          <FolderPlusIcon size={15} />{t('folders.newFolder')}
         </button>
         {/* btn-ghost: a bare `.btn` has no border and no background, and reads as text. */}
         <button type="button" className="btn btn-ghost" onClick={() => setAssigningRoles(true)}>
-          <SlidersIcon size={15} />System folders
+          <SlidersIcon size={15} />{t('folders.systemFolders')}
         </button>
       </div>
 
       {isLoading && <LoadingBlock />}
-      {!isLoading && (isError || !folders) && <p>Could not load the folders.</p>}
+      {!isLoading && (isError || !folders) && <p>{t('folders.loadFailed')}</p>}
       {!isLoading && !isError && folders && (
         <FolderManager folders={folders} onNotify={addToast} />
       )}

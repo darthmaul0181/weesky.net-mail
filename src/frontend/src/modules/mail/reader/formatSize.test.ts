@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import i18next from 'i18next'
+import { afterEach, describe, it, expect } from 'vitest'
 import { formatSize } from './formatSize'
 
 describe('formatSize', () => {
+  afterEach(async () => { await i18next.changeLanguage('en') })
+
   it.each([
     [0, '0 B'],
     [512, '512 B'],
@@ -16,5 +19,11 @@ describe('formatSize', () => {
   it('returns empty for a nonsensical size', () => {
     expect(formatSize(-1)).toBe('')
     expect(formatSize(Number.NaN)).toBe('')
+  })
+
+  it('translates its units', async () => {
+    expect(formatSize(2048)).toBe('2 KB')
+    await i18next.changeLanguage('fr')
+    expect(formatSize(2048)).toBe('2 Ko')
   })
 })

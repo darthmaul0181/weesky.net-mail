@@ -1,6 +1,8 @@
 import { useRef, useState, type ChangeEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError, api } from '../../api.js'
 import Tooltip from '../../components/Tooltip'
+import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import { downloadBlob } from '../../lib/downloadBlob'
 import type { Contact, ContactImportReport } from './contactTypes'
 import ImportReportModal from './ImportReportModal'
@@ -17,6 +19,7 @@ interface Props {
  * foot.
  */
 export default function ContactsTransfer({ contacts, onError }: Props) {
+  const { t } = useTranslation('contacts')
   const input = useRef<HTMLInputElement>(null)
   const [report, setReport] = useState<ContactImportReport | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -34,8 +37,8 @@ export default function ContactsTransfer({ contacts, onError }: Props) {
     } catch (error) {
       // A framework-generated 413 carries no envelope, so its message is a bare "Payload Too Large".
       onError(error instanceof ApiError && error.status === 413
-        ? 'That file is too large — the limit is 5 MB.'
-        : (error as Error).message || 'Could not import the file')
+        ? t('transfer.tooLarge')
+        : apiErrorMessage(error, t('transfer.importFailed')))
     }
   }
 
@@ -45,7 +48,7 @@ export default function ContactsTransfer({ contacts, onError }: Props) {
       const { blob, fileName } = await api.exportContacts()
       downloadBlob(blob, fileName)
     } catch (error) {
-      onError((error as Error).message || 'Could not export the contacts')
+      onError(apiErrorMessage(error, t('transfer.exportFailed')))
     } finally {
       setExporting(false)
     }
@@ -58,16 +61,16 @@ export default function ContactsTransfer({ contacts, onError }: Props) {
       <input ref={input} type="file" accept=".csv,text/csv" hidden onChange={pick}
         data-testid="contacts-import-input" />
 
-      <Tooltip content="Merge a CSV file into this book">
+      <Tooltip content={t('transfer.importHint')}>
         <button type="button" className="btn" disabled={importContacts.isPending}
           onClick={() => input.current?.click()}>
-          {importContacts.isPending ? <span className="spinner" /> : 'Import…'}
+          {importContacts.isPending ? <span className="spinner" /> : t('transfer.import')}
         </button>
       </Tooltip>
 
-      <Tooltip content={empty ? 'Nothing to export' : 'Download this book as CSV'}>
+      <Tooltip content={t(empty ? 'transfer.nothingToExport' : 'transfer.exportHint')}>
         <button type="button" className="btn" disabled={empty || exporting} onClick={download}>
-          {exporting ? <span className="spinner" /> : 'Export'}
+          {exporting ? <span className="spinner" /> : t('transfer.export')}
         </button>
       </Tooltip>
 

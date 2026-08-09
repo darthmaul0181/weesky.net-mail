@@ -195,6 +195,11 @@ internal sealed class ImapSession : IImapSession
     public const string AttachmentNotFound = "Attachment not found";
     public const string FolderNotFound = "Folder not found";
 
+    /// <summary>A leaf name refused before any IMAP round trip. Not a 404 sentinel like the three
+    /// above — MailFoldersController's create/rename actions map every failure, this one
+    /// included, to 502 through the ordinary FromResult path.</summary>
+    public const string InvalidFolderName = "invalid_folder_name";
+
     /// <summary>Parent path, or null when the folder sits at the namespace root.</summary>
     public static string? ParentPath(string fullName, char separator)
     {

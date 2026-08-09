@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
 import StarIcon from '../../icons/StarIcon'
@@ -28,6 +29,7 @@ function blank(value: string): string | null {
 }
 
 export default function ContactEditView({ contact, saving, error, onSave, onCancel }: Props) {
+  const { t } = useTranslation('contacts')
   const [firstName, setFirstName] = useState(contact?.firstName ?? '')
   const [lastName, setLastName] = useState(contact?.lastName ?? '')
   const [nickname, setNickname] = useState(contact?.nickname ?? '')
@@ -82,14 +84,14 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
         <h2 className="contact-editor-title">
           {/* PersonPlusIcon takes no size prop today (fixed 15px); PencilIcon does. */}
           {contact ? <PencilIcon size={16} /> : <PersonPlusIcon />}
-          {contact ? 'Edit contact' : 'New contact'}
+          {t(contact ? 'editor.editTitle' : 'editor.newTitle')}
         </h2>
         <button type="submit" className="btn btn-primary contact-save-btn" disabled={!valid || saving}>
           {saving && <span className="spinner" data-testid="editor-spinner" />}
-          Save contact
+          {t('editor.save')}
         </button>
         {/* The ✕ is the only dismissal, as in every dialog of this app — no Cancel beside Save. */}
-        <button type="button" className="modal-close" aria-label="Close the editor" onClick={onCancel}>✕</button>
+        <button type="button" className="modal-close" aria-label={t('editor.close')} onClick={onCancel}>✕</button>
       </div>
 
       <div className="contact-editor-body">
@@ -98,59 +100,59 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
         {/* Full width is what lets these be .field-h rows at all: at the card's 380px, and worse
             at its 240px floor, a 110px label column leaves nothing for the control. */}
         <div className="field-h">
-          <label htmlFor="contact-first-name">First name</label>
+          <label htmlFor="contact-first-name">{t('editor.firstName')}</label>
           <input id="contact-first-name" type="text" value={firstName} maxLength={NAME_MAX}
             onChange={event => setFirstName(event.target.value)} autoFocus />
         </div>
         <div className="field-h">
-          <label htmlFor="contact-last-name">Last name</label>
+          <label htmlFor="contact-last-name">{t('editor.lastName')}</label>
           <input id="contact-last-name" type="text" value={lastName} maxLength={NAME_MAX}
             onChange={event => setLastName(event.target.value)} />
         </div>
         <div className="field-h">
-          <label htmlFor="contact-nickname">Nickname</label>
+          <label htmlFor="contact-nickname">{t('fields.nickname')}</label>
           <input id="contact-nickname" type="text" value={nickname} maxLength={NAME_MAX}
             onChange={event => setNickname(event.target.value)} />
         </div>
 
         <div className="field-h contact-editor-addresses">
-          <span className="field-h-label">Addresses</span>
+          <span className="field-h-label">{t('fields.addresses')}</span>
           <div className="contact-address-list">
             {addresses.map((address, index) => (
               <div key={index} className="contact-address-row" data-testid={`address-row-${index}`}>
                 <label className="visually-hidden" htmlFor={`contact-address-${index}`}>
-                  Address {index + 1}
+                  {t('editor.addressLabel', { index: index + 1 })}
                 </label>
                 <input id={`contact-address-${index}`} type="email" value={address}
-                  placeholder="name@example.com" maxLength={ADDRESS_MAX}
+                  placeholder={t('editor.addressPlaceholder')} maxLength={ADDRESS_MAX}
                   onChange={event => change(index, event.target.value)} />
                 {index === 0
-                  ? <span className="contact-address-primary">primary</span>
+                  ? <span className="contact-address-primary">{t('fields.primary')}</span>
                   : (
                     // Text content, not aria-label: an aria-label containing "address N" is also
                     // picked up by getByLabelText(/address N/i), which collides with the field.
-                    <button type="button" className="admin-icon-btn" title="Make this the primary address"
+                    <button type="button" className="admin-icon-btn" title={t('editor.makePrimary')}
                       onClick={() => moveUp(index)}>
                       <span aria-hidden="true">↑</span>
-                      <span className="visually-hidden">{`Move address ${index + 1} up`}</span>
+                      <span className="visually-hidden">{t('editor.moveUp', { index: index + 1 })}</span>
                     </button>
                   )}
-                <button type="button" className="admin-icon-btn is-danger" title="Remove"
+                <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
                   onClick={() => remove(index)}>
                   <TrashIcon size={14} />
-                  <span className="visually-hidden">{`Remove address ${index + 1}`}</span>
+                  <span className="visually-hidden">{t('editor.removeAddress', { index: index + 1 })}</span>
                 </button>
               </div>
             ))}
             <button type="button" className="contact-address-add"
               onClick={() => setAddresses(previous => [...previous, ''])}>
-              + Add an address
+              {t('editor.addAddress')}
             </button>
           </div>
         </div>
 
         <div className="field-h">
-          <label htmlFor="contact-favorite">Favourite</label>
+          <label htmlFor="contact-favorite">{t('editor.favourite')}</label>
           <button type="button" id="contact-favorite"
             className={`contact-star${isFavorite ? ' is-on' : ''}`}
             aria-pressed={isFavorite}

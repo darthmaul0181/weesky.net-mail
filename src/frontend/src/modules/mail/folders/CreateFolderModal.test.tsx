@@ -90,7 +90,8 @@ describe('CreateFolderModal', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('surfaces the backend message when creation fails, and stays open', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('surfaces the local fallback when creation fails with no code, and stays open', async () => {
     mocks.create.mockRejectedValue(new Error("A folder name cannot be empty or contain '/'"))
     const { onNotify, onClose } = renderModal()
 
@@ -98,7 +99,22 @@ describe('CreateFolderModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create folder' }))
 
     await waitFor(() =>
-      expect(onNotify).toHaveBeenCalledWith("A folder name cannot be empty or contain '/'", 'error'))
+      expect(onNotify).toHaveBeenCalledWith('Could not create the folder', 'error'))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // invalid_folder_name is a named stable code: the refusal must stay specific, translated
+  // rather than shown as the generic fallback above.
+  it('surfaces the translated invalid_folder_name message', async () => {
+    mocks.create.mockRejectedValue(
+      Object.assign(new Error('invalid_folder_name'), { code: 'invalid_folder_name' }))
+    const { onNotify, onClose } = renderModal()
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'a/b' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }))
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+      'A folder name cannot be empty, and cannot contain a separator character.', 'error'))
     expect(onClose).not.toHaveBeenCalled()
   })
 

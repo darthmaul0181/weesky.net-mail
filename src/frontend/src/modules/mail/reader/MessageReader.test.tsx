@@ -769,6 +769,7 @@ describe('MessageReader', () => {
       expect(mocks.mailAttachmentUrl).toHaveBeenCalledWith('INBOX', 2, '2', 'linked-1'))
   })
 
+  // Server prose never reaches the screen; the local fallback does — see apiErrorMessage.
   it('surfaces a download failure instead of failing silently', async () => {
     mocks.getMailMessage.mockResolvedValue(detail)
     mocks.requestBlob.mockRejectedValue(new Error('Attachment not found'))
@@ -776,7 +777,7 @@ describe('MessageReader', () => {
     render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
     fireEvent.click(await screen.findByRole('button', { name: /report\.pdf/ }))
 
-    expect(await screen.findByText('Attachment not found')).toBeInTheDocument()
+    expect(await screen.findByText('Could not download the attachment')).toBeInTheDocument()
   })
 
   describe('the image attachment split control', () => {
@@ -1702,7 +1703,7 @@ describe('MessageReader', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
 
-      await waitFor(() => expect(onNotify).toHaveBeenCalledWith('over the cap'))
+      await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not prepare the message'))
       expect(screen.queryByTestId('compose-state')).not.toBeInTheDocument()
     })
   })

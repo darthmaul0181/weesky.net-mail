@@ -1,3 +1,4 @@
+import { collator } from '../../../lib/intl'
 import type { MailFolderNode } from '../api/mailTypes'
 
 /** Where the row and reader actions file a message. Null is "no folder holds that role". */
@@ -59,7 +60,7 @@ export function sortFolders(nodes: MailFolderNode[]): MailFolderNode[] {
     .sort((a, b) => {
       if (a.specialUse === 'inbox') return -1
       if (b.specialUse === 'inbox') return 1
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+      return collator({ sensitivity: 'base', numeric: true }).compare(a.name, b.name)
     })
     .map(node => (node.children.length ? { ...node, children: sortFolders(node.children) } : node))
 }

@@ -1,20 +1,23 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../../../api.js'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
-function formatRelative(isoString) {
+function formatRelative(isoString, t) {
   const diff = Date.now() - new Date(isoString).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return t('accounts.justNow')
+  if (mins < 60) return t('accounts.minutesAgo', { value: mins })
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
+  if (hrs < 24) return t('accounts.hoursAgo', { value: hrs })
   const days = Math.floor(hrs / 24)
-  return `${days}d ago`
+  return t('accounts.daysAgo', { value: days })
 }
 
 export function AddEditUserModal({ user, domains, onSave, onClose }) {
+  const { t } = useTranslation('admin')
   const [userName, setUserName] = useState(user?.userName ?? '')
   const [domainId, setDomainId] = useState(user?.domainId ?? domains[0]?.id ?? '')
   const [password, setPassword] = useState('')
@@ -33,7 +36,7 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!isEdit && !password) { setError('Password is required'); return }
+    if (!isEdit && !password) { setError(t('accounts.passwordRequired')); return }
     setError(null)
     setLoading(true)
     try {
@@ -53,7 +56,7 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
       }
       onSave()
     } catch (err) {
-      setError(err.message || 'An error occurred')
+      setError(apiErrorMessage(err, t('errorOccurred')))
     } finally {
       setLoading(false)
     }
@@ -63,18 +66,18 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit account' : 'Add account'}</span>
+          <span className="modal-title">{isEdit ? <PencilIcon /> : <PersonPlusIcon />}{t(isEdit ? 'accounts.editTitle' : 'accounts.addTitle')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         {isEdit && user.lastLogins?.length > 0 && (
           <div className="last-login-info">
-            <span className="last-login-label">Last connections</span>
+            <span className="last-login-label">{t('accounts.lastConnections')}</span>
             <div className="last-login-row">
               {user.lastLogins.map((l, i) => (
                 <span key={l.service} className="last-login-entry">
                   {i > 0 && <span className="last-login-sep">·</span>}
                   <span className="last-login-service">{l.service.toUpperCase()}</span>
-                  <span className="last-login-time">{formatRelative(l.at)}</span>
+                  <span className="last-login-time">{formatRelative(l.at, t)}</span>
                 </span>
               ))}
             </div>
@@ -83,44 +86,44 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="field-h">
-            <label>Username</label>
+            <label>{t('accounts.userName')}</label>
             <input type="text" value={userName} onChange={e => setUserName(e.target.value)}
               disabled={isEdit} required />
           </div>
           <div className="field-h">
-            <label>Domain</label>
+            <label>{t('accounts.domain')}</label>
             <select value={domainId} onChange={e => setDomainId(e.target.value)} disabled={isEdit}>
               {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div className="field-h">
-            <label>Password</label>
+            <label>{t('accounts.password')}</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder={isEdit ? 'leave blank to keep' : ''} />
+              placeholder={isEdit ? t('accounts.leaveBlank') : ''} />
           </div>
           <div className="field-h">
-            <label>Full name</label>
+            <label>{t('accounts.fullName')}</label>
             <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} />
           </div>
           <div className="field-h">
-            <label>Quota (MB)</label>
+            <label>{t('accounts.quota')}</label>
             <div className="quota-field">
               <input type="range" min={1} max={10240} value={quotaMb}
                 onChange={e => handleQuotaSlider(e.target.value)} />
               <input type="number" min={1} max={10240} value={quotaMb}
                 onChange={e => handleQuotaSlider(e.target.value)} />
-              <span className="quota-field-unit">MB</span>
+              <span className="quota-field-unit">{t('accounts.quotaUnit')}</span>
             </div>
           </div>
           <div className="field-h">
-            <label>Active</label>
+            <label>{t('accounts.active')}</label>
             <label className="toggle-switch">
               <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
               <span className="toggle-track" />
             </label>
           </div>
           <div className="field-h">
-            <label>Administrator</label>
+            <label>{t('accounts.administrator')}</label>
             <label className="toggle-switch">
               <input type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} />
               <span className="toggle-track" />
@@ -129,7 +132,9 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
           <button className="btn btn-primary" type="submit"
             disabled={loading || !userName.trim() || (!isEdit && !password.trim())}
             style={{ marginTop: '8px' }}>
-            {loading ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create account')}
+            {loading
+              ? <span className="spinner" />
+              : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('accounts.create'))}
           </button>
         </form>
       </div>

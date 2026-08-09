@@ -1,0 +1,119 @@
+{
+  "titles": {
+    "newMessage": "Nouveau message",
+    "reply": "Répondre",
+    "forward": "Transférer",
+    "draft": "Brouillon"
+  },
+  "header": {
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "saveDraft": "Enregistrer le brouillon",
+    "saving": "Enregistrement…"
+  },
+  "fields": {
+    "from": "De",
+    "to": "À",
+    "cc": "Cc",
+    "bcc": "Cci",
+    "priority": "Priorité",
+    "subject": "Objet",
+    "body": "Corps du message"
+  },
+  "priority": {
+    "high": "Haute",
+    "normal": "Normale",
+    "low": "Basse"
+  },
+  "quote": {
+    "attribution": "Le {{date}}, {{who}} a écrit :",
+    "forwardBanner": "---------- Message transféré ----------",
+    "from": "De : {{value}}",
+    "date": "Date : {{value}}",
+    "subject": "Objet : {{value}}",
+    "to": "À : {{value}}"
+  },
+  "identity": {
+    "menu": "Identité d’expédition",
+    "unavailable": "indisponible"
+  },
+  "recipients": {
+    "remove": "Retirer {{name}}",
+    "suggestions": "Suggestions pour {{label}}"
+  },
+  "attachments": {
+    "attach": "Joindre des fichiers",
+    "uploading": "Envoi de {{name}}",
+    "remove": "Retirer {{name}}",
+    "uploadFailed": "Impossible d’envoyer la pièce jointe"
+  },
+  "drop": {
+    "image": "Déposez l’image dans le message",
+    "files": "Déposez les fichiers à joindre"
+  },
+  "leave": {
+    "title": "Enregistrer ce brouillon ?",
+    "body": "Votre message contient des modifications non enregistrées.",
+    "keepEditing": "Continuer la rédaction",
+    "discard": "Abandonner",
+    "saveDraft": "Enregistrer le brouillon",
+    "fixAddress": "Corrigez d’abord l’adresse non valide"
+  },
+  "plainText": {
+    "title": "Passer en texte brut ?",
+    "body": "La mise en forme sera supprimée et les images du message deviendront des pièces jointes.",
+    "keepFormatting": "Garder la mise en forme",
+    "confirm": "Convertir"
+  },
+  "toolbar": {
+    "plainText": "Texte brut",
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "bold": "Gras",
+    "italic": "Italique",
+    "underline": "Souligné",
+    "strikethrough": "Barré",
+    "textColour": "Couleur du texte",
+    "highlightColour": "Couleur de surlignage",
+    "font": "Police",
+    "size": "Taille",
+    "alignment": "Alignement",
+    "bulletedList": "Liste à puces",
+    "numberedList": "Liste numérotée",
+    "increaseQuote": "Augmenter la citation",
+    "decreaseQuote": "Réduire la citation",
+    "link": "Lien",
+    "linkUrl": "Adresse du lien",
+    "apply": "Appliquer",
+    "removeLink": "Supprimer le lien",
+    "insertImage": "Insérer une image",
+    "clearFormatting": "Effacer la mise en forme",
+    "sizes": {
+      "small": "Petite",
+      "normal": "Normale",
+      "large": "Grande",
+      "huge": "Très grande"
+    },
+    "align": {
+      "left": "À gauche",
+      "center": "Au centre",
+      "right": "À droite",
+      "justify": "Justifié"
+    }
+  },
+  "toast": {
+    "sent": "Message envoyé",
+    "sentNoCopy": "Message envoyé — aucune copie n’a pu être classée dans Envoyés",
+    "sentDraftKept": "Message envoyé — le brouillon n’a pas pu être supprimé",
+    "sendFailed": "Impossible d’envoyer le message",
+    "draftSaved": "Brouillon enregistré",
+    "draftSaveFailed": "Impossible d’enregistrer le brouillon",
+    "imageFailed": "Impossible d’insérer l’image",
+    "captured": "Contact ajouté : {{name}}",
+    "capturedMany_one": "{{count}} contact ajouté",
+    "capturedMany_many": "{{count}} contacts ajoutés",
+    "capturedMany_other": "{{count}} contacts ajoutés",
+    "undo": "Annuler",
+    "undoFailed": "Impossible d’annuler"
+  }
+}

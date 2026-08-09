@@ -65,6 +65,7 @@ describe('ApplicationTab', () => {
     expect(mocks.setAppSetting).toHaveBeenCalledWith('app.shortName', 'Snoopy')
   })
 
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
   it('reports a refused save instead of claiming success', async () => {
     renderTab()
     mocks.setAppSetting.mockRejectedValue(new Error('Short name is too long'))
@@ -72,7 +73,7 @@ describe('ApplicationTab', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Short name is too long', 'error'))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the name', 'error'))
   })
 
   // The global constraint is that a refused save leaves the screen on server state, never on an
@@ -89,7 +90,7 @@ describe('ApplicationTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(addToast)
-      .toHaveBeenCalledWith('Application name is too long', 'error'))
+      .toHaveBeenCalledWith('Could not save the name', 'error'))
     await waitFor(() => expect(screen.getByLabelText('Application name')).toHaveValue('Snoopy mail'))
   })
 
@@ -111,7 +112,7 @@ describe('ApplicationTab', () => {
     await userEvent.type(shortName, 'A rejected short name')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Short name is too long', 'error'))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the name', 'error'))
     expect(screen.getByLabelText('Application name')).toHaveValue('Weesky Mail')
     await waitFor(() => expect(screen.getByLabelText('Short name')).toHaveValue('Snoopy'))
   })

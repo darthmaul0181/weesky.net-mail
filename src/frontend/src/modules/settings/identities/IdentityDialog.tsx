@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAliases } from '../../mail/queries'
 import { MAX_DISPLAY_NAME_LENGTH } from './identityRows'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
@@ -24,6 +25,7 @@ interface Props {
 export default function IdentityDialog({
   mode, taken, editAddress, initialName = '', freeAddress = false, onSubmit, onClose,
 }: Props) {
+  const { t } = useTranslation('settings')
   const isEdit = mode === 'edit'
   const { data: aliases, isLoading, isError } = useAliases(!freeAddress)
   const [query, setQuery] = useState(isEdit ? editAddress ?? '' : '')
@@ -52,15 +54,16 @@ export default function IdentityDialog({
       <div className="modal identity-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">
-            {isEdit ? <PencilIcon /> : <PersonPlusIcon />}{isEdit ? 'Edit identity' : 'Add identity'}
+            {isEdit ? <PencilIcon /> : <PersonPlusIcon />}
+            {t(isEdit ? 'identities.editIdentity' : 'identities.addIdentity')}
           </span>
-          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
 
         {freeAddress ? (
           <>
             <div className="field-h">
-              <label htmlFor="identity-address">Address</label>
+              <label htmlFor="identity-address">{t('identities.address')}</label>
               <input
                 id="identity-address" type="email" autoComplete="off"
                 autoFocus={!isEdit} disabled={isEdit} value={query}
@@ -69,20 +72,17 @@ export default function IdentityDialog({
               />
             </div>
             {!isEdit && (
-              <p className="identity-combo-hint">
-                Any address you are allowed to send from. The server has the final say — if it
-                refuses this address, sending will fail.
-              </p>
+              <p className="identity-combo-hint">{t('identities.freeAddressHint')}</p>
             )}
           </>
         ) : (
           <>
             <div className="field-h">
-              <label htmlFor="identity-alias">Alias</label>
+              <label htmlFor="identity-alias">{t('identities.alias')}</label>
               <div className="identity-combo">
                 <input
                   id="identity-alias" type="text" autoComplete="off"
-                  placeholder="Search your aliases…" autoFocus={!isEdit} disabled={isEdit}
+                  placeholder={t('identities.searchAliases')} autoFocus={!isEdit} disabled={isEdit}
                   value={query}
                   onChange={e => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
                   onFocus={() => setOpen(true)}
@@ -108,14 +108,14 @@ export default function IdentityDialog({
             {/* A failed alias fetch must read as a network blip, not "you have no aliases". */}
             {!isEdit && (isLoading || isError) && (
               <p className="identity-combo-hint">
-                {isLoading ? 'Loading your aliases…' : 'Could not load your aliases.'}
+                {t(isLoading ? 'identities.aliasesLoading' : 'identities.aliasesLoadFailed')}
               </p>
             )}
           </>
         )}
 
         <div className="field-h">
-          <label htmlFor="identity-name">Display name</label>
+          <label htmlFor="identity-name">{t('identities.displayName')}</label>
           <input
             id="identity-name" type="text" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH}
             autoFocus={isEdit}
@@ -127,7 +127,7 @@ export default function IdentityDialog({
         <div className="identity-modal-actions">
           <button type="button" className="btn btn-primary" style={{ width: 'auto' }}
             disabled={!canSubmit} onClick={submit}>
-            {isEdit ? 'Save' : 'Add'}
+            {t(isEdit ? 'actions.save' : 'actions.add', { ns: 'common' })}
           </button>
         </div>
       </div>

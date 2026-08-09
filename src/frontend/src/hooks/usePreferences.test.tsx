@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
-  notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf, showFolderIconsOf,
-  showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
+  languageOf, notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf,
+  showFolderIconsOf, showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
@@ -203,5 +203,17 @@ describe('composeFormatOf', () => {
   it('falls back to html on an absent or unrecognised value', () => {
     expect(composeFormatOf({})).toBe('html')
     expect(composeFormatOf({ 'mail.composeFormat': 'plain' })).toBe('html')
+  })
+})
+
+describe('languageOf', () => {
+  it('reads the stored preference', () => {
+    expect(languageOf({ [PREFERENCE_KEYS.language]: 'fr' })).toBe('fr')
+    expect(languageOf({ [PREFERENCE_KEYS.language]: 'auto' })).toBe('auto')
+  })
+
+  // What every account gets before it has ever chosen — an absent row, not an absent language.
+  it('falls back to auto for an account that has not chosen yet', () => {
+    expect(languageOf({})).toBe('auto')
   })
 })

@@ -53,22 +53,8 @@ public sealed class ConnectedAccountsController(
 
     private const string ServerRefused = "Could not sign in to this mailbox. Check the address and the password.";
 
-    /// <summary>A domain the user may not pick, whether it is absent or unusable — the caller has
-    /// nothing to do about the difference, and it is administrator information.</summary>
-    private const string UnknownDomain = "Unknown domain";
-
     /// <summary>The width of connected_accounts.email, which the default identity's address mirrors.</summary>
     internal const int MaxEmailLength = 255;
-
-    private const string NotAProviderDomain = "This server does not sign in with a provider account";
-
-    /// <summary>For a domain that *is* OAuth2 but incompletely configured: the user just clicked
-    /// a provider button this server rendered, so the password sentence would be false. The cause
-    /// is administrator information and stays in the log.</summary>
-    private const string ProviderNotAvailable =
-        "This provider sign-in is not available right now. Contact your administrator.";
-
-    private const string ProviderDomain = "This server signs in with a provider account, not with a password";
 
     /// <summary>
     /// The mailboxes attached to this session, each with the label of its default identity and
@@ -134,30 +120,31 @@ public sealed class ConnectedAccountsController(
         if (RefusePassword(request.Password) is { } invalidPassword) return invalidPassword;
 
         if (!MailboxAddress.TryParse(RecipientAddressParser.Options, request.Email ?? string.Empty, out var parsed))
-            return BadRequestEnveloppe("This is not a valid email address");
+            return BadRequestEnveloppe(ConnectedAccountErrors.InvalidEmailAddress);
         var email = IdentityResolver.Canonical(parsed.Address);
 
         // The column is finite too: bound the address the way the password is bounded, rather
         // than let a strict-mode MariaDB turn an over-long login into a 500.
         if (email.Length > MaxEmailLength)
-            return BadRequestEnveloppe($"An address must be at most {MaxEmailLength} characters");
+            return BadRequestEnveloppe(ConnectedAccountErrors.AddressTooLong);
 
         if (request.DomainId is null && email == IdentityResolver.Canonical(AuthenticatedUser.Email))
-            return BadRequestEnveloppe("You are already signed in to this mailbox");
+            return BadRequestEnveloppe(ConnectedAccountErrors.AlreadySignedIn);
 
         ExternalDomain? domain = null;
         if (request.DomainId is { } domainId)
         {
             domain = await domains.FindAsync(domainId, cancellationToken);
-            if (domain is null) return BadRequestEnveloppe(UnknownDomain);
+            if (domain is null) return BadRequestEnveloppe(ConnectedAccountErrors.UnknownDomain);
 
             // A password probed here would be stored as a Password row on a provider domain —
             // a mode divergence no screen offers and the closed credential design exists to avoid.
-            if (domain.AuthMode is MailAuthMode.OAuth2) return BadRequestEnveloppe(ProviderDomain);
+            if (domain.AuthMode is MailAuthMode.OAuth2)
+                return BadRequestEnveloppe(ConnectedAccountErrors.ProviderDomain);
         }
 
         var probe = BuildProbe(domain, email, request.Password);
-        if (probe is null) return BadRequestEnveloppe(UnknownDomain);
+        if (probe is null) return BadRequestEnveloppe(ConnectedAccountErrors.UnknownDomain);
 
         var verified = await VerifyAsync(probe, email, cancellationToken);
         if (verified.IsFailure) return BadGatewayEnveloppe(verified.Error);
@@ -218,10 +205,10 @@ public sealed class ConnectedAccountsController(
         if (row is null) return NotFoundEnveloppe(ConnectedAccountErrors.AccountNotFound);
 
         // A password encrypted under this row's oauth2 context, with auth_mode still saying
-        // token, could never authenticate again. Reconnecting is the OAuth twin of this endpoint.
+        // token, could never authenticate again. Reconnecting is the OAuth twin of this endpoint —
+        // OAuthStart's reconnect branch makes the mirror-image check, in the other direction.
         if (row.AuthMode is MailAuthMode.OAuth2)
-            return BadRequestEnveloppe(
-                "This account signs in with a provider account; reconnect it instead of entering a password");
+            return BadRequestEnveloppe(ConnectedAccountErrors.AccountUsesProvider);
 
         ExternalDomain? domain = null;
         if (row.DomainId is { } domainId)
@@ -302,7 +289,7 @@ public sealed class ConnectedAccountsController(
     {
         if (request is null) return BadRequestEnveloppe("Request body is required");
         if (request.DomainId is null == request.AccountId is null)
-            return BadRequestEnveloppe("Name either a domain to connect from or an account to reconnect");
+            return BadRequestEnveloppe(ConnectedAccountErrors.OAuthStartTargetRequired);
 
         var domainId = request.DomainId;
         if (request.AccountId is { } accountId)
@@ -313,13 +300,14 @@ public sealed class ConnectedAccountsController(
             // The mirror of the UpdatePassword guard: a Password row re-consented here would hold
             // a refresh token its own auth_mode says to replay as a password.
             if (row.AuthMode is not MailAuthMode.OAuth2)
-                return BadRequestEnveloppe("This account signs in with a password; enter its new password instead");
+                return BadRequestEnveloppe(ConnectedAccountErrors.AccountUsesPassword);
             domainId = row.DomainId;
         }
 
         var domain = await domains.FindAsync(domainId!.Value, cancellationToken);
-        if (domain is null) return BadRequestEnveloppe(UnknownDomain);
-        if (domain.AuthMode is not MailAuthMode.OAuth2) return BadRequestEnveloppe(NotAProviderDomain);
+        if (domain is null) return BadRequestEnveloppe(ConnectedAccountErrors.UnknownDomain);
+        if (domain.AuthMode is not MailAuthMode.OAuth2)
+            return BadRequestEnveloppe(ConnectedAccountErrors.NotAProviderDomain);
         if (!OAuthProviderConfig.TryFrom(domain, out var provider))
         {
             // The spec's rule for an unusable row: logged as an administrator error, like the
@@ -328,7 +316,7 @@ public sealed class ConnectedAccountsController(
                 "External domain {DomainName} ({DomainId}) is in OAuth2 mode but its provider " +
                 "configuration is incomplete",
                 domain.Name, domain.Id);
-            return BadRequestEnveloppe(ProviderNotAvailable);
+            return BadRequestEnveloppe(ConnectedAccountErrors.ProviderConfigIncomplete);
         }
 
         var handshake = handshakes.Start(AuthenticatedUser.WebmailUid, domain.Id, request.AccountId);
@@ -411,13 +399,13 @@ public sealed class ConnectedAccountsController(
 
         if (handshake.Tokens?.RefreshToken is not { Length: > 0 } refreshToken
             || handshake.Email is not { Length: > 0 } email)
-            return BadRequestEnveloppe("The sign-in did not complete. Try again.");
+            return BadRequestEnveloppe(ConnectedAccountErrors.HandshakeIncomplete);
 
         if (Encoding.UTF8.GetByteCount(refreshToken) > ConnectedAccountCipher.MaxSecretLength)
             return BadRequestEnveloppe("This provider's token is too large to store");
 
         var domain = await domains.FindAsync(handshake.DomainId, cancellationToken);
-        if (domain is null) return BadRequestEnveloppe(UnknownDomain);
+        if (domain is null) return BadRequestEnveloppe(ConnectedAccountErrors.UnknownDomain);
 
         return handshake.AccountId is { } accountId
             ? await ReconnectAsync(accountId, domain, email, refreshToken, kek.Value, cancellationToken)
@@ -430,7 +418,7 @@ public sealed class ConnectedAccountsController(
     {
         // The provider chose this address, not the caller, but the column bound still applies.
         if (email.Length > MaxEmailLength)
-            return BadRequestEnveloppe($"An address must be at most {MaxEmailLength} characters");
+            return BadRequestEnveloppe(ConnectedAccountErrors.AddressTooLong);
 
         var row = new ConnectedAccount
         {
@@ -461,7 +449,7 @@ public sealed class ConnectedAccountsController(
         if (row is null) return NotFoundEnveloppe(ConnectedAccountErrors.AccountNotFound);
 
         if (!string.Equals(row.Email, email, StringComparison.Ordinal))
-            return BadRequestEnveloppe($"You signed in as {email}, but this account is {row.Email}");
+            return BadRequestEnveloppe(ConnectedAccountErrors.ReconnectMismatch);
 
         await accounts.UpdateCipherAsync(
             row,
@@ -562,12 +550,11 @@ public sealed class ConnectedAccountsController(
     /// <summary>Null when the password cannot be stored, otherwise the 400 to answer with.</summary>
     private ActionResult? RefusePassword(string? password)
     {
-        if (string.IsNullOrEmpty(password)) return BadRequestEnveloppe("A password is required");
+        if (string.IsNullOrEmpty(password)) return BadRequestEnveloppe(ConnectedAccountErrors.PasswordRequired);
 
         // The cipher column is finite and Encrypt throws past its bound: answer it here instead.
         return Encoding.UTF8.GetByteCount(password) > ConnectedAccountCipher.MaxSecretLength
-            ? BadRequestEnveloppe(
-                $"The password may not exceed {ConnectedAccountCipher.MaxSecretLength} bytes")
+            ? BadRequestEnveloppe(ConnectedAccountErrors.PasswordTooLong)
             : null;
     }
 

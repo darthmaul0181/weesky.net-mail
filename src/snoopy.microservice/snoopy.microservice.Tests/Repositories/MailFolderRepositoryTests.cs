@@ -122,12 +122,12 @@ public sealed class MailFolderRepositoryTests
     {
         var (repo, sessions, session, _) = CreateSut();
         session.Setup(s => s.CreateFolderAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(Result.Failure<string>("A folder name cannot be empty or contain '/'"));
+               .ReturnsAsync(Result.Failure<string>(ImapSession.InvalidFolderName));
 
         var result = await repo.CreateFolderAsync(Alice, Conn, "", "Pro/jects", CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Contains("cannot be empty or contain", result.Error);
+        Assert.Equal(ImapSession.InvalidFolderName, result.Error);
     }
 
     [Fact]

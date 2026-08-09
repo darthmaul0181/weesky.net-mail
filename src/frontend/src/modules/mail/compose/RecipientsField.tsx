@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { contactNameOf } from '../../contacts/contactName'
 import { compareContacts, suggestionsFor } from '../../contacts/contactSearch'
@@ -23,6 +24,7 @@ interface Props {
 export default function RecipientsField({
   id, label, tokens, onChange, autoFocus, contacts = [],
 }: Props) {
+  const { t } = useTranslation('compose')
   const [draft, setDraft] = useState('')
   const [closed, setClosed] = useState(false)
   // -1 means "nothing highlighted", and it is the default on purpose: Enter must commit the
@@ -124,7 +126,7 @@ export default function RecipientsField({
               // the cursor is noise, the rule AddressLabel follows in the reader.
               title={name ? token : undefined}>
               {shown}
-              <button type="button" aria-label={`Remove ${shown}`}
+              <button type="button" aria-label={t('recipients.remove', { name: shown })}
                 onClick={() => onChange(tokens.filter((_, i) => i !== index))}>✕</button>
             </span>
           )
@@ -141,7 +143,7 @@ export default function RecipientsField({
 
         {open && (
           <ul ref={listRef} className="ownership-dropdown" id={listId} role="listbox"
-            aria-label={`${label} suggestions`}
+            aria-label={t('recipients.suggestions', { label })}
             // On the container, so it also covers the scrollbar and the padding strip: any
             // mousedown here would blur the input, and the blur commits the half-typed draft as
             // an invalid token. Rows rely on this too — their own handler bubbles up to it.

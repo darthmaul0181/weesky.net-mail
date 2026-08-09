@@ -27,4 +27,6 @@ See [`src/snoopy.microservice/DESIGN.md`](src/snoopy.microservice/DESIGN.md) for
 
 React SPA (Vite) for alias, account, and mail-rule management.
 
+The interface ships in English and French, resolved from the browser and overridable per account.
+
 See [`src/frontend/CLAUDE.md`](src/frontend/CLAUDE.md) for details.

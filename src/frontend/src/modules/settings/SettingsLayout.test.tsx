@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../contexts/AuthContext'
+import { LocaleProvider } from '../../contexts/LocaleContext'
 import { ThemeProvider } from '../../contexts/ThemeContext'
 import { routes } from '../../routes'
 
@@ -44,7 +45,7 @@ function renderAt(path: string) {
   render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <AuthProvider><RouterProvider router={router} /></AuthProvider>
+        <AuthProvider><LocaleProvider><RouterProvider router={router} /></LocaleProvider></AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )

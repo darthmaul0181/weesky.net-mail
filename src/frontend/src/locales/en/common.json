@@ -1,0 +1,34 @@
+{
+  "actions": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "saveChanges": "Save changes",
+    "save": "Save",
+    "delete": "Delete",
+    "add": "Add",
+    "edit": "Edit",
+    "remove": "Remove"
+  },
+  "loading": "Loading",
+  "sizes": { "b": "{{value}} B", "kb": "{{value}} KB", "mb": "{{value}} MB", "gb": "{{value}} GB" },
+  "rail": {
+    "label": "Modules",
+    "mail": "Mail",
+    "calendar": "Calendar",
+    "contacts": "Contacts",
+    "settings": "Settings"
+  },
+  "comingSoon": "This module is coming soon.",
+  "deleteConfirm": {
+    "title": "Confirm deletion",
+    "message": "Delete <name/>? This action cannot be undone."
+  },
+  "identity": {
+    "loading": "Loading…",
+    "menu": "Account menu",
+    "passwordNeeded": "Password needed",
+    "signInNeeded": "Sign-in needed",
+    "connectedAccounts": "Connected accounts…",
+    "signOut": "Sign out"
+  }
+}

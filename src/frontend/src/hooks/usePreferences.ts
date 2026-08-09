@@ -22,17 +22,21 @@ export const PREFERENCE_KEYS = {
   showFolderIcons: 'mail.showFolderIcons',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
+  language: 'ui.language',
 } as const
 
 export type Preferences = Record<string, string>
 
 const queryKey = ['preferences'] as const
 
-export function usePreferences() {
+/** `enabled` so a caller with no session — the locale provider on the login page — can leave the
+    query off rather than firing a request that can only 401. Same shape as `useFolders`. */
+export function usePreferences({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey,
     queryFn: ({ signal }) => api.getPreferences({ signal }) as Promise<Preferences>,
     staleTime: 5 * 60 * 1000,
+    enabled,
   })
 }
 
@@ -41,6 +45,19 @@ export function useSetPreference() {
 
   return useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) => api.setPreference(key, value),
+    // Optimistic: every reader of usePreferences() — LocaleContext among them — sees the new
+    // value the instant the mutation fires, on the one shared cache entry, rather than after a
+    // round trip a stateless test double can't even simulate. onError is what makes a refused
+    // write behave like one: the write failed, so the cache has to go back to what it held.
+    onMutate: async ({ key, value }) => {
+      await client.cancelQueries({ queryKey })
+      const previous = client.getQueryData<Preferences>(queryKey)
+      client.setQueryData<Preferences>(queryKey, old => old && { ...old, [key]: value })
+      return { previous }
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) client.setQueryData(queryKey, context.previous)
+    },
     onSuccess: () => {
       client.invalidateQueries({ queryKey })
       // The page size is part of what a message page *is*, so every cached page was computed
@@ -148,3 +165,11 @@ export function captureRecipientsOf(preferences: Preferences): boolean {
 export function trustContactsOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.trustContacts] === 'true'
 }
+
+/** The raw stored value — `auto`, `en`, `fr`, or something a newer build wrote. `resolveLocale`
+    is what turns it into a locale; this accessor deliberately does not, so the settings radio can
+    show "Automatic" as the distinct choice it is. */
+export function languageOf(preferences: Preferences): string {
+  return preferences[PREFERENCE_KEYS.language] ?? 'auto'
+}
+

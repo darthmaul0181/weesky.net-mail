@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
@@ -9,6 +10,7 @@ import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import type { SendingIdentity } from '../../mail/api/mailTypes'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { useAliases, useIdentities, useReplaceIdentities } from '../../mail/queries'
 import IdentityDialog from './IdentityDialog'
 import { applyAddition, applyDefault, applyLabel, applyRemoval, sortIdentities, toRows } from './identityRows'
@@ -29,6 +31,7 @@ export default function IdentitiesPage() {
 
 function IdentitiesPanel() {
   const { identity, activeAccount, accountsLoading } = useAuth()
+  const { t } = useTranslation('settings')
   // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the page
   // must open on the variant the settings nav already assumed rather than swap wording under way.
   const ownMailbox = activeAccount?.isPrimary !== false
@@ -64,7 +67,7 @@ function IdentitiesPanel() {
     replace.mutate(toRows(next, !ownMailbox), {
       onError: (error: Error) => {
         setEdited(null)
-        addToast(error.message || 'Could not save your identities', 'error')
+        addToast(apiErrorMessage(error, t('identities.saveFailed')), 'error')
       },
     })
   }
@@ -82,43 +85,41 @@ function IdentitiesPanel() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><MailIcon size={17} />Identities</h1>
+        <h1 className="settings-page-title"><MailIcon size={17} />{t('nav.identities')}</h1>
       </div>
       <p className="identities-hint">
-        An identity is an address from which you can send emails.<br />
-        {ownMailbox
-          ? 'Each identity is linked to one of your aliases and has its own name, which will be visible to your recipients.'
-          : 'Each identity has its own name, which will be visible to your recipients.'}
+        {t('identities.hintIntro')}<br />
+        {t(ownMailbox ? 'identities.hintOwn' : 'identities.hintConnected')}
       </p>
       {ownMailbox ? (
         <p className="identities-hint">
-          Deleting an identity does not affect the alias itself in any way.<br />
-          Your primary identity cannot be deleted. Its name can be changed via the ‘Account’ page.
+          {t('identities.hintDeleteOwn')}<br />
+          {t('identities.hintPrimary')}
         </p>
       ) : (
         <p className="identities-hint">
-          This mailbox’s own address is always the default and cannot be deleted.<br />
-          Any other address is accepted here, but the remote server decides whether it may send from it.
+          {t('identities.hintConnectedDefault')}<br />
+          {t('identities.hintConnectedOther')}
         </p>
       )}
 
       {isLoading && <LoadingBlock />}
       {/* Only when there is nothing to show: a failed background refetch must not blank a list that
           is already on screen and still perfectly usable. */}
-      {!isLoading && !shown && <p>Could not load your identities.</p>}
+      {!isLoading && !shown && <p>{t('identities.loadFailed')}</p>}
       {!isLoading && shown && (
         <div className="identity-panel">
           <div className="admin-list-header">
-            <button className="btn btn-primary" style={{ width: 'auto' }} aria-label="Add identity"
+            <button className="btn btn-primary" style={{ width: 'auto' }} aria-label={t('identities.addIdentity')}
               disabled={noAliases || locked}
-              title={noAliases ? 'You have no alias to create an identity from' : undefined}
+              title={noAliases ? t('identities.noAlias') : undefined}
               onClick={() => setAdding(true)}>
-              <PersonPlusIcon /> Add
+              <PersonPlusIcon /> {t('actions.add', { ns: 'common' })}
             </button>
           </div>
           {/* Usable but possibly out of date — the page edits this list, and a save built on stale
               rows comes back refused. */}
-          {isError && <p className="settings-note">Could not refresh this list — it may be out of date.</p>}
+          {isError && <p className="settings-note">{t('refreshFailed')}</p>}
           <div className="admin-list identity-list">
             {tiles.map(i => (
               <div key={i.address} className={`admin-list-item${i.stale ? ' is-stale' : ''}`}>
@@ -128,15 +129,17 @@ function IdentitiesPanel() {
                 {ownMailbox && (
                   <span className="identity-star-slot">
                     {!i.stale && i.isDefault && (
-                      <span className="admin-icon-btn is-default" title="Default identity">
+                      <span className="admin-icon-btn is-default" title={t('identities.defaultIdentity')}>
                         <StarIcon size={16} filled />
-                        <span className="visually-hidden">{i.address} is the default</span>
+                        <span className="visually-hidden">
+                          {t('identities.isDefault', { address: i.address })}
+                        </span>
                       </span>
                     )}
                     {!i.stale && !i.isDefault && (
                       <button
-                        type="button" className="admin-icon-btn" title="Set as default"
-                        aria-label={`Make ${i.address} the default`} disabled={locked}
+                        type="button" className="admin-icon-btn" title={t('identities.setDefault')}
+                        aria-label={t('identities.makeDefault', { address: i.address })} disabled={locked}
                         onClick={() => save(applyDefault(shown, i.address))}
                       >
                         <StarIcon size={16} />
@@ -146,23 +149,26 @@ function IdentitiesPanel() {
                 )}
                 <span className="admin-list-item-email">{i.displayName}</span>
                 <span className="admin-list-item-name">{i.address}</span>
-                {i.isPrimary && <span className="row-tag">{ownMailbox ? 'primary' : 'Account address'}</span>}
-                {i.stale && <span className="row-tag">unavailable</span>}
+                {i.isPrimary && <span className="row-tag">
+                  {t(ownMailbox ? 'identities.tagPrimary' : 'identities.tagAccountAddress')}
+                </span>}
+                {i.stale && <span className="row-tag">{t('identities.tagUnavailable')}</span>}
                 <div className="admin-list-item-actions">
                   {/* The primary's name comes from the Account tab, so it is not editable here;
                       a connected mailbox's own label has no other home, so it is. */}
                   {!i.stale && !(ownMailbox && i.isPrimary) && (
                     <button
-                      type="button" className="admin-icon-btn" title="Edit" disabled={locked}
-                      aria-label={`Edit ${i.address}`} onClick={() => setEditing(i)}
+                      type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
+                      disabled={locked} aria-label={t('identities.editAddress', { address: i.address })}
+                      onClick={() => setEditing(i)}
                     >
                       <PencilIcon />
                     </button>
                   )}
                   {!i.isPrimary && (
                     <button
-                      type="button" className="admin-icon-btn is-danger" title="Remove"
-                      aria-label={`Remove ${i.address}`} disabled={locked}
+                      type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
+                      aria-label={t('identities.removeAddress', { address: i.address })} disabled={locked}
                       onClick={() => save(applyRemoval(shown, i.address))}
                     >
                       <TrashIcon />

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../../../api.js'
 
 interface ChangePasswordSectionProps {
@@ -6,6 +7,7 @@ interface ChangePasswordSectionProps {
 }
 
 export default function ChangePasswordSection({ onDone }: ChangePasswordSectionProps) {
+  const { t } = useTranslation('settings')
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -16,15 +18,15 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
     e.preventDefault()
 
     if (!oldPassword) {
-      setError('Current password is required.')
+      setError(t('account.currentPasswordRequired'))
       return
     }
     if (newPassword.length < 10) {
-      setError('New password must be at least 10 characters.')
+      setError(t('account.newPasswordTooShort'))
       return
     }
     if (newPassword !== confirm) {
-      setError('Passwords do not match.')
+      setError(t('account.passwordsDoNotMatch'))
       return
     }
 
@@ -37,7 +39,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
       setConfirm('')
       onDone?.()
     } catch {
-      setError('Current password is incorrect.')
+      setError(t('account.currentPasswordIncorrect'))
     } finally {
       setLoading(false)
     }
@@ -47,7 +49,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
     <form className="change-password-form" onSubmit={handleSubmit}>
       {error && <div className="alert alert-error">{error}</div>}
       <div className="field">
-        <label htmlFor="account-old-password">Current password</label>
+        <label htmlFor="account-old-password">{t('account.currentPassword')}</label>
         <input
           id="account-old-password"
           type="password"
@@ -56,7 +58,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
         />
       </div>
       <div className="field">
-        <label htmlFor="account-new-password">New password</label>
+        <label htmlFor="account-new-password">{t('account.newPassword')}</label>
         <input
           id="account-new-password"
           type="password"
@@ -65,7 +67,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
         />
       </div>
       <div className="field">
-        <label htmlFor="account-confirm-password">Confirm new password</label>
+        <label htmlFor="account-confirm-password">{t('account.confirmNewPassword')}</label>
         <input
           id="account-confirm-password"
           type="password"
@@ -74,7 +76,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
         />
       </div>
       <button className="btn btn-primary" type="submit" disabled={loading}>
-        {loading ? <span className="spinner" /> : 'Change password'}
+        {loading ? <span className="spinner" /> : t('account.changePassword')}
       </button>
     </form>
   )

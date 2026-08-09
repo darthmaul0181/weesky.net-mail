@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import Tooltip from '../../../components/Tooltip'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import ForwardIcon from '../../../icons/ForwardIcon'
@@ -11,8 +12,6 @@ import StarIcon from '../../../icons/StarIcon'
 import SunIcon from '../../../icons/SunIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 
-const NO_TRASH = 'Assign the trash folder in Settings → Folders'
-
 interface Props {
   showColourToggle: boolean
   originalColours: boolean
@@ -21,7 +20,7 @@ interface Props {
   flagged: boolean
   onToggleSeen: () => void
   onToggleFlagged: () => void
-  deleteLabel: 'Delete' | 'Delete permanently'
+  deleteLabel: string
   deleteDisabled: boolean
   onDelete: () => void
   actions: MenuEntry[]
@@ -40,17 +39,19 @@ export default function ReaderActions({
   deleteLabel, deleteDisabled, onDelete, actions,
   onReply, onReplyAll, onForward, preparing,
 }: Props) {
+  const { t } = useTranslation('mail')
+
   return (
     <div className="reader-actions">
-      <button type="button" className="action-btn" aria-label="Reply" title="Reply"
+      <button type="button" className="action-btn" aria-label={t('reader.reply')} title={t('reader.reply')}
         disabled={preparing} onClick={onReply}>
         <ReplyIcon size={18} />
       </button>
-      <button type="button" className="action-btn" aria-label="Reply all" title="Reply all"
+      <button type="button" className="action-btn" aria-label={t('reader.replyAll')} title={t('reader.replyAll')}
         disabled={preparing} onClick={onReplyAll}>
         <ReplyAllIcon size={18} />
       </button>
-      <button type="button" className="action-btn" aria-label="Forward" title="Forward"
+      <button type="button" className="action-btn" aria-label={t('reader.forward')} title={t('reader.forward')}
         disabled={preparing} onClick={onForward}>
         <ForwardIcon size={18} />
       </button>
@@ -59,14 +60,12 @@ export default function ReaderActions({
         <>
           <Tooltip
             placement="bottom-right"
-            content={originalColours
-              ? 'Colours are adapted to your dark theme.'
-              : 'Showing the colours the sender chose.'}
+            content={t(originalColours ? 'reader.coloursAdapted' : 'reader.coloursOriginal')}
           >
             <button
               type="button"
               className="action-btn"
-              aria-label={originalColours ? 'Match my theme' : 'Original colours'}
+              aria-label={t(originalColours ? 'reader.matchTheme' : 'reader.originalColours')}
               onClick={onToggleColours}
             >
               {originalColours ? <MoonIcon size={18} /> : <SunIcon size={18} />}
@@ -80,23 +79,23 @@ export default function ReaderActions({
         className="action-btn is-danger"
         aria-label={deleteLabel}
         disabled={deleteDisabled}
-        title={deleteDisabled ? NO_TRASH : undefined}
+        title={deleteDisabled ? t('actions.noTrashFolder') : undefined}
         onClick={onDelete}
       >
         <TrashIcon size={18} />
       </button>
       <DropdownMenu
-        ariaLabel="Message actions"
+        ariaLabel={t('reader.messageActions')}
         className="action-btn"
         trigger={<KebabIcon size={18} />}
         items={[
           {
-            label: seen ? 'Mark as unread' : 'Mark as read',
+            label: t(seen ? 'toolbar.markUnread' : 'toolbar.markRead'),
             icon: seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />,
             onSelect: onToggleSeen,
           },
           {
-            label: flagged ? 'Unstar' : 'Star',
+            label: t(flagged ? 'list.unstar' : 'list.star'),
             icon: <StarIcon filled={flagged} size={18} />,
             onSelect: onToggleFlagged,
           },

@@ -174,7 +174,8 @@ describe('ExternalDomainsTab — create', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('External domain created'))
   })
 
-  it('shows the API refusal instead of a generic message', async () => {
+  // Server prose never reaches the screen; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback instead of the server message', async () => {
     mocks.adminCreateExternalDomain.mockRejectedValue(new Error('Name is already taken'))
     renderTab()
     await screen.findByText('Gmail')
@@ -183,7 +184,7 @@ describe('ExternalDomainsTab — create', () => {
     await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
     await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
     await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
-    await waitFor(() => expect(screen.getByText('Name is already taken')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
 })
 
@@ -420,13 +421,17 @@ describe('ExternalDomainsTab — delete', () => {
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })
 
+  // domain_in_use is a named stable code, not generic prose: the refusal must stay specific,
+  // just translated instead of raw off the wire — see apiErrorMessage.
   it('surfaces the domain_in_use refusal message from the API rather than a generic one', async () => {
-    mocks.adminDeleteExternalDomain.mockRejectedValue(new Error('Accounts are still connected to this domain'))
+    mocks.adminDeleteExternalDomain.mockRejectedValue(
+      Object.assign(new Error('domain_in_use'), { code: 'domain_in_use' }))
     renderTab()
     await screen.findByText('Gmail')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
     await userEvent.click(deleteButtons[deleteButtons.length - 1])
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Accounts are still connected to this domain', 'error'))
+    await waitFor(() => expect(addToast)
+      .toHaveBeenCalledWith('Accounts are still connected to this domain.', 'error'))
   })
 })

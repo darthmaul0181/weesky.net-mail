@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './routes'
 import { AuthProvider } from './contexts/AuthContext'
+import { LocaleProvider } from './contexts/LocaleContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { useWebAppManifest } from './hooks/useWebAppManifest'
 import { shouldRetry } from './lib/retryPolicy'
@@ -30,7 +31,9 @@ export default function App() {
       <InstallManifest />
       <ThemeProvider>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <LocaleProvider>
+            <RouterProvider router={router} />
+          </LocaleProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

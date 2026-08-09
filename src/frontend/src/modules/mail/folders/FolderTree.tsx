@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { DragEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
@@ -83,11 +84,12 @@ function FolderRow({
   onDropMessages?: (targetPath: string, payload: DragPayload) => void
   showIcons?: boolean
 }) {
+  const { t } = useTranslation('mail')
   const [open, setOpen] = useState(folder.specialUse === 'inbox')
   const [dropReady, setDropReady] = useState(false)
   const visibleChildren = sortChildren(folder.children.filter(isVisible))
   const isActive = folder.path === selectedPath
-  const label = folder.specialUse ? roleLabel(folder.specialUse) : folder.name
+  const label = folder.specialUse ? roleLabel(folder.specialUse, t) : folder.name
   // Only when a badge is actually rendered does the accessible name grow a suffix — an unread
   // count on trash or junk never reaches the screen, so it must not reach assistive tech either.
   const showsBadge = Boolean(folder.unread) && showsUnreadCount(folder)
@@ -123,7 +125,7 @@ function FolderRow({
           <button
             type="button"
             className={open ? 'folder-toggle is-open' : 'folder-toggle'}
-            aria-label={`${open ? 'Collapse' : 'Expand'} ${folder.name}`}
+            aria-label={t(open ? 'folders.collapse' : 'folders.expand', { name: folder.name })}
             aria-expanded={open}
             onClick={() => setOpen(value => !value)}
           >
@@ -144,7 +146,9 @@ function FolderRow({
           // The label and badge spans concatenate into the accessible name with no separator
           // ("Inbox4"), which is a real number losing its meaning, not a decorative artifact —
           // so instead of hiding the count from assistive tech, spell it out as words.
-          aria-label={showsBadge ? `${label}, ${folder.unread} unread` : undefined}
+          aria-label={showsBadge
+            ? t('folders.unreadAria', { label, count: folder.unread })
+            : undefined}
           // The role label replaces the name; the real mailbox name stays one hover away, so
           // the user never loses track of which physical folder they are looking at.
           title={folder.specialUse ? folder.name : undefined}
@@ -176,10 +180,11 @@ function FolderRow({
 export default function FolderTree(
   { folders, selectedPath, onSelect, onDropMessages, showIcons }: Props,
 ) {
+  const { t } = useTranslation('mail')
   const { system, others } = splitByRole(folders.filter(isVisible))
 
   return (
-    <nav aria-label="Folders">
+    <nav aria-label={t('folders.navLabel')}>
       {system.map(folder => (
         <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath}
           onSelect={onSelect} onDropMessages={onDropMessages} showIcons={showIcons} />

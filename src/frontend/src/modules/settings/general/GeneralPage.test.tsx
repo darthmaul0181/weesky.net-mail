@@ -229,13 +229,14 @@ describe('GeneralPage', () => {
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.showSpamScore', 'false'))
   })
 
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
   it('surfaces a failure to save instead of pretending', async () => {
     renderPage()
     mocks.setPreference.mockRejectedValue(new Error('Refused by the server'))
 
     fireEvent.change(await screen.findByLabelText('Messages per page'), { target: { value: '10' } })
 
-    expect(await screen.findByText('Refused by the server')).toBeInTheDocument()
+    expect(await screen.findByText('Could not save the setting')).toBeInTheDocument()
   })
 
   it('reports a load failure rather than showing empty controls', async () => {

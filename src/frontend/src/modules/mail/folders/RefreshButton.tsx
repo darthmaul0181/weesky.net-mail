@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import LoaderIcon from '../../../icons/LoaderIcon'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
  * the fallback for environments where the animation never iterates (reduced motion).
  */
 export default function RefreshButton({ fetching, onRefresh }: Props) {
+  const { t } = useTranslation('mail')
   const [spinning, setSpinning] = useState(false)
   const fetchingRef = useRef(fetching)
   const iconRef = useRef<HTMLSpanElement>(null)
@@ -37,8 +39,8 @@ export default function RefreshButton({ fetching, onRefresh }: Props) {
   }, [])
 
   return (
-    <button type="button" className="btn btn-primary mail-refresh-btn" aria-label="Refresh"
-      title="Check for new mail"
+    <button type="button" className="btn btn-primary mail-refresh-btn" aria-label={t('folders.refresh')}
+      title={t('folders.refreshHint')}
       onClick={() => { if (!spinning) onRefresh() }}>
       <span ref={iconRef} className={`mail-refresh-icon${spinning ? ' is-spinning' : ''}`}>
         <LoaderIcon size={16} />

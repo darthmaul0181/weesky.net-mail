@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, type ActiveAccount } from '../contexts/AuthContext'
 import { confirmLeave } from '../lib/leaveGuard'
@@ -25,6 +26,7 @@ function labelOf(acc: ActiveAccount): string {
  */
 export default function IdentityMenu() {
   const { identity, accounts, activeAccount, switchAccount, logout } = useAuth()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -83,13 +85,13 @@ export default function IdentityMenu() {
         {bandLabel ? initialsOf(bandLabel) : ''}
       </span>
       <span className="identity-text">
-        <span className="identity-name">{bandLabel ?? 'Loading…'}</span>
+        <span className="identity-name">{bandLabel ?? t('identity.loading')}</span>
         {bandSub && bandSub !== bandLabel && <span className="identity-email">{bandSub}</span>}
       </span>
       <button
         type="button"
         className="identity-toggle"
-        aria-label="Account menu"
+        aria-label={t('identity.menu')}
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
@@ -124,7 +126,7 @@ export default function IdentityMenu() {
                     consent rather than a password on a provider mailbox. */}
                 {!acc.credentialsValid && (
                   <span className="row-tag is-warn">
-                    {acc.authMode === 'OAuth2' ? 'Sign-in needed' : 'Password needed'}
+                    {t(acc.authMode === 'OAuth2' ? 'identity.signInNeeded' : 'identity.passwordNeeded')}
                   </span>
                 )}
               </button>
@@ -132,10 +134,10 @@ export default function IdentityMenu() {
           })}
           <button type="button" role="menuitem" className="identity-action"
             onClick={goToLinkedAccounts}>
-            <PersonPlusIcon /> Connected accounts…
+            <PersonPlusIcon /> {t('identity.connectedAccounts')}
           </button>
           <button type="button" role="menuitem" className="identity-action" onClick={handleSignOut}>
-            <SignOutIcon size={15} /> Sign out
+            <SignOutIcon size={15} /> {t('identity.signOut')}
           </button>
         </div>
       )}

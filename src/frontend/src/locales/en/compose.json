@@ -1,0 +1,119 @@
+{
+  "titles": {
+    "newMessage": "New message",
+    "reply": "Reply",
+    "forward": "Forward",
+    "draft": "Draft"
+  },
+  "header": {
+    "send": "Send",
+    "sending": "Sending…",
+    "saveDraft": "Save draft",
+    "saving": "Saving…"
+  },
+  "fields": {
+    "from": "From",
+    "to": "To",
+    "cc": "Cc",
+    "bcc": "Bcc",
+    "priority": "Priority",
+    "subject": "Subject",
+    "body": "Message body"
+  },
+  "priority": {
+    "high": "High",
+    "normal": "Normal",
+    "low": "Low"
+  },
+  "quote": {
+    "attribution": "On {{date}}, {{who}} wrote:",
+    "forwardBanner": "---------- Forwarded message ----------",
+    "from": "From: {{value}}",
+    "date": "Date: {{value}}",
+    "subject": "Subject: {{value}}",
+    "to": "To: {{value}}"
+  },
+  "identity": {
+    "menu": "From identity",
+    "unavailable": "unavailable"
+  },
+  "recipients": {
+    "remove": "Remove {{name}}",
+    "suggestions": "{{label}} suggestions"
+  },
+  "attachments": {
+    "attach": "Attach files",
+    "uploading": "Uploading {{name}}",
+    "remove": "Remove {{name}}",
+    "uploadFailed": "Could not upload the attachment"
+  },
+  "drop": {
+    "image": "Drop image into the message",
+    "files": "Drop files to attach"
+  },
+  "leave": {
+    "title": "Save this draft?",
+    "body": "Your message has unsaved changes.",
+    "keepEditing": "Keep editing",
+    "discard": "Discard",
+    "saveDraft": "Save draft",
+    "fixAddress": "Fix the invalid address first"
+  },
+  "plainText": {
+    "title": "Switch to plain text?",
+    "body": "Formatting will be removed, and images in the message become attachments.",
+    "keepFormatting": "Keep formatting",
+    "confirm": "Switch"
+  },
+  "toolbar": {
+    "plainText": "Plain text",
+    "undo": "Undo",
+    "redo": "Redo",
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "strikethrough": "Strikethrough",
+    "textColour": "Text colour",
+    "highlightColour": "Highlight colour",
+    "font": "Font",
+    "size": "Size",
+    "alignment": "Alignment",
+    "bulletedList": "Bulleted list",
+    "numberedList": "Numbered list",
+    "increaseQuote": "Increase quote",
+    "decreaseQuote": "Decrease quote",
+    "link": "Link",
+    "linkUrl": "Link URL",
+    "apply": "Apply",
+    "removeLink": "Remove link",
+    "insertImage": "Insert image",
+    "clearFormatting": "Clear formatting",
+    "sizes": {
+      "small": "Small",
+      "normal": "Normal",
+      "large": "Large",
+      "huge": "Huge"
+    },
+    "align": {
+      "left": "Left",
+      "center": "Center",
+      "right": "Right",
+      "justify": "Justify"
+    }
+  },
+  "toast": {
+    "sent": "Message sent",
+    "sentNoCopy": "Message sent — no Sent copy could be filed",
+    "sentDraftKept": "Message sent — the draft could not be removed",
+    "sendFailed": "Could not send the message",
+    "draftSaved": "Draft saved",
+    "draftSaveFailed": "Could not save the draft",
+    "imageFailed": "Could not insert the image",
+    "captured": "{{name}} added to contacts",
+    "capturedMany_one": "{{count}} contact added",
+    "capturedMany_many": "{{count}} contacts added",
+    "capturedMany_other": "{{count}} contacts added",
+    "undo": "Undo",
+    "undoFailed": "Could not undo"
+  }
+}

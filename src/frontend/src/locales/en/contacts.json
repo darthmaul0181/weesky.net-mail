@@ -1,0 +1,83 @@
+{
+  "layout": {
+    "add": "+ Add contact",
+    "loading": "Loading contacts…",
+    "loadFailed": "Could not load contacts.",
+    "notFound": "Contact not found",
+    "saved": "Contact saved",
+    "saveFailed": "Could not save the contact",
+    "deleted": "{{name}} deleted",
+    "deleteFailed": "Could not delete the contact",
+    "favouriteFailed": "Could not save the favourite"
+  },
+  "scopes": {
+    "all": "All contacts",
+    "favourites": "Favourites"
+  },
+  "fields": {
+    "nickname": "Nickname",
+    "addresses": "Addresses",
+    "primary": "primary"
+  },
+  "favourites": {
+    "add": "Add to favourites",
+    "remove": "Remove from favourites",
+    "addNamed": "Add {{name}} to favourites",
+    "removeNamed": "Remove {{name}} from favourites"
+  },
+  "list": {
+    "searchLabel": "Search contacts",
+    "searchPlaceholder": "Search contacts…",
+    "empty": "No contacts yet",
+    "noMatch": "No matching contacts",
+    "edit": "Edit {{name}}",
+    "delete": "Delete {{name}}"
+  },
+  "card": {
+    "invite": "Select a contact to see its details"
+  },
+  "editor": {
+    "editTitle": "Edit contact",
+    "newTitle": "New contact",
+    "save": "Save contact",
+    "close": "Close the editor",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "addressLabel": "Address {{index}}",
+    "addressPlaceholder": "name@example.com",
+    "makePrimary": "Make this the primary address",
+    "moveUp": "Move address {{index}} up",
+    "removeAddress": "Remove address {{index}}",
+    "addAddress": "+ Add an address",
+    "favourite": "Favourite"
+  },
+  "transfer": {
+    "importHint": "Merge a CSV file into this book",
+    "import": "Import…",
+    "nothingToExport": "Nothing to export",
+    "exportHint": "Download this book as CSV",
+    "export": "Export",
+    "tooLarge": "That file is too large — the limit is 5 MB.",
+    "importFailed": "Could not import the file",
+    "exportFailed": "Could not export the contacts"
+  },
+  "import": {
+    "title": "Import finished",
+    "added_one": "added",
+    "added_many": "added",
+    "added_other": "added",
+    "updated_one": "updated",
+    "updated_many": "updated",
+    "updated_other": "updated",
+    "skipped_one": "skipped",
+    "skipped_many": "skipped",
+    "skipped_other": "skipped",
+    "refused_one": "refused",
+    "refused_many": "refused",
+    "refused_other": "refused",
+    "line": "Line {{line}}",
+    "more_one": "and {{count}} more",
+    "more_many": "and {{count}} more",
+    "more_other": "and {{count}} more"
+  }
+}

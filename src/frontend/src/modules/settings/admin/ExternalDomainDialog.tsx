@@ -1,16 +1,26 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import GlobeIcon from '../../../icons/GlobeIcon.jsx'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import {
   useCreateExternalDomain, useUpdateExternalDomain,
   type ExternalDomain, type ExternalDomainPayload,
 } from './useExternalDomains'
 
-const SECURITY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'None', label: 'None' },
+// STARTTLS and SSL/TLS are protocol names; only "None" is prose.
+const SECURITY_OPTIONS = [
+  { value: 'None', labelKey: 'external.securityNone' },
   { value: 'StartTls', label: 'STARTTLS' },
   { value: 'SslOnConnect', label: 'SSL/TLS' },
-]
+] as const satisfies Array<{ value: string; label?: string; labelKey?: string }>
+
+type SecurityOption = (typeof SECURITY_OPTIONS)[number]
+
+function securityLabel(option: SecurityOption, t: TFunction<'admin'>): string {
+  return 'labelKey' in option ? t(option.labelKey) : option.label
+}
 
 // Mirrors Uri.CheckHostName loosely: a dotted DNS name or an IPv4/IPv6 literal. It only needs to
 // catch the common typos before they round-trip — the backend's own check is the real gate.
@@ -52,6 +62,7 @@ interface Props {
  * syntax, port range, sieve both-or-neither) so the common refusals never round-trip.
  */
 export default function ExternalDomainDialog({ domain, onSave, onClose }: Props) {
+  const { t } = useTranslation('admin')
   const isEdit = !!domain
   const createDomain = useCreateExternalDomain()
   const updateDomain = useUpdateExternalDomain()
@@ -131,7 +142,7 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
       }
       onSave()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      setError(apiErrorMessage(err, t('errorOccurred')))
     }
   }
 
@@ -140,65 +151,68 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">
-            {isEdit ? <PencilIcon /> : <GlobeIcon />} {isEdit ? 'Edit external domain' : 'Add external domain'}
+            {isEdit ? <PencilIcon /> : <GlobeIcon />} {t(isEdit ? 'external.editTitle' : 'external.addTitle')}
           </span>
-          <button type="button" className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <button type="button" className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
+            onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           {error && <div className="alert alert-error" role="alert">{error}</div>}
 
           <div className="field-h">
-            <label htmlFor="ext-domain-name">Display name</label>
+            <label htmlFor="ext-domain-name">{t('external.displayName')}</label>
             <input id="ext-domain-name" type="text" value={name} maxLength={100}
               className={name && !nameValid ? 'is-error' : undefined}
               onChange={e => setName(e.target.value)} autoFocus />
           </div>
 
           <div className="field-h">
-            <label htmlFor="ext-domain-imap-host">IMAP host</label>
+            <label htmlFor="ext-domain-imap-host">{t('external.imapHost')}</label>
             <input id="ext-domain-imap-host" type="text" value={imapHost}
               className={imapHost && !imapHostValid ? 'is-error' : undefined}
               onChange={e => setImapHost(e.target.value)} />
           </div>
           <div className="field-h">
-            <label htmlFor="ext-domain-imap-port">IMAP port</label>
+            <label htmlFor="ext-domain-imap-port">{t('external.imapPort')}</label>
             <input id="ext-domain-imap-port" type="number" min={1} max={65535} value={imapPort}
               className={imapPort && !imapPortValid ? 'is-error' : undefined}
               onChange={e => setImapPort(e.target.value)} />
           </div>
           <div className="field-h">
-            <label htmlFor="ext-domain-imap-security">IMAP security</label>
+            <label htmlFor="ext-domain-imap-security">{t('external.imapSecurity')}</label>
             <select id="ext-domain-imap-security" value={imapSecurity}
               onChange={e => setImapSecurity(e.target.value)}>
-              {SECURITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {SECURITY_OPTIONS.map(o =>
+                <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
             </select>
           </div>
 
           <div className="field-h">
-            <label htmlFor="ext-domain-smtp-host">SMTP host</label>
+            <label htmlFor="ext-domain-smtp-host">{t('external.smtpHost')}</label>
             <input id="ext-domain-smtp-host" type="text" value={smtpHost}
               className={smtpHost && !smtpHostValid ? 'is-error' : undefined}
               onChange={e => setSmtpHost(e.target.value)} />
           </div>
           <div className="field-h">
-            <label htmlFor="ext-domain-smtp-port">SMTP port</label>
+            <label htmlFor="ext-domain-smtp-port">{t('external.smtpPort')}</label>
             <input id="ext-domain-smtp-port" type="number" min={1} max={65535} value={smtpPort}
               className={smtpPort && !smtpPortValid ? 'is-error' : undefined}
               onChange={e => setSmtpPort(e.target.value)} />
           </div>
           <div className="field-h">
-            <label htmlFor="ext-domain-smtp-security">SMTP security</label>
+            <label htmlFor="ext-domain-smtp-security">{t('external.smtpSecurity')}</label>
             <select id="ext-domain-smtp-security" value={smtpSecurity}
               onChange={e => setSmtpSecurity(e.target.value)}>
-              {SECURITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {SECURITY_OPTIONS.map(o =>
+                <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
             </select>
           </div>
 
           <div className="field-h">
-            <label htmlFor="ext-domain-auth-mode">Authentication</label>
+            <label htmlFor="ext-domain-auth-mode">{t('external.authentication')}</label>
             <select id="ext-domain-auth-mode" value={authMode}
               onChange={e => setAuthMode(e.target.value as 'Password' | 'OAuth2')}>
-              <option value="Password">Password</option>
+              <option value="Password">{t('external.authPassword')}</option>
               <option value="OAuth2">OAuth 2.0</option>
             </select>
           </div>
@@ -206,71 +220,68 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
           {isOAuth && (
             <>
               <div className="field-h">
-                <label htmlFor="ext-domain-oauth-auth-url">Authorization URL</label>
+                <label htmlFor="ext-domain-oauth-auth-url">{t('external.authorizationUrl')}</label>
                 <input id="ext-domain-oauth-auth-url" type="text" value={oauthAuthorizationUrl}
                   className={oauthAuthorizationUrl && !authUrlValid ? 'is-error' : undefined}
                   onChange={e => setOauthAuthorizationUrl(e.target.value)} />
               </div>
               <div className="field-h">
-                <label htmlFor="ext-domain-oauth-token-url">Token URL</label>
+                <label htmlFor="ext-domain-oauth-token-url">{t('external.tokenUrl')}</label>
                 <input id="ext-domain-oauth-token-url" type="text" value={oauthTokenUrl}
                   className={oauthTokenUrl && !tokenUrlValid ? 'is-error' : undefined}
                   onChange={e => setOauthTokenUrl(e.target.value)} />
               </div>
               <div className="field-h">
-                <label htmlFor="ext-domain-oauth-scopes">Scopes</label>
+                <label htmlFor="ext-domain-oauth-scopes">{t('external.scopes')}</label>
                 <input id="ext-domain-oauth-scopes" type="text" value={oauthScopes}
                   className={oauthScopes && !scopesValid ? 'is-error' : undefined}
                   onChange={e => setOauthScopes(e.target.value)} />
               </div>
               <div className="field-h">
-                <label htmlFor="ext-domain-oauth-client-id">Client id</label>
+                <label htmlFor="ext-domain-oauth-client-id">{t('external.clientId')}</label>
                 <input id="ext-domain-oauth-client-id" type="text" value={oauthClientId}
                   className={oauthClientId && !clientIdValid ? 'is-error' : undefined}
                   onChange={e => setOauthClientId(e.target.value)} />
               </div>
               <div className="field-h">
-                <label htmlFor="ext-domain-oauth-secret">Client secret</label>
+                <label htmlFor="ext-domain-oauth-secret">{t('external.clientSecret')}</label>
                 <input id="ext-domain-oauth-secret" type="password" autoComplete="new-password"
-                  value={oauthClientSecret} placeholder={secretStored ? 'Unchanged' : undefined}
+                  value={oauthClientSecret} placeholder={secretStored ? t('external.secretUnchanged') : undefined}
                   onChange={e => setOauthClientSecret(e.target.value)} />
               </div>
               <p className="settings-note">
-                {secretStored
-                  ? 'A client secret is stored. It is never shown; leave the field empty to keep it.'
-                  : 'The secret is stored encrypted and never shown again. Both URLs must be https.'}
+                {t(secretStored ? 'external.secretStoredNote' : 'external.secretNewNote')}
               </p>
             </>
           )}
 
           <p className="admin-list-title" style={{ marginTop: '16px', marginBottom: '8px' }}>
-            Sieve filters (optional)
+            {t('external.sieveHeading')}
           </p>
           <div className="field-h">
-            <label htmlFor="ext-domain-sieve-host">Sieve host</label>
+            <label htmlFor="ext-domain-sieve-host">{t('external.sieveHost')}</label>
             <input id="ext-domain-sieve-host" type="text" value={sieveHost}
               className={sieveHost && !sieveHostValid ? 'is-error' : undefined}
               onChange={e => setSieveHost(e.target.value)} />
           </div>
           <div className="field-h">
-            <label htmlFor="ext-domain-sieve-port">Sieve port</label>
+            <label htmlFor="ext-domain-sieve-port">{t('external.sievePort')}</label>
             <input id="ext-domain-sieve-port" type="number" min={1} max={65535} value={sievePort}
               className={sievePort && !sievePortValid ? 'is-error' : undefined}
               onChange={e => setSievePort(e.target.value)} />
           </div>
           {sieveMismatch && (
             <div className="alert alert-error" role="alert">
-              Sieve host and port must both be present or both be absent
+              {t('external.sieveMismatch')}
             </div>
           )}
-          <p className="settings-note">
-            Leave empty if the provider does not support Sieve filters — the Rules tab will be
-            hidden for accounts on this domain.
-          </p>
+          <p className="settings-note">{t('external.sieveNote')}</p>
 
           <button className="btn btn-primary" type="submit" disabled={pending || !canSubmit}
             style={{ marginTop: '8px' }}>
-            {pending ? <span className="spinner" /> : (isEdit ? 'Save changes' : 'Create domain')}
+            {pending
+              ? <span className="spinner" />
+              : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('external.create'))}
           </button>
         </form>
       </div>

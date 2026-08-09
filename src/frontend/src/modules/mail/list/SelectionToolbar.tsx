@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
@@ -42,11 +43,10 @@ export interface SelectionToolbarProps {
   selectionDisabled?: boolean
 }
 
-const CAP = 'Select 200 or fewer'
-
 /** Dumb band: renders selection state and calls handlers. All role/enablement logic is
     computed by MessageList and passed in as props. */
 export default function SelectionToolbar(props: SelectionToolbarProps) {
+  const { t } = useTranslation('mail')
   const { title, count, allSelected, indeterminate, onToggleAll, overCap, deleteLabel } = props
   const master = useRef<HTMLInputElement>(null)
   useEffect(() => { if (master.current) master.current.indeterminate = indeterminate }, [indeterminate])
@@ -56,7 +56,7 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   // the kebab's selection-bound entries, so disabledReason binds identically in both places.
   function selectionState(action: ToolbarAction) {
     const disabled = count === 0 || overCap || !!action.disabledReason
-    const tip = overCap ? CAP : action.disabledReason
+    const tip = overCap ? t('toolbar.cap') : action.disabledReason
     return { disabled, tip }
   }
 
@@ -73,13 +73,13 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   }
 
   const kebab: MenuEntry[] = [
-    kebabItem('Mark as read', <MailOpenIcon size={18} />, props.markRead),
-    kebabItem('Mark as unread', <MailIcon size={18} />, props.markUnread),
+    kebabItem(t('toolbar.markRead'), <MailOpenIcon size={18} />, props.markRead),
+    kebabItem(t('toolbar.markUnread'), <MailIcon size={18} />, props.markUnread),
     'separator',
-    kebabItem('Move to…', <FolderMoveIcon size={18} />, props.move),
-    kebabItem('Copy to…', <CopyIcon size={18} />, props.copy),
+    kebabItem(t('toolbar.moveTo'), <FolderMoveIcon size={18} />, props.move),
+    kebabItem(t('toolbar.copyTo'), <CopyIcon size={18} />, props.copy),
     'separator',
-    { label: 'Empty folder', icon: <TrashIcon size={18} />, onSelect: props.emptyFolder.onRun,
+    { label: t('toolbar.emptyFolder'), icon: <TrashIcon size={18} />, onSelect: props.emptyFolder.onRun,
       disabled: !!props.emptyFolder.disabledReason, title: props.emptyFolder.disabledReason },
   ]
 
@@ -89,19 +89,21 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         ref={master}
         type="checkbox"
         className="selection-master"
-        aria-label="Select all"
+        aria-label={t('toolbar.selectAll')}
         checked={allSelected}
         onChange={onToggleAll}
         disabled={props.selectionDisabled}
       />
       <span className="selection-heading">
-        <span className="selection-title">{count > 0 ? `${count} selected` : title}</span>
+        <span className="selection-title">
+          {count > 0 ? t('toolbar.selected', { count }) : title}
+        </span>
         {/* Beside the name rather than in the actions: it filters the view, it acts on nothing. */}
         <button
           type="button"
           className={`selection-btn selection-star${props.starred ? ' is-on' : ''}`}
-          aria-label={props.starred ? 'Show all messages' : 'Show starred only'}
-          title={props.starred ? 'Show all messages' : 'Show starred only'}
+          aria-label={t(props.starred ? 'toolbar.showAll' : 'toolbar.showStarred')}
+          title={t(props.starred ? 'toolbar.showAll' : 'toolbar.showStarred')}
           aria-pressed={props.starred}
           disabled={props.starredDisabled}
           onClick={props.onToggleStarred}
@@ -110,10 +112,10 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         </button>
       </span>
       <div className="selection-actions">
-        <button type="button" className="selection-btn" aria-label="Archive" {...actionProps(props.archive, 'Archive')}>
+        <button type="button" className="selection-btn" aria-label={t('toolbar.archive')} {...actionProps(props.archive, t('toolbar.archive'))}>
           <ArchiveIcon size={20} />
         </button>
-        <button type="button" className="selection-btn" aria-label="Report as junk" {...actionProps(props.junk, 'Report as junk')}>
+        <button type="button" className="selection-btn" aria-label={t('toolbar.junk')} {...actionProps(props.junk, t('toolbar.junk'))}>
           <JunkIcon size={20} />
         </button>
         <button type="button" className="selection-btn is-danger" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
@@ -122,13 +124,13 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         <button
           type="button"
           className={`selection-btn${props.searchOpen ? ' is-active' : ''}`}
-          aria-label="Search"
-          title="Search"
+          aria-label={t('toolbar.search')}
+          title={t('toolbar.search')}
           onClick={props.onToggleSearch}
         >
           <SearchIcon size={20} />
         </button>
-        <DropdownMenu ariaLabel="More actions" className="selection-btn" trigger={<KebabIcon />} items={kebab} />
+        <DropdownMenu ariaLabel={t('toolbar.more')} className="selection-btn" trigger={<KebabIcon />} items={kebab} />
       </div>
     </div>
   )

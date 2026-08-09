@@ -1,8 +1,12 @@
-export default function ComingSoon({ module }: { module: string }) {
+import { useTranslation } from 'react-i18next'
+
+/** `module` names the rail entry this page stands in for: the heading is that same label. */
+export default function ComingSoon({ module }: { module: 'calendar' }) {
+  const { t } = useTranslation()
   return (
     <div className="coming-soon">
-      <h1>{module}</h1>
-      <p>This module is coming soon.</p>
+      <h1>{t(`rail.${module}`)}</h1>
+      <p>{t('comingSoon')}</p>
     </div>
   )
 }

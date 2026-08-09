@@ -1,23 +1,34 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useLocale } from '../../../contexts/LocaleContext'
 import { useTheme, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
 import DropletIcon from '../../../icons/DropletIcon'
 import SearchIcon from '../../../icons/SearchIcon'
 
-const THEMES: { value: ThemePreference; label: string }[] = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
+const LANGUAGES = [
+  { value: 'auto', labelKey: 'appearance.language.auto' as const },
+  // Written in their own language on purpose: a francophone lost in an English interface does not
+  // search for "French". These two are therefore not translated and not in a catalogue.
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'Français' },
 ]
 
-const PALETTES: { value: Palette; label: string }[] = [
-  { value: 'night', label: 'Night & coral (default)' },
-  { value: 'classic', label: 'Sea breeze' },
-  { value: 'forest', label: 'Forest & amber' },
-  { value: 'slate', label: 'Slate & teal' },
-  { value: 'plum', label: 'Plum & gold' },
-  { value: 'ink', label: 'Ink' },
-  { value: 'azure', label: 'Azure' },
-  { value: 'indigo', label: 'Indigo & violet' },
+const THEMES = [
+  { value: 'light', labelKey: 'appearance.theme.light' },
+  { value: 'dark', labelKey: 'appearance.theme.dark' },
+  { value: 'system', labelKey: 'appearance.theme.system' },
+] as const satisfies { value: ThemePreference; labelKey: string }[]
+
+// Product names, not prose: they stay out of the catalogue. Only the "(default)" suffix moves.
+const PALETTES: { value: Palette; name: string; isDefault?: boolean }[] = [
+  { value: 'night', name: 'Night & coral', isDefault: true },
+  { value: 'classic', name: 'Sea breeze' },
+  { value: 'forest', name: 'Forest & amber' },
+  { value: 'slate', name: 'Slate & teal' },
+  { value: 'plum', name: 'Plum & gold' },
+  { value: 'ink', name: 'Ink' },
+  { value: 'azure', name: 'Azure' },
+  { value: 'indigo', name: 'Indigo & violet' },
 ]
 
 /** Renders in the palette it advertises rather than the active one: the palette selectors are
@@ -65,6 +76,7 @@ function PalettePreview({ value, dark, large }: { value: Palette; dark: boolean;
 /** Both modes at once, which is the one thing a thumbnail cannot do: it can only ever show the
     mode in use, and a palette is chosen once for both. */
 function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: string; onClose: () => void }) {
+  const { t } = useTranslation('settings')
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -77,13 +89,14 @@ function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: st
         <div className="modal-header">
           {/* The loupe again, so the dialog reads as the enlargement of what was clicked. */}
           <span className="modal-title"><SearchIcon size={16} /> {label}</span>
-          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
+            onClick={onClose}>✕</button>
         </div>
         <div className="palette-zoom-pair">
           {[false, true].map(dark => (
             <figure key={String(dark)}>
               <PalettePreview value={value} dark={dark} large />
-              <figcaption>{dark ? 'Dark' : 'Light'}</figcaption>
+              <figcaption>{t(dark ? 'appearance.theme.dark' : 'appearance.theme.light')}</figcaption>
             </figure>
           ))}
         </div>
@@ -94,17 +107,34 @@ function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: st
 
 export default function AppearancePage() {
   const { theme, setTheme, palette, setPalette, isDark } = useTheme()
+  const { preference, setPreference } = useLocale()
+  const { t } = useTranslation('settings')
   const [zoomed, setZoomed] = useState<{ value: Palette; label: string } | null>(null)
 
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><DropletIcon size={17} />Appearance</h1>
+        <h1 className="settings-page-title"><DropletIcon size={17} />{t('nav.appearance')}</h1>
       </div>
 
       <section className="account-section">
-        <h2>Theme</h2>
-        {THEMES.map(({ value, label }) => (
+        <h2>{t('appearance.language.heading')}</h2>
+        {LANGUAGES.map(({ value, label, labelKey }) => (
+          <label key={value} className="radio-row">
+            <input
+              type="radio"
+              name="language"
+              checked={preference === value}
+              onChange={() => setPreference(value)}
+            />
+            {labelKey ? t(labelKey) : label}
+          </label>
+        ))}
+      </section>
+
+      <section className="account-section">
+        <h2>{t('appearance.theme.heading')}</h2>
+        {THEMES.map(({ value, labelKey }) => (
           <label key={value} className="radio-row">
             <input
               type="radio"
@@ -112,41 +142,44 @@ export default function AppearancePage() {
               checked={theme === value}
               onChange={() => setTheme(value)}
             />
-            {label}
+            {t(labelKey)}
           </label>
         ))}
       </section>
 
       <section className="account-section">
-        <h2>Palette</h2>
+        <h2>{t('appearance.palette.heading')}</h2>
         <div className="palette-grid">
-          {PALETTES.map(({ value, label }) => (
+          {PALETTES.map(({ value, name, isDefault }) => {
+            const label = isDefault ? t('appearance.palette.default', { name }) : name
             // The loupe sits outside the label on purpose: inside one, clicking it would activate
             // the label's radio and pick the palette as a side effect of asking to look at it.
-            <div key={value} className="palette-card">
-              <label className="palette-pick">
-                <PalettePreview value={value} dark={isDark} />
-                <span className="palette-name">
-                  <input
-                    type="radio"
-                    name="palette"
-                    value={value}
-                    checked={palette === value}
-                    onChange={() => setPalette(value)}
-                  />
-                  {label}
-                </span>
-              </label>
-              <button
-                type="button"
-                className="palette-zoom"
-                aria-label={`Enlarge the ${label} preview`}
-                onClick={() => setZoomed({ value, label })}
-              >
-                <SearchIcon size={14} />
-              </button>
-            </div>
-          ))}
+            return (
+              <div key={value} className="palette-card">
+                <label className="palette-pick">
+                  <PalettePreview value={value} dark={isDark} />
+                  <span className="palette-name">
+                    <input
+                      type="radio"
+                      name="palette"
+                      value={value}
+                      checked={palette === value}
+                      onChange={() => setPalette(value)}
+                    />
+                    {label}
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  className="palette-zoom"
+                  aria-label={t('appearance.palette.enlarge', { name: label })}
+                  onClick={() => setZoomed({ value, label })}
+                >
+                  <SearchIcon size={14} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       </section>
 
