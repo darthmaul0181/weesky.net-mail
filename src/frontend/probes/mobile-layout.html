@@ -7,12 +7,13 @@
   screen. This page links the REAL stylesheets and restates only the markup, so a CSS edit changes
   what is measured. It needs no session because it needs no data.
 
-  Served by the Vite dev server (npm run dev) at /probes/mobile-layout.html. Drive it in Chrome
-  under device emulation at 360x640, 390x844, 768x1024 and 1024x768. #out holds the JSON and
-  document.title becomes 'probe-done' once every case has been measured. The page suppresses its
-  own classic scrollbar (the `html` rule in the <style> below), so the reading is the same however
-  it is driven: a phone paints an overlay scrollbar and spends no width on it, while a desktop
-  Chrome opening this file directly spends 15 and hands every case that much phantom `overflow`.
+  Served by the Vite dev server (npm run dev) at /probes/mobile-layout.html. Drive it in a Blink
+  browser — Chrome or Edge — under device emulation at 360x640, 390x844, 768x1024 and 1024x768.
+  #out holds the JSON and document.title becomes 'probe-done' once every case has been measured.
+  The page suppresses its own classic scrollbar (the `html` rule in the <style> below), so the
+  reading is the same however it is driven: a phone paints an overlay scrollbar and spends no
+  width on it, while a desktop Blink browser opening this file directly spends 15 and hands every
+  case that much phantom `overflow`.
 
   Reading the numbers:
   - `overflow` is documentElement.scrollWidth - clientWidth. Anything above 0 is a horizontal
@@ -116,12 +117,12 @@
   <style>
     /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
        app's own dark-band tokens rather than inventing a colour of its own. */
-    /* The classic scrollbar is what a desktop Chrome takes out of the viewport and a phone does
-       not: it leaves documentElement.clientWidth 15px short of the width being emulated, and
+    /* The classic scrollbar is what a desktop Blink browser takes out of the viewport and a phone
+       does not: it leaves documentElement.clientWidth 15px short of the width being emulated, and
        `overflow` — scrollWidth minus clientWidth — reads that as a defect in every case at once.
        Suppressed here rather than in whatever drives the file, so an unaided run of this page
        reports the same numbers a scripted one does. Media queries are unaffected either way:
-       Chrome resolves them against innerWidth, which includes the scrollbar (confirmed by reading
+       Blink resolves them against innerWidth, which includes the scrollbar (confirmed by reading
        matchMedia against each tier while driving this file). */
     html { scrollbar-width: none; }
     /* overflow-x on the report itself, and it is load-bearing rather than cosmetic: `white-space:
