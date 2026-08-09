@@ -494,9 +494,15 @@
                  <div class="modal-header"><span class="modal-title">Move to…</span>
                    <button class="modal-close">✕</button></div>
                  <div class="field-h"><label>Folder</label><select><option>INBOX.Archive</option></select></div>
+                 <!-- AddEditUserModal's own row, the sixth and last .toggle-switch call site:
+                      the switch's hit area bleeds 8px left, and this is the one place that
+                      lands in a dialog's 18px padding rather than a page's. -->
+                 <div class="field-h"><label for="m-adm">Administrator</label>
+                   <label class="toggle-switch"><input id="m-adm" type="checkbox" /><span class="toggle-track"></span></label>
+                 </div>
                </div>
              </div>`,
-      touch: '.modal-close',
+      touch: '.modal-close, .toggle-switch',
     })
 
     // A dialog whose content is genuinely narrow: does width:100% stretch a two-line confirm
@@ -527,12 +533,23 @@
     // its buttons on a 1px gap, so expanded pseudo-elements would steal each other's taps. The
     // real fix is fewer visible tools behind an overflow group, which is design work outside this
     // plan; see task-11-report.md.
+    //
+    // The To row is RecipientsField's real markup, and its `type="text"` is load-bearing: an
+    // attribute selector matches the ATTRIBUTE and not the IDL default, so the bare <input /> that
+    // used to stand here (inside a bare .compose-to-row, wearing .rule-wizard-input, which is the
+    // Rules page's class) was invisible to index.css's phone-block floor on typed controls — this
+    // case and the one below reported "byte-identical" while that floor was pushing the real
+    // .recipients-box from 32px to 54px. A fixture that is not the markup is not a guard.
     CASES.push({
       name: 'compose-360',
       html: `<div class="compose-view">
                <div class="compose-header"><button class="btn btn-primary compose-send">Send</button></div>
                <div class="compose-fields">
-                 <div class="compose-to-row"><span>To</span><input class="rule-wizard-input" /></div>
+                 <div class="compose-to-row">
+                   <div class="field-h recipients-field"><label>To</label>
+                     <div class="recipients-box"><input type="text" /></div>
+                   </div>
+                 </div>
                </div>
                <div class="compose-toolbar">
                  ${Array.from({ length: 14 }, (_, i) => `<button class="compose-tool">${i}</button>`).join('')}
@@ -541,6 +558,9 @@
       touch: '.compose-tool, .compose-send',
     })
 
+    // The one case that reads `.recipients-box`'s own height, which is the whole point of it now:
+    // 32px is the box's `min-height` and anything above it means something inside grew.
+    //
     // `undersized: 2` here is likewise known and accepted: `.recipient-token` is deliberately
     // `height: 22px` (see mail.css's own comment on it) and `.recipients-box` wraps tokens on a
     // 4px gap, so an inset hit-area pseudo on either ✕ would overlap the token rows above and
@@ -553,7 +573,7 @@
                  <div class="field-h recipients-field"><label>To</label>
                    <div class="recipients-box">
                      <span class="recipient-token">alice@example.com <button type="button">&#10005;</button></span>
-                     <input />
+                     <input type="text" />
                    </div>
                  </div>
                </div>
@@ -998,6 +1018,123 @@
           </div>
         </div>`,
       touch: '.pane-item',
+    })
+
+    // 6. The Rules page. Nothing else in the module wears this shape — `.rules-toolbar` is a flex
+    //    line with no wrap of its own holding a count, the extended-rules switch with its label and
+    //    help bubble, and New rule; `.rule-card-header` puts a `.toggle-switch` between a drag
+    //    handle and five `.admin-icon-btn`s, which is the tightest company that switch keeps
+    //    anywhere and the one place its 4px sideways hit-area bleed could reach a neighbour.
+    CASES.push({
+      name: 'settings-rules',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="rules-toolbar">
+            <span class="rules-count">3 rules</span>
+            <div class="extended-rules-toggle" style="margin-left:auto;display:flex;align-items:center;gap:8px">
+              <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+              <span class="rule-wizard-toggle-label">Extended rules</span>
+              <span class="tooltip-wrap"><div class="help-tooltip-icon">?</div></span>
+            </div>
+            <button class="btn btn-primary" style="width:auto;display:inline-flex;align-items:center;gap:6px;margin-left:12px">
+              <svg width="15" height="15"></svg> New rule</button>
+          </div>
+          <div class="rules-list">
+            <div class="rule-card rule-card-collapsed">
+              <div class="rule-card-header">
+                <span class="rule-card-drag"><svg width="14" height="14"></svg></span>
+                <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+                <span class="rule-card-name">Facturation Proximus</span>
+                <div class="rule-card-btns">
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                  <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                  <span class="rule-card-btns-sep"></span>
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`),
+      touch: '.toggle-switch, .admin-icon-btn, .rules-toolbar .btn',
+    })
+
+    // 7. The Aliases page. Its own tile skin — `.alias-grid` is a wrapping flex of `.alias-tile`s
+    //    whose delete is an 18px glyph absolutely positioned inside a tile roughly 41px tall, so
+    //    neither a painted 44px box nor a symmetric pseudo fits without the tile itself being
+    //    floored first. The alpha rail beside it is a column of 20px letters.
+    CASES.push({
+      name: 'settings-aliases',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="domain-toolbar" style="display:flex;gap:8px;align-items:center">
+            <select class="domain-select"><option>weesky.be</option></select>
+            <input type="text" class="search-input" placeholder="New alias" />
+            <button class="btn btn-add">Create</button>
+            <label class="toggle-row alias-alpha-toggle" style="margin-left:auto">
+              <span class="toggle-label">A-Z</span>
+              <span class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></span>
+            </label>
+          </div>
+          <div class="alias-grid">
+            <div class="alias-tile"><span class="alias-tile-name">facturation</span><span class="alias-tile-domain">@weesky.be</span>
+              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+            <div class="alias-tile"><span class="alias-tile-name">contact</span><span class="alias-tile-domain">@weesky.be</span>
+              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+            <div class="alias-tile"><span class="alias-tile-name">marie-christine.vandenbroucke</span><span class="alias-tile-domain">@weesky.be</span>
+              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+          </div>
+        </div>`),
+      touch: '.alias-tile-delete, .toggle-switch, .domain-toolbar .btn, .domain-select',
+    })
+
+    // 8. The Folders page. `FolderManager` puts a `.toggle-switch` as the FIRST child of an
+    //    `.admin-list-item`, which the admin-list case above does not hold at all: a mistap there
+    //    hides a folder, and the switch's 12px vertical bleed sits against a 6px row gap.
+    CASES.push({
+      name: 'settings-folders',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Folders</h1></div>
+          <ul class="admin-list folder-list">
+            <li class="admin-list-item folder-tile">
+              <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+              <span class="admin-list-item-email">Inbox</span>
+              <span class="row-tag">inbox</span>
+              <div class="admin-list-item-actions">
+                <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </li>
+            <li class="admin-list-item folder-tile" style="margin-left:18px">
+              <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+              <span class="admin-list-item-email">Projets/Weesky</span>
+              <div class="admin-list-item-actions">
+                <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </li>
+          </ul>
+        </div>`),
+      touch: '.toggle-switch, .admin-icon-btn',
+    })
+
+    // 9. The mail quick-search band, folded open by the toolbar's magnifier. `.search-bar` is
+    //    `flex: none`, so both of its controls growing to the floor costs the list nothing but the
+    //    band's own height — which is what this case reports. Named -360 like the other cases
+    //    carrying an explicit column width: at 320 its own 360px `.mail-list` is what overflows,
+    //    which says nothing about the band.
+    CASES.push({
+      name: 'mail-search-bar-360',
+      html: `
+        <div class="mail-list" style="width:360px">
+          <div class="search-bar">
+            <input type="search" class="search-bar-input" placeholder="Search this folder" />
+            <button class="search-bar-advanced"><svg width="15" height="15"></svg></button>
+          </div>
+        </div>`,
+      touch: '.search-bar-input, .search-bar-advanced',
     })
 
     window.addEventListener('resize', measure)

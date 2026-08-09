@@ -824,15 +824,26 @@ a.dropdown-item { text-decoration: none; }
      their own .settings-page-header, so a hamburger placed there would be written nine times.
      The negative margin pulls the band out to .settings-content's own padding edges — it spans
      exactly that box's padding width, so it adds nothing to the scrollable area.
+     Sticky, unlike mail's and contacts' hamburgers: those sit in `flex: none` bands that cannot
+     move, while this one is inside .settings-content, which IS the scroller — without it the only
+     route to the navigation scrolls off the top of every page taller than the viewport — measured,
+     it left by 400px on a 967px page. It needs an opaque background of its own for the same
+     reason, and var(--bg) is what .app-content puts behind it. `top` mirrors the negative margin
+     rather than being 0: sticky clamps the box to the scrollport top, which is 24px below where
+     the negative margin puts it, so `top: 0` pushed the band down by exactly that at rest.
      44px spelled out rather than var(--touch): the token is declared in the 639px block alone
      (styles/responsive.test.ts pins it there) and does not resolve at a tablet width. */
   .settings-mobile-bar {
+    position: sticky;
+    top: -24px;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 8px;
     min-height: 44px;
     margin: -24px -28px 12px;
     padding: 0 12px;
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
   .settings-mobile-title { font-size: 14px; font-weight: 600; }
@@ -842,9 +853,18 @@ a.dropdown-item { text-decoration: none; }
    folded into the 639px block below: that block reaches a narrow DESKTOP window, which needs
    neither of these, and misses a touch tablet, which needs both. The union is deliberate — the
    width rules there still floor .pane-item for a 400px desktop window, and these two reach the
-   640-1023px touch tier where --touch does not resolve at all, hence 44px spelled out. */
+   640-1023px touch tier where --touch does not resolve at all, hence 44px spelled out.
+   `hover: none` rather than `pointer: coarse`: Media Queries 4 makes the second the one that
+   describes target SIZE, which is nearer to what a floor is about, but it is not what the branch
+   already uses in mail.css and index.css and one file answering a different question than the
+   other two is worse than either choice. Both are approximations at the edges — `hover: none` is
+   true of a pen and false of a touchscreen laptop resting on its trackpad. */
 @media (hover: none) {
-  /* ~34px rows, and the only navigation the settings drawer holds. */
+  /* ~34px rows, and the only navigation the settings drawer holds. What keeps the width-keyed
+     copy in the 639px block alive is the probe rather than a user: probes/mobile-layout.html runs
+     in a mouse-driven Chrome, where this query never matches, so retiring that copy would drop
+     settings-drawer from `smallest: 44` to 35 and read as a regression. Tooling driving product
+     CSS should say so out loud. */
   .pane-item { min-height: 44px; }
 
   /* The loupe is `opacity: 0` until :hover/:focus-within, and the enlarged preview it opens is
@@ -906,7 +926,7 @@ a.dropdown-item { text-decoration: none; }
      It returns 24px of a 320px screen to the measure every settings page is read in, and the
      band's negative margin has to follow the padding it is cancelling. */
   .settings-content { padding: 14px 16px; }
-  .settings-mobile-bar { margin: -14px -16px 12px; }
+  .settings-mobile-bar { margin: -14px -16px 12px; top: -14px; }
 
   /* index.css's phone block stacks .field-h and resets `label:first-child` — an ELEMENT selector,
      which a settings row's <span class="setting-label"> never matches, so the 300px wrapper

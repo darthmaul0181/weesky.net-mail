@@ -1829,8 +1829,25 @@ textarea.compose-editor {
      task-11-report.md), and .compose-to-row's two children (the To field and the Cc/Bcc/Priority
      links) stack instead of splitting the row, so To no longer shares its width with those links
      either. */
-  .compose-from, .compose-to-row, .recipients-field { flex-direction: column; align-items: stretch; gap: 4px; }
+  /* `.recipients-field` is off this list because index.css's phone block now rotates every
+     `.field-h`, which this one is — the three declarations were byte-identical. The two compose
+     rows that are NOT `.field-h` still need it. */
+  .compose-from, .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
   .compose-link-form input { width: 100%; }
+
+  /* The quick-search band is `flex: none`, so flooring its 26px advanced button grows the band
+     once and spends no row budget — the same trade .compose-header's buttons take below. The
+     input beside it is floored by index.css's typed-control rule and carries min-width: 0, so
+     the width this takes comes out of it. */
+  .search-bar-advanced { min-width: var(--touch); min-height: var(--touch); }
+
+  /* The caret is a bare input inside a box that already IS the field, so the phone block's
+     `input[type="text"] { min-height: var(--touch) }` in index.css lands on it: the rule at
+     line 1566 above outranks it on specificity but declares no height at all, so 44px applied
+     and pushed `.recipients-box` from 32px to 54px with every `.recipient-token` left floating
+     in it — the exact defect that rule's own comment records as already fixed once, three rows
+     over with Cc and Bcc open. The box is the touch target here, not the caret inside it. */
+  .field-h.recipients-field .recipients-box input { min-height: 0; }
 
   /* Send and Save draft are the surface's two primary actions; .compose-header is a fixed band
      (flex: none), so flooring them only grows it once and spends no row budget. */

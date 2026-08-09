@@ -265,9 +265,10 @@ describe('SettingsLayout below 1024px', () => {
     expect(document.querySelector('.context-drawer.is-open')).toBeTruthy()
   })
 
-  // Picking a row closes the drawer and retitles the bar. The close is ContextDrawer's own route
-  // effect, and it only fires because `onClose` is `drawer.close` by reference: an inline arrow
-  // gets a fresh identity every render, which the drawer would read as a route change.
+  // Picking a row closes the drawer and retitles the bar. Note what this does NOT prove:
+  // ContextDrawer holds `onClose` in a ref and its route effect depends on [pathname, search]
+  // alone, so an inline arrow would pass this too — nothing here or anywhere else enforces the
+  // by-reference contract, which is a convention rather than a guarantee.
   it('closes the drawer on a pick and follows the section name', async () => {
     mockViewport('tablet')
     renderAt('/settings/general')

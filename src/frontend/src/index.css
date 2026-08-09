@@ -2448,7 +2448,10 @@ body {
   /* 31px, and the only navigation the contacts drawer holds. The 639px block below floors it
      through var(--touch) for a narrow window; this reaches the 640-1023px touch tablet, where the
      token is not declared at all — hence the number spelled out rather than a second declaration
-     of it. Neither condition contains the other, so both rules are live. */
+     of it. Neither condition contains the other, so both rules are live — but what keeps the
+     width-keyed copy alive in practice is probes/mobile-layout.html, which runs in a mouse-driven
+     Chrome where this query never matches: retiring it would drop contacts-drawer from
+     `smallest: 44` to 34 and read as a regression. */
   .contact-scope { min-height: 44px; }
 }
 
@@ -2503,11 +2506,10 @@ body {
      nothing on its own — the stacking already clears the clip — it returns 8px of a 320px screen
      to the measure the fields are read in. */
   .contact-editor-body { padding: 14px; }
-  /* gap: 4px, the composer's own number for the same rotation: .field-h's 16px was the space
-     between a label and the control BESIDE it, and turned sideways it exceeded the 12px
-     margin-bottom between one row and the next, so every label read as belonging to the field
-     above it. */
-  .contact-editor-body .field-h { flex-direction: column; align-items: stretch; gap: 4px; }
+  /* The rotation itself is the global `.field-h` rule further down this block now — the three
+     declarations that used to sit here were byte-identical to it. These two are not: the addresses
+     row heads with a `.field-h-label` span, so the global reset's `label:first-child` never
+     reaches it, and it is the row holding the longest values. */
   .contact-editor-body .field-h > :first-child { width: auto; }
   /* stretch is what widens the inputs; the favourite row's control is a 20px star and must not
      become a full-width slab with a glyph in the corner. */
@@ -2572,18 +2574,36 @@ body {
   /* Every typed control at the floor, the same breadth as the 16px rule at the head of this block
      and for a related reason: measured, a .field-h text box is 39px and a select 41px on their
      9px padding. Checkboxes and radios are out — both are hit through the label around them — and
-     so is the quota range, which is dragged rather than tapped. */
-  input[type="text"], input[type="password"], input[type="email"],
+     so is the quota range, which is dragged rather than tapped.
+     `input:not([type])` because an attribute selector matches the ATTRIBUTE and not the IDL
+     default: .panel-fullname-input on the Account page ships no `type` at all and stayed at 28px
+     under the list above. The same distinction is why the compose fixtures in
+     probes/mobile-layout.html now carry a real type= — a bare <input /> there hid a regression
+     this rule caused in the recipients box. */
+  input:not([type]), input[type="text"], input[type="password"], input[type="email"],
   input[type="number"], input[type="search"], select, textarea {
     min-height: var(--touch);
   }
 
   /* The painted switch stays 36x20: .toggle-track is `inset: 0`, so growing the box grows the
      switch itself, and a 44px slab beside a 14px label is not the control this page draws. It
-     takes .reader-back's idiom instead — 4px each side and 12px above and below make 44x44. The
-     12px above falls on the row's own <label>, which toggles the same input, and the 4px sideways
-     stay inside .settings-content's 16px padding. */
-  .toggle-switch::before { content: ''; position: absolute; inset: -12px -4px; }
+     takes .reader-back's idiom instead — 12px above and below and 8px to the LEFT make 44x44.
+     The 8px is entirely leftward, not 4px each side, and that is measured rather than tidy: a
+     rightward overhang is counted by scrollWidth on every ancestor that does not own the pseudo,
+     and it read 4px of clip on .toggle-row and on .rule-card-header. Leftward overhang is not
+     counted at all in a left-to-right document, and there is somewhere for it to go at all six
+     call sites — .settings-content's 16px padding (GeneralPage, ApplicationTab, AddEditUserModal),
+     .admin-list-item's 12px (FolderManager), .rule-card-header's 10px gap after the drag handle,
+     and .toggle-row's 8px gap after its own <label>, which toggles the same input anyway.
+     Vertically the 12px reaches the row's own label above, which is the same target again. */
+  .toggle-switch::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    right: 0;
+    bottom: -12px;
+    left: -8px;
+  }
 
   /* Measured at 320: the 140px column left .admin-tab-content 133px of the screen, and the five
      tabs stacked 261px tall inside it. Horizontal and WRAPPING rather than scrolling sideways:
@@ -2602,4 +2622,38 @@ body {
   }
   .admin-tab { min-height: var(--touch); white-space: nowrap; }
   .admin-tab-content { padding: 14px 0 0; overflow: visible; }
+
+  /* The alias tile's delete is an 18px glyph absolutely positioned at right: 8px, and the only
+     way to drop an alias. The tile is given the floor so a symmetric hit area fits inside it
+     rather than bleeding into the 10px grid gutter, and the pseudo takes `left: -26px; right: 0`
+     — 26px straight over the 28px `margin-right` that .alias-tile-domain already reserves for
+     this button, which is space nothing else claims and puts nothing outside the tile. */
+  .alias-tile { min-height: var(--touch); }
+  .alias-tile-delete::before {
+    content: '';
+    position: absolute;
+    top: -13px;
+    right: 0;
+    bottom: -13px;
+    left: -26px;
+  }
+
+  /* Count, the extended-rules switch with its label and help, and New rule, all on one line
+     against 273px. The count keeps the first line and the rest wraps under it. The row-gap is 14
+     rather than the base 8 for the same measured reason as .rule-card-header below: at 320 the
+     New rule button wraps under the extended-rules switch, and 8px of gap left the switch's 12px
+     downward hit-area bleed sitting 4px inside it. */
+  .rules-toolbar { flex-wrap: wrap; row-gap: 14px; }
+
+  /* Five 44px row actions plus their separator come to 237px on their own, so the header ran 46px
+     past a 283px card even with .rule-card-name shrunk to nothing by its own min-width: 0 — and
+     an ellipsised rule name is not what should pay for the buttons. The cluster takes a line of
+     its own and keeps the right edge every other row's actions sit on.
+     The row-gap is 14 rather than the 10 the base rule sets for both axes, and it is measured:
+     the switch on line one carries a 12px downward hit-area bleed, and at 10px of gap it reached
+     1px into the first icon button on line two — a pseudo on a positioned element paints above
+     static siblings, so it would have been the button losing the tap, not the switch. At 14 the
+     two clear each other by 3px. */
+  .rule-card-header { flex-wrap: wrap; row-gap: 14px; }
+  .rule-card-btns { margin-left: auto; }
 }
