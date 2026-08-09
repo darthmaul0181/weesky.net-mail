@@ -2464,6 +2464,14 @@ body {
      57px tab bar: 73px inset plus 56px of button is 129px, plus the same 8px gap. */
   .toast-container { bottom: 137px; }
 
+  /* The login screen is the one surface a phone meets before anything else, and both boxes were
+     drawn for a desktop window: .page-center's 24px against .card's 32px spends 112px of a 360px
+     screen on padding and its own 1px border, and the fields measured 246px. 16 + 20 measures
+     286 — the two inputs and Sign in are all width: 100%, so every pixel returned here is field.
+     Only LoginPage uses either class, so neither rule can reach another screen. */
+  .page-center { padding: 16px; }
+  .card { padding: 20px; }
+
   /* The list has the row to itself here, and the splitter's stored width left with the splitter:
      measured at 320px, the base rule's flex: none then takes the column's 387px max-content and
      runs 67px past the row. */

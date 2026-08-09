@@ -65,13 +65,17 @@
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
     four sizes the line above tells you to drive it at, which is how a metric gets ignored.
-  - `clipped` carries a known noise floor of 1: at some widths, one case's own `<input>` — the
-    bare recipients-box draft field in `compose-remove-buttons-360` — reports `scrollWidth` one
-    pixel ahead of `clientWidth` with no visible defect behind it. Traced (task-11-report.md's
-    addendum, Task 11's second follow-up) to the flex-distributed width Chromium hands that input
-    landing on a fractional value (measured: 152.40625px) that `clientWidth` and `scrollWidth`
-    round in opposite directions — CSSOM permits exactly this, since `scrollWidth` is allowed to
-    round up so a genuinely-scrollable box is never mis-reported as clean. What that fractional
+  - `clipped` carries a known noise floor of 1: at some widths, a case's own flex-distributed
+    `<input>` reports `scrollWidth` one pixel ahead of `clientWidth` with no visible defect behind
+    it. Four cases show it as of Task 14's full pass, and the mechanism is the same one in each —
+    measured directly, `compose-remove-buttons-360`'s recipients field at 152.40625px,
+    `contacts-list`'s search box at 225.34375, `settings-aliases`' at 252.40625, and
+    `contacts-editor`'s address input at 339.328125, each the only element in its case with any
+    excess at all. Traced (task-11-report.md's
+    addendum, Task 11's second follow-up) to the flex-distributed width Chromium hands such an
+    input landing on a fractional value that `clientWidth` and `scrollWidth` round in opposite
+    directions — CSSOM permits exactly this, since `scrollWidth` is allowed to round up so a
+    genuinely-scrollable box is never mis-reported as clean. What that fractional
     value comes out to is sensitive to incidental prior layout work **in the same document** —
     isolating the case (its own fresh page, nothing measured before it) reads 0; measuring it in
     place among this file's other cases, on a fresh load, reads 1 reliably at 360px and 0 at
@@ -97,7 +101,13 @@
   <style>
     /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
        app's own dark-band tokens rather than inventing a colour of its own. */
-    #out { padding: 12px; white-space: pre; font-family: monospace; font-size: 11px; }
+    /* overflow-x on the report itself, and it is load-bearing rather than cosmetic: `white-space:
+       pre` makes this block as wide as its longest JSON line, and the block is on the page while
+       the NEXT measurement runs — so from the second reading onward it was the report, not any
+       case, that grew documentElement.scrollWidth. Measured at 320x640, the width several cases
+       here tell you to read them at: every case reported `overflow: 24` at once, the same 24, with
+       nothing wrong in any of them. A scroller of its own keeps that width off the page. */
+    #out { padding: 12px; white-space: pre; overflow-x: auto; font-family: monospace; font-size: 11px; }
     .case { margin-bottom: 8px; }
     .case > h2 {
       font: 700 11px monospace; padding: 2px 6px;
@@ -394,6 +404,19 @@
       name: 'list dialogs escape the container column',
       html: '<div class="mail-list" style="width:240px"><div class="modal-overlay">dialog</div></div>',
       overlap: ['.modal-overlay', '.mail-list'],
+    })
+
+    // The same question the list case above asks, asked of the second container this branch
+    // declares: `.mail-reader` carries `container-type: inline-size` so its header can answer to
+    // the column rather than to the window, and MessageReader renders three dialogs — the move
+    // picker, the delete confirm and the attachment viewer — INSIDE it with no portal. Read the
+    // two rects, never the boolean: `.mail-reader` here holds nothing but a fixed child, so its
+    // own box is zero-height at the top of the stage and `intersects` is false either way. The
+    // overlay's width is the whole answer — the viewport's, or this 240px column's.
+    CASES.push({
+      name: 'reader dialogs escape the container column',
+      html: '<div class="mail-reader" style="width:240px"><div class="modal-overlay">dialog</div></div>',
+      overlap: ['.modal-overlay', '.mail-reader'],
     })
 
     // Task 9: the reader header at phone width. `.mail-reader` is `overflow: hidden`, so
@@ -1138,6 +1161,38 @@
           </div>
         </div>`,
       touch: '.search-bar-input, .search-bar-advanced',
+    })
+
+    // ── Login (Task 14) ────────────────────────────────────────────────────────────────────────
+    // The one surface reached without a session, and the only user of `.page-center` and `.card`.
+    // Markup is LoginPage.jsx's, and two details of it are load-bearing rather than incidental:
+    // the fields carry NO <label> — the real form labels its inputs by placeholder alone, so a
+    // fixture with labels measures a taller card the app never draws — and the error alert is
+    // present because that is the card's tallest real state, the only one whose content can
+    // outgrow the box. The types are `email` and `password` because index.css's phone-block floor
+    // on typed controls is an attribute selector: a bare <input /> would miss it the same way the
+    // compose fixture's did.
+    //
+    // No inline width or position override: `.card` already declares `max-width: 400px`, and
+    // `.page-center` is `position: relative` in the app, which is what its own inset ::before
+    // scrim answers to. Restating either would measure a box the login screen does not have.
+    CASES.push({
+      name: 'login-360',
+      html: `<div class="page-center">
+               <div class="card">
+                 <div class="alert alert-error">Invalid credentials.</div>
+                 <form>
+                   <div class="field">
+                     <input id="email" type="email" autocomplete="email" placeholder="Email address" required />
+                   </div>
+                   <div class="field">
+                     <input id="password" type="password" autocomplete="current-password" placeholder="Password" required />
+                   </div>
+                   <button class="btn btn-primary" type="submit">Sign in</button>
+                 </form>
+               </div>
+             </div>`,
+      touch: 'input, .btn',
     })
 
     window.addEventListener('resize', measure)

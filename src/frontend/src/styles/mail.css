@@ -178,10 +178,17 @@
   text-decoration: underline;
 }
 
+/* container-type for the same reason .mail-list carries one: the reader's own width and the
+   window's are different numbers, and it is the column that has to hold the header. Measured
+   (probes/mobile-layout.html, 'reader header loaded-320' at 768x1024): the reader is pinned to
+   its own 320px min-width on a tablet, .reader-actions takes 212 of it and .reader-stack is left
+   64, so the unsubscribe pill — `white-space: nowrap`, 141px — hung 77px outside a column that
+   is overflow: hidden and was cut off rather than scrollable. */
 .mail-reader {
   flex: 1;
   min-width: 0;
   background: var(--surface);
+  container-type: inline-size;
 }
 
 /* ── Folder tree ─────────────────────────────────────────── */
@@ -1883,6 +1890,33 @@ textarea.compose-editor {
   /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
      wins over this whatever order the cascade reads the two blocks in. */
   .selection-btn { width: 40px; height: 40px; }
+}
+
+/* The reader's own column, and a second container query rather than more selectors in the one
+   above: an unnamed @container resolves against each element's NEAREST container ancestor, so
+   these two rules read .mail-reader while the block above reads .mail-list, and folding them
+   together would only hide which column each answers to.
+
+   The window is the wrong question here, which is what the measurements said. At 768x1024 and at
+   1024x768 alike, 'reader header loaded-320' clipped 77px and 'reader header loaded' 37px: on a
+   tablet `.is-right .mail-reader` sits at its own 320px min-width while `.reader-actions` spends
+   212px of it, and on a 1024px desktop the rail, the folder column and a 380px list leave the
+   reader ~342px — the same crush, at a width no window-keyed rule of this branch is allowed to
+   name. Stacking the header hands the meta the full measure and the pill fits.
+
+   Naming the window-keyed at-rule in this comment is what the phrasing above avoids, and that is
+   not squeamishness: styles/responsive.test.ts matches it as raw text through to the next
+   `max-width: <n>px`, comments included, so one mention here read `480px` as a third breakpoint
+   and reddened the suite.
+
+   The 639px block's copies of these two declarations are NOT duplicates of this and must stay:
+   a 540-639px phone gives the reader a column WIDER than 480px, where this query does not match
+   and the device is still a phone — the same gap `.selection-btn`'s floor is written around. */
+@container (max-width: 480px) {
+  .reader-header { flex-direction: column; }
+  /* The base rule anchors the cluster to the last line present, which is a cross-axis alignment:
+     turned into a column that becomes the right edge, under the actions' own left-aligned lines. */
+  .reader-actions { align-self: flex-start; }
 }
 
 /* Input modality, not width — and that distinction is the bug this block was extracted to fix.
