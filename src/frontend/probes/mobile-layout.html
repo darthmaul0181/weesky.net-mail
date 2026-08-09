@@ -74,7 +74,11 @@
       const report = CASES.map(({ name, html, touch, overlap }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
-        const targets = touch ? [...stage.querySelectorAll(touch)] : []
+        // Only what is actually drawn: a control a query hides has no box, and counting its 0px
+        // height as an undersized touch target reports a defect where nothing is touchable at all.
+        const targets = touch
+          ? [...stage.querySelectorAll(touch)].filter(el => el.getClientRects().length)
+          : []
         const heights = targets.map(el => Math.round(el.getBoundingClientRect().height))
         let pair = null
         if (overlap) {
@@ -97,6 +101,35 @@
       document.getElementById('out').textContent = JSON.stringify(report, null, 1)
       document.title = 'probe-done'
     }
+
+    // The list toolbar's two states. The column carries an explicit width because the container
+    // query answers to it and not to the window: 360 is a phone, 240 is the narrowest the tablet
+    // splitter allows, and both have to hold the same row of controls.
+    const toolbar = (selecting) => `
+      <div class="mail-list" style="width:360px">
+        <div class="selection-toolbar${selecting ? ' is-selecting' : ''}">
+          <button class="drawer-toggle" style="display:inline-flex">☰</button>
+          <input type="checkbox" class="selection-master" />
+          <span class="selection-heading">
+            <span class="selection-title">${selecting ? '3 selected' : 'Inbox'}</span>
+            <button class="selection-btn selection-star">★</button>
+          </span>
+          <div class="selection-actions">
+            <button class="selection-btn selection-archive">A</button>
+            <button class="selection-btn selection-junk">J</button>
+            <button class="selection-btn is-danger selection-delete">D</button>
+            <button class="selection-btn selection-search">S</button>
+            <button class="selection-btn">⋮</button>
+          </div>
+        </div>
+      </div>`
+    CASES.push({ name: 'toolbar-idle-360', html: toolbar(false), touch: '.selection-btn, .drawer-toggle' })
+    CASES.push({ name: 'toolbar-selecting-360', html: toolbar(true), touch: '.selection-btn' })
+    CASES.push({
+      name: 'toolbar-idle-240',
+      html: toolbar(false).replace('width:360px', 'width:240px'),
+      touch: '.selection-btn, .drawer-toggle',
+    })
 
     window.addEventListener('resize', measure)
     measure()

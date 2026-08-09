@@ -61,10 +61,8 @@ interface Props {
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
  */
 export default function MessageList(
-  // `leading` and `onRefresh` are declared on Props but not destructured: the toolbar renders
-  // them in the next slice, and a binding read by nobody is a lint error here.
-  { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
-    onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
+  { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
+    onNotify, onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
   const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
@@ -530,6 +528,8 @@ export default function MessageList(
     <div className="message-list-root" onKeyDown={onListKeyDown}>
       {/* Replaces the old heading band: the toolbar names the folder until a selection is on. */}
       <SelectionToolbar
+        leading={leading}
+        refresh={onRefresh ? { onRun: onRefresh } : undefined}
         title={folderName || folderPath}
         count={count}
         allSelected={allSelected}

@@ -834,6 +834,8 @@ a.dropdown-item { text-decoration: none; }
   .rail-item { min-width: var(--touch); min-height: var(--touch); }
   .dropdown-item { min-height: var(--touch); }
   .pane-item { min-height: var(--touch); }
+  /* Square like .rail-item, and for the same reason: it is a 40x40 glyph, not a row. */
+  .drawer-toggle { min-width: var(--touch); min-height: var(--touch); }
 
   .app-rail { display: none; }
 

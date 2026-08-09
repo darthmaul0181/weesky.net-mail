@@ -61,8 +61,15 @@
   border-top: 1px solid var(--folders-item-hover);
 }
 
+/* A container, so the toolbar sizes itself against the column it sits in and not the window.
+   Those are different numbers: the splitter can leave this column at its 240px minimum on a
+   tablet — narrower than any phone — while the same tablet under readingPane:'none' gives it
+   960px. Safe in all three arrangements, which is what inline-size containment assumes: at
+   'right' the width is the splitter's inline style, at 'bottom' the stack's stretch, and at
+   'none' a `flex: 1` whose basis is already 0. Nothing here has ever sized to its contents. */
 .mail-list {
   background: var(--surface);
+  container-type: inline-size;
 }
 
 /* The inline width is the splitter's; shrink-not-grow (flex: 0 1 auto) lets a size stored on
@@ -1708,4 +1715,26 @@ textarea.compose-editor {
 @media (max-width: 639px) {
   /* Clear of the tab bar, which is 56px plus its border. */
   .floating-action { bottom: 73px; }
+}
+
+/* Six 44px controls do not fit across 360px. Nothing usable is lost: archive, junk and delete
+   are already disabled with an empty selection, so at rest they only rendered dead state. */
+@container (max-width: 480px) {
+  /* The selecting state still spends six controls, and at the splitter's 240px floor they run
+     41px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
+     kebab simply disappeared. EmptyFolderBanner's answer, for the same reason: a second line
+     costs height nobody is short of, where dropping a control costs the action itself. */
+  .selection-toolbar { flex-wrap: wrap; }
+
+  .selection-toolbar:not(.is-selecting) .selection-archive,
+  .selection-toolbar:not(.is-selecting) .selection-junk,
+  .selection-toolbar:not(.is-selecting) .selection-delete,
+  .selection-toolbar:not(.is-selecting) .selection-master { display: none; }
+
+  .selection-toolbar.is-selecting .selection-search,
+  .selection-toolbar.is-selecting .selection-star { display: none; }
+
+  /* Square, so the phone's --touch has to floor both axes; off a phone the column can be this
+     narrow on a tablet, where the pointer is a mouse and 40px is the band's own proportion. */
+  .selection-btn { width: var(--touch, 40px); height: var(--touch, 40px); }
 }
