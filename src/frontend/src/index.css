@@ -2585,23 +2585,31 @@ body {
     min-height: var(--touch);
   }
 
+  /* How far the switch's hit area bleeds above and below its 20px painted box: 12 + 20 + 12 is
+     the 44. A token rather than a literal because .rule-card-header's row-gap further down is
+     DERIVED from this number — a line wrapping under a switch has to clear the bleed — and two
+     literals would go stale independently the day this one is retuned. Anything else that puts a
+     control on a wrapped line under a .toggle-switch answers to it too. */
+  :root { --toggle-bleed: 12px; }
+
   /* The painted switch stays 36x20: .toggle-track is `inset: 0`, so growing the box grows the
      switch itself, and a 44px slab beside a 14px label is not the control this page draws. It
-     takes .reader-back's idiom instead — 12px above and below and 8px to the LEFT make 44x44.
-     The 8px is entirely leftward, not 4px each side, and that is measured rather than tidy: a
-     rightward overhang is counted by scrollWidth on every ancestor that does not own the pseudo,
-     and it read 4px of clip on .toggle-row and on .rule-card-header. Leftward overhang is not
-     counted at all in a left-to-right document, and there is somewhere for it to go at all six
-     call sites — .settings-content's 16px padding (GeneralPage, ApplicationTab, AddEditUserModal),
-     .admin-list-item's 12px (FolderManager), .rule-card-header's 10px gap after the drag handle,
-     and .toggle-row's 8px gap after its own <label>, which toggles the same input anyway.
-     Vertically the 12px reaches the row's own label above, which is the same target again. */
+     takes .reader-back's idiom instead — the bleed above and below, and 8px to the LEFT, make
+     44x44. The 8px is entirely leftward, not 4px each side, and that is measured rather than
+     tidy: a rightward overhang is counted by scrollWidth on every ancestor that does not own the
+     pseudo, and it read 4px of clip on .toggle-row and on .rule-card-header. Leftward overhang is
+     not counted at all in a left-to-right document, and there is somewhere for it to go at all
+     six call sites — .settings-content's 16px padding (GeneralPage, ApplicationTab),
+     .modal's 18px (AddEditUserModal), .admin-list-item's 12px (FolderManager),
+     .rule-card-header's 10px gap after the drag handle, and .toggle-row's 12px gap after its own
+     <label>, which toggles the same input anyway. Vertically the bleed reaches the row's own
+     label above, which is the same target again. */
   .toggle-switch::before {
     content: '';
     position: absolute;
-    top: -12px;
+    top: calc(-1 * var(--toggle-bleed));
     right: 0;
-    bottom: -12px;
+    bottom: calc(-1 * var(--toggle-bleed));
     left: -8px;
   }
 
@@ -2639,21 +2647,33 @@ body {
   }
 
   /* Count, the extended-rules switch with its label and help, and New rule, all on one line
-     against 273px. The count keeps the first line and the rest wraps under it. The row-gap is 14
-     rather than the base 8 for the same measured reason as .rule-card-header below: at 320 the
-     New rule button wraps under the extended-rules switch, and 8px of gap left the switch's 12px
-     downward hit-area bleed sitting 4px inside it. */
-  .rules-toolbar { flex-wrap: wrap; row-gap: 14px; }
+     against 273px. The count keeps the first line and the rest wraps under it.
+     The row-gap is derived from --toggle-bleed for the same reason as .rule-card-header below,
+     but it earns its place at 320 ONLY — and the width is the whole point, so the numbers are
+     here rather than a "see above". .extended-rules-toggle is pushed right by margin-left: auto
+     while New rule wraps to the LEFT end of the next line, so how much of the button the switch
+     stands over depends on how far right the toolbar pushes the switch:
+       360 — switch painted x 175-211, hit x 167-211, button x 28-138: 29px apart, never meet.
+       320 — switch painted x 135-171, hit x 127-171, button x 28-138: the PAINTED box already
+             shares 3px of the button's x-range and the hit rect shares 11px, so the vertical
+             bleed lands on it — measured, an 11x4px overlap of the button's top-right corner
+             with the base 8px gap, and 2px of clearance with this one.
+     A pseudo on a positioned element paints above static siblings, so those 44 square pixels
+     would have been the switch answering a tap meant for New rule. The cost is 6px of band
+     height (73 -> 79) at a width that does not need it. */
+  .rules-toolbar { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
 
   /* Five 44px row actions plus their separator come to 237px on their own, so the header ran 46px
      past a 283px card even with .rule-card-name shrunk to nothing by its own min-width: 0 — and
      an ellipsised rule name is not what should pay for the buttons. The cluster takes a line of
      its own and keeps the right edge every other row's actions sit on.
-     The row-gap is 14 rather than the 10 the base rule sets for both axes, and it is measured:
-     the switch on line one carries a 12px downward hit-area bleed, and at 10px of gap it reached
-     1px into the first icon button on line two — a pseudo on a positioned element paints above
-     static siblings, so it would have been the button losing the tap, not the switch. At 14 the
-     two clear each other by 3px. */
-  .rule-card-header { flex-wrap: wrap; row-gap: 14px; }
+     The row-gap is DERIVED from --toggle-bleed above, not chosen: the switch on line one sits
+     directly above the icon buttons on line two, and the base rule's 10px for both axes left the
+     switch's downward bleed 1px inside the first button — a pseudo on a positioned element paints
+     above static siblings, so it would have been the button losing the tap, not the switch. The
+     +2px is the switch's own sub-pixel centring on a line whose height is not an even multiple of
+     its 20px box: measured, 10px overlapped by 1.5px and this clears by 3. Retuning
+     --toggle-bleed retunes this with it. */
+  .rule-card-header { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
   .rule-card-btns { margin-left: auto; }
 }

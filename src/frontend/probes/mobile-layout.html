@@ -1068,7 +1068,7 @@
       name: 'settings-aliases',
       html: settingsPage(`
         <div class="settings-page">
-          <div class="domain-toolbar" style="display:flex;gap:8px;align-items:center">
+          <div class="domain-toolbar">
             <select class="domain-select"><option>weesky.be</option></select>
             <input type="text" class="search-input" placeholder="New alias" />
             <button class="btn btn-add">Create</button>
@@ -1122,7 +1122,10 @@
 
     // 9. The mail quick-search band, folded open by the toolbar's magnifier. `.search-bar` is
     //    `flex: none`, so both of its controls growing to the floor costs the list nothing but the
-    //    band's own height — which is what this case reports. Named -360 like the other cases
+    //    band's own height — which is what this case reports. `type="text"` because that is what
+    //    SearchBar.tsx ships: `type="search"` would be blind to any future `input[type="text"]`
+    //    rule, which is exactly how the recipients-box regression got past this file once.
+    //    Named -360 like the other cases
     //    carrying an explicit column width: at 320 its own 360px `.mail-list` is what overflows,
     //    which says nothing about the band.
     CASES.push({
@@ -1130,7 +1133,7 @@
       html: `
         <div class="mail-list" style="width:360px">
           <div class="search-bar">
-            <input type="search" class="search-bar-input" placeholder="Search this folder" />
+            <input type="text" class="search-bar-input" placeholder="Search this folder" />
             <button class="search-bar-advanced"><svg width="15" height="15"></svg></button>
           </div>
         </div>`,
