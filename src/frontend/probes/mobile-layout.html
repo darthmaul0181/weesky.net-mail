@@ -538,7 +538,8 @@
     // viewport the case is read at, since a real phone gives
     // `.mail-reader` the full screen rather than a fixed column; `detailsOpen` swaps the compact
     // To/Cc lines for the `<dl>` ReaderDetails renders, which is the only thing that exercises the
-    // narrow-width grid override and its dt margin.
+    // narrow-width grid override: the two columns it keeps, the ellipsis on every value and the
+    // one `.detail-subject` exempt from it.
     //
     // These cases draw the PHONE shape of the header, which is a different tree and not merely a
     // different width: below 640px MessageReader drops the long date from `.reader-from`, puts the
@@ -579,10 +580,10 @@
                 </div>
                 ${detailsOpen ? `
                 <dl class="reader-details">
-                  <dt>Objet :</dt><dd>Réunion budget T3 — validation finale avant envoi au comité de direction</dd>
-                  <dt>De</dt><dd>Alice Martin &lt;alice.martin@example.com&gt;</dd>
-                  <dt>À</dt><dd>moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</dd>
-                  <dt>Cc</dt><dd>Carole Petit &lt;carole@example.com&gt;</dd>
+                  <dt>Objet :</dt><dd class="detail-subject">Réunion budget T3 — validation finale avant envoi au comité de direction</dd>
+                  <dt>De</dt><dd>Alice Martin <span class="detail-muted">&lt;alice.martin@example.com&gt;</span></dd>
+                  <dt>À</dt><dd>${addressList(to)}</dd>
+                  <dt>Cc</dt><dd>${addressList(cc)}</dd>
                   <dt>Date</dt><dd>9 août 2026, 14:32:07</dd>
                   <dt>Score de spam :</dt>
                   <dd>
@@ -639,6 +640,9 @@
         overlap: ['.reader-actions', '.reader-header'],
       })
     }
+    // `height` is the whole point of this case: each label:value pair is one grid row rather than
+    // two, so the header reads 363 where the stacked version read 563. The subject is the one
+    // value still allowed to take the lines it needs, and it takes four at 360.
     CASES.push({
       name: 'reader details open',
       html: readerHeader({ width: 360, detailsOpen: true }),
@@ -666,9 +670,10 @@
     // name fitted with 0.1px to spare and no truncation could ever have shown. The two rects say
     // the date survived whole — `.reader-date` ends 20px inside `.reader-header`'s right edge at
     // its full 101px width — since ellipsising the wrong item would still measure 20 tall.
-    // This case, and `reader header loaded-320` above, are the two carrying a non-zero `clipped`
-    // by design: `.reader-to` ellipsises and holds AddressList's spans, which the metric's
-    // childless-leaf exemption deliberately does not cover. 33 here, 25 there.
+    // This case, `reader header loaded-320` and `reader details open` are the three carrying a
+    // non-zero `clipped` by design: `.reader-to` and the grid's `dd`s ellipsise while holding
+    // AddressList's spans, which the metric's childless-leaf exemption deliberately does not
+    // cover. 33 here, 25 and 36 there. A fourth case reporting one is a real defect.
     CASES.push({
       name: 'reader header long single recipient',
       html: readerHeader({

@@ -901,10 +901,12 @@
 /* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
    gap would land between the comma and the name it precedes instead of after it. */
 .reader-recipients { display: block; }
-/* Inline, not Tooltip's own inline-flex: an inline-flex box is atomic and shrink-to-fits against
-   its containing block rather than the space left on the line, so a named recipient never shared
-   the "To:" label's line — it moved to the next one whole and left the label sitting alone. */
-.reader-recipients .tooltip-wrap { display: inline; }
+/* Inline, not Tooltip's own inline-flex: an atomic inline box shrink-to-fits against its
+   containing block rather than the space left on the line, so a named recipient never shared its
+   label's line — it moved to the next one whole, leaving the label alone — and an ellipsis is
+   never drawn inside one either, so the details grid clipped a recipient with no "…". */
+.reader-recipients .tooltip-wrap,
+.reader-details .tooltip-wrap { display: inline; }
 
 .details-toggle {
   display: inline-flex;
@@ -1853,15 +1855,23 @@ textarea.compose-editor {
      row. It still escapes .reader-to's clip, that box not being in its containing block chain. */
   .reader-to .tooltip-wrap { position: static; }
   .reader-to-row .reader-date { flex: none; }
-  .reader-details { grid-template-columns: 1fr; }
-  /* One column turns each label:value pair into two consecutive rows instead of one, so the
-     grid's own 5px row-gap — previously only ever between one pair and the next, since a pair's
-     own dt/dd shared a row — now also falls between a label and its own value, and every row
-     reads as evenly spaced with no way to tell where one pair ends and the next begins. The
-     margin re-establishes that grouping: tight under its own label (the unchanged 5px row-gap),
-     looser before the next one. */
-  .reader-details dt { text-align: left; margin-top: 8px; }
-  .reader-details dt:first-of-type { margin-top: 0; }
+  /* The grid keeps its two columns here rather than stacking each pair into two rows: a label and
+     its value stay on one line, the value ellipsising, which is what the phone's own To line does
+     a chevron above. The subject is the single exception and wraps over as many lines as it takes
+     — it is the one value a reader opens this grid to read in full. `minmax(0, 1fr)` and not
+     `1fr`, whose auto minimum would let a long value push the column past the screen instead of
+     truncating. The tooltip anchor moves to the grid for the reason it moves to .reader-to-row
+     above; it lands on the <dl> and not on the <dd> because that box is the one doing the
+     clipping, and an abspos child of its own containing block would be clipped by it. */
+  .reader-details { grid-template-columns: max-content minmax(0, 1fr); position: relative; }
+  .reader-details dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-details dd.detail-subject { overflow: visible; white-space: normal; }
+  .reader-details .tooltip-wrap { position: static; }
+  /* The bubble is what a truncated value is read in full from, so it may not itself hang out of a
+     column that clips: its 320px cap is wider than the 276px a 320px screen leaves inside the
+     header's padding. 100% of the anchor, which both of these now are. */
+  .reader-details .tooltip-bubble,
+  .reader-to-row .tooltip-bubble { max-width: 100%; }
   /* Measured at 360x640 (probes/mobile-layout.html, 'reader header loaded'): .reader-back's
      ::before above is its own fix for the same 44px floor — grown as a hit area rather than as a
      painted box. Every .action-btn in ReaderActions — reply, reply-all, forward, the colour

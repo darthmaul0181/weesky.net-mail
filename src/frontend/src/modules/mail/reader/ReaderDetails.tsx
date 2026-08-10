@@ -25,7 +25,11 @@ export default function ReaderDetails({ message, showSubject, showSpamScore }: P
   return (
     <dl className="reader-details">
       {showSubject && (
-        <><dt>{t('reader.details.subject')}</dt><dd>{message.subject || t('list.noSubject')}</dd></>
+        <>
+          <dt>{t('reader.details.subject')}</dt>
+          {/* The one row the phone block lets wrap: every other value ellipsises to one line. */}
+          <dd className="detail-subject">{message.subject || t('list.noSubject')}</dd>
+        </>
       )}
       <dt>{t('reader.details.from')}</dt>
       <dd>
