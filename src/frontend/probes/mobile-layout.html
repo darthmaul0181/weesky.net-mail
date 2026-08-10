@@ -601,7 +601,14 @@
       ['reader header loaded', 360],
       ['reader header loaded-320', 320],
     ]) {
-      CASES.push({ name, html: readerHeader({ width }), touch: READER_TOUCH, height: '.reader-header' })
+      // The two rects answer where the cluster sits, which no other metric here can: left-aligned
+      // under the stack is not a clip, not an overflow and not a small target. Read the rights —
+      // .reader-actions' must land one 22px padding inside .reader-header's — and ignore
+      // `intersect`, true by construction for a child and its parent.
+      CASES.push({
+        name, html: readerHeader({ width }), touch: READER_TOUCH, height: '.reader-header',
+        overlap: ['.reader-actions', '.reader-header'],
+      })
     }
     CASES.push({
       name: 'reader details open',

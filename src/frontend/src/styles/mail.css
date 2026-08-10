@@ -1780,8 +1780,12 @@ textarea.compose-editor {
      width, so a 360px phone has ~20px to spare but a 320px one (iPhone SE, an Android
      split-screen pane) is ~20px short — and .mail-reader is overflow:hidden, so the kebab was
      silently cut off rather than scrollable. Measured, probes/mobile-layout.html's
-     'reader header loaded-320' case. */
-  .reader-actions { align-self: flex-start; flex-wrap: wrap; }
+     'reader header loaded-320' case.
+     The alignment pair is the container block's, copied here for the reason recorded above it —
+     a 540-639px phone gives the reader a column wider than that query's threshold. The wrap is
+     this copy's alone: it is the narrow END of the phone tier that runs out of room, never the
+     wide one. */
+  .reader-actions { align-self: stretch; justify-content: flex-end; flex-wrap: wrap; }
   .reader-subject { font-size: 17px; }
   /* .reader-back keeps its base rule's 26x26 painted size at this width rather than growing to
      the 44px floor: a first attempt grew the button itself (float, plus flow-root on the h1 to
@@ -1957,9 +1961,16 @@ textarea.compose-editor {
    and the device is still a phone — the same gap `.selection-btn`'s floor is written around. */
 @container (max-width: 480px) {
   .reader-header { flex-direction: column; }
-  /* The base rule anchors the cluster to the last line present, which is a cross-axis alignment:
-     turned into a column that becomes the right edge, under the actions' own left-aligned lines. */
-  .reader-actions { align-self: flex-start; }
+  /* The base rule's `align-self: flex-end` anchors the cluster to the last line of the stack
+     beside it — a cross-axis alignment, so once the header is a column the same property decides
+     LEFT or RIGHT instead of top or bottom, and `flex-start` put the whole cluster against the
+     left margin with the message's meta above it. This block is where that happened at every
+     width, the 639px copy included: it is the later of the two and wins wherever both match.
+     Stretch rather than `flex-end`, because an aligned item is shrink-to-fit — max-content while
+     the cluster fits and the full available width once it stops, at which point its own lines pack
+     from the left again and a wrapped cluster silently returns to where it started. Stretched, the
+     item is the header's content width at every size and justify-content decides both states. */
+  .reader-actions { align-self: stretch; justify-content: flex-end; }
 }
 
 /* Input modality, not width — and that distinction is the bug this block was extracted to fix.
