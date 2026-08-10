@@ -546,7 +546,23 @@
     // the unsubscribe pill into the details grid — two lines of metadata instead of five. Above
     // 640px the header keeps the long date, the pill and a standalone `.reader-spam`, and nothing
     // here stands for that shape; every case below is read at 320 or 360.
-    const readerHeader = ({ width, detailsOpen = false, sender = 'Alice Martin' }) => `
+    //
+    // AddressList's markup, not a stand-in span: a recipient carrying a display name is wrapped in
+    // Tooltip, whose `.tooltip-wrap` is `display: inline-flex` — an atomic inline box whose
+    // shrink-to-fit width is read off the containing block rather than off the space left on the
+    // line. That is the whole shape of the "À :" orphan defect, and a flat span cannot produce it.
+    const addressList = recipients => recipients.map(({ name, address }, index) => {
+      const label = name
+        ? `<span class="tooltip-wrap"><span class="address-label" tabindex="0">${name}</span>`
+          + `<span class="tooltip-bubble is-bottom-left" role="tooltip">"${name}" &lt;${address}&gt;</span></span>`
+        : `<span class="address-label">${address}</span>`
+      return `<span>${index > 0 ? ', ' : ''}${label}</span>`
+    }).join('')
+    const DEFAULT_TO = [{ name: '', address: 'moi@weesky.net' }, { name: 'Bob Dupont', address: 'bob@example.com' }]
+    const DEFAULT_CC = [{ name: 'Carole Petit', address: 'carole@example.com' }]
+    const readerHeader = ({
+      width, detailsOpen = false, sender = 'Alice Martin', to = DEFAULT_TO, cc = DEFAULT_CC,
+    }) => `
       <div class="mail-reader" style="width:${width}px">
         <article>
           <header class="reader-header">
@@ -578,10 +594,10 @@
                   <dt>Désabonnement</dt><dd><a href="#">Se désabonner</a></dd>
                 </dl>` : `
                 <div class="reader-recipients reader-to-row">
-                  <span class="reader-to">To: <span class="address-label">moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</span></span>
+                  <span class="reader-to">To: ${addressList(to)}</span>
                   <span class="reader-date">09/08/2026 14:32</span>
                 </div>
-                <div class="reader-recipients">Cc: <span class="address-label">Carole Petit &lt;carole@example.com&gt;</span></div>`}
+                <div class="reader-recipients">Cc: ${addressList(cc)}</div>`}
               </div>
             </div>
             <div class="reader-actions">
@@ -642,6 +658,22 @@
       name: 'reader header mailing-list sender',
       html: readerHeader({ width: 360, sender: 'BNP Paribas Fortis Surveys' }),
       height: '.reader-header',
+    })
+    // One recipient whose display name is long — a GitHub notification's `owner/repo`, the shape
+    // that put "To:" alone on its line with the name underneath. `height` is `.reader-to` here
+    // rather than the header, because that IS the defect: 20 is one line, the label and the name
+    // together; 59 is what it read before `.reader-to-row` learned to wrap (label alone, then the
+    // name over two lines). 320 rather than 360, where it fitted with 0.1px to spare and could
+    // therefore never have shown the break.
+    CASES.push({
+      name: 'reader header long single recipient',
+      html: readerHeader({
+        width: 320,
+        sender: 'github-actions[bot]',
+        to: [{ name: 'darthmaul0181/weesky.net-mail', address: 'weesky.net-mail@noreply.github.com' }],
+        cc: [{ name: '', address: 'darthmaul0181' }, { name: '', address: 'Author' }],
+      }),
+      height: '.reader-to',
     })
 
     // Task 10: the 24rem floor overflowed a 360px screen because min-width always beats

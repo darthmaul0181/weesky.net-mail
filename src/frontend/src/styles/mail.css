@@ -901,6 +901,10 @@
 /* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
    gap would land between the comma and the name it precedes instead of after it. */
 .reader-recipients { display: block; }
+/* Inline, not Tooltip's own inline-flex: an inline-flex box is atomic and shrink-to-fits against
+   its containing block rather than the space left on the line, so a named recipient never shared
+   the "To:" label's line — it moved to the next one whole and left the label sitting alone. */
+.reader-recipients .tooltip-wrap { display: inline; }
 
 .details-toggle {
   display: inline-flex;
@@ -1840,7 +1844,9 @@ textarea.compose-editor {
      back unconditionally, at the price of truncating recipients on every message that names more
      than one; it also read as an 83px clip in probes/mobile-layout.html, since that metric only
      forgives an ellipsised box with no element children and .reader-to holds AddressList's spans. */
-  .reader-to-row { display: flex; align-items: baseline; gap: 8px; }
+  /* It wraps: a recipient too wide to share the line with the date takes the row and the date
+     drops below it, rather than the line being kept by the label on its own. */
+  .reader-to-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .reader-to { min-width: 0; }
   .reader-to-row .reader-date { flex: none; }
   .reader-details { grid-template-columns: 1fr; }
