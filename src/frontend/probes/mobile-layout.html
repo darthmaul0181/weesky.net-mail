@@ -101,6 +101,11 @@
     converse — an integer content width inside fractional padding — would be forgiven wrongly. All
     four boxes above are integer-padding inputs, so nothing is live today; the next fixture is
     where to check it.
+  - `height` is present only on a case that named a `height` selector, and it is the one number
+    here with no pass mark: it reports how tall that element's own box is, for the defects that are
+    vertical rather than horizontal — a reader header that leaves the message body four lines of
+    screen is invisible to every metric above. Compare it between two runs, not against a
+    threshold. -1 means the selector matched nothing.
 -->
 <html data-palette="night" data-theme="light">
 <head>
@@ -241,7 +246,7 @@
     function measure() {
       const stage = document.getElementById('stage')
       const floor = touchFloor()
-      const report = CASES.map(({ name, html, touch, overlap }) => {
+      const report = CASES.map(({ name, html, touch, overlap, height }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
         // Only what is actually drawn: a control a query hides has no box, and counting its 0px
@@ -330,6 +335,12 @@
           smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
           undersized: sizes.filter(s => s < floor).length,
           ...(pair ? { overlap: pair } : {}),
+          // `height: selector` reports that element's own box height. Nothing passes or fails on
+          // it — it is for cases whose defect is vertical (a header eating the body's screen), a
+          // question the width metrics above cannot ask. -1 means the selector matched nothing.
+          ...(height
+            ? { height: Math.round(stage.querySelector(height)?.getBoundingClientRect().height ?? -1) }
+            : {}),
         }
       })
       stage.innerHTML = ''
@@ -517,6 +528,13 @@
     // `.mail-reader` the full screen rather than a fixed column; `detailsOpen` swaps the compact
     // To/Cc lines for the `<dl>` ReaderDetails renders, which is the only thing that exercises the
     // narrow-width grid override and its dt margin.
+    //
+    // These cases draw the PHONE shape of the header, which is a different tree and not merely a
+    // different width: below 640px MessageReader drops the long date from `.reader-from`, puts the
+    // short one on the recipients line inside `.reader-to-row`, and moves the spam gauge into the
+    // details grid — three lines of metadata instead of five. Above 640px the header keeps the long
+    // date and a standalone `.reader-spam`, and nothing here stands for that shape; every case
+    // below is read at 320 or 360.
     const readerHeader = ({ width, detailsOpen = false }) => `
       <div class="mail-reader" style="width:${width}px">
         <article>
@@ -530,7 +548,6 @@
                 <div class="reader-from">
                   <button type="button" class="address-label is-sender">Alice Martin</button>
                   <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
-                  <span class="reader-date">(9 août 2026, 14:32)</span>
                   <button type="button" class="details-toggle" aria-expanded="${detailsOpen}" aria-label="Show details">&rsaquo;</button>
                   <a class="unsub-btn" href="#" target="_blank" rel="noopener noreferrer">&#8663; Se désabonner</a>
                 </div>
@@ -540,16 +557,20 @@
                   <dt>À</dt><dd>moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</dd>
                   <dt>Cc</dt><dd>Carole Petit &lt;carole@example.com&gt;</dd>
                   <dt>Date</dt><dd>9 août 2026, 14:32:07</dd>
+                  <dt>Score de spam :</dt>
+                  <dd>
+                    <span class="spam-gauge" tabindex="0">
+                      <span class="spam-gauge-track" style="--gauge-ratio:0.2"><span class="spam-gauge-fill"></span></span>
+                      <span class="spam-gauge-value">1.2 / 5.0</span>
+                    </span>
+                  </dd>
                   <dt>Désabonnement</dt><dd><a href="#">Se désabonner</a></dd>
                 </dl>` : `
-                <div class="reader-recipients">To: <span class="address-label">moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</span></div>
-                <div class="reader-recipients">Cc: <span class="address-label">Carole Petit &lt;carole@example.com&gt;</span></div>`}
-                <div class="reader-spam">Score de spam :
-                  <span class="spam-gauge" tabindex="0">
-                    <span class="spam-gauge-track" style="--gauge-ratio:0.2"><span class="spam-gauge-fill"></span></span>
-                    <span class="spam-gauge-value">1.2 / 5.0</span>
-                  </span>
+                <div class="reader-recipients reader-to-row">
+                  <span class="reader-to">To: <span class="address-label">moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</span></span>
+                  <span class="reader-date">09/08/2026 14:32</span>
                 </div>
+                <div class="reader-recipients">Cc: <span class="address-label">Carole Petit &lt;carole@example.com&gt;</span></div>`}
               </div>
             </div>
             <div class="reader-actions">
@@ -580,12 +601,13 @@
       ['reader header loaded', 360],
       ['reader header loaded-320', 320],
     ]) {
-      CASES.push({ name, html: readerHeader({ width }), touch: READER_TOUCH })
+      CASES.push({ name, html: readerHeader({ width }), touch: READER_TOUCH, height: '.reader-header' })
     }
     CASES.push({
       name: 'reader details open',
       html: readerHeader({ width: 360, detailsOpen: true }),
       touch: READER_TOUCH,
+      height: '.reader-header',
     })
 
     // Task 10: the 24rem floor overflowed a 360px screen because min-width always beats

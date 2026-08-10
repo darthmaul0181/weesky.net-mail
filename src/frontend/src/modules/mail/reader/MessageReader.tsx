@@ -37,7 +37,7 @@ import {
 } from '../../../hooks/usePreferences'
 import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
-import { formatReaderDate } from './formatReaderDate'
+import { formatReaderDate, formatReaderDateShort } from './formatReaderDate'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
@@ -198,6 +198,12 @@ export default function MessageReader(
   // One list for the split chips and the viewer's navigation — the two can never disagree.
   const imageAttachments = attachments.filter(a => isImageType(a.contentType))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
+  const spamOn = !!preferences && showSpamScoreOf(preferences)
+  // A phone header spends four of its lines on metadata before the body starts. Two of them are
+  // recovered here: the date shrinks to its locale's short form and joins the recipients line,
+  // and the gauge moves behind the chevron. Both stay in full inside the details grid.
+  const compactDate = viewportNarrow
+    ? <span className="reader-date">{formatReaderDateShort(data.date)}</span> : null
 
   async function download(part: string, fileName: string) {
     setDownloadError(null)
@@ -317,7 +323,7 @@ export default function MessageReader(
             <div className="reader-from">
               <AddressLabel sender name={data.fromName} address={data.fromAddress} />
               <AuthBadge authentication={data.authentication} />
-              <span className="reader-date">({formatReaderDate(data.date)})</span>
+              {!viewportNarrow && <span className="reader-date">({formatReaderDate(data.date)})</span>}
               <button
                 type="button"
                 className={`details-toggle${detailsOpen ? ' is-open' : ''}`}
@@ -337,18 +343,23 @@ export default function MessageReader(
               )}
             </div>
             {detailsOpen ? (
-              <ReaderDetails message={data} />
+              <ReaderDetails message={data} showSpamScore={viewportNarrow && spamOn} />
             ) : (
               <>
-                {data.to.length > 0 && (
-                  <div className="reader-recipients">{t('reader.details.to')} <AddressList addresses={data.to} /></div>
+                {(data.to.length > 0 || compactDate) && (
+                  <div className="reader-recipients reader-to-row">
+                    {data.to.length > 0 && (
+                      <span className="reader-to">{t('reader.details.to')} <AddressList addresses={data.to} /></span>
+                    )}
+                    {compactDate}
+                  </div>
                 )}
                 {data.cc.length > 0 && (
                   <div className="reader-recipients">{t('reader.details.cc')} <AddressList addresses={data.cc} /></div>
                 )}
               </>
             )}
-            {!!preferences && showSpamScoreOf(preferences) && <SpamGauge spamScore={data.spamScore} />}
+            {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
           </div>
         </div>
         <ReaderActions

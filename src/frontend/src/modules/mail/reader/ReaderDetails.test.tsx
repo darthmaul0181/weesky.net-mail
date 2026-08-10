@@ -86,6 +86,26 @@ describe('ReaderDetails', () => {
     expect(screen.queryByText(/no encryption/i)).not.toBeInTheDocument()
   })
 
+  // The gauge is the phone header's, folded in here: MessageReader passes the flag only there.
+  it('carries the spam gauge when asked, and never otherwise', () => {
+    const scored = { ...message, spamScore: { score: 7, threshold: 16, raw: 'raw' } }
+
+    const { unmount } = render(<ReaderDetails message={scored} showSpamScore />)
+    expect(screen.getByText('Spam score:')).toBeInTheDocument()
+    expect(screen.getByText('7.0 / 16.0')).toBeInTheDocument()
+    unmount()
+
+    render(<ReaderDetails message={scored} />)
+    expect(screen.queryByText('Spam score:')).not.toBeInTheDocument()
+  })
+
+  // Otherwise the flag alone would leave a labelled row with nothing under it.
+  it('drops the spam row when the message carries no score', () => {
+    render(<ReaderDetails message={message} showSpamScore />)
+
+    expect(screen.queryByText('Spam score:')).not.toBeInTheDocument()
+  })
+
   // The scheme is case-insensitive on the wire; a new tab would open blank on a mailto.
   it('treats an uppercase mailto as a mailto', () => {
     render(<ReaderDetails message={{ ...message, unsubscribeUrl: 'MAILTO:unsub@x.be' }} />)

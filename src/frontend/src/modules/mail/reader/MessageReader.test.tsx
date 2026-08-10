@@ -3,10 +3,11 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { settle } from '../../../test-utils'
+import { mockViewport, resetViewport, settle } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
 import MessageReader from './MessageReader'
+import { formatReaderDateShort } from './formatReaderDate'
 
 const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
@@ -1705,6 +1706,64 @@ describe('MessageReader', () => {
 
       await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not prepare the message'))
       expect(screen.queryByTestId('compose-state')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('the phone header', () => {
+    const scored = {
+      ...detail,
+      spamScore: { score: 7, threshold: 16, raw: 'X-Spamd-Result: default: False [7.00 / 16.00];' },
+    }
+
+    beforeEach(() => { mockViewport('phone') })
+    afterEach(() => { resetViewport() })
+
+    it('moves the date onto the recipients line, in its short form', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      const row = container.querySelector('.reader-to-row') as HTMLElement
+      expect(row).toHaveTextContent('Mick')
+      expect(row.textContent).toContain(formatReaderDateShort(detail.date))
+      // The long form is what wrapped the sender line in two; the month name is its tell, and it
+      // reads July in every timezone this date can land in.
+      expect(container.querySelector('.reader-from .reader-date')).toBeNull()
+      expect(screen.queryByText(/July/)).not.toBeInTheDocument()
+    })
+
+    it('keeps the date on screen when the message names no recipient', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, to: [] })
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-to-row')!.textContent)
+        .toBe(formatReaderDateShort(detail.date))
+    })
+
+    it('folds the spam gauge behind the chevron', async () => {
+      mocks.getMailMessage.mockResolvedValue(scored)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText('7.0 / 16.0')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+
+      expect(container.querySelector('.reader-details')).toHaveTextContent('7.0 / 16.0')
+    })
+
+    it('honours the setting that turns the gauge off', async () => {
+      mocks.getMailMessage.mockResolvedValue(scored)
+      mocks.getPreferences.mockResolvedValue({ 'mail.showSpamScore': 'false' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+
+      expect(screen.queryByText('Spam score:')).not.toBeInTheDocument()
     })
   })
 })
