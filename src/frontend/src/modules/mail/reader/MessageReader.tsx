@@ -61,10 +61,13 @@ interface Props {
   onBack?: () => void
   onNotify?: (message: string) => void
   onDeparted?: (uid: number) => void
+  /** Draw the actions across the foot of the column instead of inside the header. The caller's
+      call, not this component's: only the layout knows whether the reader owns the screen. */
+  bottomActions?: boolean
 }
 
 export default function MessageReader(
-  { folderPath, uid, folderRole, onBack, onNotify, onDeparted }: Props) {
+  { folderPath, uid, folderRole, onBack, onNotify, onDeparted, bottomActions }: Props) {
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
@@ -292,6 +295,28 @@ export default function MessageReader(
     href: `/mail/source?folder=${encodeURIComponent(folderPath!)}&uid=${uid}`,
   })
 
+  const readerActions = (
+    <ReaderActions
+      bar={bottomActions}
+      showColourToggle={isDark && !!data.htmlBody}
+      originalColours={originalColours}
+      onToggleColours={() => setOriginalColours(v => !v)}
+      seen={seen}
+      flagged={flagged}
+      onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
+      onToggleFlagged={() =>
+        setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
+      deleteLabel={deleteLabel}
+      deleteDisabled={deleteDisabled}
+      onDelete={onDelete}
+      actions={actions}
+      onReply={() => void openCompose('reply')}
+      onReplyAll={() => void openCompose('replyAll')}
+      onForward={() => void openCompose('forward')}
+      preparing={prepare.isPending}
+    />
+  )
+
   return (
     <article>
       <header className="reader-header">
@@ -373,24 +398,7 @@ export default function MessageReader(
             {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
           </div>
         </div>
-        <ReaderActions
-          showColourToggle={isDark && !!data.htmlBody}
-          originalColours={originalColours}
-          onToggleColours={() => setOriginalColours(v => !v)}
-          seen={seen}
-          flagged={flagged}
-          onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
-          onToggleFlagged={() =>
-            setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
-          deleteLabel={deleteLabel}
-          deleteDisabled={deleteDisabled}
-          onDelete={onDelete}
-          actions={actions}
-          onReply={() => void openCompose('reply')}
-          onReplyAll={() => void openCompose('replyAll')}
-          onForward={() => void openCompose('forward')}
-          preparing={prepare.isPending}
-        />
+        {!bottomActions && readerActions}
       </header>
 
       {/* The backend hit one of its sanitiser ceilings. Nothing here can restore the rest — the
@@ -486,6 +494,10 @@ export default function MessageReader(
           })}
         </div>
       )}
+
+      {/* Last band of the column, so it sits on the screen's own edge — under the attachments,
+          which belong to the message, not to the actions taken on it. */}
+      {bottomActions && <div className="reader-actionbar">{readerActions}</div>}
 
       {viewed && (
         <AttachmentViewerModal

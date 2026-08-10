@@ -1798,5 +1798,34 @@ describe('MessageReader', () => {
 
       expect(screen.queryByText('Spam score:')).not.toBeInTheDocument()
     })
+
+    // The cluster leaves the header for the foot of the column: it costs a whole line up there,
+    // since the header stacks below 480px, and at the bottom it lands where the thumb already is.
+    // `bottomActions` is the caller's call rather than this component's, because only MailLayout
+    // knows the pane — the same message beside a list on a tablet keeps its header cluster.
+    it('moves the actions to a bottom bar when the caller asks for one', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(
+        <MessageReader folderPath="INBOX" uid={2} onBack={vi.fn()} bottomActions />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-header .reader-actions')).toBeNull()
+      const bar = container.querySelector('.reader-actionbar')
+      expect(bar).not.toBeNull()
+      expect(bar!.querySelector('.reader-actions')).not.toBeNull()
+      expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    })
+
+    it('keeps the actions in the header when it is not asked for one', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} onBack={vi.fn()} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-header .reader-actions')).not.toBeNull()
+      expect(container.querySelector('.reader-actionbar')).toBeNull()
+    })
   })
 })

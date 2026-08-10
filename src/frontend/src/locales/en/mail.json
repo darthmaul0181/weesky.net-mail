@@ -197,6 +197,13 @@
     "reply": "Reply",
     "replyAll": "Reply all",
     "forward": "Forward",
+    "bar": {
+      "reply": "Reply",
+      "replyAll": "Reply all",
+      "forward": "Forward",
+      "delete": "Delete",
+      "more": "More"
+    },
     "messageActions": "Message actions",
     "editAsNew": "Edit as new",
     "viewSource": "View source",

@@ -197,6 +197,13 @@
     "reply": "Répondre",
     "replyAll": "Répondre à tous",
     "forward": "Transférer",
+    "bar": {
+      "reply": "Répondre",
+      "replyAll": "À tous",
+      "forward": "Transférer",
+      "delete": "Supprimer",
+      "more": "Plus"
+    },
     "messageActions": "Actions du message",
     "editAsNew": "Modifier comme nouveau",
     "viewSource": "Afficher la source",

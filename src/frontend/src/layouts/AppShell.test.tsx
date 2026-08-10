@@ -33,4 +33,14 @@ describe('AppShell', () => {
     expect(hasTabBar('/contacts/new')).toBe(false)
     expect(hasTabBar('/contacts/9f1c-b2/edit')).toBe(false)
   })
+
+  // An open message owns the phone screen, and "Mail" is the tab it would navigate to: the bar
+  // costs 57px to point at where the reader already is, while the ← is the real way out. Keyed on
+  // the uid rather than on the viewport, which the bar's own stylesheet already answers — above
+  // 639px it is not drawn whatever this decides. A contact's `?id=` is deliberately not the same
+  // shape: its card sits beside the list rather than replacing it.
+  it('withholds it while a message owns the screen', () => {
+    expect(hasTabBar('/mail?folder=INBOX&uid=42')).toBe(false)
+    expect(hasTabBar('/mail?folder=INBOX')).toBe(true)
+  })
 })

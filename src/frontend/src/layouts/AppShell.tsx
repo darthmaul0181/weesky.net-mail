@@ -1,4 +1,4 @@
-import { Outlet, useMatch } from 'react-router-dom'
+import { Outlet, useMatch, useSearchParams } from 'react-router-dom'
 import { useMailNotifications } from '../modules/mail/notify/useMailNotifications'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useFaviconBadge } from '../hooks/useFaviconBadge'
@@ -19,6 +19,14 @@ export default function AppShell() {
   const newContact = useMatch('/contacts/new') != null
   const editingContact = useMatch('/contacts/:id/edit') != null
   const writing = composing || newContact || editingContact
+  // An open message owns the phone screen and draws its own action bar at the foot of it, so the
+  // tab bar would point at the tab it is already on. Keyed on the uid rather than on the viewport:
+  // the bar's own stylesheet withholds it above 639px whatever this decides, and a route flag
+  // cannot fall out of step with the reader's own hook the way a second `useViewport` would.
+  // Both calls unconditional, for the reason spelled out above the three matches.
+  const onMail = useMatch('/mail') != null
+  const [params] = useSearchParams()
+  const readingMail = onMail && params.get('uid') !== null
 
   return (
     <div className="app-shell">
@@ -29,7 +37,7 @@ export default function AppShell() {
           <Outlet />
         </main>
       </div>
-      {!writing && <BottomNav />}
+      {!writing && !readingMail && <BottomNav />}
     </div>
   )
 }

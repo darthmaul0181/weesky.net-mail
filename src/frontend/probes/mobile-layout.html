@@ -563,6 +563,7 @@
     const DEFAULT_CC = [{ name: 'Carole Petit', address: 'carole@example.com' }]
     const readerHeader = ({
       width, detailsOpen = false, sender = 'Alice Martin', to = DEFAULT_TO, cc = DEFAULT_CC,
+      headerActions = true,
     }) => `
       <div class="mail-reader" style="width:${width}px">
         <article>
@@ -601,6 +602,7 @@
                 <div class="reader-recipients">Cc: ${addressList(cc)}</div>`}
               </div>
             </div>
+            ${headerActions ? `
             <div class="reader-actions">
               <button type="button" class="action-btn" aria-label="Répondre">R</button>
               <button type="button" class="action-btn" aria-label="Répondre à tous">RT</button>
@@ -612,7 +614,7 @@
               <div class="dropdown-root">
                 <button type="button" class="action-btn" aria-label="Actions du message">&#8942;</button>
               </div>
-            </div>
+            </div>` : ''}
           </header>
         </article>
       </div>`
@@ -620,6 +622,51 @@
     // was one and is not here because the markup no longer has one: below 640px the pill is not
     // rendered at all, the details grid's own Désabonnement row being the phone's route to it.
     const READER_TOUCH = '.reader-back, .details-toggle, .action-btn'
+
+    // The phone's foot-of-screen shape: the cluster leaves the header for a band of its own at the
+    // bottom of the column, and the tab bar is not drawn at all while a message is open. Five named
+    // cells, in French, because those are the long labels — `Transférer` is what a 320px screen has
+    // to fit in a fifth of its width. Read `clipped` for the labels and `smallest` for the cells;
+    // `height` is the band, which must come to the 57px the tab bar it replaces spent (56 + border).
+    const readerBar = ({ width }) => `
+      <div class="mail-reader" style="width:${width}px">
+        <article>
+          <div class="reader-actionbar">
+            <div class="reader-actions is-bar">
+              <button type="button" class="reader-bar-item" aria-label="Répondre">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">Répondre</span>
+              </button>
+              <button type="button" class="reader-bar-item" aria-label="Répondre à tous">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">À tous</span>
+              </button>
+              <button type="button" class="reader-bar-item" aria-label="Transférer">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">Transférer</span>
+              </button>
+              <button type="button" class="reader-bar-item is-danger" aria-label="Supprimer">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">Supprimer</span>
+              </button>
+              <div class="dropdown-root">
+                <button type="button" class="reader-bar-item" aria-label="Actions du message">
+                  <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6" r="1"/></svg>
+                  <span class="reader-bar-label">Plus</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>`
+    for (const width of [360, 320]) {
+      CASES.push({
+        name: `reader action bar-${width}`,
+        html: readerBar({ width }),
+        touch: '.reader-bar-item',
+        height: '.reader-actionbar',
+      })
+    }
     // 320 (iPhone SE 1st gen, an Android split-screen pane) needs no "(read at …)" annotation the
     // way the 520-wide toolbar cases above do: that annotation exists only when a case's own
     // width is WIDER than the viewport it would otherwise be read at, so the stage overflows the
@@ -627,26 +674,42 @@
     // file says to drive it at, so — like 'toolbar-idle-240' above — it reads correctly at any of
     // them; `.reader-actions`' fit-content sizing keys off this div's own definite width, not the
     // window's.
+    // No `.reader-actions` in these two: below 640px the cluster is not in the header at all, it is
+    // the `reader action bar` band below. `height` is what they exist for — 150 at both widths,
+    // against the 194 and 240 the same headers read while the cluster still cost them a line. The
+    // two now agreeing is the To row's own ellipsis: 320 used to buy a second line there.
     for (const [name, width] of [
       ['reader header loaded', 360],
       ['reader header loaded-320', 320],
     ]) {
-      // The two rects answer where the cluster sits, which no other metric here can: left-aligned
-      // under the stack is not a clip, not an overflow and not a small target. Read the rights —
-      // .reader-actions' must land one 22px padding inside .reader-header's — and ignore
-      // `intersect`, true by construction for a child and its parent.
       CASES.push({
-        name, html: readerHeader({ width }), touch: READER_TOUCH, height: '.reader-header',
-        overlap: ['.reader-actions', '.reader-header'],
+        name, html: readerHeader({ width, headerActions: false }),
+        touch: '.reader-back, .details-toggle', height: '.reader-header',
       })
     }
+    // The cluster's own geometry, which the two cases above used to hold and no longer can. Read at
+    // 768 with a 400px column, which is a real shape rather than a phone drawn wrong: a tablet at
+    // `right`, whose `.mail-reader` sits under the 480px container query — so the header stacks,
+    // which is the arrangement the `align-self: stretch` + `justify-content: flex-end` pair exists
+    // for. `align-self: flex-end` alone put the cluster against the LEFT margin at every width the
+    // query matches, and no metric but these two rects could see it. Read the rights —
+    // .reader-actions' must land one 22px padding inside .reader-header's — and ignore `intersect`,
+    // true by construction for a child and its parent.
+    CASES.push({
+      name: 'reader header cluster, stacked (read at 768x1024)',
+      html: readerHeader({ width: 400 }),
+      touch: READER_TOUCH,
+      height: '.reader-header',
+      overlap: ['.reader-actions', '.reader-header'],
+    })
     // `height` is the whole point of this case: each label:value pair is one grid row rather than
-    // two, so the header reads 363 where the stacked version read 563. The subject is the one
-    // value still allowed to take the lines it needs, and it takes four at 360.
+    // two, so the header reads 319 where the stacked version read 563 — 44 of that difference is
+    // the action cluster, which now sits in the bar below. The subject is the one value still
+    // allowed to take the lines it needs, and it takes four at 360.
     CASES.push({
       name: 'reader details open',
-      html: readerHeader({ width: 360, detailsOpen: true }),
-      touch: READER_TOUCH,
+      html: readerHeader({ width: 360, detailsOpen: true, headerActions: false }),
+      touch: '.reader-back, .details-toggle',
       height: '.reader-header',
     })
     // A mailing list's own name, which is the sender the unsubscribe pill always accompanied and
@@ -660,7 +723,7 @@
     // carries no touch selector of its own.
     CASES.push({
       name: 'reader header mailing-list sender',
-      html: readerHeader({ width: 360, sender: 'BNP Paribas Fortis Surveys' }),
+      html: readerHeader({ width: 360, sender: 'BNP Paribas Fortis Surveys', headerActions: false }),
       height: '.reader-header',
     })
     // One recipient whose display name is long — a GitHub notification's `owner/repo`, the shape

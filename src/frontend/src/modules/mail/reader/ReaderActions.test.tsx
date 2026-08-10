@@ -247,4 +247,63 @@ describe('ReaderActions', () => {
       expect(onSelect).not.toHaveBeenCalled()
     })
   })
+
+  describe('as a bottom bar', () => {
+    it('names every button on screen rather than in a tooltip', () => {
+      render(<ReaderActions {...base} bar />)
+
+      expect(screen.getByText('Reply')).toBeInTheDocument()
+      expect(screen.getByText('Reply all')).toBeInTheDocument()
+      expect(screen.getByText('Forward')).toBeInTheDocument()
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+      expect(screen.getByText('More')).toBeInTheDocument()
+    })
+
+    // A bar whose number of cells changes with the theme and the body type reads as a rendering
+    // fault, and the toggle is the one control here that is conditional. It keeps its wording —
+    // the action to come, never the current state — wherever it is drawn.
+    it('folds the colour toggle into the menu instead of spending a sixth cell on it', () => {
+      const onToggle = vi.fn()
+      const { container } = render(
+        <ReaderActions {...base} bar showColourToggle onToggleColours={onToggle} />)
+
+      expect(screen.queryByRole('button', { name: 'Original colours' })).not.toBeInTheDocument()
+      expect(container.querySelectorAll('.reader-bar-item')).toHaveLength(5)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Original colours' }))
+
+      expect(onToggle).toHaveBeenCalledOnce()
+    })
+
+    it('leaves the menu alone when the toggle has no business being offered', () => {
+      render(<ReaderActions {...base} bar />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+      expect(screen.queryByRole('menuitem', { name: 'Original colours' })).not.toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Mark as unread' })).toBeInTheDocument()
+    })
+
+    // The visible label is generic where the accessible name is not: inside the trash this button
+    // expunges, and a screen reader has to say so even though the cell has room for one word.
+    it('keeps the caller`s delete wording as the accessible name', () => {
+      render(<ReaderActions {...base} bar deleteLabel="Delete permanently" />)
+
+      expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeInTheDocument()
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+
+    it('fires the same callbacks the header cluster does', () => {
+      const onReply = vi.fn()
+      const onDelete = vi.fn()
+      render(<ReaderActions {...base} bar onReply={onReply} onDelete={onDelete} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+      expect(onReply).toHaveBeenCalledOnce()
+      expect(onDelete).toHaveBeenCalledOnce()
+    })
+  })
 })

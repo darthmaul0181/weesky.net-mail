@@ -869,4 +869,41 @@ describe('MailLayout on a phone', () => {
     expect(container.querySelector('.context-drawer')).toBeNull()
     expect(container.querySelector('.mail-folders')).toBeTruthy()
   })
+
+  // The reader draws its own action bar across the foot of the screen here, and the compose
+  // button is anchored 73px up from that same edge: leaving it there would put a 56px disc over
+  // the delete and the kebab. Writing stays one ← away, which the list screen still offers.
+  const opened = {
+    uid: 1, folderPath: 'INBOX', uidValidity: 1, subject: 'ouvert', fromName: '', fromAddress: 'a@b.c',
+    to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '<p>x</p>', textBody: 'x',
+    blockedImageCount: 0, attachments: [],
+  }
+
+  it('withholds the compose button while a message owns the screen', async () => {
+    mockViewport('phone')
+    mocks.getMailMessage.mockResolvedValue(opened)
+    const { container } = renderAt('/mail?folder=INBOX&uid=1')
+    await screen.findByText('ouvert')
+    expect(container.querySelector('.reader-actionbar')).toBeTruthy()
+    expect(container.querySelector('.floating-action')).toBeNull()
+  })
+
+  it('keeps it on the list screen', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.floating-action')).toBeTruthy()
+  })
+
+  // A tablet at `none` gives the reader the screen too, but its header has the width to keep the
+  // cluster — and the drawer hides the folder column's own Compose, so the button is the only
+  // way to write from here.
+  it('leaves both alone on a tablet', async () => {
+    mockViewport('tablet')
+    mocks.getMailMessage.mockResolvedValue(opened)
+    const { container } = renderAt('/mail?folder=INBOX&uid=1', undefined, 'none')
+    await screen.findByText('ouvert')
+    expect(container.querySelector('.reader-actionbar')).toBeNull()
+    expect(container.querySelector('.floating-action')).toBeTruthy()
+  })
 })

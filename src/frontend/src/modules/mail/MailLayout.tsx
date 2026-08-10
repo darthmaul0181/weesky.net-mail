@@ -376,6 +376,7 @@ export default function MailLayout() {
               {uid !== null && (
                 <div className="mail-reader">
                   <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
+                    bottomActions={viewport === 'phone'}
                     onBack={closeMessage} onDeparted={departed} onNotify={addToast} />
                 </div>
               )}
@@ -384,7 +385,11 @@ export default function MailLayout() {
         </>
       )}
 
-      {!composing && (
+      {/* The reader draws its own bar across the foot of a phone screen, and the button is anchored
+          73px up from that same edge: leaving it there puts a 56px disc over the delete and the
+          kebab. A tablet at `none` keeps it — its reader has no bar, and the folder column's own
+          Compose is behind the drawer. */}
+      {!composing && !(viewport === 'phone' && pane === 'none' && uid !== null) && (
         <FloatingAction label={t('layout.newMessage')} onClick={openCompose}>
           <RocketIcon size={22} />
         </FloatingAction>
