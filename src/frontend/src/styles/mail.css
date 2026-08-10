@@ -1940,16 +1940,30 @@ textarea.compose-editor {
      the desktop toolbar and finds it unaffected by this query. */
   .compose-tool, .compose-tool-select { min-height: var(--touch); }
 
-  /* From, To, Cc and Bcc: each field-h.recipients-field's own label moves above its box, widening
-     the recipients-box from 237px to 313px at 360px (measured, all three identical — see
-     task-11-report.md), and .compose-to-row's two children (the To field and the Cc/Bcc/Priority
-     links) stack instead of splitting the row, so To no longer shares its width with those links
-     either. */
-  /* `.recipients-field` is off this list because index.css's phone block now rotates every
-     `.field-h`, which this one is — the three declarations were byte-identical. The two compose
-     rows that are NOT `.field-h` still need it. */
-  .compose-from, .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
+  /* The composer's labels go back BESIDE their control, against index.css's phone block, which
+     rotates every `.field-h`. That rotation is right for a settings row — sentence-length captions
+     over an input with a ~177px intrinsic floor — and wrong here: `De`, `À`, `Cc`, `Cci` and
+     `Objet` are one word each, and every rotated row spent a whole line on a caption. Owner's
+     call, and the price is a narrower box: the recipients box goes back from 313px to 237 at 360.
+     Three declarations carry it — a row again, a label column sized to the longest of those five
+     words rather than the settings 110px, and `min-width: 0` on the controls, which is what the
+     rotation existed to avoid needing. `.compose-to-row` stays a column: its second child is the
+     Cc/Cci/Priorité strip, which is a row of its own and not this row's control. */
+  .compose-fields .field-h { flex-direction: row; align-items: center; gap: 10px; }
+  .compose-fields .field-h > label:first-child { width: 52px; flex: none; }
+  .compose-fields .field-h > input[type="text"],
+  .compose-fields .field-h.recipients-field .recipients-box { min-width: 0; }
+  .field-h.recipients-field .recipients-box input { min-width: 60px; }
+  .compose-from { flex-direction: row; align-items: center; gap: 10px; }
+  .compose-from .compose-from-label { width: 52px; flex: none; }
+  .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
   .compose-link-form input { width: 100%; }
+
+  /* Three rows of tools left 102px of a 640px screen to the message. Folded, the bar keeps the
+     plain-text switch, the paperclip, B/I/U/S and the ⋯ that reveals the rest — measured, seven
+     cells is what fits one row at 320 as well as at 360, and eight already wraps at 320. Hidden
+     rather than unmounted, so an open popover among them survives a fold. */
+  .compose-toolbar:not(.is-expanded) .compose-tool-group.is-extra { display: none; }
 
   /* The quick-search band is `flex: none`, so flooring its 26px advanced button grows the band
      once and spends no row budget — the same trade .compose-header's buttons take below. The
@@ -1965,9 +1979,13 @@ textarea.compose-editor {
      over with Cc and Bcc open. The box is the touch target here, not the caret inside it. */
   .field-h.recipients-field .recipients-box input { min-height: 0; }
 
-  /* Send and Save draft are the surface's two primary actions; .compose-header is a fixed band
+  /* Send and the kebab are the surface's two header actions; .compose-header is a fixed band
      (flex: none), so flooring them only grows it once and spends no row budget. */
   .compose-header .btn { min-height: var(--touch); }
+  /* The band has no `flex-wrap` and must not gain one: what fixed the 102px of overflow is the
+     title leaving and Save draft folding into this trigger, not a second row. Square, so the
+     kebab is a touch target rather than a word-shaped button with no word in it. */
+  .compose-header-more { min-width: var(--touch); padding: 0; }
 }
 
 /* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk

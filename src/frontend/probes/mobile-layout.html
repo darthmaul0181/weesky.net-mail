@@ -795,16 +795,18 @@
       touch: '.modal-close, .btn',
     })
 
-    // `undersized: 14` here is known and accepted, not a defect this task missed: all 14 are
-    // `.compose-tool` buttons, floored to `var(--touch)` on height only, so each stays 31px wide
-    // and `smallest` (the lesser of a target's own width and height) reads 31. `.compose-send` is
-    // floored on both axes and is not one of the 14. Widening `.compose-tool` to 44px was measured
-    // and rejected: it packs the toolbar to 4 rows (231px, +56px over the shipped 175px), leaving
-    // ~130px of editor on a 640px screen with one attachment staged, and the usual hit-area escape
-    // (an inset `::before`, as `.reader-back` uses) does not transfer — `.compose-tool-group` packs
-    // its buttons on a 1px gap, so expanded pseudo-elements would steal each other's taps. The
-    // real fix is fewer visible tools behind an overflow group, which is design work outside this
-    // plan; see task-11-report.md.
+    // `undersized: 7` folded and `22` expanded are known and accepted, not a defect this task
+    // missed: every one is a `.compose-tool` floored to `var(--touch)` on height only, so it stays
+    // 31px wide and `smallest` (the lesser of a target's own width and height) reads 31.
+    // `.compose-send`, `.compose-header-more` and `.modal-close` are floored on both axes and are
+    // none of them. It read 14 before the overflow group: folding took the visible count to seven,
+    // which is half the deferral paid off rather than the whole of it. **44px still does not fit,
+    // and that is arithmetic rather than an untried idea**: seven cells at 44 come to 308px plus
+    // the group gaps, against the 288px a 320px screen leaves inside the bar's own padding — it
+    // would take five visible tools, and even at 360 the gaps put seven over the 328 available.
+    // The other escape does not transfer either: an inset `::before` hit area, as `.reader-back`
+    // uses, would have neighbours 1px away inside `.compose-tool-group` and they would steal each
+    // other's taps. So the remaining fix is fewer visible tools still, which is a product call.
     //
     // The To row is RecipientsField's real markup, and its `type="text"` is load-bearing: an
     // attribute selector matches the ATTRIBUTE and not the IDL default, so the bare <input /> that
@@ -812,23 +814,66 @@
     // Rules page's class) was invisible to index.css's phone-block floor on typed controls — this
     // case and the one below reported "byte-identical" while that floor was pushing the real
     // .recipients-box from 32px to 54px. A fixture that is not the markup is not a guard.
-    CASES.push({
-      name: 'compose-360',
-      html: `<div class="compose-view">
-               <div class="compose-header"><button class="btn btn-primary compose-send">Send</button></div>
-               <div class="compose-fields">
-                 <div class="compose-to-row">
-                   <div class="field-h recipients-field"><label>To</label>
-                     <div class="recipients-box"><input type="text" /></div>
-                   </div>
-                 </div>
-               </div>
-               <div class="compose-toolbar">
-                 ${Array.from({ length: 14 }, (_, i) => `<button class="compose-tool">${i}</button>`).join('')}
-               </div>
-             </div>`,
-      touch: '.compose-tool, .compose-send',
-    })
+    //
+    // The whole surface, in its real bands, because the defect it now holds is vertical: the body
+    // had 102px of a 640px screen. `height` is `.compose-body`, and the numbers are 347 folded at
+    // both widths against 102 before, with the header's own 102px of overflow — Save draft cut off
+    // and the ✕ entirely off screen — gone from `clipped` at the same time.
+    const composeView = ({ width, expanded = false }) => {
+      const tools = n => Array.from({ length: n }, () => '<button class="compose-tool">B</button>').join('')
+      const selects = n => Array.from({ length: n },
+        () => '<div class="dropdown-root"><button class="compose-tool-select">A<span>v</span></button></div>').join('')
+      // Group order and `is-extra` exactly as EditorToolbar writes them: plain-text switch and the
+      // paperclip stay, undo/redo folds, B/I/U/S stays, colours, font/size/align, lists and
+      // link/unlink/image/clear fold, then the ⋯ that reveals them. Seven cells folded.
+      const groups = [
+        [1, false], [1, false], [2, true], [4, false], [2, true],
+        [3, true, 'select'], [4, true], [4, true], [1, false],
+      ]
+      return `
+      <div class="compose-view" style="width:${width}px;height:640px">
+        <div class="compose-header">
+          <button class="btn btn-primary compose-send">🚀 Envoyer</button>
+          <button class="btn btn-ghost compose-header-more">&#8942;</button>
+          <button class="modal-close" aria-label="Fermer">&#10005;</button>
+        </div>
+        <div class="compose-fields">
+          <div class="compose-from"><span class="compose-from-label">De</span>
+            <span class="compose-from-value">Mick (darth@weesky.be)</span></div>
+          <div class="compose-to-row">
+            <div class="field-h recipients-field"><label>À</label>
+              <div class="recipients-box">
+                <span class="recipient-token">Michaël <button type="button">&#10005;</button></span>
+                <input type="text" />
+              </div>
+            </div>
+            <span class="compose-cc-links">
+              <button class="compose-link-btn">Cc</button>
+              <button class="compose-link-btn">Cci</button>
+              <button class="compose-link-btn">Priorité</button>
+            </span>
+          </div>
+          <div class="field-h"><label for="probe-subject">Objet</label>
+            <input id="probe-subject" type="text" value="Re: Mail avec pièce jointe .eml" /></div>
+        </div>
+        <div class="compose-toolbar${expanded ? ' is-expanded' : ''}">
+          ${groups.map(([n, extra, kind]) =>
+            `<div class="compose-tool-group${extra ? ' is-extra' : ''}">${kind === 'select' ? selects(n) : tools(n)}</div>`).join('')}
+        </div>
+        <div class="compose-body"><div class="compose-editor"></div></div>
+      </div>`
+    }
+    for (const [name, opts] of [
+      ['compose-360', { width: 360 }],
+      ['compose-320', { width: 320 }],
+      ['compose-360-expanded', { width: 360, expanded: true }],
+    ]) {
+      CASES.push({
+        name, html: composeView(opts),
+        touch: '.compose-tool, .compose-tool-select, .compose-send, .compose-header-more, .modal-close',
+        height: '.compose-body',
+      })
+    }
 
     // The one case that reads `.recipients-box`'s own height, which is the whole point of it now:
     // 32px is the box's `min-height` and anything above it means something inside grew.
@@ -858,9 +903,6 @@
              </div>
              <div class="compose-attachments">
                <span class="compose-attachment">report.pdf <button type="button">&#10005;</button></span>
-               <button type="button" class="btn btn-ghost compose-attach-btn">
-                 <svg width="16" height="16"></svg> Attach a file
-               </button>
              </div>`,
       touch: '.recipient-token button, .compose-attachment button',
     })

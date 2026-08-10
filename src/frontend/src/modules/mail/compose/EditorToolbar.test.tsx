@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { mockViewport, resetViewport } from '../../../test-utils'
 import EditorToolbar from './EditorToolbar'
 import type { EditorHandle } from './SquireEditor'
 
@@ -200,5 +201,74 @@ describe('EditorToolbar', () => {
     render(<EditorToolbar editor={null} plainText onPickImages={noop} onTogglePlainText={noop} />)
 
     expect(screen.queryByRole('button', { name: 'Insert image' })).toBeNull()
+  })
+
+  // The tray's own button, moved: attaching a file and inserting an image both open a picker, and
+  // one of the two was costing a 61px band of its own. Outside the plain-text branch, since a
+  // plain-text message carries attachments exactly like an HTML one.
+  it('hands picked files to the composer, in both body formats', () => {
+    const onAddFiles = vi.fn()
+    const file = new File(['x'], 'facture.pdf', { type: 'application/pdf' })
+
+    const { rerender } = render(<EditorToolbar editor={null} plainText={false}
+      onPickImages={noop} onAddFiles={onAddFiles} onTogglePlainText={noop} />)
+    const input = screen.getByTestId('attachment-input') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(onAddFiles).toHaveBeenCalledWith([file])
+    expect(input.value).toBe('')
+
+    rerender(<EditorToolbar editor={null} plainText onPickImages={noop} onAddFiles={onAddFiles}
+      onTogglePlainText={noop} />)
+    expect(screen.getByRole('button', { name: 'Attach files' })).toBeInTheDocument()
+  })
+
+  // Three rows of tools left 102px of a 640px phone screen to the message. The rest is one tap
+  // away rather than gone, and the groups keep their own markup: font, size, alignment and the
+  // two colour swatches are menus and popovers, which cannot be nested inside another menu.
+  describe('on a phone', () => {
+    beforeEach(() => { mockViewport('phone') })
+    afterEach(() => { resetViewport() })
+
+    const toolbar = () => render(<EditorToolbar editor={fakeEditor()} plainText={false}
+      onPickImages={noop} onAddFiles={noop} onTogglePlainText={noop} />)
+
+    it('folds every group but the essentials behind one button', () => {
+      const { container } = toolbar()
+
+      expect(container.querySelector('.compose-toolbar')!.className).not.toContain('is-expanded')
+      expect(screen.getByRole('button', { name: 'More formatting tools' }))
+        .toHaveAttribute('aria-expanded', 'false')
+      // Still rendered, and hidden by the stylesheet alone: unmounting them would drop the open
+      // state of every popover among them, and the probe is what checks they are off screen.
+      expect(container.querySelectorAll('.compose-tool-group.is-extra').length).toBeGreaterThan(0)
+    })
+
+    it('reveals them on the button and folds them back', () => {
+      const { container } = toolbar()
+      const more = screen.getByRole('button', { name: 'More formatting tools' })
+
+      fireEvent.click(more)
+      expect(container.querySelector('.compose-toolbar')!.className).toContain('is-expanded')
+      expect(screen.getByRole('button', { name: 'Fewer formatting tools' }))
+        .toHaveAttribute('aria-expanded', 'true')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Fewer formatting tools' }))
+      expect(container.querySelector('.compose-toolbar')!.className).not.toContain('is-expanded')
+    })
+
+    it('offers no such button in plain-text mode, which draws no group to fold', () => {
+      render(<EditorToolbar editor={null} plainText onPickImages={noop} onAddFiles={noop}
+        onTogglePlainText={noop} />)
+
+      expect(screen.queryByRole('button', { name: 'More formatting tools' })).toBeNull()
+    })
+  })
+
+  it('draws every group and no fold button on a desktop', () => {
+    const { container } = render(<EditorToolbar editor={fakeEditor()} plainText={false}
+      onPickImages={noop} onAddFiles={noop} onTogglePlainText={noop} />)
+
+    expect(screen.queryByRole('button', { name: 'More formatting tools' })).toBeNull()
+    expect(container.querySelector('.compose-toolbar')!.className).not.toContain('is-expanded')
   })
 })

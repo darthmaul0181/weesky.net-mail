@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useViewport } from '../../../hooks/useViewport'
 import { useContacts } from '../../contacts/queries'
 import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
@@ -14,6 +15,7 @@ import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMe
 import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
 import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import KebabIcon from '../../../icons/KebabIcon'
 import RocketIcon from '../../../icons/RocketIcon'
 import type { MailPriority } from '../api/mailTypes'
 import AttachmentTray from './AttachmentTray'
@@ -65,6 +67,7 @@ interface Props {
  */
 export default function ComposeView({ onNotify }: Props) {
   const { t } = useTranslation('compose')
+  const narrow = useViewport() === 'phone'
   const { identity } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -445,14 +448,32 @@ export default function ComposeView({ onNotify }: Props) {
   return (
     <div className="compose-view" data-testid="compose-view"
       onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+      {/* Measured at 360: title + Send + Save draft + ✕ came to 462px of content in a 360px band,
+          which has no `flex-wrap` — Save draft was cut off and the ✕, the only visible way out of
+          the composer, ended a hundred pixels past the screen. The title goes because the subject
+          field says the same thing one row down, and Save draft into a menu because Send is the
+          action this surface exists for. */}
       <div className="compose-header">
-        <span className="modal-title">{composeTitle(seed?.action, t)}</span>
+        {!narrow && <span className="modal-title">{composeTitle(seed?.action, t)}</span>}
         <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
           <RocketIcon size={15} /> {t(send.isPending ? 'header.sending' : 'header.send')}
         </button>
-        <button type="button" className="btn btn-ghost" disabled={!canSaveDraft} onClick={() => saveDraft()}>
-          {t(saveDraftMutation.isPending ? 'header.saving' : 'header.saveDraft')}
-        </button>
+        {narrow ? (
+          <DropdownMenu
+            ariaLabel={t('header.moreActions')}
+            className="btn btn-ghost compose-header-more"
+            trigger={<KebabIcon size={16} />}
+            items={[{
+              label: t(saveDraftMutation.isPending ? 'header.saving' : 'header.saveDraft'),
+              disabled: !canSaveDraft,
+              onSelect: () => saveDraft(),
+            }]}
+          />
+        ) : (
+          <button type="button" className="btn btn-ghost" disabled={!canSaveDraft} onClick={() => saveDraft()}>
+            {t(saveDraftMutation.isPending ? 'header.saving' : 'header.saveDraft')}
+          </button>
+        )}
         <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={close}>✕</button>
       </div>
 
@@ -509,6 +530,7 @@ export default function ComposeView({ onNotify }: Props) {
       <EditorToolbar editor={editor} active={active} plainText={text !== null}
         switchLocked={inlineUploads > 0}
         onPickImages={routeFiles}
+        onAddFiles={addFiles}
         onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
       <div className="compose-body" onDragEnter={onBodyDragEnter} onDragLeave={onBodyDragLeave}
         onDrop={onBodyDrop} onPasteCapture={onBodyPaste}>
@@ -520,7 +542,7 @@ export default function ComposeView({ onNotify }: Props) {
         )}
       </div>
 
-      <AttachmentTray items={attachments.items} onAddFiles={addFiles} onRemove={removeFile} />
+      <AttachmentTray items={attachments.items} onRemove={removeFile} />
 
       {(blocker.state === 'blocked' || leaveAsk !== null) && (
         <div className="modal-overlay">
