@@ -307,7 +307,10 @@ export default function MessageReader(
                 <ArrowLeftIcon size={16} />
               </button>
             )}
-            {data.subject || t('list.noSubject')}
+            {/* Its own element so the phone block can ellipsise the SUBJECT rather than the h1:
+                a box with element children that clips is a real defect everywhere else in this
+                app, and probes/mobile-layout.html only forgives an ellipsised leaf. */}
+            <span className="reader-subject-text">{data.subject || t('list.noSubject')}</span>
             {data.priority !== 'normal' && (
               <Tooltip
                 placement="bottom-left"
@@ -347,7 +350,11 @@ export default function MessageReader(
               )}
             </div>
             {detailsOpen ? (
-              <ReaderDetails message={data} showSpamScore={viewportNarrow && spamOn} />
+              <ReaderDetails
+                message={data}
+                showSubject={viewportNarrow}
+                showSpamScore={viewportNarrow && spamOn}
+              />
             ) : (
               <>
                 {(data.to.length > 0 || compactDate) && (

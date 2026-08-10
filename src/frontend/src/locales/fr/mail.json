@@ -226,6 +226,7 @@
       "failed": "Échec de SPF ou de DKIM"
     },
     "details": {
+      "subject": "Objet :",
       "from": "De :",
       "to": "À :",
       "cc": "Cc :",

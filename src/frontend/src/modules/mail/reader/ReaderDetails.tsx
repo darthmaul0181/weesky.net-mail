@@ -9,12 +9,14 @@ import { isWebUnsubscribe } from './unsubscribeLink'
 
 interface Props {
   message: MailMessageDetail
+  /** Phone only: the header ellipsises the subject to one line, so the whole of it lives here. */
+  showSubject?: boolean
   /** Phone only: the header has no room for the gauge, so it folds in here instead. */
   showSpamScore?: boolean
 }
 
 /** The grid the header chevron expands into. A row whose datum is absent renders nothing. */
-export default function ReaderDetails({ message, showSpamScore }: Props) {
+export default function ReaderDetails({ message, showSubject, showSpamScore }: Props) {
   const { t } = useTranslation('mail')
   const named = message.fromName && message.fromName !== message.fromAddress
   const isWeb = isWebUnsubscribe(message.unsubscribeUrl)
@@ -22,6 +24,9 @@ export default function ReaderDetails({ message, showSpamScore }: Props) {
 
   return (
     <dl className="reader-details">
+      {showSubject && (
+        <><dt>{t('reader.details.subject')}</dt><dd>{message.subject || t('list.noSubject')}</dd></>
+      )}
       <dt>{t('reader.details.from')}</dt>
       <dd>
         {named

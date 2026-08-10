@@ -86,6 +86,23 @@ describe('ReaderDetails', () => {
     expect(screen.queryByText(/no encryption/i)).not.toBeInTheDocument()
   })
 
+  // The phone header ellipsises the subject to one line, so the whole of it lives here instead.
+  it('carries the subject when asked, and never otherwise', () => {
+    const { unmount } = render(<ReaderDetails message={message} showSubject />)
+    expect(screen.getByText('Subject:')).toBeInTheDocument()
+    expect(screen.getByText('News')).toBeInTheDocument()
+    unmount()
+
+    render(<ReaderDetails message={message} />)
+    expect(screen.queryByText('Subject:')).not.toBeInTheDocument()
+  })
+
+  it('names an empty subject rather than leaving the row blank', () => {
+    render(<ReaderDetails message={{ ...message, subject: '' }} showSubject />)
+
+    expect(screen.getByText('(no subject)')).toBeInTheDocument()
+  })
+
   // The gauge is the phone header's, folded in here: MessageReader passes the flag only there.
   it('carries the spam gauge when asked, and never otherwise', () => {
     const scored = { ...message, spamScore: { score: 7, threshold: 16, raw: 'raw' } }

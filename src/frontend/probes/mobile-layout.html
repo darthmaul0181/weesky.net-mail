@@ -272,14 +272,15 @@
         // 4px behind a 44px invisible target would read clean by this metric — genuinely hittable,
         // visually unfindable. Accepted for what this field exists to catch (can a finger hit it),
         // not a claim that a control is easy to see.
-        const sizes = targets.map(el => {
+        const measured = targets.map(el => {
           const rect = el.getBoundingClientRect()
           const hit = pseudoHitBox(el)
           const box = hit && containsRect(hit, rect) ? hit : rect
-          const width = box.right - box.left
-          const height = box.bottom - box.top
-          return Math.round(Math.min(width, height))
+          const width = Math.round(box.right - box.left)
+          const height = Math.round(box.bottom - box.top)
+          return { el, width, height, hit: !!(hit && containsRect(hit, rect)), size: Math.min(width, height) }
         })
+        const sizes = measured.map(m => m.size)
         let pair = null
         if (overlap) {
           const [a, b] = overlap.map(selector => stage.querySelector(selector))
@@ -334,6 +335,17 @@
             })),
           smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
           undersized: sizes.filter(s => s < floor).length,
+          // WHICH target is short, in BOTH axes, and whether a ::before hit area was credited.
+          // `smallest: 33` on a case naming four selectors sent a whole diagnostic round through
+          // CDP to answer a question the report already had the data for — and the axis and the
+          // `hit` flag are the two things that then say WHY. Present only when something is
+          // actually under the floor, so a clean case stays as terse as it was.
+          ...(sizes.some(s => s < floor)
+            ? {
+              short: measured.filter(m => m.size < floor).map(
+                m => `${m.el.className || m.el.tagName.toLowerCase()}=${m.width}x${m.height}${m.hit ? ' (hit area)' : ''}`),
+            }
+            : {}),
           ...(pair ? { overlap: pair } : {}),
           // `height: selector` reports that element's own box height. Nothing passes or fails on
           // it — it is for cases whose defect is vertical (a header eating the body's screen), a
@@ -541,7 +553,7 @@
             <div class="reader-stack">
               <h1 class="reader-subject">
                 <button type="button" class="reader-back" aria-label="Back">&larr;</button>
-                Réunion budget T3 — validation finale avant envoi au comité de direction
+                <span class="reader-subject-text">Réunion budget T3 — validation finale avant envoi au comité de direction</span>
               </h1>
               <div class="reader-meta">
                 <div class="reader-from">
@@ -551,6 +563,7 @@
                 </div>
                 ${detailsOpen ? `
                 <dl class="reader-details">
+                  <dt>Objet :</dt><dd>Réunion budget T3 — validation finale avant envoi au comité de direction</dd>
                   <dt>De</dt><dd>Alice Martin &lt;alice.martin@example.com&gt;</dd>
                   <dt>À</dt><dd>moi@weesky.net, Bob Dupont &lt;bob@example.com&gt;</dd>
                   <dt>Cc</dt><dd>Carole Petit &lt;carole@example.com&gt;</dd>

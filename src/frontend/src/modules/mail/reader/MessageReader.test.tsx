@@ -1301,6 +1301,8 @@ describe('MessageReader', () => {
       // Named in full: the header carries its own shorter "Unsubscribe" link alongside.
       expect(screen.getByRole('link', { name: 'Unsubscribe from this mailing list' })).toBeInTheDocument()
       expect(container.querySelector('.reader-recipients')).toBeNull()
+      // Subject and spam are phone-only rows: the desktop header shows both in full already.
+      expect(screen.queryByText('Subject:')).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Hide details' })).toHaveAttribute('aria-expanded', 'true')
     })
 
@@ -1754,6 +1756,21 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
 
       expect(container.querySelector('.reader-details')).toHaveTextContent('7.0 / 16.0')
+    })
+
+    // The h1 keeps the back button and the priority badge as children, so the truncation has to
+    // go on a leaf of its own — the stylesheet holds the rule, this holds the element it needs.
+    it('wraps the subject in its own element, and repeats it in the details', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-subject-text')).toHaveTextContent('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+
+      expect(container.querySelector('.reader-details')).toHaveTextContent('Subject:')
     })
 
     // The pill cost a whole line: it never fitted beside a mailing list's own name, and the grid

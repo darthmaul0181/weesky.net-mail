@@ -1773,8 +1773,26 @@ textarea.compose-editor {
   .selection-master { margin: 0; }
 
   /* The actions sit under the address lines instead of beside them: at 360px, To, Cc and the
-     spam gauge each need the full measure. */
-  .reader-header { flex-direction: column; align-items: stretch; }
+     spam gauge each need the full measure.
+     padding-bottom is 6px rather than the base 18: an .action-btn is 44px tall around an 18px glyph, so 13 of those
+     18 were already inside the button and the padding was buying the gap a second time. 19px of
+     visual clearance under the icons, measured, against 31 before. The top keeps its 18 — nothing
+     above the subject supplies any. */
+  .reader-header { flex-direction: column; align-items: stretch; padding-bottom: 6px; }
+  /* One line, ellipsised: a three-line subject is ~50px of a header the message body has to pay
+     for, and the reader arrives here from a list row the reader just tapped and read. The whole
+     of it is a chevron away — ReaderDetails takes a Subject row below 640px for exactly this.
+     Flex rather than an ellipsis on the h1 itself: the back button and the priority badge are
+     element children, and an ellipsised box with children is a real clip everywhere else in this
+     app, so only .reader-subject-text — a leaf — carries the truncation.
+     `flex: none` on the two fixed children is not belt-and-braces: shrinkage is distributed in
+     proportion to each item's BASE size, and the subject's base is its whole unwrapped text —
+     ~1500px against the arrow's 26 — so the arrow still took ~2% of a 1200px overflow and was
+     squeezed to its 15px min-content. Measured: `.reader-back`'s hit area read 33x44, short in
+     the one axis nothing about the rule suggested. */
+  .reader-subject { display: flex; align-items: center; }
+  .reader-subject-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-back, .reader-priority { flex: none; }
   /* flex-wrap, not a fixed layout: minimum cluster width is 6 * 44px controls + 7 * 2px gaps +
      2 * (1px rule + 8px margin) ~= 296px. .reader-header keeps its 18px 22px padding at this
      width, so a 360px phone has ~20px to spare but a 320px one (iPhone SE, an Android
@@ -1792,7 +1810,8 @@ textarea.compose-editor {
      contain it), which fixed a WRAPPING subject but broke a one-line one — the h1 grew from 44px
      to 48px and the arrow sat 9.5px off the text's own centre, up from 2.8px on the unpatched
      rule (measured, probes/mobile-layout.html's 'reader header loaded' case rendered with a
-     one-line subject). The painted box staying 26x26 is what keeps both cases aligned; the
+     one-line subject). The painted box staying 26x26 is what keeps the arrow on the text's own
+     centre — it mattered for a wrapping subject too, back when one could wrap here; the
      ::before below only expands the HIT area, which needs no space in the layout at all since it
      is taken out of flow. position: relative on the button gives that absolutely positioned
      pseudo something to measure its inset against — specifically its PADDING box, which excludes
@@ -1805,9 +1824,10 @@ textarea.compose-editor {
      have let a small future change to the subject's line-height or margin-bottom start winning a
      hit-test meant for .address-label.is-sender underneath. Biasing the split up costs nothing
      against .reader-header's own 18px top padding and buys real headroom: measured directly
-     (senderRect.top - hitAreaBottom) at 360x640 and 320x640, a one-line subject clears 15px and a
-     wrapped one clears 66px, identically at both widths — the width plays no part, only the
-     subject's own line count does. */
+     (senderRect.top - hitAreaBottom), the clearance is 15px. There used to be a second, roomier
+     figure here for a wrapped subject; the subject no longer wraps at this width — the ellipsis
+     rule above holds it to one line — so 15px is now the only case and the worst case at once,
+     and any future change to the subject's line-height or margin-bottom spends it. */
   .reader-back { position: relative; }
   .reader-back::before { content: ''; position: absolute; top: -14px; right: -10px; bottom: -6px; left: -10px; }
   /* The short date shares the To line here. Flex on .reader-to-row only, never on the Cc row
