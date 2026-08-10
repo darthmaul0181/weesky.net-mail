@@ -1837,17 +1837,21 @@ textarea.compose-editor {
   /* The short date shares the To line here. Flex on .reader-to-row only, never on the Cc row
      beside it: AddressList keeps each separator inside the recipient's own span, so a flex gap
      between those spans would land before the comma instead of after it — the trap the base
-     .reader-recipients rule records. The addresses are wrapped in .reader-to for the same reason,
-     and they wrap rather than ellipsise: a single recipient — the common case, and the one the
-     saved line is for — fits beside the date, while a long list takes the two lines it took
-     before and the date rides along at no cost. Ellipsis was the first attempt and gave the line
-     back unconditionally, at the price of truncating recipients on every message that names more
-     than one; it also read as an 83px clip in probes/mobile-layout.html, since that metric only
-     forgives an ellipsised box with no element children and .reader-to holds AddressList's spans. */
-  /* It wraps: a recipient too wide to share the line with the date takes the row and the date
-     drops below it, rather than the line being kept by the label on its own. */
-  .reader-to-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .reader-to { min-width: 0; }
+     .reader-recipients rule records. The addresses are wrapped in .reader-to for the same reason.
+     They ELLIPSISE rather than wrap, and the row never wraps either: To and the date are one line
+     whatever they hold, which is the owner's call — a truncated recipient is the accepted price.
+     The nowrap is what makes it an ellipsis rather than a clip, and the min-width lets the item
+     shrink past its own content so there is something to truncate. Two consequences, both real:
+     probes/mobile-layout.html reads a `clipped` here, since that metric only forgives an
+     ellipsised box with no element children and .reader-to holds AddressList's spans; and the row
+     aligns on center, because a flex item with overflow: hidden synthesises its baseline from the
+     border box, which dropped the To text below the date it is supposed to sit level with. */
+  .reader-to-row { display: flex; align-items: center; gap: 8px; position: relative; }
+  .reader-to { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Blink paints no ellipsis over a positioned descendant, and Tooltip's wrapper is
+     position: relative — the name truncated with no "…" until the bubble's anchor moved up to the
+     row. It still escapes .reader-to's clip, that box not being in its containing block chain. */
+  .reader-to .tooltip-wrap { position: static; }
   .reader-to-row .reader-date { flex: none; }
   .reader-details { grid-template-columns: 1fr; }
   /* One column turns each label:value pair into two consecutive rows instead of one, so the
