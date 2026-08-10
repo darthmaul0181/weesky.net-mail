@@ -1835,11 +1835,12 @@ textarea.compose-editor {
   /* Measured at 360x640 (probes/mobile-layout.html, 'reader header loaded'): .reader-back's
      ::before above is its own fix for the same 44px floor — grown as a hit area rather than as a
      painted box. Every .action-btn in ReaderActions — reply, reply-all, forward, the colour
-     toggle, delete and the kebab — sat at 30x30, the details chevron at 20x20, and the
-     unsubscribe pill (padding: 4px 11px on 12px text, plus its border) at ~25px tall, all under
-     that floor and all fine to grow as painted boxes, since none of them sits inline with wrapping
-     text the way the subject's arrow does. */
-  .action-btn, .details-toggle, .unsub-btn {
+     toggle, delete and the kebab — sat at 30x30 and the details chevron at 20x20, both under
+     that floor and both fine to grow as painted boxes, since neither sits inline with wrapping
+     text the way the subject's arrow does. `.unsub-btn` was the third here and is gone rather
+     than dead: MessageReader stops rendering it below 640px, so the selector would have matched
+     nothing at the one width this block applies to. */
+  .action-btn, .details-toggle {
     min-width: var(--touch);
     min-height: var(--touch);
   }

@@ -1756,6 +1756,22 @@ describe('MessageReader', () => {
       expect(container.querySelector('.reader-details')).toHaveTextContent('7.0 / 16.0')
     })
 
+    // The pill cost a whole line: it never fitted beside a mailing list's own name, and the grid
+    // it moves behind already listed it.
+    it('drops the unsubscribe pill, keeping the details row it duplicated', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, unsubscribeUrl: 'https://news.x.be/unsub' })
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.unsub-btn')).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+
+      expect(screen.getByRole('link', { name: 'Unsubscribe from this mailing list' }))
+        .toHaveAttribute('href', 'https://news.x.be/unsub')
+    })
+
     it('honours the setting that turns the gauge off', async () => {
       mocks.getMailMessage.mockResolvedValue(scored)
       mocks.getPreferences.mockResolvedValue({ 'mail.showSpamScore': 'false' })

@@ -521,21 +521,20 @@
     // Task 9: the reader header at phone width. `.mail-reader` is `overflow: hidden`, so
     // `overflow` above cannot see a control hanging outside it — only `clipped` can. Drawn LOADED,
     // the same principle as the message row above: subject, a sender with an auth badge, the
-    // unsubscribe pill (the header's most crowded real state — it sits right beside the details
-    // chevron whenever the message carries one), the spam gauge, and the full ReaderActions
-    // cluster, because a header missing any of those cannot show whether the actions wrap or the
-    // row overruns. `width` mirrors the viewport the case is read at, since a real phone gives
+    // recipients, the date and the full ReaderActions cluster, because a header missing any of
+    // those cannot show whether the actions wrap or the row overruns. `width` mirrors the
+    // viewport the case is read at, since a real phone gives
     // `.mail-reader` the full screen rather than a fixed column; `detailsOpen` swaps the compact
     // To/Cc lines for the `<dl>` ReaderDetails renders, which is the only thing that exercises the
     // narrow-width grid override and its dt margin.
     //
     // These cases draw the PHONE shape of the header, which is a different tree and not merely a
     // different width: below 640px MessageReader drops the long date from `.reader-from`, puts the
-    // short one on the recipients line inside `.reader-to-row`, and moves the spam gauge into the
-    // details grid — three lines of metadata instead of five. Above 640px the header keeps the long
-    // date and a standalone `.reader-spam`, and nothing here stands for that shape; every case
-    // below is read at 320 or 360.
-    const readerHeader = ({ width, detailsOpen = false }) => `
+    // short one on the recipients line inside `.reader-to-row`, and moves both the spam gauge and
+    // the unsubscribe pill into the details grid — two lines of metadata instead of five. Above
+    // 640px the header keeps the long date, the pill and a standalone `.reader-spam`, and nothing
+    // here stands for that shape; every case below is read at 320 or 360.
+    const readerHeader = ({ width, detailsOpen = false, sender = 'Alice Martin' }) => `
       <div class="mail-reader" style="width:${width}px">
         <article>
           <header class="reader-header">
@@ -546,10 +545,9 @@
               </h1>
               <div class="reader-meta">
                 <div class="reader-from">
-                  <button type="button" class="address-label is-sender">Alice Martin</button>
+                  <button type="button" class="address-label is-sender">${sender}</button>
                   <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
                   <button type="button" class="details-toggle" aria-expanded="${detailsOpen}" aria-label="Show details">&rsaquo;</button>
-                  <a class="unsub-btn" href="#" target="_blank" rel="noopener noreferrer">&#8663; Se désabonner</a>
                 </div>
                 ${detailsOpen ? `
                 <dl class="reader-details">
@@ -588,8 +586,10 @@
           </header>
         </article>
       </div>`
-    // Every control in the header plus the ReaderActions cluster is a touch target.
-    const READER_TOUCH = '.reader-back, .details-toggle, .action-btn, .unsub-btn'
+    // Every control in the header plus the ReaderActions cluster is a touch target. `.unsub-btn`
+    // was one and is not here because the markup no longer has one: below 640px the pill is not
+    // rendered at all, the details grid's own Désabonnement row being the phone's route to it.
+    const READER_TOUCH = '.reader-back, .details-toggle, .action-btn'
     // 320 (iPhone SE 1st gen, an Android split-screen pane) needs no "(read at …)" annotation the
     // way the 520-wide toolbar cases above do: that annotation exists only when a case's own
     // width is WIDER than the viewport it would otherwise be read at, so the stage overflows the
@@ -614,6 +614,20 @@
       name: 'reader details open',
       html: readerHeader({ width: 360, detailsOpen: true }),
       touch: READER_TOUCH,
+      height: '.reader-header',
+    })
+    // A mailing list's own name, which is the sender the unsubscribe pill always accompanied and
+    // the reason it is no longer drawn below 640px. The case above could never have shown what
+    // the pill cost: 'Alice Martin' renders 72px wide and left the 141px pill room to share the
+    // line, so that header measured 278px with the pill and 278px without it. At 157px the pill
+    // wraps and the pre-change header was 330 — the whole 52 being the line it then had to
+    // itself, its 44px touch floor plus the 8px row gap. Three more senders read the same 330
+    // (129px, 157px, 185px), so 278 here is the datum, not a coincidence of one name. Nothing
+    // about the SHAPE differs from the case above, only the sender, which is why this case
+    // carries no touch selector of its own.
+    CASES.push({
+      name: 'reader header mailing-list sender',
+      html: readerHeader({ width: 360, sender: 'BNP Paribas Fortis Surveys' }),
       height: '.reader-header',
     })
 

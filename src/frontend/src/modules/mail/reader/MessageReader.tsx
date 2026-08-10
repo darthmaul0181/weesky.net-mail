@@ -334,8 +334,12 @@ export default function MessageReader(
                 <ChevronRightIcon size={12} />
               </button>
               {/* Unsubscribing acts on the sender, not on this message — hence here, not in the
-                  actions zone. */}
-              {unsubscribe && (
+                  actions zone. Not at all on a phone: at 360px the sender line has 316px and a
+                  mailing list's name spends most of it, so the pill never shared the line and
+                  always cost a whole one — 52px with its gutter, for a control the details grid
+                  already lists a chevron away. An icon-only pill saves nothing, 44px not fitting
+                  any better than 141. */}
+              {!viewportNarrow && unsubscribe && (
                 <a className="unsub-btn" href={unsubscribe} target="_blank" rel="noopener noreferrer">
                   <ExternalLinkIcon />
                   {t('reader.unsubscribe')}
