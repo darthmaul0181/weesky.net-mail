@@ -5,10 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-dotnet build                    # Build the project
-dotnet build -c Release         # Release build
 dotnet run                      # Run on localhost:5104 (opens Swagger UI)
-dotnet clean                    # Clean build artifacts
 dotnet test                     # Run all tests (always use this, NOT --no-build, when new test files have been added)
 dotnet test --no-build          # Run tests without recompiling (safe only when no new test files were added since last build)
 ```
