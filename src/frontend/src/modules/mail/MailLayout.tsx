@@ -26,7 +26,7 @@ import { roleLabel } from './roleLabel'
 import { readingPaneOf, showFolderIconsOf, usePreferences } from '../../hooks/usePreferences'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from './split/PaneSplitter'
-import { usePaneSize } from './split/usePaneSize'
+import { usePaneCollapsed, usePaneSize } from './split/usePaneSize'
 import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
 import FloatingAction from '../../components/FloatingAction'
 import { useViewport } from '../../hooks/useViewport'
@@ -208,6 +208,11 @@ export default function MailLayout() {
   const drawer = useContextDrawer()
   const [listWidth, setListWidth] = usePaneSize('mail.split.right', 380, 240)
   const [listHeight, setListHeight] = usePaneSize('mail.split.bottom', 280, 120)
+  // The folder column's own split, and the only one that folds away. 180 is its floor because the
+  // column is not a list of names but a band stack: Compose plus the refresh square is what stops
+  // shrinking first. `reserve` is the list's 240 floor plus the reader's 320.
+  const [foldersWidth, setFoldersWidth] = usePaneSize('mail.split.folders', 240, 180)
+  const [foldersCollapsed, setFoldersCollapsed] = usePaneCollapsed('mail.folders.collapsed')
 
   function closeMessage() {
     if (folder) setParams({ folder })
@@ -297,7 +302,9 @@ export default function MailLayout() {
   // Each column is a band stack: what scrolls is the middle band only, so the folder actions and
   // the pager stay put instead of hiding below their own content.
   const folderColumn = (
-    <div className="mail-folders">
+    /* No inline width inside the drawer: there the panel gives the column its width, and an
+       inline one beats the stylesheet rule that says so. */
+    <div className="mail-folders" style={drawer.inDrawer ? undefined : { width: foldersWidth }}>
       <div className="mail-folders-compose">
         <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
           <RocketIcon size={15} /> {t('layout.newMessage')}
@@ -327,9 +334,22 @@ export default function MailLayout() {
 
   return (
     <div className={`mail-layout is-${pane}`}>
-      {drawer.inDrawer
-        ? <ContextDrawer open={drawer.open} onClose={drawer.close}>{folderColumn}</ContextDrawer>
-        : folderColumn}
+      {drawer.inDrawer ? (
+        <ContextDrawer open={drawer.open} onClose={drawer.close}>{folderColumn}</ContextDrawer>
+      ) : (
+        <>
+          {/* Unmounted rather than hidden, unlike the message list under `pane: 'none'`: the tree
+              holds no scroll offset or loaded pages worth keeping, and its expand state is
+              `FolderTree`'s own — a collapsed column has nothing to preserve. */}
+          {!foldersCollapsed && folderColumn}
+          <PaneSplitter
+            orientation="vertical" size={foldersWidth} defaultSize={240} min={180} reserve={560}
+            ariaLabel={t('splitter.foldersLabel')} onResize={setFoldersWidth}
+            collapsed={foldersCollapsed}
+            onToggleCollapse={() => setFoldersCollapsed(!foldersCollapsed)}
+          />
+        </>
+      )}
 
       {/* Composing takes the whole list+reader side; the folder tree stays where it was. */}
       {composing ? (

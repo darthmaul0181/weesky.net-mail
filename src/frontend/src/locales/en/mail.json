@@ -272,7 +272,10 @@
     "newMessages_other": "{{count}} new messages"
   },
   "splitter": {
-    "label": "Resize the panes"
+    "label": "Resize the panes",
+    "collapseFolders": "Hide the folder column",
+    "expandFolders": "Show the folder column",
+    "foldersLabel": "Resize the folder column"
   },
   "mutations": {
     "updateFailed": "Could not update the message",

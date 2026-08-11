@@ -612,6 +612,50 @@ describe('reading pane arrangements', () => {
     expect(container.querySelector('.mail-stack')).not.toBeNull()
   })
 
+  // The folder column has a seam of its own, and it is the only one carrying a chevron: the two
+  // splits between the list and the reader fold nothing.
+  describe('the folder column seam', () => {
+    afterEach(() => localStorage.clear())
+
+    it('folds the column away and remembers it', async () => {
+      const { container } = renderAt('/mail?folder=INBOX')
+      await screen.findByRole('separator', { name: 'Resize the folder column' })
+      expect(container.querySelector('.mail-folders')).not.toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Hide the folder column' }))
+
+      expect(container.querySelector('.mail-folders')).toBeNull()
+      expect(localStorage.getItem('mail.folders.collapsed')).toBe('true')
+      // The seam stays: folded, it is the closed column's edge and the only way back.
+      expect(screen.getByRole('button', { name: 'Show the folder column' })).toBeInTheDocument()
+    })
+
+    it('opens folded when that is what was stored, and unfolds from the same chevron', async () => {
+      localStorage.setItem('mail.folders.collapsed', 'true')
+      const { container } = renderAt('/mail?folder=INBOX')
+      await screen.findByRole('separator', { name: 'Resize the folder column' })
+      expect(container.querySelector('.mail-folders')).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show the folder column' }))
+
+      expect(container.querySelector('.mail-folders')).not.toBeNull()
+      expect(localStorage.getItem('mail.folders.collapsed')).toBe('false')
+    })
+
+    // Folding is not resizing: unfolding must give back the width the user had set, which is why
+    // the two live in separate keys rather than a single number with 0 meaning folded.
+    it('gives back the stored width rather than the default', async () => {
+      localStorage.setItem('mail.split.folders', '300')
+      localStorage.setItem('mail.folders.collapsed', 'true')
+      const { container } = renderAt('/mail?folder=INBOX')
+      await screen.findByRole('separator', { name: 'Resize the folder column' })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show the folder column' }))
+
+      expect((container.querySelector('.mail-folders') as HTMLElement).style.width).toBe('300px')
+    })
+  })
+
   // No message open: the list has the space and there is nothing to split.
   it('renders no reader and no splitter in the no-split mode without a message', async () => {
     const { container } = renderAt('/mail?folder=INBOX', folders, 'none')
@@ -868,6 +912,19 @@ describe('MailLayout on a phone', () => {
     await settle()
     expect(container.querySelector('.context-drawer')).toBeNull()
     expect(container.querySelector('.mail-folders')).toBeTruthy()
+  })
+
+  // Behind the drawer the column has no seam to fold at, and the hamburger already hides it: a
+  // second mechanism there would be two answers to one question.
+  it('draws no folders seam while the column is in the drawer', async () => {
+    localStorage.setItem('mail.folders.collapsed', 'true')
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+
+    expect(screen.queryByRole('separator', { name: 'Resize the folder column' })).toBeNull()
+    expect(container.querySelector('.context-drawer .mail-folders')).toBeTruthy()
+    localStorage.clear()
   })
 
   // The reader draws its own action bar across the foot of the screen here, and the compose

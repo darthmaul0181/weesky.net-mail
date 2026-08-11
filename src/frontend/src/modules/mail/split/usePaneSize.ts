@@ -20,3 +20,20 @@ export function usePaneSize(
 
   return [size, update]
 }
+
+/**
+ * Whether a pane is folded away, persisted beside its size and for the same reason: a 4K screen
+ * has room for a column a laptop would rather spend on the reader, so this is the device's answer
+ * and not the account's. Only `'true'` folds — an absent key, and any value a future build does
+ * not recognise, leaves the pane where the user last saw it rather than hiding it.
+ */
+export function usePaneCollapsed(storageKey: string): [boolean, (next: boolean) => void] {
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(storageKey) === 'true')
+
+  const update = useCallback((next: boolean) => {
+    setCollapsed(next)
+    localStorage.setItem(storageKey, String(next))
+  }, [storageKey])
+
+  return [collapsed, update]
+}
