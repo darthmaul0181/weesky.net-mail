@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import {
@@ -26,11 +26,22 @@ export default function ApplicationTab({ addToast }: Props) {
 
   // The fields are reseeded from the server's answer: after a save that is the value it kept,
   // after a refusal that is server state rather than an optimistic lie.
-  useEffect(() => {
-    if (!settings) return
+  //
+  // Seeded DURING the render that first has an answer, not from an effect, and that is a race
+  // rather than a preference: an effect runs after the commit, so the inputs were mounted empty
+  // for one frame and filled on the next. CI caught it — `findByLabelText` resolves on the commit
+  // that mounts the field, which on a loaded runner is the frame before the effect, and the
+  // assertion read `""`. A render-phase update re-renders before React commits, so no tree in
+  // which the input exists empty is ever produced. Keyed on the object identity React Query hands
+  // back, which is also what the reverts below depend on: structural sharing returns the SAME
+  // reference when a refetch is deep-equal, so a refused save that left the server unchanged
+  // reseeds nothing here and the catch block has to put the field back itself.
+  const [seeded, setSeeded] = useState<typeof settings>(undefined)
+  if (settings && settings !== seeded) {
+    setSeeded(settings)
     setName(settings[APP_SETTING_KEYS.name] ?? '')
     setShortName(settings[APP_SETTING_KEYS.shortName] ?? '')
-  }, [settings])
+  }
 
   if (isLoading) return <LoadingBlock />
   if (isError || !settings) return <p>{t('application.loadFailed')}</p>
