@@ -21,7 +21,6 @@ describe('AppShell', () => {
   it('carries the tab bar on the ordinary routes', () => {
     expect(hasTabBar('/mail')).toBe(true)
     expect(hasTabBar('/contacts')).toBe(true)
-    expect(hasTabBar('/contacts?id=b')).toBe(true)
     expect(hasTabBar('/settings/account')).toBe(true)
   })
 
@@ -37,10 +36,13 @@ describe('AppShell', () => {
   // An open message owns the phone screen, and "Mail" is the tab it would navigate to: the bar
   // costs 57px to point at where the reader already is, while the ← is the real way out. Keyed on
   // the uid rather than on the viewport, which the bar's own stylesheet already answers — above
-  // 639px it is not drawn whatever this decides. A contact's `?id=` is deliberately not the same
-  // shape: its card sits beside the list rather than replacing it.
-  it('withholds it while a message owns the screen', () => {
+  // 639px it is not drawn whatever this decides. An open contact is the same arrangement one
+  // module over, so it takes the same rule: on a phone its card replaces the list and draws its
+  // own `.actionbar` at the foot.
+  it('withholds it while an open item owns the screen', () => {
     expect(hasTabBar('/mail?folder=INBOX&uid=42')).toBe(false)
     expect(hasTabBar('/mail?folder=INBOX')).toBe(true)
+    expect(hasTabBar('/contacts?id=b')).toBe(false)
+    expect(hasTabBar('/contacts?scope=favorites')).toBe(true)
   })
 })

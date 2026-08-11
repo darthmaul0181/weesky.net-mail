@@ -190,7 +190,7 @@
 
     // WCAG relative luminance and the contrast ratio built on it. Here because a token can be
     // inherited from the wrong chain and come out invisible with every geometric metric clean:
-    // `.reader-bar-item.is-danger` took `color: inherit` and got the reader column's `--text`,
+    // `.actionbar-item.is-danger` took `color: inherit` and got the reader column's `--text`,
     // which measured 1.09:1 on the action bar's rail background in the light theme and 14.41 in
     // dark — a defect that shipped, and that only one of the two themes could have shown.
     function luminance(colour) {
@@ -718,30 +718,28 @@
     const readerBar = ({ width }) => `
       <div class="mail-reader" style="width:${width}px">
         <article>
-          <div class="reader-actionbar">
-            <div class="reader-actions is-bar">
-              <button type="button" class="reader-bar-item" aria-label="Répondre">
-                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
-                <span class="reader-bar-label">Répondre</span>
+          <div class="actionbar">
+            <button type="button" class="actionbar-item" aria-label="Répondre">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">Répondre</span>
+            </button>
+            <button type="button" class="actionbar-item" aria-label="Répondre à tous">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">À tous</span>
+            </button>
+            <button type="button" class="actionbar-item" aria-label="Transférer">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">Transférer</span>
+            </button>
+            <button type="button" class="actionbar-item is-danger" aria-label="Supprimer">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">Supprimer</span>
+            </button>
+            <div class="dropdown-root">
+              <button type="button" class="actionbar-item" aria-label="Actions du message">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6" r="1"/></svg>
+                <span class="actionbar-label">Plus</span>
               </button>
-              <button type="button" class="reader-bar-item" aria-label="Répondre à tous">
-                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
-                <span class="reader-bar-label">À tous</span>
-              </button>
-              <button type="button" class="reader-bar-item" aria-label="Transférer">
-                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
-                <span class="reader-bar-label">Transférer</span>
-              </button>
-              <button type="button" class="reader-bar-item is-danger" aria-label="Supprimer">
-                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
-                <span class="reader-bar-label">Supprimer</span>
-              </button>
-              <div class="dropdown-root">
-                <button type="button" class="reader-bar-item" aria-label="Actions du message">
-                  <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6" r="1"/></svg>
-                  <span class="reader-bar-label">Plus</span>
-                </button>
-              </div>
             </div>
           </div>
         </article>
@@ -750,12 +748,47 @@
       CASES.push({
         name: `reader action bar-${width}`,
         html: readerBar({ width }),
-        touch: '.reader-bar-item',
-        height: '.reader-actionbar',
+        touch: '.actionbar-item',
+        height: '.actionbar',
         // The one case in this file that reads colour, and it earned it: the delete cell shipped
         // at 1.09:1 in the light theme, having taken `color: inherit` from the reader column
         // instead of the band it sits on. Both themes, worst cell — dark alone read 14.41.
-        contrast: '.reader-bar-item',
+        contrast: '.actionbar-item',
+      })
+    }
+
+    // The same band one module over, and the reason it is a case of its own rather than a trust in
+    // the one above: three cells instead of five make each one wider, but `Ajouter aux favoris` is
+    // the label the star carries everywhere else in this app — the cell shows the short `Favori`
+    // precisely because the long one does not fit, and only a measurement says whether the short
+    // one does. `is-danger` is here too, so the contrast trap this file exists for is read on both
+    // bands rather than on the mail one alone.
+    const contactBar = ({ width }) => `
+      <div class="contacts-card" style="width:${width}px">
+        <div class="contact-card">
+          <div class="actionbar">
+            <button type="button" class="actionbar-item" aria-label="Ajouter aux favoris">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">Favori</span>
+            </button>
+            <button type="button" class="actionbar-item" aria-label="Modifier">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">Modifier</span>
+            </button>
+            <button type="button" class="actionbar-item is-danger" aria-label="Supprimer">
+              <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+              <span class="actionbar-label">Supprimer</span>
+            </button>
+          </div>
+        </div>
+      </div>`
+    for (const width of [360, 320]) {
+      CASES.push({
+        name: `contact action bar-${width}`,
+        html: contactBar({ width }),
+        touch: '.actionbar-item',
+        height: '.actionbar',
+        contrast: '.actionbar-item',
       })
     }
     // 320 (iPhone SE 1st gen, an Android split-screen pane) needs no "(read at …)" annotation the
@@ -1097,9 +1130,11 @@
       touch: '.contact-tile, .contact-star, .drawer-toggle, .contact-tile-actions .admin-icon-btn',
     })
 
-    // The card takes the same row once a contact is picked. Its three actions are `.btn` boxes
-    // carrying an icon and a word each, and `Remove from favourites` is the long one — with the
-    // rule between them, that row is what decides whether `.contact-card-actions` fits.
+    // The card takes the same row once a contact is picked. Its actions are the `.actionbar` band
+    // measured on its own above; what this case is for is the rest of the card around it — the head
+    // and the body — and that the band is the column's last band rather than a box inside the
+    // scrolling one. The three `.btn` boxes it used to end on are gone: below 640px they wrapped
+    // onto two rows and reserved 88px for a floating button that is no longer drawn here at all.
     CASES.push({
       name: 'contacts-card',
       html: `
@@ -1108,6 +1143,7 @@
             <div class="contacts-card">
               <div class="contact-card">
                 <div class="contact-card-head">
+                  <button class="contact-card-back"><svg width="16" height="16"></svg></button>
                   <h2 class="contact-card-name">Marie-Christine Vandenbroucke</h2>
                 </div>
                 <div class="contact-card-body">
@@ -1121,17 +1157,16 @@
                     </span>
                   </div>
                 </div>
-                <div class="contact-card-actions">
-                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
-                  <span class="actions-rule"></span>
-                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
-                  <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                <div class="actionbar">
+                  <button class="actionbar-item"><svg width="21" height="21"></svg><span class="actionbar-label">Favori</span></button>
+                  <button class="actionbar-item"><svg width="21" height="21"></svg><span class="actionbar-label">Modifier</span></button>
+                  <button class="actionbar-item is-danger"><svg width="21" height="21"></svg><span class="actionbar-label">Supprimer</span></button>
                 </div>
               </div>
             </div>
           </div>
         </div>`,
-      touch: '.contact-card-btn',
+      touch: '.contact-card-back, .actionbar-item',
     })
 
     // The nameless contact, which the case above cannot see: `displayNameOf` falls back to the
@@ -1161,65 +1196,24 @@
                     </span>
                   </div>
                 </div>
-                <div class="contact-card-actions">
-                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
-                  <span class="actions-rule"></span>
-                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
-                  <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                <div class="actionbar">
+                  <button class="actionbar-item"><svg width="21" height="21"></svg><span class="actionbar-label">Favori</span></button>
+                  <button class="actionbar-item"><svg width="21" height="21"></svg><span class="actionbar-label">Modifier</span></button>
+                  <button class="actionbar-item is-danger"><svg width="21" height="21"></svg><span class="actionbar-label">Supprimer</span></button>
                 </div>
               </div>
             </div>
           </div>
         </div>`,
-      touch: '.contact-card-btn, .contact-card-back',
+      touch: '.contact-card-back, .actionbar-item',
     })
 
-    // The same card, bottom-anchored the way the shell anchors it, with .floating-action on the
-    // screen beside it. `.contact-card-actions` is a bottom BAND where mail keeps the reader's
-    // actions in its header, so on a phone the FAB lands in the same corner — and none of the four
-    // metrics above can see an occlusion: nothing overflows, nothing is clipped, and both boxes
-    // are at the touch floor while one is unreachable under the other. Only `overlap` answers it.
-    //
-    // The wrapper is what makes the question askable at all: `.floating-action` is position: fixed
-    // and the card is not, so the card has to sit where the shell puts it — filling the viewport
-    // above `.app-bottom-nav`, whose own height is 56px of `.bottom-nav-item` plus its 1px
-    // border-top (shell.css's phone block). Read the two rects rather than the boolean when this
-    // moves: the numbers say by how much, which is what a padding is chosen from.
-    CASES.push({
-      name: 'contacts-card vs. floating add',
-      html: `
-        <div style="position:fixed;left:0;right:0;top:0;bottom:57px">
-          <div class="contacts-layout" style="height:100%">
-            <div class="contacts-row">
-              <div class="contacts-card">
-                <div class="contact-card">
-                  <div class="contact-card-head">
-                    <button class="contact-card-back"><svg width="16" height="16"></svg></button>
-                    <h2 class="contact-card-name">Marie-Christine Vandenbroucke</h2>
-                  </div>
-                  <div class="contact-card-body">
-                    <div class="contact-card-row">
-                      <span class="contact-card-label">Addresses</span>
-                      <span class="contact-card-values">
-                        <span class="contact-card-value"><a href="#">mc@example.be</a></span>
-                      </span>
-                    </div>
-                  </div>
-                  <div class="contact-card-actions">
-                    <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
-                    <span class="actions-rule"></span>
-                    <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
-                    <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button type="button" class="floating-action" aria-label="Add contact">+</button>`,
-      touch: '.contact-card-btn, .contact-card-back',
-      overlap: ['.contact-card-btn.is-danger', '.floating-action'],
-    })
+    // There was a `contacts-card vs. floating add` case here, and it is gone rather than broken:
+    // it existed because the card's Delete was a `.btn` in a bottom band and `.floating-action`
+    // landed on it, an occlusion no other metric in this file can see. The card now draws the
+    // `.actionbar` measured above and `ContactsLayout` withholds the button entirely while that
+    // band is on screen, so the question is answered in React and guarded there — a geometry case
+    // cannot measure an element that is not rendered. Bring it back the day the button returns.
 
     // The scope band as the drawer actually draws it: inside .context-drawer-panel, which is what
     // gives the column its width (min(320px, 86vw)) and drops its own 240px. .contacts-scopes-add

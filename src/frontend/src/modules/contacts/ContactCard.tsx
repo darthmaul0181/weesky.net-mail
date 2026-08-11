@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import DropdownMenu from '../../components/DropdownMenu'
 import ArrowLeftIcon from '../../icons/ArrowLeftIcon'
+import KebabIcon from '../../icons/KebabIcon'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
@@ -14,6 +16,10 @@ interface Props {
   onEdit: (id: string) => void
   onDelete: (contact: Contact) => void
   onToggleFavorite: (contact: Contact) => void
+  /** The phone's foot-of-screen shape: named cells in a band instead of a header cluster. Set by
+      the layout, which is the only thing that knows the tier — never a `useViewport` of the card's
+      own, for the reason `MessageReader.bottomActions` is a prop too. */
+  bottomActions?: boolean
 }
 
 /**
@@ -23,7 +29,9 @@ interface Props {
  * Every row renders only when its datum exists: an empty labelled row reads as data that went
  * missing rather than data that was never entered.
  */
-export default function ContactCard({ contact, onBack, onEdit, onDelete, onToggleFavorite }: Props) {
+export default function ContactCard({
+  contact, onBack, onEdit, onDelete, onToggleFavorite, bottomActions = false,
+}: Props) {
   const { t } = useTranslation('contacts')
 
   // Escape mirrors the ← button, MessageReader's arrangement, and like it exists only where the
@@ -55,11 +63,61 @@ export default function ContactCard({ contact, onBack, onEdit, onDelete, onToggl
     )
   }
 
+  const favouriteLabel = t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')
+  const editLabel = t('actions.edit', { ns: 'common' })
+  const deleteLabel = t('actions.delete', { ns: 'common' })
+
+  /* The tile's own vocabulary, moved up to the card: the star outside the cluster because it is a
+     flag rather than an action, then `.admin-icon-btn` for what acts on the contact. Delete is one
+     click deeper than the two reversible actions beside it. */
+  const cluster = (
+    <div className="contact-card-actions">
+      <button type="button" className={`contact-star${contact.isFavorite ? ' is-on' : ''}`}
+        aria-label={favouriteLabel} title={favouriteLabel} aria-pressed={contact.isFavorite}
+        onClick={() => onToggleFavorite(contact)}>
+        <StarIcon size={18} filled={contact.isFavorite} />
+      </button>
+      <button type="button" className="admin-icon-btn" aria-label={editLabel} title={editLabel}
+        onClick={() => onEdit(contact.id)}>
+        <PencilIcon size={16} />
+      </button>
+      <DropdownMenu ariaLabel={t('card.actions')} className="admin-icon-btn"
+        trigger={<KebabIcon size={16} />}
+        items={[{
+          label: deleteLabel, icon: <TrashIcon size={18} />, onSelect: () => onDelete(contact),
+        }]} />
+    </div>
+  )
+
+  /* Three cells, no kebab: the card holds three actions and a bar whose last cell only ever opens
+     a one-entry menu spends a third of the screen saying nothing. The visible word stays short
+     where the accessible name does not — a cell has no room to spell out which way the star goes. */
+  const bar = (
+    <div className="actionbar">
+      <button type="button" className="actionbar-item" aria-label={favouriteLabel}
+        aria-pressed={contact.isFavorite} onClick={() => onToggleFavorite(contact)}>
+        <StarIcon size={21} filled={contact.isFavorite} />
+        <span className="actionbar-label">{t('card.bar.favourite')}</span>
+      </button>
+      <button type="button" className="actionbar-item" aria-label={editLabel}
+        onClick={() => onEdit(contact.id)}>
+        <PencilIcon size={21} />
+        <span className="actionbar-label">{editLabel}</span>
+      </button>
+      <button type="button" className="actionbar-item is-danger" aria-label={deleteLabel}
+        onClick={() => onDelete(contact)}>
+        <TrashIcon size={21} />
+        <span className="actionbar-label">{deleteLabel}</span>
+      </button>
+    </div>
+  )
+
   return (
     <div className="contact-card">
       <div className="contact-card-head">
         {back}
         <h2 className="contact-card-name">{displayNameOf(contact)}</h2>
+        {!bottomActions && cluster}
       </div>
 
       <div className="contact-card-body">
@@ -85,24 +143,8 @@ export default function ContactCard({ contact, onBack, onEdit, onDelete, onToggl
         )}
       </div>
 
-      {/* Bottom-right of whatever rows are actually present, like the reader's action cluster. */}
-      <div className="contact-card-actions">
-        <button type="button" className="btn contact-card-btn"
-          aria-label={t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
-          aria-pressed={contact.isFavorite}
-          onClick={() => onToggleFavorite(contact)}>
-          <StarIcon size={15} filled={contact.isFavorite} />
-          {t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
-        </button>
-        <span className="actions-rule" />
-        <button type="button" className="btn contact-card-btn" onClick={() => onEdit(contact.id)}>
-          <PencilIcon size={15} /> {t('actions.edit', { ns: 'common' })}
-        </button>
-        <button type="button" className="btn contact-card-btn is-danger"
-          onClick={() => onDelete(contact)}>
-          <TrashIcon size={15} /> {t('actions.delete', { ns: 'common' })}
-        </button>
-      </div>
+      {/* Last band of the column, so it sits on the screen's own edge. */}
+      {bottomActions && bar}
     </div>
   )
 }

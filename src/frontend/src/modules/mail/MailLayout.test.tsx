@@ -884,7 +884,7 @@ describe('MailLayout on a phone', () => {
     mocks.getMailMessage.mockResolvedValue(opened)
     const { container } = renderAt('/mail?folder=INBOX&uid=1')
     await screen.findByText('ouvert')
-    expect(container.querySelector('.reader-actionbar')).toBeTruthy()
+    expect(container.querySelector('.actionbar')).toBeTruthy()
     expect(container.querySelector('.floating-action')).toBeNull()
   })
 
@@ -903,7 +903,7 @@ describe('MailLayout on a phone', () => {
     mocks.getMailMessage.mockResolvedValue(opened)
     const { container } = renderAt('/mail?folder=INBOX&uid=1', undefined, 'none')
     await screen.findByText('ouvert')
-    expect(container.querySelector('.reader-actionbar')).toBeNull()
+    expect(container.querySelector('.actionbar')).toBeNull()
     expect(container.querySelector('.floating-action')).toBeTruthy()
   })
 })

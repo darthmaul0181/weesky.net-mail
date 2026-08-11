@@ -25,8 +25,12 @@ export default function AppShell() {
   // cannot fall out of step with the reader's own hook the way a second `useViewport` would.
   // Both calls unconditional, for the reason spelled out above the three matches.
   const onMail = useMatch('/mail') != null
+  const onContacts = useMatch('/contacts') != null
   const [params] = useSearchParams()
   const readingMail = onMail && params.get('uid') !== null
+  // The contact card is the same arrangement one module over: it replaces the list on a phone and
+  // draws its own band at the foot, so the tab bar would sit under it pointing at Contacts.
+  const readingContact = onContacts && params.get('id') !== null
 
   return (
     <div className="app-shell">
@@ -37,7 +41,7 @@ export default function AppShell() {
           <Outlet />
         </main>
       </div>
-      {!writing && !readingMail && <BottomNav />}
+      {!writing && !readingMail && !readingContact && <BottomNav />}
     </div>
   )
 }

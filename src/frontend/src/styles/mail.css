@@ -833,60 +833,8 @@
    so nothing is anchored to a fixed height. */
 .reader-actions { align-self: flex-end; display: flex; align-items: center; gap: 2px; }
 
-/* The phone's foot-of-screen shape. A band of the reader column rather than a fixed overlay, so
-   the message body's own scroll ends above it instead of running under it — every column here is
-   a band stack, and this is its last band. It wears the tab bar's colours because it stands
-   exactly where the tab bar stood, and `--rail-bg` is what a reader's eye is anchored on. */
-.reader-actionbar {
-  flex: none;
-  background: var(--rail-bg);
-  border-top: 1px solid var(--border);
-}
-
-.reader-actions.is-bar { align-self: stretch; display: flex; gap: 0; }
-
-/* DropdownMenu wraps its trigger, so the fifth cell's flex item is the wrapper and not the button
-   the class is on: without this the kebab sizes to its own content and the other four share what
-   is left, which reads as four wide cells and a narrow one. */
-.reader-actions.is-bar > .dropdown-root { flex: 1; min-width: 0; display: flex; }
-
-.reader-bar-item {
-  flex: 1;
-  min-width: 0;
-  min-height: 56px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 6px 2px;
-  border: 0;
-  background: none;
-  color: var(--rail-fg);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.reader-bar-item:disabled { opacity: 0.45; cursor: default; }
-
-/* The delete cell keeps its class and deliberately not the red: `--danger` on `--rail-bg` measures
-   3.28:1 in the light theme (6.53 in dark), which is under the floor for an 11px label — and a
-   colour that only appears in one theme is worse than none. The trash and the word carry it.
-   **The token is named, never `inherit`**, and that was a shipped defect: `inherit` takes the
-   parent's colour, and this band's parent chain is the reader column, so the cell got `--text` —
-   measured at 1.09:1 against `--rail-bg` in the light theme, invisible, while dark's `--text`
-   happened to land at 14.41 and hid it from anyone testing in one theme. This band is the only
-   place in the app where content sits on the rail's background outside the rail itself, so
-   nothing else was there to make the mistake obvious. */
-.reader-bar-item.is-danger { color: var(--rail-fg); }
-
-.reader-bar-label {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* The phone's foot-of-screen shape is `.actionbar` in shell.css — shared with the contact card,
+   which draws the same band for the same reason. Nothing reader-specific was left here. */
 
 .action-btn {
   display: inline-flex;
