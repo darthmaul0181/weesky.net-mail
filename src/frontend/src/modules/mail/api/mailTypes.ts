@@ -195,8 +195,10 @@ export interface OpenedDraft {
   subject: string
   fromAddress: string | null
   htmlBody: string
-  /** Non-null when the stored draft was written as text: the composer reopens in text mode. */
-  textBody: string | null
+  /** A string when the stored draft was written as text: the composer reopens in text mode.
+      Optional rather than nullable because the API omits a null field, so an HTML draft carries
+      no `textBody` at all — read as `undefined` it would open an empty plain-text composer. */
+  textBody?: string | null
   attachments: StagedAttachmentInfo[]
   inReplyTo: string | null
   references: string[]
