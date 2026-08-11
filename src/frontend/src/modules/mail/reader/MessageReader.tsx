@@ -497,7 +497,7 @@ export default function MessageReader(
 
       {/* Last band of the column, so it sits on the screen's own edge — under the attachments,
           which belong to the message, not to the actions taken on it. */}
-      {bottomActions && <div className="reader-actionbar">{readerActions}</div>}
+      {bottomActions && <div className="actionbar">{readerActions}</div>}
 
       {viewed && (
         <AttachmentViewerModal

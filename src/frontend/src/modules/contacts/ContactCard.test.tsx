@@ -19,8 +19,7 @@ function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}) {
   const props = {
     contact: bruno, onEdit: vi.fn(), onDelete: vi.fn(), onToggleFavorite: vi.fn(), ...overrides,
   }
-  render(<ContactCard {...props} />)
-  return props
+  return { ...props, ...render(<ContactCard {...props} />) }
 }
 
 describe('ContactCard', () => {
@@ -66,16 +65,38 @@ describe('ContactCard', () => {
     expect(screen.queryByTestId('card-address')).not.toBeInTheDocument()
   })
 
-  it('offers edit, delete and the favourite toggle', async () => {
+  // The tile's own arrangement, one surface up: the star and the pencil on the row, the
+  // destructive one a click deeper.
+  it('offers the favourite toggle and edit in the head, delete behind the kebab', async () => {
     const props = setup()
 
     await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
-    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
     await userEvent.click(screen.getByRole('button', { name: /add to favourites/i }))
+    await userEvent.click(screen.getByRole('button', { name: /contact actions/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete$/i }))
 
     expect(props.onEdit).toHaveBeenCalledWith('b')
-    expect(props.onDelete).toHaveBeenCalledWith(bruno)
     expect(props.onToggleFavorite).toHaveBeenCalledWith(bruno)
+    expect(props.onDelete).toHaveBeenCalledWith(bruno)
+  })
+
+  // The phone's shape: three named cells in a band of their own, no kebab — a last cell that only
+  // ever opens a one-entry menu would spend a third of the screen saying nothing.
+  it('draws the three actions as a bottom band when the caller asks for one', () => {
+    const { container } = setup({ bottomActions: true })
+
+    const bar = container.querySelector('.actionbar')
+    expect(bar).not.toBeNull()
+    expect(bar!.querySelectorAll('.actionbar-item')).toHaveLength(3)
+    expect(container.querySelector('.contact-card-actions')).toBeNull()
+    expect(screen.queryByRole('button', { name: /contact actions/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps the actions in the head when it is not asked for a band', () => {
+    const { container } = setup()
+
+    expect(container.querySelector('.contact-card-head .contact-card-actions')).not.toBeNull()
+    expect(container.querySelector('.actionbar')).toBeNull()
   })
 
   it('names the action to come on the favourite toggle', () => {

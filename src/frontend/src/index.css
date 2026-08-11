@@ -2342,12 +2342,10 @@ body {
   letter-spacing: .04em;
 }
 
-.contact-card-actions {
-  flex: none; display: flex; align-items: center; gap: 6px; justify-content: flex-end;
-  padding: 12px 18px; border-top: 1px solid var(--border);
-}
-.contact-card-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
-.contact-card-btn.is-danger { color: var(--danger); }
+/* In the head beside the name, not a band under the card. `margin-left: auto` rather than a
+   `flex: 1` on the name: a contact with no name falls back to its address, and growing that h2 to
+   fill the row is what would let it push the cluster off the edge instead of wrapping. */
+.contact-card-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; }
 
 .contact-editor-form { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .contact-editor-head {
@@ -2433,13 +2431,6 @@ body {
   /* Contacts' own primary action becomes the floating button below 1024px, the way compose does
      in mail: opening a drawer to add a contact is one gesture too many. */
   .context-drawer-panel .contacts-scopes-add { display: none; }
-
-  /* The card's own actions are a bottom band, where mail keeps the reader's in the header — so
-     from here down .floating-action lands on them: 56px on a 16px inset spans the last 72px of
-     the row, and Delete ended at the band's 18px padding, 54px of it under a button that wins on
-     z-index. The corner is reserved instead (16 + 56 + 16), and the band wraps rather than
-     crushing three labels into what is left of a 360px screen. */
-  .contact-card-actions { flex-wrap: wrap; padding-right: 88px; }
 }
 
 /* There is no hover on a touch screen, and on several touch browsers :hover sticks after a tap,
@@ -2466,6 +2457,13 @@ body {
      Chrome where this query never matches: retiring it would drop contacts-drawer from
      `smallest: 44` to 34 and read as a regression. */
   .contact-scope { min-height: 44px; }
+
+  /* The card's actions are icon buttons in the head from 640px up — 28px and 22px against a
+     finger, on the one tier where `--touch` is not declared at all (a phone draws the band
+     instead, whose cells are 56). Painted boxes rather than `.reader-back`'s inset pseudo: the
+     head has the room, and three adjacent pseudos would steal each other's taps. */
+  .contact-card-actions > button,
+  .contact-card-actions > .dropdown-root > button { min-width: 44px; min-height: 44px; }
 }
 
 @media (max-width: 639px) {

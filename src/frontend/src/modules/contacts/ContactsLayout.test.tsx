@@ -506,6 +506,25 @@ describe('ContactsLayout on a phone', () => {
     expect(editor.container.querySelector('.floating-action')).toBeNull()
   })
 
+  // It is anchored 73px up from an edge the card's own action band now owns, so it would sit over
+  // Modifier and Supprimer. Withheld rather than nudged: the card has replaced the list, and the
+  // add action belongs to the list. Above the phone tier the card sits beside it and both stay.
+  it('withholds the floating add while a card owns the phone screen', async () => {
+    mockViewport('phone')
+    const { container, unmount } = renderAt('/contacts?id=b')
+    await bookLoaded()
+    expect(container.querySelector('.floating-action')).toBeNull()
+    expect(container.querySelector('.actionbar')).toBeTruthy()
+    unmount()
+
+    mockViewport('desktop')
+    const wide = renderAt('/contacts?id=b')
+    await bookLoaded()
+
+    expect(wide.container.querySelector('.floating-action')).toBeTruthy()
+    expect(wide.container.querySelector('.actionbar')).toBeNull()
+  })
+
   it('keeps the scope column inline on a desktop', async () => {
     mockViewport('desktop')
     const { container } = renderAt('/contacts')

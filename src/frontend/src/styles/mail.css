@@ -833,60 +833,8 @@
    so nothing is anchored to a fixed height. */
 .reader-actions { align-self: flex-end; display: flex; align-items: center; gap: 2px; }
 
-/* The phone's foot-of-screen shape. A band of the reader column rather than a fixed overlay, so
-   the message body's own scroll ends above it instead of running under it — every column here is
-   a band stack, and this is its last band. It wears the tab bar's colours because it stands
-   exactly where the tab bar stood, and `--rail-bg` is what a reader's eye is anchored on. */
-.reader-actionbar {
-  flex: none;
-  background: var(--rail-bg);
-  border-top: 1px solid var(--border);
-}
-
-.reader-actions.is-bar { align-self: stretch; display: flex; gap: 0; }
-
-/* DropdownMenu wraps its trigger, so the fifth cell's flex item is the wrapper and not the button
-   the class is on: without this the kebab sizes to its own content and the other four share what
-   is left, which reads as four wide cells and a narrow one. */
-.reader-actions.is-bar > .dropdown-root { flex: 1; min-width: 0; display: flex; }
-
-.reader-bar-item {
-  flex: 1;
-  min-width: 0;
-  min-height: 56px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 6px 2px;
-  border: 0;
-  background: none;
-  color: var(--rail-fg);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.reader-bar-item:disabled { opacity: 0.45; cursor: default; }
-
-/* The delete cell keeps its class and deliberately not the red: `--danger` on `--rail-bg` measures
-   3.28:1 in the light theme (6.53 in dark), which is under the floor for an 11px label — and a
-   colour that only appears in one theme is worse than none. The trash and the word carry it.
-   **The token is named, never `inherit`**, and that was a shipped defect: `inherit` takes the
-   parent's colour, and this band's parent chain is the reader column, so the cell got `--text` —
-   measured at 1.09:1 against `--rail-bg` in the light theme, invisible, while dark's `--text`
-   happened to land at 14.41 and hid it from anyone testing in one theme. This band is the only
-   place in the app where content sits on the rail's background outside the rail itself, so
-   nothing else was there to make the mistake obvious. */
-.reader-bar-item.is-danger { color: var(--rail-fg); }
-
-.reader-bar-label {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* The phone's foot-of-screen shape is `.actionbar` in shell.css — shared with the contact card,
+   which draws the same band for the same reason. Nothing reader-specific was left here. */
 
 .action-btn {
   display: inline-flex;
@@ -1709,6 +1657,27 @@ textarea.compose-editor {
    Subject values line up close to their labels. */
 /* One gap for the whole header: From, To, Cc, Bcc, Priority and Subject are all direct children,
    so the spacing between them is this value and nothing else. */
+/* The folded stand-in for the three field rows, phone only — the element is rendered nowhere else,
+   so the rule needs no query of its own. A button rather than a row with a button in it: the whole
+   line is the target, which is what a thumb reaches for, and 32px + the band's own padding puts
+   the band at 48 against the 162 it spends open. */
+.compose-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compose-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+
 .compose-fields { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; }
 .compose-fields .field-h { margin-bottom: 0; gap: 10px; }
 .compose-fields .field-h > label:first-child { width: 66px; }
@@ -1964,6 +1933,22 @@ textarea.compose-editor {
   .compose-from .compose-from-label { width: 52px; flex: none; }
   .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
   .compose-link-form input { width: 100%; }
+
+  /* The one way back to the fields once they are folded, so it takes the floor like any other
+     control here. It costs 12px of the 113 the fold rendered — the band goes to 60 — which is the
+     trade a primary control not being reachable by a thumb would otherwise be. */
+  .compose-summary { min-height: var(--touch); }
+
+  /* A dialog's actions stack and take the width, rather than sitting on one right-aligned row.
+     The leave dialog is what forced it: `Continuer l'édition`, `Abandonner` and `Enregistrer le
+     brouillon` come to 440px of buttons against the ~310 a 360px screen leaves inside the dialog,
+     and because the row is `justify-content: flex-end` the excess ran off the LEFT edge — the
+     first button was half a word wide at x=0. **Stacking rather than wrapping**, which was the
+     other candidate: a `.btn` neither shrinks nor wraps its label, so a wrapped row still
+     overflows the day one button alone is wider than the dialog, while a column cannot. The
+     primary keeps its place last in source order, which puts it nearest the thumb. */
+  .folder-pick-submit { flex-direction: column; align-items: stretch; }
+  .folder-pick-submit .btn { width: 100%; min-height: var(--touch); }
 
   /* Three rows of tools left 102px of a 640px screen to the message. Folded, the bar keeps the
      plain-text switch, the paperclip, B/I/U/S and the ⋯ that reveals the rest — measured, seven

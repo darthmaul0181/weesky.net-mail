@@ -1811,9 +1811,9 @@ describe('MessageReader', () => {
       await screen.findByText('Re: facture')
 
       expect(container.querySelector('.reader-header .reader-actions')).toBeNull()
-      const bar = container.querySelector('.reader-actionbar')
+      const bar = container.querySelector('.actionbar')
       expect(bar).not.toBeNull()
-      expect(bar!.querySelector('.reader-actions')).not.toBeNull()
+      expect(bar!.querySelectorAll('.actionbar-item')).toHaveLength(5)
       expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     })
@@ -1825,7 +1825,7 @@ describe('MessageReader', () => {
       await screen.findByText('Re: facture')
 
       expect(container.querySelector('.reader-header .reader-actions')).not.toBeNull()
-      expect(container.querySelector('.reader-actionbar')).toBeNull()
+      expect(container.querySelector('.actionbar')).toBeNull()
     })
   })
 })

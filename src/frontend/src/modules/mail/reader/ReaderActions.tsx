@@ -75,19 +75,20 @@ export default function ReaderActions({
     ) => (
       <button
         type="button"
-        className={`reader-bar-item${danger ? ' is-danger' : ''}`}
+        className={`actionbar-item${danger ? ' is-danger' : ''}`}
         aria-label={name}
         title={title}
         disabled={disabled}
         onClick={onClick}
       >
         {icon}
-        <span className="reader-bar-label">{label}</span>
+        <span className="actionbar-label">{label}</span>
       </button>
     )
 
+    // No wrapper of its own: `.actionbar` is the flex row, so these five are its items directly.
     return (
-      <div className="reader-actions is-bar">
+      <>
         {cell(t('reader.bar.reply'), t('reader.reply'), <ReplyIcon size={21} />, onReply, preparing)}
         {cell(t('reader.bar.replyAll'), t('reader.replyAll'), <ReplyAllIcon size={21} />, onReplyAll, preparing)}
         {cell(t('reader.bar.forward'), t('reader.forward'), <ForwardIcon size={21} />, onForward, preparing)}
@@ -98,11 +99,11 @@ export default function ReaderActions({
         <DropdownMenu
           direction="up"
           ariaLabel={t('reader.messageActions')}
-          className="reader-bar-item"
-          trigger={<><KebabIcon size={21} /><span className="reader-bar-label">{t('reader.bar.more')}</span></>}
+          className="actionbar-item"
+          trigger={<><KebabIcon size={21} /><span className="actionbar-label">{t('reader.bar.more')}</span></>}
           items={menuItems}
         />
-      </div>
+      </>
     )
   }
 

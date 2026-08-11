@@ -35,7 +35,11 @@
   },
   "card": {
     "invite": "Select a contact to see its details",
-    "back": "Back to the list"
+    "back": "Back to the list",
+    "actions": "Contact actions",
+    "bar": {
+      "favourite": "Favourite"
+    }
   },
   "editor": {
     "editTitle": "Edit contact",

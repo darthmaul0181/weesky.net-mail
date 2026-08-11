@@ -19,7 +19,10 @@
     "bcc": "Cci",
     "priority": "Priorité",
     "subject": "Objet",
-    "body": "Corps du message"
+    "body": "Corps du message",
+    "noRecipient": "Aucun destinataire",
+    "noSubject": "(sans objet)",
+    "showFields": "Afficher les destinataires et l’objet"
   },
   "priority": {
     "high": "Haute",

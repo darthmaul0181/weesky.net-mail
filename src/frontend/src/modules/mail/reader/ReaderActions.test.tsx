@@ -268,7 +268,7 @@ describe('ReaderActions', () => {
         <ReaderActions {...base} bar showColourToggle onToggleColours={onToggle} />)
 
       expect(screen.queryByRole('button', { name: 'Original colours' })).not.toBeInTheDocument()
-      expect(container.querySelectorAll('.reader-bar-item')).toHaveLength(5)
+      expect(container.querySelectorAll('.actionbar-item')).toHaveLength(5)
 
       fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
       fireEvent.click(screen.getByRole('menuitem', { name: 'Original colours' }))

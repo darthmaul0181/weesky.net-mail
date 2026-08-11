@@ -204,6 +204,7 @@ export default function ContactsLayout() {
                   the dialog — the ← is behind the overlay by then and comes back with it. */}
               <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
                 onBack={phone && !pendingDelete ? backToList : undefined}
+                bottomActions={phone}
                 onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)} />
             </div>
           )}
@@ -217,8 +218,10 @@ export default function ContactsLayout() {
       )}
 
       {/* Never over the editor: that surface already is the create form, and the button would
-          navigate out of a half-typed contact with nothing to ask about it. */}
-      {!inEditor && (
+          navigate out of a half-typed contact with nothing to ask about it. And never over an open
+          card on a phone, where it is anchored 73px up from an edge the action band now owns —
+          MailLayout drops it under the same condition for the same collision. */}
+      {!inEditor && !(phone && selectedId) && (
         <FloatingAction label={t('layout.add')} onClick={() => navigate('/contacts/new')}>
           <PersonPlusIcon size={22} />
         </FloatingAction>
