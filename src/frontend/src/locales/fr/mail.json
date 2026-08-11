@@ -272,10 +272,7 @@
     "newMessages_other": "{{count}} nouveaux messages"
   },
   "splitter": {
-    "label": "Redimensionner les volets",
-    "collapseFolders": "Masquer la colonne des dossiers",
-    "expandFolders": "Afficher la colonne des dossiers",
-    "foldersLabel": "Redimensionner la colonne des dossiers"
+    "label": "Redimensionner les volets"
   },
   "mutations": {
     "updateFailed": "Impossible de mettre à jour le message",

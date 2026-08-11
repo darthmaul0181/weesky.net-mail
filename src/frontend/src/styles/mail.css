@@ -1230,7 +1230,6 @@
 /* The bar carries the panes' separation — the old fixed border-right is gone with it. */
 .pane-splitter {
   flex: none;
-  position: relative;
   background: var(--border);
   touch-action: none;
 }
@@ -1240,56 +1239,6 @@
 
 .pane-splitter:hover,
 .pane-splitter:focus-visible { background: var(--accent-unread); outline: none; }
-
-/* The chevron that folds the folder column away. It straddles the seam because 5px cannot hold a
-   control, and it is HIDDEN at rest on purpose: the two splitters that shipped before it are a
-   hairline in `--border` until the pointer arrives, so a permanently painted pill here would make
-   the third seam speak louder than the two it is meant to match. The reveal is therefore the
-   splitter's own hover — the same gesture that already discovers the drag. */
-.pane-collapse {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-}
-
-.pane-splitter:hover .pane-collapse,
-.pane-splitter:focus-visible .pane-collapse,
-.pane-collapse:hover,
-.pane-collapse:focus-visible { opacity: 1; }
-
-.pane-collapse:hover { border-color: var(--action-primary); color: var(--action-primary); }
-
-/* Folded, the seam is no longer a divider between two panes — it is the closed column's edge, and
-   this chevron is the only way back. Revealing the sole route on hover is a trap, not a style. */
-.pane-splitter.is-collapsed .pane-collapse { opacity: 1; }
-
-/* Measured in Chrome rather than reasoned, since the disc overhangs a 5px bar into two columns
-   that paint backgrounds: 16x16 centred on the seam, 11px of overhang, `elementFromPoint` at its
-   own right edge still answering `.pane-collapse` — a positioned child beats its non-positioned
-   siblings, so no z-index is needed — and the layout clipping 0 in both states. */
-
-/* No hover to reveal it on, and the seam only exists from 1024px up — so a touch screen that wide
-   (a Surface, a tablet on a keyboard) would never see the chevron at all. The painted disc stays
-   16px and grows an inset hit area instead, `.reader-back`'s idiom: at 44px painted it would be a
-   disc three times the seam's own width sitting in the middle of the page, and nothing adjacent
-   competes for those taps the way the compose toolbar's neighbours do. */
-@media (hover: none) {
-  .pane-collapse { opacity: 1; }
-  .pane-collapse::before { content: ''; position: absolute; inset: -14px; }
-}
 
 /* ── Move/Copy folder picker ─────────────────────────────── */
 

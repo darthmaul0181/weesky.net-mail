@@ -93,47 +93,4 @@ describe('PaneSplitter', () => {
 
     expect(onResize).toHaveBeenCalledWith(380)
   })
-
-  describe('the collapse chevron', () => {
-    // Both splits between the list and the reader hand in neither prop: a seam with a control that
-    // folds nothing is worse than a bare one.
-    it('is absent unless the caller offers something to fold', () => {
-      renderSplitter()
-
-      expect(screen.queryByRole('button')).not.toBeInTheDocument()
-    })
-
-    it('names the action to come and reports the pane state', () => {
-      const onToggleCollapse = vi.fn()
-      renderSplitter({ collapsed: false, onToggleCollapse })
-
-      const chevron = screen.getByRole('button', { name: /hide the folder column/i })
-      expect(chevron).toHaveAttribute('aria-expanded', 'true')
-
-      fireEvent.click(chevron)
-      expect(onToggleCollapse).toHaveBeenCalledOnce()
-    })
-
-    it('turns round once the pane is folded', () => {
-      renderSplitter({ collapsed: true, onToggleCollapse: vi.fn() })
-
-      expect(screen.getByRole('button', { name: /show the folder column/i }))
-        .toHaveAttribute('aria-expanded', 'false')
-      expect(screen.getByRole('separator').className).toContain('is-collapsed')
-    })
-
-    // It sits INSIDE the separator, so both gestures reach the bar unless they are stopped: a
-    // click would start a drag, and a double-click would reset the width it is folding away.
-    it('neither drags nor resets the pane it folds', () => {
-      const { onResize } = renderSplitter({ collapsed: false, onToggleCollapse: vi.fn() })
-      const chevron = screen.getByRole('button')
-
-      fireEvent.pointerDown(chevron, { clientX: 400, clientY: 10 })
-      fireEvent.pointerMove(window, { clientX: 460, clientY: 10 })
-      fireEvent.pointerUp(window)
-      fireEvent.doubleClick(chevron)
-
-      expect(onResize).not.toHaveBeenCalled()
-    })
-  })
 })

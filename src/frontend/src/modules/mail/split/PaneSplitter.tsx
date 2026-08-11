@@ -1,7 +1,5 @@
 import type { KeyboardEvent, PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import ChevronLeftIcon from '../../../icons/ChevronLeftIcon'
-import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 
 interface PaneSplitterProps {
   orientation: 'vertical' | 'horizontal'
@@ -11,13 +9,6 @@ interface PaneSplitterProps {
   /** What the other pane keeps: the drag ceiling is the parent's span minus this. */
   reserve: number
   onResize: (size: number) => void
-  /** Names this seam where a layout draws more than one: two separators reading "Resize the panes"
-      are indistinguishable to anything that lists them. Defaults to that generic wording. */
-  ariaLabel?: string
-  /** Given together: the seam grows a chevron folding the pane it borders away. Withheld by the
-      two splits that have nothing to fold — a bar with a dead control on it is worse than none. */
-  collapsed?: boolean
-  onToggleCollapse?: () => void
 }
 
 const NUDGE = 16
@@ -27,9 +18,7 @@ const NUDGE = 16
  * about changes — so the same bar serves the vertical and horizontal splits.
  */
 export default function PaneSplitter(
-  {
-    orientation, size, defaultSize, min, reserve, onResize, ariaLabel, collapsed, onToggleCollapse,
-  }: PaneSplitterProps,
+  { orientation, size, defaultSize, min, reserve, onResize }: PaneSplitterProps,
 ) {
   const { t } = useTranslation('mail')
   const vertical = orientation === 'vertical'
@@ -72,30 +61,12 @@ export default function PaneSplitter(
     <div
       role="separator"
       aria-orientation={orientation}
-      aria-label={ariaLabel ?? t('splitter.label')}
+      aria-label={t('splitter.label')}
       tabIndex={0}
-      className={`pane-splitter is-${orientation}${collapsed ? ' is-collapsed' : ''}`}
+      className={`pane-splitter is-${orientation}`}
       onPointerDown={startDrag}
       onKeyDown={nudge}
       onDoubleClick={() => onResize(defaultSize)}
-    >
-      {onToggleCollapse && (
-        /* Inside the bar rather than beside it, and that is the drag's doing: `startDrag` reads
-           `parentElement` for the ceiling, so wrapping the two in a box of their own would hand it
-           a 5px span. Both handlers are stopped instead — without them a click on the chevron
-           starts a drag, and a double-click on it resets the width it was folding away. */
-        <button
-          type="button"
-          className="pane-collapse"
-          aria-label={t(collapsed ? 'splitter.expandFolders' : 'splitter.collapseFolders')}
-          aria-expanded={!collapsed}
-          onPointerDown={event => event.stopPropagation()}
-          onDoubleClick={event => event.stopPropagation()}
-          onClick={onToggleCollapse}
-        >
-          {collapsed ? <ChevronRightIcon size={13} /> : <ChevronLeftIcon size={13} />}
-        </button>
-      )}
-    </div>
+    />
   )
 }
