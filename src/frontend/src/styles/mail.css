@@ -1709,6 +1709,27 @@ textarea.compose-editor {
    Subject values line up close to their labels. */
 /* One gap for the whole header: From, To, Cc, Bcc, Priority and Subject are all direct children,
    so the spacing between them is this value and nothing else. */
+/* The folded stand-in for the three field rows, phone only — the element is rendered nowhere else,
+   so the rule needs no query of its own. A button rather than a row with a button in it: the whole
+   line is the target, which is what a thumb reaches for, and 32px + the band's own padding puts
+   the band at 48 against the 162 it spends open. */
+.compose-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compose-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+
 .compose-fields { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; }
 .compose-fields .field-h { margin-bottom: 0; gap: 10px; }
 .compose-fields .field-h > label:first-child { width: 66px; }
@@ -1964,6 +1985,11 @@ textarea.compose-editor {
   .compose-from .compose-from-label { width: 52px; flex: none; }
   .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
   .compose-link-form input { width: 100%; }
+
+  /* The one way back to the fields once they are folded, so it takes the floor like any other
+     control here. It costs 12px of the 113 the fold rendered — the band goes to 60 — which is the
+     trade a primary control not being reachable by a thumb would otherwise be. */
+  .compose-summary { min-height: var(--touch); }
 
   /* Three rows of tools left 102px of a 640px screen to the message. Folded, the bar keeps the
      plain-text switch, the paperclip, B/I/U/S and the ⋯ that reveals the rest — measured, seven

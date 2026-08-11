@@ -21,6 +21,26 @@ interface Props {
   contacts?: Contact[]
 }
 
+/**
+ * Canonical address to the name its contact carries, if any. A token stays the bare address — the
+ * wire format and every reader downstream depend on it — so naming it is a rendering step, and it
+ * is exported because the folded summary on a phone names the same recipients: two callers naming
+ * one person two different ways is the drift `displayNameOf` exists to prevent in contacts.
+ * Sorted, and first-wins, so a shared address keeps the name the dropdown offered it under.
+ */
+export function namesByAddressOf(contacts: Contact[]): Map<string, string> {
+  const names = new Map<string, string>()
+  for (const contact of [...contacts].sort(compareContacts)) {
+    const name = contactNameOf(contact)
+    if (name === null) continue
+    for (const address of contact.addresses) {
+      const key = canonicalAddress(address)
+      if (!names.has(key)) names.set(key, name)
+    }
+  }
+  return names
+}
+
 export default function RecipientsField({
   id, label, tokens, onChange, autoFocus, contacts = [],
 }: Props) {
@@ -34,21 +54,7 @@ export default function RecipientsField({
   const suggestions = useMemo(
     () => suggestionsFor(contacts, draft, { exclude: new Set(tokens) }),
     [contacts, draft, tokens])
-  // A token stays the bare address — the wire format and every reader downstream depend on it —
-  // so naming it is a rendering step: canonical address to the name its contact carries, if any.
-  const namesByAddress = useMemo(() => {
-    const names = new Map<string, string>()
-    // Sorted, and first-wins, so a shared address keeps the name the dropdown offered it under.
-    for (const contact of [...contacts].sort(compareContacts)) {
-      const name = contactNameOf(contact)
-      if (name === null) continue
-      for (const address of contact.addresses) {
-        const key = canonicalAddress(address)
-        if (!names.has(key)) names.set(key, name)
-      }
-    }
-    return names
-  }, [contacts])
+  const namesByAddress = useMemo(() => namesByAddressOf(contacts), [contacts])
 
   const open = !closed && suggestions.length > 0
   const listId = `${id}-suggestions`

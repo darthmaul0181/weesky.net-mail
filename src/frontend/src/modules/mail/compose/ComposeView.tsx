@@ -11,6 +11,7 @@ import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, composeFormatOf, usePreferences } from '../../../hooks/usePreferences'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
+import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
 import DropdownMenu from '../../../components/DropdownMenu'
@@ -23,7 +24,7 @@ import { htmlToText, losesFormatting, textToHtml } from './bodyFormat'
 import EditorToolbar from './EditorToolbar'
 import IdentitySelect from './IdentitySelect'
 import { mailtoSeedFrom } from './mailtoSeed'
-import RecipientsField, { isValidAddress } from './RecipientsField'
+import RecipientsField, { isValidAddress, namesByAddressOf } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
 import { applyComposeFormat, type ComposeAction, type ComposeSeed } from './composeSeed'
 import LoadingBlock from '../../../components/LoadingBlock'
@@ -366,6 +367,27 @@ export default function ComposeView({ onNotify }: Props) {
   const canSend = to.length > 0 && allValid && !busy
   const canSaveDraft = allValid && !busy
 
+  // Measured on a Galaxy S25: the keyboard takes 426px of an 832px screen, so the composer only
+  // ever has 406 while anything is being typed, and the header, the fields and the toolbar spend
+  // 294 of them — 113px of body, four lines, which is what it had before the whole mobile pass.
+  // Folded, the fields are 48px and the body 226. `narrow &&` rather than a stored flag reset on
+  // rotation: growing past 639px brings them back without this state having to be told.
+  const [fieldsFolded, setFieldsFolded] = useState(false)
+  const [refocusTo, setRefocusTo] = useState(false)
+  const folded = narrow && fieldsFolded
+  const recipientNames = useMemo(() => namesByAddressOf(contacts ?? []), [contacts])
+  const nameOf = (token: string) => recipientNames.get(canonicalAddress(token)) ?? token
+  // The sender is named only where it can be wrong: `IdentitySelect` shows a menu on exactly this
+  // condition, so the summary and the field cannot disagree about whether there is a choice.
+  const choosableFrom = (identityList ?? []).filter(i => !i.stale).length > 1
+  const summary = [
+    ...(choosableFrom && effectiveFrom ? [`${t('fields.from')} : ${effectiveFrom}`] : []),
+    // Send is disabled without a recipient, so a folded line that stayed silent would leave a dead
+    // button and no visible reason for it.
+    to.length ? `${t('fields.to')} : ${to.map(nameOf).join(', ')}` : t('fields.noRecipient'),
+    subject || t('fields.noSubject'),
+  ].join(' · ')
+
   const buildPayload = () => ({
     to, cc, bcc, subject,
     htmlBody: text === null ? relativizeStagedUrls(editor?.getHTML() ?? '') : '',
@@ -477,7 +499,24 @@ export default function ComposeView({ onNotify }: Props) {
         <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={close}>✕</button>
       </div>
 
+      {/* Unmounted while folded, never hidden: hidden in CSS they would keep their place in the
+          tab order and Tab would walk into invisible fields. Nothing is lost either — the caret
+          reaching the body has already blurred the recipients field, so its half-typed token was
+          committed on the way. */}
       <div className="compose-fields">
+        {folded ? (
+          <button
+            type="button"
+            className="compose-summary"
+            aria-expanded={false}
+            aria-label={t('fields.showFields')}
+            onClick={() => { setFieldsFolded(false); if (to.length === 0) setRefocusTo(true) }}
+          >
+            <span className="compose-summary-text">{summary}</span>
+            <ChevronDownIcon size={14} />
+          </button>
+        ) : (
+        <>
         <div className="compose-from">
           <span className="compose-from-label">{t('fields.from')}</span>
           {effectiveFrom ? (
@@ -492,7 +531,7 @@ export default function ComposeView({ onNotify }: Props) {
         </div>
         <div className="compose-to-row">
           <RecipientsField id="compose-to" label={t('fields.to')} tokens={to} onChange={changeTo}
-            autoFocus={!seed} contacts={contacts} />
+            autoFocus={!seed || refocusTo} contacts={contacts} />
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>{t('fields.cc')}</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>{t('fields.bcc')}</button>}
@@ -525,6 +564,8 @@ export default function ComposeView({ onNotify }: Props) {
           <label htmlFor="compose-subject">{t('fields.subject')}</label>
           <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />
         </div>
+        </>
+        )}
       </div>
 
       <EditorToolbar editor={editor} active={active} plainText={text !== null}
@@ -532,8 +573,13 @@ export default function ComposeView({ onNotify }: Props) {
         onPickImages={routeFiles}
         onAddFiles={addFiles}
         onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
+      {/* The fold is keyed on the caret entering the BODY, never on the keyboard: it opens on To
+          and on the subject too, and keying it there would fold the fields at the very moment they
+          are being filled. `onFocus` because React listens for `focusin`, which bubbles out of
+          Squire's contenteditable and out of the plain-text textarea alike. */}
       <div className="compose-body" onDragEnter={onBodyDragEnter} onDragLeave={onBodyDragLeave}
-        onDrop={onBodyDrop} onPasteCapture={onBodyPaste}>
+        onDrop={onBodyDrop} onPasteCapture={onBodyPaste}
+        onFocus={() => { setFieldsFolded(true); setRefocusTo(false) }}>
         {text === null ? (
           <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
         ) : (

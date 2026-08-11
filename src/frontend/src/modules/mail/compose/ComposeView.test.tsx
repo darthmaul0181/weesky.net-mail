@@ -1597,3 +1597,101 @@ describe('the composer header on a phone', () => {
     expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ subject: 'Notes' })
   })
 })
+
+// Measured on a Galaxy S25: the software keyboard takes 426px of an 832px screen, so the composer
+// itself only ever has 406 while anything is being typed — and the header, the fields and the
+// toolbar spend 294 of them. The body had 113px, four lines, which is what it had before the whole
+// mobile pass. Folding the fields once the caret is in the body takes it to 226.
+describe('the composer fields on a phone', () => {
+  beforeEach(() => { mockViewport('phone') })
+  afterEach(() => { resetViewport() })
+
+  // The real path rather than fireEvent.focus: React listens for `focusin`, and a `focus` event
+  // does not bubble, so it would never reach the wrapper that owns this.
+  async function focusBody() {
+    const editor = screen.getByTestId('compose-editor')
+    await act(async () => { editor.focus() })
+  }
+
+  const summary = () => document.querySelector('.compose-summary-text')
+
+  it('folds the fields once the caret is in the body, naming the recipient and the subject', async () => {
+    renderCompose()
+    fireEvent.change(await screen.findByLabelText('Subject'), { target: { value: 'Notes' } })
+    addRecipient('To', 'bruno@x.be')
+    expect(screen.getByLabelText('Subject')).toBeInTheDocument()
+
+    await focusBody()
+
+    expect(screen.queryByLabelText('Subject')).toBeNull()
+    // The contact's name, not the bare token: the summary and the chip read the same map, so one
+    // person cannot be named two ways on one screen.
+    expect(summary()).toHaveTextContent('Bruno Mertens')
+    expect(summary()).toHaveTextContent('Notes')
+  })
+
+  // The keyboard opens on To and on the subject too: keying the fold to it would fold them at the
+  // very moment they are being filled.
+  it('leaves them alone while a field itself has the focus', async () => {
+    renderCompose()
+    const subject = await screen.findByLabelText('Subject')
+    await act(async () => { subject.focus() })
+
+    expect(screen.getByLabelText('Subject')).toBeInTheDocument()
+    expect(summary()).toBeNull()
+  })
+
+  it('brings them back on the summary, with no second fold behind it', async () => {
+    renderCompose()
+    await screen.findByLabelText('Subject')
+    addRecipient('To', 'bruno@x.be')
+    await focusBody()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show the recipients and the subject' }))
+
+    expect(screen.getByLabelText('Subject')).toBeInTheDocument()
+    expect(summary()).toBeNull()
+  })
+
+  // Send is disabled without one, so a folded line that stayed silent would leave a dead button
+  // and no visible reason for it.
+  it('says so when the message names no recipient', async () => {
+    renderCompose()
+    await screen.findByLabelText('Subject')
+
+    await focusBody()
+
+    expect(summary()).toHaveTextContent('No recipient')
+  })
+
+  it('names the sender when the account has more than one identity to choose from', async () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
+    renderCompose()
+    await screen.findByLabelText('Subject')
+    await focusBody()
+
+    expect(summary()).toHaveTextContent('michel@weesky.be')
+  })
+
+  // The same condition IdentitySelect draws a menu on, so the summary and the field cannot
+  // disagree about whether there is a choice — and a line that cannot be wrong stays short.
+  it('leaves it out when there is only one', async () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: [identityList[0]] } as never)
+    renderCompose()
+    await screen.findByLabelText('Subject')
+    await focusBody()
+
+    expect(summary()).not.toHaveTextContent('mick@weesky.be')
+  })
+})
+
+describe('the composer fields on a desktop', () => {
+  it('never fold, whatever the caret is doing', async () => {
+    renderCompose()
+    const editor = await screen.findByTestId('compose-editor')
+    await act(async () => { editor.focus() })
+
+    expect(screen.getByLabelText('Subject')).toBeInTheDocument()
+    expect(document.querySelector('.compose-summary')).toBeNull()
+  })
+})

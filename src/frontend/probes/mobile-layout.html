@@ -872,7 +872,7 @@
     // had 102px of a 640px screen. `height` is `.compose-body`, and the numbers are 347 folded at
     // both widths against 102 before, with the header's own 102px of overflow — Save draft cut off
     // and the ✕ entirely off screen — gone from `clipped` at the same time.
-    const composeView = ({ width, expanded = false }) => {
+    const composeView = ({ width, expanded = false, height = 640, folded = false }) => {
       const tools = n => Array.from({ length: n }, () => '<button class="compose-tool">B</button>').join('')
       const selects = n => Array.from({ length: n },
         () => '<div class="dropdown-root"><button class="compose-tool-select">A<span>v</span></button></div>').join('')
@@ -884,13 +884,18 @@
         [3, true, 'select'], [4, true], [4, true], [1, false],
       ]
       return `
-      <div class="compose-view" style="width:${width}px;height:640px">
+      <div class="compose-view" style="width:${width}px;height:${height}px">
         <div class="compose-header">
           <button class="btn btn-primary compose-send">🚀 Envoyer</button>
           <button class="btn btn-ghost compose-header-more">&#8942;</button>
           <button class="modal-close" aria-label="Fermer">&#10005;</button>
         </div>
         <div class="compose-fields">
+          ${folded ? `
+          <button class="compose-summary" aria-expanded="false" aria-label="Afficher les destinataires et l’objet">
+            <span class="compose-summary-text">De : michel@weesky.be · À : Michaël · Re: Mail avec pièce jointe .eml</span>
+            <svg width="14" height="14"></svg>
+          </button>` : `
           <div class="compose-from"><span class="compose-from-label">De</span>
             <span class="compose-from-value">Mick (darth@weesky.be)</span></div>
           <div class="compose-to-row">
@@ -907,7 +912,7 @@
             </span>
           </div>
           <div class="field-h"><label for="probe-subject">Objet</label>
-            <input id="probe-subject" type="text" value="Re: Mail avec pièce jointe .eml" /></div>
+            <input id="probe-subject" type="text" value="Re: Mail avec pièce jointe .eml" /></div>`}
         </div>
         <div class="compose-toolbar${expanded ? ' is-expanded' : ''}">
           ${groups.map(([n, extra, kind]) =>
@@ -916,14 +921,23 @@
         <div class="compose-body"><div class="compose-editor"></div></div>
       </div>`
     }
+    // 384 x 406 is the S25 with its keyboard up — a measurement off a real screenshot, the scale
+    // taken from the 69px header this same fixture draws. It is the size the composer actually has
+    // whenever anything is being typed, which is the only time it matters, and the pair below is
+    // what the fold is for: 113px of body against 214. The 48px the folded band would take grew
+    // to 60 when its summary took the 44px touch floor, and that is where the missing 12 went.
+    // The 832-tall case is the same phone with the keyboard away, kept so the two read together.
     for (const [name, opts] of [
       ['compose-360', { width: 360 }],
       ['compose-320', { width: 320 }],
       ['compose-360-expanded', { width: 360, expanded: true }],
+      ['compose-keyboard-384', { width: 384, height: 406 }],
+      ['compose-keyboard-384-folded', { width: 384, height: 406, folded: true }],
+      ['compose-384-folded', { width: 384, height: 832, folded: true }],
     ]) {
       CASES.push({
         name, html: composeView(opts),
-        touch: '.compose-tool, .compose-tool-select, .compose-send, .compose-header-more, .modal-close',
+        touch: '.compose-tool, .compose-tool-select, .compose-send, .compose-header-more, .modal-close, .compose-summary',
         height: '.compose-body',
       })
     }

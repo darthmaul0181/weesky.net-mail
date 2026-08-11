@@ -19,7 +19,10 @@
     "bcc": "Bcc",
     "priority": "Priority",
     "subject": "Subject",
-    "body": "Message body"
+    "body": "Message body",
+    "noRecipient": "No recipient",
+    "noSubject": "(no subject)",
+    "showFields": "Show the recipients and the subject"
   },
   "priority": {
     "high": "High",
