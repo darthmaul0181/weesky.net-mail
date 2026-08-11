@@ -1,0 +1,1542 @@
+<!doctype html>
+<!--
+  Probe: does anything overflow, and is anything too small to hit, below 1024px?
+
+  Serving the real app was not an option: the frontend talks to https://api.mail.weesky.net and
+  the dev API carries no `localhost` origin, so a locally served build cannot get past the login
+  screen. This page links the REAL stylesheets and restates only the markup, so a CSS edit changes
+  what is measured. It needs no session because it needs no data.
+
+  Served by the Vite dev server (npm run dev) at /probes/mobile-layout.html. Drive it in a Blink
+  browser — Chrome or Edge — under device emulation at 360x640, 390x844, 768x1024 and 1024x768.
+  #out holds the JSON and document.title becomes 'probe-done' once every case has been measured.
+  The page suppresses its own classic scrollbar (the `html` rule in the <style> below), so the
+  reading is the same however it is driven: a phone paints an overlay scrollbar and spends no
+  width on it, while a desktop Blink browser opening this file directly spends 15 and hands every
+  case that much phantom `overflow`.
+
+  Reading the numbers:
+  - `overflow` is documentElement.scrollWidth - clientWidth. Anything above 0 is a horizontal
+    scrollbar on the page, which is the defect this whole plan exists to remove.
+  - `clipped` is the worst scrollWidth - clientWidth of any element in the section, and it is the
+    number most of these cases actually turn on. `overflow` alone cannot see the common defect:
+    mail.css puts `overflow: hidden` on .mail-folders, .mail-list and .mail-reader alike, and the
+    shell and the modal overlay clip too, so a control pushed past its column's right edge is cut
+    off rather than scrolled — the page never grows and `overflow` stays 0 while a button is gone
+    from the screen. Measured: the selection toolbar ran past a 240px list column and reported
+    `overflow: 0` throughout. Read both; `clipped` above 0 means something is off-screen inside a
+    column, `overflow` above 0 means the page itself scrolls sideways.
+    Excluded from it: an element that carries `text-overflow: ellipsis` AND has no element
+    children. That exclusion is what keeps the number worth reading — an ellipsised folder name or
+    subject clips by design and announces that it did, so counting it reports a defect on every
+    truncated label in the app; measured, the list toolbar's own `.selection-title` alone raised
+    `clipped` to 34 with nothing wrong. Two limits on the exclusion are deliberate, because it
+    would otherwise blind the metric rather than sharpen it. It is restricted to **childless**
+    elements: an ellipsised box that wraps other elements (`.message-row-line` around
+    `.message-row-line-preview` is already this shape) can clip a real control the day one is put
+    inside it, so only leaf labels are exempt. And `text-overflow` does **not** inherit, so the
+    exemption is per element and never spreads: when an ellipsised label pushes a sibling out of
+    its parent, the box doing the clipping is that parent, which carries no `text-overflow` of its
+    own and is still measured.
+    A second adjustment, not an exclusion: an inset `::before` hit area (`.reader-back`'s own,
+    below) inflates its host's scrollWidth by exactly its own overhang, per CSSOM View's own
+    algorithm — a pseudo the host does not scroll to, on a control doing nothing wrong. `pseudoBox`
+    computes that overhang and only THAT many pixels are subtracted from the element's excess
+    before it enters this scan, never the whole element: an earlier version of this file dropped
+    the whole element instead and it blinded two real cases immediately — a `.page-center`-shaped
+    login card, where the element it dropped was not even the pseudo's containing block and the
+    exclusion bought nothing, and any real overflowing child a childless-but-decorated wrapper
+    might one day hold.
+  - `smallest` is the shortest of a target's own width and height, the smaller taken per target
+    before the section's minimum is read off — a target undersized in only one dimension used to
+    read as passing when the read axis happened to be the wider one: the reader's back button was
+    26px wide and reported `smallest: 44` under a rule that had only fixed its height, because
+    height was the only axis this ever measured. Where a target grows its hit area with an inset
+    `::before` instead of growing its own painted box (`.reader-back` again, once fixed properly —
+    a 44px arrow misaligned a one-line subject, where the pseudo-element leaves the painted box at
+    its original 26x26), `pseudoHitBox` computes that pseudo's own rect and it is credited **only**
+    as the single rectangle it is — never as a bigger-of-two-axes composite describing a rectangle
+    that exists nowhere on screen — and **only** when it actually contains the element's own rect
+    and can be hit at all (`pointer-events` is not `none`; a `left: 100%` badge or a decorative
+    overlay must not inflate a real control's target next to it). `null` means the case named no
+    `touch` selector; `'none rendered'` means it named one and every match was hidden, which is a
+    case measuring nothing rather than a case passing.
+    Accepted, not fixed: once a hit area is credited, nothing here measures the PAINTED box
+    anymore. A control shrunk to 4px behind a 44px invisible target reads clean by this metric —
+    genuinely reachable by a finger, invisible to an eye. That is the shape of what this guard
+    checks, not a claim that a passing control is easy to find.
+  - `undersized` counts targets under the floor, and **the floor is 44 only at or below 639px**.
+    `--touch` is declared in shell.css's phone block alone, so above that width the app draws
+    36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
+    four sizes the line above tells you to drive it at, which is how a metric gets ignored.
+    A third adjustment, also per element and for the same reason the other two are: an element
+    whose USED width is fractional reports `scrollWidth` one pixel ahead of `clientWidth` with no
+    visible defect behind it, because the two round in opposite directions (CSSOM allows
+    `scrollWidth` to round up, so a genuinely-scrollable box is never mis-reported as clean).
+    Traced first in task-11-report.md's addendum, Task 11's second follow-up, to the flex-
+    distributed width Chromium hands an `<input>`; four cases show it as of Task 14's full pass,
+    each on exactly one element and all four the same shape — `compose-remove-buttons-360`'s
+    recipients field at 152.40625px, `contacts-list`'s search box at 225.34375,
+    `settings-aliases`' at 252.40625, `contacts-editor`'s address input at 339.328125. What the
+    fraction comes out to is sensitive to incidental prior layout work **in the same document**,
+    so it is not reproducible per case: isolating one (its own fresh page, nothing measured before
+    it) reads 0, and replaying the same prefix of cases inside an already-loaded page was observed
+    to flip it for the identical input. `parseFloat(getComputedStyle(el).width) % 1` is what
+    identifies the shape rather than the value, so the pixel is subtracted **from that element
+    alone** and a genuine 1px clip on any integer-width box is still reported. This used to be
+    written up as a noise floor — "treat a `clipped` of 1 as noise" — which cost the metric its
+    resolution on four cases for the rest of the file's life; it is a per-element correction now,
+    and a `clipped` of 1 means something again. The fixtures must NOT be adjusted to stop
+    producing a fractional box: that is divergence from the component's markup, which this file
+    forbids for the reason recorded on `compose-360` below.
+    Two limits on it, both stated rather than papered over. **The cost is analytic, not measured**:
+    a case whose worst offender is itself a fractional-width box is under-reported by at most 1px
+    — a genuine 40px clip on such a box would read 39 — and nothing here exercises that case. The
+    bound is exact and one pixel, which is why it stands; what was measured is the other
+    direction, that a real 1px clip on an integer-width box still reports (injecting
+    `min-width: 361px` on `.selection-toolbar` inside its 360px column moves `toolbar-idle-360`
+    from 0 to 1). And **the test reads the CONTENT box while the excess is a padding-box
+    comparison**: `getComputedStyle(el).width` resolves to the content width, so fractional
+    padding over an integer content width is not forgiven (safe, it only under-forgives) while the
+    converse — an integer content width inside fractional padding — would be forgiven wrongly. All
+    four boxes above are integer-padding inputs, so nothing is live today; the next fixture is
+    where to check it.
+  - `height` is present only on a case that named a `height` selector, and it is the one number
+    here with no pass mark: it reports how tall that element's own box is, for the defects that are
+    vertical rather than horizontal — a reader header that leaves the message body four lines of
+    screen is invisible to every metric above. Compare it between two runs, not against a
+    threshold. -1 means the selector matched nothing.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- main.tsx's order, exactly: the cascade decides several of these boxes. -->
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/tooltip.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
+       app's own dark-band tokens rather than inventing a colour of its own. */
+    /* The classic scrollbar is what a desktop Blink browser takes out of the viewport and a phone
+       does not: it leaves documentElement.clientWidth 15px short of the width being emulated, and
+       `overflow` — scrollWidth minus clientWidth — reads that as a defect in every case at once.
+       Suppressed here rather than in whatever drives the file, so an unaided run of this page
+       reports the same numbers a scripted one does. Media queries are unaffected either way:
+       Blink resolves them against innerWidth, which includes the scrollbar (confirmed by reading
+       matchMedia against each tier while driving this file). */
+    html { scrollbar-width: none; }
+    /* overflow-x on the report itself, and it is load-bearing rather than cosmetic: `white-space:
+       pre` makes this block as wide as its longest JSON line, and the block is on the page while
+       the NEXT measurement runs — so from the second reading onward it was the report, not any
+       case, that grew documentElement.scrollWidth. Measured at 320x640, the width several cases
+       here tell you to read them at: it put a FLOOR of 24 under every case's `overflow` — 17 cases
+       read exactly 24 with nothing wrong in any of them, while a case whose own fixture is wider
+       than the viewport kept its larger number and hid the contamination inside it. A scroller of
+       its own keeps that width off the page. */
+    #out { padding: 12px; white-space: pre; overflow-x: auto; font-family: monospace; font-size: 11px; }
+    .case { margin-bottom: 8px; }
+    .case > h2 {
+      font: 700 11px monospace; padding: 2px 6px;
+      background: var(--topbar-bg); color: var(--topbar-fg);
+    }
+  </style>
+</head>
+<body>
+  <pre id="out">measuring…</pre>
+  <div id="stage"></div>
+  <script type="module">
+    // Only where the app itself declares one: --touch lives in shell.css's phone block, so above
+    // 639px there is no floor to hold anything to. See the header.
+    const touchFloor = () => window.innerWidth <= 639 ? 44 : 0
+    // Later tasks push their own {name, html} entries onto this array. One section per screen.
+    // `overlap: [selectorA, selectorB]` additionally reports the two rectangles and whether they
+    // intersect — for the fixed-position furniture that shares a screen corner.
+    const CASES = [{
+      name: 'floating compose vs. toast stack',
+      // Both are position:fixed, so the stage they sit in has no bearing on where they land.
+      html: `
+        <button type="button" class="floating-action" aria-label="New message">+</button>
+        <div class="toast-container"><div class="toast toast-success">Message sent</div></div>`,
+      overlap: ['.floating-action', '.toast-container'],
+    }]
+
+    // Rounded to whole pixels: a sub-pixel touch is a rendering artefact, not a collision.
+    function boxOf(el) {
+      const r = el.getBoundingClientRect()
+      return {
+        left: Math.round(r.left), top: Math.round(r.top),
+        right: Math.round(r.right), bottom: Math.round(r.bottom),
+      }
+    }
+
+    function intersects(a, b) {
+      return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+    }
+
+    // An element's padding box — its border box inset by its own border — which is the edge both
+    // a positioned descendant's containing block AND clientWidth/scrollWidth are measured from.
+    // (clientWidth excludes border, and CSSOM View's scrollWidth algorithm sizes the scrollable
+    // overflow area from the padding edge too — using the border edge for either one silently
+    // undercounts a pseudo's overhang by exactly the element's own border width.)
+    function paddingBoxOf(el) {
+      const rect = el.getBoundingClientRect()
+      const host = getComputedStyle(el)
+      const bl = parseFloat(host.borderLeftWidth) || 0
+      const br = parseFloat(host.borderRightWidth) || 0
+      const bt = parseFloat(host.borderTopWidth) || 0
+      const bb = parseFloat(host.borderBottomWidth) || 0
+      return { left: rect.left + bl, right: rect.right - br, top: rect.top + bt, bottom: rect.bottom - bb }
+    }
+
+    // The viewport rect an absolutely positioned ::before actually paints to, computed rather
+    // than read: a pseudo-element is not a real node, so getBoundingClientRect cannot see it, but
+    // getComputedStyle resolves top/right/bottom/left to their USED (numeric) values for an
+    // out-of-flow box, which is enough to place it against its containing block by hand.
+    //
+    // Returns null — "this pseudo's box cannot be attributed to el" — when there is no box to
+    // place at all (`content: none`, not absolutely positioned), or — the case a future
+    // `.page-center`-shaped rule can hit — when `el` itself is not positioned: an absolutely
+    // positioned box's containing block is its nearest positioned ANCESTOR's padding edge, so an
+    // unpositioned host's own ::before belongs to some ancestor further up the tree and
+    // contributes nothing to *this* element, geometrically or in its scrollWidth, at all.
+    // Deliberately silent on `pointer-events` — that gates whether a rect can be CLICKED, not
+    // where it physically sits, and geometry is all this function answers.
+    function pseudoBox(el) {
+      const before = getComputedStyle(el, '::before')
+      if (before.content === 'none' || before.position !== 'absolute') return null
+      const host = getComputedStyle(el)
+      if (host.position === 'static') return null
+      const cb = paddingBoxOf(el)
+      const left = parseFloat(before.left)
+      const right = parseFloat(before.right)
+      const top = parseFloat(before.top)
+      const bottom = parseFloat(before.bottom)
+      if (![left, right, top, bottom].every(Number.isFinite)) return null
+      return { left: cb.left + left, right: cb.right - right, top: cb.top + top, bottom: cb.bottom - bottom }
+    }
+
+    // The stricter question `sizes` below actually needs: is this pseudo's box not just present,
+    // but genuinely a HIT area — able to receive a click at all? `pointer-events: none` says no;
+    // five existing rules in this codebase set exactly that to guarantee a decorative layer does
+    // NOT intercept clicks, the compose drop overlay among them, and crediting one of those toward
+    // a control's touch size would hide the opposite defect this metric exists to catch.
+    function pseudoHitBox(el) {
+      const before = getComputedStyle(el, '::before')
+      if (before.pointerEvents === 'none') return null
+      return pseudoBox(el)
+    }
+
+    // A hit area is one rectangle, not the larger of two independent axes: a 44x2 underline
+    // pseudo beside a 20x44 button must not read as a 44x44 target when no such rectangle exists
+    // anywhere on screen, and a badge or chevron sitting outside the element entirely (`left:
+    // 100%`) must not be credited just because it happens to have a resolvable box. Crediting only
+    // fires when the pseudo's rect actually CONTAINS the element's own — exactly the shape the
+    // inset-overhang idiom produces, and nothing else. A half-pixel tolerance absorbs sub-pixel
+    // rounding between the two independently-computed rects.
+    function containsRect(outer, inner, eps = 0.5) {
+      return outer.left <= inner.left + eps && outer.top <= inner.top + eps
+        && outer.right >= inner.right - eps && outer.bottom >= inner.bottom - eps
+    }
+
+    function measure() {
+      const stage = document.getElementById('stage')
+      const floor = touchFloor()
+      const report = CASES.map(({ name, html, touch, overlap, height }) => {
+        stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
+        const doc = document.documentElement
+        // Only what is actually drawn: a control a query hides has no box, and counting its 0px
+        // height as an undersized touch target reports a defect where nothing is touchable at all.
+        const targets = touch
+          ? [...stage.querySelectorAll(touch)].filter(el => el.getClientRects().length)
+          : []
+        // The smaller of each target's own width and height: a target fixed tall but not wide (or
+        // the reverse) is still one finger can miss, and reading only height passed .reader-back
+        // at 26px wide under a rule that had fixed nothing but its height.
+        //
+        // A hit area can also be bigger than the box that paints it: .reader-back stays a 26x26
+        // arrow and grows only an inset ::before to reach the floor, so text beside it keeps its
+        // baseline. pseudoHitBox resolves that pseudo's own rect (getComputedStyle resolves used
+        // pixel offsets even for a pseudo-element); it is credited only when it actually CONTAINS
+        // the element's own rect — the shape an inset overhang produces — and only as the single
+        // rectangle it is, never as a bigger-of-two-axes composite that could describe a rectangle
+        // nothing on screen actually is. An empty `content: ''` is exactly the pattern this
+        // credits, same as `.reader-back`'s own; it is a decorative pseudo with `pointer-events:
+        // none` — unhittable by construction — that pseudoHitBox refuses instead.
+        //
+        // Nothing here measures the PAINTED box once a hit area is credited: a control shrunk to
+        // 4px behind a 44px invisible target would read clean by this metric — genuinely hittable,
+        // visually unfindable. Accepted for what this field exists to catch (can a finger hit it),
+        // not a claim that a control is easy to see.
+        const measured = targets.map(el => {
+          const rect = el.getBoundingClientRect()
+          const hit = pseudoHitBox(el)
+          const box = hit && containsRect(hit, rect) ? hit : rect
+          const width = Math.round(box.right - box.left)
+          const height = Math.round(box.bottom - box.top)
+          return { el, width, height, hit: !!(hit && containsRect(hit, rect)), size: Math.min(width, height) }
+        })
+        const sizes = measured.map(m => m.size)
+        let pair = null
+        if (overlap) {
+          const [a, b] = overlap.map(selector => stage.querySelector(selector))
+          const boxes = a && b ? [boxOf(a), boxOf(b)] : null
+          pair = boxes
+            ? { [overlap[0]]: boxes[0], [overlap[1]]: boxes[1], intersect: intersects(...boxes) }
+            : 'missing'
+        }
+        return {
+          name,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          overflow: doc.scrollWidth - doc.clientWidth,
+          // CSSOM View's scrollWidth algorithm counts a positioned descendant's border box against
+          // its containing block, so .reader-back's inset ::before hit area — deliberately
+          // overhanging its own 26px button to reach 44px — inflates scrollWidth for doing exactly
+          // what it is built to do. The fix is to subtract only the pseudo's own known overhang,
+          // never to drop the whole element from the scan the way an earlier version of this file
+          // did: `el.scrollWidth - el.clientWidth` measures whether ANYTHING inside `el` overflows
+          // it, so excluding `el` entirely would have hidden a real overflowing child right beside
+          // the forgiven pseudo. `pseudoBox` already answers null — no adjustment — for a pseudo
+          // that cannot be `el`'s own overhang in the first place: no box, or `el` itself
+          // unpositioned (a `position: static` override on something shaped like `.page-center`,
+          // whose own ::before then belongs to a positioned ancestor further up the tree and
+          // never touches `el`'s scrollWidth at all). Only the RIGHTWARD excess is subtracted —
+          // this metric is `scrollWidth - clientWidth`, which in a left-to-right, unscrolled
+          // document only grows from an edge past the right, never the left. And the overhang is
+          // measured from the PADDING edge, not the border edge `getBoundingClientRect` reports:
+          // measured directly against `.reader-back` (a 1px-bordered button), comparing to the
+          // border edge undercounted the true 10px overhang by exactly that 1px border and left a
+          // stray `clipped: 1` where the element's own scrollWidth/clientWidth (both padding-edge
+          // measurements) agreed on 0.
+          //
+          // The second adjustment is the sub-pixel one, and it is deliberately PER ELEMENT rather
+          // than a noise floor read off the whole number: a box whose used width is fractional has
+          // its clientWidth rounded down and its scrollWidth rounded up (CSSOM allows the second,
+          // so a genuinely scrollable box is never reported clean), which is one pixel of excess
+          // that no layout produced. `% 1` is what identifies it — an integer-width element is
+          // never forgiven, so a real 1px clip anywhere else in the app is still visible, which a
+          // blanket "treat 1 as noise" convention would have cost this metric for good. Four cases
+          // rely on it today, all four the same shape: a flex-distributed `<input>` that lands on
+          // 152.40625, 225.34375, 252.40625 or 339.328125px. Do NOT instead change a fixture to
+          // stop producing a fractional box — that means diverging from the component's markup,
+          // which is the one thing this file may never do.
+          clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
+            .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
+            .map(el => {
+              const excess = el.scrollWidth - el.clientWidth
+              const box = pseudoBox(el)
+              const overhang = box ? Math.max(0, box.right - paddingBoxOf(el).right) : 0
+              const subpixel = parseFloat(getComputedStyle(el).width) % 1 === 0 ? 0 : 1
+              return Math.max(0, excess - overhang - subpixel)
+            })),
+          smallest: !touch ? null : sizes.length ? Math.min(...sizes) : 'none rendered',
+          undersized: sizes.filter(s => s < floor).length,
+          // WHICH target is short, in BOTH axes, and whether a ::before hit area was credited.
+          // `smallest: 33` on a case naming four selectors sent a whole diagnostic round through
+          // CDP to answer a question the report already had the data for — and the axis and the
+          // `hit` flag are the two things that then say WHY. Present only when something is
+          // actually under the floor, so a clean case stays as terse as it was.
+          ...(sizes.some(s => s < floor)
+            ? {
+              short: measured.filter(m => m.size < floor).map(
+                m => `${m.el.className || m.el.tagName.toLowerCase()}=${m.width}x${m.height}${m.hit ? ' (hit area)' : ''}`),
+            }
+            : {}),
+          ...(pair ? { overlap: pair } : {}),
+          // `height: selector` reports that element's own box height. Nothing passes or fails on
+          // it — it is for cases whose defect is vertical (a header eating the body's screen), a
+          // question the width metrics above cannot ask. -1 means the selector matched nothing.
+          ...(height
+            ? { height: Math.round(stage.querySelector(height)?.getBoundingClientRect().height ?? -1) }
+            : {}),
+        }
+      })
+      stage.innerHTML = ''
+      document.getElementById('out').textContent = JSON.stringify(report, null, 1)
+      document.title = 'probe-done'
+    }
+
+    // The list toolbar's two states. The column carries an explicit width because the container
+    // query answers to it and not to the window: 360 is a phone, 240 is the narrowest the tablet
+    // splitter allows, and 520 is the one column width on a phone that the query does NOT catch —
+    // a 540px device, where the touch floor has to come from the viewport instead. All three hold
+    // the same row of controls, and `clipped` rather than `overflow` is what says whether they fit.
+    //
+    // The 240 pair carries a "(read at …)" annotation for a reason of its own, and it is not the
+    // 520 pair's. The 520 pair's number is contamination — a stage wider than the page, measuring
+    // nothing about the toolbar. The 240 pair's `clipped: 34` at 360x640 is a TRUE measurement of a
+    // reachable geometry, and it is annotated because that geometry is out of contract, not because
+    // it is a phantom: at 240 with the 44px touch floor the master crushes `.selection-heading` to
+    // 12px and the star paints over `.selection-actions`. A 240px column and that floor meet only
+    // below the 320px viewport this product supports — `--touch` lives in shell.css's phone block
+    // alone, and a phone gets `effectivePane(…, 'phone') === 'none'`, no splitter, the list at the
+    // full viewport, so on that tier the column IS the viewport and the pairing needs one under
+    // 274px (measured boundary; the Galaxy Fold cover screen is 280). Page zoom reaches it — a
+    // ~520px window at 200% — which is why the wording here is "out of contract" and not
+    // "impossible". 768x1024 is where a 240px column really occurs, so that is the reading these
+    // two are named for; the two 360 cases in the list below are where the 44px controls are read.
+    // The suffix stays in the case NAME rather than moving into this comment: the name travels in
+    // the JSON a reader actually looks at, and a comment does not.
+    const toolbar = (selecting, width) => `
+      <div class="mail-list" style="width:${width}px">
+        <div class="selection-toolbar${selecting ? ' is-selecting' : ''}">
+          <button class="drawer-toggle" style="display:inline-flex">☰</button>
+          <label class="selection-master-hit"><input type="checkbox" class="selection-master" /></label>
+          <span class="selection-heading">
+            <span class="selection-title">${selecting ? '3 selected' : 'Inbox'}</span>
+            <button class="selection-btn selection-star">★</button>
+          </span>
+          <div class="selection-actions">
+            <button class="selection-btn selection-archive">A</button>
+            <button class="selection-btn selection-junk">J</button>
+            <button class="selection-btn is-danger selection-delete">D</button>
+            <button class="selection-btn selection-search">S</button>
+            <button class="selection-btn">⋮</button>
+          </div>
+        </div>
+      </div>`
+    // The master's target is its wrapping label, not the box it paints — see mail.css's phone block.
+    const TOOLBAR_TOUCH = '.selection-btn, .selection-master-hit, .drawer-toggle'
+    for (const [name, selecting, width] of [
+      ['toolbar-idle-360', false, 360],
+      ['toolbar-selecting-360', true, 360],
+      ['toolbar-idle-240 (read at 768x1024)', false, 240],
+      // The one configuration the container query's flex-wrap exists for: without it these six
+      // controls run past the column and `.mail-list` clips the kebab off the screen. It still
+      // wraps to two rows at the tablet's own 40px controls — measured, 117px of band.
+      ['toolbar-selecting-240 (read at 768x1024)', true, 240],
+      // Read these two at 540x900 only. A 520px column cannot fit a 360px viewport, so at 360
+      // their `overflow` is the stage overflowing the page and says nothing about the toolbar.
+      ['toolbar-idle-520 (read at 540x900)', false, 520],
+      ['toolbar-selecting-520 (read at 540x900)', true, 520],
+    ]) CASES.push({ name, html: toolbar(selecting, width), touch: TOOLBAR_TOUCH })
+
+    // The master checkbox has no threshold of its own any more: it is drawn at every column width,
+    // and these three are the widths that had to prove it. 380 is `usePaneSize('mail.split.right',
+    // 380, 240)`'s default — the column every untouched desktop has — 360 is the commonest Android
+    // width, and 240 is that same call's floor, the narrowest column the splitter can produce.
+    // `touch` names the master ALONE, so `smallest` answers the presence question directly: a
+    // number is the box it draws, and 'none rendered' — the doc block's word for a selector every
+    // match of which is hidden — is the failure this trio now exists to catch. It is what 360 used
+    // to report, back when the master answered to a lower threshold than the actions beside it: a
+    // 390px phone could tap the master into the selecting state and watch archive/junk/delete
+    // appear, and a 360px one had only long-press, which nothing on screen announces.
+    //
+    // All three read at 768x1024, and the two narrow ones for the reason the 240 pair above
+    // carries: 380 cannot fit a 360px viewport at all, and 360 and 240 would otherwise measure a
+    // 44px master against the 13px one the widths they name actually draw — at 240 that reads
+    // `clipped: 34`, the out-of-contract sub-274 crush the comment above records rather than a
+    // defect in this trio. `smallest` is 13 at all three here — the shrink-to-fit label off a
+    // phone — and the number that matters is that there is one. The 44px target is measured by
+    // 'toolbar-idle-360' above, at the viewport that has a touch floor to measure it against.
+    for (const [name, width] of [
+      ['toolbar-master-380 (read at 768x1024)', 380],
+      ['toolbar-master-360 (read at 768x1024)', 360],
+      ['toolbar-master-240 (read at 768x1024)', 240],
+    ]) CASES.push({ name, html: toolbar(false, width), touch: '.selection-master-hit' })
+
+    // A row is a touch target in its own right — long-press is how a selection starts once the
+    // container query has stopped :hover revealing the per-row checkbox — so the row itself is
+    // what `touch` names here, not the controls inside it.
+    //
+    // The row is drawn LOADED rather than in its friendliest state, and that is the whole point of
+    // the case. `.message-row-top` is a flex line and every optional item in it — the unread dot,
+    // the Draft badge, the priority mark, the paperclip — competes with the date and the star for
+    // the width `.message-row-from` is trying to take with `flex: 1`. `.message-row-from` carries
+    // `text-overflow: ellipsis` and no element children, so `clipped` exempts it by design and it
+    // absorbs the shrink; anything that instead pushes the date or the star past the line's right
+    // edge lands on `.message-row-top`, which is measured. A row missing those items cannot fail,
+    // and a case that cannot fail is not a guard.
+    //
+    // `.mail-list-scroll` is here because the real list always has it and it is what owns the
+    // vertical scrollbar: without it the row is measured against a gutter the app never gives it.
+    // It is also the one box in this case with `overflow-y: auto`, so should `clipped` ever go
+    // non-zero, check it against that caveat before chasing a control.
+    //
+    // The two variants are the two list states. Note what the pair can and cannot prove: the box
+    // is absolutely positioned over the row's unconditional 34px gutter, so an identical row
+    // height across the two is a property of the base stylesheet and NOT evidence that revealing
+    // every checkbox reflows nothing. What the pair does prove is that neither state overflows or
+    // clips, and that the second draws a real box rather than nothing at all.
+    const row = (selecting) => `
+      <div class="mail-list" style="width:360px">
+        <div class="mail-list-scroll">
+          <ul class="message-list${selecting ? ' has-selection' : ''}">
+            <li><div role="button" class="message-row is-unread" style="--row-actions:4">
+              <input type="checkbox" class="message-row-check" />
+              <div class="message-row-top">
+                <span class="message-row-unread-dot"></span>
+                <span class="message-row-draft">Draft</span>
+                <span class="message-row-priority is-high">HIGH</span>
+                <span class="message-row-from">Alice Martin</span>
+                <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                <span class="message-row-date">18 Jul</span>
+                <button class="row-btn row-star">★</button>
+              </div>
+              <div class="message-row-subject">Re: facture du mois de juillet</div>
+              <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+              <div class="message-row-cluster">
+                <button class="row-btn">S</button>
+                <button class="row-btn">A</button>
+                <button class="row-btn">J</button>
+                <button class="row-btn is-danger">D</button>
+              </div>
+            </div></li>
+          </ul>
+        </div>
+      </div>`
+    for (const [name, selecting] of [['row-360', false], ['row-selecting-360', true]]) {
+      CASES.push({ name, html: row(selecting), touch: '.message-row' })
+    }
+
+    // The one mechanism in this repo that can catch this, and no unit test can stand in for it:
+    // jsdom computes no layout. `.mail-list` carries `container-type: inline-size`, and MessageList
+    // renders four dialogs INSIDE that column with no portal anywhere in the codebase. Layout
+    // containment would make the column the containing block for their `position: fixed` overlay
+    // and trap every one of them in a 240-380px box. Two independent Blink measurements say
+    // container-type does not apply it; this case is that claim left running, because the spec
+    // prose is read both ways and a citation settles nothing.
+    // Read it as: is `.modal-overlay` the viewport, or is it the column? The column is deliberately
+    // 240px so the two can never be confused. The overlay may be a scrollbar's width narrower than
+    // `viewport` says; what must never happen is its width matching `.mail-list`'s.
+    CASES.push({
+      name: 'list dialogs escape the container column',
+      html: '<div class="mail-list" style="width:240px"><div class="modal-overlay">dialog</div></div>',
+      overlap: ['.modal-overlay', '.mail-list'],
+    })
+
+    // The same question the list case above asks, asked of the second container this branch
+    // declares: `.mail-reader` carries `container-type: inline-size` so its header can answer to
+    // the column rather than to the window, and MessageReader renders three dialogs — the move
+    // picker, the delete confirm and the attachment viewer — INSIDE it with no portal. Read the
+    // two rects, never the boolean: `.mail-reader` here holds nothing but a fixed child, so its
+    // own box is zero-height at the top of the stage and `intersects` is false either way. The
+    // overlay's width is the whole answer — the viewport's, or this 240px column's.
+    //
+    // The reading to carry away is that the spec and the engine disagree and the engine is what
+    // ships here: `container-type: inline-size` DOES apply layout containment, which by CSS
+    // Contain makes the element a containing block for its fixed descendants, and Blink lays the
+    // overlay out against the viewport regardless (measured here, and with elementFromPoint for
+    // the z-index half of the same question). Blink-only evidence, leaned on twice now — this
+    // case and the list's — which is why each container keeps its own live case rather than one
+    // standing for both.
+    CASES.push({
+      name: 'reader dialogs escape the container column',
+      html: '<div class="mail-reader" style="width:240px"><div class="modal-overlay">dialog</div></div>',
+      overlap: ['.modal-overlay', '.mail-reader'],
+    })
+
+    // Task 9: the reader header at phone width. `.mail-reader` is `overflow: hidden`, so
+    // `overflow` above cannot see a control hanging outside it — only `clipped` can. Drawn LOADED,
+    // the same principle as the message row above: subject, a sender with an auth badge, the
+    // recipients, the date and the full ReaderActions cluster, because a header missing any of
+    // those cannot show whether the actions wrap or the row overruns. `width` mirrors the
+    // viewport the case is read at, since a real phone gives
+    // `.mail-reader` the full screen rather than a fixed column; `detailsOpen` swaps the compact
+    // To/Cc lines for the `<dl>` ReaderDetails renders, which is the only thing that exercises the
+    // narrow-width grid override: the two columns it keeps, the ellipsis on every value and the
+    // one `.detail-subject` exempt from it.
+    //
+    // These cases draw the PHONE shape of the header, which is a different tree and not merely a
+    // different width: below 640px MessageReader drops the long date from `.reader-from`, puts the
+    // short one on the recipients line inside `.reader-to-row`, and moves both the spam gauge and
+    // the unsubscribe pill into the details grid — two lines of metadata instead of five. Above
+    // 640px the header keeps the long date, the pill and a standalone `.reader-spam`, and nothing
+    // here stands for that shape; every case below is read at 320 or 360.
+    //
+    // AddressList's markup, not a stand-in span: a recipient carrying a display name is wrapped in
+    // Tooltip, whose `.tooltip-wrap` is `display: inline-flex` — an atomic inline box whose
+    // shrink-to-fit width is read off the containing block rather than off the space left on the
+    // line. That is the whole shape of the "À :" orphan defect, and a flat span cannot produce it.
+    const addressList = recipients => recipients.map(({ name, address }, index) => {
+      const label = name
+        ? `<span class="tooltip-wrap"><span class="address-label" tabindex="0">${name}</span>`
+          + `<span class="tooltip-bubble is-bottom-left" role="tooltip">"${name}" &lt;${address}&gt;</span></span>`
+        : `<span class="address-label">${address}</span>`
+      return `<span>${index > 0 ? ', ' : ''}${label}</span>`
+    }).join('')
+    const DEFAULT_TO = [{ name: '', address: 'moi@weesky.net' }, { name: 'Bob Dupont', address: 'bob@example.com' }]
+    const DEFAULT_CC = [{ name: 'Carole Petit', address: 'carole@example.com' }]
+    const readerHeader = ({
+      width, detailsOpen = false, sender = 'Alice Martin', to = DEFAULT_TO, cc = DEFAULT_CC,
+      headerActions = true,
+    }) => `
+      <div class="mail-reader" style="width:${width}px">
+        <article>
+          <header class="reader-header">
+            <div class="reader-stack">
+              <h1 class="reader-subject">
+                <button type="button" class="reader-back" aria-label="Back">&larr;</button>
+                <span class="reader-subject-text">Réunion budget T3 — validation finale avant envoi au comité de direction</span>
+              </h1>
+              <div class="reader-meta">
+                <div class="reader-from">
+                  <button type="button" class="address-label is-sender">${sender}</button>
+                  <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
+                  <button type="button" class="details-toggle" aria-expanded="${detailsOpen}" aria-label="Show details">&rsaquo;</button>
+                </div>
+                ${detailsOpen ? `
+                <dl class="reader-details">
+                  <dt>Objet :</dt><dd class="detail-subject">Réunion budget T3 — validation finale avant envoi au comité de direction</dd>
+                  <dt>De</dt><dd>Alice Martin <span class="detail-muted">&lt;alice.martin@example.com&gt;</span></dd>
+                  <dt>À</dt><dd>${addressList(to)}</dd>
+                  <dt>Cc</dt><dd>${addressList(cc)}</dd>
+                  <dt>Date</dt><dd>9 août 2026, 14:32:07</dd>
+                  <dt>Score de spam :</dt>
+                  <dd>
+                    <span class="spam-gauge" tabindex="0">
+                      <span class="spam-gauge-track" style="--gauge-ratio:0.2"><span class="spam-gauge-fill"></span></span>
+                      <span class="spam-gauge-value">1.2 / 5.0</span>
+                    </span>
+                  </dd>
+                  <dt>Désabonnement</dt><dd><a href="#">Se désabonner</a></dd>
+                </dl>` : `
+                <div class="reader-recipients reader-to-row">
+                  <span class="reader-to">To: ${addressList(to)}</span>
+                  <span class="reader-date">09/08/2026 14:32</span>
+                </div>
+                <div class="reader-recipients">Cc: ${addressList(cc)}</div>`}
+              </div>
+            </div>
+            ${headerActions ? `
+            <div class="reader-actions">
+              <button type="button" class="action-btn" aria-label="Répondre">R</button>
+              <button type="button" class="action-btn" aria-label="Répondre à tous">RT</button>
+              <button type="button" class="action-btn" aria-label="Transférer">T</button>
+              <span class="actions-rule"></span>
+              <button type="button" class="action-btn" aria-label="Couleurs d'origine">S</button>
+              <span class="actions-rule"></span>
+              <button type="button" class="action-btn is-danger" aria-label="Supprimer">D</button>
+              <div class="dropdown-root">
+                <button type="button" class="action-btn" aria-label="Actions du message">&#8942;</button>
+              </div>
+            </div>` : ''}
+          </header>
+        </article>
+      </div>`
+    // Every control in the header plus the ReaderActions cluster is a touch target. `.unsub-btn`
+    // was one and is not here because the markup no longer has one: below 640px the pill is not
+    // rendered at all, the details grid's own Désabonnement row being the phone's route to it.
+    const READER_TOUCH = '.reader-back, .details-toggle, .action-btn'
+
+    // The phone's foot-of-screen shape: the cluster leaves the header for a band of its own at the
+    // bottom of the column, and the tab bar is not drawn at all while a message is open. Five named
+    // cells, in French, because those are the long labels — `Transférer` is what a 320px screen has
+    // to fit in a fifth of its width. Read `clipped` for the labels and `smallest` for the cells;
+    // `height` is the band, which must come to the 57px the tab bar it replaces spent (56 + border).
+    const readerBar = ({ width }) => `
+      <div class="mail-reader" style="width:${width}px">
+        <article>
+          <div class="reader-actionbar">
+            <div class="reader-actions is-bar">
+              <button type="button" class="reader-bar-item" aria-label="Répondre">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">Répondre</span>
+              </button>
+              <button type="button" class="reader-bar-item" aria-label="Répondre à tous">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">À tous</span>
+              </button>
+              <button type="button" class="reader-bar-item" aria-label="Transférer">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">Transférer</span>
+              </button>
+              <button type="button" class="reader-bar-item is-danger" aria-label="Supprimer">
+                <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12" stroke="currentColor" fill="none"/></svg>
+                <span class="reader-bar-label">Supprimer</span>
+              </button>
+              <div class="dropdown-root">
+                <button type="button" class="reader-bar-item" aria-label="Actions du message">
+                  <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6" r="1"/></svg>
+                  <span class="reader-bar-label">Plus</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>`
+    for (const width of [360, 320]) {
+      CASES.push({
+        name: `reader action bar-${width}`,
+        html: readerBar({ width }),
+        touch: '.reader-bar-item',
+        height: '.reader-actionbar',
+      })
+    }
+    // 320 (iPhone SE 1st gen, an Android split-screen pane) needs no "(read at …)" annotation the
+    // way the 520-wide toolbar cases above do: that annotation exists only when a case's own
+    // width is WIDER than the viewport it would otherwise be read at, so the stage overflows the
+    // page and contaminates `overflow`. 320 is narrower than every one of the four widths this
+    // file says to drive it at, so — like 'toolbar-idle-240' above — it reads correctly at any of
+    // them; `.reader-actions`' fit-content sizing keys off this div's own definite width, not the
+    // window's.
+    // No `.reader-actions` in these two: below 640px the cluster is not in the header at all, it is
+    // the `reader action bar` band below. `height` is what they exist for — 150 at both widths,
+    // against the 194 and 240 the same headers read while the cluster still cost them a line. The
+    // two now agreeing is the To row's own ellipsis: 320 used to buy a second line there.
+    for (const [name, width] of [
+      ['reader header loaded', 360],
+      ['reader header loaded-320', 320],
+    ]) {
+      CASES.push({
+        name, html: readerHeader({ width, headerActions: false }),
+        touch: '.reader-back, .details-toggle', height: '.reader-header',
+      })
+    }
+    // The cluster's own geometry, which the two cases above used to hold and no longer can. Read at
+    // 768 with a 400px column, which is a real shape rather than a phone drawn wrong: a tablet at
+    // `right`, whose `.mail-reader` sits under the 480px container query — so the header stacks,
+    // which is the arrangement the `align-self: stretch` + `justify-content: flex-end` pair exists
+    // for. `align-self: flex-end` alone put the cluster against the LEFT margin at every width the
+    // query matches, and no metric but these two rects could see it. Read the rights —
+    // .reader-actions' must land one 22px padding inside .reader-header's — and ignore `intersect`,
+    // true by construction for a child and its parent.
+    CASES.push({
+      name: 'reader header cluster, stacked (read at 768x1024)',
+      html: readerHeader({ width: 400 }),
+      touch: READER_TOUCH,
+      height: '.reader-header',
+      overlap: ['.reader-actions', '.reader-header'],
+    })
+    // `height` is the whole point of this case: each label:value pair is one grid row rather than
+    // two, so the header reads 319 where the stacked version read 563 — 44 of that difference is
+    // the action cluster, which now sits in the bar below. The subject is the one value still
+    // allowed to take the lines it needs, and it takes four at 360.
+    CASES.push({
+      name: 'reader details open',
+      html: readerHeader({ width: 360, detailsOpen: true, headerActions: false }),
+      touch: '.reader-back, .details-toggle',
+      height: '.reader-header',
+    })
+    // A mailing list's own name, which is the sender the unsubscribe pill always accompanied and
+    // the reason it is no longer drawn below 640px. The case above could never have shown what
+    // the pill cost: 'Alice Martin' renders 72px wide and left the 141px pill room to share the
+    // line, so that header measured 278px with the pill and 278px without it. At 157px the pill
+    // wraps and the pre-change header was 330 — the whole 52 being the line it then had to
+    // itself, its 44px touch floor plus the 8px row gap. Three more senders read the same 330
+    // (129px, 157px, 185px), so 278 here is the datum, not a coincidence of one name. Nothing
+    // about the SHAPE differs from the case above, only the sender, which is why this case
+    // carries no touch selector of its own.
+    CASES.push({
+      name: 'reader header mailing-list sender',
+      html: readerHeader({ width: 360, sender: 'BNP Paribas Fortis Surveys', headerActions: false }),
+      height: '.reader-header',
+    })
+    // One recipient whose display name is long — a GitHub notification's `owner/repo`, the shape
+    // that put "To:" alone on its line with the name underneath. `height` is `.reader-to` rather
+    // than the header, because that IS the defect: 20 is the one line To and the date are required
+    // to share, and 59 is what it read while the row still wrapped. 320 rather than 360, where the
+    // name fitted with 0.1px to spare and no truncation could ever have shown. The two rects say
+    // the date survived whole — `.reader-date` ends 20px inside `.reader-header`'s right edge at
+    // its full 101px width — since ellipsising the wrong item would still measure 20 tall.
+    // This case, `reader header loaded-320` and `reader details open` are the three carrying a
+    // non-zero `clipped` by design: `.reader-to` and the grid's `dd`s ellipsise while holding
+    // AddressList's spans, which the metric's childless-leaf exemption deliberately does not
+    // cover. 33 here, 25 and 36 there. A fourth case reporting one is a real defect.
+    CASES.push({
+      name: 'reader header long single recipient',
+      html: readerHeader({
+        width: 320,
+        sender: 'github-actions[bot]',
+        to: [{ name: 'darthmaul0181/weesky.net-mail', address: 'weesky.net-mail@noreply.github.com' }],
+        cc: [{ name: '', address: 'darthmaul0181' }, { name: '', address: 'Author' }],
+      }),
+      height: '.reader-to',
+      overlap: ['.reader-date', '.reader-header'],
+    })
+
+    // Task 10: the 24rem floor overflowed a 360px screen because min-width always beats
+    // max-width. Read at 360x640 AND 320x640 — a 320px viewport is a real device (iPhone SE
+    // 1st gen, an Android split-screen pane) that earlier tasks found trips over widths 360
+    // leaves clean.
+    // `position:static` on the overlay (not the real `fixed`) is what makes `overflow` below
+    // load-bearing for this case: `.modal-overlay` carries `overflow-y: auto`, and per CSS
+    // Overflow 3 a non-visible value on one axis forces the other to `auto` too, so a REAL fixed
+    // overlay scrolls horizontally itself and `documentElement.scrollWidth` never grows — this
+    // page's `overflow` would read 0 whether or not the dialog fit. Static lets the case's own
+    // width overflow the page instead, which is what this metric can see.
+    CASES.push({
+      name: 'modal-360',
+      html: `<div class="modal-overlay" style="position:static">
+               <div class="modal">
+                 <div class="modal-header"><span class="modal-title">Move to…</span>
+                   <button class="modal-close">✕</button></div>
+                 <div class="field-h"><label>Folder</label><select><option>INBOX.Archive</option></select></div>
+                 <!-- AddEditUserModal's own row, the sixth and last .toggle-switch call site:
+                      the switch's hit area bleeds 8px left, and this is the one place that
+                      lands in a dialog's 18px padding rather than a page's. -->
+                 <div class="field-h"><label for="m-adm">Administrator</label>
+                   <label class="toggle-switch"><input id="m-adm" type="checkbox" /><span class="toggle-track"></span></label>
+                 </div>
+               </div>
+             </div>`,
+      touch: '.modal-close, .toggle-switch',
+    })
+
+    // A dialog whose content is genuinely narrow: does width:100% stretch a two-line confirm
+    // across the whole screen? Markup mirrors DeleteConfirmModal.jsx exactly — its own single
+    // action button is a touch target too.
+    CASES.push({
+      name: 'modal-confirm-360',
+      html: `<div class="modal-overlay" style="position:static">
+               <div class="modal">
+                 <div class="modal-header"><span class="modal-title">Delete this message?</span>
+                   <button class="modal-close">✕</button></div>
+                 <p style="margin:0 0 20px;font-size:14px">This cannot be undone.</p>
+                 <div style="display:flex;gap:8px;justify-content:flex-end">
+                   <button class="btn btn-primary" style="width:auto">Delete</button>
+                 </div>
+               </div>
+             </div>`,
+      touch: '.modal-close, .btn',
+    })
+
+    // `undersized: 7` folded and `22` expanded are known and accepted, not a defect this task
+    // missed: every one is a `.compose-tool` floored to `var(--touch)` on height only, so it stays
+    // 31px wide and `smallest` (the lesser of a target's own width and height) reads 31.
+    // `.compose-send`, `.compose-header-more` and `.modal-close` are floored on both axes and are
+    // none of them. It read 14 before the overflow group: folding took the visible count to seven,
+    // which is half the deferral paid off rather than the whole of it. **44px still does not fit,
+    // and that is arithmetic rather than an untried idea**: seven cells at 44 come to 308px plus
+    // the group gaps, against the 288px a 320px screen leaves inside the bar's own padding — it
+    // would take five visible tools, and even at 360 the gaps put seven over the 328 available.
+    // The other escape does not transfer either: an inset `::before` hit area, as `.reader-back`
+    // uses, would have neighbours 1px away inside `.compose-tool-group` and they would steal each
+    // other's taps. So the remaining fix is fewer visible tools still, which is a product call.
+    //
+    // The To row is RecipientsField's real markup, and its `type="text"` is load-bearing: an
+    // attribute selector matches the ATTRIBUTE and not the IDL default, so the bare <input /> that
+    // used to stand here (inside a bare .compose-to-row, wearing .rule-wizard-input, which is the
+    // Rules page's class) was invisible to index.css's phone-block floor on typed controls — this
+    // case and the one below reported "byte-identical" while that floor was pushing the real
+    // .recipients-box from 32px to 54px. A fixture that is not the markup is not a guard.
+    //
+    // The whole surface, in its real bands, because the defect it now holds is vertical: the body
+    // had 102px of a 640px screen. `height` is `.compose-body`, and the numbers are 347 folded at
+    // both widths against 102 before, with the header's own 102px of overflow — Save draft cut off
+    // and the ✕ entirely off screen — gone from `clipped` at the same time.
+    const composeView = ({ width, expanded = false }) => {
+      const tools = n => Array.from({ length: n }, () => '<button class="compose-tool">B</button>').join('')
+      const selects = n => Array.from({ length: n },
+        () => '<div class="dropdown-root"><button class="compose-tool-select">A<span>v</span></button></div>').join('')
+      // Group order and `is-extra` exactly as EditorToolbar writes them: plain-text switch and the
+      // paperclip stay, undo/redo folds, B/I/U/S stays, colours, font/size/align, lists and
+      // link/unlink/image/clear fold, then the ⋯ that reveals them. Seven cells folded.
+      const groups = [
+        [1, false], [1, false], [2, true], [4, false], [2, true],
+        [3, true, 'select'], [4, true], [4, true], [1, false],
+      ]
+      return `
+      <div class="compose-view" style="width:${width}px;height:640px">
+        <div class="compose-header">
+          <button class="btn btn-primary compose-send">🚀 Envoyer</button>
+          <button class="btn btn-ghost compose-header-more">&#8942;</button>
+          <button class="modal-close" aria-label="Fermer">&#10005;</button>
+        </div>
+        <div class="compose-fields">
+          <div class="compose-from"><span class="compose-from-label">De</span>
+            <span class="compose-from-value">Mick (darth@weesky.be)</span></div>
+          <div class="compose-to-row">
+            <div class="field-h recipients-field"><label>À</label>
+              <div class="recipients-box">
+                <span class="recipient-token">Michaël <button type="button">&#10005;</button></span>
+                <input type="text" />
+              </div>
+            </div>
+            <span class="compose-cc-links">
+              <button class="compose-link-btn">Cc</button>
+              <button class="compose-link-btn">Cci</button>
+              <button class="compose-link-btn">Priorité</button>
+            </span>
+          </div>
+          <div class="field-h"><label for="probe-subject">Objet</label>
+            <input id="probe-subject" type="text" value="Re: Mail avec pièce jointe .eml" /></div>
+        </div>
+        <div class="compose-toolbar${expanded ? ' is-expanded' : ''}">
+          ${groups.map(([n, extra, kind]) =>
+            `<div class="compose-tool-group${extra ? ' is-extra' : ''}">${kind === 'select' ? selects(n) : tools(n)}</div>`).join('')}
+        </div>
+        <div class="compose-body"><div class="compose-editor"></div></div>
+      </div>`
+    }
+    for (const [name, opts] of [
+      ['compose-360', { width: 360 }],
+      ['compose-320', { width: 320 }],
+      ['compose-360-expanded', { width: 360, expanded: true }],
+    ]) {
+      CASES.push({
+        name, html: composeView(opts),
+        touch: '.compose-tool, .compose-tool-select, .compose-send, .compose-header-more, .modal-close',
+        height: '.compose-body',
+      })
+    }
+
+    // The one case that reads `.recipients-box`'s own height, which is the whole point of it now:
+    // 32px is the box's `min-height` and anything above it means something inside grew.
+    //
+    // `undersized: 2` here is likewise known and accepted: `.recipient-token` is deliberately
+    // `height: 22px` (see mail.css's own comment on it) and `.recipients-box` wraps tokens on a
+    // 4px gap, so an inset hit-area pseudo on either ✕ would overlap the token rows above and
+    // below it. Kept as its own case rather than folded into compose-360 above, so a future fix
+    // for either one shows up as its own line instead of getting lost inside the toolbar's 14.
+    //
+    // `.compose-attach-btn` is in the tray because AttachmentTray.tsx always ships it, after the
+    // chips, and the tray is a `flex-wrap` line: the chips and the button share one measure, so a
+    // fixture holding only chips cannot see the button pushed past the row. It is NOT in `touch` —
+    // it is a `.btn`, floored by index.css's phone block like every other one, and naming it here
+    // would mix a fixed defect into the two deferred numbers this case exists to hold steady.
+    CASES.push({
+      name: 'compose-remove-buttons-360',
+      html: `<div class="compose-fields">
+               <div class="compose-to-row">
+                 <div class="field-h recipients-field"><label>To</label>
+                   <div class="recipients-box">
+                     <span class="recipient-token">alice@example.com <button type="button">&#10005;</button></span>
+                     <input type="text" />
+                   </div>
+                 </div>
+               </div>
+             </div>
+             <div class="compose-attachments">
+               <span class="compose-attachment">report.pdf <button type="button">&#10005;</button></span>
+             </div>`,
+      touch: '.recipient-token button, .compose-attachment button',
+    })
+
+    // ── Contacts (Task 12) ──────────────────────────────────────────────────────────────────
+    // The list owns the whole row on a phone, so no explicit column width here: `.contacts-row`
+    // is a flex row inside `.contacts-layout` and the list is what fills it, which is exactly the
+    // arrangement the phone rules have to produce. The tiles are drawn LOADED — the widest tile
+    // is a long name beside a hidden-but-reserved action cluster, and the tile carrying only an
+    // address is the one that exercises `.contact-tile-address`'s reserved line.
+    //
+    // `.contact-tile-name` and `.contact-tile-address` both ellipsise and hold no elements, so
+    // `clipped` exempts them by design; what it can still see is a heading whose hamburger, search
+    // box and count do not fit, or a tile line pushed past the column.
+    // ContactsLayout's own rule for this column: `style={phone ? undefined : { width: listWidth }}`,
+    // listWidth being usePaneSize('contacts.split.right', 380, 240). Left bare, the column fell to
+    // `flex: none; width: auto` at 768px and reported a 106px clip for a layout the app cannot
+    // produce — a guard people learn to discount. The phone arm stays bare, where `.contacts-list`
+    // takes `flex: 1` from the 639px block instead.
+    const contactList = () => `
+      <div class="contacts-layout" style="height:520px">
+        <div class="contacts-row">
+          <div class="contacts-list"${window.innerWidth <= 639 ? '' : ' style="width:380px"'}>
+            <div class="contacts-list-heading">
+              <button class="drawer-toggle" style="display:inline-flex">&#9776;</button>
+              <span class="contacts-search">
+                <svg width="14" height="14"></svg>
+                <input type="search" class="search-input" placeholder="Search contacts" />
+              </span>
+              <span class="contacts-count">3 / 12</span>
+            </div>
+            <div class="contacts-list-scroll">
+              <div class="contact-tiles">
+                ${[
+                  ['Marie-Christine Vandenbroucke', 'marie-christine.vandenbroucke@example.be · +2', ' is-selected'],
+                  ['Bruno Weiss', 'bruno@x.be', ''],
+                  ['', 'someone-with-no-name@example.com', ''],
+                ].map(([name, address, selected]) => `
+                  <div class="contact-tile${selected}" role="button" tabindex="0">
+                    <div class="contact-tile-line">
+                      <button class="contact-star is-on"><svg width="14" height="14"></svg></button>
+                      <span class="contact-tile-name">${name || address}</span>
+                      <span class="contact-tile-actions">
+                        <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                        <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                      </span>
+                    </div>
+                    <div class="contact-tile-address">${name ? address : ''}</div>
+                  </div>`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`
+    // The tile is a target in its own right — tapping it is what opens the card, which on a phone
+    // is the only route to Edit and Delete. The two .admin-icon-btn are named on purpose even
+    // though the phone rules hide them: `sizes` drops what has no box, so if the hover rule below
+    // ever stops matching they come straight back into `undersized` rather than passing silently.
+    CASES.push({
+      name: 'contacts-list',
+      html: contactList(),
+      touch: '.contact-tile, .contact-star, .drawer-toggle, .contact-tile-actions .admin-icon-btn',
+    })
+
+    // The card takes the same row once a contact is picked. Its three actions are `.btn` boxes
+    // carrying an icon and a word each, and `Remove from favourites` is the long one — with the
+    // rule between them, that row is what decides whether `.contact-card-actions` fits.
+    CASES.push({
+      name: 'contacts-card',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-row">
+            <div class="contacts-card">
+              <div class="contact-card">
+                <div class="contact-card-head">
+                  <h2 class="contact-card-name">Marie-Christine Vandenbroucke</h2>
+                </div>
+                <div class="contact-card-body">
+                  <div class="contact-card-row">
+                    <span class="contact-card-label">Addresses</span>
+                    <span class="contact-card-values">
+                      <span class="contact-card-value">
+                        <a href="#">marie-christine.vandenbroucke@example.be</a>
+                        <span class="contact-card-primary">primary</span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div class="contact-card-actions">
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
+                  <span class="actions-rule"></span>
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
+                  <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      touch: '.contact-card-btn',
+    })
+
+    // The nameless contact, which the case above cannot see: `displayNameOf` falls back to the
+    // address, and an address is ONE word where `Marie-Christine Vandenbroucke` has three spaces
+    // to wrap on. Read at 320x640, with the back arrow the phone draws — 44px plus the head's 10px
+    // gap — since that is the width the h2 is actually short at. `.contact-card-name` carries no
+    // `text-overflow`, so `clipped` measures it directly rather than exempting it.
+    CASES.push({
+      name: 'contacts-card-nameless (read at 320x640)',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-row">
+            <div class="contacts-card">
+              <div class="contact-card">
+                <div class="contact-card-head">
+                  <button class="contact-card-back"><svg width="16" height="16"></svg></button>
+                  <h2 class="contact-card-name">marie-christine.vandenbroucke@example.be</h2>
+                </div>
+                <div class="contact-card-body">
+                  <div class="contact-card-row">
+                    <span class="contact-card-label">Addresses</span>
+                    <span class="contact-card-values">
+                      <span class="contact-card-value">
+                        <a href="#">marie-christine.vandenbroucke@example.be</a>
+                        <span class="contact-card-primary">primary</span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div class="contact-card-actions">
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
+                  <span class="actions-rule"></span>
+                  <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
+                  <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      touch: '.contact-card-btn, .contact-card-back',
+    })
+
+    // The same card, bottom-anchored the way the shell anchors it, with .floating-action on the
+    // screen beside it. `.contact-card-actions` is a bottom BAND where mail keeps the reader's
+    // actions in its header, so on a phone the FAB lands in the same corner — and none of the four
+    // metrics above can see an occlusion: nothing overflows, nothing is clipped, and both boxes
+    // are at the touch floor while one is unreachable under the other. Only `overlap` answers it.
+    //
+    // The wrapper is what makes the question askable at all: `.floating-action` is position: fixed
+    // and the card is not, so the card has to sit where the shell puts it — filling the viewport
+    // above `.app-bottom-nav`, whose own height is 56px of `.bottom-nav-item` plus its 1px
+    // border-top (shell.css's phone block). Read the two rects rather than the boolean when this
+    // moves: the numbers say by how much, which is what a padding is chosen from.
+    CASES.push({
+      name: 'contacts-card vs. floating add',
+      html: `
+        <div style="position:fixed;left:0;right:0;top:0;bottom:57px">
+          <div class="contacts-layout" style="height:100%">
+            <div class="contacts-row">
+              <div class="contacts-card">
+                <div class="contact-card">
+                  <div class="contact-card-head">
+                    <button class="contact-card-back"><svg width="16" height="16"></svg></button>
+                    <h2 class="contact-card-name">Marie-Christine Vandenbroucke</h2>
+                  </div>
+                  <div class="contact-card-body">
+                    <div class="contact-card-row">
+                      <span class="contact-card-label">Addresses</span>
+                      <span class="contact-card-values">
+                        <span class="contact-card-value"><a href="#">mc@example.be</a></span>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="contact-card-actions">
+                    <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Remove from favourites</button>
+                    <span class="actions-rule"></span>
+                    <button class="btn contact-card-btn"><svg width="15" height="15"></svg>Edit</button>
+                    <button class="btn contact-card-btn is-danger"><svg width="15" height="15"></svg>Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="floating-action" aria-label="Add contact">+</button>`,
+      touch: '.contact-card-btn, .contact-card-back',
+      overlap: ['.contact-card-btn.is-danger', '.floating-action'],
+    })
+
+    // The scope band as the drawer actually draws it: inside .context-drawer-panel, which is what
+    // gives the column its width (min(320px, 86vw)) and drops its own 240px. .contacts-scopes-add
+    // is present in the markup because the phone rule that hides it is the thing under test.
+    CASES.push({
+      name: 'contacts-drawer',
+      html: `
+        <div class="context-drawer is-open">
+          <div class="context-drawer-panel" style="position:absolute">
+            <div class="contacts-scopes-column">
+              <div class="contacts-scopes-add">
+                <button class="btn btn-primary contacts-add-btn">+ Add contact</button>
+              </div>
+              <div class="contacts-scopes-scroll">
+                <nav class="contact-scopes">
+                  <button class="contact-scope is-active"><svg width="15" height="15"></svg>
+                    <span class="contact-scope-label">All contacts</span>
+                    <span class="contact-scope-count">128</span></button>
+                  <button class="contact-scope"><svg width="15" height="15"></svg>
+                    <span class="contact-scope-label">Favourites</span>
+                    <span class="contact-scope-count">12</span></button>
+                </nav>
+              </div>
+              <div class="contacts-transfer">
+                <span class="tooltip-wrap"><button class="btn">Import…</button></span>
+                <span class="tooltip-wrap"><button class="btn">Export</button></span>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      touch: '.contact-scope, .contacts-transfer .btn, .contacts-add-btn',
+    })
+
+    // The full-width editor route. `.field-h`'s inputs carry no `min-width: 0`, so an input's own
+    // ~177px intrinsic width is its flex floor: beside a 110px label column plus a 16px gap it
+    // does not fit a 320px screen, and `.contact-editor-body` is inside an overflow:hidden column,
+    // so what it did was clip rather than scroll. The addresses row heads with a `.field-h-label`
+    // span rather than a `<label>` and is the row that would keep its 110px column if the reset
+    // named `label:first-child`.
+    //
+    // The two addresses are deliberately SHORT where the list and card fixtures above carry a long
+    // one: an `<input>` whose value is wider than its box scrolls its own text, and `scrollWidth -
+    // clientWidth` counts that as a clip — measured, `marie-christine@example.be` in the 177px box
+    // this row leaves at 320px reads 25 on its own and would mask a real 25px clip anywhere else in
+    // the case. Nothing about the row depends on the value's length: `.contact-address-row input`
+    // carries `min-width: 0`, so it absorbs the shrink whatever it holds.
+    CASES.push({
+      name: 'contacts-editor',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-editor">
+            <form class="contact-editor-form">
+              <div class="contact-editor-head">
+                <h2 class="contact-editor-title"><svg width="15" height="15"></svg>Edit contact</h2>
+                <button class="btn btn-primary contact-save-btn">Save contact</button>
+                <button class="modal-close">✕</button>
+              </div>
+              <div class="contact-editor-body">
+                <div class="field-h"><label>First name</label><input type="text" /></div>
+                <div class="field-h"><label>Last name</label><input type="text" /></div>
+                <div class="field-h contact-editor-addresses">
+                  <span class="field-h-label">Addresses</span>
+                  <div class="contact-address-list">
+                    <div class="contact-address-row">
+                      <input type="email" value="mc@example.be" />
+                      <span class="contact-address-primary">primary</span>
+                      <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                    </div>
+                    <div class="contact-address-row">
+                      <input type="email" value="mc@work.be" />
+                      <button class="admin-icon-btn">&#8593;</button>
+                      <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                    </div>
+                    <button class="contact-address-add">+ Add an address</button>
+                  </div>
+                </div>
+                <div class="field-h"><label>Favourite</label>
+                  <button class="contact-star is-on"><svg width="16" height="16"></svg></button></div>
+              </div>
+            </form>
+          </div>
+        </div>`,
+      touch: '.contact-save-btn, .contact-editor-head .modal-close, .contact-address-row .admin-icon-btn, .contact-editor-body .contact-star',
+    })
+
+    // ── Settings ───────────────────────────────────────────────────────────────────────────────
+    // Nine pages plus five admin tabs cannot all be probed, so these five are the ones whose
+    // LAYOUT is genuinely different from each other. Everything not listed here reuses one of
+    // these five skins: Account and Rules are `.field-h` forms, Identities / Connected accounts /
+    // Folders are `.admin-list` pages, and the four other admin tabs are the tab case's content.
+    //
+    // Every case is wrapped in a real `.settings-content` — the band's negative margin is read
+    // against that box's own padding, and it is the element that would carry the scrollbar.
+    const settingsPage = (inner) => `
+      <div class="settings-layout" style="height:560px">
+        <div class="settings-content">
+          <div class="settings-mobile-bar">
+            <button class="drawer-toggle">&#9776;</button>
+            <span class="settings-mobile-title">Appearance</span>
+          </div>
+          ${inner}
+        </div>
+      </div>`
+
+    // 1. The form-heavy page (General; Account and the rule wizard wear the same rows). Three
+    //    different `.field-h` shapes at once, because they fail differently: `.is-stacked` gives
+    //    the row to a `.layout-cards` flex line that carries no wrap of its own, `.is-setting`
+    //    holds a 300px `.setting-label` that index.css's `label:first-child` reset cannot reach,
+    //    and the plain row is the 110px-label admin shape. The toggle is the module's most-used
+    //    control and its painted box is 36x20.
+    CASES.push({
+      name: 'settings-general',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>General</h1></div>
+          <section class="account-section">
+            <h2>Layout</h2>
+            <div class="field-h is-setting is-stacked">
+              <span class="setting-label"><span>Reading pane</span>
+                <span class="setting-hint">Where the message opens beside the list.</span></span>
+              <div class="layout-cards" role="radiogroup">
+                <label class="layout-card"><span class="pane-glyph"></span>
+                  <span class="layout-card-name"><input type="radio" name="rp" />Right</span></label>
+                <label class="layout-card"><span class="pane-glyph"></span>
+                  <span class="layout-card-name"><input type="radio" name="rp" />Bottom</span></label>
+                <label class="layout-card"><span class="pane-glyph"></span>
+                  <span class="layout-card-name"><input type="radio" name="rp" />No pane</span></label>
+              </div>
+            </div>
+            <div class="field-h is-setting">
+              <span class="setting-label"><label for="ps">Messages per page</label>
+                <span class="setting-hint">How many rows a page of the list holds.</span></span>
+              <select id="ps"><option>30</option></select>
+            </div>
+            <div class="field-h is-setting">
+              <span class="setting-label"><label for="sp">Message list preview</label>
+                <span class="setting-hint">A line of the body under each subject.</span></span>
+              <label class="toggle-switch"><input id="sp" type="checkbox" /><span class="toggle-track"></span></label>
+            </div>
+            <div class="field-h is-setting is-stacked">
+              <span class="setting-label"><span>Quick actions</span>
+                <span class="setting-hint">The icons a row carries.</span></span>
+              <div class="action-chips" role="group">
+                <button class="action-chip is-on"><svg width="14" height="14"></svg>Mark as read</button>
+                <button class="action-chip"><svg width="14" height="14"></svg>Report as junk</button>
+              </div>
+            </div>
+          </section>
+          <section class="account-section">
+            <h2>Identity</h2>
+            <div class="field-h"><label for="dn">Display name</label><input id="dn" type="text" /></div>
+            <form class="change-password-form">
+              <div class="field-h"><label for="pw">New password</label><input id="pw" type="password" /></div>
+              <button class="btn btn-primary">Change password</button>
+            </form>
+          </section>
+        </div>`),
+      touch: '.drawer-toggle, .toggle-switch, .action-chip, .layout-card, select, input[type="text"], input[type="password"], .change-password-form .btn',
+    })
+
+    // 2. The list page. `.admin-list-item-email` is `width: 40ch; flex-shrink: 0` — over 300px of
+    //    a 320px screen before the tile's own padding — and the two row actions are 28px squares.
+    //    The header's search box carries an inline `width: 180px` plus a 30px inline margin, which
+    //    no stylesheet can reach, so the header is drawn with them.
+    CASES.push({
+      name: 'settings-admin-list',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="admin-list-header">
+            <span class="admin-list-title">Accounts (42)</span>
+            <input class="search-input" type="search" placeholder="Search"
+              style="margin-left:30px;width:180px;padding:6px 10px;font-size:13px" />
+            <button class="btn btn-primary" style="margin-left:auto;width:auto;display:inline-flex;align-items:center;gap:6px">
+              <svg width="15" height="15"></svg> Add</button>
+          </div>
+          <div class="admin-list">
+            <div class="admin-list-item">
+              <span class="admin-list-item-email">marie-christine.vandenbroucke@example.be</span>
+              <span class="admin-list-item-name" style="padding-left:30px">Marie-Christine Vandenbroucke</span>
+              <div class="admin-list-item-quota">1.2 GB</div>
+              <div class="admin-list-item-actions">
+                <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </div>
+            <div class="admin-list-item">
+              <span class="admin-list-item-email">bob@example.be</span>
+              <span class="admin-list-item-name" style="padding-left:30px">Bob</span>
+              <div class="admin-list-item-actions">
+                <button class="btn btn-ghost">Reconnect</button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>`),
+      touch: '.admin-icon-btn, .admin-list-item-actions .btn, .admin-list-header .btn, .search-input',
+    })
+
+    // 3. The admin tabs. `.admin-tab-bar` is a 140px vertical column beside a scrolling body —
+    //    140 of the 288px a 320px screen leaves inside `.settings-content` — and `.admin-tab` is
+    //    ~33px tall. Five tabs, which is what makes wrapping the strip worse than scrolling it.
+    CASES.push({
+      name: 'settings-admin-tabs',
+      html: settingsPage(`
+        <div class="settings-page admin-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Administration</h1></div>
+          <div class="admin-modal-body">
+            <nav class="admin-tab-bar">
+              <button class="admin-tab is-active">Accounts</button>
+              <button class="admin-tab">Domains</button>
+              <button class="admin-tab">Virtual domains</button>
+              <button class="admin-tab">External domains</button>
+              <button class="admin-tab">Application</button>
+            </nav>
+            <div class="admin-tab-content">
+              <div class="admin-list-header"><span class="admin-list-title">Accounts (42)</span></div>
+              <div class="admin-list"><div class="admin-list-item">
+                <span class="admin-list-item-email">bob@example.be</span>
+                <div class="admin-list-item-actions">
+                  <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                </div>
+              </div></div>
+              <!-- The Application tab's own shape: an .is-setting row headed by a BARE label
+                   rather than by a .setting-label wrapper, which is the one place the 260px
+                   label column is reached by an element selector. -->
+              <div class="field-h is-setting">
+                <label for="app-name">Application name</label>
+                <input id="app-name" type="text" />
+              </div>
+            </div>
+          </div>
+        </div>`),
+      touch: '.admin-tab, .admin-icon-btn, .admin-tab-content input',
+    })
+
+    // 4. Appearance. Its palette cards are the module's only grid, and `.palette-zoom` is its only
+    //    hover-revealed control: `opacity: 0` until `:hover`/`:focus-within`, 24px square, and the
+    //    single route to the enlarged preview. The radio rows above it are ~25px label boxes.
+    CASES.push({
+      name: 'settings-appearance',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Appearance</h1></div>
+          <section class="account-section"><h2>Theme</h2>
+            <label class="radio-row"><input type="radio" name="th" />Follow the system</label>
+            <label class="radio-row"><input type="radio" name="th" />Light</label>
+          </section>
+          <section class="account-section"><h2>Palette</h2>
+            <div class="palette-grid">
+              <div class="palette-card">
+                <label class="palette-pick">
+                  <span class="palette-preview"><span class="pp-bar"></span><span class="pp-body">
+                    <span class="pp-rail"><span class="pp-rail-item is-on"></span><span class="pp-rail-item"></span></span>
+                    <span class="pp-pane"><span class="pp-compose"></span><span class="pp-folder is-on"></span></span>
+                    <span class="pp-rows"><span class="pp-row is-unread"></span><span class="pp-row"></span>
+                      <span class="pp-attachments"><span class="pp-chip"></span></span></span>
+                  </span></span>
+                  <span class="palette-name"><input type="radio" name="pal" />Night &amp; coral (default)</span>
+                </label>
+                <button class="palette-zoom"><svg width="14" height="14"></svg></button>
+              </div>
+            </div>
+          </section>
+        </div>`),
+      touch: '.radio-row, .palette-zoom',
+    })
+
+    // 5. The navigation as the drawer draws it, which is the one place below 1024px it appears.
+    //    `.pane-item` is ~34px and `shell.css` floors it in the 639px block alone, so this case is
+    //    the tablet's own reading too — drive it at 768x1024 as well as at 360 and 320.
+    CASES.push({
+      name: 'settings-drawer',
+      html: `
+        <div class="context-drawer is-open">
+          <div class="context-drawer-panel" style="position:absolute">
+            <nav class="context-pane" aria-label="Settings">
+              <a class="pane-item is-active" href="#"><svg width="16" height="16"></svg>Account</a>
+              <a class="pane-item" href="#"><svg width="16" height="16"></svg>Connected accounts</a>
+              <a class="pane-item" href="#"><svg width="16" height="16"></svg>Administration</a>
+              <div class="settings-nav-foot">
+                <div class="identity-root">
+                  <span class="identity-pill">MV</span>
+                  <span class="identity-text"><span class="identity-name">Mick</span>
+                    <span class="identity-email">mick@weesky.be</span></span>
+                  <button class="identity-toggle"><svg width="14" height="14"></svg></button>
+                </div>
+              </div>
+            </nav>
+          </div>
+        </div>`,
+      touch: '.pane-item',
+    })
+
+    // 6. The Rules page. Nothing else in the module wears this shape — `.rules-toolbar` is a flex
+    //    line with no wrap of its own holding a count, the extended-rules switch with its label and
+    //    help bubble, and New rule; `.rule-card-header` puts a `.toggle-switch` between a drag
+    //    handle and five `.admin-icon-btn`s, which is the tightest company that switch keeps
+    //    anywhere and the one place its 4px sideways hit-area bleed could reach a neighbour.
+    CASES.push({
+      name: 'settings-rules',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="rules-toolbar">
+            <span class="rules-count">3 rules</span>
+            <div class="extended-rules-toggle" style="margin-left:auto;display:flex;align-items:center;gap:8px">
+              <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+              <span class="rule-wizard-toggle-label">Extended rules</span>
+              <span class="tooltip-wrap"><div class="help-tooltip-icon">?</div></span>
+            </div>
+            <button class="btn btn-primary" style="width:auto;display:inline-flex;align-items:center;gap:6px;margin-left:12px">
+              <svg width="15" height="15"></svg> New rule</button>
+          </div>
+          <div class="rules-list">
+            <div class="rule-card rule-card-collapsed">
+              <div class="rule-card-header">
+                <span class="rule-card-drag"><svg width="14" height="14"></svg></span>
+                <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+                <span class="rule-card-name">Facturation Proximus</span>
+                <div class="rule-card-btns">
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                  <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
+                  <span class="rule-card-btns-sep"></span>
+                  <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`),
+      touch: '.toggle-switch, .admin-icon-btn, .rules-toolbar .btn',
+    })
+
+    // 7. The Aliases page. Its own tile skin — `.alias-grid` is a wrapping flex of `.alias-tile`s
+    //    whose delete is an 18px glyph absolutely positioned inside a tile roughly 41px tall, so
+    //    neither a painted 44px box nor a symmetric pseudo fits without the tile itself being
+    //    floored first. The alpha rail beside it is a column of 20px letters.
+    CASES.push({
+      name: 'settings-aliases',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="domain-toolbar">
+            <select class="domain-select"><option>weesky.be</option></select>
+            <input type="text" class="search-input" placeholder="New alias" />
+            <button class="btn btn-add">Create</button>
+            <label class="toggle-row alias-alpha-toggle" style="margin-left:auto">
+              <span class="toggle-label">A-Z</span>
+              <span class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></span>
+            </label>
+          </div>
+          <div class="alias-grid">
+            <div class="alias-tile"><span class="alias-tile-name">facturation</span><span class="alias-tile-domain">@weesky.be</span>
+              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+            <div class="alias-tile"><span class="alias-tile-name">contact</span><span class="alias-tile-domain">@weesky.be</span>
+              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+            <div class="alias-tile"><span class="alias-tile-name">marie-christine.vandenbroucke</span><span class="alias-tile-domain">@weesky.be</span>
+              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+          </div>
+        </div>`),
+      touch: '.alias-tile-delete, .toggle-switch, .domain-toolbar .btn, .domain-select',
+    })
+
+    // 8. The Folders page. `FolderManager` puts a `.toggle-switch` as the FIRST child of an
+    //    `.admin-list-item`, which the admin-list case above does not hold at all: a mistap there
+    //    hides a folder, and the switch's 12px vertical bleed sits against a 6px row gap.
+    CASES.push({
+      name: 'settings-folders',
+      html: settingsPage(`
+        <div class="settings-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Folders</h1></div>
+          <ul class="admin-list folder-list">
+            <li class="admin-list-item folder-tile">
+              <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+              <span class="admin-list-item-email">Inbox</span>
+              <span class="row-tag">inbox</span>
+              <div class="admin-list-item-actions">
+                <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </li>
+            <li class="admin-list-item folder-tile" style="margin-left:18px">
+              <label class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></label>
+              <span class="admin-list-item-email">Projets/Weesky</span>
+              <div class="admin-list-item-actions">
+                <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button>
+              </div>
+            </li>
+          </ul>
+        </div>`),
+      touch: '.toggle-switch, .admin-icon-btn',
+    })
+
+    // 9. The mail quick-search band, folded open by the toolbar's magnifier. `.search-bar` is
+    //    `flex: none`, so both of its controls growing to the floor costs the list nothing but the
+    //    band's own height — which is what this case reports. `type="text"` because that is what
+    //    SearchBar.tsx ships: `type="search"` would be blind to any future `input[type="text"]`
+    //    rule, which is exactly how the recipients-box regression got past this file once.
+    //    Named -360 like the other cases
+    //    carrying an explicit column width: at 320 its own 360px `.mail-list` is what overflows,
+    //    which says nothing about the band.
+    CASES.push({
+      name: 'mail-search-bar-360',
+      html: `
+        <div class="mail-list" style="width:360px">
+          <div class="search-bar">
+            <input type="text" class="search-bar-input" placeholder="Search this folder" />
+            <button class="search-bar-advanced"><svg width="15" height="15"></svg></button>
+          </div>
+        </div>`,
+      touch: '.search-bar-input, .search-bar-advanced',
+    })
+
+    // ── Login (Task 14) ────────────────────────────────────────────────────────────────────────
+    // The one surface reached without a session, and the only user of `.page-center` and `.card`.
+    // Markup is LoginPage.jsx's, and two details of it are load-bearing rather than incidental:
+    // the fields carry NO <label> — the real form labels its inputs by placeholder alone, so a
+    // fixture with labels measures a taller card the app never draws — and the error alert is
+    // present because that is the card's tallest real state, the only one whose content can
+    // outgrow the box. The types are `email` and `password` because index.css's phone-block floor
+    // on typed controls is an attribute selector: a bare <input /> would miss it the same way the
+    // compose fixture's did.
+    //
+    // No inline width or position override: `.card` already declares `max-width: 400px`, and
+    // `.page-center` is `position: relative` in the app, which is what its own inset ::before
+    // scrim answers to. Restating either would measure a box the login screen does not have.
+    CASES.push({
+      name: 'login-360',
+      html: `<div class="page-center">
+               <div class="card">
+                 <div class="alert alert-error">Invalid credentials.</div>
+                 <form>
+                   <div class="field">
+                     <input id="email" type="email" autocomplete="email" placeholder="Email address" required />
+                   </div>
+                   <div class="field">
+                     <input id="password" type="password" autocomplete="current-password" placeholder="Password" required />
+                   </div>
+                   <button class="btn btn-primary" type="submit">Sign in</button>
+                 </form>
+               </div>
+             </div>`,
+      touch: 'input, .btn',
+    })
+
+    window.addEventListener('resize', measure)
+    measure()
+  </script>
+</body>
+</html>

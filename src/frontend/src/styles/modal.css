@@ -122,3 +122,27 @@
   width: var(--field-w, 34ch);
   max-width: 100%;
 }
+
+/* A 360px viewport leaves 312px inside the overlay's 24px padding, and min-width always beats
+   max-width — the 24rem floor put a 384px box in a 312px slot. The overlay's own overflow-y:
+   auto forces the other axis to auto too (CSS Overflow 3), so the real defect was never a
+   scrolling page: it was a dialog wider than the screen, inside an overlay now scrolling
+   sideways to show it. Below 640px a dialog simply takes the width it is given; the
+   content-sized contract above is untouched. The scroll stays the overlay's. */
+@media (max-width: 639px) {
+  .modal-overlay { padding: 12px; }
+
+  .modal {
+    --modal-w: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 18px;
+  }
+
+  /* .modal-close is reused by every dialog and carries no Cancel sibling on most of them, so on
+     a phone — where the outside-click strip just shrank from 24px plus centring slack to 12px —
+     it is the practical way to dismiss. Same idiom as .rail-item/.drawer-toggle in shell.css and
+     .selection-btn in mail.css: min-*, not width/height, so the row's own layout still owns the
+     box's size. */
+  .modal-close { min-width: var(--touch); min-height: var(--touch); }
+}

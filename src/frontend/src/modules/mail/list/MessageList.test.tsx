@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
-import { settle } from '../../../test-utils'
+import { fireTouch as dispatchTouch, settle } from '../../../test-utils'
 import { DRAG_MIME, serializeDrag } from './dragMessages'
 
 const mocks = vi.hoisted(() => ({
@@ -84,6 +84,9 @@ function pagedState(paging = {}, overrides = {}) {
 }
 
 type ListProps = Parameters<typeof MessageList>[0]
+
+// The only press useLongPress answers to. A mouse hold is deliberately inert — see its own suite.
+const FINGER = { pointerType: 'touch', isPrimary: true, button: 0 }
 
 function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record<string, string>) {
   if (preferencesOverride) {
@@ -812,6 +815,57 @@ describe('the preferences it obeys', () => {
   })
 })
 
+describe('pull to refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  // dispatchTouch is shared with usePullToRefresh.test.ts (test-utils.ts) so the two suites
+  // cannot drift on what a touch event needs to carry; act() wraps it here since MessageList,
+  // unlike the hook's own test, re-renders on every dispatch.
+  function fireTouch(element: HTMLElement, type: string, y: number) {
+    act(() => { dispatchTouch(element, type, y) })
+  }
+
+  it('draws the band and calls onRefresh once the pull passes the threshold', () => {
+    const onRefresh = vi.fn()
+    const { container } = renderList({ onRefresh })
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 0
+
+    fireTouch(band, 'touchstart', 0)
+    fireTouch(band, 'touchmove', 30)
+    expect(screen.getByText('Pull to refresh')).toBeInTheDocument()
+
+    fireTouch(band, 'touchmove', 90)
+    expect(screen.getByText('Release to refresh')).toBeInTheDocument()
+
+    fireTouch(band, 'touchend', 90)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Release to refresh')).not.toBeInTheDocument()
+  })
+
+  // The gesture and the kebab entry are two consumers of one handler, and only the second is
+  // gated: a touch laptop above 1024px keeps the pull while the folder column's RefreshButton is
+  // still on screen beside it, so a kebab entry there would be a second door onto the same action.
+  it('keeps the kebab free of Refresh while the folder column is not a drawer', () => {
+    renderList({ onRefresh: vi.fn(), inDrawer: false })
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.queryByRole('menuitem', { name: 'Refresh' })).not.toBeInTheDocument()
+  })
+
+  it('offers Refresh in the kebab once the folder column is a drawer', () => {
+    const onRefresh = vi.fn()
+    renderList({ onRefresh, inDrawer: true })
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }))
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
+})
+
 function streamingState(overrides = {}, count = 100) {
   return {
     messages: Array.from({ length: count }, (_, i) => ({
@@ -962,6 +1016,101 @@ describe('multi-select', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /select message from alice/i }))
     expect(screen.getByText('1 selected')).toBeInTheDocument()
     expect(bar().getByRole('button', { name: 'Archive' })).toBeEnabled()
+  })
+
+  // Below 480px of list column the row carries no visible checkbox, so a held press is how a
+  // selection starts. A touch browser still sends a click after that press, and it must not also
+  // open the message — nor may it reach the checkbox under the finger and undo the selection.
+  it('a long press selects the row without opening it', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+      expect(onSelect).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  // The finger may well have been resting on the checkbox: its own click would toggle the very
+  // selection the press just made straight back off, so the capture has to eat that one too.
+  it('the swallowed click does not reach the control under the finger', () => {
+    vi.useFakeTimers()
+    try {
+      renderWithRoles()
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(within(row).getByRole('checkbox'))
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+    } finally { vi.useRealTimers() }
+  })
+
+  // A mouse hold must leave the desktop exactly as it was: no selection, and the click it ends
+  // in still opens the message. Held past the delay and released without moving.
+  it('a mouse press held on a row neither selects nor loses its click', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, { pointerType: 'mouse', isPrimary: true, button: 0 })
+      act(() => { vi.advanceTimersByTime(600) })
+      fireEvent.pointerUp(row)
+      fireEvent.click(row)
+
+      expect(screen.queryByText('1 selected')).not.toBeInTheDocument()
+      expect(onSelect).toHaveBeenCalledWith(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  // The press that never ends in a click: a finger that lifts off the row, or a drag that began
+  // after the delay. The suppression flag has to be dropped by the next press rather than waiting
+  // for a click that is not coming, or the row's following tap is eaten instead.
+  it('a long press that produces no click does not eat the next one', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.pointerUp(row)  // lifted off the row: no click follows
+
+      fireEvent.pointerDown(row, FINGER)
+      fireEvent.pointerUp(row)
+      fireEvent.click(row)
+
+      expect(onSelect).toHaveBeenCalledWith(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  // The suppression lasts exactly one click: the next tap opens the message like any other.
+  it('a plain tap after a long press still opens the message', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderWithRoles(undefined, { onSelect })
+      const row = screen.getByRole('button', { name: /alice martin/i })
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+      fireEvent.pointerDown(row, FINGER)
+      fireEvent.pointerUp(row)
+      fireEvent.click(row)
+
+      expect(onSelect).toHaveBeenCalledWith(2)
+    } finally { vi.useRealTimers() }
   })
 
   it('a shift-click selects the range', () => {
@@ -1249,6 +1398,26 @@ describe('MessageList searching', () => {
 
     fireEvent.click(screen.getByText('From archive'))
     expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
+  })
+
+  // No checkbox, no selection, so no press to hold — and nothing may eat the tap that opens the
+  // row in the folder it actually lives in.
+  it('a long press on a cross-folder result neither selects nor swallows the tap', () => {
+    vi.useFakeTimers()
+    try {
+      const onOpenResult = vi.fn()
+      const cross = [{ ...results[0], uid: 20, subject: 'From archive', folderPath: 'Archive' }]
+      mocks.useSearchMessages.mockReturnValue(page({ total: 1, page: 0, pageSize: 50, results: cross }))
+      renderList({ search: { folderPath: 'INBOX', allFolders: true, quick: 'x' }, onOpenResult })
+      const row = screen.getByText('From archive').closest('.message-row') as HTMLElement
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+
+      expect(screen.queryByText('1 selected')).not.toBeInTheDocument()
+      expect(onOpenResult).toHaveBeenCalledWith(20, 'Archive')
+    } finally { vi.useRealTimers() }
   })
 
   it('in a current-folder search the rows select and carry checkboxes', () => {

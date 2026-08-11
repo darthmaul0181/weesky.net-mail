@@ -18,11 +18,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "PowerShell(dotnet test *)",
       "PowerShell(npm run *)",
-      "Bash(powershell *)",
       "Bash(dotnet clean *)",
-      "PowerShell(dotnet build *)",
-      "PowerShell(Set-Content *)",
-      "Bash(git fetch *)"
+      "PowerShell(dotnet build *)"
     ]
   }
 }

@@ -3,7 +3,9 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  min-width: 1024px; /* desktop-first floor; below this the page scrolls */
+  /* dvh follows the mobile URL bar; the vh line above is the fallback for a browser without it.
+     With 100vh alone the bottom band — the tab bar — sits under the URL bar and off screen. */
+  height: 100dvh;
 }
 
 .app-topbar {
@@ -57,6 +59,9 @@
 }
 
 .rail-spacer { flex: 1; }
+
+/* Phone only. The media block below is what shows it; here it is simply absent. */
+.app-bottom-nav { display: none; }
 
 .app-content {
   flex: 1;
@@ -736,4 +741,220 @@ a.dropdown-item { text-decoration: none; }
   height: calc(8px * var(--pp));
   border-radius: calc(2px * var(--pp));
   background: var(--action-primary);
+}
+
+/* ── Narrow tiers ─────────────────────────────────────────────────────────────
+   Desktop is the unqualified base above. These two blocks only override it, the
+   second refining the first through the ordinary cascade. Never invert this:
+   wrapping the desktop rules in a min-width query makes the whole file conditional. */
+
+/* Desktop never draws the hamburger, and never shows the drawer: the pane is right there,
+   inline, so a consumer that renders <ContextDrawer> unconditionally cannot paint a duplicate
+   of it over the desktop layout. */
+.drawer-toggle { display: none; }
+.context-drawer { display: none; }
+
+@media (max-width: 1023px) {
+  /* The context pane is a drawer from here down, so no module shows one inline. */
+  .app-content { margin: 0; border-radius: 0; }
+
+  /* Closed is display:none, which takes the panel out of the tab order and the accessibility
+     tree in one move while React keeps its children mounted. */
+  .context-drawer { display: none; }
+  .context-drawer.is-open { display: block; }
+
+  .context-drawer-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .context-drawer-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    width: min(320px, 86vw);
+    background: var(--folders-bg);
+    border-right: 1px solid var(--border);
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.25);
+    animation: drawer-in 0.18s ease-out;
+  }
+
+  @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .context-drawer-panel { animation: none; }
+  }
+
+  /* The pane inside the drawer fills it: its own column width belongs to the desktop layout. */
+  .context-drawer-panel > .mail-folders,
+  .context-drawer-panel > .contacts-scopes-column,
+  .context-drawer-panel > .context-pane {
+    width: auto;
+    flex: 1;
+    min-height: 0;
+    border-right: none;
+  }
+
+  .drawer-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .drawer-toggle:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
+
+  /* The settings module is the only one that needs a band of its own: its nine pages each draw
+     their own .settings-page-header, so a hamburger placed there would be written nine times.
+     The negative margin pulls the band out to .settings-content's own padding edges — it spans
+     exactly that box's padding width, so it adds nothing to the scrollable area.
+     Sticky, unlike mail's and contacts' hamburgers: those sit in `flex: none` bands that cannot
+     move, while this one is inside .settings-content, which IS the scroller — without it the only
+     route to the navigation scrolls off the top of every page taller than the viewport — measured,
+     it left by 400px on a 967px page. It needs an opaque background of its own for the same
+     reason, and var(--bg) is what .app-content puts behind it. `top` mirrors the negative margin
+     rather than being 0: sticky clamps the box to the scrollport top, which is 24px below where
+     the negative margin puts it, so `top: 0` pushed the band down by exactly that at rest.
+     44px spelled out rather than var(--touch): the token is declared in the 639px block alone
+     (styles/responsive.test.ts pins it there) and does not resolve at a tablet width. */
+  .settings-mobile-bar {
+    position: sticky;
+    top: -24px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    margin: -24px -28px 12px;
+    padding: 0 12px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-mobile-title { font-size: 14px; font-weight: 600; }
+}
+
+/* Two settings controls answer to the input device rather than to the window, and neither can be
+   folded into the 639px block below: that block reaches a narrow DESKTOP window, which needs
+   neither of these, and misses a touch tablet, which needs both. The union is deliberate — the
+   width rules there still floor .pane-item for a 400px desktop window, and these two reach the
+   640-1023px touch tier where --touch does not resolve at all, hence 44px spelled out.
+   `hover: none` rather than `pointer: coarse`: Media Queries 4 makes the second the one that
+   describes target SIZE, which is nearer to what a floor is about, but it is not what the branch
+   already uses in mail.css and index.css and one file answering a different question than the
+   other two is worse than either choice. Both are approximations at the edges — `hover: none` is
+   true of a pen and false of a touchscreen laptop resting on its trackpad. */
+@media (hover: none) {
+  /* ~34px rows, and the only navigation the settings drawer holds. What keeps the width-keyed
+     copy in the 639px block alive is the probe rather than a user: probes/mobile-layout.html runs
+     in a mouse-driven Chrome, where this query never matches, so retiring that copy would drop
+     settings-drawer from `smallest: 44` to 35 and read as a regression. Tooling driving product
+     CSS should say so out loud. */
+  .pane-item { min-height: 44px; }
+
+  /* The loupe is `opacity: 0` until :hover/:focus-within, and the enlarged preview it opens is
+     the only way to read a palette that is not the active one — on a touch screen it would be
+     reachable only by tabbing onto the radio beside it. */
+  .palette-zoom { opacity: 1; }
+}
+
+@media (max-width: 639px) {
+  :root { --touch: 44px; }
+
+  /* Brand only since the account block moved to the foot of the folder column: 44px of pure
+     decoration out of a 640px-tall viewport, returned to the message list. The brand stays
+     visible at the head of the drawer. */
+  .app-topbar { display: none; }
+
+  /* .rail-item is a fixed 40x40 square, not a full-width row: flooring only its height would
+     leave it 40px wide and 44px tall, no longer square. */
+  .rail-item { min-width: var(--touch); min-height: var(--touch); }
+  .dropdown-item { min-height: var(--touch); }
+  .pane-item { min-height: var(--touch); }
+  /* Square like .rail-item, and for the same reason: it is a 40x40 glyph, not a row. */
+  .drawer-toggle { min-width: var(--touch); min-height: var(--touch); }
+
+  .app-rail { display: none; }
+
+  .app-bottom-nav {
+    display: flex;
+    flex: none;
+    background: var(--rail-bg);
+    border-top: 1px solid var(--border);
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    min-width: 0;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    color: var(--rail-fg);
+    text-decoration: none;
+    font-size: 11px;
+  }
+
+  .bottom-nav-item.is-active { color: var(--rail-item-active-fg); }
+
+  .bottom-nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Comfort, and recorded as such: nothing clips without it once the rules below are in place.
+     It returns 24px of a 320px screen to the measure every settings page is read in, and the
+     band's negative margin has to follow the padding it is cancelling. */
+  .settings-content { padding: 14px 16px; }
+  .settings-mobile-bar { margin: -14px -16px 12px; top: -14px; }
+
+  /* index.css's phone block stacks .field-h and resets `label:first-child` — an ELEMENT selector,
+     which a settings row's <span class="setting-label"> never matches, so the 300px wrapper
+     survived the rotation: measured, 104px and 78px of clip inside a 274px section at 360, and
+     42px still at 320 with everything else in place.
+     .field-h.is-setting's OWN 260px label column needs no companion rule here, and that was
+     measured rather than assumed: 260 fits the 273px a 320px screen leaves, the narrowest box
+     any of these rows sits in — the Application tab's bare labels and a phone dialog's 260px
+     measure both — so a `width: auto` beside this one would change nothing anywhere. */
+  .field-h.is-setting > .setting-label { width: auto; }
+
+  /* Three 86-92px cards and two 12px gaps. At 360 they fit the rotated row and this changes
+     nothing; at 320 they run 30px past it, measured with every other rule here in place. */
+  .layout-cards { flex-wrap: wrap; }
+
+  /* A 36px chip and a 29px radio row, each the whole of the control it carries. */
+  .action-chip { min-height: var(--touch); }
+  .radio-row { min-height: var(--touch); }
+
+  /* The loupe keeps its painted box and grows an inset ::before — .reader-back's idiom, because a
+     44px chip covers a fifth of a 168px thumbnail. The insets are measured from the button's
+     PADDING box, which its own 1px border makes 22px — 22 + 6 + 16 on each axis is the 44, and
+     the first attempt at -6/-14 read 42. The button sits at top/right 6px, so -6px there stops
+     1px inside .palette-card's padding edge and nothing overhangs a card that is overflow:
+     hidden. The 16px falls over the thumbnail, where a tap picks the palette — the one action the
+     loupe is deliberately not part of. */
+  .palette-zoom::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    bottom: -16px;
+    left: -16px;
+  }
 }

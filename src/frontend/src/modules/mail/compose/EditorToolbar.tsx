@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { useViewport } from '../../../hooks/useViewport'
+import PaperclipIcon from '../../../icons/PaperclipIcon'
+import EllipsisIcon from '../../../icons/EllipsisIcon'
 import type { ActiveFormats, EditorHandle } from './SquireEditor'
 import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
@@ -78,11 +81,17 @@ interface Props {
   onTogglePlainText: () => void
   /** Picked images go through the composer's own routing, the one paste and drop already use. */
   onPickImages: (files: File[]) => void
+  /** Attaching moved here from the tray, which is a list of files and not a place to add one. */
+  onAddFiles?: (files: File[]) => void
 }
 
 export default function EditorToolbar(
-  { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages }: Props) {
+  { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages, onAddFiles }: Props) {
   const { t } = useTranslation('compose')
+  // Three rows of tools left 102px of a 640px screen to the message. Only the phone folds: a
+  // desktop has the width for all seven groups and would gain a button that hides its own tools.
+  const narrow = useViewport() === 'phone'
+  const [expanded, setExpanded] = useState(false)
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
   // The editor reports no font, size or colour at the caret, so these are the last choice made
@@ -94,6 +103,7 @@ export default function EditorToolbar(
   const [highlight, setHighlight] = useState('#f8e71c')
   const container = useRef<HTMLDivElement>(null)
   const picker = useRef<HTMLInputElement>(null)
+  const attachPicker = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!openPopover) return
@@ -135,15 +145,36 @@ export default function EditorToolbar(
     </span>
   )
 
+  // `is-extra` is what the phone block folds away; the groups keep their own markup either way,
+  // because font, size, alignment and the two swatch grids are menus and popovers, and a menu
+  // cannot hold another. Hidden by the stylesheet rather than unmounted, so an open popover among
+  // them is not destroyed by a fold — and so the tab order needs no second source of truth.
   return (
-    <div className="compose-toolbar" ref={container}>
+    <div className={`compose-toolbar${narrow && expanded ? ' is-expanded' : ''}`} ref={container}>
       {/* Stays when everything else folds away: it is the only way back to the editor. */}
       <div className="compose-tool-group">
         {btn(t('toolbar.plainText'), <PlainTextIcon size={ICON} />, onTogglePlainText, plainText, switchLocked)}
       </div>
+      {/* Outside the plain-text branch below: a plain-text message carries attachments exactly
+          like an HTML one, and this is the only button that adds one now. */}
+      {onAddFiles && (
+        <div className="compose-tool-group">
+          <button type="button" className="compose-tool"
+            aria-label={t('attachments.attach')} title={t('attachments.attach')}
+            onClick={() => attachPicker.current?.click()}>
+            <PaperclipIcon size={ICON} />
+          </button>
+          <input ref={attachPicker} type="file" multiple hidden data-testid="attachment-input"
+            onChange={e => {
+              const files = e.target.files
+              // Cleared straight away: an input keeping its value fires no change for the same file twice.
+              if (files?.length) { onAddFiles(Array.from(files)); e.target.value = '' }
+            }} />
+        </div>
+      )}
       {plainText ? null : (
       <>
-      <div className="compose-tool-group">
+      <div className="compose-tool-group is-extra">
         {btn(t('toolbar.undo'), <UndoIcon size={ICON} />, () => editor?.command('undo'))}
         {btn(t('toolbar.redo'), <RedoIcon size={ICON} />, () => editor?.command('redo'))}
       </div>
@@ -153,7 +184,7 @@ export default function EditorToolbar(
         {btn(t('toolbar.underline'), <u>U</u>, () => editor?.command('underline'), active?.underline)}
         {btn(t('toolbar.strikethrough'), <s>S</s>, () => editor?.command('strikethrough'), active?.strikethrough)}
       </div>
-      <div className="compose-tool-group">
+      <div className="compose-tool-group is-extra">
         <span className="compose-popover-anchor">
           {btn(t('toolbar.textColour'), inked(<TextColourIcon size={INK_ICON} />, textColour),
             () => setOpenPopover(p => p === 'text' ? null : 'text'))}
@@ -169,7 +200,7 @@ export default function EditorToolbar(
           </Popover>
         </span>
       </div>
-      <div className="compose-tool-group">
+      <div className="compose-tool-group is-extra">
         {/* Icon only: spelling the value on the trigger made the bar a different width per font,
             so it re-flowed under the user at the moment of choosing. The choice moved into the
             menu, which is the one place it was ever read from — the bar cannot see the format at
@@ -198,14 +229,14 @@ export default function EditorToolbar(
             onSelect: () => { setAlignment(entry); editor?.setAlignment(entry.value) },
           }))} />
       </div>
-      <div className="compose-tool-group">
+      <div className="compose-tool-group is-extra">
         {btn(t('toolbar.bulletedList'), <ListBulletIcon size={ICON} />, () => editor?.command('unorderedList'), active?.unorderedList)}
         {btn(t('toolbar.numberedList'), <ListOrderedIcon size={ICON} />, () => editor?.command('orderedList'), active?.orderedList)}
         {/* Squire exposes quote level only, so indent and quote are one pair of buttons. */}
         {btn(t('toolbar.increaseQuote'), <IndentIcon size={ICON} />, () => editor?.command('increaseQuote'))}
         {btn(t('toolbar.decreaseQuote'), <OutdentIcon size={ICON} />, () => editor?.command('decreaseQuote'))}
       </div>
-      <div className="compose-tool-group">
+      <div className="compose-tool-group is-extra">
         <span className="compose-popover-anchor">
           {btn(t('toolbar.link'), <LinkIcon size={ICON} />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
           <Popover open={openPopover === 'link'}>
@@ -236,6 +267,19 @@ export default function EditorToolbar(
           }} />
         {btn(t('toolbar.clearFormatting'), <ClearFormatIcon size={ICON} />, () => editor?.command('clearFormatting'))}
       </div>
+      {/* Last, so the collapsed row reads as the tools it keeps followed by the ones it does not.
+          Only on a phone: elsewhere every group is drawn and this would hide working tools. */}
+      {narrow && (
+        <div className="compose-tool-group">
+          <button type="button" className="compose-tool"
+            aria-expanded={expanded}
+            aria-label={t(expanded ? 'toolbar.fewerTools' : 'toolbar.moreTools')}
+            title={t(expanded ? 'toolbar.fewerTools' : 'toolbar.moreTools')}
+            onClick={() => setExpanded(v => !v)}>
+            <EllipsisIcon size={ICON} />
+          </button>
+        </div>
+      )}
       </>
       )}
     </div>

@@ -21,3 +21,16 @@ export function formatReaderDate(iso: string, locale: string = activeLocale()): 
     minute: '2-digit',
   }, locale).format(date)
 }
+
+/**
+ * The phone header's date, sharing a line with the recipients: the long form above wraps that
+ * line in two on its own. `dateStyle`/`timeStyle` rather than hand-picked components, so the
+ * field order and the separators are the locale's rather than ours — 09/08/2026 16:45 in French,
+ * 8/9/26, 4:45 PM in English. The full form stays one chevron away in the details grid.
+ */
+export function formatReaderDateShort(iso: string, locale: string = activeLocale()): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return dateFormat({ dateStyle: 'short', timeStyle: 'short' }, locale).format(date)
+}

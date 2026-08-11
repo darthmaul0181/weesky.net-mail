@@ -6,6 +6,7 @@ import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
+import { useViewport } from '../../../hooks/useViewport'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import ChevronUpIcon from '../../../icons/ChevronUpIcon'
@@ -36,7 +37,7 @@ import {
 } from '../../../hooks/usePreferences'
 import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
-import { formatReaderDate } from './formatReaderDate'
+import { formatReaderDate, formatReaderDateShort } from './formatReaderDate'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
@@ -60,13 +61,33 @@ interface Props {
   onBack?: () => void
   onNotify?: (message: string) => void
   onDeparted?: (uid: number) => void
+  /** Draw the actions across the foot of the column instead of inside the header. The caller's
+      call, not this component's: only the layout knows whether the reader owns the screen. */
+  bottomActions?: boolean
 }
 
 export default function MessageReader(
-  { folderPath, uid, folderRole, onBack, onNotify, onDeparted }: Props) {
+  { folderPath, uid, folderRole, onBack, onNotify, onDeparted, bottomActions }: Props) {
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
+  const viewportNarrow = useViewport() === 'phone'
+  // Frozen per open message rather than tracking the viewport live: a changed srcDoc is a fresh
+  // iframe document load, and `narrow` crosses the 639px boundary on a phone rotation — reloading
+  // the body and throwing a reader midway through a long message back to the top. Adjusted during
+  // render rather than in an effect, per React's own pattern for resetting state when a prop
+  // changes: an effect fires after commit, so the message that just opened would paint one frame
+  // with the PREVIOUS message's padding before the effect corrected it. Calling setState here
+  // instead discards this render's output and replays the component immediately with the new
+  // state already in place — the freeze takes effect in the same render that opens the message,
+  // with no extra reload and no visible frame in between.
+  const readerKey = `${folderPath ?? ''}:${uid ?? ''}`
+  const [frozenNarrow, setFrozenNarrow] = useState(() => ({ key: readerKey, value: viewportNarrow }))
+  // The guarded write means a committed render always has frozenNarrow.key === readerKey — the
+  // mismatched render it corrects is discarded before commit — so reading `.value` needs no
+  // fallback for the case that never reaches the screen.
+  if (frozenNarrow.key !== readerKey) setFrozenNarrow({ key: readerKey, value: viewportNarrow })
+  const narrow = frozenNarrow.value
   const { data: preferences } = usePreferences()
   const { data: folders } = useFolders()
   const [imagesShown, setImagesShown] = useState(false)
@@ -180,6 +201,12 @@ export default function MessageReader(
   // One list for the split chips and the viewer's navigation — the two can never disagree.
   const imageAttachments = attachments.filter(a => isImageType(a.contentType))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
+  const spamOn = !!preferences && showSpamScoreOf(preferences)
+  // A phone header spends four of its lines on metadata before the body starts. Two of them are
+  // recovered here: the date shrinks to its locale's short form and joins the recipients line,
+  // and the gauge moves behind the chevron. Both stay in full inside the details grid.
+  const compactDate = viewportNarrow
+    ? <span className="reader-date">{formatReaderDateShort(data.date)}</span> : null
 
   async function download(part: string, fileName: string) {
     setDownloadError(null)
@@ -268,6 +295,28 @@ export default function MessageReader(
     href: `/mail/source?folder=${encodeURIComponent(folderPath!)}&uid=${uid}`,
   })
 
+  const readerActions = (
+    <ReaderActions
+      bar={bottomActions}
+      showColourToggle={isDark && !!data.htmlBody}
+      originalColours={originalColours}
+      onToggleColours={() => setOriginalColours(v => !v)}
+      seen={seen}
+      flagged={flagged}
+      onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
+      onToggleFlagged={() =>
+        setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
+      deleteLabel={deleteLabel}
+      deleteDisabled={deleteDisabled}
+      onDelete={onDelete}
+      actions={actions}
+      onReply={() => void openCompose('reply')}
+      onReplyAll={() => void openCompose('replyAll')}
+      onForward={() => void openCompose('forward')}
+      preparing={prepare.isPending}
+    />
+  )
+
   return (
     <article>
       <header className="reader-header">
@@ -283,7 +332,10 @@ export default function MessageReader(
                 <ArrowLeftIcon size={16} />
               </button>
             )}
-            {data.subject || t('list.noSubject')}
+            {/* Its own element so the phone block can ellipsise the SUBJECT rather than the h1:
+                a box with element children that clips is a real defect everywhere else in this
+                app, and probes/mobile-layout.html only forgives an ellipsised leaf. */}
+            <span className="reader-subject-text">{data.subject || t('list.noSubject')}</span>
             {data.priority !== 'normal' && (
               <Tooltip
                 placement="bottom-left"
@@ -299,7 +351,7 @@ export default function MessageReader(
             <div className="reader-from">
               <AddressLabel sender name={data.fromName} address={data.fromAddress} />
               <AuthBadge authentication={data.authentication} />
-              <span className="reader-date">({formatReaderDate(data.date)})</span>
+              {!viewportNarrow && <span className="reader-date">({formatReaderDate(data.date)})</span>}
               <button
                 type="button"
                 className={`details-toggle${detailsOpen ? ' is-open' : ''}`}
@@ -310,8 +362,12 @@ export default function MessageReader(
                 <ChevronRightIcon size={12} />
               </button>
               {/* Unsubscribing acts on the sender, not on this message — hence here, not in the
-                  actions zone. */}
-              {unsubscribe && (
+                  actions zone. Not at all on a phone: at 360px the sender line has 316px and a
+                  mailing list's name spends most of it, so the pill never shared the line and
+                  always cost a whole one — 52px with its gutter, for a control the details grid
+                  already lists a chevron away. An icon-only pill saves nothing, 44px not fitting
+                  any better than 141. */}
+              {!viewportNarrow && unsubscribe && (
                 <a className="unsub-btn" href={unsubscribe} target="_blank" rel="noopener noreferrer">
                   <ExternalLinkIcon />
                   {t('reader.unsubscribe')}
@@ -319,38 +375,30 @@ export default function MessageReader(
               )}
             </div>
             {detailsOpen ? (
-              <ReaderDetails message={data} />
+              <ReaderDetails
+                message={data}
+                showSubject={viewportNarrow}
+                showSpamScore={viewportNarrow && spamOn}
+              />
             ) : (
               <>
-                {data.to.length > 0 && (
-                  <div className="reader-recipients">{t('reader.details.to')} <AddressList addresses={data.to} /></div>
+                {(data.to.length > 0 || compactDate) && (
+                  <div className="reader-recipients reader-to-row">
+                    {data.to.length > 0 && (
+                      <span className="reader-to">{t('reader.details.to')} <AddressList addresses={data.to} /></span>
+                    )}
+                    {compactDate}
+                  </div>
                 )}
                 {data.cc.length > 0 && (
                   <div className="reader-recipients">{t('reader.details.cc')} <AddressList addresses={data.cc} /></div>
                 )}
               </>
             )}
-            {!!preferences && showSpamScoreOf(preferences) && <SpamGauge spamScore={data.spamScore} />}
+            {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
           </div>
         </div>
-        <ReaderActions
-          showColourToggle={isDark && !!data.htmlBody}
-          originalColours={originalColours}
-          onToggleColours={() => setOriginalColours(v => !v)}
-          seen={seen}
-          flagged={flagged}
-          onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
-          onToggleFlagged={() =>
-            setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
-          deleteLabel={deleteLabel}
-          deleteDisabled={deleteDisabled}
-          onDelete={onDelete}
-          actions={actions}
-          onReply={() => void openCompose('reply')}
-          onReplyAll={() => void openCompose('replyAll')}
-          onForward={() => void openCompose('forward')}
-          preparing={prepare.isPending}
-        />
+        {!bottomActions && readerActions}
       </header>
 
       {/* The backend hit one of its sanitiser ceilings. Nothing here can restore the rest — the
@@ -400,7 +448,7 @@ export default function MessageReader(
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
           title={t('reader.bodyTitle')}
-          srcDoc={renderBodyDocument(body, { dark: inverted })}
+          srcDoc={renderBodyDocument(body, { dark: inverted, narrow })}
         />
       ) : (
         <div className="reader-text">{data.textBody}</div>
@@ -446,6 +494,10 @@ export default function MessageReader(
           })}
         </div>
       )}
+
+      {/* Last band of the column, so it sits on the screen's own edge — under the attachments,
+          which belong to the message, not to the actions taken on it. */}
+      {bottomActions && <div className="reader-actionbar">{readerActions}</div>}
 
       {viewed && (
         <AttachmentViewerModal

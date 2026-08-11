@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
@@ -32,6 +32,45 @@ import Pagination from './Pagination'
 import SelectionToolbar from './SelectionToolbar'
 import { useSelection } from './useSelection'
 import { useMessageList } from './useMessageList'
+import { useLongPress } from '../../../hooks/useLongPress'
+import { usePullToRefresh } from '../../../hooks/usePullToRefresh'
+
+/**
+ * The row's box, lifted out only so the long-press hook has a component to live in — a hook
+ * cannot be called inside the `.map()` that draws the rows.
+ *
+ * A held press still ends in a click on every touch browser, so without `onClickCapture` a
+ * long press would both start a selection and open the message. Capturing on the row swallows
+ * that one click before it reaches anything: the row's own `onClick`, and the checkbox or star
+ * the finger happened to land on, which would otherwise undo the selection just made.
+ */
+function Row({ onLongPress, children, ...rest }:
+  { onLongPress?: () => void; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+  const fired = useRef(false)
+  const { onPointerDown, ...press } = useLongPress(() => {
+    if (!onLongPress) return  // A cross-folder result: no selection to enter, so no click to eat.
+    fired.current = true
+    onLongPress()
+  })
+  return (
+    <div
+      {...rest}
+      {...press}
+      onPointerDown={event => { fired.current = false; onPointerDown(event) }}
+      onClickCapture={event => {
+        if (!fired.current) return
+        fired.current = false
+        // Both are load-bearing and neither replaces the other: stopPropagation keeps the click
+        // from the checkbox's own listener, preventDefault is what cancels the input's native
+        // activation — without it the box still toggles and undoes the selection just made.
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+    >
+      {children}
+    </div>
+  )
+}
 
 interface Props {
   folderPath: string | null
@@ -41,6 +80,13 @@ interface Props {
   selectedUid: number | null
   onSelect: (uid: number) => void
   wide?: boolean
+  /** Rendered at the head of the toolbar: the drawer's hamburger below 1024px. */
+  leading?: ReactNode
+  /** The pull-to-refresh gesture's handler, bound at every width — a touch laptop has it too. */
+  onRefresh?: () => void
+  /** The folder column is behind a drawer, so its RefreshButton is out of reach and the kebab
+      takes the action. On desktop that button is on screen and a second entry is a duplicate. */
+  inDrawer?: boolean
   onNotify?: (message: string) => void
   onRows?: (uids: number[]) => void
   /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
@@ -57,8 +103,9 @@ interface Props {
  * used to sit after the last row, so reaching it meant scrolling past fifty messages.
  */
 export default function MessageList(
-  { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, onNotify,
-    onRows, onDeparted, search = null, onSearchChange, onOpenResult }: Props) {
+  { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
+    inDrawer = false, onNotify, onRows, onDeparted, search = null, onSearchChange,
+    onOpenResult }: Props) {
   const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
@@ -100,6 +147,7 @@ export default function MessageList(
     : list
   const { messages, total, isLoading, isError, paging, streaming } = view
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { pull, armed } = usePullToRefresh(scrollRef, () => onRefresh?.())
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
@@ -451,7 +499,7 @@ export default function MessageList(
             return (
               <li key={message.uid}>
                 {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
-                <div
+                <Row
                   role="button"
                   tabIndex={0}
                   aria-label={label}
@@ -462,6 +510,8 @@ export default function MessageList(
                   onKeyDown={event => onRowKey(event, message)}
                   onDragStart={event => onRowDragStart(event, message.uid)}
                   onDragEnd={() => setDraggingUids(null)}
+                  // Entering selection with no visible checkbox to aim at: the row itself is the target.
+                  onLongPress={crossFolder ? undefined : () => selection.toggle(message.uid, index)}
                 >
                   {wide ? (
                     <>
@@ -501,7 +551,7 @@ export default function MessageList(
                       {cluster}
                     </>
                   )}
-                </div>
+                </Row>
               </li>
             )
           })}
@@ -524,6 +574,8 @@ export default function MessageList(
     <div className="message-list-root" onKeyDown={onListKeyDown}>
       {/* Replaces the old heading band: the toolbar names the folder until a selection is on. */}
       <SelectionToolbar
+        leading={leading}
+        refresh={onRefresh && inDrawer ? { onRun: onRefresh } : undefined}
         title={folderName || folderPath}
         count={count}
         allSelected={allSelected}
@@ -572,7 +624,17 @@ export default function MessageList(
       {/* The empty-folder offer belongs to the folder itself, not to a search laid over it. */}
       {!searching && <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />}
 
-      <div className="mail-list-scroll" ref={scrollRef}>{rows()}</div>
+      <div className="mail-list-scroll" ref={scrollRef}>
+        {/* Not aria-live: the region would carry its text before it ever changes, so most stacks
+            announce nothing, and where one does it fires on every wobble of a gesture a
+            screen-reader user in explore-by-touch cannot perform anyway. */}
+        {pull > 0 && (
+          <div className="mail-pull" style={{ height: pull }}>
+            {t(armed ? 'list.release' : 'list.pull')}
+          </div>
+        )}
+        {rows()}
+      </div>
 
       {/* The footer is the pager's alone. Streaming has no page to go to, so it carries no band:
           the rows take the height back, and the loaded count is already the scrollbar's job. */}

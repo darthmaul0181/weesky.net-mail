@@ -266,3 +266,31 @@ describe('renderBodyDocument', () => {
     expect(document).toContain('hi')
   })
 })
+
+describe('renderBodyDocument narrow', () => {
+  it('trims the body padding', () => {
+    expect(renderBodyDocument('<p>x</p>', { narrow: true })).toContain('padding: 12px 14px')
+    expect(renderBodyDocument('<p>x</p>')).toContain('padding: 18px 22px')
+  })
+
+  // A plain toContain('text-size-adjust: 100%') passes on the prefixed property alone, since
+  // '-webkit-text-size-adjust: 100%' contains that exact substring — it would not catch an
+  // implementation that emitted only the vendor-prefixed half. Pinning the literal pair asserts
+  // both properties, in the order and spacing the implementation actually emits.
+  it('pins the text scale, which iOS otherwise inflates on its own', () => {
+    expect(renderBodyDocument('<p>x</p>', { narrow: true }))
+      .toContain('-webkit-text-size-adjust: 100%; text-size-adjust: 100%;')
+  })
+
+  it('leaves the scale alone at the default width', () => {
+    expect(renderBodyDocument('<p>x</p>')).not.toContain('text-size-adjust')
+  })
+
+  it('keeps the existing width guards whatever the width', () => {
+    const narrow = renderBodyDocument('<p>x</p>', { narrow: true })
+    expect(narrow).toContain('img { max-width: 100%')
+    expect(narrow).toContain('table { max-width: 100%')
+    expect(narrow).toContain('overflow-wrap: break-word')
+    expect(narrow).toContain('pre { overflow-x: auto')
+  })
+})

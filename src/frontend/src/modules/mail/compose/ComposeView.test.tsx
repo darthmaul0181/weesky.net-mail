@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { mockViewport, resetViewport } from '../../../test-utils'
 import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
@@ -1562,5 +1563,37 @@ describe('the default composing editor', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('Half written')).toBeInTheDocument())
     expect(screen.queryByRole('textbox', { name: 'Message body' })).toBeNull()
+  })
+})
+
+// Measured at 360: the header's own content came to 462px in a 360px column, so "Save draft" was
+// cut off and the ✕ — the only visible way out of the composer — ended a hundred pixels past the
+// screen. The title goes because the subject field says the same thing one row down.
+describe('the composer header on a phone', () => {
+  beforeEach(() => { mockViewport('phone') })
+  afterEach(() => { resetViewport() })
+
+  it('keeps Send and the ✕ on the band, and moves Save draft into a menu', async () => {
+    renderCompose()
+    await screen.findByLabelText('Subject')
+
+    expect(document.querySelector('.compose-header .modal-title')).toBeNull()
+    expect(sendButton()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+
+    expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('menuitem', { name: 'Save draft' })).toBeInTheDocument()
+  })
+
+  it('saves the draft from the menu entry', async () => {
+    renderCompose()
+    fireEvent.change(await screen.findByLabelText('Subject'), { target: { value: 'Notes' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledOnce())
+    expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ subject: 'Notes' })
   })
 })

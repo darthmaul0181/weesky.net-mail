@@ -113,6 +113,8 @@
     "retry": "Réessayer",
     "noSubject": "(sans objet)",
     "noRecipient": "(sans destinataire)",
+    "pull": "Tirer pour rafraîchir",
+    "release": "Relâcher pour rafraîchir",
     "draft": "Brouillon",
     "star": "Suivre",
     "unstar": "Ne plus suivre",
@@ -195,6 +197,13 @@
     "reply": "Répondre",
     "replyAll": "Répondre à tous",
     "forward": "Transférer",
+    "bar": {
+      "reply": "Répondre",
+      "replyAll": "À tous",
+      "forward": "Transférer",
+      "delete": "Supprimer",
+      "more": "Plus"
+    },
     "messageActions": "Actions du message",
     "editAsNew": "Modifier comme nouveau",
     "viewSource": "Afficher la source",
@@ -224,6 +233,7 @@
       "failed": "Échec de SPF ou de DKIM"
     },
     "details": {
+      "subject": "Objet :",
       "from": "De :",
       "to": "À :",
       "cc": "Cc :",

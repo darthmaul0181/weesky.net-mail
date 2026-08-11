@@ -7,6 +7,11 @@
   overflow: hidden;   /* .app-content sets overflow:auto; the columns scroll, not the page */
 }
 
+/* Desktop's compose button is in the folder column; this one would be a second copy of it.
+   A base rule, above the media block: CSS has no width-based specificity, so written after it
+   this would win at every width and the button would never appear at all. */
+.floating-action { display: none; }
+
 /* Every column is a stack of bands with one scrolling middle. min-height:0 on each is what
    lets that middle actually shrink — without it a flex child refuses to go below its content
    height and the scroll lands on the page instead of the band. */
@@ -56,8 +61,25 @@
   border-top: 1px solid var(--folders-item-hover);
 }
 
+/* A container, so the toolbar sizes itself against the column it sits in and not the window.
+   Those are different numbers: the splitter can leave this column at its 240px minimum on a
+   tablet — narrower than any phone — while the same tablet under readingPane:'none' gives it
+   960px. Safe in all three arrangements, which is what inline-size containment assumes: at
+   'right' the width is the splitter's inline style, at 'bottom' the stack's stretch, and at
+   'none' a `flex: 1` whose basis is already 0. Nothing here has ever sized to its contents.
+
+   Do NOT add `contain` here, and do not go looking for a spec line to settle it — two careful
+   readers have now read the prose opposite ways, so measure it instead. MessageList renders four
+   dialogs inside this column and there are no portals in this codebase, so `.modal-overlay`'s
+   `position: fixed` resolves against the viewport only for as long as nothing makes this element
+   the containing block for fixed descendants. Measured in Blink, twice, independently: with
+   `container-type: inline-size` the overlay is the viewport; with `contain: layout` or
+   `contain: paint` it collapses to this column and every dialog opened from the list is trapped
+   in it. The probe case 'list dialogs escape the container column' keeps that claim running,
+   because no test here can — jsdom computes no layout. */
 .mail-list {
   background: var(--surface);
+  container-type: inline-size;
 }
 
 /* The inline width is the splitter's; shrink-not-grow (flex: 0 1 auto) lets a size stored on
@@ -89,7 +111,15 @@
    element; !important is not needed once it is. */
 .mail-list.is-hidden { display: none; }
 
-.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+/* `overscroll-behavior-y` unconditional, not gated to a width: `usePullToRefresh`'s listeners
+   bind at every width, and a rule that only fired below 1023px would leave a touch laptop above
+   it with the gesture live and uncontained. This is the only element in the module it can bind
+   to — `.app-shell` declares no `overflow`, so it is not a scroll container and the property
+   could never take hold there; the app-wide containment lives on `html` in index.css, where the
+   root's value is what propagates to the viewport. Cheap insurance either way: the hook's own
+   `preventDefault` fires at 10px of travel, well under the distance Chrome's native
+   pull-to-refresh arms at, so the browser's own gesture rarely reaches this. */
+.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 
 /* The two columns show their scrollbar under the cursor only, each on its own hover — but the
    gutter stays reserved whether the thumb is painted or not. Toggling `overflow` instead would
@@ -116,6 +146,15 @@
 .mail-folders-scroll:hover::-webkit-scrollbar-thumb,
 .mail-list-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
 
+.mail-pull {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .mail-list-footer {
   flex: none;
   border-top: 1px solid var(--list-separator);
@@ -140,10 +179,17 @@
   text-decoration: underline;
 }
 
+/* container-type for the same reason .mail-list carries one: the reader's own width and the
+   window's are different numbers, and it is the column that has to hold the header. Measured
+   (probes/mobile-layout.html, 'reader header loaded-320' at 768x1024): the reader is pinned to
+   its own 320px min-width on a tablet, .reader-actions takes 212 of it and .reader-stack is left
+   64, so the unsubscribe pill — `white-space: nowrap`, 141px — hung 77px outside a column that
+   is overflow: hidden and was cut off rather than scrollable. */
 .mail-reader {
   flex: 1;
   min-width: 0;
   background: var(--surface);
+  container-type: inline-size;
 }
 
 /* ── Folder tree ─────────────────────────────────────────── */
@@ -358,7 +404,15 @@
   background: var(--surface);
 }
 
-.selection-master { flex: none; }
+/* Wraps the master checkbox so a phone can grow the target without growing the drawn box.
+   Shrink-to-fit here, so off a phone it is exactly the checkbox's margin box and the band is
+   laid out as it always was. */
+.selection-master-hit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* The name and its filter travel together, so the star sits against the name rather than
    drifting to the actions on the far side. */
@@ -779,6 +833,55 @@
    so nothing is anchored to a fixed height. */
 .reader-actions { align-self: flex-end; display: flex; align-items: center; gap: 2px; }
 
+/* The phone's foot-of-screen shape. A band of the reader column rather than a fixed overlay, so
+   the message body's own scroll ends above it instead of running under it — every column here is
+   a band stack, and this is its last band. It wears the tab bar's colours because it stands
+   exactly where the tab bar stood, and `--rail-bg` is what a reader's eye is anchored on. */
+.reader-actionbar {
+  flex: none;
+  background: var(--rail-bg);
+  border-top: 1px solid var(--border);
+}
+
+.reader-actions.is-bar { align-self: stretch; display: flex; gap: 0; }
+
+/* DropdownMenu wraps its trigger, so the fifth cell's flex item is the wrapper and not the button
+   the class is on: without this the kebab sizes to its own content and the other four share what
+   is left, which reads as four wide cells and a narrow one. */
+.reader-actions.is-bar > .dropdown-root { flex: 1; min-width: 0; display: flex; }
+
+.reader-bar-item {
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--rail-fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.reader-bar-item:disabled { opacity: 0.45; cursor: default; }
+
+/* The delete cell keeps its class and deliberately not the red: `--danger` on `--rail-bg` measures
+   3.28:1 in the light theme (6.53 in dark), which is under the floor for an 11px label — and a
+   colour that only appears in one theme is worse than none. The trash and the word carry it. */
+.reader-bar-item.is-danger { color: inherit; }
+
+.reader-bar-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .action-btn {
   display: inline-flex;
   align-items: center;
@@ -847,6 +950,12 @@
 /* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
    gap would land between the comma and the name it precedes instead of after it. */
 .reader-recipients { display: block; }
+/* Inline, not Tooltip's own inline-flex: an atomic inline box shrink-to-fits against its
+   containing block rather than the space left on the line, so a named recipient never shared its
+   label's line — it moved to the next one whole, leaving the label alone — and an ellipsis is
+   never drawn inside one either, so the details grid clipped a recipient with no "…". */
+.reader-recipients .tooltip-wrap,
+.reader-details .tooltip-wrap { display: inline; }
 
 .details-toggle {
   display: inline-flex;
@@ -1672,3 +1781,360 @@ textarea.compose-editor {
 
 .source-error { color: var(--text-muted); margin: 0 0 12px; }
 .source-truncated { margin: 10px 0 0; color: var(--text-muted); font-size: 0.8rem; }
+
+@media (max-width: 1023px) {
+  /* Compose and Refresh both leave the drawer: opening a drawer to write a message, or to
+     check for new mail, is one gesture too many. Compose becomes the floating button below;
+     Refresh moves into the list toolbar's kebab, which MessageList adds under this same
+     condition (`inDrawer`) and nowhere else, so a desktop keeps one Refresh rather than two. */
+  .context-drawer-panel .mail-folders-compose { display: none; }
+
+  .floating-action {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--action-primary);
+    color: var(--action-primary-fg);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    cursor: pointer;
+  }
+  .floating-action:hover { background: var(--action-primary-hover); }
+}
+
+@media (max-width: 639px) {
+  /* Clear of the tab bar, which is 56px plus its border. */
+  .floating-action { bottom: 73px; }
+
+  /* The touch floor answers to the device, so it cannot live in the container query below: the
+     two axes do not nest, and a 540px phone whose list column is wider than 480px would fall
+     through to the 36px base rule with a finger on it. min-* rather than width/height, so the
+     query can still own the layout size whatever order the two blocks are read in. */
+  .selection-btn { min-width: var(--touch); min-height: var(--touch); }
+
+  /* The one control on this band that is not a .selection-btn, and the one the selecting state
+     exists for. The target is the wrapper and the box stays its native size: padding on an
+     `appearance: auto` checkbox computes to 0 in Chrome — measured — so sizing the input itself
+     painted a 44px slab of accent colour beside 20px icons. */
+  .selection-master-hit { width: var(--touch); height: var(--touch); }
+  .selection-master { margin: 0; }
+
+  /* The actions sit under the address lines instead of beside them: at 360px, To, Cc and the
+     spam gauge each need the full measure.
+     padding-bottom is 6px rather than the base 18: an .action-btn is 44px tall around an 18px glyph, so 13 of those
+     18 were already inside the button and the padding was buying the gap a second time. 19px of
+     visual clearance under the icons, measured, against 31 before. The top keeps its 18 — nothing
+     above the subject supplies any. */
+  .reader-header { flex-direction: column; align-items: stretch; padding-bottom: 6px; }
+  /* One line, ellipsised: a three-line subject is ~50px of a header the message body has to pay
+     for, and the reader arrives here from a list row the reader just tapped and read. The whole
+     of it is a chevron away — ReaderDetails takes a Subject row below 640px for exactly this.
+     Flex rather than an ellipsis on the h1 itself: the back button and the priority badge are
+     element children, and an ellipsised box with children is a real clip everywhere else in this
+     app, so only .reader-subject-text — a leaf — carries the truncation.
+     `flex: none` on the two fixed children is not belt-and-braces: shrinkage is distributed in
+     proportion to each item's BASE size, and the subject's base is its whole unwrapped text —
+     ~1500px against the arrow's 26 — so the arrow still took ~2% of a 1200px overflow and was
+     squeezed to its 15px min-content. Measured: `.reader-back`'s hit area read 33x44, short in
+     the one axis nothing about the rule suggested. */
+  .reader-subject { display: flex; align-items: center; }
+  .reader-subject-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-back, .reader-priority { flex: none; }
+  /* flex-wrap, not a fixed layout: minimum cluster width is 6 * 44px controls + 7 * 2px gaps +
+     2 * (1px rule + 8px margin) ~= 296px. .reader-header keeps its 18px 22px padding at this
+     width, so a 360px phone has ~20px to spare but a 320px one (iPhone SE, an Android
+     split-screen pane) is ~20px short — and .mail-reader is overflow:hidden, so the kebab was
+     silently cut off rather than scrollable. Measured, probes/mobile-layout.html's
+     'reader header loaded-320' case.
+     The alignment pair is the container block's, copied here for the reason recorded above it —
+     a 540-639px phone gives the reader a column wider than that query's threshold. The wrap is
+     this copy's alone: it is the narrow END of the phone tier that runs out of room, never the
+     wide one. */
+  .reader-actions { align-self: stretch; justify-content: flex-end; flex-wrap: wrap; }
+  .reader-subject { font-size: 17px; }
+  /* .reader-back keeps its base rule's 26x26 painted size at this width rather than growing to
+     the 44px floor: a first attempt grew the button itself (float, plus flow-root on the h1 to
+     contain it), which fixed a WRAPPING subject but broke a one-line one — the h1 grew from 44px
+     to 48px and the arrow sat 9.5px off the text's own centre, up from 2.8px on the unpatched
+     rule (measured, probes/mobile-layout.html's 'reader header loaded' case rendered with a
+     one-line subject). The painted box staying 26x26 is what keeps the arrow on the text's own
+     centre — it mattered for a wrapping subject too, back when one could wrap here; the
+     ::before below only expands the HIT area, which needs no space in the layout at all since it
+     is taken out of flow. position: relative on the button gives that absolutely positioned
+     pseudo something to measure its inset against — specifically its PADDING box, which excludes
+     the button's own 1px border, so the box the inset is measured from is 24px (26 - 2 * 1px),
+     not 26; 20px split across top+bottom (and left+right) is what reaches 44 (24 + 20), where the
+     naive -9px a side (26 + 9 + 9) measured 42px in practice.
+     The 20px is split 14/6 rather than 10/10: an even split put the hit area's own bottom edge
+     within a pixel of .reader-meta's top edge — close enough that positioned boxes painting above
+     static in-flow ones (an absolutely positioned pseudo always does, whatever its DOM order) would
+     have let a small future change to the subject's line-height or margin-bottom start winning a
+     hit-test meant for .address-label.is-sender underneath. Biasing the split up costs nothing
+     against .reader-header's own 18px top padding and buys real headroom: measured directly
+     (senderRect.top - hitAreaBottom), the clearance is 15px. There used to be a second, roomier
+     figure here for a wrapped subject; the subject no longer wraps at this width — the ellipsis
+     rule above holds it to one line — so 15px is now the only case and the worst case at once,
+     and any future change to the subject's line-height or margin-bottom spends it. */
+  .reader-back { position: relative; }
+  .reader-back::before { content: ''; position: absolute; top: -14px; right: -10px; bottom: -6px; left: -10px; }
+  /* The short date shares the To line here. Flex on .reader-to-row only, never on the Cc row
+     beside it: AddressList keeps each separator inside the recipient's own span, so a flex gap
+     between those spans would land before the comma instead of after it — the trap the base
+     .reader-recipients rule records. The addresses are wrapped in .reader-to for the same reason.
+     They ELLIPSISE rather than wrap, and the row never wraps either: To and the date are one line
+     whatever they hold, which is the owner's call — a truncated recipient is the accepted price.
+     The nowrap is what makes it an ellipsis rather than a clip, and the min-width lets the item
+     shrink past its own content so there is something to truncate. Two consequences, both real:
+     probes/mobile-layout.html reads a `clipped` here, since that metric only forgives an
+     ellipsised box with no element children and .reader-to holds AddressList's spans; and the row
+     aligns on center, because a flex item with overflow: hidden synthesises its baseline from the
+     border box, which dropped the To text below the date it is supposed to sit level with. */
+  .reader-to-row { display: flex; align-items: center; gap: 8px; position: relative; }
+  .reader-to { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Blink paints no ellipsis over a positioned descendant, and Tooltip's wrapper is
+     position: relative — the name truncated with no "…" until the bubble's anchor moved up to the
+     row. It still escapes .reader-to's clip, that box not being in its containing block chain. */
+  .reader-to .tooltip-wrap { position: static; }
+  .reader-to-row .reader-date { flex: none; }
+  /* The grid keeps its two columns here rather than stacking each pair into two rows: a label and
+     its value stay on one line, the value ellipsising, which is what the phone's own To line does
+     a chevron above. The subject is the single exception and wraps over as many lines as it takes
+     — it is the one value a reader opens this grid to read in full. `minmax(0, 1fr)` and not
+     `1fr`, whose auto minimum would let a long value push the column past the screen instead of
+     truncating. The tooltip anchor moves to the grid for the reason it moves to .reader-to-row
+     above; it lands on the <dl> and not on the <dd> because that box is the one doing the
+     clipping, and an abspos child of its own containing block would be clipped by it. */
+  .reader-details { grid-template-columns: max-content minmax(0, 1fr); position: relative; }
+  .reader-details dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-details dd.detail-subject { overflow: visible; white-space: normal; }
+  .reader-details .tooltip-wrap { position: static; }
+  /* The bubble is what a truncated value is read in full from, so it may not itself hang out of a
+     column that clips: its 320px cap is wider than the 276px a 320px screen leaves inside the
+     header's padding. 100% of the anchor, which both of these now are. */
+  .reader-details .tooltip-bubble,
+  .reader-to-row .tooltip-bubble { max-width: 100%; }
+  /* Measured at 360x640 (probes/mobile-layout.html, 'reader header loaded'): .reader-back's
+     ::before above is its own fix for the same 44px floor — grown as a hit area rather than as a
+     painted box. Every .action-btn in ReaderActions — reply, reply-all, forward, the colour
+     toggle, delete and the kebab — sat at 30x30 and the details chevron at 20x20, both under
+     that floor and both fine to grow as painted boxes, since neither sits inline with wrapping
+     text the way the subject's arrow does. `.unsub-btn` was the third here and is gone rather
+     than dead: MessageReader stops rendering it below 640px, so the selector would have matched
+     nothing at the one width this block applies to. */
+  .action-btn, .details-toggle {
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
+
+  /* .compose-toolbar already wraps at every width (the base rule, mail.css:1451-1458) — this
+     block only has to raise each tool to the touch floor; a repeated `flex-wrap: wrap` here would
+     read as what makes it wrap and invite deleting the base rule as "dead" the day someone checks
+     the desktop toolbar and finds it unaffected by this query. */
+  .compose-tool, .compose-tool-select { min-height: var(--touch); }
+
+  /* The composer's labels go back BESIDE their control, against index.css's phone block, which
+     rotates every `.field-h`. That rotation is right for a settings row — sentence-length captions
+     over an input with a ~177px intrinsic floor — and wrong here: `De`, `À`, `Cc`, `Cci` and
+     `Objet` are one word each, and every rotated row spent a whole line on a caption. Owner's
+     call, and the price is a narrower box: the recipients box goes back from 313px to 237 at 360.
+     Three declarations carry it — a row again, a label column sized to the longest of those five
+     words rather than the settings 110px, and `min-width: 0` on the controls, which is what the
+     rotation existed to avoid needing. `.compose-to-row` stays a column: its second child is the
+     Cc/Cci/Priorité strip, which is a row of its own and not this row's control. */
+  .compose-fields .field-h { flex-direction: row; align-items: center; gap: 10px; }
+  .compose-fields .field-h > label:first-child { width: 52px; flex: none; }
+  .compose-fields .field-h > input[type="text"],
+  .compose-fields .field-h.recipients-field .recipients-box { min-width: 0; }
+  .field-h.recipients-field .recipients-box input { min-width: 60px; }
+  .compose-from { flex-direction: row; align-items: center; gap: 10px; }
+  .compose-from .compose-from-label { width: 52px; flex: none; }
+  .compose-to-row { flex-direction: column; align-items: stretch; gap: 4px; }
+  .compose-link-form input { width: 100%; }
+
+  /* Three rows of tools left 102px of a 640px screen to the message. Folded, the bar keeps the
+     plain-text switch, the paperclip, B/I/U/S and the ⋯ that reveals the rest — measured, seven
+     cells is what fits one row at 320 as well as at 360, and eight already wraps at 320. Hidden
+     rather than unmounted, so an open popover among them survives a fold. */
+  .compose-toolbar:not(.is-expanded) .compose-tool-group.is-extra { display: none; }
+
+  /* The quick-search band is `flex: none`, so flooring its 26px advanced button grows the band
+     once and spends no row budget — the same trade .compose-header's buttons take below. The
+     input beside it is floored by index.css's typed-control rule and carries min-width: 0, so
+     the width this takes comes out of it. */
+  .search-bar-advanced { min-width: var(--touch); min-height: var(--touch); }
+
+  /* The caret is a bare input inside a box that already IS the field, so the phone block's
+     `input[type="text"] { min-height: var(--touch) }` in index.css lands on it: the rule at
+     line 1566 above outranks it on specificity but declares no height at all, so 44px applied
+     and pushed `.recipients-box` from 32px to 54px with every `.recipient-token` left floating
+     in it — the exact defect that rule's own comment records as already fixed once, three rows
+     over with Cc and Bcc open. The box is the touch target here, not the caret inside it. */
+  .field-h.recipients-field .recipients-box input { min-height: 0; }
+
+  /* Send and the kebab are the surface's two header actions; .compose-header is a fixed band
+     (flex: none), so flooring them only grows it once and spends no row budget. */
+  .compose-header .btn { min-height: var(--touch); }
+  /* The band has no `flex-wrap` and must not gain one: what fixed the 102px of overflow is the
+     title leaving and Save draft folding into this trigger, not a second row. Square, so the
+     kebab is a touch target rather than a word-shaped button with no word in it. */
+  .compose-header-more { min-width: var(--touch); padding: 0; }
+}
+
+/* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk
+   and delete are already disabled with an empty selection, so at rest they only rendered dead
+   state.
+
+   480px is NOT a third breakpoint and must not be "corrected" to 639px to satisfy the two-width
+   whitelist: this is a @container query, so it measures the inline size of `.mail-list` — the
+   column, not the window — and the two are routinely different numbers. 480 rather than the 360
+   this comment argues from because the column is what has to fit the controls and the splitter
+   hands it any width it likes: on a tablet it can sit at its 240px floor, narrower than any
+   phone, while the same tablet under readingPane:'none' gives the same column 960px. 480 is the
+   width below which the six controls stop fitting with a folder name still legible beside them.
+
+   Read the threshold against the DEFAULT column, which is 380px — `usePaneSize('mail.split.right',
+   380, 240)` — and not against that 240px floor: 480 fires on a stock desktop, so everything named
+   here is gone from an untouched installation. That is intended for the archive/junk/delete group,
+   measured at 48px of overflow without it.
+
+   The master checkbox is NOT among them, at any width, and that is the whole of its rule — there is
+   no second block below for it any more. It is the only discoverable door into the selecting state
+   the actions appear in: hidden, the way in is long-press, which nothing on screen announces. It
+   used to hide below 360, which made a 390px phone and a 360px one behave differently for no reason
+   the user could see.
+
+   It costs nothing to keep **at or above the 320px viewport this product supports** — that bound is
+   the claim, and it is narrower than "at every width" on purpose. There are two regimes and only
+   one of them has a touch floor. A column narrower than the viewport is the splitter's doing (a
+   phone gets `effectivePane(…, 'phone') === 'none'` and no splitter at all), so a tablet or a
+   desktop is drawing it, `--touch` does not resolve, and the master is the 13px box the browser
+   paints: measured at the splitter's 240px floor, the idle toolbar still fits on one row with the
+   folder name ellipsised. On the phone tier the column IS the viewport, `--touch` does resolve, and
+   the 44px master fits down to a 274px column and no further — measured, 274 clips 0, 273 clips 1,
+   260 clips 14 and 240 clips 34, the star painting over `.selection-actions` rather than wrapping,
+   since `.selection-heading` is `flex: 1` from a 0 base and is crushed instead of breaking the
+   line. No shipping device is under 274 (the Galaxy Fold cover screen is 280), but page zoom
+   reaches it — a ~520px window at 200%, or Chrome for Android's own zoom setting on a 360px
+   handset — so the sub-274 crush is OUT OF CONTRACT, not impossible.
+
+   That matters to exactly one future change: flooring this master to 44px above the phone tier, for
+   the 640-1023px touch tablet where `--touch` does not resolve. Doing it recreates the crush above
+   at any narrow column, so it has to handle `.selection-heading`'s shrink at the same time. */
+@container (max-width: 480px) {
+  /* The selecting state still spends six controls, and at the splitter's 240px floor they run
+     48px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
+     kebab simply disappeared. EmptyFolderBanner's answer, for the same reason: a second line
+     costs height nobody is short of, where dropping a control costs the action itself. */
+  .selection-toolbar { flex-wrap: wrap; }
+
+  .selection-toolbar:not(.is-selecting) .selection-archive,
+  .selection-toolbar:not(.is-selecting) .selection-junk,
+  .selection-toolbar:not(.is-selecting) .selection-delete { display: none; }
+
+  .selection-toolbar.is-selecting .selection-search,
+  .selection-toolbar.is-selecting .selection-star { display: none; }
+
+  /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
+     wins over this whatever order the cascade reads the two blocks in. */
+  .selection-btn { width: 40px; height: 40px; }
+}
+
+/* The reader's own column, and a second container query rather than more selectors in the one
+   above: an unnamed @container resolves against each element's NEAREST container ancestor, so
+   these two rules read .mail-reader while the block above reads .mail-list, and folding them
+   together would only hide which column each answers to.
+
+   The window is the wrong question here, which is what the measurements said. At 768x1024 and at
+   1024x768 alike, 'reader header loaded-320' clipped 77px and 'reader header loaded' 37px: on a
+   tablet `.is-right .mail-reader` sits at its own 320px min-width while `.reader-actions` spends
+   212px of it, and on a 1024px desktop the rail, the folder column and a 380px list leave the
+   reader ~342px — the same crush, at a width no window-keyed rule of this branch is allowed to
+   name. Stacking the header hands the meta the full measure and the pill fits.
+
+   Naming the window-keyed at-rule in this comment is what the phrasing above avoids, and that is
+   not squeamishness: styles/responsive.test.ts matches it as raw text through to the next
+   `max-width: <n>px`, comments included, so one mention here read `480px` as a third breakpoint
+   and reddened the suite.
+
+   The 639px block's copies of these two declarations are NOT duplicates of this and must stay:
+   a 540-639px phone gives the reader a column WIDER than 480px, where this query does not match
+   and the device is still a phone — the same gap `.selection-btn`'s floor is written around. */
+@container (max-width: 480px) {
+  .reader-header { flex-direction: column; }
+  /* The base rule's `align-self: flex-end` anchors the cluster to the last line of the stack
+     beside it — a cross-axis alignment, so once the header is a column the same property decides
+     LEFT or RIGHT instead of top or bottom, and `flex-start` put the whole cluster against the
+     left margin with the message's meta above it. This block is where that happened at every
+     width, the 639px copy included: it is the later of the two and wins wherever both match.
+     Stretch rather than `flex-end`, because an aligned item is shrink-to-fit — max-content while
+     the cluster fits and the full available width once it stops, at which point its own lines pack
+     from the left again and a wrapped cluster silently returns to where it started. Stretched, the
+     item is the header's content width at every size and justify-content decides both states. */
+  .reader-actions { align-self: stretch; justify-content: flex-end; }
+}
+
+/* Input modality, not width — and that distinction is the bug this block was extracted to fix.
+   These three rules used to sit in the @container above, where they read the column instead of the
+   device: `usePaneSize('mail.split.right', 380, 240)` puts `.mail-list` at 380px by default, so an
+   ordinary desktop already sits inside a 480px container query and a mouse user who switched
+   `mail.rowActions` on never saw the cluster at all. `hover` is the only feature that asks the
+   question these rules actually ask, and it carries no width at all, so the two-breakpoint
+   whitelist in `styles/responsive.test.ts` — which scans width queries, and scans them as raw
+   text, comments included — has nothing to say about it. The column's own two toolbar states stay
+   in the @container above, where a desktop dragged to the 240px floor still needs them. */
+@media (hover: none) {
+  /* There is no hover on a touch screen, and on several touch browsers :hover sticks after a
+     tap — the cluster would appear and stay. These actions remain reachable by opening the
+     message and through the selection toolbar.
+
+     It is the two REVEALING selectors that have to be named, not the cluster on its own: the base
+     declaration above already says `display: none`, and a media query adds no specificity, so a
+     bare `.message-row-cluster` here (0,1,0) restates that base rule and still loses to
+     `.message-row:hover .message-row-cluster` (0,3,0) — the cluster would come back on the very
+     tap this exists to stop. Matching their specificity and sitting later is the whole rule. */
+  .message-row:hover .message-row-cluster,
+  .message-row:focus-within .message-row-cluster { display: none; }
+
+  /* The reserve that hover rule paid for, and it has to share its condition rather than a width:
+     released while the cluster is still revealed, the row's last line would run under the buttons.
+     `:has()` and `:nth-last-child()` both still match a `display: none` element, so hiding the
+     cluster does not release its reserve on its own — 116px on the four-action row the probe
+     draws (`--row-actions: 4`, so 4 × 28 + 4), and a stuck :hover would ellipsise a narrow row's
+     last line around padding held for nothing. */
+  .message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
+  .message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
+    padding-right: 0;
+  }
+
+  /* Same reason as the cluster, and visually only. `display: none` would also have taken the box
+     out of the tab order, and a tablet driving this app from a keyboard would then have no route
+     into a selection at all, since the idle toolbar's master checkbox is hidden whenever the column
+     is narrow. So only :hover stops revealing it; :focus-within, .has-selection and :checked all
+     still do. Costs no width either way: the 34px gutter is unconditional base padding and the box
+     is absolutely positioned over it. */
+  .message-list:not(.has-selection) .message-row:hover:not(:focus-within) .message-row-check {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The wide skin's other half of the same swap, and it shares this condition for the reason the
+     reserve above does. The base rule takes the date away so the cluster can stand in its place in
+     the flex line; with the cluster hidden here nothing stands in it, and the row loses its date
+     while `.message-row-line` absorbs the space and reflows under the finger — permanently, on
+     whichever row a tap left focused. `is-line` rows are reachable on touch: `wideRows` is
+     `viewport !== 'phone' && pane !== 'right'`, so a tablet at bottom or none draws them, and the
+     row is role=button/tabIndex=0, so a tap satisfies :focus-within before sticky :hover does.
+     `inline` is the restore, not a new look: .message-row-date is a span declaring no display of
+     its own. Its used value here is `block` either way — an `is-line` row is a flex container and
+     blockifies its items — measured at both, so this reproduces the base exactly. */
+  .message-row.is-line:hover .message-row-date,
+  .message-row.is-line:focus-within .message-row-date { display: inline; }
+}

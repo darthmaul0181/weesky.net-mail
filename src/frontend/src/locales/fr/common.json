@@ -18,6 +18,10 @@
     "contacts": "Contacts",
     "settings": "Paramètres"
   },
+  "drawer": {
+    "label": "Navigation",
+    "open": "Ouvrir la navigation"
+  },
   "comingSoon": "Ce module arrive bientôt.",
   "deleteConfirm": {
     "title": "Confirmer la suppression",

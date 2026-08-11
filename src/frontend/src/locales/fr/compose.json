@@ -9,7 +9,8 @@
     "send": "Envoyer",
     "sending": "Envoi…",
     "saveDraft": "Enregistrer le brouillon",
-    "saving": "Enregistrement…"
+    "saving": "Enregistrement…",
+    "moreActions": "Plus d’actions"
   },
   "fields": {
     "from": "De",
@@ -99,7 +100,9 @@
       "center": "Au centre",
       "right": "À droite",
       "justify": "Justifié"
-    }
+    },
+    "moreTools": "Plus d’outils de mise en forme",
+    "fewerTools": "Moins d’outils de mise en forme"
   },
   "toast": {
     "sent": "Message envoyé",

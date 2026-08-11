@@ -4,6 +4,11 @@
   padding: 0;
 }
 
+/* Chrome for Android's own pull-to-refresh arms on a downward overscroll of the viewport, and the
+   reload it runs takes an unsaved draft with it — the composer's leave guard covers router
+   navigations, not the browser. Only the root's value propagates to the viewport. */
+html { overscroll-behavior-y: contain; }
+
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -11,6 +16,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Text for assistive technology only. Clipped rather than `display: none`, which would take it
@@ -28,6 +34,7 @@ body {
 
 .page-center {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2240,6 +2247,9 @@ body {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
 }
 .contacts-list { flex: none; }
+/* Hidden rather than unmounted where the card takes the screen — see ContactsLayout, and
+   .mail-list.is-hidden, which exists for the identical reason. */
+.contacts-list.is-hidden { display: none; }
 .contacts-card { flex: 1; min-width: 0; }
 .contacts-editor { flex: 1; min-width: 0; }
 .contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
@@ -2293,8 +2303,29 @@ body {
 
 .contact-card { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .contacts-card-invite { margin: auto; }
-.contact-card-head { flex: none; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
-.contact-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
+.contact-card-head {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+}
+/* .reader-back's box, and it is only ever drawn where the card has replaced the list. It grows to
+   the touch floor as a painted box rather than a pseudo hit area, unlike the reader's: nothing
+   here sits inline with wrapping text, so there is no baseline to keep. */
+.contact-card-back {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.contact-card-back:hover { background: var(--list-row-hover); color: var(--text); }
+/* A contact with no name falls back to its address (`displayNameOf`), which is one unbreakable
+   word: without `min-width: 0` the h2 is a flex item at its min-content width, and `.contacts-card`
+   is overflow:hidden, so at 320px — where the back arrow takes 54px of the row — the tail of the
+   address was cut off rather than wrapped. `break-word` and not `anywhere`: only the second feeds
+   its break points into min-content sizing, and this box is sized from exactly that. */
+.contact-card-name {
+  margin: 0; min-width: 0; overflow-wrap: break-word;
+  font-size: 18px; font-weight: 700; color: var(--text);
+}
 
 .contact-card-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px; }
 .contact-card-row { display: flex; gap: 14px; margin-bottom: 14px; }
@@ -2391,3 +2422,279 @@ body {
 .import-errors li:last-child { border-bottom: 0; }
 .import-error-line { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .import-errors-more { color: var(--text-muted); }
+
+@media (max-width: 1023px) {
+  /* The mail module's floating compose button owns this corner below 1024px, and it loses:
+     .toast-container is z-index 300 against its 60, and its 24px inset puts its whole box
+     inside the button's. The toast stack clears the button's top edge instead — the button is
+     56px tall on a 16px inset, so 72px, plus the 8px the stack already puts between toasts. */
+  .toast-container { bottom: 80px; }
+
+  /* Contacts' own primary action becomes the floating button below 1024px, the way compose does
+     in mail: opening a drawer to add a contact is one gesture too many. */
+  .context-drawer-panel .contacts-scopes-add { display: none; }
+
+  /* The card's own actions are a bottom band, where mail keeps the reader's in the header — so
+     from here down .floating-action lands on them: 56px on a 16px inset spans the last 72px of
+     the row, and Delete ended at the band's 18px padding, 54px of it under a button that wins on
+     z-index. The corner is reserved instead (16 + 56 + 16), and the band wraps rather than
+     crushing three labels into what is left of a 360px screen. */
+  .contact-card-actions { flex-wrap: wrap; padding-right: 88px; }
+}
+
+/* There is no hover on a touch screen, and on several touch browsers :hover sticks after a tap,
+   so the tile's action cluster would appear and stay. It is the two REVEALING selectors that have
+   to be named, not the cluster: the base declaration is already `visibility: hidden`, a media
+   query adds no specificity, and a bare .contact-tile-actions (0,1,0) would lose to them (0,2,0).
+   Nothing is lost — a tap opens the card, whose Edit and Delete are at the touch floor.
+
+   `hover`, not a width: this block used to be `@container (max-width: 480px)` over a container
+   `.contacts-list` declared inside the 1023px block, which kept it off a desktop but also let a
+   tablet whose splitter sits past 480px have the cluster back with no way to reach it. Every rule
+   here is about the input device and none is about the column, so nothing is left needing a
+   container and the declaration went with the query. It carries no width, so the two-breakpoint
+   whitelist in styles/responsive.test.ts does not apply to it. */
+@media (hover: none) {
+  .contact-tile:hover .contact-tile-actions,
+  .contact-tile:focus-within .contact-tile-actions { display: none; }
+
+  /* 31px, and the only navigation the contacts drawer holds. The 639px block below floors it
+     through var(--touch) for a narrow window; this reaches the 640-1023px touch tablet, where the
+     token is not declared at all — hence the number spelled out rather than a second declaration
+     of it. Neither condition contains the other, so both rules are live — but what keeps the
+     width-keyed copy alive in practice is probes/mobile-layout.html, which runs in a mouse-driven
+     Chrome where this query never matches: retiring it would drop contacts-drawer from
+     `smallest: 44` to 34 and read as a regression. */
+  .contact-scope { min-height: 44px; }
+}
+
+@media (max-width: 639px) {
+  /* iOS zooms the page in when a focused field's text is under 16px, and never zooms back out.
+     16px on the controls, not on body: the interface keeps its 14px scale. */
+  input, select, textarea { font-size: 16px; }
+
+  /* Same clearance against the button in its phone position, which is itself lifted over the
+     57px tab bar: 73px inset plus 56px of button is 129px, plus the same 8px gap. */
+  .toast-container { bottom: 137px; }
+
+  /* The login screen is the one surface a phone meets before anything else, and both boxes were
+     drawn for a desktop window: .page-center's 24px against .card's 32px spends 112px of a 360px
+     screen on padding and its own 1px border, and the fields measured 246px. 16 + 20 measures
+     286 — the two inputs and Sign in are all width: 100%, so every pixel returned here is field.
+     Only LoginPage uses either class, so neither rule can reach another screen. */
+  .page-center { padding: 16px; }
+  .card { padding: 20px; }
+
+  /* The list has the row to itself here, and the splitter's stored width left with the splitter:
+     measured at 320px, the base rule's flex: none then takes the column's 387px max-content and
+     runs 67px past the row. */
+  .contacts-list { flex: 1; }
+
+  /* The card is the whole screen, so its ← is a primary control rather than the reader's inline
+     26px arrow. */
+  .contact-card-back { width: var(--touch); height: var(--touch); }
+
+  /* 31px on its own 7px padding, and the only navigation the drawer holds. */
+  .contact-scope { min-height: var(--touch); }
+
+  /* The star grows a hit area rather than a painted box — .reader-back's idiom, and for the same
+     reason: at 44px square it would push the name 26px right and desync .contact-tile-address's
+     25px indent, on a tile that is already at the floor. The 18x18 button needs 26px on each axis;
+     both splits are biased into space no other control claims. Sideways: 17px left reaches the
+     list scroll's own 8px padding (9px tile padding + 1px border + 8px), where nothing else is
+     hittable, leaving 9px right — the heading's 7px gap plus 2px of the name's leading edge.
+     Vertically: 8px up lands exactly on the tile's top border edge and 18px down fills the address
+     line, which is not a target of its own. */
+  .contact-star { position: relative; }
+  .contact-star::before {
+    content: ''; position: absolute; top: -8px; right: -9px; bottom: -18px; left: -17px;
+  }
+
+  /* There is no hover on a touch screen, so the cluster is 58px of a 309px tile line reserved for
+     two 28px buttons no finger can reach — and on several touch browsers :hover sticks after a tap,
+     which would then reveal them permanently. display, not visibility: the base rule and its two
+     :hover/:focus-within reveals all set visibility, so this wins on a different property whatever
+     their specificity, and it returns the reserve to the name. Nothing is lost — a tap opens the
+     card, which carries Edit and Delete at the touch floor above. */
+  .contact-tile-actions { display: none; }
+
+  /* The label above its control instead of beside it. A 110px label column plus its 16px gap
+     leaves 151px of a 320px screen for an input whose own intrinsic width is ~177px, and
+     .field-h's inputs carry no min-width: 0 — so the box ran past the row rather than shrinking
+     into it: measured, every .field-h clipped by 20px at 320. :first-child rather than
+     label:first-child: the addresses row heads with a .field-h-label span, and the one row that
+     would keep its 110px column is the one holding the longest values. The trimmed padding fixes
+     nothing on its own — the stacking already clears the clip — it returns 8px of a 320px screen
+     to the measure the fields are read in. */
+  .contact-editor-body { padding: 14px; }
+  /* The rotation itself is the global `.field-h` rule further down this block now — the three
+     declarations that used to sit here were byte-identical to it. These two are not: the addresses
+     row heads with a `.field-h-label` span, so the global reset's `label:first-child` never
+     reaches it, and it is the row holding the longest values. */
+  .contact-editor-body .field-h > :first-child { width: auto; }
+  /* stretch is what widens the inputs; the favourite row's control is a 20px star and must not
+     become a full-width slab with a glyph in the corner. */
+  .contact-editor-body .field-h > .contact-star { align-self: flex-start; }
+  /* The tile's insets do not transfer here. This star is 20px rather than 18, and it sits at the
+     content edge of .contact-editor-body, which is overflow-y: auto — so its overflow-x computes
+     to auto too and clips at the padding box 14px away: the tile's 17px left overhang lost 3px
+     and the target measured 41. 14 + 20 + 10 is the same 44 with nothing outside the box. */
+  .contact-editor-body .contact-star::before { right: -10px; left: -14px; }
+
+  /* The header band's three items — title, Save contact, ✕ — measure 312px against the 284px a
+     320px screen leaves inside its 18px padding, and .contacts-editor is overflow: hidden, so the
+     ✕ was cut off rather than scrolled to. Wrapping rather than shrinking the title: at 360 the
+     English row still fits on one line (312 of 324), and where it does not — 320px, or French at
+     any width, which spends 189px on "Modifier le contact" and 163px on "Enregistrer le contact"
+     — the ✕ takes a second line instead of the surface's own name being ellipsised. */
+  .contact-editor-head { flex-wrap: wrap; }
+  /* Make-primary and remove-address: 28px squares, and the only way to reorder or drop an address.
+     The input beside them carries min-width: 0, so the width they take comes out of it. */
+  .contact-address-row .admin-icon-btn { min-width: var(--touch); min-height: var(--touch); }
+  /* A 22px text link, and the only way to add a second address. */
+  .contact-address-add { min-height: var(--touch); }
+
+  /* ── Forms and lists, shared by the settings pages, the admin tabs and the dialogs ────────── */
+
+  /* The label above its control rather than beside it. .field-h's inputs carry no min-width: 0,
+     so an input's ~177px intrinsic width is its flex floor, and beside a 110px label column plus
+     a 16px gap that does not fit: measured at 360, every plain .field-h clipped by 38px inside a
+     274px section. gap: 4px is the composer's and the contact editor's own number for the same
+     rotation — the base 16px was the space between a label and the control BESIDE it, and turned
+     sideways it exceeds the 12px between one row and the next. */
+  .field-h { flex-direction: column; align-items: stretch; gap: 4px; }
+  /* The reset is not about clipping — 110px never overflows anything — it is about the caption
+     wrapping inside a ribbon it no longer needs: measured at 320, "Confirm new password" is two
+     lines and a 87px row against one line and 68px with the column released. */
+  .field-h > label:first-child { width: auto; }
+
+  /* Title, search box and Add on one line ran 48px past a 289px header, and 24px still with the
+     rest of this block in place. */
+  .admin-list-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Measured at 360: the tile ran 285px past the list. Wrapping alone does not close it — the
+     address is `width: 40ch; flex-shrink: 0`, over 300px before the tile's own padding, so it
+     overflows a line it has to itself. Two pages already carry exactly this pair for themselves
+     (.identity-list, .connected-account-text); here it is the skin's own answer. */
+  .admin-list-item { flex-wrap: wrap; }
+  .admin-list-item-email { width: auto; max-width: 100%; }
+  /* No metric moves for this pair and the row is the same height either way — measured, the
+     actions already had the wrapped line to themselves. What moves is where they sit on it: 29-121
+     without, 29-276 with, i.e. the site's own right edge rather than under the address. */
+  .admin-list-item-actions { width: 100%; justify-content: flex-end; }
+
+  /* 28px squares, and the only route to editing or deleting a row. */
+  .admin-icon-btn { min-height: var(--touch); min-width: var(--touch); }
+
+  /* Measured 39px, and global: login, settings, toolbars, dialogs. It is also the only control on
+     the composer's two dialogs, which carry no ✕ to fall back on. This is what floors
+     .contacts-transfer's file actions, the contact card's three actions and .contact-save-btn —
+     all three are .btn, and their own rules were dropped as duplicates of this one. */
+  .btn { min-height: var(--touch); }
+
+  /* Every typed control at the floor, the same breadth as the 16px rule at the head of this block
+     and for a related reason: measured, a .field-h text box is 39px and a select 41px on their
+     9px padding. Checkboxes and radios are out — both are hit through the label around them — and
+     so is the quota range, which is dragged rather than tapped.
+     `input:not([type])` because an attribute selector matches the ATTRIBUTE and not the IDL
+     default: .panel-fullname-input on the Account page ships no `type` at all and stayed at 28px
+     under the list above. The same distinction is why the compose fixtures in
+     probes/mobile-layout.html now carry a real type= — a bare <input /> there hid a regression
+     this rule caused in the recipients box. */
+  input:not([type]), input[type="text"], input[type="password"], input[type="email"],
+  input[type="number"], input[type="search"], select, textarea {
+    min-height: var(--touch);
+  }
+
+  /* How far the switch's hit area bleeds above and below its 20px painted box: 12 + 20 + 12 is
+     the 44. A token rather than a literal because .rule-card-header's row-gap further down is
+     DERIVED from this number — a line wrapping under a switch has to clear the bleed — and two
+     literals would go stale independently the day this one is retuned. Anything else that puts a
+     control on a wrapped line under a .toggle-switch answers to it too. */
+  :root { --toggle-bleed: 12px; }
+
+  /* The painted switch stays 36x20: .toggle-track is `inset: 0`, so growing the box grows the
+     switch itself, and a 44px slab beside a 14px label is not the control this page draws. It
+     takes .reader-back's idiom instead — the bleed above and below, and 8px to the LEFT, make
+     44x44. The 8px is entirely leftward, not 4px each side, and that is measured rather than
+     tidy: a rightward overhang is counted by scrollWidth on every ancestor that does not own the
+     pseudo, and it read 4px of clip on .toggle-row and on .rule-card-header. Leftward overhang is
+     not counted at all in a left-to-right document, and there is somewhere for it to go at all
+     six call sites — .settings-content's 16px padding (GeneralPage, ApplicationTab),
+     .modal's 18px (AddEditUserModal), .admin-list-item's 12px (FolderManager),
+     .rule-card-header's 10px gap after the drag handle, and .toggle-row's 12px gap after its own
+     <label>, which toggles the same input anyway. Vertically the bleed reaches the row's own
+     label above, which is the same target again. */
+  .toggle-switch::before {
+    content: '';
+    position: absolute;
+    top: calc(-1 * var(--toggle-bleed));
+    right: 0;
+    bottom: calc(-1 * var(--toggle-bleed));
+    left: -8px;
+  }
+
+  /* Measured at 320: the 140px column left .admin-tab-content 133px of the screen, and the five
+     tabs stacked 261px tall inside it. Horizontal and WRAPPING rather than scrolling sideways:
+     the labels come to 561px against 313px, so a scroller would carry the last two off-screen
+     with nothing to scroll the active one back into view. It costs a three-line, 149px strip —
+     still 112px shorter than the column it replaces, and it hands the content 273px. */
+  .admin-modal-body { display: block; overflow: visible; }
+  .admin-tab-bar {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 0 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-tab { min-height: var(--touch); white-space: nowrap; }
+  .admin-tab-content { padding: 14px 0 0; overflow: visible; }
+
+  /* The alias tile's delete is an 18px glyph absolutely positioned at right: 8px, and the only
+     way to drop an alias. The tile is given the floor so a symmetric hit area fits inside it
+     rather than bleeding into the 10px grid gutter, and the pseudo takes `left: -26px; right: 0`
+     — 26px straight over the 28px `margin-right` that .alias-tile-domain already reserves for
+     this button, which is space nothing else claims and puts nothing outside the tile. */
+  .alias-tile { min-height: var(--touch); }
+  .alias-tile-delete::before {
+    content: '';
+    position: absolute;
+    top: -13px;
+    right: 0;
+    bottom: -13px;
+    left: -26px;
+  }
+
+  /* Count, the extended-rules switch with its label and help, and New rule, all on one line
+     against 273px. The count keeps the first line and the rest wraps under it.
+     The row-gap is derived from --toggle-bleed for the same reason as .rule-card-header below,
+     but it earns its place at 320 ONLY — and the width is the whole point, so the numbers are
+     here rather than a "see above". .extended-rules-toggle is pushed right by margin-left: auto
+     while New rule wraps to the LEFT end of the next line, so how much of the button the switch
+     stands over depends on how far right the toolbar pushes the switch:
+       360 — switch painted x 175-211, hit x 167-211, button x 28-138: 29px apart, never meet.
+       320 — switch painted x 135-171, hit x 127-171, button x 28-138: the PAINTED box already
+             shares 3px of the button's x-range and the hit rect shares 11px, so the vertical
+             bleed lands on it — measured, an 11x4px overlap of the button's top-right corner
+             with the base 8px gap, and 2px of clearance with this one.
+     A pseudo on a positioned element paints above static siblings, so those 44 square pixels
+     would have been the switch answering a tap meant for New rule. The cost is 6px of band
+     height (73 -> 79) at a width that does not need it. */
+  .rules-toolbar { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
+
+  /* Five 44px row actions plus their separator come to 237px on their own, so the header ran 46px
+     past a 283px card even with .rule-card-name shrunk to nothing by its own min-width: 0 — and
+     an ellipsised rule name is not what should pay for the buttons. The cluster takes a line of
+     its own and keeps the right edge every other row's actions sit on.
+     The row-gap is DERIVED from --toggle-bleed above, not chosen: the switch on line one sits
+     directly above the icon buttons on line two, and the base rule's 10px for both axes left the
+     switch's downward bleed 1px inside the first button — a pseudo on a positioned element paints
+     above static siblings, so it would have been the button losing the tap, not the switch. The
+     +2px is the switch's own sub-pixel centring on a line whose height is not an even multiple of
+     its 20px box: measured, 10px overlapped by 1.5px and this clears by 3. Retuning
+     --toggle-bleed retunes this with it. */
+  .rule-card-header { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
+  .rule-card-btns { margin-left: auto; }
+}

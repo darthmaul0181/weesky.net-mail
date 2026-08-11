@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import SelectionToolbar, { type SelectionToolbarProps } from './SelectionToolbar'
 
 const noop = { onRun: vi.fn() }
@@ -169,5 +170,34 @@ describe('SelectionToolbar', () => {
   it('disables the master checkbox when selection is disabled', () => {
     render(<SelectionToolbar {...props({ selectionDisabled: true })} />)
     expect(screen.getByRole('checkbox', { name: 'Select all' })).toBeDisabled()
+  })
+})
+
+describe('SelectionToolbar narrow states', () => {
+  it('marks itself as selecting exactly when rows are selected', () => {
+    const { container, rerender } = render(<SelectionToolbar {...props({ count: 0 })} />)
+    expect(container.querySelector('.selection-toolbar')!.className).not.toContain('is-selecting')
+    rerender(<SelectionToolbar {...props({ count: 3 })} />)
+    expect(container.querySelector('.selection-toolbar')!.className).toContain('is-selecting')
+  })
+
+  it('renders whatever the leading slot is handed', () => {
+    render(<SelectionToolbar {...props({ count: 0 })} leading={<button type="button">Menu</button>} />)
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeTruthy()
+  })
+
+  it('offers Refresh in the kebab when the layout supplies one', async () => {
+    const onRun = vi.fn()
+    render(<SelectionToolbar {...props({ count: 0 })} refresh={{ onRun }} />)
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }))
+    expect(onRun).toHaveBeenCalled()
+  })
+
+  // Nothing to refresh with means no entry: a dead row in the kebab reads as a broken action.
+  it('leaves Refresh out when no handler was supplied', async () => {
+    render(<SelectionToolbar {...props({ count: 0 })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.queryByRole('menuitem', { name: 'Refresh' })).toBeNull()
   })
 })

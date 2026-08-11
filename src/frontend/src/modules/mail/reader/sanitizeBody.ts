@@ -102,7 +102,9 @@ export function revealBlockedImages(html: string): string {
  * these set a floor for bodies that have none, and contain the two overflows that a body can
  * inflict on the layout regardless of its own intent.
  */
-export function renderBodyDocument(fragment: string, options: { dark?: boolean } = {}): string {
+export function renderBodyDocument(
+  fragment: string, options: { dark?: boolean; narrow?: boolean } = {},
+): string {
   // No filter here: darkenColours has already recoloured what the message declares. These are
   // the defaults for what it does not — the sheet behind a message that brings no background,
   // and the text colour of one that names no colour.
@@ -116,6 +118,11 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
   // it for one message, which is what makes a light touch the right one.
   const images = options.dark ? 'filter: brightness(0.85) saturate(0.9);' : ''
 
+  // 44px of side margin out of a 360px screen is a lot to spend on nothing.
+  const padding = options.narrow ? '12px 14px' : '18px 22px'
+  // iOS reflows a document's font sizes on its own unless told the scale is deliberate.
+  const scale = options.narrow ? '-webkit-text-size-adjust: 100%; text-size-adjust: 100%;' : ''
+
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8"><style>
@@ -123,10 +130,11 @@ export function renderBodyDocument(fragment: string, options: { dark?: boolean }
   html { background: ${sheet.background}; }
   body {
     margin: 0;
-    padding: 18px 22px;
+    padding: ${padding};
     background: ${sheet.background};
     color: ${sheet.text};
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    ${scale}
   }
   /* A wide image or a long unbroken URL — this mailbox is largely made of the latter — would
      otherwise scroll the body sideways. No height:auto - it recomputes every height from the

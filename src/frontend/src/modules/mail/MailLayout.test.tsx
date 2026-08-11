@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import { ApiError } from '../../api.js'
 import type { MailFolderNode } from './api/mailTypes'
-import { settle } from '../../test-utils'
+import { mockViewport, resetViewport, settle } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
 
 const mocks = vi.hoisted(() => ({
@@ -115,6 +115,9 @@ function renderAt(
   )
   return render(<MailLayout />, { wrapper })
 }
+
+// Every mockViewport call leaks its matchMedia stub into the rest of the file otherwise.
+afterEach(resetViewport)
 
 
 describe('MailLayout', () => {
@@ -503,10 +506,13 @@ describe('compose mode', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('')
   })
 
+  // Scoped to the column: the floating action carries the same label and is only hidden by CSS,
+  // which jsdom does not apply.
   it('opens the composer from the New message button in the folder column', async () => {
-    renderAt('/mail?folder=INBOX')
+    const { container } = renderAt('/mail?folder=INBOX')
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New message' }))
+    const column = container.querySelector('.mail-folders') as HTMLElement
+    fireEvent.click(await within(column).findByRole('button', { name: 'New message' }))
 
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
     expect(screen.getByTestId('compose-view')).toBeInTheDocument()
@@ -833,5 +839,71 @@ describe('searching from the layout', () => {
     await settle()
     expect(mocks.searchMessages).not.toHaveBeenCalled()
     expect(document.querySelector('.search-results-banner')).toBeNull()
+  })
+})
+
+// A phone gets one pane at a time, so `effectivePane` forces the `none` arrangement whatever the
+// account stored — and that arrangement holds no second pane, which is why no splitter is drawn.
+// The folder column moves behind the drawer instead of taking 240px of a 360px screen.
+describe('MailLayout on a phone', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders no splitter', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.pane-splitter')).toBeNull()
+  })
+
+  it('puts the folder column in a drawer', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.context-drawer .mail-folders')).toBeTruthy()
+  })
+
+  it('leaves the folder column inline on a desktop', async () => {
+    mockViewport('desktop')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.context-drawer')).toBeNull()
+    expect(container.querySelector('.mail-folders')).toBeTruthy()
+  })
+
+  // The reader draws its own action bar across the foot of the screen here, and the compose
+  // button is anchored 73px up from that same edge: leaving it there would put a 56px disc over
+  // the delete and the kebab. Writing stays one ← away, which the list screen still offers.
+  const opened = {
+    uid: 1, folderPath: 'INBOX', uidValidity: 1, subject: 'ouvert', fromName: '', fromAddress: 'a@b.c',
+    to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '<p>x</p>', textBody: 'x',
+    blockedImageCount: 0, attachments: [],
+  }
+
+  it('withholds the compose button while a message owns the screen', async () => {
+    mockViewport('phone')
+    mocks.getMailMessage.mockResolvedValue(opened)
+    const { container } = renderAt('/mail?folder=INBOX&uid=1')
+    await screen.findByText('ouvert')
+    expect(container.querySelector('.reader-actionbar')).toBeTruthy()
+    expect(container.querySelector('.floating-action')).toBeNull()
+  })
+
+  it('keeps it on the list screen', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await settle()
+    expect(container.querySelector('.floating-action')).toBeTruthy()
+  })
+
+  // A tablet at `none` gives the reader the screen too, but its header has the width to keep the
+  // cluster — and the drawer hides the folder column's own Compose, so the button is the only
+  // way to write from here.
+  it('leaves both alone on a tablet', async () => {
+    mockViewport('tablet')
+    mocks.getMailMessage.mockResolvedValue(opened)
+    const { container } = renderAt('/mail?folder=INBOX&uid=1', undefined, 'none')
+    await screen.findByText('ouvert')
+    expect(container.querySelector('.reader-actionbar')).toBeNull()
+    expect(container.querySelector('.floating-action')).toBeTruthy()
   })
 })

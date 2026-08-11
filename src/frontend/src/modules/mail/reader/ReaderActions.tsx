@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import Tooltip from '../../../components/Tooltip'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
@@ -29,6 +30,8 @@ interface Props {
   onForward: () => void
   /** A PrepareQuote round-trip is in flight — the quote actions hold until it lands. */
   preparing: boolean
+  /** The phone's foot-of-screen shape: five named cells instead of an icon cluster. */
+  bar?: boolean
 }
 
 /** Icon AND tooltip describe the action to come, not the current state — the validated design
@@ -37,9 +40,71 @@ interface Props {
 export default function ReaderActions({
   showColourToggle, originalColours, onToggleColours, seen, flagged, onToggleSeen, onToggleFlagged,
   deleteLabel, deleteDisabled, onDelete, actions,
-  onReply, onReplyAll, onForward, preparing,
+  onReply, onReplyAll, onForward, preparing, bar = false,
 }: Props) {
   const { t } = useTranslation('mail')
+
+  const colourEntry: MenuEntry = {
+    label: t(originalColours ? 'reader.matchTheme' : 'reader.originalColours'),
+    icon: originalColours ? <MoonIcon size={18} /> : <SunIcon size={18} />,
+    onSelect: onToggleColours,
+  }
+
+  const menuItems: MenuEntry[] = [
+    // The bar spends no cell on the toggle: it is conditional on the theme AND on the body being
+    // HTML, and a bar whose number of cells moves with either reads as a rendering fault.
+    ...(bar && showColourToggle ? [colourEntry, 'separator' as const] : []),
+    {
+      label: t(seen ? 'toolbar.markUnread' : 'toolbar.markRead'),
+      icon: seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />,
+      onSelect: onToggleSeen,
+    },
+    {
+      label: t(flagged ? 'list.unstar' : 'list.star'),
+      icon: <StarIcon filled={flagged} size={18} />,
+      onSelect: onToggleFlagged,
+    },
+    // A separator under nothing reads as a rendering fault, so it comes only with a group.
+    ...(actions.length ? ['separator' as const, ...actions] : []),
+  ]
+
+  if (bar) {
+    const cell = (
+      label: string, name: string, icon: ReactNode,
+      onClick: () => void, disabled = false, danger = false, title?: string,
+    ) => (
+      <button
+        type="button"
+        className={`reader-bar-item${danger ? ' is-danger' : ''}`}
+        aria-label={name}
+        title={title}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        {icon}
+        <span className="reader-bar-label">{label}</span>
+      </button>
+    )
+
+    return (
+      <div className="reader-actions is-bar">
+        {cell(t('reader.bar.reply'), t('reader.reply'), <ReplyIcon size={21} />, onReply, preparing)}
+        {cell(t('reader.bar.replyAll'), t('reader.replyAll'), <ReplyAllIcon size={21} />, onReplyAll, preparing)}
+        {cell(t('reader.bar.forward'), t('reader.forward'), <ForwardIcon size={21} />, onForward, preparing)}
+        {/* The visible word stays generic where the accessible name does not: inside the trash
+            this expunges, and one cell has no room to say so twice. */}
+        {cell(t('reader.bar.delete'), deleteLabel, <TrashIcon size={21} />, onDelete, deleteDisabled,
+          true, deleteDisabled ? t('actions.noTrashFolder') : undefined)}
+        <DropdownMenu
+          direction="up"
+          ariaLabel={t('reader.messageActions')}
+          className="reader-bar-item"
+          trigger={<><KebabIcon size={21} /><span className="reader-bar-label">{t('reader.bar.more')}</span></>}
+          items={menuItems}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="reader-actions">
@@ -88,20 +153,7 @@ export default function ReaderActions({
         ariaLabel={t('reader.messageActions')}
         className="action-btn"
         trigger={<KebabIcon size={18} />}
-        items={[
-          {
-            label: t(seen ? 'toolbar.markUnread' : 'toolbar.markRead'),
-            icon: seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />,
-            onSelect: onToggleSeen,
-          },
-          {
-            label: t(flagged ? 'list.unstar' : 'list.star'),
-            icon: <StarIcon filled={flagged} size={18} />,
-            onSelect: onToggleFlagged,
-          },
-          // A separator under nothing reads as a rendering fault, so it comes only with a group.
-          ...(actions.length ? ['separator' as const, ...actions] : []),
-        ]}
+        items={menuItems}
       />
     </div>
   )

@@ -3,10 +3,11 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { settle } from '../../../test-utils'
+import { mockViewport, resetViewport, settle } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
 import MessageReader from './MessageReader'
+import { formatReaderDateShort } from './formatReaderDate'
 
 const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
@@ -1300,6 +1301,8 @@ describe('MessageReader', () => {
       // Named in full: the header carries its own shorter "Unsubscribe" link alongside.
       expect(screen.getByRole('link', { name: 'Unsubscribe from this mailing list' })).toBeInTheDocument()
       expect(container.querySelector('.reader-recipients')).toBeNull()
+      // Subject and spam are phone-only rows: the desktop header shows both in full already.
+      expect(screen.queryByText('Subject:')).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Hide details' })).toHaveAttribute('aria-expanded', 'true')
     })
 
@@ -1705,6 +1708,124 @@ describe('MessageReader', () => {
 
       await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not prepare the message'))
       expect(screen.queryByTestId('compose-state')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('the phone header', () => {
+    const scored = {
+      ...detail,
+      spamScore: { score: 7, threshold: 16, raw: 'X-Spamd-Result: default: False [7.00 / 16.00];' },
+    }
+
+    beforeEach(() => { mockViewport('phone') })
+    afterEach(() => { resetViewport() })
+
+    it('moves the date onto the recipients line, in its short form', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      const row = container.querySelector('.reader-to-row') as HTMLElement
+      expect(row).toHaveTextContent('Mick')
+      expect(row.textContent).toContain(formatReaderDateShort(detail.date))
+      // The long form is what wrapped the sender line in two; the month name is its tell, and it
+      // reads July in every timezone this date can land in.
+      expect(container.querySelector('.reader-from .reader-date')).toBeNull()
+      expect(screen.queryByText(/July/)).not.toBeInTheDocument()
+    })
+
+    it('keeps the date on screen when the message names no recipient', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, to: [] })
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-to-row')!.textContent)
+        .toBe(formatReaderDateShort(detail.date))
+    })
+
+    it('folds the spam gauge behind the chevron', async () => {
+      mocks.getMailMessage.mockResolvedValue(scored)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(screen.queryByText('7.0 / 16.0')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+
+      expect(container.querySelector('.reader-details')).toHaveTextContent('7.0 / 16.0')
+    })
+
+    // The h1 keeps the back button and the priority badge as children, so the truncation has to
+    // go on a leaf of its own — the stylesheet holds the rule, this holds the element it needs.
+    it('wraps the subject in its own element, and repeats it in the details', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-subject-text')).toHaveTextContent('Re: facture')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+
+      expect(container.querySelector('.reader-details')).toHaveTextContent('Subject:')
+    })
+
+    // The pill cost a whole line: it never fitted beside a mailing list's own name, and the grid
+    // it moves behind already listed it.
+    it('drops the unsubscribe pill, keeping the details row it duplicated', async () => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, unsubscribeUrl: 'https://news.x.be/unsub' })
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.unsub-btn')).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+
+      expect(screen.getByRole('link', { name: 'Unsubscribe from this mailing list' }))
+        .toHaveAttribute('href', 'https://news.x.be/unsub')
+    })
+
+    it('honours the setting that turns the gauge off', async () => {
+      mocks.getMailMessage.mockResolvedValue(scored)
+      mocks.getPreferences.mockResolvedValue({ 'mail.showSpamScore': 'false' })
+
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+
+      expect(screen.queryByText('Spam score:')).not.toBeInTheDocument()
+    })
+
+    // The cluster leaves the header for the foot of the column: it costs a whole line up there,
+    // since the header stacks below 480px, and at the bottom it lands where the thumb already is.
+    // `bottomActions` is the caller's call rather than this component's, because only MailLayout
+    // knows the pane — the same message beside a list on a tablet keeps its header cluster.
+    it('moves the actions to a bottom bar when the caller asks for one', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(
+        <MessageReader folderPath="INBOX" uid={2} onBack={vi.fn()} bottomActions />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-header .reader-actions')).toBeNull()
+      const bar = container.querySelector('.reader-actionbar')
+      expect(bar).not.toBeNull()
+      expect(bar!.querySelector('.reader-actions')).not.toBeNull()
+      expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    })
+
+    it('keeps the actions in the header when it is not asked for one', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} onBack={vi.fn()} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-header .reader-actions')).not.toBeNull()
+      expect(container.querySelector('.reader-actionbar')).toBeNull()
     })
   })
 })

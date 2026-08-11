@@ -9,7 +9,8 @@
     "send": "Send",
     "sending": "Sending…",
     "saveDraft": "Save draft",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "moreActions": "More actions"
   },
   "fields": {
     "from": "From",
@@ -99,7 +100,9 @@
       "center": "Center",
       "right": "Right",
       "justify": "Justify"
-    }
+    },
+    "moreTools": "More formatting tools",
+    "fewerTools": "Fewer formatting tools"
   },
   "toast": {
     "sent": "Message sent",

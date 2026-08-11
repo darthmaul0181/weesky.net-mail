@@ -174,6 +174,15 @@ of each of those rules — `.modal-folders`' band stack, `.identity-combo`, the 
 The floor is 24rem rather than the 22rem a bare minimum would suggest, so the dialogs sitting at 380px
 today do not visibly narrow.
 
+**Amended 2026-08-09 (the mobile slice): below 640px the box takes the screen.** `min-width` always beats
+`max-width`, so on a 360px phone the 24rem floor put a 384px dialog in the 312px the overlay's padding
+leaves — and since the overlay carries `overflow-y: auto`, CSS Overflow 3 forces the other axis to `auto`
+too, so the symptom was never a scrolling page but a dialog wider than the screen inside an overlay
+scrolling sideways to reach it. `modal.css`'s `@media (max-width: 639px)` block therefore drops
+`--modal-w` to 0 and gives `.modal` `width: 100%` with 18px of padding and a 12px overlay inset. It is the
+one width in this design that is a pixel count rather than a consequence of the content, and it is bounded:
+at every other width the contract above stands unchanged, and the scroll stays the overlay's.
+
 **The control rule is scoped under `.modal`, never applied globally.** The settings pages use
 `.field-h.is-setting`, where the project's own note requires a `<select>` to size to its widest option; an
 unscoped selector would overwrite that with a fixed measure, and `AppearancePage`, `GeneralPage` and the

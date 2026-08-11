@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
+import FloatingAction from '../../components/FloatingAction'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
+import { useViewport } from '../../hooks/useViewport'
+import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
+import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from '../mail/split/PaneSplitter'
 import { usePaneSize } from '../mail/split/usePaneSize'
@@ -46,6 +50,8 @@ export default function ContactsLayout() {
   const scope: ContactScope = params.get('scope') === 'favorites' ? 'favorites' : 'all'
   const selectedId = params.get('id')
 
+  const phone = useViewport() === 'phone'
+  const drawer = useContextDrawer()
   const [listWidth, setListWidth] = usePaneSize('contacts.split.right', 380, 240)
   const [pendingDelete, setPendingDelete] = useState<Contact | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -90,6 +96,17 @@ export default function ContactsLayout() {
     setParams(scope === 'favorites' ? { scope, id } : { id })
   }
 
+  // Dropping the open contact is what puts the list back on screen where the card had replaced it.
+  // The scope is read off the URL rather than closed over, so the callback stays stable and the
+  // card's Escape listener is bound once instead of on every render.
+  const backToList = useCallback(() => {
+    setParams(previous => {
+      const next: Record<string, string> = {}
+      if (previous.get('scope') === 'favorites') next.scope = 'favorites'
+      return next
+    })
+  }, [setParams])
+
   async function save(draft: ContactDraft) {
     setSaveError(null)
     try {
@@ -125,21 +142,27 @@ export default function ContactsLayout() {
     })
   }
 
+  const scopeColumn = (
+    <div className="contacts-scopes-column">
+      <div className="contacts-scopes-add">
+        <button type="button" className="btn btn-primary contacts-add-btn"
+          onClick={() => navigate('/contacts/new')}>
+          {t('layout.add')}
+        </button>
+      </div>
+      <div className="contacts-scopes-scroll">
+        <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope} />
+      </div>
+      <ContactsTransfer contacts={contacts}
+        onError={message => addToast(message, 'error')} />
+    </div>
+  )
+
   return (
     <div className="contacts-layout">
-      <div className="contacts-scopes-column">
-        <div className="contacts-scopes-add">
-          <button type="button" className="btn btn-primary contacts-add-btn"
-            onClick={() => navigate('/contacts/new')}>
-            {t('layout.add')}
-          </button>
-        </div>
-        <div className="contacts-scopes-scroll">
-          <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope} />
-        </div>
-        <ContactsTransfer contacts={contacts}
-          onError={message => addToast(message, 'error')} />
-      </div>
+      {drawer.inDrawer
+        ? <ContextDrawer open={drawer.open} onClose={drawer.close}>{scopeColumn}</ContextDrawer>
+        : scopeColumn}
 
       {inEditor ? (
         <div className="contacts-editor" data-testid="contact-editor">
@@ -154,22 +177,36 @@ export default function ContactsLayout() {
           )}
         </div>
       ) : (
+        /* One pane at a time on a phone: 360px split between a tile list and a reading card
+           leaves neither readable. Elsewhere the two share the row as they always have. */
         <div className="contacts-row">
-          <div className="contacts-list" style={{ width: listWidth }} data-testid="contact-list">
+          {/* Hidden, never unmounted — MailLayout's rule for the same swap: the search query is
+              ContactList's own state and the scroll offset is the DOM's, and opening a contact
+              and coming back would throw both away. */}
+          <div className={`contacts-list${phone && selectedId ? ' is-hidden' : ''}`}
+            style={phone ? undefined : { width: listWidth }} data-testid="contact-list">
             {isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
             {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
             {contacts && (
               <ContactList contacts={scoped} selectedId={selectedId} onSelect={select}
+                leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
                 onEdit={id => navigate(`/contacts/${id}/edit`)} />
             )}
           </div>
-          <PaneSplitter orientation="vertical" size={listWidth} defaultSize={380} min={240}
-            reserve={320} onResize={setListWidth} />
-          <div className="contacts-card" data-testid="contact-card">
-            <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
-              onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)} />
-          </div>
+          {!phone && (
+            <PaneSplitter orientation="vertical" size={listWidth} defaultSize={380} min={240}
+              reserve={320} onResize={setListWidth} />
+          )}
+          {!(phone && !selectedId) && (
+            <div className="contacts-card" data-testid="contact-card">
+              {/* Withheld while the confirm is open so its Escape does not back out from under
+                  the dialog — the ← is behind the overlay by then and comes back with it. */}
+              <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
+                onBack={phone && !pendingDelete ? backToList : undefined}
+                onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)} />
+            </div>
+          )}
         </div>
       )}
 
@@ -177,6 +214,14 @@ export default function ContactsLayout() {
         <DeleteConfirmModal entityLabel={displayNameOf(pendingDelete)}
           loading={deleteContact.isPending}
           onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />
+      )}
+
+      {/* Never over the editor: that surface already is the create form, and the button would
+          navigate out of a half-typed contact with nothing to ask about it. */}
+      {!inEditor && (
+        <FloatingAction label={t('layout.add')} onClick={() => navigate('/contacts/new')}>
+          <PersonPlusIcon size={22} />
+        </FloatingAction>
       )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />

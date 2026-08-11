@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import ArrowLeftIcon from '../../icons/ArrowLeftIcon'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
@@ -7,6 +9,8 @@ import type { Contact } from './contactTypes'
 
 interface Props {
   contact: Contact | null
+  /** Set only where the card has replaced the list — a phone. It draws the ← and binds Escape. */
+  onBack?: () => void
   onEdit: (id: string) => void
   onDelete: (contact: Contact) => void
   onToggleFavorite: (contact: Contact) => void
@@ -19,15 +23,42 @@ interface Props {
  * Every row renders only when its datum exists: an empty labelled row reads as data that went
  * missing rather than data that was never entered.
  */
-export default function ContactCard({ contact, onEdit, onDelete, onToggleFavorite }: Props) {
+export default function ContactCard({ contact, onBack, onEdit, onDelete, onToggleFavorite }: Props) {
   const { t } = useTranslation('contacts')
+
+  // Escape mirrors the ← button, MessageReader's arrangement, and like it exists only where the
+  // card has replaced the list. The layout withholds onBack while its delete confirm is open, so
+  // Escape never backs out from under the dialog.
+  useEffect(() => {
+    if (!onBack) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onBack() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onBack])
+
+  const back = onBack ? (
+    <button type="button" className="contact-card-back" aria-label={t('card.back')}
+      title={t('card.back')} onClick={onBack}>
+      <ArrowLeftIcon size={16} />
+    </button>
+  ) : null
+
   if (contact == null) {
-    return <p className="contacts-empty contacts-card-invite">{t('card.invite')}</p>
+    // The ← has to survive the empty card: an ?id= naming a contact the book no longer holds
+    // lands here, and on a phone this invite is the whole screen.
+    if (!back) return <p className="contacts-empty contacts-card-invite">{t('card.invite')}</p>
+    return (
+      <div className="contact-card">
+        <div className="contact-card-head">{back}</div>
+        <p className="contacts-empty contacts-card-invite">{t('card.invite')}</p>
+      </div>
+    )
   }
 
   return (
     <div className="contact-card">
       <div className="contact-card-head">
+        {back}
         <h2 className="contact-card-name">{displayNameOf(contact)}</h2>
       </div>
 

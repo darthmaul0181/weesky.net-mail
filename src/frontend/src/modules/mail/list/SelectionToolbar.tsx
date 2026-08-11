@@ -11,6 +11,7 @@ import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
 import SearchIcon from '../../../icons/SearchIcon'
 import StarIcon from '../../../icons/StarIcon'
+import LoaderIcon from '../../../icons/LoaderIcon'
 
 export interface ToolbarAction {
   onRun: () => void
@@ -41,6 +42,10 @@ export interface SelectionToolbarProps {
   starredDisabled?: boolean
   /** All-folders results: rows carry no checkbox, so the master must not promise one. */
   selectionDisabled?: boolean
+  /** The drawer's hamburger below 1024px, nothing on desktop. */
+  leading?: ReactNode
+  /** Refresh, which loses its home in the folder column once that column is a drawer. */
+  refresh?: ToolbarAction
 }
 
 /** Dumb band: renders selection state and calls handlers. All role/enablement logic is
@@ -73,6 +78,10 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   }
 
   const kebab: MenuEntry[] = [
+    ...(props.refresh
+      ? [{ label: t('folders.refresh'), icon: <LoaderIcon size={18} />, onSelect: props.refresh.onRun },
+        'separator' as const]
+      : []),
     kebabItem(t('toolbar.markRead'), <MailOpenIcon size={18} />, props.markRead),
     kebabItem(t('toolbar.markUnread'), <MailIcon size={18} />, props.markUnread),
     'separator',
@@ -84,16 +93,21 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   ]
 
   return (
-    <div className="selection-toolbar">
-      <input
-        ref={master}
-        type="checkbox"
-        className="selection-master"
-        aria-label={t('toolbar.selectAll')}
-        checked={allSelected}
-        onChange={onToggleAll}
-        disabled={props.selectionDisabled}
-      />
+    <div className={`selection-toolbar${count > 0 ? ' is-selecting' : ''}`}>
+      {props.leading}
+      {/* The finger-sized target on a phone is this label, not the box: a native checkbox paints
+          its whole border box, so sizing it to 44px draws a slab twice its neighbours' weight. */}
+      <label className="selection-master-hit">
+        <input
+          ref={master}
+          type="checkbox"
+          className="selection-master"
+          aria-label={t('toolbar.selectAll')}
+          checked={allSelected}
+          onChange={onToggleAll}
+          disabled={props.selectionDisabled}
+        />
+      </label>
       <span className="selection-heading">
         <span className="selection-title">
           {count > 0 ? t('toolbar.selected', { count }) : title}
@@ -112,18 +126,18 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         </button>
       </span>
       <div className="selection-actions">
-        <button type="button" className="selection-btn" aria-label={t('toolbar.archive')} {...actionProps(props.archive, t('toolbar.archive'))}>
+        <button type="button" className="selection-btn selection-archive" aria-label={t('toolbar.archive')} {...actionProps(props.archive, t('toolbar.archive'))}>
           <ArchiveIcon size={20} />
         </button>
-        <button type="button" className="selection-btn" aria-label={t('toolbar.junk')} {...actionProps(props.junk, t('toolbar.junk'))}>
+        <button type="button" className="selection-btn selection-junk" aria-label={t('toolbar.junk')} {...actionProps(props.junk, t('toolbar.junk'))}>
           <JunkIcon size={20} />
         </button>
-        <button type="button" className="selection-btn is-danger" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
+        <button type="button" className="selection-btn is-danger selection-delete" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
           <TrashIcon size={20} />
         </button>
         <button
           type="button"
-          className={`selection-btn${props.searchOpen ? ' is-active' : ''}`}
+          className={`selection-btn selection-search${props.searchOpen ? ' is-active' : ''}`}
           aria-label={t('toolbar.search')}
           title={t('toolbar.search')}
           onClick={props.onToggleSearch}

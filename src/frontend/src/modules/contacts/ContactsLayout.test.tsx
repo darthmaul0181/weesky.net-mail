@@ -2,9 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import ContactsLayout from './ContactsLayout'
 import type { Contact } from './contactTypes'
+import { mockViewport, resetViewport, settle } from '../../test-utils'
+
+afterEach(resetViewport)
 
 vi.mock('../../api.js', () => ({
   api: {
@@ -351,5 +354,165 @@ describe('the transfer footer', () => {
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
 
     await waitFor(() => expect(api.getContacts).toHaveBeenCalled())
+  })
+})
+
+/** `ContactsLayout` holds a loading line until `useContacts()` answers, and every case below reads
+    something the book produced. `settle()` drains a single macrotask — it covered that query on an
+    idle machine and raced it under load, which is exactly the distinction CLAUDE.md draws between
+    the two; it stays the right tool only where the assertion is that nothing happened. */
+const bookLoaded = () => screen.findAllByText(/^(Alice|Bruno)$/)
+
+describe('ContactsLayout on a phone', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.getContacts.mockResolvedValue({
+      contacts: [
+        contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+        contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+      ],
+    })
+  })
+
+  it('puts the scope column in a drawer and renders no splitter', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await bookLoaded()
+
+    expect(container.querySelector('.context-drawer .contacts-scopes-column')).toBeTruthy()
+    // Once, not twice: an implementation drawing it inline as well would pass the line above.
+    expect(container.querySelectorAll('.contacts-scopes-column')).toHaveLength(1)
+    expect(container.querySelector('.pane-splitter')).toBeNull()
+  })
+
+  it('shows the list alone until a contact is picked', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await bookLoaded()
+
+    expect(container.querySelector('[data-testid="contact-list"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
+    expect(container.querySelector('[data-testid="contact-card"]')).toBeNull()
+  })
+
+  // The other half of taking turns: the card owns the screen once an id is in the URL, or the two
+  // would share a 360px row and neither would be readable. Hidden, never unmounted — MailLayout's
+  // rule, and the next case is what it buys.
+  it('gives the card the screen once a contact is picked', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await bookLoaded()
+
+    expect(container.querySelector('[data-testid="contact-card"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+  })
+
+  // The search lives in ContactList's own state: unmounting the column to show the card throws it
+  // away, and the user comes back to the whole book with their query gone.
+  it('keeps the list search across opening a contact and coming back', async () => {
+    mockViewport('phone')
+    renderAt('/contacts')
+    // findBy, not settle(): the heading holding this box only exists once `useContacts()` has
+    // answered, and settle() drains one macrotask — it covered the query on this machine and
+    // raced it under load, which is the distinction CLAUDE.md draws between the two.
+    await userEvent.type(await screen.findByLabelText(/search contacts/i), 'bru')
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Bruno'))
+    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+
+    expect(screen.getByLabelText(/search contacts/i)).toHaveValue('bru')
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+  })
+
+  // The card replaced the list, and with it the hamburger: without a ← the only ways out are the
+  // browser's own Back and the tab bar.
+  it('gives the card a way back, on the button and on Escape', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await bookLoaded()
+    expect(screen.getByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+    expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
+
+    await userEvent.click(screen.getByText('Bruno'))
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
+  })
+
+  // A scope survives the trip too: backing out of a favourite must not silently widen the list to
+  // the whole book.
+  it('keeps the scope when the card is closed', async () => {
+    mockViewport('phone')
+    renderAt('/contacts?scope=favorites&id=a')
+    await bookLoaded()
+
+    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.queryByText('Bruno')).not.toBeInTheDocument()
+  })
+
+  // The confirm owns Escape while it is open: backing out from under it would leave a dialog
+  // acting on a contact the screen no longer shows.
+  it('withholds the card back while the delete confirm is open', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await bookLoaded()
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+  })
+
+  // Desktop never draws it: the list is right there, so a ← would be a second way to do nothing.
+  it('draws no back control on a desktop', async () => {
+    mockViewport('desktop')
+    renderAt('/contacts?id=b')
+    await bookLoaded()
+
+    expect(screen.queryByRole('button', { name: /back to the list/i })).not.toBeInTheDocument()
+  })
+
+  // The hamburger is the only way back to the scopes once the column is behind the drawer, and it
+  // is the list heading that has to carry it — the column it used to sit beside is gone.
+  it('hands the list the hamburger and opens the drawer with it', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await bookLoaded()
+
+    await userEvent.click(screen.getByRole('button', { name: /open navigation/i }))
+
+    expect(container.querySelector('.context-drawer.is-open')).toBeTruthy()
+  })
+
+  // The column's own Add button is behind the drawer from here down, so the floating one is the
+  // module's primary action — except over the editor, which is already that surface.
+  it('floats the add action outside the editor and withholds it inside', async () => {
+    mockViewport('phone')
+    const { container, unmount } = renderAt('/contacts')
+    await bookLoaded()
+    expect(container.querySelector('.floating-action')).toBeTruthy()
+    unmount()
+
+    const editor = renderAt('/contacts/new')
+    await settle()
+
+    expect(editor.container.querySelector('.floating-action')).toBeNull()
+  })
+
+  it('keeps the scope column inline on a desktop', async () => {
+    mockViewport('desktop')
+    const { container } = renderAt('/contacts')
+    await bookLoaded()
+
+    expect(container.querySelector('.context-drawer')).toBeNull()
+    expect(container.querySelector('.contacts-layout > .contacts-scopes-column')).toBeTruthy()
+    expect(container.querySelector('.pane-splitter')).toBeTruthy()
   })
 })
