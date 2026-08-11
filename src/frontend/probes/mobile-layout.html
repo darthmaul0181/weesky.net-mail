@@ -178,6 +178,39 @@
       return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
     }
 
+    // WCAG relative luminance and the contrast ratio built on it. Here because a token can be
+    // inherited from the wrong chain and come out invisible with every geometric metric clean:
+    // `.reader-bar-item.is-danger` took `color: inherit` and got the reader column's `--text`,
+    // which measured 1.09:1 on the action bar's rail background in the light theme and 14.41 in
+    // dark — a defect that shipped, and that only one of the two themes could have shown.
+    function luminance(colour) {
+      const [r, g, b] = colour.match(/[\d.]+/g).slice(0, 3).map(Number)
+      const channel = c => (c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+      return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    }
+
+    /** The nearest ancestor painting a background, which is what a foreground actually sits on. */
+    function paintedBackground(el) {
+      for (let node = el; node; node = node.parentElement) {
+        const bg = getComputedStyle(node).backgroundColor
+        const alpha = Number(bg.match(/[\d.]+/g)?.[3] ?? 1)
+        if (alpha > 0) return bg
+      }
+      return 'rgb(255, 255, 255)'
+    }
+
+    /** Every match's foreground against what it is painted on, rounded to two decimals. */
+    function contrastOf(root, selector) {
+      return [...root.querySelectorAll(selector)]
+        .filter(el => el.getClientRects().length)
+        .map(el => {
+          const fg = luminance(getComputedStyle(el).color)
+          const bg = luminance(paintedBackground(el))
+          const [light, dark] = fg > bg ? [fg, bg] : [bg, fg]
+          return Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100
+        })
+    }
+
     // An element's padding box — its border box inset by its own border — which is the edge both
     // a positioned descendant's containing block AND clientWidth/scrollWidth are measured from.
     // (clientWidth excludes border, and CSSOM View's scrollWidth algorithm sizes the scrollable
@@ -246,7 +279,7 @@
     function measure() {
       const stage = document.getElementById('stage')
       const floor = touchFloor()
-      const report = CASES.map(({ name, html, touch, overlap, height }) => {
+      const report = CASES.map(({ name, html, touch, overlap, height, contrast }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
         // Only what is actually drawn: a control a query hides has no box, and counting its 0px
@@ -352,6 +385,22 @@
           // question the width metrics above cannot ask. -1 means the selector matched nothing.
           ...(height
             ? { height: Math.round(stage.querySelector(height)?.getBoundingClientRect().height ?? -1) }
+            : {}),
+          // `contrast: selector` reports EVERY match's ratio against the background it is actually
+          // painted on, both themes in one run — the case is drawn twice, since a token can be
+          // legible in one and invisible in the other and reading only the active theme is how
+          // that ships. 4.5 is the floor for the small text these cases hold; nothing fails
+          // automatically, the numbers are there to be read like `height` is.
+          ...(contrast
+            ? {
+              contrast: Object.fromEntries(['light', 'dark'].map(theme => {
+                const previous = doc.dataset.theme
+                doc.dataset.theme = theme
+                const ratios = contrastOf(stage, contrast)
+                doc.dataset.theme = previous
+                return [theme, ratios.length ? Math.min(...ratios) : 'none rendered']
+              })),
+            }
             : {}),
         }
       })
@@ -665,6 +714,10 @@
         html: readerBar({ width }),
         touch: '.reader-bar-item',
         height: '.reader-actionbar',
+        // The one case in this file that reads colour, and it earned it: the delete cell shipped
+        // at 1.09:1 in the light theme, having taken `color: inherit` from the reader column
+        // instead of the band it sits on. Both themes, worst cell — dark alone read 14.41.
+        contrast: '.reader-bar-item',
       })
     }
     // 320 (iPhone SE 1st gen, an Android split-screen pane) needs no "(read at …)" annotation the

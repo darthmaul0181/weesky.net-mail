@@ -872,8 +872,14 @@
 
 /* The delete cell keeps its class and deliberately not the red: `--danger` on `--rail-bg` measures
    3.28:1 in the light theme (6.53 in dark), which is under the floor for an 11px label — and a
-   colour that only appears in one theme is worse than none. The trash and the word carry it. */
-.reader-bar-item.is-danger { color: inherit; }
+   colour that only appears in one theme is worse than none. The trash and the word carry it.
+   **The token is named, never `inherit`**, and that was a shipped defect: `inherit` takes the
+   parent's colour, and this band's parent chain is the reader column, so the cell got `--text` —
+   measured at 1.09:1 against `--rail-bg` in the light theme, invisible, while dark's `--text`
+   happened to land at 14.41 and hid it from anyone testing in one theme. This band is the only
+   place in the app where content sits on the rail's background outside the rail itself, so
+   nothing else was there to make the mistake obvious. */
+.reader-bar-item.is-danger { color: var(--rail-fg); }
 
 .reader-bar-label {
   max-width: 100%;
