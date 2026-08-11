@@ -201,6 +201,19 @@ describe('buildDraftSeed', () => {
     expect(buildDraftSeed({ ...opened, priority: 'high' }, [], ref, 'primary').priority).toBe('high')
   })
 
+  // The API drops a null field entirely (JsonIgnoreCondition.WhenWritingNull), so an HTML draft
+  // arrives with no textBody at all. Read as `undefined` it fails ComposeView's `text === null`
+  // test and opens the plain-text textarea on an empty value, discarding the draft's body.
+  it('reads an absent textBody as HTML, the way the wire actually sends it', () => {
+    const htmlDraft: OpenedDraft = { ...opened }
+    delete htmlDraft.textBody
+    expect(buildDraftSeed(htmlDraft, [], ref, 'primary').text).toBeNull()
+  })
+
+  it('opens a text draft in text mode', () => {
+    expect(buildDraftSeed({ ...opened, textBody: 'plain' }, [], ref, 'primary').text).toBe('plain')
+  })
+
   // A draft keeps no headers from whatever it was a reply to, so there is nothing to carry.
   it('carries no name hints', () => {
     expect(buildDraftSeed(opened, [], ref, 'primary').nameHints).toEqual({})

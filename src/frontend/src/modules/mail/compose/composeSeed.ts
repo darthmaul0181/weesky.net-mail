@@ -149,7 +149,7 @@ export function buildDraftSeed(
     to: opened.to, cc: opened.cc, bcc: opened.bcc,
     subject: opened.subject,
     html: absolutizeStagedUrls(opened.htmlBody, opened.attachments.map(a => a.id), accountId),
-    text: opened.textBody,
+    text: opened.textBody ?? null,
     fromAddress: owned?.address ?? null,
     attachments: opened.attachments,
     inReplyTo: opened.inReplyTo,
