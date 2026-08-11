@@ -966,7 +966,26 @@ a.dropdown-item { text-decoration: none; }
     font-size: 11px;
   }
 
-  .bottom-nav-item.is-active { color: var(--rail-item-active-fg); }
+  /* The rail's own selected pill, both tokens together — taking the foreground ALONE was a shipped
+     defect, and it failed in 9 of the 16 palette/mode combinations. `--rail-item-active-fg` is
+     designed against the `--rail-item-active` FILL, never against the band: on the bare
+     `--rail-bg` it computes 1.04:1 in night dark (#1a0f0b on #0f1626 — the black strokes that were
+     reported), 1.02 in forest dark, 1.04 in slate and plum dark, 1.06 in ink dark, and light mode
+     is no better where the pill's fg is not white — 1.45 in classic, 1.28 in plum, 1.5 in forest.
+     Reading the pair AS a pair is what makes it right everywhere by construction: 13 of 16 clear
+     4.5, and the three that do not (night light 3.35, indigo dark 2.80, azure dark 2.43) are the
+     identical white-on-accent the desktop rail already ships, so this cell is exactly as legible
+     as the rail item it mirrors and a retune of that pair moves both. `--rail-item-active` as a
+     COLOUR was the other candidate and the numbers rejected it: slate light 2.37, indigo light
+     2.36, azure light 2.69, ink light 3.59 — and borrowing a background role for a foreground is
+     the very substitution that caused this. All sixteen were computed off the palette files
+     directly, not in a browser; see the note on `contrast` in probes/mobile-layout.html for why
+     that distinction turned out to matter. The fill takes the whole cell rather than an inset
+     pill: a margin here would shrink a 56px touch target. */
+  .bottom-nav-item.is-active {
+    background: var(--rail-item-active);
+    color: var(--rail-item-active-fg);
+  }
 
   .bottom-nav-label {
     max-width: 100%;

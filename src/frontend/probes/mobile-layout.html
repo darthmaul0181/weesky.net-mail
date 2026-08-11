@@ -193,6 +193,16 @@
     // `.actionbar-item.is-danger` took `color: inherit` and got the reader column's `--text`,
     // which measured 1.09:1 on the action bar's rail background in the light theme and 14.41 in
     // dark — a defect that shipped, and that only one of the two themes could have shown.
+    //
+    // CAVEAT, and it voids every number this metric produces when it applies: a browser EXTENSION
+    // that repaints pages — Dark Reader is the one that caught us — rewrites the used colours
+    // while leaving the custom properties themselves untouched, so `getPropertyValue('--rail-bg')`
+    // still reads `#182238` while the element it paints computes `rgb(24, 26, 27)`, Dark Reader's
+    // own `#181a1b`. Every case then reports the SAME ratio (14.02 across the whole file in the
+    // run that found this), which is the tell: identical numbers in both themes and across cases
+    // that hold different colours mean the extension's palette is being measured, not the app's.
+    // Geometry is unaffected — only `contrast` is. Drive this file in a clean profile, or settle a
+    // colour question off the palette files in Node, which is how the tab bar's was settled.
     function luminance(colour) {
       const [r, g, b] = colour.match(/[\d.]+/g).slice(0, 3).map(Number)
       const channel = c => (c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
@@ -1214,6 +1224,31 @@
     // `.actionbar` measured above and `ContactsLayout` withholds the button entirely while that
     // band is on screen, so the question is answered in React and guarded there — a geometry case
     // cannot measure an element that is not rendered. Bring it back the day the button returns.
+
+    // The tab bar, here for `contrast` rather than for geometry: the active tab took
+    // `--rail-item-active-fg` alone, a foreground designed against the `--rail-item-active` fill
+    // and not against the band, so it painted near-black strokes on a near-black bar — 1.04:1 in
+    // night dark, and failing in 9 of the 16 palette/mode combinations. Nothing about that is
+    // visible to `overflow`, `clipped`, `smallest` or `height`; it was reported from a phone, not
+    // from here, and READ THE CAVEAT ON `contrast` IN THE HEADER before trusting these two numbers
+    // — the run that shipped this case could not see the defect either. The sixteen combinations
+    // were settled off the palette files in Node instead; the table is in shell.css beside the
+    // rule that won. This file links `theme-night.css` alone, so the case can only ever speak for
+    // night's two modes whatever else is fixed. `.bottom-nav-item` is a touch target too: the
+    // cells are the 56px the action bands above mirror.
+    CASES.push({
+      name: 'bottom-nav-360',
+      html: `
+        <nav class="app-bottom-nav">
+          <a class="bottom-nav-item"><svg width="22" height="22"></svg><span class="bottom-nav-label">Courrier</span></a>
+          <a class="bottom-nav-item"><svg width="22" height="22"></svg><span class="bottom-nav-label">Agenda</span></a>
+          <a class="bottom-nav-item is-active"><svg width="22" height="22"></svg><span class="bottom-nav-label">Contacts</span></a>
+          <a class="bottom-nav-item"><svg width="22" height="22"></svg><span class="bottom-nav-label">Paramètres</span></a>
+        </nav>`,
+      touch: '.bottom-nav-item',
+      height: '.app-bottom-nav',
+      contrast: '.bottom-nav-item, .bottom-nav-item.is-active',
+    })
 
     // The scope band as the drawer actually draws it: inside .context-drawer-panel, which is what
     // gives the column its width (min(320px, 86vw)) and drops its own 240px. .contacts-scopes-add
