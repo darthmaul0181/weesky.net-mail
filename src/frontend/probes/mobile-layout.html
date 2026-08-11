@@ -101,6 +101,16 @@
     converse — an integer content width inside fractional padding — would be forgiven wrongly. All
     four boxes above are integer-padding inputs, so nothing is live today; the next fixture is
     where to check it.
+  - `escape` is present only on a case that named an `escape: [inner, outer]` pair, and it exists
+    because `clipped` has one blind side. That metric is `scrollWidth - clientWidth`, which in a
+    left-to-right unscrolled document only ever grows from content pushed past the RIGHT edge — so
+    a right-aligned row that does not fit spills LEFT and every number here stays clean. Measured:
+    the leave dialog's three French buttons put the first one at x=-130 inside a dialog whose own
+    left edge is 12, `clipped: 0` throughout. `escape` reports the worst overhang per edge across
+    EVERY match of the inner selector, which matters as much as the metric itself — the box that
+    escapes is rarely the container a rule names, and pointing this at `.folder-pick-submit`
+    rather than at the buttons inside it reported four clean zeroes for the same broken dialog.
+    All four edges must read 0.
   - `height` is present only on a case that named a `height` selector, and it is the one number
     here with no pass mark: it reports how tall that element's own box is, for the defects that are
     vertical rather than horizontal — a reader header that leaves the message body four lines of
@@ -199,6 +209,30 @@
       return 'rgb(255, 255, 255)'
     }
 
+    // How far a box escapes its ancestor, per edge, 0 when it is inside. `clipped` is
+    // `scrollWidth - clientWidth`, which in a left-to-right unscrolled document only ever grows
+    // from content past the RIGHT edge — so a right-aligned row that overflows spills LEFT and
+    // reads 0. Measured: the leave dialog's three French buttons put the first one at x=-130
+    // inside a dialog starting at x=12, with `clipped` clean at every case in the file.
+    // EVERY match, worst edge kept: the box that escapes is rarely the container named in a rule.
+    // The leave dialog's row stayed inside its dialog to the pixel while the first BUTTON in it
+    // sat at x=-130 — pointing this at the row instead of the buttons reported four clean zeroes.
+    function escapeOf(root, [innerSelector, outerSelector]) {
+      const outer = root.querySelector(outerSelector)
+      const inners = [...root.querySelectorAll(innerSelector)].filter(el => el.getClientRects().length)
+      if (!outer || !inners.length) return 'missing'
+      const b = outer.getBoundingClientRect()
+      const worst = { left: 0, right: 0, top: 0, bottom: 0 }
+      for (const inner of inners) {
+        const a = inner.getBoundingClientRect()
+        worst.left = Math.max(worst.left, Math.round(b.left - a.left))
+        worst.right = Math.max(worst.right, Math.round(a.right - b.right))
+        worst.top = Math.max(worst.top, Math.round(b.top - a.top))
+        worst.bottom = Math.max(worst.bottom, Math.round(a.bottom - b.bottom))
+      }
+      return worst
+    }
+
     /** Every match's foreground against what it is painted on, rounded to two decimals. */
     function contrastOf(root, selector) {
       return [...root.querySelectorAll(selector)]
@@ -279,7 +313,7 @@
     function measure() {
       const stage = document.getElementById('stage')
       const floor = touchFloor()
-      const report = CASES.map(({ name, html, touch, overlap, height, contrast }) => {
+      const report = CASES.map(({ name, html, touch, overlap, height, contrast, escape }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
         // Only what is actually drawn: a control a query hides has no box, and counting its 0px
@@ -391,6 +425,10 @@
           // legible in one and invisible in the other and reading only the active theme is how
           // that ships. 4.5 is the floor for the small text these cases hold; nothing fails
           // automatically, the numbers are there to be read like `height` is.
+          // `escape: [inner, outer]` is the metric `clipped` cannot be: per-edge overhang, so a
+          // box that runs off the LEFT of its container is a number rather than a clean report.
+          // Every edge must read 0.
+          ...(escape ? { escape: escapeOf(stage, escape) } : {}),
           ...(contrast
             ? {
               contrast: Object.fromEntries(['light', 'dark'].map(theme => {
@@ -829,6 +867,31 @@
              </div>`,
       touch: '.modal-close, .toggle-switch',
     })
+
+    // The leave dialog, which is the widest footer this app has: three actions, and in French
+    // `Continuer l'édition` + `Abandonner` + `Enregistrer le brouillon` come to 440px of buttons
+    // against the ~310 a 360px screen leaves inside the dialog. `.folder-pick-submit` is
+    // `justify-content: flex-end`, so the excess ran off the LEFT edge and the first button was
+    // half a word wide at x=0 — which `overflow` cannot see, the overlay clipping it, and only
+    // `clipped` reports. Read at 320 as well: the labels do not shrink with the screen.
+    for (const width of [360, 320]) {
+      CASES.push({
+        name: `modal-leave-${width}`,
+        html: `<div class="modal-overlay" style="position:static;width:${width}px">
+                 <div class="modal">
+                   <div class="modal-header"><span class="modal-title">Enregistrer ce brouillon ?</span></div>
+                   <p>Votre message contient des modifications non enregistrées.</p>
+                   <div class="folder-pick-submit">
+                     <button class="btn btn-ghost">Continuer l'édition</button>
+                     <button class="btn btn-ghost">Abandonner</button>
+                     <button class="btn btn-primary">Enregistrer le brouillon</button>
+                   </div>
+                 </div>
+               </div>`,
+        touch: '.folder-pick-submit .btn',
+        escape: ['.folder-pick-submit .btn', '.modal'],
+      })
+    }
 
     // A dialog whose content is genuinely narrow: does width:100% stretch a two-line confirm
     // across the whole screen? Markup mirrors DeleteConfirmModal.jsx exactly — its own single

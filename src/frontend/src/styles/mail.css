@@ -1991,6 +1991,17 @@ textarea.compose-editor {
      trade a primary control not being reachable by a thumb would otherwise be. */
   .compose-summary { min-height: var(--touch); }
 
+  /* A dialog's actions stack and take the width, rather than sitting on one right-aligned row.
+     The leave dialog is what forced it: `Continuer l'édition`, `Abandonner` and `Enregistrer le
+     brouillon` come to 440px of buttons against the ~310 a 360px screen leaves inside the dialog,
+     and because the row is `justify-content: flex-end` the excess ran off the LEFT edge — the
+     first button was half a word wide at x=0. **Stacking rather than wrapping**, which was the
+     other candidate: a `.btn` neither shrinks nor wraps its label, so a wrapped row still
+     overflows the day one button alone is wider than the dialog, while a column cannot. The
+     primary keeps its place last in source order, which puts it nearest the thumb. */
+  .folder-pick-submit { flex-direction: column; align-items: stretch; }
+  .folder-pick-submit .btn { width: 100%; min-height: var(--touch); }
+
   /* Three rows of tools left 102px of a 640px screen to the message. Folded, the bar keeps the
      plain-text switch, the paperclip, B/I/U/S and the ⋯ that reveals the rest — measured, seven
      cells is what fits one row at 320 as well as at 360, and eight already wraps at 320. Hidden
