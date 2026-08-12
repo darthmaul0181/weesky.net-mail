@@ -13,6 +13,7 @@
     "loadFailed": "Could not load folders.",
     "refresh": "Refresh",
     "refreshHint": "Check for new mail",
+    "dropHere": "Drop here",
     "collapse": "Collapse {{name}}",
     "expand": "Expand {{name}}",
     "unreadAria_one": "{{label}}, {{count}} unread",

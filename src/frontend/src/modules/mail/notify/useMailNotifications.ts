@@ -8,7 +8,7 @@ import { flatten } from '../folders/folderNodes'
 import { snapshotOf, uidValidityBroke, type FolderSnapshot } from '../list/folderDelta'
 import { useAccountId, useFolders } from '../queries'
 import { claimNotification, playNewMailSound, showDesktopNotification } from './channels'
-import { allArrivalsRead, newSince, notifyBody, notifyDecision } from './notifyDecision'
+import { newSince, notifyBody, notifyDecision, silentBatch } from './notifyDecision'
 
 interface Described {
   body: string
@@ -31,7 +31,7 @@ interface Baseline {
     at flags it could not read. */
 async function describeArrivals(
   accountId: string, folder: string, size: number, sinceUid: number, count: number,
-  signal: AbortSignal,
+  unreadDelta: number | null, signal: AbortSignal,
 ): Promise<Described> {
   try {
     const page = await api.getMailMessages(folder, 0, size, { signal, accountId })
@@ -39,11 +39,19 @@ async function describeArrivals(
     return {
       body: notifyBody(arrivals, count),
       uid: count === 1 && arrivals.length === 1 ? arrivals[0].uid : null,
-      silent: allArrivalsRead(arrivals, count),
+      silent: silentBatch(arrivals, count, unreadDelta),
     }
   } catch {
-    return { body: notifyBody([], count), uid: null, silent: false }
+    return { body: notifyBody([], count), uid: null, silent: silentBatch([], count, unreadDelta) }
   }
+}
+
+/** The counters are `int?` on the wire and a null one is omitted, so `undefined` reaches here
+    as readily as null; either side missing leaves the two ticks incomparable. */
+function unreadDeltaOf(previous: FolderSnapshot, next: FolderSnapshot): number | null {
+  return typeof previous.unread === 'number' && typeof next.unread === 'number'
+    ? next.unread - previous.unread
+    : null
 }
 
 /**
@@ -99,6 +107,8 @@ export function useMailNotifications(): void {
       comparable ? last.snapshot.uidNext : null, inbox.uidNext, { sound, desktop })
     if (!decision) return
 
+    const unreadDelta = comparable ? unreadDeltaOf(last.snapshot, snapshot) : null
+
     // Derived rather than read off the node: after a decision this is exactly the new uidNext,
     // and it needs no non-null assertion.
     const arrivedAt = decision.sinceUid + decision.count
@@ -110,7 +120,7 @@ export function useMailNotifications(): void {
     const controller = new AbortController()
     void describeArrivals(
       accountId, inbox.path, requestSizeOf(preferences), decision.sinceUid, decision.count,
-      controller.signal,
+      unreadDelta, controller.signal,
     ).then(({ body, uid, silent }) => {
       // Two reasons to hold back: the hook is gone, or the batch turned out to be mail moved in
       // rather than delivered. An aborted fetch still announces, with the count fallback.

@@ -2196,36 +2196,29 @@ body {
   width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0;
   overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
 }
-.contacts-scopes-add { flex: none; padding: 12px; }
-.contacts-add-btn { width: 100%; justify-content: center; }
+/* The mail folder column's own top row (.mail-folders-compose), transcribed: the primary action
+   takes the width and one square sits beside it. Import and export used to be two filled buttons
+   across the foot of this column — the heaviest pair in it after Add contact, for the two rarest
+   actions in the module, and a footer shape nothing else in the app wears. There is no footer band
+   any more; the column ends on the scopes.
+
+   The trigger costs the Add button 47px (40 plus the row's gap), which is the whole of the label's
+   remaining headroom: measured in probes/localisation-widths.html, `+ Ajouter un contact` is
+   131.9px of ink against the 136 the button now leaves — English spends 90.8. It fits in both
+   shipped languages and in neither with anything to spare, so a third language, a reworded label
+   or a wider trigger has to be re-measured there rather than reasoned about. */
+.contacts-scopes-add { flex: none; display: flex; gap: 7px; padding: 12px; }
+.contacts-add-btn { flex: 1; min-width: 0; justify-content: center; }
+/* The rule lands on the wrapper, not on the button, and that is `.actionbar .dropdown-root`'s
+   reason exactly: DropdownMenu wraps its trigger, so the flex item of this row is the wrapper while
+   the class is on the button inside it. Without this the button is not a flex item of anything and
+   sizes to its 16px icon — measured, a 16px-tall square beside a 39px Add. */
+.contacts-scopes-add .dropdown-root { display: flex; }
+.contacts-transfer-trigger {
+  flex: none; width: 40px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
 .contacts-scopes-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
-
-/* The band's footer, the shape the mail column's account block wears: a flat strip separated by a
-   rule, never a second block of navigation. */
-.contacts-transfer {
-  position: relative;
-  flex: none; display: flex; gap: 8px; padding: 10px 12px;
-  border-top: 1px solid var(--border);
-}
-/* static, not the tooltip.css default relative: Import's own 104px-wide wrap sits left of centre,
-   so its bubble's right: 0 must resolve against this full-width footer, not against that wrap —
-   otherwise only Export's bubble (flush with the footer's own right edge) would ever fit. */
-.contacts-transfer .tooltip-wrap { position: static; flex: 1; min-width: 0; }
-.contacts-transfer .btn { width: 100%; justify-content: center; }
-
-/* The column is 240px and overflow: hidden — .tooltip-bubble's 280px is-top-right width runs off
-   its left edge. Shrink to fit inside the footer's 12px side padding and wrap instead of clipping.
-   The extra .tooltip-wrap ancestor lifts specificity above .tooltip-bubble.is-top-right's own.
-   The positioned ancestor above is the footer's *padding* box (240px, not its 216px content box),
-   so right: 0 would sit flush with the column's clipped edge instead of the footer's own inset —
-   right: 12px restores it. bottom's +8px is trimmed to -2px by the footer's 10px top padding,
-   which the old per-wrap anchor didn't have, so the gap above the button stays the same 8px. */
-.contacts-transfer .tooltip-wrap .tooltip-bubble {
-  right: 12px;
-  bottom: calc(100% - 2px);
-  width: 216px;
-  white-space: normal;
-}
 
 .contact-scopes { display: flex; flex-direction: column; gap: 2px; }
 .contact-scope {
@@ -2237,6 +2230,22 @@ body {
 /* Fill and weight, no accent bar: the navigation language. */
 .contact-scope.is-active {
   background: var(--pane-item-active-bg); color: var(--pane-item-active-fg); font-weight: 600;
+}
+/* `.folder-line.drop-ready .folder-row`, transcribed onto the scope row. Louder than `is-active`
+   on purpose: the scope you are already in must read as excluded, not as a target. The label is a
+   custom property because it is translated — a stylesheet's `content` cannot be. */
+.contact-scope.drop-ready {
+  background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px var(--badge-count-bg);
+}
+.contact-scope.drop-ready::after {
+  content: var(--drop-label, '');
+  margin-left: auto; flex: none;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--badge-count-bg);
 }
 .contact-scope-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
@@ -2254,38 +2263,91 @@ body {
 .contacts-editor { flex: 1; min-width: 0; }
 .contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
 
-.contacts-list-heading {
-  flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
+/* The heading band is SelectionBand now (styles/selection.css); these two are what the list puts
+   in its centre slot. */
 .contacts-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
 .contacts-search .search-input { flex: 1; min-width: 0; }
 .contacts-search svg { flex: none; color: var(--text-muted); }
 .contacts-count { flex: none; color: var(--text-muted); font-size: 12px; }
 
-.contacts-list-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
-.contact-tiles { display: flex; flex-direction: column; gap: 6px; }
+/* The list column speaks the message list's language rather than the page-tile one: rows run edge
+   to edge, separated by a hairline instead of standing apart as cards. A gap, a radius and a
+   surrounding border are what a tile on a *page* wears, where the list is one block among others;
+   in a column beside a detail pane they only spend width and vertical rhythm the rows want. */
+.contacts-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.contact-tiles { display: flex; flex-direction: column; }
 
+/* Positioned for the action cluster below, which is taken out of the flow like the message row's.
+   The left padding is a gutter reserved permanently for the checkbox, exactly as
+   `.message-row:not(.is-line)` reserves 34px: revealing the box on hover must never shove the
+   name sideways. */
 .contact-tile {
-  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
-  padding: 7px 9px; cursor: pointer;
+  position: relative;
+  border: none; border-bottom: 1px solid var(--list-separator); background: var(--surface);
+  padding: 8px 12px 8px 34px; cursor: pointer;
 }
-.contact-tile:hover { border-color: var(--action-primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 15%, transparent); }
-/* Content-row language: selected fill plus an inset accent bar. Never a bare fill — that is what
-   a navigation pane wears. */
+/* Content-row language throughout, the message row's own: the hover fill on hover, the selected
+   fill plus an inset accent bar when picked. Never a bare fill — that is what a navigation pane
+   wears. The tile idiom's border-accent-plus-ring hover is for a list on a *page*, where no row is
+   ever picked; on a column that carries a selection it painted the two states nearly alike, the
+   picked tile and the one under the cursor both ringed in the accent. */
+.contact-tile:hover { background: var(--list-row-hover); }
 .contact-tile.is-selected {
   background: var(--list-row-selected-bg); color: var(--list-row-selected-fg);
-  border-color: var(--action-primary); box-shadow: inset 3px 0 0 var(--accent-unread);
+  box-shadow: inset 3px 0 0 var(--accent-unread);
 }
+/* `.message-row-check`, to the declaration: hidden and inert at rest, centred over the gutter so
+   it stays centred whatever the tile's height, pinned once a selection stands. */
+.contact-tile-check {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; margin: 0;
+  accent-color: var(--action-primary); cursor: pointer;
+  opacity: 0; pointer-events: none;
+}
+.contact-tile:hover .contact-tile-check,
+.contact-tile:focus-within .contact-tile-check,
+.contact-tiles.has-selection .contact-tile-check,
+.contact-tile-check:checked { opacity: 1; pointer-events: auto; }
+
+/* Dimmed while it rides the cursor: the pill is the thing being moved, the tile is its origin. */
+.contact-tile.is-dragging { opacity: 0.45; }
+
 .contact-tile-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .contact-tile-name {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-weight: 700; font-size: 13px;
 }
-/* Reserved, not conjured: revealing the cluster on hover must not shove the name sideways. */
-.contact-tile-actions { flex: none; display: flex; gap: 2px; visibility: hidden; }
+
+/* One control size across the row, and it is `.row-btn`'s: a 26px box around an 18px glyph. The
+   row carried three — an 18px star on a 14px glyph, beside 28px action buttons on 16px ones — and
+   the star, the smallest, is the one control the tile draws at rest. The sizes are declared here
+   rather than by borrowing `.row-btn` itself: `.contact-star` also dresses the card and the
+   editor, where it is a form control at its own size, and `.admin-icon-btn`'s 16px svg rule
+   (0,1,1) beats a width attribute, so the glyph has to be overridden from a longer selector. */
+.contact-tile .contact-star,
+.contact-tile-actions .admin-icon-btn {
+  width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.contact-tile .contact-star svg,
+.contact-tile-actions .admin-icon-btn svg { width: 18px; height: 18px; }
+/* The message row's cluster, to the pixel: out of the flow on the bottom-right corner, over the
+   last line present, and flush with the row's content edge. Out of the flow is what lets the name
+   keep the whole first line — reserving a slot beside it spent the width permanently for a control
+   that is only ever there under the cursor. */
+.contact-tile-actions {
+  position: absolute; right: 12px; bottom: 4px;
+  display: flex; gap: 2px; visibility: hidden;
+}
 .contact-tile:hover .contact-tile-actions,
 .contact-tile:focus-within .contact-tile-actions { visibility: visible; }
+
+/* The address is the line the cluster covers, so it ends in an ellipsis instead of running under
+   the buttons. Two 26px buttons and their 2px gap come to 54, plus 6px of air — the message row's
+   own arithmetic, and its own number for two buttons, now that the row draws one control size.
+   Unlike the message row's, the count is fixed: edit and delete, never a choice. */
+.contact-tile:hover .contact-tile-address,
+.contact-tile:focus-within .contact-tile-address { padding-right: 60px; }
 
 .contact-star {
   flex: none; display: inline-flex; padding: 2px; border: 0; background: transparent;
@@ -2295,8 +2357,11 @@ body {
 .contact-star.is-on { color: var(--badge-count-bg); }
 
 .contact-tile-address {
-  /* min-height must reserve a full line even when empty, so tiles without an address don't shrink */
-  padding-left: 25px; line-height: 1.5; min-height: 1.5em; color: var(--text-muted); font-size: 12px;
+  /* min-height must reserve a full line even when empty, so tiles without an address don't shrink.
+     No left indent: the star left the head of the line for its right end, so the name starts at the
+     tile's own content edge and the address lines up under it — as the subject does under the
+     sender. */
+  line-height: 1.5; min-height: 1.5em; color: var(--text-muted); font-size: 12px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .contact-tile.is-selected .contact-tile-address { color: inherit; opacity: .8; }
@@ -2449,6 +2514,12 @@ body {
   .contact-tile:hover .contact-tile-actions,
   .contact-tile:focus-within .contact-tile-actions { display: none; }
 
+  /* The reserve goes with what it was reserving. The tile itself is the tab stop, so a tap puts
+     :focus-within on it whether or not the cluster inside is drawn — leaving the address ending in
+     an ellipsis 64px short of a row with nothing in that corner. */
+  .contact-tile:hover .contact-tile-address,
+  .contact-tile:focus-within .contact-tile-address { padding-right: 0; }
+
   /* 31px, and the only navigation the contacts drawer holds. The 639px block below floors it
      through var(--touch) for a narrow window; this reaches the 640-1023px touch tablet, where the
      token is not declared at all — hence the number spelled out rather than a second declaration
@@ -2496,24 +2567,28 @@ body {
   .contact-scope { min-height: var(--touch); }
 
   /* The star grows a hit area rather than a painted box — .reader-back's idiom, and for the same
-     reason: at 44px square it would push the name 26px right and desync .contact-tile-address's
-     25px indent, on a tile that is already at the floor. The 18x18 button needs 26px on each axis;
-     both splits are biased into space no other control claims. Sideways: 17px left reaches the
-     list scroll's own 8px padding (9px tile padding + 1px border + 8px), where nothing else is
-     hittable, leaving 9px right — the heading's 7px gap plus 2px of the name's leading edge.
-     Vertically: 8px up lands exactly on the tile's top border edge and 18px down fills the address
-     line, which is not a target of its own. */
+     reason: at 44px square it would take 18px more of a line the name is already ellipsising, on a
+     tile that is at the floor. The 26x26 button needs 18px on each axis, biased into space no other
+     control claims. Sideways: 12px right is the tile's whole right padding and stops at the column
+     edge, leaving 6px left — under the line's 7px gap, so it never reaches the name. Vertically:
+     8px up is the tile's top padding and 10px down sits over the address line, which is not a
+     target of its own. */
   .contact-star { position: relative; }
+  /* The skeleton and the editor's own numbers, which is what it was before the tile grew a star of
+     a different size: .contact-editor-body's override below bends the horizontal insets only and
+     reads top/bottom from here, so this rule may not be narrowed to the tile. */
   .contact-star::before {
     content: ''; position: absolute; top: -8px; right: -9px; bottom: -18px; left: -17px;
   }
+  /* The tile's star is the 26px one, so it needs 18px per axis rather than 26. */
+  .contact-tile .contact-star::before { right: -12px; bottom: -10px; left: -6px; }
 
-  /* There is no hover on a touch screen, so the cluster is 58px of a 309px tile line reserved for
-     two 28px buttons no finger can reach — and on several touch browsers :hover sticks after a tap,
-     which would then reveal them permanently. display, not visibility: the base rule and its two
-     :hover/:focus-within reveals all set visibility, so this wins on a different property whatever
-     their specificity, and it returns the reserve to the name. Nothing is lost — a tap opens the
-     card, which carries Edit and Delete at the touch floor above. */
+  /* There is no hover on a touch screen, so the cluster is two 26px buttons no finger can reach —
+     and on several touch browsers :hover sticks after a tap, which would then reveal them
+     permanently. display, not visibility: the base rule and its two :hover/:focus-within reveals
+     all set visibility, so this wins on a different property whatever their specificity. Nothing is
+     lost — a tap opens the card, which carries Edit and Delete at the touch floor above. The
+     address keeps its reserve neutralised by the (hover: none) block, which a phone also matches. */
   .contact-tile-actions { display: none; }
 
   /* The label above its control instead of beside it. A 110px label column plus its 16px gap
@@ -2586,8 +2661,8 @@ body {
 
   /* Measured 39px, and global: login, settings, toolbars, dialogs. It is also the only control on
      the composer's two dialogs, which carry no ✕ to fall back on. This is what floors
-     .contacts-transfer's file actions, the contact card's three actions and .contact-save-btn —
-     all three are .btn, and their own rules were dropped as duplicates of this one. */
+     the contact card's three actions and .contact-save-btn — both are .btn, and their own rules
+     were dropped as duplicates of this one. */
   .btn { min-height: var(--touch); }
 
   /* Every typed control at the floor, the same breadth as the 16px rule at the head of this block

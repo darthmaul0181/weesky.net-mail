@@ -126,6 +126,59 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
         return saved.IsSuccess ? NoContent() : NotFoundEnveloppe(saved.Error);
     }
 
+    /// <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.</summary>
+    private const int MaxBatch = 200;
+
+    /// <summary>
+    /// Deletes a batch. An id this user does not own resolves to nothing and is skipped in silence:
+    /// a batch may not half-fail, and a 404 on a foreign id would confirm that it exists.
+    /// </summary>
+    /// <param name="request">the ids to delete</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">Deleted, whether or not every id matched</response>
+    /// <response code="400">No id, or more than 200</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpDelete]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> DeleteMany(
+        BulkContactsRequest request, CancellationToken cancellationToken)
+    {
+        if (Refuse(request?.Ids) is { } refusal) return refusal;
+
+        await store.DeleteManyAsync(AuthenticatedUser.WebmailUid, request!.Ids, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Sets or clears the favourite flag over a batch, under the same silent-skip rule.</summary>
+    /// <param name="request">the ids and the flag they are given</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">Applied, whether or not every id matched</response>
+    /// <response code="400">No id, or more than 200</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpPut("Favorite")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> SetFavoriteMany(
+        BulkFavoriteRequest request, CancellationToken cancellationToken)
+    {
+        if (Refuse(request?.Ids) is { } refusal) return refusal;
+
+        await store.SetFavoriteManyAsync(
+            AuthenticatedUser.WebmailUid, request!.Ids, request.IsFavorite, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>The one gate both bulk routes pass, so the two cannot drift on what they refuse.</summary>
+    private ActionResult? Refuse(IReadOnlyList<Guid>? ids) => ids switch
+    {
+        null or { Count: 0 } => BadRequestEnveloppe("At least one contact is required"),
+        { Count: > MaxBatch } => BadRequestEnveloppe($"No more than {MaxBatch} contacts at a time"),
+        _ => null,
+    };
+
     /// <summary>
     /// What bounds the request. A constant rather than configuration, so the attribute can carry
     /// it and the read is capped before model binding buffers the body to disk.

@@ -126,6 +126,7 @@
   <link rel="stylesheet" href="/src/styles/theme-night.css" />
   <link rel="stylesheet" href="/src/index.css" />
   <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/selection.css" />
   <link rel="stylesheet" href="/src/styles/shell.css" />
   <link rel="stylesheet" href="/src/styles/tooltip.css" />
   <link rel="stylesheet" href="/src/styles/mail.css" />
@@ -1083,9 +1084,10 @@
     // ── Contacts (Task 12) ──────────────────────────────────────────────────────────────────
     // The list owns the whole row on a phone, so no explicit column width here: `.contacts-row`
     // is a flex row inside `.contacts-layout` and the list is what fills it, which is exactly the
-    // arrangement the phone rules have to produce. The tiles are drawn LOADED — the widest tile
-    // is a long name beside a hidden-but-reserved action cluster, and the tile carrying only an
-    // address is the one that exercises `.contact-tile-address`'s reserved line.
+    // arrangement the phone rules have to produce. The tiles are drawn LOADED — the widest tile is
+    // a long name with the whole line to itself, the cluster having left the flow for the tile's
+    // bottom-right corner, and the tile carrying only an address is the one that exercises
+    // `.contact-tile-address`'s reserved line.
     //
     // `.contact-tile-name` and `.contact-tile-address` both ellipsise and hold no elements, so
     // `clipped` exempts them by design; what it can still see is a heading whose hamburger, search
@@ -1099,13 +1101,21 @@
       <div class="contacts-layout" style="height:520px">
         <div class="contacts-row">
           <div class="contacts-list"${window.innerWidth <= 639 ? '' : ' style="width:380px"'}>
-            <div class="contacts-list-heading">
+            <div class="selection-toolbar">
               <button class="drawer-toggle" style="display:inline-flex">&#9776;</button>
-              <span class="contacts-search">
-                <svg width="14" height="14"></svg>
-                <input type="search" class="search-input" placeholder="Search contacts" />
+              <label class="selection-master-hit">
+                <input type="checkbox" class="selection-master" aria-label="Select all" />
+              </label>
+              <span class="selection-heading">
+                <span class="contacts-search">
+                  <svg width="14" height="14"></svg>
+                  <input type="search" class="search-input" placeholder="Search contacts" />
+                </span>
+                <span class="contacts-count">3 / 12</span>
               </span>
-              <span class="contacts-count">3 / 12</span>
+              <div class="selection-actions">
+                <button class="selection-btn is-danger" disabled><svg width="20" height="20"></svg></button>
+              </div>
             </div>
             <div class="contacts-list-scroll">
               <div class="contact-tiles">
@@ -1114,16 +1124,17 @@
                   ['Bruno Weiss', 'bruno@x.be', ''],
                   ['', 'someone-with-no-name@example.com', ''],
                 ].map(([name, address, selected]) => `
-                  <div class="contact-tile${selected}" role="button" tabindex="0">
+                  <div class="contact-tile${selected}" role="button" tabindex="0" draggable="true">
+                    <input type="checkbox" class="contact-tile-check" aria-label="Select" />
                     <div class="contact-tile-line">
-                      <button class="contact-star is-on"><svg width="14" height="14"></svg></button>
                       <span class="contact-tile-name">${name || address}</span>
-                      <span class="contact-tile-actions">
-                        <button class="admin-icon-btn"><svg width="14" height="14"></svg></button>
-                        <button class="admin-icon-btn is-danger"><svg width="14" height="14"></svg></button>
-                      </span>
+                      <button class="contact-star is-on"><svg width="18" height="18"></svg></button>
                     </div>
                     <div class="contact-tile-address">${name ? address : ''}</div>
+                    <span class="contact-tile-actions">
+                      <button class="admin-icon-btn"><svg width="18" height="18"></svg></button>
+                      <button class="admin-icon-btn is-danger"><svg width="18" height="18"></svg></button>
+                    </span>
                   </div>`).join('')}
               </div>
             </div>
@@ -1134,10 +1145,16 @@
     // is the only route to Edit and Delete. The two .admin-icon-btn are named on purpose even
     // though the phone rules hide them: `sizes` drops what has no box, so if the hover rule below
     // ever stops matching they come straight back into `undersized` rather than passing silently.
+    //
+    // The band is `SelectionBand`, so the master checkbox is measured here for the same reason it
+    // is in the toolbar-master trio: it answers to no width at all, and 'none rendered' on it is
+    // the regression. The tile's own box is at rest — `opacity: 0`, which still has a box — so it
+    // is deliberately NOT in `touch`: a 16px box reported undersized would be a target nobody is
+    // aiming at yet, and the finger-sized one on this list is the tile itself.
     CASES.push({
       name: 'contacts-list',
       html: contactList(),
-      touch: '.contact-tile, .contact-star, .drawer-toggle, .contact-tile-actions .admin-icon-btn',
+      touch: '.contact-tile, .contact-star, .drawer-toggle, .contact-tile-actions .admin-icon-btn, .selection-master-hit',
     })
 
     // The card takes the same row once a contact is picked. Its actions are the `.actionbar` band
@@ -1272,14 +1289,10 @@
                     <span class="contact-scope-count">12</span></button>
                 </nav>
               </div>
-              <div class="contacts-transfer">
-                <span class="tooltip-wrap"><button class="btn">Import…</button></span>
-                <span class="tooltip-wrap"><button class="btn">Export</button></span>
-              </div>
             </div>
           </div>
         </div>`,
-      touch: '.contact-scope, .contacts-transfer .btn, .contacts-add-btn',
+      touch: '.contact-scope, .contacts-add-btn',
     })
 
     // The full-width editor route. `.field-h`'s inputs carry no `min-width: 0`, so an input's own

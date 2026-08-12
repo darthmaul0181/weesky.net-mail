@@ -49,6 +49,8 @@ import UnlinkIcon from './UnlinkIcon'
 import ClearFormatIcon from './ClearFormatIcon'
 import InboxIcon from './InboxIcon'
 import MenuIcon from './MenuIcon'
+import UploadIcon from './UploadIcon'
+import DownloadIcon from './DownloadIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -100,6 +102,8 @@ const icons = [
   { name: 'ClearFormatIcon', Icon: ClearFormatIcon, defaultSize: '16' },
   { name: 'InboxIcon', Icon: InboxIcon, defaultSize: '16' },
   { name: 'MenuIcon', Icon: MenuIcon, defaultSize: '20' },
+  { name: 'UploadIcon', Icon: UploadIcon, defaultSize: '16' },
+  { name: 'DownloadIcon', Icon: DownloadIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

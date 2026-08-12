@@ -58,6 +58,16 @@ export function useSetContactFavorite() {
       api.setContactFavorite(id, isFavorite))
 }
 
+export function useDeleteContacts() {
+  return useContactMutation((ids: string[]) => api.deleteContacts(ids))
+}
+
+export function useSetContactsFavorite() {
+  return useContactMutation(
+    ({ ids, isFavorite }: { ids: string[]; isFavorite: boolean }) =>
+      api.setContactsFavorite(ids, isFavorite))
+}
+
 export function useImportContacts() {
   return useContactMutation((file: File) => api.importContacts(file) as Promise<ContactImportReport>)
 }

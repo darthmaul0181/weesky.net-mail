@@ -128,17 +128,30 @@ describe('useMailNotifications', () => {
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
   })
 
-  // Silence is only safe when the page held every arrival: read messages among a partial page
-  // say nothing about the ones it did not carry.
-  it('still rings when the read arrivals are only part of the batch', async () => {
+  // The flags cannot answer for arrivals the page never carried, so the folder's unread counter
+  // does: a batch that left it where it was is nothing anybody has to read.
+  it('still rings when the page missed part of the batch and unread rose', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([10], { seen: true }))
+    const { tick } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ uidNext: 13, total: 8, unread: 4 }))
+    await settle()
+
+    expect(mocks.playNewMailSound).toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).toHaveBeenCalled()
+  })
+
+  // The shipped defect: a mail filed into the inbox from another folder keeps its own date, so a
+  // date-sorted page need not carry it at all — and the batch was announced as new mail.
+  it('stays silent when the page missed the batch and unread did not move', async () => {
     mocks.getMailMessages.mockResolvedValue(pageOf([10], { seen: true }))
     const { tick } = await renderWithBaseline(bothOn)
 
     await tick(inbox({ uidNext: 13, total: 8 }))
     await settle()
 
-    expect(mocks.playNewMailSound).toHaveBeenCalled()
-    expect(mocks.showDesktopNotification).toHaveBeenCalled()
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
   })
 
   it('says nothing on the baseline observation', async () => {
@@ -268,7 +281,9 @@ describe('useMailNotifications', () => {
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
 
-    await tick(inbox({ uidValidity: 200, uidNext: 4784 }))
+    // The page mock holds none of these uids, so the arrival is judged on the counter: a real
+    // delivery moves it, which is what separates this from a message filed in.
+    await tick(inbox({ uidValidity: 200, uidNext: 4784, unread: 3 }))
 
     await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1))
     // Claimed under the new numbering, so the entry banked before the break cannot gag it.
@@ -285,7 +300,7 @@ describe('useMailNotifications', () => {
     expect(mocks.claimNotification).not.toHaveBeenCalled()
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
 
-    await tick(inbox({ path: 'Courrier', name: 'Courrier', uidNext: 4001 }))
+    await tick(inbox({ path: 'Courrier', name: 'Courrier', uidNext: 4001, unread: 3 }))
 
     await waitFor(() => expect(mocks.playNewMailSound).toHaveBeenCalledTimes(1))
   })
@@ -336,10 +351,23 @@ describe('useMailNotifications', () => {
     mocks.getMailMessages.mockRejectedValue(new Error('refused'))
     const { tick } = await renderWithBaseline(bothOn)
 
-    await tick(inbox({ uidNext: 11 }))
+    await tick(inbox({ uidNext: 11, unread: 3 }))
 
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
       '1 new message', expect.any(String), expect.any(Function)))
+  })
+
+  // A failed fetch reads no flags, but the tree tick that decided this one did read the counter:
+  // silence here is the server's own answer, not a guess at what the fetch never saw.
+  it('stays silent when the fetch fails and unread did not move', async () => {
+    mocks.getMailMessages.mockRejectedValue(new Error('refused'))
+    const { tick } = await renderWithBaseline(bothOn)
+
+    await tick(inbox({ uidNext: 11 }))
+    await settle()
+
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
   })
 
   // Logout, or an account switch, mid-fetch: the bubble would arrive after the session it
@@ -365,10 +393,10 @@ describe('useMailNotifications', () => {
       const fetch = heldFetch()
       const { tick } = await renderWithBaseline(bothOn)
 
-      await tick(inbox({ uidNext: 11 }))
+      await tick(inbox({ uidNext: 11, unread: 3 }))
       await fetch.started()
       // Same uidNext, so no second decision — only the effect re-running and aborting.
-      await tick(inbox({ uidNext: 11, unread: 3 }))
+      await tick(inbox({ uidNext: 11, unread: 3, total: 7 }))
 
       await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
         '1 new message', expect.any(String), expect.any(Function)))
@@ -394,7 +422,7 @@ describe('useMailNotifications', () => {
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
     expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
 
-    await tick(inbox({ uidNext: 501, total: 496 }))
+    await tick(inbox({ uidNext: 501, total: 496, unread: 3 }))
 
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalledWith(
       '1 new message', expect.any(String), expect.any(Function)))

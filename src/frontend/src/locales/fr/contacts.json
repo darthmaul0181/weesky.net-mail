@@ -8,11 +8,13 @@
     "saveFailed": "Impossible d’enregistrer le contact",
     "deleted": "Contact supprimé : {{name}}",
     "deleteFailed": "Impossible de supprimer le contact",
+    "deleteManyFailed": "Les contacts n’ont pas pu être supprimés",
     "favouriteFailed": "Impossible d’enregistrer le favori"
   },
   "scopes": {
     "all": "Tous les contacts",
-    "favourites": "Favoris"
+    "favourites": "Favoris",
+    "dropHere": "Déposer ici"
   },
   "fields": {
     "nickname": "Surnom",
@@ -31,7 +33,16 @@
     "empty": "Aucun contact pour l’instant",
     "noMatch": "Aucun contact correspondant",
     "edit": "Modifier {{name}}",
-    "delete": "Supprimer {{name}}"
+    "delete": "Supprimer {{name}}",
+    "selectAll": "Tout sélectionner",
+    "selectOne": "Sélectionner {{name}}",
+    "selected_one": "{{count}} sélectionné",
+    "selected_many": "{{count}} sélectionnés",
+    "selected_other": "{{count}} sélectionnés",
+    "deleteSelected": "Supprimer la sélection",
+    "deleteSelectedConfirm_one": "Supprimer ce contact ? Cette action est définitive.",
+    "deleteSelectedConfirm_many": "Supprimer ces {{count}} contacts ? Cette action est définitive.",
+    "deleteSelectedConfirm_other": "Supprimer ces {{count}} contacts ? Cette action est définitive."
   },
   "card": {
     "invite": "Sélectionnez un contact pour voir sa fiche",
@@ -57,6 +68,7 @@
     "favourite": "Favori"
   },
   "transfer": {
+    "actions": "Importer et exporter",
     "importHint": "Fusionner un fichier CSV dans ce carnet",
     "import": "Importer…",
     "nothingToExport": "Rien à exporter",

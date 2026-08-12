@@ -323,6 +323,12 @@
    for the same reason — keep the two in step. */
 .dropdown-item:hover { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
 
+/* A disabled row was drawn exactly like a live one — the reader kebab's Delete with no trash
+   folder, and now the contacts' Export on an empty book. The `title` carries the reason; nothing
+   carried the state. Declared after :hover so a hover cannot tint a dead row. */
+.dropdown-item:disabled { opacity: 0.4; cursor: default; }
+.dropdown-item:disabled:hover { background: none; }
+
 /* An <a> arrives underlined; .dropdown-item above already sets its color and font. */
 a.dropdown-item { text-decoration: none; }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { MailMessageSummary } from '../api/mailTypes'
-import { allArrivalsRead, newSince, notifyBody, notifyDecision } from './notifyDecision'
+import { newSince, notifyBody, notifyDecision, silentBatch } from './notifyDecision'
 
 const both = { sound: true, desktop: true }
 
@@ -106,25 +106,39 @@ describe('notifyBody', () => {
 
 /** Moving a message into the inbox appends it with a fresh uid, so uidNext advances just as it
     does for delivery. The read flags are the only thing that separates the two. */
-describe('allArrivalsRead', () => {
+describe('silentBatch', () => {
   const read = (uid: number): MailMessageSummary => ({ ...message(uid), seen: true })
 
   it('holds when the whole batch arrived already read', () => {
-    expect(allArrivalsRead([read(10)], 1)).toBe(true)
-    expect(allArrivalsRead([read(11), read(10)], 2)).toBe(true)
+    expect(silentBatch([read(10)], 1, 0)).toBe(true)
+    expect(silentBatch([read(11), read(10)], 2, 0)).toBe(true)
   })
 
   it('fails as soon as one arrival is unread', () => {
-    expect(allArrivalsRead([read(11), message(10)], 2)).toBe(false)
+    expect(silentBatch([read(11), message(10)], 2, 0)).toBe(false)
   })
 
-  // A partial page says nothing about the arrivals it did not carry, so it may not buy silence.
-  it('fails when the page held fewer arrivals than arrived', () => {
-    expect(allArrivalsRead([read(10)], 3)).toBe(false)
+  // The flags are the direct witness: an arrival read is read whatever the counter did meanwhile.
+  it('holds on read arrivals even when the unread count rose', () => {
+    expect(silentBatch([read(10)], 1, 1)).toBe(true)
   })
 
-  // The fetch failing leaves no flags to judge: announcing beats swallowing real mail.
-  it('fails when the fetch found nothing', () => {
-    expect(allArrivalsRead([], 1)).toBe(false)
+  // A filed message keeps its own Date, and the page is sorted by it — so an old mail dragged in
+  // takes a fresh uid at the top of the uid range and lands nowhere near the top of the page.
+  // Its flags are then unreachable, and the folder's unread counter is the only witness left.
+  it('holds when the page missed the batch and nothing new is unread', () => {
+    expect(silentBatch([], 1, 0)).toBe(true)
+    expect(silentBatch([read(10)], 3, 0)).toBe(true)
+    expect(silentBatch([], 2, -1)).toBe(true)
+  })
+
+  it('announces when the page missed the batch and the unread count rose', () => {
+    expect(silentBatch([], 1, 1)).toBe(false)
+    expect(silentBatch([read(10)], 3, 2)).toBe(false)
+  })
+
+  // No counter to fall back on and no flags to read: announcing beats swallowing real mail.
+  it('announces when the unread counter is unreadable', () => {
+    expect(silentBatch([], 1, null)).toBe(false)
   })
 })

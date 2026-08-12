@@ -1232,3 +1232,29 @@ describe('app settings', () => {
       }))
   })
 })
+
+describe('contact batches', () => {
+  it('sends the batch in the body of a DELETE', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.deleteContacts(['a', 'b'])
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Contacts')
+    expect(options.method).toBe('DELETE')
+    expect(JSON.parse(options.body)).toEqual({ ids: ['a', 'b'] })
+  })
+
+  it('sends the batch and the flag when starring in bulk', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.setContactsFavorite(['a'], true)
+
+    const [url, options] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/Contacts/Favorite')
+    expect(options.method).toBe('PUT')
+    expect(JSON.parse(options.body)).toEqual({ ids: ['a'], isFavorite: true })
+  })
+})

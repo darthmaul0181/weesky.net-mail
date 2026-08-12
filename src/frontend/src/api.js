@@ -179,6 +179,14 @@ export const api = {
   setContactFavorite: (id, isFavorite) =>
     request('PUT', `/api/Contacts/${id}/Favorite`, { isFavorite }),
 
+  // The batch travels in the body rather than the URL: a list of ids in a query string breaks past
+  // a few dozen and has no agreed shape. Capped at 200 server-side, the mail's own batch size.
+  deleteContacts: (ids) =>
+    request('DELETE', '/api/Contacts', { ids }),
+
+  setContactsFavorite: (ids, isFavorite) =>
+    request('PUT', '/api/Contacts/Favorite', { ids, isFavorite }),
+
   importContacts: (file) => {
     const form = new FormData()
     form.append('file', file)

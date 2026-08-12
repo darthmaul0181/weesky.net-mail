@@ -37,11 +37,23 @@ export function newSince(messages: MailMessageSummary[], sinceUid: number): Mail
 /**
  * A message moved into the inbox is appended with a fresh uid, so uidNext advances exactly as it
  * does for real delivery — only the flags tell the two apart, and an already-read arrival is not
- * new mail. Silence a batch only when the fetched page carried it whole: read messages among a
- * partial page say nothing about the arrivals it did not hold.
+ * new mail. The flags are the direct witness and are used whenever the fetched page carried the
+ * batch whole.
+ *
+ * It routinely does not. A filed message keeps its own `Date` while the page is sorted by it, so
+ * a mail dragged in from another folder takes the highest uid in the folder and lands wherever
+ * its date puts it — past the fetched window entirely once it is older than the page's last row.
+ * `unreadDelta` is the witness left for that case: nothing the user has to read arrived, so
+ * nothing rang. It is only ever consulted there, which is why it does not reopen the read-flip
+ * race the flag test is written against — a real delivery is the newest message in the folder
+ * and sits at the top of the page, never in this branch. A counter that cannot be compared
+ * (null on either side) buys no silence: announcing beats swallowing real mail.
  */
-export function allArrivalsRead(arrivals: MailMessageSummary[], count: number): boolean {
-  return arrivals.length === count && arrivals.every(message => message.seen)
+export function silentBatch(
+  arrivals: MailMessageSummary[], count: number, unreadDelta: number | null,
+): boolean {
+  if (arrivals.length === count) return arrivals.every(message => message.seen)
+  return unreadDelta !== null && unreadDelta <= 0
 }
 
 export function notifyBody(messages: MailMessageSummary[], count: number): string {

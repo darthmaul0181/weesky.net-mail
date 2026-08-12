@@ -777,6 +777,31 @@
             <response code="401">Not authenticated</response>
             <response code="404">No such contact for this user</response>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxBatch">
+            <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.DeleteMany(weesky.Snoopy.Microservice.Models.Contacts.BulkContactsRequest,System.Threading.CancellationToken)">
+            <summary>
+            Deletes a batch. An id this user does not own resolves to nothing and is skipped in silence:
+            a batch may not half-fail, and a 404 on a foreign id would confirm that it exists.
+            </summary>
+            <param name="request">the ids to delete</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Deleted, whether or not every id matched</response>
+            <response code="400">No id, or more than 200</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.SetFavoriteMany(weesky.Snoopy.Microservice.Models.Contacts.BulkFavoriteRequest,System.Threading.CancellationToken)">
+            <summary>Sets or clears the favourite flag over a batch, under the same silent-skip rule.</summary>
+            <param name="request">the ids and the flag they are given</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Applied, whether or not every id matched</response>
+            <response code="400">No id, or more than 200</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Refuse(System.Collections.Generic.IReadOnlyList{System.Guid})">
+            <summary>The one gate both bulk routes pass, so the two cannot drift on what they refuse.</summary>
+        </member>
         <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxImportBytes">
             <summary>
             What bounds the request. A constant rather than configuration, so the attribute can carry
@@ -1876,6 +1901,12 @@
             An external domain in the connect form's choice list. Names and ids only: hosts, ports and
             transport security are administrator information.
             </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.BulkContactsRequest">
+            <summary>The batch a bulk contact write names. Empty and over-cap are both refused.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.BulkFavoriteRequest">
+            <summary>The batch, plus the flag it is being given.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactImportOutcome">
             <summary>What the store did. Its error list is unbounded — the controller caps it.</summary>

@@ -152,6 +152,47 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
         return Result.Success();
     }
 
+    public async Task<int> DeleteManyAsync(
+        Guid userId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        var rows = await context.Contacts
+            .Where(c => c.UserId == userId && ids.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0) return 0;
+
+        // The FK cascades in MariaDB, but the InMemory provider the tests run on enforces no FK
+        // at all: deleting the children here is what makes the behaviour the same in both, exactly
+        // as DeleteAsync does for a single contact.
+        var found = rows.Select(r => r.Id).ToList();
+        var addresses = await context.ContactEmails
+            .Where(e => found.Contains(e.ContactId))
+            .ToListAsync(cancellationToken);
+
+        context.ContactEmails.RemoveRange(addresses);
+        context.Contacts.RemoveRange(rows);
+        await context.SaveChangesAsync(cancellationToken);
+        return rows.Count;
+    }
+
+    public async Task<int> SetFavoriteManyAsync(
+        Guid userId, IReadOnlyList<Guid> ids, bool isFavorite, CancellationToken cancellationToken)
+    {
+        var rows = await context.Contacts
+            .Where(c => c.UserId == userId && ids.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0) return 0;
+
+        var now = DateTime.UtcNow;
+        foreach (var row in rows)
+        {
+            row.IsFavorite = isFavorite;
+            row.UpdatedAt = now;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        return rows.Count;
+    }
+
     public async Task<ContactImportOutcome> ImportAsync(
         Guid userId, IReadOnlyList<ContactImportRow> rows, CancellationToken cancellationToken)
     {

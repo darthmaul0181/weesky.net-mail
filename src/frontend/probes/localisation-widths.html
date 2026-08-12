@@ -26,6 +26,7 @@
   <link rel="stylesheet" href="/src/styles/theme-night.css" />
   <link rel="stylesheet" href="/src/index.css" />
   <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/selection.css" />
   <link rel="stylesheet" href="/src/styles/shell.css" />
   <link rel="stylesheet" href="/src/styles/tooltip.css" />
   <link rel="stylesheet" href="/src/styles/mail.css" />
@@ -316,10 +317,14 @@
       })
     }
 
-    // 4.6 ContactsLayout's add button, in the 240px scopes column.
+    // 4.6 ContactsLayout's add button, in the 240px scopes column. The 40px transfer trigger and
+    // the row's 7px gap are in the markup because they are what the label has to fit AROUND: the
+    // button went from the column's whole width to `flex: 1` beside them, which is 47px less.
     for (const lang of ['en', 'fr']) {
       const html = `<div class="contacts-scopes-column"><div class="contacts-scopes-add">
-        <button class="btn btn-primary contacts-add-btn">${s(lang, 'contacts:layout.add')}</button></div></div>`
+        <button class="btn btn-primary contacts-add-btn">${s(lang, 'contacts:layout.add')}</button>
+        <div class="dropdown-root"><button class="btn contacts-transfer-trigger">&#8942;</button></div>
+        </div></div>`
       const host = mount(html, 240)
       const btn = host.querySelector('.contacts-add-btn')
       const m = ink(lastText(btn))

@@ -1,7 +1,10 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError, api } from '../../api.js'
-import Tooltip from '../../components/Tooltip'
+import DropdownMenu from '../../components/DropdownMenu'
+import DownloadIcon from '../../icons/DownloadIcon'
+import KebabIcon from '../../icons/KebabIcon'
+import UploadIcon from '../../icons/UploadIcon'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import { downloadBlob } from '../../lib/downloadBlob'
 import type { Contact, ContactImportReport } from './contactTypes'
@@ -11,14 +14,20 @@ import { useImportContacts } from './queries'
 interface Props {
   contacts: Contact[] | undefined
   onError: (message: string) => void
+  /**
+   * The trigger's skin, which is the caller's because the placement is: a 40px `.btn` beside Add
+   * contact on a desktop, a `.selection-btn` in the list band once the scope column is a drawer.
+   */
+  triggerClassName: string
 }
 
 /**
- * The band's footer. The two file actions sit here rather than among the scopes because the band
- * is navigation and these are not — the same reason the mail column keeps its account block at the
- * foot.
+ * Import and export, behind one trigger. They are the rarest actions in the module and used to be
+ * two filled buttons across the foot of the scope column — the heaviest thing in it after the
+ * primary action, and a shape no other column here wears. The mail folder column's own top row is
+ * the precedent: a primary action and one square beside it.
  */
-export default function ContactsTransfer({ contacts, onError }: Props) {
+export default function ContactsTransfer({ contacts, onError, triggerClassName }: Props) {
   const { t } = useTranslation('contacts')
   const input = useRef<HTMLInputElement>(null)
   const [report, setReport] = useState<ContactImportReport | null>(null)
@@ -57,24 +66,30 @@ export default function ContactsTransfer({ contacts, onError }: Props) {
   const empty = !contacts?.length
 
   return (
-    <div className="contacts-transfer">
+    <>
       <input ref={input} type="file" accept=".csv,text/csv" hidden onChange={pick}
         data-testid="contacts-import-input" />
 
-      <Tooltip content={t('transfer.importHint')}>
-        <button type="button" className="btn" disabled={importContacts.isPending}
-          onClick={() => input.current?.click()}>
-          {importContacts.isPending ? <span className="spinner" /> : t('transfer.import')}
-        </button>
-      </Tooltip>
-
-      <Tooltip content={t(empty ? 'transfer.nothingToExport' : 'transfer.exportHint')}>
-        <button type="button" className="btn" disabled={empty || exporting} onClick={download}>
-          {exporting ? <span className="spinner" /> : t('transfer.export')}
-        </button>
-      </Tooltip>
+      <DropdownMenu
+        ariaLabel={t('transfer.actions')}
+        className={triggerClassName}
+        trigger={importContacts.isPending ? <span className="spinner" /> : <KebabIcon size={16} />}
+        items={[
+          {
+            label: t('transfer.import'), icon: <UploadIcon size={15} />,
+            title: t('transfer.importHint'), disabled: importContacts.isPending,
+            onSelect: () => input.current?.click(),
+          },
+          {
+            label: t('transfer.export'), icon: <DownloadIcon size={15} />,
+            // The reason a shut door is shut, where the two buttons carried it in a tooltip.
+            title: t(empty ? 'transfer.nothingToExport' : 'transfer.exportHint'),
+            disabled: empty || exporting, onSelect: download,
+          },
+        ]}
+      />
 
       {report && <ImportReportModal report={report} onClose={() => setReport(null)} />}
-    </div>
+    </>
   )
 }

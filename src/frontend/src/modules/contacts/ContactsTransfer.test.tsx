@@ -30,10 +30,16 @@ function renderTransfer(contacts: Contact[] | undefined, onError = vi.fn()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <ContactsTransfer contacts={contacts} onError={onError} />
+      <ContactsTransfer contacts={contacts} onError={onError}
+        triggerClassName="btn contacts-transfer-trigger" />
     </QueryClientProvider>,
   )
   return onError
+}
+
+// DropdownMenu mounts its rows only while open, so every assertion about them opens it first.
+async function openMenu() {
+  await userEvent.click(screen.getByRole('button', { name: 'Import and export' }))
 }
 
 // The input is hidden, so userEvent.upload cannot reach it; the change event is what the component
@@ -114,22 +120,37 @@ describe('ContactsTransfer', () => {
     api.exportContacts.mockResolvedValue({ blob, fileName: 'contacts-2026-07-27.csv' })
     renderTransfer(book)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await openMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Export' }))
 
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(blob, 'contacts-2026-07-27.csv'))
   })
 
   // A file with no rows in it reads as a failure, so the door is shut rather than opened onto one.
-  it('disables the export on an empty book', () => {
+  it('disables the export on an empty book', async () => {
     renderTransfer([])
 
-    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled()
+    await openMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Export' })).toBeDisabled()
   })
 
-  it('disables the export while the book is still loading', () => {
+  // The tooltip that carried it went with the two buttons; the row's title carries it now.
+  it('names why the export is shut on an empty book', async () => {
+    renderTransfer([])
+
+    await openMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Export' }))
+      .toHaveAttribute('title', 'Nothing to export')
+  })
+
+  it('disables the export while the book is still loading', async () => {
     renderTransfer(undefined)
 
-    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled()
+    await openMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Export' })).toBeDisabled()
   })
 
   // Server prose never reaches the caller; the local fallback does — see apiErrorMessage.
@@ -137,8 +158,30 @@ describe('ContactsTransfer', () => {
     api.exportContacts.mockRejectedValue(new Error('Server error'))
     const onError = renderTransfer(book)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await openMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Export' }))
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith('Could not export the contacts'))
+  })
+
+  // The complaint the whole change answers: two filled buttons in the column's foot became one
+  // trigger. Nothing may put a second door onto either action back on the band.
+  it('draws one trigger rather than a button per action', () => {
+    renderTransfer(book)
+
+    expect(screen.getByRole('button', { name: 'Import and export' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import…' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument()
+  })
+
+  it('opens the file dialog from the menu', async () => {
+    renderTransfer(book)
+    const input = screen.getByTestId('contacts-import-input')
+    const click = vi.spyOn(input, 'click')
+
+    await openMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Import…' }))
+
+    expect(click).toHaveBeenCalledTimes(1)
   })
 })
