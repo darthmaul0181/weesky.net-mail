@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using MimeKit;
+using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
@@ -15,6 +16,16 @@ public interface IImapSession : IAsyncDisposable
     /// configured: an additional domain may point at a server that uses a different one.
     /// </summary>
     char DirectorySeparator { get; }
+
+    /// <summary>Whether the server advertised the QUOTA (RFC 2087) capability post-authentication.</summary>
+    bool SupportsQuota { get; }
+
+    /// <summary>
+    /// Reads GETQUOTAROOT INBOX. Check <see cref="SupportsQuota"/> first — a server that
+    /// never advertised QUOTA has nothing to answer this with, which is not this method's
+    /// failure to report.
+    /// </summary>
+    Task<Result<Quota>> GetQuotaAsync(CancellationToken cancellationToken);
 
     /// <summary>The full folder tree, subscribed and unsubscribed alike.</summary>
     Task<Result<IReadOnlyList<MailFolderNode>>> ListFoldersAsync(CancellationToken cancellationToken);

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>weesky.Snoopy.Providers.Weesky.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
+    <PackageReference Include="CryptSharp.Core" Version="2.0.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\snoopy.providers.weesky\snoopy.providers.weesky.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Linked, not copied: these helpers are the core suite's, and a second copy would be the one
+         place the two suites could silently disagree about what an authenticated request, a stubbed
+         HTTP exchange or a cache commit looks like. -->
+    <Compile Include="..\snoopy.microservice\snoopy.microservice.Tests\Infrastructure\ControllerTestHelpers.cs"
+             Link="Infrastructure\ControllerTestHelpers.cs" />
+    <Compile Include="..\snoopy.microservice\snoopy.microservice.Tests\Infrastructure\StubHttpMessageHandler.cs"
+             Link="Infrastructure\StubHttpMessageHandler.cs" />
+    <Compile Include="..\snoopy.microservice\snoopy.microservice.Tests\Infrastructure\StubSystemClock.cs"
+             Link="Infrastructure\StubSystemClock.cs" />
+    <Compile Include="..\snoopy.microservice\snoopy.microservice.Tests\Infrastructure\CommitHookCache.cs"
+             Link="Infrastructure\CommitHookCache.cs" />
+  </ItemGroup>
+
+</Project>

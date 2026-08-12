@@ -18,10 +18,11 @@ public sealed class AuthToken
     public string? Token { get; set; }
 
     /// <summary>
-    /// The account this token was issued for, as the database spells it — not as the caller typed
-    /// it. Anything keyed on the account after a login has to use this one: a row looked up under
-    /// the caller's spelling can miss, and the caller only learns of it much later, through
-    /// whatever that row was holding.
+    /// The account this token was issued for, as the caller typed it — canonicalised
+    /// (trimmed, lower-cased) by <c>IdentityResolver.Canonical</c> before the IMAP LOGIN, not
+    /// looked up from a database row. Anything keyed on the account after a login has to use this
+    /// one: it is the single spelling shared by the webmail store row and the credentials-cookie
+    /// KDF salt, so a second spelling of the same mailbox would miss the row or derive the wrong key.
     /// </summary>
     public string Email { get; set; } = string.Empty;
 }

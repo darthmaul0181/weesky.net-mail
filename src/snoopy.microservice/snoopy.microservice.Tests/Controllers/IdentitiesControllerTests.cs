@@ -6,6 +6,7 @@ using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
+using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -18,22 +19,24 @@ public sealed class IdentitiesControllerTests
     private static readonly Guid WebmailUid = Guid.NewGuid();
 
     private readonly Mock<ISendingIdentityStore> _store = new();
-    private readonly Mock<IAliasesRepository> _aliases = new();
-    private readonly Mock<IUsersRepository> _users = new();
+    private readonly Mock<IAliasDirectory> _directory = new();
+    private readonly Mock<IProfileReader> _profiles = new();
     private readonly Mock<IConnectedAccountStore> _accounts = new();
 
     private IdentitiesController CreateController(
-        IReadOnlyList<SendingIdentity>? stored = null, IEnumerable<Alias>? aliases = null,
-        string? fullName = "Mick Dubois", string? accountIdHeader = null, string? accountIdQuery = null)
+        IReadOnlyList<SendingIdentity>? stored = null, IReadOnlyList<string>? aliases = null,
+        string? fullName = "Mick Dubois", string? accountIdHeader = null, string? accountIdQuery = null,
+        bool enforcesOwnership = true)
     {
         _store.Setup(s => s.GetAsync(WebmailUid, AccountScope.Primary, It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored ?? []);
-        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+        _directory.SetupGet(d => d.EnforcesOwnership).Returns(enforcesOwnership);
+        _directory.Setup(d => d.GetAddressesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(aliases ?? []);
-        _users.Setup(u => u.FindByEmailAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new User("mick@weesky.be") { FullName = fullName! });
+        _profiles.Setup(p => p.GetDisplayNameAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(fullName);
 
-        var controller = new IdentitiesController(_store.Object, _aliases.Object, _users.Object, _accounts.Object)
+        var controller = new IdentitiesController(_store.Object, _directory.Object, _profiles.Object, _accounts.Object)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("mick", "weesky.be", WebmailUid),
         };
@@ -53,7 +56,7 @@ public sealed class IdentitiesControllerTests
     {
         var controller = CreateController(
             stored: [Row("michel@weesky.be", "Michel"), Row("gone@weesky.be", "Ancien")],
-            aliases: [new Alias { Name = "michel", Domain = "weesky.be" }]);
+            aliases: ["michel@weesky.be"]);
 
         var result = await controller.List(CancellationToken.None);
 
@@ -67,7 +70,7 @@ public sealed class IdentitiesControllerTests
     [Fact]
     public async Task Replace_ValidSet_Returns204AndWritesCanonicalRows()
     {
-        var controller = CreateController(aliases: [new Alias { Name = "michel", Domain = "weesky.be" }]);
+        var controller = CreateController(aliases: ["michel@weesky.be"]);
         IReadOnlyList<SendingIdentity>? written = null;
         _store.Setup(s => s.ReplaceAsync(WebmailUid, AccountScope.Primary, It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, string, IReadOnlyList<SendingIdentity>, CancellationToken>(
@@ -140,7 +143,7 @@ public sealed class IdentitiesControllerTests
     {
         var controller = CreateController(
             stored: [Row("michel@weesky.be", "Michel")],
-            aliases: [new Alias { Name = "michel", Domain = "weesky.be" }],
+            aliases: ["michel@weesky.be"],
             accountIdHeader: "primary");
 
         var result = await controller.List(CancellationToken.None);
@@ -293,5 +296,70 @@ public sealed class IdentitiesControllerTests
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result);
         Assert.Equal(ConnectedAccountErrors.AccountNotFound, Assert.IsType<ResultEnveloppe>(notFound.Value).Message);
+    }
+
+    // ── Free identities: a platform that cannot vouch for an address ─────────
+    // The primary mailbox is then read and written exactly as a connected account is: no alias
+    // list exists to judge ownership against, so no row can be stale and any address is allowed.
+
+    [Fact]
+    public async Task List_FreeIdentities_ResolvesLikeAConnectedAccount()
+    {
+        var controller = CreateController(
+            stored: [Row("elsewhere@other.test", "Elsewhere")], enforcesOwnership: false);
+
+        var result = await controller.List(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<IdentityListResponse>(ok.Value);
+        Assert.Equal(2, response.Identities.Count);
+        Assert.All(response.Identities, i => Assert.False(i.Stale));
+        var primary = Assert.Single(response.Identities, i => i.IsPrimary);
+        Assert.Equal("mick@weesky.be", primary.Address);
+        Assert.True(primary.IsDefault);
+        _directory.Verify(d => d.GetAddressesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
+        _profiles.Verify(p => p.GetDisplayNameAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Replace_FreeIdentities_AcceptsAnyWellFormedAddressUnderThePrimaryScope()
+    {
+        var controller = CreateController(enforcesOwnership: false);
+        IReadOnlyList<SendingIdentity>? written = null;
+        _store.Setup(s => s.ReplaceAsync(WebmailUid, AccountScope.Primary, It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, string, IReadOnlyList<SendingIdentity>, CancellationToken>((_, _, rows, _) => written = rows)
+            .Returns(Task.CompletedTask);
+
+        var request = new ReplaceIdentitiesRequest
+        {
+            Identities =
+            [
+                new IdentityEntry { Address = "elsewhere@other.test", DisplayName = "Elsewhere", IsDefault = true },
+                new IdentityEntry { Address = "Mick@Weesky.BE", DisplayName = "Mick" },
+            ],
+        };
+        var result = await controller.Replace(request, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(2, written!.Count);
+        // The primary carries the default whatever the request said — ValidateConnected's rule.
+        Assert.True(Assert.Single(written, r => r.Address == "mick@weesky.be").IsDefault);
+        Assert.False(Assert.Single(written, r => r.Address == "elsewhere@other.test").IsDefault);
+    }
+
+    [Fact]
+    public async Task Replace_FreeIdentities_WithoutThePrimary_Returns400()
+    {
+        var controller = CreateController(enforcesOwnership: false);
+
+        var request = new ReplaceIdentitiesRequest
+        {
+            Identities = [new IdentityEntry { Address = "elsewhere@other.test", DisplayName = "Elsewhere" }],
+        };
+        var result = await controller.Replace(request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _store.Verify(s => s.ReplaceAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<IReadOnlyList<SendingIdentity>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

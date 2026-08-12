@@ -7,6 +7,7 @@ import AccountPage from './AccountPage'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
+  getCapabilities: vi.fn(),
   getQuota: vi.fn(),
   changeFullName: vi.fn(),
   changePassword: vi.fn(),
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../api.js', () => ({
   api: {
     getAccount: mocks.getAccount,
+    getCapabilities: mocks.getCapabilities,
     getQuota: mocks.getQuota,
     changeFullName: mocks.changeFullName,
     changePassword: mocks.changePassword,
@@ -52,6 +54,8 @@ describe('AccountPage', () => {
       userName: 'mick', mailbox: 'WSY', fullName: 'Mick', isAdmin: false,
       domains: [{ id: 'WSY', name: 'weesky.be' }, { id: 'EXT', name: 'example.org' }],
     })
+    // Omits every flag — the current, unrestricted behaviour.
+    mocks.getCapabilities.mockResolvedValue({})
     // Real QuotaBlock shape (see AliasesPage.main.test.jsx): { storageBytesUsed, storageBytesLimit },
     // not the brief's { used, limit }.
     mocks.getQuota.mockResolvedValue({ storageBytesUsed: 100 * MB, storageBytesLimit: 1024 * MB })
@@ -146,5 +150,34 @@ describe('AccountPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /change password/i }))
     expect(await screen.findByText(/current password is required/i)).toBeInTheDocument()
     expect(mocks.changePassword).not.toHaveBeenCalled()
+  })
+
+  describe('capability gating', () => {
+    it('hides the change-password section when the platform does not wire it up', async () => {
+      mocks.getCapabilities.mockResolvedValue({ passwordChange: false })
+      renderPage()
+      await screen.findByText('mick@weesky.be')
+      await waitFor(() => expect(screen.queryByText('Change password')).not.toBeInTheDocument())
+      expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()
+    })
+
+    it('hides the name-editing pencil when the platform does not wire profile editing up', async () => {
+      mocks.getCapabilities.mockResolvedValue({ profileEditing: false })
+      renderPage()
+      await screen.findByText('mick@weesky.be')
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /edit name/i })).not.toBeInTheDocument())
+      expect(screen.getByText('Mick')).toBeInTheDocument()
+    })
+
+    // GET /api/Account/Quota answers 204 when the IMAP server advertises no QUOTA capability —
+    // api.getQuota() already resolves that to null, and QuotaBlock renders nothing for null.
+    it('renders no quota gauge when the quota endpoint answers empty', async () => {
+      mocks.getQuota.mockResolvedValue(null)
+      const { container } = renderPage()
+      await screen.findByText('mick@weesky.be')
+      await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
+      expect(container.querySelector('.panel-quota')).toBeNull()
+    })
   })
 })

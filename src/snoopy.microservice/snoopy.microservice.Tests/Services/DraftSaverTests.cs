@@ -5,6 +5,7 @@ using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
+using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -16,8 +17,8 @@ public sealed class DraftSaverTests
 {
     private static readonly MailAccountConnection Conn = TestConnections.Primary("mick@weesky.be", "pw");
 
-    private readonly Mock<IUsersRepository> _users = new();
-    private readonly Mock<IAliasesRepository> _aliases = new();
+    private readonly Mock<IAliasDirectory> _directory = new();
+    private readonly Mock<IProfileReader> _profiles = new();
     private readonly Mock<ISendingIdentityStore> _identities = new();
     private readonly Mock<IOutgoingMailSanitizer> _sanitizer = new();
     private readonly Mock<IStagedAttachmentStore> _staged = new();
@@ -29,8 +30,8 @@ public sealed class DraftSaverTests
 
     private DraftSaver CreateSaver()
     {
-        _users.Setup(u => u.FindByEmailAsync("mick@weesky.be", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new User("mick@weesky.be") { FullName = "Mick" });
+        _profiles.Setup(p => p.GetDisplayNameAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Mick");
         _sanitizer.Setup(s => s.Prepare(It.IsAny<string>()))
             .Returns(new OutgoingBody("<div>hi</div>", "hi"));
 
@@ -43,13 +44,14 @@ public sealed class DraftSaverTests
         _messages.Setup(m => m.SaveDraftAsync(_user, Conn, "Drafts", It.IsAny<MimeMessage>(), It.IsAny<uint?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(7u));
 
-        _aliases.Setup(a => a.GetAliasesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new Alias { Name = "michel", Domain = "weesky.be" }]);
+        _directory.SetupGet(d => d.EnforcesOwnership).Returns(true);
+        _directory.Setup(d => d.GetAddressesAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["michel@weesky.be"]);
         _identities.Setup(i => i.GetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         // The real factory, not a mock: several tests assert on how the built message behaves.
-        var factory = new OutgoingMessageFactory(_users.Object, _aliases.Object, _identities.Object,
+        var factory = new OutgoingMessageFactory(_directory.Object, _profiles.Object, _identities.Object,
             _sanitizer.Object, _staged.Object, NullLogger<OutgoingMessageFactory>.Instance);
         return new DraftSaver(factory, _folders.Object, _roles.Object, _messages.Object, NullLogger<DraftSaver>.Instance);
     }

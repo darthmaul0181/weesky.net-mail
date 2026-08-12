@@ -13,6 +13,7 @@ afterEach(resetViewport)
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
+  getCapabilities: vi.fn(),
   getQuota: vi.fn(),
   logout: vi.fn(),
   hasSession: vi.fn(() => true),
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../api.js', () => ({
   api: {
     getAccount: mocks.getAccount,
+    getCapabilities: mocks.getCapabilities,
     getQuota: mocks.getQuota,
     logout: mocks.logout,
     adminGetUsers: mocks.adminGetUsers,
@@ -72,6 +74,9 @@ describe('settings section', () => {
     vi.clearAllMocks()
     localStorage.clear()
     mocks.hasSession.mockReturnValue(true)
+    // Omits every flag — a capabilities response with nothing gated, or a platform that hasn't
+    // restricted anything. The gate is `!== false`, so an absent key must leave every surface up.
+    mocks.getCapabilities.mockResolvedValue({})
     mocks.getQuota.mockResolvedValue(null)
     mocks.adminGetUsers.mockResolvedValue([])
     mocks.adminGetDomains.mockResolvedValue([])
@@ -206,6 +211,123 @@ describe('settings section', () => {
     const router = renderAt('/settings/rules')
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
   })
+
+  describe('capability gating', () => {
+    it('hides Aliases when the platform does not wire it up', async () => {
+      mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+      mocks.getCapabilities.mockResolvedValue({ aliases: false })
+      renderAt('/settings/account')
+      const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+      expect(nav.getByText('Account')).toBeInTheDocument()
+      await waitFor(() => expect(nav.queryByText('Aliases')).not.toBeInTheDocument())
+      // Unrelated surfaces stay up — one flag going false must not take the others with it.
+      expect(nav.getByText('Administration')).toBeInTheDocument()
+    })
+
+    it('hides Administration when the platform does not wire it up, even for an admin', async () => {
+      mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+      mocks.getCapabilities.mockResolvedValue({ admin: false })
+      renderAt('/settings/account')
+      const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+      await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(true))
+      await waitFor(() => expect(nav.queryByText('Administration')).not.toBeInTheDocument())
+    })
+
+    it('hides Rules on the primary account when the platform does not wire it up', async () => {
+      mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+      mocks.getCapabilities.mockResolvedValue({ rules: false })
+      renderAt('/settings/account')
+      const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+      expect(nav.getByText('Account')).toBeInTheDocument()
+      await waitFor(() => expect(nav.queryByText('Rules')).not.toBeInTheDocument())
+    })
+
+    // The connected account's Rules gate is sieveSupported, not the platform's capabilities — the
+    // two must not be conflated, or a generic-platform connected mailbox loses Rules for no reason.
+    it('leaves a connected account\'s Sieve-based Rules gating untouched by capabilities.rules', async () => {
+      localStorage.setItem('mail.activeAccount', 'g1')
+      mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+      mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: true })])
+      mocks.getCapabilities.mockResolvedValue({ rules: false })
+      renderAt('/settings/general')
+      const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+      await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
+      expect(nav.getByText('Rules')).toBeInTheDocument()
+    })
+
+    // The nav already hides these three rows on the flag; a deep link (bookmark, typed URL) is a
+    // second door to the same screen and has to be guarded independently — that guard is what
+    // these six cases exercise, on the model of the Sieve deep-link test above.
+    describe('deep-link guarding', () => {
+      it('deep-links to /settings/admin with capabilities.admin=false and redirects to Account', async () => {
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+        mocks.getCapabilities.mockResolvedValue({ admin: false })
+        const router = renderAt('/settings/admin')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
+      })
+
+      it('deep-links to /settings/admin as an admin with no capabilities fixture and stays', async () => {
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
+        mocks.getCapabilities.mockResolvedValue({})
+        const router = renderAt('/settings/admin')
+        expect(await screen.findByRole('button', { name: 'Accounts' })).toBeInTheDocument()
+        expect(router.state.location.pathname).toBe('/settings/admin')
+      })
+
+      it('deep-links to /settings/rules on the primary account with capabilities.rules=false and redirects to General', async () => {
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+        mocks.getCapabilities.mockResolvedValue({ rules: false })
+        const router = renderAt('/settings/rules')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+      })
+
+      it('deep-links to /settings/rules on the primary account with no capabilities fixture and stays', async () => {
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+        mocks.getCapabilities.mockResolvedValue({})
+        const router = renderAt('/settings/rules')
+        await screen.findByRole('navigation', { name: 'Settings' })
+        expect(router.state.location.pathname).toBe('/settings/rules')
+      })
+
+      it('deep-links to /settings/aliases with capabilities.aliases=false and redirects to General', async () => {
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+        mocks.getCapabilities.mockResolvedValue({ aliases: false })
+        const router = renderAt('/settings/aliases')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+      })
+
+      it('deep-links to /settings/aliases with no capabilities fixture and stays', async () => {
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+        mocks.getCapabilities.mockResolvedValue({})
+        const router = renderAt('/settings/aliases')
+        await screen.findByRole('navigation', { name: 'Settings' })
+        expect(router.state.location.pathname).toBe('/settings/aliases')
+      })
+
+      // The race the redirect used to lose: activeAccount is null for the width of the connected
+      // accounts fetch, and the `isPrimary` fallback that reads null as "primary" is right for a
+      // nav row (it just re-renders once the list lands) but was wrong for a redirect — a
+      // connected, Sieve-capable account deep-linking in while capabilities.rules resolves false
+      // first got bounced off a page it was actually allowed to see.
+      it('does not redirect a deep-linked /settings/rules while capabilities.rules=false resolves before the still-loading account list, then stays once the connected account\'s sieveSupported lands true', async () => {
+        localStorage.setItem('mail.activeAccount', 'g1')
+        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+        mocks.getCapabilities.mockResolvedValue({ rules: false })
+        let resolveAccounts: (rows: unknown[]) => void = () => {}
+        mocks.getConnectedAccounts.mockReturnValue(new Promise(resolve => { resolveAccounts = resolve }))
+        const router = renderAt('/settings/rules')
+
+        await waitFor(() => expect(mocks.getCapabilities).toHaveBeenCalled())
+        await settle()
+        expect(router.state.location.pathname).toBe('/settings/rules')
+
+        resolveAccounts([connectedRow({ sieveSupported: true })])
+        await screen.findByRole('navigation', { name: 'Settings' })
+        await settle()
+        expect(router.state.location.pathname).toBe('/settings/rules')
+      })
+    })
+  })
 })
 
 describe('SettingsLayout below 1024px', () => {
@@ -214,6 +336,7 @@ describe('SettingsLayout below 1024px', () => {
     localStorage.clear()
     mocks.hasSession.mockReturnValue(true)
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+    mocks.getCapabilities.mockResolvedValue({})
     mocks.getQuota.mockResolvedValue(null)
     mocks.adminGetUsers.mockResolvedValue([])
     mocks.adminGetDomains.mockResolvedValue([])

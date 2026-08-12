@@ -19,6 +19,7 @@ internal static class ApplicationServicesConfiguration
         // by the handler — HMAC takes any length. Validated on start rather than on first use, so
         // a misconfigured deployment fails where an operator is watching instead of on a 500 the
         // first user meets. Same refusal AddFrontendCors and AddCredentialKeyRing make.
+        services.AddOptions<PlatformOptions>().Bind(configuration);
         services.AddOptions<TokenConstants>()
             .Bind(configuration.GetSection("TokenConstants"))
             .Validate(
@@ -27,7 +28,6 @@ internal static class ApplicationServicesConfiguration
                 $"TokenConstants:Key must be at least {AuthorizationExtension.MinimumSigningKeyBytes} bytes " +
                 "to sign with HMAC-SHA256. Set TokenConstants__Key in the service's EnvironmentFile.")
             .ValidateOnStart();
-        services.AddOptions<DovecotOptions>().Bind(configuration.GetSection("Dovecot"));
         services.AddOptions<SieveOptions>().Bind(configuration.GetSection("Sieve"));
         services.AddOptions<MailOptions>().Bind(configuration.GetSection("Mail"));
         services.AddOptions<TrustedSenderOptions>().Bind(configuration.GetSection("TrustedSenders"));
@@ -53,6 +53,7 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
         services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
         services.AddSingleton<IManageSieveClient, ManageSieveClient>();
+        services.AddSingleton<ISieveAvailabilityProbe, SieveAvailabilityProbe>();
         services.AddSingleton<IMailHtmlSanitizer, MailHtmlSanitizer>();
         services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
         services.AddSingleton<IQuotePreparer, QuotePreparer>();
@@ -74,11 +75,6 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
         services.AddHostedService<StagedAttachmentSweeper>();
         services.AddHostedService<TrustedSenderSweeper>();
-
-        services.AddHttpClient<IDovecotQuotaClient, DovecotQuotaClient>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(5);
-        });
 
         services.AddHttpClient<IOAuthTokenService, OAuthTokenService>(client =>
             {
@@ -105,9 +101,6 @@ internal static class ApplicationServicesConfiguration
     public static IServiceCollection AddRepositories(this IServiceCollection services)
     {
         services.AddScoped<ISieveRepository, SieveRepository>();
-        services.AddScoped<IUsersRepository, UsersRepository>();
-        services.AddScoped<IAliasesRepository, AliasesRepository>();
-        services.AddScoped<IAdminRepository, AdminRepository>();
         services.AddScoped<IMailFolderRepository, MailFolderRepository>();
         services.AddScoped<IMailMessageRepository, MailMessageRepository>();
         services.AddScoped<IFolderRoleStore, FolderRoleStore>();

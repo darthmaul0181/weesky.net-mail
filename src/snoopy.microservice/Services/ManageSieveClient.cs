@@ -25,8 +25,7 @@ internal sealed class ManageSieveClient(
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        // The authorization identity may legitimately be empty — that is the own-credentials shape.
-        if (string.IsNullOrWhiteSpace(connection.Host) || string.IsNullOrWhiteSpace(connection.AuthenticationIdentity))
+        if (string.IsNullOrWhiteSpace(connection.Host))
         {
             logger.LogError("ManageSieve target is incomplete: {Connection}", connection);
             return Result.Failure<IManageSieveSession>(SieveErrors.NotConfigured);
@@ -89,8 +88,9 @@ internal sealed class ManageSieveClient(
                 return Fail(SieveErrors.NotSecure);
             }
 
-            // authzid \0 authcid \0 password: an authzid is impersonation (our own server, master
-            // account), an empty one means we are authenticating as the mailbox itself.
+            // authzid \0 authcid \0 password: there is no master account any more, so the authzid
+            // stays empty — every account authenticates with its own credentials, as the mailbox
+            // itself.
             var saslPayload = $"{connection.AuthorizationIdentity}\0{connection.AuthenticationIdentity}\0{connection.Password}";
             var b64 = Convert.ToBase64String(ManageSieveWire.Utf8.GetBytes(saslPayload));
             await wire.WriteLineAsync($"AUTHENTICATE \"PLAIN\" \"{b64}\"", handshakeToken);

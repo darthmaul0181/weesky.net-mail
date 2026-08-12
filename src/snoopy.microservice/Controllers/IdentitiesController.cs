@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
+using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 
@@ -15,17 +15,25 @@ namespace weesky.Snoopy.Microservice.Controllers;
 /// reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
 /// they do there; a connected account's set is validated against the account address itself,
 /// since there is no alias list on our server for a mailbox we do not administer.
+///
+/// A platform that does not enforce ownership (<see cref="IAliasDirectory.EnforcesOwnership"/>)
+/// puts the primary mailbox on that very same path: with no alias list to judge against, the rule
+/// is the connected one rather than a third one of its own.
 /// </summary>
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
 public sealed class IdentitiesController(
-    ISendingIdentityStore store, IAliasesRepository aliases, IUsersRepository users,
+    ISendingIdentityStore store, IAliasDirectory aliasDirectory, IProfileReader profiles,
     IConnectedAccountStore accounts) : ApiBaseController
 {
     /// <summary>
-    /// The resolved list: the primary address always (FullName label unless overridden), then
-    /// every stored row; a row whose alias vanished comes back stale, never silently dropped.
+    /// The resolved list. In strict mode (<see cref="IAliasDirectory.EnforcesOwnership"/>): the
+    /// primary address always first (FullName label unless overridden), then every stored row; a
+    /// row whose alias vanished comes back stale, never silently dropped. In free mode — a
+    /// connected account, or a platform that enforces no ownership at all — there is no alias list
+    /// to check a row against, so the connected-style list applies instead: the account address
+    /// first, then every stored row as-is, and nothing is ever stale.
     /// </summary>
     /// <response code="200">The identities, default first</response>
     /// <response code="401">Not authenticated</response>
@@ -36,10 +44,10 @@ public sealed class IdentitiesController(
     {
         var scope = await ResolveScopeAsync(cancellationToken);
         if (scope.Error is not null) return scope.Error;
-        if (scope.Account is { } account)
+        if (UnverifiableScope(scope.Account) is { } unverifiable)
         {
-            var connectedStored = await store.GetAsync(AuthenticatedUser.WebmailUid, account.Id.ToString(), cancellationToken);
-            return Ok(new IdentityListResponse(IdentityResolver.ResolveConnected(connectedStored, account.Email)));
+            var rows = await store.GetAsync(AuthenticatedUser.WebmailUid, unverifiable.Scope, cancellationToken);
+            return Ok(new IdentityListResponse(IdentityResolver.ResolveConnected(rows, unverifiable.Address)));
         }
 
         var (stored, aliasAddresses, fullName) = await LoadSourcesAsync(cancellationToken);
@@ -48,8 +56,10 @@ public sealed class IdentitiesController(
     }
 
     /// <summary>
-    /// Replaces the whole set. Addresses must belong to the caller (primary, a live alias, or an
-    /// already-stored row — the last keeps stale identities alive across saves).
+    /// Replaces the whole set. In strict mode, addresses must belong to the caller (primary, a
+    /// live alias, or an already-stored row — the last keeps stale identities alive across saves).
+    /// In free mode there is no alias list to check ownership against, so any well-formed address
+    /// is accepted as long as the set still contains the account address itself.
     /// </summary>
     /// <param name="request">the full identity list</param>
     /// <param name="cancellationToken">cancellation token</param>
@@ -66,12 +76,12 @@ public sealed class IdentitiesController(
 
         var scope = await ResolveScopeAsync(cancellationToken);
         if (scope.Error is not null) return scope.Error;
-        if (scope.Account is { } account)
+        if (UnverifiableScope(scope.Account) is { } unverifiable)
         {
-            var connectedValidated = IdentityResolver.ValidateConnected(request.Identities ?? [], account.Email);
-            if (connectedValidated.IsFailure) return BadRequestEnveloppe(connectedValidated.Error);
+            var accepted = IdentityResolver.ValidateConnected(request.Identities ?? [], unverifiable.Address);
+            if (accepted.IsFailure) return BadRequestEnveloppe(accepted.Error);
 
-            await store.ReplaceAsync(AuthenticatedUser.WebmailUid, account.Id.ToString(), connectedValidated.Value, cancellationToken);
+            await store.ReplaceAsync(AuthenticatedUser.WebmailUid, unverifiable.Scope, accepted.Value, cancellationToken);
             return NoContent();
         }
 
@@ -85,13 +95,24 @@ public sealed class IdentitiesController(
         return NoContent();
     }
 
-    private async Task<(IReadOnlyList<Data.Preferences.SendingIdentity> Stored, List<string> AliasAddresses, string? FullName)>
+    /// <summary>
+    /// The scope whose address is the only one anything can vouch for, and which therefore takes
+    /// <c>ResolveConnected</c>/<c>ValidateConnected</c>: a connected account, or — when the platform
+    /// enforces no ownership at all — the primary mailbox itself. Null means the alias-checked path.
+    /// </summary>
+    private (string Scope, string Address)? UnverifiableScope(Data.Preferences.ConnectedAccount? account)
+    {
+        if (account is { } connected) return (connected.Id.ToString(), connected.Email);
+        return aliasDirectory.EnforcesOwnership ? null : (AccountScope.Primary, AuthenticatedUser.Email);
+    }
+
+    private async Task<(IReadOnlyList<Data.Preferences.SendingIdentity> Stored, IReadOnlyList<string> AliasAddresses, string? FullName)>
         LoadSourcesAsync(CancellationToken cancellationToken)
     {
         var stored = await store.GetAsync(AuthenticatedUser.WebmailUid, AccountScope.Primary, cancellationToken);
-        var aliasList = await aliases.GetAliasesAsync(AuthenticatedUser, cancellationToken);
-        var dbUser = await users.FindByEmailAsync(AuthenticatedUser.Email, cancellationToken);
-        return (stored, aliasList.ToAddresses(), dbUser?.FullName);
+        var aliasAddresses = await aliasDirectory.GetAddressesAsync(AuthenticatedUser, cancellationToken);
+        var fullName = await profiles.GetDisplayNameAsync(AuthenticatedUser, cancellationToken);
+        return (stored, aliasAddresses, fullName);
     }
 
     /// <summary>

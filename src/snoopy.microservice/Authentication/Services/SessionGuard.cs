@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Caching.Memory;
+using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Authentication.Services;
 
 internal sealed class SessionGuard(
-    IUsersRepository users,
+    IAccountInfoProvider accounts,
     IWebmailUserStore webmailUsers,
     IMemoryCache cache) : ISessionGuard
 {
@@ -24,9 +25,7 @@ internal sealed class SessionGuard(
         {
             entry.AbsoluteExpirationRelativeToNow = CacheWindow;
 
-            // FindByEmailAsync answers null for a deleted *or* deactivated mailbox, so this one
-            // read covers both — see UsersRepository.
-            var usable = await users.FindByEmailAsync(email, cancellationToken) != null;
+            var usable = await accounts.IsUsableAsync(email, cancellationToken);
             var account = usable ? await webmailUsers.FindByEmailAsync(email, cancellationToken) : null;
 
             return new AccountState(usable, account?.SecurityStamp);

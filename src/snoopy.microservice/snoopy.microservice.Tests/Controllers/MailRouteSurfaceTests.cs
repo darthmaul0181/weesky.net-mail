@@ -1,8 +1,8 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Routing;
 using weesky.Snoopy.Microservice.Controllers;
+using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Controllers;
@@ -15,31 +15,10 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 /// </summary>
 public sealed class MailRouteSurfaceTests
 {
-    private static IReadOnlyList<(Type Controller, MethodInfo Action, string Verb, string Route)> MailSurface()
-    {
-        var surface = new List<(Type, MethodInfo, string, string)>();
-        foreach (var type in typeof(ApiBaseController).Assembly.GetTypes())
-        {
-            if (!type.IsClass || type.IsAbstract || !typeof(ControllerBase).IsAssignableFrom(type))
-                continue;
-
-            var prefix = type.GetCustomAttribute<RouteAttribute>()?.Template?
-                .Replace("[controller]", type.Name[..^"Controller".Length]);
-            if (prefix != "api/Mail")
-                continue;
-
-            foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
-            {
-                foreach (var http in method.GetCustomAttributes<HttpMethodAttribute>())
-                {
-                    var route = string.IsNullOrEmpty(http.Template) ? prefix : $"{prefix}/{http.Template}";
-                    surface.Add((type, method, http.HttpMethods.Single(), route));
-                }
-            }
-        }
-
-        return surface;
-    }
+    private static IReadOnlyList<ControllerRouteSurface.Action> MailSurface() =>
+        [.. ControllerRouteSurface
+            .Of(ControllerRouteSurface.ControllersOf(typeof(ApiBaseController).Assembly))
+            .Where(a => a.Prefix == "api/Mail")];
 
     /// <summary>The historical surface of MailController, verb by verb. Changing an entry here
     /// is an API break for every deployed client; additions belong at the end.</summary>
@@ -84,7 +63,7 @@ public sealed class MailRouteSurfaceTests
     [Fact]
     public void Every_action_declares_the_same_statuses_as_before()
     {
-        foreach (var (_, action, verb, route) in MailSurface())
+        foreach (var (_, action, verb, _, route) in MailSurface())
         {
             var declared = action.GetCustomAttributes<ProducesResponseTypeAttribute>()
                 .Select(a => a.StatusCode).OrderBy(c => c).ToArray();
@@ -110,11 +89,11 @@ public sealed class MailRouteSurfaceTests
     public void Only_the_upload_carries_a_service_filter_and_nothing_carries_a_size_limit()
     {
         var filters = MailSurface()
-            .SelectMany(a => a.Action.GetCustomAttributes<ServiceFilterAttribute>()
+            .SelectMany(a => a.Method.GetCustomAttributes<ServiceFilterAttribute>()
                 .Select(f => $"{a.Verb} {a.Route} -> {f.ServiceType.Name}"))
             .ToList();
 
         Assert.Equal(["POST api/Mail/Attachments -> AttachmentSizeLimitFilter"], filters);
-        Assert.All(MailSurface(), a => Assert.Empty(a.Action.GetCustomAttributes<RequestSizeLimitAttribute>()));
+        Assert.All(MailSurface(), a => Assert.Empty(a.Method.GetCustomAttributes<RequestSizeLimitAttribute>()));
     }
 }

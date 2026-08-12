@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 import RequireAuth from './layouts/RequireAuth'
 import RequireAdmin from './layouts/RequireAdmin'
+import RequireAliases from './layouts/RequireAliases'
 import RequirePrimary from './layouts/RequirePrimary'
 import RequireSieve from './layouts/RequireSieve'
 import AppShell from './layouts/AppShell'
@@ -52,7 +53,12 @@ export const routes: RouteObject[] = [
                 element: <RequirePrimary />,
                 children: [
                   { path: 'account', element: <AccountPage /> },
-                  { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
+                  {
+                    element: <RequireAliases />,
+                    children: [
+                      { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
+                    ],
+                  },
                 ],
               },
               { path: 'general', element: <GeneralPage /> },

@@ -121,13 +121,17 @@ internal sealed class FakeImapServer : IDisposable
 {
     private readonly bool _condStore;
     private readonly bool _oauth;
+    private readonly bool _quota;
+    private readonly string? _quotaResponse;
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
 
-    public FakeImapServer(bool condStore = false, bool oauth = false)
+    public FakeImapServer(bool condStore = false, bool oauth = false, bool quota = false, string? quotaResponse = null)
     {
         _condStore = condStore;
         _oauth = oauth;
+        _quota = quota;
+        _quotaResponse = quotaResponse;
     }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -145,6 +149,7 @@ internal sealed class FakeImapServer : IDisposable
             var baseCaps = _condStore
                 ? "IMAP4rev1 NAMESPACE SPECIAL-USE CONDSTORE"
                 : "IMAP4rev1 NAMESPACE SPECIAL-USE";
+            if (_quota) baseCaps += " QUOTA";
             return _oauth ? $"{baseCaps} AUTH=XOAUTH2 LOGINDISABLED" : baseCaps;
         }
     }
@@ -209,6 +214,12 @@ internal sealed class FakeImapServer : IDisposable
                             : "MESSAGES 3 UNSEEN 1 UIDVALIDITY 100 UIDNEXT 4";
                         await writer.WriteLineAsync($"* STATUS {mailbox} ({items})");
                         await writer.WriteLineAsync($"{tag} OK STATUS completed");
+                        break;
+
+                    case "GETQUOTAROOT":
+                        await writer.WriteLineAsync("* QUOTAROOT INBOX \"\"");
+                        await writer.WriteLineAsync($"* QUOTA \"\" ({_quotaResponse})");
+                        await writer.WriteLineAsync($"{tag} OK GETQUOTAROOT completed");
                         break;
 
                     case "LOGOUT":

@@ -21,7 +21,9 @@ internal static class SecurityConfiguration
     {
         services.AddJwtBearerAuthentication(cookiesSupport: true);
 
-        services.AddScoped<IAuthorizationHandler, AdminRequirementHandler>();
+        // No handler is registered here: the platform brings one, and a deployment whose platform
+        // has no admin directory leaves the policy unsatisfiable — which is the right answer,
+        // since no route it serves carries it.
         services.AddAuthorization(options =>
         {
             options.AddPolicy(AdminRequirement.PolicyName, policy =>

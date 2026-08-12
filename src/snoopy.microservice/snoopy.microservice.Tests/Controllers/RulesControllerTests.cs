@@ -17,8 +17,6 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 
 public sealed class RulesControllerTests
 {
-    private const string MasterUser = "master";
-    private const string MasterPassword = "master-secret";
     private const string SieveHost = "sieve.home.test";
 
     private readonly Mock<ISieveRepository> _repo = new();
@@ -29,9 +27,7 @@ public sealed class RulesControllerTests
     private readonly SieveOptions _sieveOptions = new()
     {
         Host = SieveHost,
-        Port = 4190,
-        MasterUser = MasterUser,
-        MasterPassword = MasterPassword
+        Port = 4190
     };
 
     private RulesController CreateController()
@@ -413,19 +409,19 @@ public sealed class RulesControllerTests
     }
 
     // ----- The active account -----
-    // Two authentication shapes, and crossing them is the defect this whole task exists to avoid.
-    // Master impersonation is the primary account's alone; every connected mailbox is entered with
-    // the credentials we hold for it, so a password change revokes its filters along with its mail.
+    // Every account — primary or connected — authenticates with the credentials we hold for it, so
+    // a password change revokes its filters along with its mail. Crossing shapes (sending someone
+    // else's password, or authorizing as someone else) is the defect this whole task exists to avoid.
 
     [Fact]
-    public async Task Get_OnThePrimaryAccount_ImpersonatesTheMailboxWithTheMasterCredentials()
+    public async Task Get_OnThePrimaryAccount_AuthenticatesWithTheUsersOwnCredentials()
     {
         SucceedGet();
 
         await CreateController().Get(CancellationToken.None);
 
         _repo.Verify(r => r.GetRuleSetAsync(
-            new SieveConnection(SieveHost, 4190, "alice@weesky.be", MasterUser, MasterPassword),
+            new SieveConnection(SieveHost, 4190, string.Empty, "alice@weesky.be", "hunter2"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -556,34 +552,6 @@ public sealed class RulesControllerTests
         _repo.Verify(r => r.SaveRawScriptAsync(
             new SieveConnection("sieve.external.test", 4190, string.Empty, "bob@external.test", "bob-secret"),
             "stop;", null, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    // Without a master password the impersonation would go out with a blank credential: a stream of
-    // failed master logins against our own Dovecot, and a 502 blaming the server for our own gap.
-    [Fact]
-    public async Task Get_OnThePrimaryAccountWithoutAMasterPassword_Returns502WithoutOpeningASession()
-    {
-        SucceedGet();
-        _sieveOptions.MasterPassword = string.Empty;
-
-        var result = await CreateController().Get(CancellationToken.None);
-
-        var bad = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(StatusCodes.Status502BadGateway, bad.StatusCode);
-        Assert.Equal(SieveErrors.NotConfigured, Assert.IsType<ResultEnveloppe>(bad.Value).Message);
-        _repo.Verify(r => r.GetRuleSetAsync(It.IsAny<SieveConnection>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Replace_OnThePrimaryAccountWithoutAMasterPassword_NeverOpensASession()
-    {
-        _sieveOptions.MasterPassword = "   ";
-
-        var result = await CreateController().Replace(new SaveRulesRequest { Rules = [] }, CancellationToken.None);
-
-        Assert.Equal(StatusCodes.Status502BadGateway, Assert.IsType<ObjectResult>(result.Result).StatusCode);
-        _repo.Verify(r => r.SaveRulesAsync(It.IsAny<SieveConnection>(), It.IsAny<IReadOnlyList<SieveRule>>(),
-            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The two provider endpoints answer out of the registry alone — no mailbox, no session — so

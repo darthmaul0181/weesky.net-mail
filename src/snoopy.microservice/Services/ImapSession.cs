@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
 using MimeKit;
+using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
@@ -33,6 +34,11 @@ internal sealed class ImapSession : IImapSession
     }
 
     public char DirectorySeparator { get; }
+
+    public bool SupportsQuota => _client.Capabilities.HasFlag(ImapCapabilities.Quota);
+
+    public Task<Result<Quota>> GetQuotaAsync(CancellationToken cancellationToken) =>
+        _folders.GetQuotaAsync(cancellationToken);
 
     /// <summary>
     /// The failure contract every operation on this session shares, and the reason none of them

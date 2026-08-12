@@ -9,7 +9,7 @@ namespace weesky.Snoopy.Microservice.Models;
 /// reason alone: as plain <c>int</c>/<c>bool</c> they carried a non-null default, so a partial
 /// update that simply omitted them reset the quota to 1024 and revoked admin — silently, and
 /// with no way for the repository to tell "false" from "not sent". The creation defaults live
-/// in <see cref="Repositories.AdminRepository"/>, applied only when the field is absent.
+/// in the weesky platform's <c>AdminRepository</c>, applied only when the field is absent.
 /// </summary>
 public sealed class AdminUserRequest
 {

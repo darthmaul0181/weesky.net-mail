@@ -21,9 +21,9 @@ public sealed class RulesController(
 {
     /// <summary>
     /// The ManageSieve target for the active account, or the error to answer with. The only place
-    /// a <see cref="SieveConnection"/> is built, and the only place the SASL shape is chosen. Master
-    /// impersonation is the primary account's alone; a connected mailbox authenticates with the
-    /// credentials we hold for it, so revoking its password revokes its filters in the same move.
+    /// a <see cref="SieveConnection"/> is built, and the only place the SASL shape is chosen. Every
+    /// account authenticates with the credentials we hold for it — no impersonation — so revoking
+    /// a mailbox's password revokes its filters in the same move.
     /// </summary>
     private async Task<AccountResolution<SieveConnection>> TryResolveAsync(
         CancellationToken cancellationToken)
@@ -40,21 +40,10 @@ public sealed class RulesController(
         if (account.Credential is not PasswordCredential mailbox)
             return AccountResolution<SieveConnection>.Failure(NotFoundEnveloppe(SieveErrors.Unsupported));
 
-        if (account.AccountId == MailAccountConnection.Primary)
-        {
-            // A blank master password would still open a session and offer the mailbox with an
-            // empty credential — a stream of failed master logins against our own Dovecot, and a
-            // 502 blaming the server. Fail here instead. Host and MasterUser the client guards.
-            if (string.IsNullOrWhiteSpace(sieve.MasterPassword))
-                return AccountResolution<SieveConnection>.Failure(SieveFailure(SieveErrors.NotConfigured));
-
-            return AccountResolution<SieveConnection>.Success(new SieveConnection(
-                sieve.Host, sieve.Port, account.Username, sieve.MasterUser, sieve.MasterPassword));
-        }
-
-        // A connected mailbox on our own server: its own login, but the house endpoint — the
-        // resolver leaves SieveHost null for home connections, since there is nothing to store.
-        if (account.IsHomeServer)
+        // Primaire et mailbox partagée sur notre serveur : mêmes credentials propres, même endpoint
+        // maison — the resolver leaves SieveHost null for home connections, since there is nothing
+        // to store.
+        if (account.AccountId == MailAccountConnection.Primary || account.IsHomeServer)
             return AccountResolution<SieveConnection>.Success(new SieveConnection(
                 sieve.Host, sieve.Port, string.Empty, account.Username, mailbox.Password));
 

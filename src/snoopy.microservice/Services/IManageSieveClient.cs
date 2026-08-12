@@ -5,8 +5,7 @@ namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
 /// Opens authenticated ManageSieve sessions against the target a <see cref="SieveConnection"/>
-/// describes — our own server through master impersonation, or another provider's server as the
-/// mailbox itself.
+/// describes, always with the mailbox's own credentials — our server or another provider's.
 /// </summary>
 public interface IManageSieveClient
 {

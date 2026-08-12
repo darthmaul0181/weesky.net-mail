@@ -5,6 +5,7 @@ using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
+using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Services;
@@ -15,8 +16,8 @@ namespace weesky.Snoopy.Microservice.Services;
 /// desync fails the whole request rather than producing a half-built message.
 /// </summary>
 internal sealed class OutgoingMessageFactory(
-    IUsersRepository users,
-    IAliasesRepository aliases,
+    IAliasDirectory aliasDirectory,
+    IProfileReader profiles,
     ISendingIdentityStore identities,
     IOutgoingMailSanitizer sanitizer,
     IStagedAttachmentStore staged,
@@ -33,9 +34,13 @@ internal sealed class OutgoingMessageFactory(
         // own server carries a GUID id, so it takes the connected path and never borrows the main
         // account's alias list. Safe direction — its From set is its own stored identities.
         var isPrimary = connection.AccountId == MailAccountConnection.Primary;
+        // A platform that cannot vouch for an address leaves the primary mailbox with exactly what
+        // a connected account has — its own address plus its stored rows. Not a third rule: the
+        // alias list is what the strict path checks against, and here there is none to check.
+        var ownershipEnforced = isPrimary && aliasDirectory.EnforcesOwnership;
         var stored = await LoadIdentitiesAsync(userId, connection.StorageAccountId, cancellationToken);
 
-        var from = isPrimary
+        var from = ownershipEnforced
             ? await ResolvePrimaryFromAsync(user, request.FromAddress, cancellationToken)
             : ResolveConnectedFrom(connection, stored, request.FromAddress);
         if (from.IsFailure) return Result.Failure<MimeMessage>(from.Error);
@@ -53,7 +58,7 @@ internal sealed class OutgoingMessageFactory(
         try
         {
             return Result.Success(
-                await BuildMessageAsync(user, request, attachments, isPrimary, stored, fromAddress, cancellationToken));
+                await BuildMessageAsync(user, request, attachments, ownershipEnforced, stored, fromAddress, cancellationToken));
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -75,8 +80,8 @@ internal sealed class OutgoingMessageFactory(
         // beyond it, the alias list — not the identity table — says what the user really owns.
         if (requested != fromAddress)
         {
-            var owned = await aliases.GetAliasesAsync(user, cancellationToken);
-            if (!IdentityResolver.Owns(owned.ToAddresses(), user.Email, requested))
+            var owned = await aliasDirectory.GetAddressesAsync(user, cancellationToken);
+            if (!IdentityResolver.Owns(owned, user.Email, requested))
                 return Result.Failure<string>(IOutgoingMessageFactory.ForbiddenFrom);
         }
         return requested;
@@ -85,6 +90,8 @@ internal sealed class OutgoingMessageFactory(
     /// <summary>
     /// A connected account sends through its own server, so the home server's alias list says
     /// nothing about it: it owns its login address and whatever identities were stored for it.
+    /// Also the home mailbox's path when the platform vouches for no address — its
+    /// <see cref="MailAccountConnection.Username"/> is then the caller's own email.
     /// </summary>
     private static Result<string> ResolveConnectedFrom(
         MailAccountConnection connection, IReadOnlyList<SendingIdentity> stored, string? requestedFrom)
@@ -100,7 +107,8 @@ internal sealed class OutgoingMessageFactory(
 
     private async Task<MimeMessage> BuildMessageAsync(
         User user, SendMessageRequest request, IReadOnlyList<StagedAttachment> attachments,
-        bool isPrimary, IReadOnlyList<SendingIdentity> stored, string fromAddress, CancellationToken cancellationToken)
+        bool ownershipEnforced, IReadOnlyList<SendingIdentity> stored, string fromAddress,
+        CancellationToken cancellationToken)
     {
         var linked = new List<StagedAttachment>();
         var regular = new List<StagedAttachment>();
@@ -148,7 +156,7 @@ internal sealed class OutgoingMessageFactory(
         }
 
         var message = new MimeMessage();
-        var label = await LabelForAsync(user, isPrimary, stored, fromAddress, cancellationToken);
+        var label = await LabelForAsync(user, ownershipEnforced, stored, fromAddress, cancellationToken);
         // LabelFor falls back to the address itself; on the wire that would be a redundant "a@x <a@x>".
         message.From.Add(new MailboxAddress(label == fromAddress ? string.Empty : label, fromAddress));
         AddAddresses(message.To, request.To);
@@ -181,20 +189,21 @@ internal sealed class OutgoingMessageFactory(
     }
 
     /// <summary>
-    /// The label the From carries. The home mailbox falls back to its FullName — read from the
-    /// database, not the JWT claims; a connected account has only its stored rows, and no row (or
-    /// a blank one) means the address travels alone rather than borrowing the main account's name.
+    /// The label the From carries. The home mailbox falls back to the display name the platform
+    /// holds — never the JWT claims; a connected account, and a home mailbox on a platform that
+    /// vouches for nothing, has only its stored rows, and no row (or a blank one) means the address
+    /// travels alone rather than borrowing a name nothing confirms.
     /// </summary>
     private async Task<string> LabelForAsync(
-        User user, bool isPrimary, IReadOnlyList<SendingIdentity> stored, string fromAddress,
+        User user, bool ownershipEnforced, IReadOnlyList<SendingIdentity> stored, string fromAddress,
         CancellationToken cancellationToken)
     {
-        if (!isPrimary)
+        if (!ownershipEnforced)
             return stored.FirstOrDefault(i => IdentityResolver.Canonical(i.Address) == fromAddress)?.DisplayName
                    ?? string.Empty;
 
-        var dbUser = await users.FindByEmailAsync(user.Email, cancellationToken);
-        return IdentityResolver.LabelFor(stored, fromAddress, dbUser?.FullName, user.Email);
+        var fullName = await profiles.GetDisplayNameAsync(user, cancellationToken);
+        return IdentityResolver.LabelFor(stored, fromAddress, fullName, user.Email);
     }
 
     private static string DomainOf(string address)

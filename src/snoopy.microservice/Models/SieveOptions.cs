@@ -16,17 +16,6 @@ public sealed class SieveOptions
     public int Port { get; set; } = 4190;
 
     /// <summary>
-    /// Master username configured in Dovecot (see <c>auth_master_users</c>).
-    /// Used as the SASL PLAIN authentication identity while impersonating the target user.
-    /// </summary>
-    public string MasterUser { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Master password matching <see cref="MasterUser"/>.
-    /// </summary>
-    public string MasterPassword { get; set; } = string.Empty;
-
-    /// <summary>
     /// Name of the Sieve script managed by this service. A single named script holds all the rules
     /// produced by the structured editor; users can keep other scripts they uploaded separately.
     /// </summary>
@@ -45,7 +34,7 @@ public sealed class SieveOptions
     /// <summary>
     /// When true, carry on over an unencrypted socket if the server does not advertise
     /// STARTTLS. Off by default, and it must stay off anywhere the link is not a loopback:
-    /// the SASL PLAIN payload carries the master password, and base64 is not encryption. The
+    /// the SASL PLAIN payload carries the user's own password, and base64 is not encryption. The
     /// capability banner arrives in the clear, so an attacker on the path can strip STARTTLS
     /// from it — without this gate that downgrade is silent and the password goes out plain.
     /// </summary>
