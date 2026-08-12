@@ -13,6 +13,7 @@ vi.mock('../../api.js', () => ({
   api: {
     getContacts: vi.fn(), createContact: vi.fn(), updateContact: vi.fn(),
     deleteContact: vi.fn(), setContactFavorite: vi.fn(),
+    deleteContacts: vi.fn(), setContactsFavorite: vi.fn(),
     importContacts: vi.fn(), exportContacts: vi.fn(),
   },
   ApiError: class extends Error {},
@@ -21,7 +22,8 @@ vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getContacts' | 'createContact' | 'updateContact' | 'deleteContact'
-    | 'setContactFavorite' | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
+    | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
+    | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
 }
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
@@ -160,6 +162,20 @@ describe('ContactsLayout', () => {
     await confirmDeletion()
 
     await waitFor(() => expect(api.deleteContact).toHaveBeenCalledWith('b'))
+  })
+
+  // Le lot passe par un seul appel, et un refus laisse l'écran sur l'état du serveur en le disant.
+  it('deletes the selection and toasts on refusal', async () => {
+    api.deleteContacts.mockRejectedValueOnce(new Error('refused'))
+    renderAt('/contacts')
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByLabelText('Select Alice'))
+    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await confirmDeletion()
+
+    await waitFor(() => expect(api.deleteContacts).toHaveBeenCalledWith(['a']))
+    expect(await screen.findByText(/could not be deleted/i)).toBeInTheDocument()
   })
 
   it('creates a contact and returns to the list', async () => {

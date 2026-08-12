@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
+import SelectionBand from '../../../components/SelectionBand'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import TrashIcon from '../../../icons/TrashIcon'
@@ -53,8 +54,6 @@ export interface SelectionToolbarProps {
 export default function SelectionToolbar(props: SelectionToolbarProps) {
   const { t } = useTranslation('mail')
   const { title, count, allSelected, indeterminate, onToggleAll, overCap, deleteLabel } = props
-  const master = useRef<HTMLInputElement>(null)
-  useEffect(() => { if (master.current) master.current.indeterminate = indeterminate }, [indeterminate])
 
   // A selection action is off when nothing is selected, over the cap, or its role forbids it.
   // The cap message wins the tooltip, then the role reason. Shared by the direct buttons and
@@ -93,26 +92,19 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   ]
 
   return (
-    <div className={`selection-toolbar${count > 0 ? ' is-selecting' : ''}`}>
-      {props.leading}
-      {/* The finger-sized target on a phone is this label, not the box: a native checkbox paints
-          its whole border box, so sizing it to 44px draws a slab twice its neighbours' weight. */}
-      <label className="selection-master-hit">
-        <input
-          ref={master}
-          type="checkbox"
-          className="selection-master"
-          aria-label={t('toolbar.selectAll')}
-          checked={allSelected}
-          onChange={onToggleAll}
-          disabled={props.selectionDisabled}
-        />
-      </label>
-      <span className="selection-heading">
-        <span className="selection-title">
-          {count > 0 ? t('toolbar.selected', { count }) : title}
-        </span>
-        {/* Beside the name rather than in the actions: it filters the view, it acts on nothing. */}
+    <SelectionBand
+      leading={props.leading}
+      allSelected={allSelected}
+      indeterminate={indeterminate}
+      onToggleAll={onToggleAll}
+      selectionDisabled={props.selectionDisabled}
+      selectAllLabel={t('toolbar.selectAll')}
+      count={count}
+      countLabel={t('toolbar.selected', { count })}
+      center={<span className="selection-title">{title}</span>}
+      /* Beside the name rather than in the actions: it filters the view, it acts on nothing —
+         which is also why it outlives the count the folder name gives way to. */
+      trailing={
         <button
           type="button"
           className={`selection-btn selection-star${props.starred ? ' is-on' : ''}`}
@@ -124,28 +116,27 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
         >
           <StarIcon size={18} filled={props.starred} />
         </button>
-      </span>
-      <div className="selection-actions">
-        <button type="button" className="selection-btn selection-archive" aria-label={t('toolbar.archive')} {...actionProps(props.archive, t('toolbar.archive'))}>
-          <ArchiveIcon size={20} />
-        </button>
-        <button type="button" className="selection-btn selection-junk" aria-label={t('toolbar.junk')} {...actionProps(props.junk, t('toolbar.junk'))}>
-          <JunkIcon size={20} />
-        </button>
-        <button type="button" className="selection-btn is-danger selection-delete" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
-          <TrashIcon size={20} />
-        </button>
-        <button
-          type="button"
-          className={`selection-btn selection-search${props.searchOpen ? ' is-active' : ''}`}
-          aria-label={t('toolbar.search')}
-          title={t('toolbar.search')}
-          onClick={props.onToggleSearch}
-        >
-          <SearchIcon size={20} />
-        </button>
-        <DropdownMenu ariaLabel={t('toolbar.more')} className="selection-btn" trigger={<KebabIcon />} items={kebab} />
-      </div>
-    </div>
+      }
+    >
+      <button type="button" className="selection-btn selection-archive" aria-label={t('toolbar.archive')} {...actionProps(props.archive, t('toolbar.archive'))}>
+        <ArchiveIcon size={20} />
+      </button>
+      <button type="button" className="selection-btn selection-junk" aria-label={t('toolbar.junk')} {...actionProps(props.junk, t('toolbar.junk'))}>
+        <JunkIcon size={20} />
+      </button>
+      <button type="button" className="selection-btn is-danger selection-delete" aria-label={deleteLabel} {...actionProps(props.del, deleteLabel)}>
+        <TrashIcon size={20} />
+      </button>
+      <button
+        type="button"
+        className={`selection-btn selection-search${props.searchOpen ? ' is-active' : ''}`}
+        aria-label={t('toolbar.search')}
+        title={t('toolbar.search')}
+        onClick={props.onToggleSearch}
+      >
+        <SearchIcon size={20} />
+      </button>
+      <DropdownMenu ariaLabel={t('toolbar.more')} className="selection-btn" trigger={<KebabIcon />} items={kebab} />
+    </SelectionBand>
   )
 }

@@ -8,11 +8,13 @@
     "saveFailed": "Could not save the contact",
     "deleted": "{{name}} deleted",
     "deleteFailed": "Could not delete the contact",
+    "deleteManyFailed": "The contacts could not be deleted",
     "favouriteFailed": "Could not save the favourite"
   },
   "scopes": {
     "all": "All contacts",
-    "favourites": "Favourites"
+    "favourites": "Favourites",
+    "dropHere": "Drop here"
   },
   "fields": {
     "nickname": "Nickname",
@@ -31,7 +33,16 @@
     "empty": "No contacts yet",
     "noMatch": "No matching contacts",
     "edit": "Edit {{name}}",
-    "delete": "Delete {{name}}"
+    "delete": "Delete {{name}}",
+    "selectAll": "Select all",
+    "selectOne": "Select {{name}}",
+    "selected_one": "{{count}} selected",
+    "selected_many": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "deleteSelected": "Delete selection",
+    "deleteSelectedConfirm_one": "Delete this contact? This cannot be undone.",
+    "deleteSelectedConfirm_many": "Delete these {{count}} contacts? This cannot be undone.",
+    "deleteSelectedConfirm_other": "Delete these {{count}} contacts? This cannot be undone."
   },
   "card": {
     "invite": "Select a contact to see its details",

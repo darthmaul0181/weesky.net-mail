@@ -85,6 +85,24 @@ When a rule is ambiguous, copy what those screens do.
   address is not a shorter tile than its neighbours — the same reason the message list always
   renders its preview element. Its action icons are **not** on the first line: that is the
   list-column rule below, not an exception to the anatomy.
+- **A selectable list column wears `SelectionBand` as its heading, never a band of its own**
+  (`src/components/SelectionBand.tsx`, `src/styles/selection.css`). The skeleton owns the master
+  checkbox, the reserved gutter the row checkboxes are revealed in, and one rule: **the centre
+  belongs to the caller at rest and gives way to the count while a selection stands.** What sits in
+  that centre is the module's — the mail puts its folder name there, the contacts their search field
+  and total — and so are the actions on the right. A control that filters rather than acts goes in
+  `trailing`, which survives the swap, because a filter is still true while rows are checked: the
+  mail's starred toggle is the one case. **A module whose centre holds something reachable at zero
+  clicks owes it a door back**: the contacts field is swallowed by the count, so the band grows a
+  loupe while selecting, and using it clears the selection and returns the field. Two bands to keep
+  in step are two bands that drift, which is why the styles left `mail.css`.
+- **A drag target lights up with `drop-ready`, and its label travels in `--drop-label`.** The state
+  is deliberately louder than `is-active` — an accent ring plus tint — so the place you are already
+  in reads as excluded rather than as the target, and a target that cannot receive the drop never
+  lights at all (the mail's source folder, the contacts' "All contacts", which is the complete view
+  rather than a group). The label is a custom property and not a `content` literal because it is
+  translated: the folder tree said `Drop here` in French for as long as it was written in the
+  stylesheet.
 - A tiled list carries **one** skin unless several layouts actually exist for it. The message list
   has a wide single-line row and a narrow two-line row because three reading-pane arrangements exist
   there; the contacts list always sits beside the contact card, so a second skin would be code

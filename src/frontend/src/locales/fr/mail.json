@@ -13,6 +13,7 @@
     "loadFailed": "Impossible de charger les dossiers.",
     "refresh": "Actualiser",
     "refreshHint": "Vérifier les nouveaux messages",
+    "dropHere": "Déposer ici",
     "collapse": "Réduire {{name}}",
     "expand": "Développer {{name}}",
     "unreadAria_one": "{{label}}, {{count}} non lu",

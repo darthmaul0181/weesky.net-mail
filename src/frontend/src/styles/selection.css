@@ -1,0 +1,159 @@
+/* The selection band, shared by the message list and the contacts list through
+   components/SelectionBand.tsx. It lives here rather than in mail.css because a shared component
+   whose stylesheet sits inside one module is how the other module silently changes shape. */
+
+/* A deliberately tall band (~64px), so the bulk actions sit on comfortable, finger-sized targets
+   right above the rows they act on. Height verified in a real browser — jsdom does no layout. */
+.selection-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--list-separator);
+  background: var(--surface);
+}
+
+/* Wraps the master checkbox so a phone can grow the target without growing the drawn box.
+   Shrink-to-fit here, so off a phone it is exactly the checkbox's margin box and the band is
+   laid out as it always was. */
+.selection-master-hit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The name and its filter travel together, so the star sits against the name rather than
+   drifting to the actions on the far side. */
+.selection-heading {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.selection-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.selection-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Larger than the row controls (.row-btn) to suit the taller band; same hover tint. Greyed
+   explicitly when a selection action is unavailable, since a bare disabled icon reads as live. */
+.selection-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.selection-btn:hover:not(:disabled) { color: var(--icon-hover-accent); }
+.selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.selection-btn.is-active {
+  color: var(--badge-count-bg);
+  background: color-mix(in oklab, var(--badge-count-bg) 14%, transparent);
+}
+
+/* The starred filter wears .row-star's look, not .is-active's: the filled star already says it
+   is on, and the same state should not read one way in the heading and another in the rows.
+   No hover rule needed here — .selection-btn:hover:not(:disabled) already outranks this. */
+.selection-star.is-on { color: var(--badge-count-bg); }
+
+/* Same declaration mail.css gives .action-btn and .row-btn, restated rather than shared: the band
+   is drawn by modules that must not have to import mail.css to get their Delete red. */
+.selection-btn.is-danger:hover:not(:disabled) { color: var(--icon-hover-danger); }
+
+@media (max-width: 639px) {
+  /* The touch floor answers to the device, so it cannot live in the container query below: the
+     two axes do not nest, and a 540px phone whose list column is wider than 480px would fall
+     through to the 36px base rule with a finger on it. min-* rather than width/height, so the
+     query can still own the layout size whatever order the two blocks are read in. */
+  .selection-btn { min-width: var(--touch); min-height: var(--touch); }
+
+  /* The one control on this band that is not a .selection-btn, and the one the selecting state
+     exists for. The target is the wrapper and the box stays its native size: padding on an
+     `appearance: auto` checkbox computes to 0 in Chrome — measured — so sizing the input itself
+     painted a 44px slab of accent colour beside 20px icons. */
+  .selection-master-hit { width: var(--touch); height: var(--touch); }
+  .selection-master { margin: 0; }
+}
+
+/* Six 44px controls do not fit across a narrow list column. Nothing usable is lost: archive, junk
+   and delete are already disabled with an empty selection, so at rest they only rendered dead
+   state.
+
+   480px is NOT a third breakpoint and must not be "corrected" to 639px to satisfy the two-width
+   whitelist: this is a @container query, so it measures the inline size of the list column — not
+   the window — and the two are routinely different numbers. An unnamed @container resolves
+   against each element's nearest container ancestor, so this one block reads whichever column is
+   drawing the band. 480 rather than the 360 this comment argues from because the column is what
+   has to fit the controls and the splitter hands it any width it likes: on a tablet it can sit at
+   its 240px floor, narrower than any phone, while the same tablet under readingPane:'none' gives
+   the same column 960px. 480 is the width below which the six controls stop fitting with a folder
+   name still legible beside them.
+
+   Read the threshold against the DEFAULT column, which is 380px — `usePaneSize('mail.split.right',
+   380, 240)` — and not against that 240px floor: 480 fires on a stock desktop, so everything named
+   here is gone from an untouched installation. That is intended for the archive/junk/delete group,
+   measured at 48px of overflow without it.
+
+   The master checkbox is NOT among them, at any width, and that is the whole of its rule — there is
+   no second block below for it any more. It is the only discoverable door into the selecting state
+   the actions appear in: hidden, the way in is long-press, which nothing on screen announces. It
+   used to hide below 360, which made a 390px phone and a 360px one behave differently for no reason
+   the user could see.
+
+   It costs nothing to keep **at or above the 320px viewport this product supports** — that bound is
+   the claim, and it is narrower than "at every width" on purpose. There are two regimes and only
+   one of them has a touch floor. A column narrower than the viewport is the splitter's doing (a
+   phone gets `effectivePane(…, 'phone') === 'none'` and no splitter at all), so a tablet or a
+   desktop is drawing it, `--touch` does not resolve, and the master is the 13px box the browser
+   paints: measured at the splitter's 240px floor, the idle toolbar still fits on one row with the
+   folder name ellipsised. On the phone tier the column IS the viewport, `--touch` does resolve, and
+   the 44px master fits down to a 274px column and no further — measured, 274 clips 0, 273 clips 1,
+   260 clips 14 and 240 clips 34, the star painting over `.selection-actions` rather than wrapping,
+   since `.selection-heading` is `flex: 1` from a 0 base and is crushed instead of breaking the
+   line. No shipping device is under 274 (the Galaxy Fold cover screen is 280), but page zoom
+   reaches it — a ~520px window at 200%, or Chrome for Android's own zoom setting on a 360px
+   handset — so the sub-274 crush is OUT OF CONTRACT, not impossible.
+
+   That matters to exactly one future change: flooring this master to 44px above the phone tier, for
+   the 640-1023px touch tablet where `--touch` does not resolve. Doing it recreates the crush above
+   at any narrow column, so it has to handle `.selection-heading`'s shrink at the same time. */
+@container (max-width: 480px) {
+  /* The selecting state still spends six controls, and at the splitter's 240px floor they run
+     48px past the column — which `.mail-list`'s overflow:hidden clips rather than scrolls, so the
+     kebab simply disappeared. EmptyFolderBanner's answer, for the same reason: a second line
+     costs height nobody is short of, where dropping a control costs the action itself. */
+  .selection-toolbar { flex-wrap: wrap; }
+
+  .selection-toolbar:not(.is-selecting) .selection-archive,
+  .selection-toolbar:not(.is-selecting) .selection-junk,
+  .selection-toolbar:not(.is-selecting) .selection-delete { display: none; }
+
+  .selection-toolbar.is-selecting .selection-search,
+  .selection-toolbar.is-selecting .selection-star { display: none; }
+
+  /* The layout size only. The phone's 44px floor is a min-* in the @media block above, which
+     wins over this whatever order the cascade reads the two blocks in. */
+  .selection-btn { width: 40px; height: 40px; }
+}

@@ -19,8 +19,10 @@ import ContactScopes, { type ContactScope } from './ContactScopes'
 import ContactsTransfer from './ContactsTransfer'
 import type { Contact, ContactDraft } from './contactTypes'
 import {
-  useContacts, useCreateContact, useDeleteContact, useSetContactFavorite, useUpdateContact,
+  useContacts, useCreateContact, useDeleteContact, useDeleteContacts, useSetContactFavorite,
+  useSetContactsFavorite, useUpdateContact,
 } from './queries'
+import type { ContactDragPayload } from './dragContacts'
 
 /**
  * The contacts module's three columns. The shell hands a module one outlet, so the module builds
@@ -39,7 +41,9 @@ export default function ContactsLayout() {
   const createContact = useCreateContact()
   const updateContact = useUpdateContact()
   const deleteContact = useDeleteContact()
+  const deleteMany = useDeleteContacts()
   const setFavorite = useSetContactFavorite()
+  const setManyFavorite = useSetContactsFavorite()
 
   // The editor takes the two content columns and leaves the band standing, exactly as the
   // composer does inside the mail module. Two routes, one layout — not a layout of its own.
@@ -136,6 +140,23 @@ export default function ContactsLayout() {
     }
   }
 
+  // One call for the whole batch: fifty contacts would otherwise be fifty requests, and a failure
+  // at the thirtieth leaves a half-state nobody can word. The list clears its own boxes on confirm.
+  function deleteSelection(ids: string[]) {
+    deleteMany.mutate(ids, {
+      onError: error => addToast(apiErrorMessage(error, t('layout.deleteManyFailed')), 'error'),
+    })
+  }
+
+  // The drop adds the favourite and never removes it: a gesture that added or removed per row
+  // would land a different result on each contact it carried.
+  function dropOnScope(target: ContactScope, payload: ContactDragPayload) {
+    if (target !== 'favorites') return
+    setManyFavorite.mutate({ ids: payload.ids, isFavorite: true }, {
+      onError: error => addToast(apiErrorMessage(error, t('layout.favouriteFailed')), 'error'),
+    })
+  }
+
   function toggleFavorite(contact: Contact) {
     setFavorite.mutate({ id: contact.id, isFavorite: !contact.isFavorite }, {
       onError: error => addToast(apiErrorMessage(error, t('layout.favouriteFailed')), 'error'),
@@ -151,7 +172,8 @@ export default function ContactsLayout() {
         </button>
       </div>
       <div className="contacts-scopes-scroll">
-        <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope} />
+        <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope}
+          onDropContacts={dropOnScope} />
       </div>
       <ContactsTransfer contacts={contacts}
         onError={message => addToast(message, 'error')} />
@@ -188,9 +210,10 @@ export default function ContactsLayout() {
             {isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
             {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
             {contacts && (
-              <ContactList contacts={scoped} selectedId={selectedId} onSelect={select}
+              <ContactList contacts={scoped} selectedId={selectedId} scope={scope} onSelect={select}
                 leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
+                onDeleteMany={deleteSelection}
                 onEdit={id => navigate(`/contacts/${id}/edit`)} />
             )}
           </div>

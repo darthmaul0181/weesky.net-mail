@@ -2238,6 +2238,22 @@ body {
 .contact-scope.is-active {
   background: var(--pane-item-active-bg); color: var(--pane-item-active-fg); font-weight: 600;
 }
+/* `.folder-line.drop-ready .folder-row`, transcribed onto the scope row. Louder than `is-active`
+   on purpose: the scope you are already in must read as excluded, not as a target. The label is a
+   custom property because it is translated — a stylesheet's `content` cannot be. */
+.contact-scope.drop-ready {
+  background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px var(--badge-count-bg);
+}
+.contact-scope.drop-ready::after {
+  content: var(--drop-label, '');
+  margin-left: auto; flex: none;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--badge-count-bg);
+}
 .contact-scope-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
 .contact-scope.is-active .contact-scope-count { color: inherit; }
@@ -2254,10 +2270,8 @@ body {
 .contacts-editor { flex: 1; min-width: 0; }
 .contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
 
-.contacts-list-heading {
-  flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
+/* The heading band is SelectionBand now (styles/selection.css); these two are what the list puts
+   in its centre slot. */
 .contacts-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
 .contacts-search .search-input { flex: 1; min-width: 0; }
 .contacts-search svg { flex: none; color: var(--text-muted); }
@@ -2270,11 +2284,14 @@ body {
 .contacts-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .contact-tiles { display: flex; flex-direction: column; }
 
-/* Positioned for the action cluster below, which is taken out of the flow like the message row's. */
+/* Positioned for the action cluster below, which is taken out of the flow like the message row's.
+   The left padding is a gutter reserved permanently for the checkbox, exactly as
+   `.message-row:not(.is-line)` reserves 34px: revealing the box on hover must never shove the
+   name sideways. */
 .contact-tile {
   position: relative;
   border: none; border-bottom: 1px solid var(--list-separator); background: var(--surface);
-  padding: 8px 12px; cursor: pointer;
+  padding: 8px 12px 8px 34px; cursor: pointer;
 }
 /* Content-row language throughout, the message row's own: the hover fill on hover, the selected
    fill plus an inset accent bar when picked. Never a bare fill — that is what a navigation pane
@@ -2286,6 +2303,22 @@ body {
   background: var(--list-row-selected-bg); color: var(--list-row-selected-fg);
   box-shadow: inset 3px 0 0 var(--accent-unread);
 }
+/* `.message-row-check`, to the declaration: hidden and inert at rest, centred over the gutter so
+   it stays centred whatever the tile's height, pinned once a selection stands. */
+.contact-tile-check {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; margin: 0;
+  accent-color: var(--action-primary); cursor: pointer;
+  opacity: 0; pointer-events: none;
+}
+.contact-tile:hover .contact-tile-check,
+.contact-tile:focus-within .contact-tile-check,
+.contact-tiles.has-selection .contact-tile-check,
+.contact-tile-check:checked { opacity: 1; pointer-events: auto; }
+
+/* Dimmed while it rides the cursor: the pill is the thing being moved, the tile is its origin. */
+.contact-tile.is-dragging { opacity: 0.45; }
+
 .contact-tile-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .contact-tile-name {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

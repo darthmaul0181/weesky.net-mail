@@ -35,6 +35,26 @@ describe('useSelection', () => {
     expect(result.current.selected.size).toBe(0)
   })
 
+  // Les contacts sont des GUID : le hook ne peut plus être lié aux uids du mail.
+  it('holds string keys as readily as numeric ones', () => {
+    const { result } = renderHook(() => useSelection<string>('all'))
+
+    act(() => result.current.toggle('a4f1-c2', 0))
+
+    expect(result.current.has('a4f1-c2')).toBe(true)
+    expect(result.current.has('other')).toBe(false)
+  })
+
+  it('range-selects over string keys', () => {
+    const keys = ['a', 'b', 'c', 'd']
+    const { result } = renderHook(() => useSelection<string>('all'))
+
+    act(() => result.current.toggle('a', 0))
+    act(() => result.current.toggleRange(keys, 2))
+
+    expect([...result.current.selected].sort()).toEqual(['a', 'b', 'c'])
+  })
+
   it('clears when the resetKey changes (folder or page)', () => {
     let key = 'INBOX::0'
     const { result, rerender } = renderHook(() => useSelection(key))

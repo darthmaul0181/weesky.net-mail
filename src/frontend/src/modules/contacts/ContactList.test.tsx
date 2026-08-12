@@ -19,8 +19,9 @@ const bruno = contact({
 
 function setup(overrides: Partial<Parameters<typeof ContactList>[0]> = {}) {
   const props = {
-    contacts: [alice, bruno], selectedId: null,
+    contacts: [alice, bruno], selectedId: null, scope: 'all',
     onSelect: vi.fn(), onToggleFavorite: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(),
+    onDeleteMany: vi.fn(),
     ...overrides,
   }
   render(<ContactList {...props} />)
@@ -142,12 +143,13 @@ describe('ContactList', () => {
   // the name takes the first line with the star closing it on the RIGHT, the address sits under
   // them, and the cluster is the tile's LAST child — out of the flow over the bottom line. The star
   // back at the head of the line is the page-tile idiom this list deliberately left.
-  it('keeps the tile anatomy in order: name then star, the address, then the actions', () => {
+  it('keeps the tile anatomy in order: the box, name then star, the address, then the actions', () => {
     setup()
 
-    const [line, address, actions] = Array.from(screen.getByTestId('contact-tile-a').children)
+    const [check, line, address, actions] = Array.from(screen.getByTestId('contact-tile-a').children)
     const [name, star] = Array.from(line.children)
 
+    expect(check).toHaveClass('contact-tile-check')
     expect(name).toHaveClass('contact-tile-name')
     expect(star).toHaveClass('contact-star')
     expect(address).toHaveClass('contact-tile-address')
@@ -180,5 +182,121 @@ describe('ContactList', () => {
     fireEvent.keyDown(screen.getByTestId('contact-tile-b'), { key: ' ' })
 
     expect(props.onSelect).toHaveBeenCalledWith('b')
+  })
+
+  it('checks a contact and counts it in the band', async () => {
+    setup()
+
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  // Cocher n'ouvre pas la fiche : deux choses se produiraient sur un clic.
+  it('checking a contact does not open it', async () => {
+    const props = setup()
+
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
+  // La case maîtresse porte sur ce qui est à l'écran, donc sur les lignes filtrées.
+  it('selects every filtered row from the master box', async () => {
+    setup()
+    await userEvent.type(screen.getByRole('searchbox'), 'alice')
+    await userEvent.click(screen.getByLabelText('Select all'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  // Le champ cède la bande au décompte, donc la loupe est le seul chemin vers la recherche pendant
+  // une sélection : elle la vide et rend le champ, plutôt que de laisser la recherche inatteignable.
+  it('gives the search field back from the loupe, clearing the selection', async () => {
+    setup()
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search contacts' }))
+
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox')).toHaveFocus()
+  })
+
+  // La loupe n'est offerte que quand elle sert : au repos le champ est déjà là, et deux portes vers
+  // la même chose se lisent comme un défaut.
+  it('offers no loupe while the field itself is on the band', () => {
+    setup()
+
+    expect(screen.queryByRole('button', { name: 'Search contacts' })).not.toBeInTheDocument()
+  })
+
+  // Choix assumé : resetKey inclut le scope, donc en changer vide la sélection.
+  it('clears the selection when the scope changes', async () => {
+    const { rerender } = render(
+      <ContactList contacts={[alice, bruno]} selectedId={null} scope="all"
+        onSelect={vi.fn()} onToggleFavorite={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()}
+        onDeleteMany={vi.fn()} />)
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    rerender(
+      <ContactList contacts={[alice, bruno]} selectedId={null} scope="favorites"
+        onSelect={vi.fn()} onToggleFavorite={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()}
+        onDeleteMany={vi.fn()} />)
+
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
+  })
+
+  it('asks for confirmation before deleting a selection', async () => {
+    const props = setup()
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await userEvent.click(screen.getByLabelText('Delete selection'))
+
+    expect(props.onDeleteMany).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(props.onDeleteMany).toHaveBeenCalledWith(['a'])
+  })
+
+  it('leaves the delete action disabled while nothing is checked', () => {
+    setup()
+
+    expect(screen.getByLabelText('Delete selection')).toBeDisabled()
+  })
+
+  it('drags the whole selection when the grabbed tile belongs to it', () => {
+    setup()
+    fireEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    fireEvent.click(screen.getByLabelText('Select Bruno Mertens'))
+    const setData = vi.fn()
+
+    fireEvent.dragStart(screen.getByTestId('contact-tile-a'),
+      { dataTransfer: { setData, setDragImage: vi.fn() } })
+
+    expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['a', 'b'] })
+  })
+
+  // Une tuile non cochée part seule : glisser ne doit jamais déranger une sélection faite pour
+  // autre chose.
+  it('drags an unchecked tile alone', () => {
+    setup()
+    fireEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    const setData = vi.fn()
+
+    fireEvent.dragStart(screen.getByTestId('contact-tile-b'),
+      { dataTransfer: { setData, setDragImage: vi.fn() } })
+
+    expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['b'] })
+  })
+
+  // Le parent a besoin de la sélection pour le glisser-déposer, et il la reçoit dans l'ordre de
+  // l'écran plutôt que dans celui des clics.
+  it('reports the selection to its parent', async () => {
+    const onSelectionChange = vi.fn()
+    setup({ onSelectionChange })
+    await userEvent.click(screen.getByLabelText('Select Bruno Mertens'))
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(['a', 'b'])
   })
 })

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { DragEvent } from 'react'
+import type { CSSProperties, DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { roleLabel } from '../roleLabel'
@@ -143,6 +143,9 @@ function FolderRow({
             isActive ? 'is-active' : '',
           ].filter(Boolean).join(' ')}
           aria-current={isActive ? 'true' : undefined}
+          // The drop badge's text, which mail.css draws through `content`. It travels as a custom
+          // property because a stylesheet literal cannot be translated — and was English here.
+          style={{ '--drop-label': `"${t('folders.dropHere')}"` } as CSSProperties}
           // The label and badge spans concatenate into the accessible name with no separator
           // ("Inbox4"), which is a real number losing its meaning, not a decorative artifact —
           // so instead of hiding the count from assistive tech, spell it out as words.

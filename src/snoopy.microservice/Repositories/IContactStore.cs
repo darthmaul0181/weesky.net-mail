@@ -28,6 +28,17 @@ public interface IContactStore
     Task<Result> SetFavoriteAsync(Guid userId, Guid contactId, bool isFavorite, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Removes a batch and answers how many rows it actually held. An id this user does not own
+    /// resolves to nothing and is skipped in silence: a batch may not half-fail, and telling an
+    /// unknown id from a foreign one would say whether it exists.
+    /// </summary>
+    Task<int> DeleteManyAsync(Guid userId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+    /// <summary>Sets or clears the favourite flag over a batch, under the same silent-skip rule.</summary>
+    Task<int> SetFavoriteManyAsync(
+        Guid userId, IReadOnlyList<Guid> ids, bool isFavorite, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Merges a whole file into the book in one transaction. Never fails as a whole: a row that
     /// cannot be filed comes back in the outcome rather than as an error status.
     /// </summary>
