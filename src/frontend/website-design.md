@@ -48,6 +48,25 @@ When a rule is ambiguous, copy what those screens do.
   driven by the `--action-primary` token — not a fixed colour — it automatically follows whatever
   theme (light/dark) and palette the user has chosen; never hard-code the hover colour. This is the
   standard affordance for every interactive tile (admin rows, identities, aliases).
+- **Unless the tile can be *picked* — then it is a list row, and it takes the message row whole.**
+  A tile lives on a page, where a row is acted on and never selected; a list column sits beside a
+  detail pane, and the two surfaces want different things. The border-and-ring hover collides there
+  with the selected language below, which spends the same `--action-primary` on its border: the
+  contacts list shipped with the picked tile and the one under the cursor both ringed in the accent,
+  indistinguishable at a glance. A list carrying `is-selected` therefore copies `.message-row`
+  rather than `.admin-list-item`, in three respects — **states**: `--list-row-hover` on hover, the
+  selected fill plus the inset `--accent-unread` bar when picked, and no accent border in either;
+  **geometry**: rows run edge to edge under a `--list-separator` hairline instead of standing apart
+  as cards, so no radius, no gap between rows, and no padding on the scroll container — a card's
+  border, radius and gap frame a list among other blocks on a page and only spend width and vertical
+  rhythm in a column; **row actions**: the cluster leaves the first line for the message row's own
+  idiom — out of the flow on the bottom-right corner, revealed on hover/focus, with the bottom line
+  reserving its width on reveal so the text ends in an ellipsis instead of running under the buttons.
+  Out of the flow is the point: a slot reserved beside the name spends that width permanently for a
+  control that is only ever there under the cursor. **One control size across the row**, `.row-btn`'s
+  26px box on an 18px glyph, star included: the contacts row shipped with three sizes — an 18px star
+  on a 14px glyph beside 28px `.admin-icon-btn`s on 16px ones — and the smallest of them was the one
+  control drawn at rest. A row that mixes sizes reads as two lists spliced together.
 - **Tile anatomy is fixed, left to right:**
   1. the **favorite star** on the far left (favorite / set-as-default), when the list has one;
   2. the **primary identifier** (`.admin-list-item-email`, bold — the email, domain, display name…);
@@ -55,14 +74,17 @@ When a rule is ambiguous, copy what those screens do.
   4. optional **metadata** (e.g. a quota mini-gauge);
   5. the **action icons** (`.admin-list-item-actions`), pinned to the far right.
 - The star always leads on the far left; the action icons are always the rightmost thing on the row.
+  **On a list column (see the picked-tile rule below) the star moves to the right end of the first
+  line instead**, where the message row keeps its own — the row there has no second identifier to
+  balance it, and a star at the head of the line pushes every name 25px in.
 - **A tile may run to two lines when its column is too narrow for one.** The contacts list
-  (`.contact-tile`) is the first: the top line keeps the anatomy above unchanged — star far left,
-  name taking the slack, action icons pinned far right — and the second line carries the primary
-  address, muted and indented under the name, with a `· +N` suffix when the contact holds further
-  addresses. Two lines are a response to width, never a licence to reorder: nothing moves out of the
-  first line but the secondary text. **The second line is rendered even when it is empty**, so a
-  contact with no address is not a shorter tile than its neighbours — the same reason the message
-  list always renders its preview element.
+  (`.contact-tile`) is the first: the top line carries the star far left and the name taking the
+  slack, and the second line the primary address, muted and indented under the name, with a `· +N`
+  suffix when the contact holds further addresses. Two lines are a response to width, never a
+  licence to reorder. **The second line is rendered even when it is empty**, so a contact with no
+  address is not a shorter tile than its neighbours — the same reason the message list always
+  renders its preview element. Its action icons are **not** on the first line: that is the
+  list-column rule below, not an exception to the anatomy.
 - A tiled list carries **one** skin unless several layouts actually exist for it. The message list
   has a wide single-line row and a narrow two-line row because three reading-pane arrangements exist
   there; the contacts list always sits beside the contact card, so a second skin would be code

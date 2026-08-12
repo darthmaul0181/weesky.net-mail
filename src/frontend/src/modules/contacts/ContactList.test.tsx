@@ -137,18 +137,21 @@ describe('ContactList', () => {
     expect(screen.getByText(/no matching contacts/i)).toBeInTheDocument()
   })
 
-  // The 13 tests above only check presence, so swapping the star and the action cluster in the
-  // JSX would leave every one of them green. website-design.md fixes the tile anatomy left to
-  // right — star, identifier, actions — so the DOM order itself has to be the assertion.
-  it('keeps the tile anatomy in order: star, name, then actions', () => {
+  // The 13 tests above only check presence, so moving the star or the action cluster in the JSX
+  // would leave every one of them green. The anatomy is the assertion, and it is the message row's:
+  // the name takes the first line with the star closing it on the RIGHT, the address sits under
+  // them, and the cluster is the tile's LAST child — out of the flow over the bottom line. The star
+  // back at the head of the line is the page-tile idiom this list deliberately left.
+  it('keeps the tile anatomy in order: name then star, the address, then the actions', () => {
     setup()
 
-    const line = screen.getByTestId('contact-tile-a').querySelector('.contact-tile-line')!
-    const [first, second, third] = Array.from(line.children)
+    const [line, address, actions] = Array.from(screen.getByTestId('contact-tile-a').children)
+    const [name, star] = Array.from(line.children)
 
-    expect(first).toHaveClass('contact-star')
-    expect(second).toHaveClass('contact-tile-name')
-    expect(third).toHaveClass('contact-tile-actions')
+    expect(name).toHaveClass('contact-tile-name')
+    expect(star).toHaveClass('contact-star')
+    expect(address).toHaveClass('contact-tile-address')
+    expect(actions).toHaveClass('contact-tile-actions')
   })
 
   // Neither fixture contact lacks an address, so nothing above exercises this. Rendering the line

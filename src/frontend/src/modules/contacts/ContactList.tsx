@@ -74,31 +74,19 @@ export default function ContactList({
                     onSelect(contact.id)
                   }
                 }}>
+                {/* The message row's layout, not the page tile's: the name takes the first line and
+                    the star closes it on the right, while the actions are the tile's last child —
+                    the cluster idiom, drawn over the bottom line rather than beside the name. */}
                 <div className="contact-tile-line">
-                  {/* The star leads on the far left and the actions close on the far right — the
-                      tile anatomy, identical to the admin and identities lists. */}
+                  <span className="contact-tile-name">{name}</span>
+
                   <button type="button" className={`contact-star${contact.isFavorite ? ' is-on' : ''}`}
                     title={t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
                     aria-label={t(
                       contact.isFavorite ? 'favourites.removeNamed' : 'favourites.addNamed', { name })}
                     onClick={event => { event.stopPropagation(); onToggleFavorite(contact) }}>
-                    <StarIcon size={14} filled={contact.isFavorite} />
+                    <StarIcon size={18} filled={contact.isFavorite} />
                   </button>
-
-                  <span className="contact-tile-name">{name}</span>
-
-                  <span className="contact-tile-actions">
-                    <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
-                      aria-label={t('list.edit', { name })}
-                      onClick={event => { event.stopPropagation(); onEdit(contact.id) }}>
-                      <PencilIcon size={14} />
-                    </button>
-                    <button type="button" className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })}
-                      aria-label={t('list.delete', { name })}
-                      onClick={event => { event.stopPropagation(); onDelete(contact) }}>
-                      <TrashIcon size={14} />
-                    </button>
-                  </span>
                 </div>
 
                 {/* Always rendered, even empty, so a contact with no address is not a shorter tile
@@ -106,6 +94,19 @@ export default function ContactList({
                 <div className="contact-tile-address">
                   {primary ?? ''}{extra > 0 ? ` · +${extra}` : ''}
                 </div>
+
+                <span className="contact-tile-actions">
+                  <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
+                    aria-label={t('list.edit', { name })}
+                    onClick={event => { event.stopPropagation(); onEdit(contact.id) }}>
+                    <PencilIcon size={18} />
+                  </button>
+                  <button type="button" className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })}
+                    aria-label={t('list.delete', { name })}
+                    onClick={event => { event.stopPropagation(); onDelete(contact) }}>
+                    <TrashIcon size={18} />
+                  </button>
+                </span>
               </div>
             )
           })}
