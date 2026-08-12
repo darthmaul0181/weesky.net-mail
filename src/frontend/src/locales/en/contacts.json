@@ -68,6 +68,7 @@
     "favourite": "Favourite"
   },
   "transfer": {
+    "actions": "Import and export",
     "importHint": "Merge a CSV file into this book",
     "import": "Import…",
     "nothingToExport": "Nothing to export",

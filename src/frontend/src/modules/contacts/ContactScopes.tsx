@@ -74,9 +74,9 @@ function ScopeRow({
  * bar belongs to content lists, and keeping the two languages apart is how a reader tells a
  * navigation pane from a list of rows at a glance.
  *
- * Two scopes today, with import and export in the column's footer below and CardDAV address books
- * the next thing to land here — the reason the module has a band at all rather than starting flush
- * against the rail.
+ * Two scopes today, with CardDAV address books the next thing to land here — the reason the module
+ * has a band at all rather than starting flush against the rail. The column ends on these rows:
+ * import and export are one trigger up beside Add contact, not a footer under them.
  *
  * A row is also a drop target, under `canDropIntoScope`: All contacts is the complete view rather
  * than a group, so it never lights up — the refusal the mail's source folder makes.

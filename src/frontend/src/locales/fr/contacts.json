@@ -68,6 +68,7 @@
     "favourite": "Favori"
   },
   "transfer": {
+    "actions": "Importer et exporter",
     "importHint": "Fusionner un fichier CSV dans ce carnet",
     "import": "Importer…",
     "nothingToExport": "Rien à exporter",

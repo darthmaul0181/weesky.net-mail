@@ -309,23 +309,53 @@ describe('ContactsLayout', () => {
   })
 })
 
-describe('the transfer footer', () => {
-  it('offers import and export under the scopes', async () => {
+describe('the transfer menu', () => {
+  const trigger = () => screen.findByRole('button', { name: 'Import and export' })
+
+  it('offers import and export from one trigger beside Add contact', async () => {
     api.getContacts.mockResolvedValue({ contacts: [contact({ id: '1', firstName: 'Bruno' })] })
     renderAt('/contacts')
 
-    expect(await screen.findByRole('button', { name: 'Import…' })).toBeInTheDocument()
-    // Export starts disabled: it depends on the same book, which the footer does not wait for.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled())
+    await userEvent.click(await trigger())
+
+    expect(screen.getByRole('menuitem', { name: 'Import…' })).toBeInTheDocument()
+    // Export depends on the book, which the trigger does not wait for.
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Export' })).toBeEnabled())
   })
 
-  // The editor takes the two content columns and leaves the band standing, footer included — the
-  // same rule the scopes follow.
-  it('keeps the footer while the editor is open', async () => {
+  // The two filled buttons across the column's foot are what this replaced: nothing may put a
+  // second door onto either action back on screen beside the trigger.
+  it('leaves no button of its own in the column', async () => {
+    api.getContacts.mockResolvedValue({ contacts: [contact({ id: '1', firstName: 'Bruno' })] })
+    renderAt('/contacts')
+
+    await trigger()
+
+    expect(screen.queryByRole('button', { name: 'Import…' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument()
+  })
+
+  // Below 1024px the row the trigger sits in is hidden by the stylesheet — Add contact is the
+  // floating button there — so it has to have MOVED, not merely still be rendered. The same road
+  // Refresh takes out of the mail's folder column.
+  it('moves the trigger into the list band once the column is a drawer', async () => {
+    mockViewport('tablet')
+    api.getContacts.mockResolvedValue({ contacts: [contact({ id: '1', firstName: 'Bruno' })] })
+    renderAt('/contacts')
+
+    const button = await trigger()
+
+    expect(button.closest('.selection-toolbar')).not.toBeNull()
+    expect(button.closest('.contacts-scopes-add')).toBeNull()
+  })
+
+  // The editor takes the two content columns and leaves the band standing, its top row included —
+  // the same rule the scopes follow.
+  it('keeps the trigger while the editor is open', async () => {
     api.getContacts.mockResolvedValue({ contacts: [] })
     renderAt('/contacts/new')
 
-    expect(await screen.findByRole('button', { name: 'Import…' })).toBeInTheDocument()
+    expect(await trigger()).toBeInTheDocument()
   })
 
   // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
@@ -334,7 +364,7 @@ describe('the transfer footer', () => {
     api.importContacts.mockRejectedValue(new Error('No recognised column in this file.'))
     renderAt('/contacts')
 
-    await screen.findByRole('button', { name: 'Import…' })
+    await trigger()
     fireEvent.change(screen.getByTestId('contacts-import-input'),
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
 
@@ -349,7 +379,7 @@ describe('the transfer footer', () => {
       Object.assign(new Error('csv_no_recognised_column'), { code: 'csv_no_recognised_column' }))
     renderAt('/contacts')
 
-    await screen.findByRole('button', { name: 'Import…' })
+    await trigger()
     fireEvent.change(screen.getByTestId('contacts-import-input'),
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
 
@@ -364,7 +394,7 @@ describe('the transfer footer', () => {
     api.importContacts.mockRejectedValue(new Error('nope'))
     renderAt('/contacts')
 
-    await screen.findByRole('button', { name: 'Import…' })
+    await trigger()
     api.getContacts.mockClear()
     fireEvent.change(screen.getByTestId('contacts-import-input'),
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })

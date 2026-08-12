@@ -2196,36 +2196,29 @@ body {
   width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0;
   overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
 }
-.contacts-scopes-add { flex: none; padding: 12px; }
-.contacts-add-btn { width: 100%; justify-content: center; }
+/* The mail folder column's own top row (.mail-folders-compose), transcribed: the primary action
+   takes the width and one square sits beside it. Import and export used to be two filled buttons
+   across the foot of this column — the heaviest pair in it after Add contact, for the two rarest
+   actions in the module, and a footer shape nothing else in the app wears. There is no footer band
+   any more; the column ends on the scopes.
+
+   The trigger costs the Add button 47px (40 plus the row's gap), which is the whole of the label's
+   remaining headroom: measured in probes/localisation-widths.html, `+ Ajouter un contact` is
+   131.9px of ink against the 136 the button now leaves — English spends 90.8. It fits in both
+   shipped languages and in neither with anything to spare, so a third language, a reworded label
+   or a wider trigger has to be re-measured there rather than reasoned about. */
+.contacts-scopes-add { flex: none; display: flex; gap: 7px; padding: 12px; }
+.contacts-add-btn { flex: 1; min-width: 0; justify-content: center; }
+/* The rule lands on the wrapper, not on the button, and that is `.actionbar .dropdown-root`'s
+   reason exactly: DropdownMenu wraps its trigger, so the flex item of this row is the wrapper while
+   the class is on the button inside it. Without this the button is not a flex item of anything and
+   sizes to its 16px icon — measured, a 16px-tall square beside a 39px Add. */
+.contacts-scopes-add .dropdown-root { display: flex; }
+.contacts-transfer-trigger {
+  flex: none; width: 40px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
 .contacts-scopes-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
-
-/* The band's footer, the shape the mail column's account block wears: a flat strip separated by a
-   rule, never a second block of navigation. */
-.contacts-transfer {
-  position: relative;
-  flex: none; display: flex; gap: 8px; padding: 10px 12px;
-  border-top: 1px solid var(--border);
-}
-/* static, not the tooltip.css default relative: Import's own 104px-wide wrap sits left of centre,
-   so its bubble's right: 0 must resolve against this full-width footer, not against that wrap —
-   otherwise only Export's bubble (flush with the footer's own right edge) would ever fit. */
-.contacts-transfer .tooltip-wrap { position: static; flex: 1; min-width: 0; }
-.contacts-transfer .btn { width: 100%; justify-content: center; }
-
-/* The column is 240px and overflow: hidden — .tooltip-bubble's 280px is-top-right width runs off
-   its left edge. Shrink to fit inside the footer's 12px side padding and wrap instead of clipping.
-   The extra .tooltip-wrap ancestor lifts specificity above .tooltip-bubble.is-top-right's own.
-   The positioned ancestor above is the footer's *padding* box (240px, not its 216px content box),
-   so right: 0 would sit flush with the column's clipped edge instead of the footer's own inset —
-   right: 12px restores it. bottom's +8px is trimmed to -2px by the footer's 10px top padding,
-   which the old per-wrap anchor didn't have, so the gap above the button stays the same 8px. */
-.contacts-transfer .tooltip-wrap .tooltip-bubble {
-  right: 12px;
-  bottom: calc(100% - 2px);
-  width: 216px;
-  white-space: normal;
-}
 
 .contact-scopes { display: flex; flex-direction: column; gap: 2px; }
 .contact-scope {
@@ -2668,8 +2661,8 @@ body {
 
   /* Measured 39px, and global: login, settings, toolbars, dialogs. It is also the only control on
      the composer's two dialogs, which carry no ✕ to fall back on. This is what floors
-     .contacts-transfer's file actions, the contact card's three actions and .contact-save-btn —
-     all three are .btn, and their own rules were dropped as duplicates of this one. */
+     the contact card's three actions and .contact-save-btn — both are .btn, and their own rules
+     were dropped as duplicates of this one. */
   .btn { min-height: var(--touch); }
 
   /* Every typed control at the floor, the same breadth as the 16px rule at the head of this block

@@ -163,6 +163,15 @@ export default function ContactsLayout() {
     })
   }
 
+  // One instance, never two: it owns the hidden file input and the import report, and a second
+  // copy behind a media query would be a second modal nobody closed. Below 1024px the row it
+  // normally sits in is hidden — Add contact is the floating button there — so the trigger follows
+  // the same road Refresh takes out of the mail's folder column: into the list's own band.
+  const transfer = (className: string) => (
+    <ContactsTransfer contacts={contacts} triggerClassName={className}
+      onError={message => addToast(message, 'error')} />
+  )
+
   const scopeColumn = (
     <div className="contacts-scopes-column">
       <div className="contacts-scopes-add">
@@ -170,13 +179,12 @@ export default function ContactsLayout() {
           onClick={() => navigate('/contacts/new')}>
           {t('layout.add')}
         </button>
+        {!drawer.inDrawer && transfer('btn contacts-transfer-trigger')}
       </div>
       <div className="contacts-scopes-scroll">
         <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope}
           onDropContacts={dropOnScope} />
       </div>
-      <ContactsTransfer contacts={contacts}
-        onError={message => addToast(message, 'error')} />
     </div>
   )
 
@@ -212,6 +220,7 @@ export default function ContactsLayout() {
             {contacts && (
               <ContactList contacts={scoped} selectedId={selectedId} scope={scope} onSelect={select}
                 leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
+                actions={drawer.inDrawer ? transfer('selection-btn') : null}
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
                 onDeleteMany={deleteSelection}
                 onEdit={id => navigate(`/contacts/${id}/edit`)} />

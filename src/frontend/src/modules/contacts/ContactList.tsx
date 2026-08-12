@@ -21,6 +21,9 @@ interface Props {
   scope: string
   /** The drawer hamburger below 1024px, where the scope column is no longer beside this heading. */
   leading?: ReactNode
+  /** Actions the band carries that act on the book rather than on a selection — the transfer
+      trigger, once the scope column that normally holds it is a drawer. */
+  actions?: ReactNode
   onSelect: (id: string) => void
   onToggleFavorite: (contact: Contact) => void
   onEdit: (id: string) => void
@@ -38,7 +41,7 @@ interface Props {
  * there; here the list always sits beside the card, so a wide skin would be unreachable code.
  */
 export default function ContactList({
-  contacts, selectedId, scope, leading,
+  contacts, selectedId, scope, leading, actions,
   onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onSelectionChange,
 }: Props) {
   const { t } = useTranslation('contacts')
@@ -129,6 +132,7 @@ export default function ContactList({
             <SearchIcon size={20} />
           </button>
         )}
+        {actions}
       </SelectionBand>
 
       <div className="contacts-list-scroll">
