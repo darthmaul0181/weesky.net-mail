@@ -7,8 +7,9 @@ namespace weesky.Snoopy.Microservice.Repositories;
 
 public interface IMailMessageRepository
 {
-    /// <summary>One page of a folder, newest message first.</summary>
-    Task<Result<MailFolderPage>> ListAsync(User user, MailAccountConnection connection, string folderPath, int page, int pageSize, CancellationToken cancellationToken);
+    /// <summary>One page of a folder, newest message first — of conversations rather than
+    /// messages when <paramref name="grouped"/>, which the server's THREAD support may refuse.</summary>
+    Task<Result<MailFolderPage>> ListAsync(User user, MailAccountConnection connection, string folderPath, int page, int pageSize, bool grouped, CancellationToken cancellationToken);
 
     /// <summary>A single message, body sanitised and attachments listed.</summary>
     Task<Result<MailMessageDetail>> GetAsync(User user, MailAccountConnection connection, string folderPath, uint uid, CancellationToken cancellationToken);

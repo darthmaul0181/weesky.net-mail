@@ -7,8 +7,9 @@ import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
   ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf,
-  notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
-  showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
+  groupConversationsOf, notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf,
+  showFolderIconsOf, showPreviewOf, showSpamScoreOf, trustContactsOf, usePreferences,
+  useSetPreference,
   type ComposeFormat, type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
@@ -226,6 +227,16 @@ export default function GeneralPage() {
               disabled={setPreference.isPending}
               onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
                 t(on ? 'general.preview.on' : 'general.preview.off'))}
+            />
+
+            <ToggleRow
+              id="group-conversations"
+              label={t('general.groupConversations.label')}
+              hint={t('general.groupConversations.hint')}
+              checked={groupConversationsOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.groupConversations, String(on),
+                t(on ? 'general.groupConversations.on' : 'general.groupConversations.off'))}
             />
 
             <ToggleRow

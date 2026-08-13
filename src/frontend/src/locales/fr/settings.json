@@ -75,6 +75,12 @@
       "on": "Les aperçus sont affichés",
       "off": "Les aperçus sont masqués"
     },
+    "groupConversations": {
+      "label": "Grouper les conversations",
+      "hint": "Afficher les messages d’une même conversation sur une seule ligne dépliable.",
+      "on": "Les conversations seront groupées",
+      "off": "Les messages seront listés individuellement"
+    },
     "folderIcons": {
       "label": "Icônes de dossier",
       "hint": "Affiche une icône à côté de chaque dossier dans la colonne courrier.",

@@ -12,11 +12,12 @@ export interface DragPayload {
 }
 
 /**
- * The dragged row carries the whole checked selection when it belongs to it, itself alone
- * otherwise — so dragging an unchecked row never disturbs a selection made for something else.
+ * The dragged row carries the whole checked selection when every uid it stands for is checked,
+ * its own uids otherwise — so dragging an unchecked row never disturbs a selection made for
+ * something else, and a collapsed thread drags every member, like its other controls act on them.
  */
-export function dragUids(selectedUids: number[], uid: number): number[] {
-  return selectedUids.includes(uid) ? selectedUids : [uid]
+export function dragUids(selectedUids: number[], rowUids: number[]): number[] {
+  return rowUids.every(uid => selectedUids.includes(uid)) ? selectedUids : rowUids
 }
 
 export function serializeDrag(payload: DragPayload): string {

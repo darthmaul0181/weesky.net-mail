@@ -38,6 +38,13 @@ function seedPage(messages: MailMessageSummary[]) {
   client.setQueryData(pagesKey, pageOf(messages))
 }
 
+/** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
+function seedGrouped(...groups: MailMessageSummary[][]) {
+  client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 50, true), {
+    ...pageOf([]), threads: groups.map(messages => ({ messages })), totalThreads: groups.length,
+  })
+}
+
 function seedStream(...blocks: MailMessageSummary[][]) {
   const stream: InfiniteData<MailFolderPage> = {
     pages: blocks.map(pageOf), pageParams: blocks.map((_, index) => index),
@@ -111,6 +118,14 @@ describe('useMarkSeenOnOpen', () => {
 
   it('does not fire on an already-read message', async () => {
     seedPage([summary(2, { seen: true })])
+
+    await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
+
+    expect(mocks.setMessageFlags).not.toHaveBeenCalled()
+  })
+
+  it('does not fire on a message a grouped page already shows read', async () => {
+    seedGrouped([summary(2, { seen: true }), summary(1)])
 
     await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
 
@@ -201,6 +216,17 @@ describe('useMarkSeenOnOpen', () => {
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
       expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
+    })
+
+    it('marks again when it lands as a grouped page', async () => {
+      await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
+
+      await act(async () => { seedGrouped([summary(1)], [summary(43), summary(42)]) })
+      await settle()
+
+      expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
+      expect(findCachedSummary(client, 'primary', 'INBOX', 42)?.seen).toBe(true)
+      expect(findCachedSummary(client, 'primary', 'INBOX', 43)?.seen).toBe(false)
     })
 
     it('leaves a listing that already says read alone', async () => {
@@ -318,6 +344,12 @@ describe('findCachedSummary', () => {
     seedPage([summary(1), summary(2, { seen: true })])
 
     expect(findCachedSummary(client, 'primary', 'INBOX', 2)?.seen).toBe(true)
+  })
+
+  it('finds a member of a grouped page thread', () => {
+    seedGrouped([summary(1)], [summary(9), summary(5, { flagged: true })])
+
+    expect(findCachedSummary(client, 'primary', 'INBOX', 5)?.flagged).toBe(true)
   })
 
   it('finds a message in a later stream block', () => {

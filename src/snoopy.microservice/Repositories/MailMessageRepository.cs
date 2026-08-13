@@ -14,11 +14,11 @@ internal sealed class MailMessageRepository(IImapSessionProvider sessions) : IMa
 {
     public Task<Result<MailFolderPage>> ListAsync(
         User user, MailAccountConnection connection, string folderPath, int page, int pageSize,
-        CancellationToken cancellationToken)
+        bool grouped, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(user);
         return sessions.WithSessionAsync(connection,
-            session => session.ListMessagesAsync(folderPath, page, pageSize, cancellationToken), cancellationToken);
+            session => session.ListMessagesAsync(folderPath, page, pageSize, grouped, cancellationToken), cancellationToken);
     }
 
     public Task<Result<MailMessageDetail>> GetAsync(

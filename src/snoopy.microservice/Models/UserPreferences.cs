@@ -31,6 +31,7 @@ public static class UserPreferences
     public const string MailRowActions = "mail.rowActions";
     public const string MailComposeFormat = "mail.composeFormat";
     public const string MailShowFolderIcons = "mail.showFolderIcons";
+    public const string MailGroupConversations = "mail.groupConversations";
 
     // contacts., not mail.: the preference governs a write to the address book. The trigger is a
     // send; the effect is what names the key.
@@ -67,6 +68,9 @@ public static class UserPreferences
         // Off by default: the folder column has never carried icons, so an account that never
         // opens the setting sees exactly what it saw yesterday.
         new(MailShowFolderIcons, "false", Booleans),
+        // Off by default: the list has always been flat, so an account that never opens the
+        // setting sees exactly what it saw yesterday.
+        new(MailGroupConversations, "false", Booleans),
         new(ContactsCaptureRecipients, "true", Booleans),
         new(MailTrustContacts, "false", Booleans),
         new(UiLanguage, "auto", ["auto", "en", "fr"]),

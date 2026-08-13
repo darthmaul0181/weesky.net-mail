@@ -33,24 +33,24 @@ public sealed class MailMessageRepositoryTests
     public async Task ListAsync_DelegatesToTheSessionWithTheRequestedPage()
     {
         var (repo, sessions, session) = CreateSut();
-        session.Setup(s => s.ListMessagesAsync("INBOX", 2, 25, It.IsAny<CancellationToken>()))
+        session.Setup(s => s.ListMessagesAsync("INBOX", 2, 25, false, It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderPage { FolderPath = "INBOX", Page = 2, PageSize = 25 }));
 
-        var result = await repo.ListAsync(Alice, Conn, "INBOX", 2, 25, CancellationToken.None);
+        var result = await repo.ListAsync(Alice, Conn, "INBOX", 2, 25, false, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.Value.Page);
-        session.Verify(s => s.ListMessagesAsync("INBOX", 2, 25, It.IsAny<CancellationToken>()), Times.Once);
+        session.Verify(s => s.ListMessagesAsync("INBOX", 2, 25, false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task ListAsync_OpensTheSessionForTheAuthenticatedUser()
     {
         var (repo, sessions, session) = CreateSut();
-        session.Setup(s => s.ListMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        session.Setup(s => s.ListMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderPage()));
 
-        await repo.ListAsync(Alice, Conn, "INBOX", 0, 50, CancellationToken.None);
+        await repo.ListAsync(Alice, Conn, "INBOX", 0, 50, false, CancellationToken.None);
 
         sessions.Verify(f => f.GetAsync(Conn, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -62,7 +62,7 @@ public sealed class MailMessageRepositoryTests
         sessions.Setup(f => f.GetAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Failure<IImapSession>("Mail authentication failed"));
 
-        var result = await repo.ListAsync(Alice, Conn, "INBOX", 0, 50, CancellationToken.None);
+        var result = await repo.ListAsync(Alice, Conn, "INBOX", 0, 50, false, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal("Mail authentication failed", result.Error);
@@ -72,10 +72,10 @@ public sealed class MailMessageRepositoryTests
     public async Task ListAsync_UsesTheRequestSession()
     {
         var (repo, sessions, session) = CreateSut();
-        session.Setup(s => s.ListMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        session.Setup(s => s.ListMessagesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(Result.Success(new MailFolderPage()));
 
-        await repo.ListAsync(Alice, Conn, "INBOX", 0, 50, CancellationToken.None);
+        await repo.ListAsync(Alice, Conn, "INBOX", 0, 50, false, CancellationToken.None);
 
         sessions.Verify(f => f.GetAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -86,7 +86,7 @@ public sealed class MailMessageRepositoryTests
         var (repo, sessions, _) = CreateSut();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => repo.ListAsync(null!, Conn, "INBOX", 0, 50, CancellationToken.None));
+            () => repo.ListAsync(null!, Conn, "INBOX", 0, 50, false, CancellationToken.None));
     }
 
     [Fact]

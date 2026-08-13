@@ -21,4 +21,13 @@ public sealed class MailFolderPage
     public int PageSize { get; set; }
 
     public List<MailMessageSummary> Messages { get; set; } = new();
+
+    /// <summary>Grouped mode only: one entry per conversation, newest thread first. Null — and
+    /// therefore absent from the JSON — on a flat page, which is how the client tells the modes
+    /// apart.</summary>
+    public List<MailThread>? Threads { get; set; }
+
+    /// <summary>Grouped mode only: how many conversations the folder holds — what the pager
+    /// pages. Total keeps counting messages.</summary>
+    public int? TotalThreads { get; set; }
 }

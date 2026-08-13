@@ -15,8 +15,8 @@ import type {
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
 import {
-  patchFolderCounts, patchFolderUnread, patchSearchResults, patchSummaries,
-  removeSearchResults, removeSummaries,
+  blankPage, pageSummaries, patchFolderCounts, patchFolderUnread, patchPage, patchSearchResults,
+  patchSummaries, removeFromPage, removeSearchResults,
   type FolderCountDeltas, type MailFlagName,
 } from './list/listPatch'
 import { nextBlockIndex } from './list/messageStream'
@@ -39,9 +39,10 @@ export const mailKeys = {
   folders: (accountId: string) => ['mail', accountId, 'folders'] as const,
   messagesIn,
   // pageSize is part of the key: a cached page was computed under one size and means something
-  // else under another.
-  messages: (accountId: string, folder: string, page: number, pageSize: number) =>
-    [...messagesIn(accountId, folder), page, pageSize] as const,
+  // else under another. So is `grouped`, which decides whether the page holds conversations or
+  // messages — and it sits last, so the prefixes above still catch both modes.
+  messages: (accountId: string, folder: string, page: number, pageSize: number, grouped = false) =>
+    [...messagesIn(accountId, folder), page, pageSize, grouped] as const,
   message: (accountId: string, folder: string, uid: number) =>
     ['mail', accountId, 'message', folder, uid] as const,
   messageSource: (accountId: string, folder: string, uid: number) =>
@@ -49,8 +50,8 @@ export const mailKeys = {
   // Its own key: what it caches is not a page but a sequence of pages, and mixing the two
   // shapes under one key is a type error that only shows at runtime.
   messageStreamIn,
-  messageStream: (accountId: string, folder: string, requestSize: number) =>
-    [...messageStreamIn(accountId, folder), requestSize] as const,
+  messageStream: (accountId: string, folder: string, requestSize: number, grouped = false) =>
+    [...messageStreamIn(accountId, folder), requestSize, grouped] as const,
   folderRoles: (accountId: string) => ['mail', accountId, 'folderRoles'] as const,
   identities: (accountId: string) => ['mail', accountId, 'identities'] as const,
   trustedSenders: (accountId: string) => ['mail', accountId, 'trustedSenders'] as const,
@@ -111,33 +112,41 @@ export function useMailRefresh() {
 }
 
 export function useMessages(
-  folderPath: string | null, page: number, pageSize: number, enabled = true,
+  folderPath: string | null, page: number, pageSize: number, enabled = true, grouped = false,
 ) {
   const accountId = useAccountId()
 
   return useQuery<MailFolderPage>({
-    queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize),
-    queryFn: ({ signal }) => api.getMailMessages(folderPath, page, pageSize, { signal, accountId }),
+    queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize, grouped),
+    queryFn: ({ signal }) =>
+      api.getMailMessages(folderPath, page, pageSize, { signal, accountId, grouped }),
     enabled: enabled && folderPath !== null,
     // Keeps the current page on screen while the next one loads, instead of flashing empty — but
     // only between pages of one folder in one mailbox. Held across either, it shows somebody
     // else's mail under this heading, which is the one wrong state a reader cannot tell from a
     // right one; the streaming mode has no placeholder at all and is what this now matches.
+    // The mode (key[6]) is checked for a milder reason: a flat page held under a grouped query
+    // paces the pager on the message count, so the reader gets ten page buttons that collapse to
+    // two when the real answer lands. A brief loading state beats a pager that lies.
     placeholderData: (previous, previousQuery) => {
       const key = previousQuery?.queryKey as readonly unknown[] | undefined
-      return key?.[1] === accountId && key?.[3] === (folderPath ?? '') ? previous : undefined
+      return key?.[1] === accountId && key?.[3] === (folderPath ?? '') && key?.[6] === grouped
+        ? previous
+        : undefined
     },
   })
 }
 
-export function useMessageStream(folderPath: string | null, requestSize: number, enabled: boolean) {
+export function useMessageStream(
+  folderPath: string | null, requestSize: number, enabled: boolean, grouped = false,
+) {
   const accountId = useAccountId()
 
   return useInfiniteQuery({
-    queryKey: mailKeys.messageStream(accountId, folderPath ?? '', requestSize),
+    queryKey: mailKeys.messageStream(accountId, folderPath ?? '', requestSize, grouped),
     queryFn: ({ pageParam, signal }) =>
       api.getMailMessages(folderPath, pageParam, requestSize,
-        { signal, accountId }) as Promise<MailFolderPage>,
+        { signal, accountId, grouped }) as Promise<MailFolderPage>,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       nextBlockIndex(lastPage, allPages.length, requestSize),
@@ -414,11 +423,11 @@ export function useSetFlags(onError?: (message: string) => void) {
 
       for (const [key, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
         if (!page) continue
-        const patch = patchSummaries(page.messages, uids, flag, value)
+        const patch = patchPage(page, uids, flag, value)
         if (patch.found === 0) continue
         snapshots.push([key, page])
-        queryClient.setQueryData(key, { ...page, messages: patch.messages })
-        tally.count(page.messages)
+        queryClient.setQueryData(key, patch.page)
+        tally.count(pageSummaries(page))
       }
 
       for (const [key, stream] of
@@ -428,10 +437,10 @@ export function useSetFlags(onError?: (message: string) => void) {
         // Every block holding the uid is patched; the tally counts it once, whichever block or
         // cache it turned up in first.
         const pages = stream.pages.map(page => {
-          const patch = patchSummaries(page.messages, uids, flag, value)
+          const patch = patchPage(page, uids, flag, value)
           found += patch.found
-          tally.count(page.messages)
-          return patch.found ? { ...page, messages: patch.messages } : page
+          tally.count(pageSummaries(page))
+          return patch.found ? patch.page : page
         })
         if (found === 0) continue
         snapshots.push([key, stream])
@@ -515,11 +524,11 @@ function removeFromFolderCaches(
 
   for (const [key, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
     if (!page) continue
-    const patch = removeSummaries(page.messages, uids)
+    const patch = removeFromPage(page, uids)
     if (patch.removed === 0) continue
     snapshots.push([key, page])
-    tally.count(page.messages)
-    queryClient.setQueryData(key, { ...page, messages: patch.messages })
+    tally.count(pageSummaries(page))
+    queryClient.setQueryData(key, patch.page)
   }
 
   for (const [key, stream] of
@@ -527,10 +536,10 @@ function removeFromFolderCaches(
     if (!stream) continue
     let removed = 0
     const pages = stream.pages.map(page => {
-      const patch = removeSummaries(page.messages, uids)
+      const patch = removeFromPage(page, uids)
       removed += patch.removed
-      tally.count(page.messages)
-      return patch.removed ? { ...page, messages: patch.messages } : page
+      tally.count(pageSummaries(page))
+      return patch.removed ? patch.page : page
     })
     if (removed === 0) continue
     snapshots.push([key, stream])
@@ -568,16 +577,14 @@ function blankFolderCaches(
   for (const [key, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
     if (!page) continue
     snapshots.push([key, page])
-    queryClient.setQueryData(key, { ...page, messages: [], total: 0 })
+    queryClient.setQueryData(key, blankPage(page))
   }
 
   for (const [key, stream] of
     queryClient.getQueriesData<InfiniteData<MailFolderPage>>({ queryKey: streamKey })) {
     if (!stream) continue
     snapshots.push([key, stream])
-    queryClient.setQueryData(key, {
-      ...stream, pages: stream.pages.map(page => ({ ...page, messages: [], total: 0 })),
-    })
+    queryClient.setQueryData(key, { ...stream, pages: stream.pages.map(blankPage) })
   }
 
   return snapshots

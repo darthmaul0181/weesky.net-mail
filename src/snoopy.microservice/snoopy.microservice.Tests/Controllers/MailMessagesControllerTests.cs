@@ -47,7 +47,7 @@ public sealed class MailMessagesControllerTests
     [Fact]
     public async Task GetMessages_ReturnsThePage()
     {
-        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "INBOX", 0, 50, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "INBOX", 0, 50, false, It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Success(new MailFolderPage
                  {
                      FolderPath = "INBOX",
@@ -56,7 +56,7 @@ public sealed class MailMessagesControllerTests
                      Messages = { new MailMessageSummary { Uid = 7, Subject = "Hello" } }
                  }));
 
-        var result = await CreateController().GetMessages("INBOX", 0, 50, CancellationToken.None);
+        var result = await CreateController().GetMessages("INBOX", 0, 50, cancellationToken: CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var page = Assert.IsType<MailFolderPage>(ok.Value);
@@ -68,10 +68,10 @@ public sealed class MailMessagesControllerTests
     [Fact]
     public async Task GetMessages_Returns404WhenTheFolderIsGone()
     {
-        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "Gone", 0, 50, It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "Gone", 0, 50, false, It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailFolderPage>(ImapSession.FolderNotFound));
 
-        var result = await CreateController().GetMessages("Gone", 0, 50, CancellationToken.None);
+        var result = await CreateController().GetMessages("Gone", 0, 50, cancellationToken: CancellationToken.None);
 
         var obj = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status404NotFound, obj.StatusCode);
@@ -95,7 +95,7 @@ public sealed class MailMessagesControllerTests
     [Fact]
     public async Task GetMessages_Returns400ForABlankFolder()
     {
-        var result = await CreateController().GetMessages("  ", 0, 50, CancellationToken.None);
+        var result = await CreateController().GetMessages("  ", 0, 50, cancellationToken: CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         VerifyMessagesNeverCalled();
@@ -104,7 +104,7 @@ public sealed class MailMessagesControllerTests
     [Fact]
     public async Task GetMessages_Returns400ForANegativePage()
     {
-        var result = await CreateController().GetMessages("INBOX", -1, 50, CancellationToken.None);
+        var result = await CreateController().GetMessages("INBOX", -1, 50, cancellationToken: CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         VerifyMessagesNeverCalled();
@@ -115,7 +115,7 @@ public sealed class MailMessagesControllerTests
     [InlineData(201)]
     public async Task GetMessages_Returns400ForAPageSizeOutOfRange(int pageSize)
     {
-        var result = await CreateController().GetMessages("INBOX", 0, pageSize, CancellationToken.None);
+        var result = await CreateController().GetMessages("INBOX", 0, pageSize, cancellationToken: CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         VerifyMessagesNeverCalled();
@@ -127,7 +127,7 @@ public sealed class MailMessagesControllerTests
         var controller = CreateController();
         FailResolution("credentials_unavailable");
 
-        var result = await controller.GetMessages("INBOX", 0, 50, CancellationToken.None);
+        var result = await controller.GetMessages("INBOX", 0, 50, cancellationToken: CancellationToken.None);
 
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
@@ -135,18 +135,40 @@ public sealed class MailMessagesControllerTests
     [Fact]
     public async Task GetMessages_Returns502WhenImapFails()
     {
-        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(Result.Failure<MailFolderPage>("Unable to read the messages"));
 
-        var result = await CreateController().GetMessages("INBOX", 0, 50, CancellationToken.None);
+        var result = await CreateController().GetMessages("INBOX", 0, 50, cancellationToken: CancellationToken.None);
 
         var status = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
     }
 
+    [Fact]
+    public async Task GetMessages_PassesGroupedToTheRepository()
+    {
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "INBOX", 0, 50, true, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(new MailFolderPage()));
+
+        var result = await CreateController().GetMessages("INBOX", 0, 50, grouped: true, CancellationToken.None);
+
+        _messages.VerifyAll();
+    }
+
+    [Fact]
+    public async Task GetMessages_DefaultsGroupedToFalse()
+    {
+        _messages.Setup(m => m.ListAsync(It.IsAny<User>(), Conn, "INBOX", 0, 50, false, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(new MailFolderPage()));
+
+        var result = await CreateController().GetMessages("INBOX", 0, 50, cancellationToken: CancellationToken.None);
+
+        _messages.VerifyAll();
+    }
+
     private void VerifyMessagesNeverCalled()
         => _messages.Verify(m => m.ListAsync(
-            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     // ── Message detail ──────────────────────────────────────────────────

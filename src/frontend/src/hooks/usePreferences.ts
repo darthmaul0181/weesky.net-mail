@@ -20,6 +20,7 @@ export const PREFERENCE_KEYS = {
   rowActions: 'mail.rowActions',
   composeFormat: 'mail.composeFormat',
   showFolderIcons: 'mail.showFolderIcons',
+  groupConversations: 'mail.groupConversations',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
   language: 'ui.language',
@@ -134,6 +135,12 @@ export function rowActionsOf(preferences: Preferences): RowAction[] {
     not know the key yet must leave it as it was. */
 export function showFolderIconsOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.showFolderIcons] === 'true'
+}
+
+/** Off unless explicitly on — the list has always been flat, so a backend that does not know
+    the key yet must keep it that way. */
+export function groupConversationsOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.groupConversations] === 'true'
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */

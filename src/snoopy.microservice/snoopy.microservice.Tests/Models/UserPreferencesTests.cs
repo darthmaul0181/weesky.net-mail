@@ -218,4 +218,15 @@ public sealed class UserPreferencesTests
     {
         Assert.Equal(expected, UserPreferences.IsValid(UserPreferences.UiLanguage, value));
     }
+
+    [Fact]
+    public void GroupConversations_defaults_to_false_and_accepts_booleans_only()
+    {
+        var effective = UserPreferences.Effective([]);
+
+        Assert.Equal("false", effective["mail.groupConversations"]);
+        Assert.True(UserPreferences.IsValid("mail.groupConversations", "true"));
+        Assert.True(UserPreferences.IsValid("mail.groupConversations", "false"));
+        Assert.False(UserPreferences.IsValid("mail.groupConversations", "yes"));
+    }
 }

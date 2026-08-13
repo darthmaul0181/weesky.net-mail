@@ -54,7 +54,7 @@ public sealed class ImapSessionFolderNotFoundTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var session = await ConnectedSessionAsync(server, cts.Token);
 
-        var result = await session.ListMessagesAsync("Gone", 0, 50, cts.Token);
+        var result = await session.ListMessagesAsync("Gone", 0, 50, false, cts.Token);
 
         Assert.True(result.IsFailure);
         Assert.Equal(ImapSession.FolderNotFound, result.Error);

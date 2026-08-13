@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { MailFolderNode, MailMessageSummary, MailSearchResult } from '../api/mailTypes'
+import type {
+  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchResult,
+} from '../api/mailTypes'
 import {
-  patchFolderCounts, patchFolderUnread, patchSearchResults, patchSummaries,
-  removeSearchResults, removeSummaries,
+  blankPage, mapPageSummaries, pageSummaries, patchFolderCounts, patchFolderUnread,
+  patchPage, patchSearchResults, patchSummaries, removeFromPage, removeSearchResults,
+  removeSummaries,
 } from './listPatch'
 
 const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
@@ -21,6 +24,19 @@ const node = (
   path, name: path, specialUse: null, selectable: true, subscribed: true,
   total, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children,
 })
+
+const flatPage = (messages: MailMessageSummary[]): MailFolderPage => ({
+  folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages,
+})
+
+/** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
+const groupedPage = (groups: number[][]): MailFolderPage => ({
+  ...flatPage([]),
+  threads: groups.map(uids => ({ messages: uids.map(uid => summary(uid)) })),
+  totalThreads: groups.length,
+})
+
+const threadUids = (page: MailFolderPage) => page.threads!.map(t => t.messages.map(m => m.uid))
 
 describe('patchSummaries', () => {
   it('rewrites only the targeted uids', () => {
@@ -183,5 +199,117 @@ describe('removeSearchResults', () => {
     const removal = removeSearchResults(rows, 'INBOX', [1, 2])
     expect(removal.removed).toBe(0)
     expect(removal.results).toBe(rows)
+  })
+})
+
+describe('mapPageSummaries', () => {
+  it('rewrites the flat list and grows no threads field on a flat page', () => {
+    const mapped = mapPageSummaries(flatPage([summary(1), summary(2)]), messages =>
+      messages.filter(message => message.uid !== 1))
+
+    expect(mapped.messages.map(m => m.uid)).toEqual([2])
+    expect('threads' in mapped).toBe(false)
+  })
+
+  it('rewrites every thread of a grouped page', () => {
+    const mapped = mapPageSummaries(groupedPage([[3, 2], [1]]), messages =>
+      messages.map(message => ({ ...message, seen: true })))
+
+    expect(mapped.threads!.every(t => t.messages.every(m => m.seen))).toBe(true)
+    expect(threadUids(mapped)).toEqual([[3, 2], [1]])
+  })
+
+  it('drops a thread the transform emptied and keeps a partially touched one', () => {
+    const mapped = mapPageSummaries(groupedPage([[3, 2], [1]]), messages =>
+      messages.filter(message => message.uid !== 1 && message.uid !== 2))
+
+    expect(threadUids(mapped)).toEqual([[3]])
+  })
+})
+
+describe('pageSummaries', () => {
+  it('answers the flat list itself on a flat page', () => {
+    const page = flatPage([summary(1)])
+    expect(pageSummaries(page)).toBe(page.messages)
+  })
+
+  it('answers every thread member on a grouped page', () => {
+    expect(pageSummaries(groupedPage([[3, 2], [1]])).map(m => m.uid)).toEqual([3, 2, 1])
+  })
+
+  it('counts a uid held by both faces once', () => {
+    // A merged block 0 (useListRefresh) keeps the fresh flat list beside its merged threads.
+    const page = { ...groupedPage([[3, 2]]), messages: [summary(3), summary(2)] }
+    expect(pageSummaries(page).map(m => m.uid)).toEqual([3, 2])
+  })
+})
+
+describe('patchPage', () => {
+  it('flags a member inside its own thread', () => {
+    const patch = patchPage(groupedPage([[3, 2], [1]]), [2], 'seen', true)
+
+    expect(patch.found).toBe(1)
+    expect(patch.page.threads![0].messages.map(m => m.seen)).toEqual([false, true])
+    expect(patch.page.threads![1].messages[0].seen).toBe(false)
+  })
+
+  it('reports zero found when no thread holds the uid', () => {
+    expect(patchPage(groupedPage([[1]]), [99], 'seen', true).found).toBe(0)
+  })
+
+  it('patches a flat page exactly as patchSummaries does', () => {
+    const patch = patchPage(flatPage([summary(1), summary(2)]), [1], 'flagged', true)
+
+    expect(patch.found).toBe(1)
+    expect(patch.page.messages.map(m => m.flagged)).toEqual([true, false])
+    expect('threads' in patch.page).toBe(false)
+  })
+})
+
+describe('removeFromPage', () => {
+  it('drops a member and leaves the rest of its thread', () => {
+    const removal = removeFromPage(groupedPage([[3, 2], [1]]), [2])
+
+    expect(removal.removed).toBe(1)
+    expect(threadUids(removal.page)).toEqual([[3], [1]])
+  })
+
+  it('makes a thread that lost every member disappear', () => {
+    const removal = removeFromPage(groupedPage([[3, 2], [1]]), [3, 2])
+
+    expect(removal.removed).toBe(2)
+    expect(threadUids(removal.page)).toEqual([[1]])
+  })
+
+  it('leaves total and totalThreads where the flat patch leaves total', () => {
+    const removal = removeFromPage(groupedPage([[3, 2], [1]]), [3, 2])
+
+    expect(removal.page.total).toBe(20)
+    expect(removal.page.totalThreads).toBe(2)
+  })
+
+  it('reports zero removed when no face holds the uid', () => {
+    expect(removeFromPage(groupedPage([[1]]), [99]).removed).toBe(0)
+    expect(removeFromPage(flatPage([summary(1)]), [99]).removed).toBe(0)
+  })
+})
+
+describe('blankPage', () => {
+  it('empties both faces of a grouped page', () => {
+    const blanked = blankPage(groupedPage([[3, 2], [1]]))
+
+    expect(blanked.messages).toEqual([])
+    expect(blanked.total).toBe(0)
+    expect(blanked.threads).toEqual([])
+    expect(blanked.totalThreads).toBe(0)
+  })
+
+  it('gives a flat page no threads field of its own', () => {
+    const blanked = blankPage(flatPage([summary(1)]))
+
+    expect(blanked.messages).toEqual([])
+    expect(blanked.total).toBe(0)
+    expect('threads' in blanked).toBe(false)
+    expect('totalThreads' in blanked).toBe(false)
   })
 })

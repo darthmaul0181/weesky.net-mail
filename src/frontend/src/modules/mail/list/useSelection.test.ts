@@ -55,6 +55,16 @@ describe('useSelection', () => {
     expect([...result.current.selected].sort()).toEqual(['a', 'b', 'c'])
   })
 
+  // The thread row's checkbox: every member on or off in one call, whatever their mix was.
+  it('setMany adds or removes a batch without touching the rest', () => {
+    const { result } = renderHook(() => useSelection('INBOX::0'))
+    act(() => result.current.toggle(50, 4))
+    act(() => result.current.setMany([10, 20], true))
+    expect([...result.current.selected].sort((a, b) => a - b)).toEqual([10, 20, 50])
+    act(() => result.current.setMany([10, 20], false))
+    expect([...result.current.selected]).toEqual([50])
+  })
+
   it('clears when the resetKey changes (folder or page)', () => {
     let key = 'INBOX::0'
     const { result, rerender } = renderHook(() => useSelection(key))

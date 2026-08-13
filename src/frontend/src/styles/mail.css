@@ -696,6 +696,30 @@
 
 .message-row.is-line.is-unread .message-row-line { font-weight: 700; }
 
+/* ── Thread rows ─────────────────────────────────────────── */
+
+/* How many messages the collapsed row stands for. The count badge's accent pair, like the
+   folder counts — no new token. */
+.message-row-thread-count {
+  flex: none;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--badge-count-bg);
+  color: var(--badge-count-fg);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.thread-toggle svg { transition: transform 0.15s; }
+.thread-toggle.is-open svg { transform: rotate(90deg); }
+
+/* Member sub-rows step in under their thread head; the checkbox keeps its gutter. After the
+   narrow skin's own padding rule on purpose: the two tie on specificity, and this one must win
+   to indent that skin past its 34px gutter. */
+.message-row.is-thread-member { padding-left: 46px; }
+
 /* ── Pager ───────────────────────────────────────────────── */
 
 .pager {

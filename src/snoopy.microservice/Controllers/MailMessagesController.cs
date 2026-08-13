@@ -38,6 +38,7 @@ public sealed class MailMessagesController(
     /// <param name="folder">full folder path</param>
     /// <param name="page">zero-based page index</param>
     /// <param name="pageSize">messages per page, 1 to 200</param>
+    /// <param name="grouped">group the page into conversations (server THREAD permitting)</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">The page, with the folder's UidValidity</response>
     /// <response code="400">The folder is missing, or the paging arguments are out of range</response>
@@ -56,6 +57,7 @@ public sealed class MailMessagesController(
         [FromQuery] string folder,
         [FromQuery] int page = 0,
         [FromQuery] int pageSize = 50,
+        [FromQuery] bool grouped = false,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
@@ -67,7 +69,7 @@ public sealed class MailMessagesController(
         var resolution = await TryResolveAsync(cancellationToken);
         if (resolution.Failed(out var error, out var connection)) return error;
 
-        var result = await messages.ListAsync(AuthenticatedUser, connection, folder, page, pageSize, cancellationToken);
+        var result = await messages.ListAsync(AuthenticatedUser, connection, folder, page, pageSize, grouped, cancellationToken);
 
         if (result.IsFailure && IsMissing(result.Error)) return NotFoundEnveloppe(result.Error);
 

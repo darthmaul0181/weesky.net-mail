@@ -71,8 +71,14 @@ const sample = [
   },
 ]
 
+// Flat mode wraps every message as a one-member group; a suite that wants real threads
+// passes `groups` through the overrides and it wins the spread.
+function singletons<T extends { uid: number }>(messages: T[]) {
+  return messages.map(message => ({ key: message.uid, messages: [message] }))
+}
+
 function pagedState(paging = {}, overrides = {}) {
-  return {
+  const state = {
     messages: sample,
     total: 2,
     isLoading: false,
@@ -81,6 +87,7 @@ function pagedState(paging = {}, overrides = {}) {
     streaming: null,
     ...overrides,
   }
+  return { groups: singletons(state.messages), ...state }
 }
 
 type ListProps = Parameters<typeof MessageList>[0]
@@ -867,12 +874,14 @@ describe('pull to refresh', () => {
 })
 
 function streamingState(overrides = {}, count = 100) {
+  const messages = Array.from({ length: count }, (_, i) => ({
+    uid: i + 1, subject: `Subject ${i + 1}`, fromName: 'A', fromAddress: 'a@b.c',
+    date: '2026-07-21T00:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 0, preview: '',
+  }))
   return {
-    messages: Array.from({ length: count }, (_, i) => ({
-      uid: i + 1, subject: `Subject ${i + 1}`, fromName: 'A', fromAddress: 'a@b.c',
-      date: '2026-07-21T00:00:00Z', seen: true, flagged: false, answered: false,
-      hasAttachments: false, size: 0, preview: '',
-    })),
+    groups: singletons(messages),
+    messages,
     total: 3812,
     isLoading: false,
     isError: false,
@@ -968,7 +977,7 @@ describe('MessageList streaming', () => {
 
   it('drops the sentinel on an empty folder', () => {
     mocks.useMessageList.mockReturnValue({
-      messages: [], total: 0, isLoading: false, isError: false, paging: null,
+      groups: [], messages: [], total: 0, isLoading: false, isError: false, paging: null,
       streaming: { hasMore: false, isLoadingMore: false, loadMoreFailed: false, loadMore: vi.fn() },
     })
     const { container } = renderList()
@@ -1669,5 +1678,254 @@ describe('choosable row actions', () => {
 
     await waitFor(() => expect(document.querySelector('.message-row-cluster')).toBeNull())
     expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Star' })).toBeInTheDocument()
+  })
+})
+
+/** The grouped list: one row per conversation, newest member rendered, aggregate state, and the
+    collapsed row's controls acting on every member at once. */
+describe('conversation rows', () => {
+  // Newest first, as the backend sends them; the key is the oldest member's uid.
+  const thread = [
+    {
+      uid: 30, subject: 'Re: quote', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
+      date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 100, preview: 'newest body',
+    },
+    {
+      uid: 10, subject: 'quote', fromName: 'Bob', fromAddress: 'bob@x.be',
+      date: '2026-07-17T09:00:00Z', seen: false, flagged: true, answered: false,
+      hasAttachments: true, size: 90, preview: 'oldest body',
+    },
+  ]
+
+  const groupedState = () =>
+    pagedState({}, { messages: thread, groups: [{ key: 10, messages: thread }], total: 2 })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(groupedState())
+  })
+
+  it('renders one row per thread with a count badge and aggregate state', () => {
+    const { container } = renderList()
+
+    // One collapsed row for the two members, showing the newest one.
+    expect(container.querySelectorAll('.message-row')).toHaveLength(1)
+    expect(screen.getByText('Re: quote')).toBeInTheDocument()
+    expect(screen.queryByText('quote')).not.toBeInTheDocument()
+
+    const badge = container.querySelector('.message-row-thread-count') as HTMLElement
+    expect(badge).toHaveTextContent('2')
+    expect(badge).toHaveAttribute('title', '2 messages in this conversation')
+    expect(screen.getByLabelText('Expand conversation')).toBeInTheDocument()
+
+    // Aggregate: the row reads unread and starred even though the latest member is neither.
+    const row = screen.getByText('Re: quote').closest('.message-row') as HTMLElement
+    expect(row).toHaveClass('is-unread')
+    expect(row.querySelector('.message-row-unread-dot')).not.toBeNull()
+    expect(within(row).getByRole('button', { name: 'Unstar' })).toBeInTheDocument()
+    expect(row.querySelector('svg[aria-label="Has attachments"]')).not.toBeNull()
+
+    // role=button is children-presentational: the count badge's title reaches nobody, so a
+    // 2-message thread has to say "conversation" in the accessible name itself.
+    expect(row).toHaveAttribute('aria-label', expect.stringContaining('2 messages in this conversation'))
+  })
+
+  it('renders a single-message thread exactly as a plain row', () => {
+    mocks.useMessageList.mockReturnValue(pagedState())
+    const { container } = renderList()
+
+    expect(screen.queryByLabelText('Expand conversation')).not.toBeInTheDocument()
+    expect(container.querySelector('.message-row-thread-count')).toBeNull()
+  })
+
+  it('expands to member sub-rows; a sub-row opens its own message', () => {
+    const onSelect = vi.fn()
+    const { container } = renderList({ onSelect })
+
+    fireEvent.click(screen.getByLabelText('Expand conversation'))
+
+    // The parent row stays and every member gets a sub-row, the latest included.
+    expect(container.querySelectorAll('.message-row')).toHaveLength(3)
+    const members = container.querySelectorAll('.message-row.is-thread-member')
+    expect(members).toHaveLength(2)
+    expect(screen.getByLabelText('Collapse conversation'))
+      .toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(members[1])
+    expect(onSelect).toHaveBeenCalledWith(10)
+  })
+
+  it('collapses back from the chevron without ever opening a message', () => {
+    const onSelect = vi.fn()
+    const { container } = renderList({ onSelect })
+
+    fireEvent.click(screen.getByLabelText('Expand conversation'))
+    fireEvent.click(screen.getByLabelText('Collapse conversation'))
+
+    expect(container.querySelectorAll('.message-row')).toHaveLength(1)
+    expect(screen.getByLabelText('Expand conversation'))
+      .toHaveAttribute('aria-expanded', 'false')
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('opens the latest member when the collapsed row is clicked', () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+
+    fireEvent.click(screen.getByText('Re: quote'))
+
+    expect(onSelect).toHaveBeenCalledWith(30)
+  })
+
+  it('checks the whole thread from the collapsed checkbox and stars it whole', () => {
+    renderList()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select conversation from Alice Martin' }))
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+
+    // The star reads the aggregate (a member is flagged), so the click unstars every member.
+    fireEvent.click(screen.getByRole('button', { name: 'Unstar' }))
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [30, 10], flag: 'flagged', value: false })
+  })
+
+  it('unchecks the whole thread when every member was selected', () => {
+    renderList()
+    const box = screen.getByRole('checkbox', { name: 'Select conversation from Alice Martin' })
+
+    fireEvent.click(box)
+    expect(box).toBeChecked()
+    fireEvent.click(box)
+
+    expect(box).not.toBeChecked()
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
+  })
+
+  it('marks the whole thread read from the cluster', () => {
+    renderList()
+    const row = screen.getByText('Re: quote').closest('.message-row') as HTMLElement
+
+    // A member is unread, so the aggregate offers "Mark as read" for every member at once.
+    fireEvent.click(within(row).getByRole('button', { name: 'Mark as read' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [30, 10], flag: 'seen', value: true })
+  })
+
+  it('archives the whole thread and advances the reader past every member', () => {
+    const onDeparted = vi.fn()
+    renderList({ selectedUid: 10, onDeparted })
+    const row = screen.getByText('Re: quote').closest('.message-row') as HTMLElement
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
+
+    expect(mocks.move).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [30, 10], targetFolderPath: 'Archives', copy: false })
+    expect(onDeparted).toHaveBeenCalledWith(10, [30, 10])
+  })
+
+  it('expunges the whole thread from the trash behind the confirm', async () => {
+    renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
+    const row = screen.getByText('Re: quote').closest('.message-row') as HTMLElement
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete permanently' }))
+    const modal = within(document.querySelector('.modal') as HTMLElement)
+    expect(modal.getByText('Re: quote')).toBeInTheDocument()
+    await settle()
+    expect(mocks.remove).not.toHaveBeenCalled()
+
+    fireEvent.click(modal.getByRole('button', { name: 'Delete' }))
+    expect(mocks.remove).toHaveBeenCalledWith({ folderPath: 'Corbeille', uids: [30, 10] })
+  })
+
+  it('a dragged thread row carries its member uids', () => {
+    renderList()
+    const store: Record<string, string> = {}
+    const dataTransfer = {
+      setData: vi.fn((type: string, value: string) => { store[type] = value }),
+      getData: (type: string) => store[type] ?? '',
+      setDragImage: vi.fn(),
+      effectAllowed: 'uninitialized',
+      types: [] as string[],
+    }
+
+    fireEvent.dragStart(
+      screen.getByText('Re: quote').closest('.message-row') as HTMLElement, { dataTransfer })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [30, 10] }))
+  })
+
+  it('carries the badge and the chevron in the wide skin too', () => {
+    const { container } = renderList({ wide: true })
+
+    expect(container.querySelector('.message-row-thread-count')).toHaveTextContent('2')
+    expect(screen.getByLabelText('Expand conversation')).toBeInTheDocument()
+  })
+
+  // Reading an older member then collapsing must not leave the list with no highlighted row:
+  // the collapsed row stands for every member, so it wears is-selected for any open one.
+  it('the collapsed row is selected when any member is the open message', () => {
+    renderList({ selectedUid: 10 })
+
+    expect(screen.getByText('Re: quote').closest('.message-row')).toHaveClass('is-selected')
+  })
+
+  it('collapses an expanded thread when the folder changes', () => {
+    const { container, rerender } = renderList()
+
+    fireEvent.click(screen.getByLabelText('Expand conversation'))
+    expect(container.querySelectorAll('.message-row')).toHaveLength(3)
+
+    rerender(
+      <MessageList folderPath="Archives" selectedUid={null} onSelect={vi.fn()}
+        search={null} onSearchChange={() => {}} />)
+
+    expect(container.querySelectorAll('.message-row')).toHaveLength(1)
+    expect(screen.getByLabelText('Expand conversation'))
+      .toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('a long press on the collapsed row selects the whole thread', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderList({ onSelect })
+      const row = screen.getByText('Re: quote').closest('.message-row') as HTMLElement
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+
+      expect(screen.getByText('2 selected')).toBeInTheDocument()
+      expect(onSelect).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('an unfolded member acts on its own uid alone', () => {
+    const { container } = renderList()
+
+    fireEvent.click(screen.getByLabelText('Expand conversation'))
+    const members = container.querySelectorAll('.message-row.is-thread-member')
+    // The older member is individually flagged, so its own star reads Unstar and unflags it alone.
+    fireEvent.click(within(members[1] as HTMLElement).getByRole('button', { name: 'Unstar' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { folderPath: 'INBOX', uids: [10], flag: 'flagged', value: false })
+  })
+
+  // The batch travels even when the open message is elsewhere: the layout no-ops on a uid that
+  // is not the open one, so this is the harmless third branch of reportDeparted, pinned.
+  it('reports the batch led by the latest member when the open message is not in it', () => {
+    const onDeparted = vi.fn()
+    renderList({ selectedUid: 999, onDeparted })
+    const row = screen.getByText('Re: quote').closest('.message-row') as HTMLElement
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
+
+    expect(onDeparted).toHaveBeenCalledWith(30, [30, 10])
   })
 })

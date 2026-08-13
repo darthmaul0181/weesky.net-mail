@@ -154,8 +154,8 @@ internal sealed class ImapSession : IImapSession
         string folderPath, bool allFolders, MailSearchCriteria criteria, int page, int pageSize, CancellationToken cancellationToken) =>
         _messages.SearchAsync(folderPath, allFolders, criteria, page, pageSize, cancellationToken);
 
-    public Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken) =>
-        _messages.ListMessagesAsync(folderPath, page, pageSize, cancellationToken);
+    public Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, bool grouped, CancellationToken cancellationToken) =>
+        _messages.ListMessagesAsync(folderPath, page, pageSize, grouped, cancellationToken);
 
     public Task<Result<MailMessageDetail>> GetMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
         _messages.GetMessageAsync(folderPath, uid, cancellationToken);

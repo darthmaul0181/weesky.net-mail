@@ -25,6 +25,16 @@ function pageOf(uids: number[], total: number) {
   }
 }
 
+/** A grouped page: `threads` carries the conversations, and `totalThreads` is what the pager
+    pages — `total` keeps counting messages. */
+function groupedPageOf(threads: number[][], total: number, totalThreads: number) {
+  return {
+    ...pageOf([], total),
+    threads: threads.map(uids => ({ messages: pageOf(uids, total).messages })),
+    totalThreads,
+  }
+}
+
 describe('useMessageList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -131,6 +141,64 @@ describe('useMessageList', () => {
     const uids = result.current.messages.map(m => m.uid)
     expect(uids.filter(uid => uid === 100)).toHaveLength(1)
     expect(uids.indexOf(100)).toBe(99)
+  })
+
+  // The pager pages conversations in grouped mode: pacing it on the message count would offer
+  // pages the folder cannot fill. 300 messages in 61 threads at 30 a page — the two units give
+  // 9 and 2, so the assertion fails if lastPage ever goes back to counting messages.
+  it('exposes thread groups and pages on totalThreads when the page is grouped', async () => {
+    mocks.getPreferences.mockResolvedValue({
+      'mail.pageSize': '30', 'mail.showPreview': 'true', 'mail.groupConversations': 'true',
+    })
+    mocks.getMailMessages.mockResolvedValue(groupedPageOf([[30, 10]], 300, 61))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+
+    await waitFor(() => expect(result.current.groups).toHaveLength(1))
+    expect(result.current.groups[0].key).toBe(10)
+    expect(result.current.groups[0].messages.map(m => m.uid)).toEqual([30, 10])
+    expect(result.current.messages.map(m => m.uid)).toEqual([30, 10])
+    expect(result.current.paging?.lastPage).toBe(2)
+    // The heading still counts messages: only the pager moved to threads.
+    expect(result.current.total).toBe(300)
+    expect(mocks.getMailMessages).toHaveBeenCalledWith(
+      'INBOX', 0, 30, expect.objectContaining({ grouped: true }))
+  })
+
+  // One shape for both modes: a flat row is a conversation of one, so Task 9's row never learns
+  // which mode it is drawing.
+  it('wraps every message as its own group in flat mode', async () => {
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
+    mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 25))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+
+    await waitFor(() => expect(result.current.groups).toHaveLength(2))
+    expect(result.current.groups.map(g => g.key)).toEqual([1, 2])
+    expect(result.current.messages.map(m => m.uid)).toEqual([1, 2])
+    expect(mocks.getMailMessages).toHaveBeenCalledWith(
+      'INBOX', 0, 10, expect.objectContaining({ grouped: false }))
+  })
+
+  // The streamed counterpart of the dedupe: an arrival shifts the thread window, so a block
+  // repeats the previous block's last conversation.
+  it('shows a thread repeated across blocks once', async () => {
+    mocks.getPreferences.mockResolvedValue({
+      'mail.pageSize': 'all', 'mail.showPreview': 'true', 'mail.groupConversations': 'true',
+    })
+    const first = groupedPageOf(Array.from({ length: 100 }, (_, i) => [i + 1]), 250, 250)
+    mocks.getMailMessages
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(groupedPageOf([[100], [200, 101]], 250, 250))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+    await waitFor(() => expect(result.current.groups).toHaveLength(100))
+
+    act(() => { result.current.streaming?.loadMore() })
+
+    await waitFor(() => expect(result.current.groups).toHaveLength(101))
+    expect(result.current.groups[100].messages.map(m => m.uid)).toEqual([200, 101])
+    expect(result.current.messages.map(m => m.uid).filter(uid => uid === 100)).toHaveLength(1)
   })
 
   it('does not query a new folder at the previous folder\'s page', async () => {

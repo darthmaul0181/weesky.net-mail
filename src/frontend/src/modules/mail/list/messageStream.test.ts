@@ -18,6 +18,10 @@ function page(uids: number[], total = 1000): MailFolderPage {
   }
 }
 
+function threadPage(threads: number[][], total = 1000): MailFolderPage {
+  return { ...page([], total), threads: threads.map(uids => ({ messages: uids.map(message) })) }
+}
+
 describe('dedupeByUid', () => {
   it('flattens the blocks in order', () => {
     expect(dedupeByUid([page([3, 2]), page([1])]).map(m => m.uid)).toEqual([3, 2, 1])
@@ -64,6 +68,13 @@ describe('nextBlockIndex', () => {
   // total moves when mail arrives; a short block is an observed fact.
   it('ignores a total that disagrees with the blocks', () => {
     expect(nextBlockIndex(page([1, 2], 9999), 1, 3)).toBeUndefined()
+  })
+
+  // A grouped block is requested in threads, so counting its members would call a full block of
+  // two long conversations short and stop the stream on the second row.
+  it('judges a grouped block on its thread count', () => {
+    expect(nextBlockIndex(threadPage([[1]]), 1, 2)).toBeUndefined()
+    expect(nextBlockIndex(threadPage([[9, 1], [5]]), 1, 2)).toBe(1)
   })
 })
 

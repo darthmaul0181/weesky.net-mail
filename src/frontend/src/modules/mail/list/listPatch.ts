@@ -1,4 +1,6 @@
-import type { MailFolderNode, MailMessageSummary, MailSearchResult } from '../api/mailTypes'
+import type {
+  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchResult,
+} from '../api/mailTypes'
 
 export type MailFlagName = 'seen' | 'flagged'
 
@@ -51,6 +53,79 @@ export function removeSummaries(messages: MailMessageSummary[], uids: number[]):
   })
 
   return { messages: removed === 0 ? messages : kept, removed, removedUnread }
+}
+
+/**
+ * The one place a cached page's two faces are rewritten: the flat `messages` and, on a grouped
+ * page, every thread's own members — the backend fills one or the other, never both. A thread
+ * the transform empties disappears with its last member.
+ */
+export function mapPageSummaries(
+  page: MailFolderPage, map: (messages: MailMessageSummary[]) => MailMessageSummary[],
+): MailFolderPage {
+  const messages = map(page.messages)
+  if (!page.threads) return { ...page, messages }
+
+  const threads = page.threads
+    .map(thread => ({ messages: map(thread.messages) }))
+    .filter(thread => thread.messages.length > 0)
+  return { ...page, messages, threads }
+}
+
+/** Every summary a page holds, thread members included, one entry per uid — what a tally counts
+    and what a lookup searches. A merged block 0 carries both faces, hence the dedup. */
+export function pageSummaries(page: MailFolderPage): MailMessageSummary[] {
+  if (!page.threads) return page.messages
+
+  const byUid = new Map(page.messages.map(message => [message.uid, message]))
+  for (const thread of page.threads) {
+    for (const message of thread.messages) {
+      if (!byUid.has(message.uid)) byUid.set(message.uid, message)
+    }
+  }
+  return [...byUid.values()]
+}
+
+export interface PagePatch {
+  page: MailFolderPage
+  /** Rows the patch touched; zero means this cache says nothing about the batch. */
+  found: number
+}
+
+/** patchSummaries over a whole page, threads included. */
+export function patchPage(
+  page: MailFolderPage, uids: number[], flag: MailFlagName, value: boolean,
+): PagePatch {
+  let found = 0
+  const patched = mapPageSummaries(page, messages => {
+    const patch = patchSummaries(messages, uids, flag, value)
+    found += patch.found
+    return patch.messages
+  })
+  return { page: patched, found }
+}
+
+export interface PageRemoval {
+  page: MailFolderPage
+  removed: number
+}
+
+/** removeSummaries over a whole page: a thread losing every member goes with them. `total` and
+    `totalThreads` are left alone, exactly as the flat patch leaves `total`. */
+export function removeFromPage(page: MailFolderPage, uids: number[]): PageRemoval {
+  let removed = 0
+  const kept = mapPageSummaries(page, messages => {
+    const removal = removeSummaries(messages, uids)
+    removed += removal.removed
+    return removal.messages
+  })
+  return { page: kept, removed }
+}
+
+/** The folder emptied in place: whatever the flat pair says, the grouped pair says too. */
+export function blankPage(page: MailFolderPage): MailFolderPage {
+  const emptied = { ...mapPageSummaries(page, () => []), total: 0 }
+  return page.threads ? { ...emptied, totalThreads: 0 } : emptied
 }
 
 export interface SearchResultsPatch {
