@@ -6,6 +6,7 @@ import { api, hasSession, clearSession, setUnauthorizedHandler, setIsAdmin } fro
 import { deriveIdentity, type Account, type AccountIdentity } from '../lib/accountIdentity'
 import { forgetNotificationClaim } from '../modules/mail/notify/channels'
 import type { MailAuthMode } from '../modules/settings/accounts/useConnectedAccounts'
+import type { Capabilities } from '../types/capabilities'
 
 const ACTIVE_ACCOUNT_KEY = 'mail.activeAccount'
 /** The account every session starts on; the one id that can never turn out to be stale. */
@@ -44,6 +45,9 @@ interface AuthContextValue {
   isAdmin: boolean
   account: Account | null
   accountLoaded: boolean
+  /** What the platform wires up (Task 6). Null before it loads and for a backend that predates
+   *  the endpoint — every gate elsewhere reads a field `!== false` for exactly that reason. */
+  capabilities: Capabilities | null
   identity: AccountIdentity | null
   /** The active account's metadata, absent until the list holding it has loaded. */
   activeAccount: ActiveAccount | null
@@ -74,12 +78,25 @@ function mapRow(row: ConnectedAccountRow): ActiveAccount {
   }
 }
 
+// Contained here rather than inline in refreshAccount: an older backend that predates the route
+// (or a test that never mocked it) throws synchronously calling api.getCapabilities() at all — the
+// try/catch has to sit around that call, not around its result, or the throw escapes as an
+// unhandled rejection instead of resolving to "no capabilities".
+async function fetchCapabilities(): Promise<Capabilities | null> {
+  try {
+    return (await api.getCapabilities()) ?? null
+  } catch {
+    return null
+  }
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(hasSession())
   const [account, setAccount] = useState<Account | null>(null)
   const [accountLoaded, setAccountLoaded] = useState(false)
+  const [capabilities, setCapabilities] = useState<Capabilities | null>(null)
   const [activeAccountId, setActiveAccountId] = useState<string>(
     () => localStorage.getItem(ACTIVE_ACCOUNT_KEY) ?? PRIMARY_ACCOUNT_ID)
   const queryClient = useQueryClient()
@@ -93,16 +110,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   })
 
+  // Bumped on every isLoggedIn → false transition (below); refreshAccount captures it at the
+  // start and checks it before each late setState, so a slow answer from a session that has since
+  // ended cannot resurrect its account/isAdmin/capabilities into whatever session is current when
+  // it finally resolves.
+  const sessionGeneration = useRef(0)
+
   const refreshAccount = useCallback(async () => {
+    const myGeneration = sessionGeneration.current
+    const current = () => sessionGeneration.current === myGeneration
+    // Kicked off first, awaited last: the two are independent and the account (which gates the
+    // rest of the app) must not wait on capabilities to resolve.
+    const capabilitiesPromise = fetchCapabilities()
     try {
       const data: Account = await api.getAccount()
-      setAccount(data)
-      setIsAdmin(data?.isAdmin === true)
+      if (current()) { setAccount(data); setIsAdmin(data?.isAdmin === true) }
     } catch {
-      setAccount(null)
+      if (current()) setAccount(null)
     } finally {
-      setAccountLoaded(true)
+      if (current()) setAccountLoaded(true)
     }
+    const caps = await capabilitiesPromise
+    if (current()) setCapabilities(caps)
   }, [])
 
   useEffect(() => {
@@ -126,8 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wasLoggedIn.current = true
       refreshAccount()
     } else {
+      sessionGeneration.current += 1
       setAccount(null)
       setAccountLoaded(false)
+      setCapabilities(null)
       // The query keys are account-scoped in shape only — the id is the constant 'primary' until
       // linked accounts ship — so folders, messages, contacts and preferences left in the cache
       // are served to whoever signs in next. It runs here, not in logout(), so the 401 path is
@@ -216,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: account?.isAdmin === true,
       account,
       accountLoaded,
+      capabilities,
       identity,
       activeAccount,
       activeAccountId,

@@ -1,25 +1,13 @@
 <?xml version="1.0"?>
 <doc>
     <assembly>
-        <name>snoopy.microservice</name>
+        <name>snoopy.microservice.core</name>
     </assembly>
     <members>
         <member name="T:weesky.Snoopy.Microservice.Authentication.Authorization.AdminRequirement">
             <summary>
             Authorization requirement satisfied when the authenticated user has admin='Y'
             in the mail database. Evaluated by <see cref="T:weesky.Snoopy.Microservice.Authentication.Authorization.AdminRequirementHandler"/>.
-            </summary>
-        </member>
-        <member name="T:weesky.Snoopy.Microservice.Authentication.Authorization.AdminRequirementHandler">
-            <summary>
-            Runs on every request to an admin endpoint; the flag itself is cached by
-            <see cref="M:weesky.Snoopy.Microservice.Repositories.IAdminRepository.IsAdminAsync(System.String,System.String,System.Threading.CancellationToken)"/> for the same window a session check uses.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Authentication.Authorization.AdminRequirementHandler.#ctor(weesky.Snoopy.Microservice.Repositories.IAdminRepository)">
-            <summary>
-            Runs on every request to an admin endpoint; the flag itself is cached by
-            <see cref="M:weesky.Snoopy.Microservice.Repositories.IAdminRepository.IsAdminAsync(System.String,System.String,System.Threading.CancellationToken)"/> for the same window a session check uses.
             </summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Authentication.Extensions.AuthorizationExtension.MinimumSigningKeyBytes">
@@ -70,10 +58,11 @@
         </member>
         <member name="P:weesky.Snoopy.Microservice.Authentication.Models.AuthToken.Email">
             <summary>
-            The account this token was issued for, as the database spells it — not as the caller typed
-            it. Anything keyed on the account after a login has to use this one: a row looked up under
-            the caller's spelling can miss, and the caller only learns of it much later, through
-            whatever that row was holding.
+            The account this token was issued for, as the caller typed it — canonicalised
+            (trimmed, lower-cased) by <c>IdentityResolver.Canonical</c> before the IMAP LOGIN, not
+            looked up from a database row. Anything keyed on the account after a login has to use this
+            one: it is the single spelling shared by the webmail store row and the credentials-cookie
+            KDF salt, so a second spelling of the same mailbox would miss the row or derive the wrong key.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Authentication.Services.ISessionGuard">
@@ -207,13 +196,13 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Configuration.DatabaseConfiguration.AddSnoopyDatabases(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
              <summary>
-             The two databases this service talks to, plus the health check over the first one.
+             The webmail's own database, plus the health check over it. A platform bringing a directory
+             of its own registers that one separately — the dovecot schema belongs to Dovecot and can be
+             rebuilt by mail-server provisioning, which would take our preferences with it.
             
-             They are separate on purpose: the dovecot schema belongs to Dovecot and can be rebuilt by
-             mail-server provisioning, which would take our preferences with it. Preferences creation is
-             manual — no EF migrations here; see docs/superpowers/mail-2a5-database-prerequisite.md — and
-             the service refuses to start without its connection string rather than run with folder roles
-             silently inert.
+             Preferences creation is manual — no EF migrations here; see
+             docs/superpowers/mail-2a5-database-prerequisite.md — and the service refuses to start
+             without its connection string rather than run with folder roles silently inert.
              </summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Configuration.LoggingConfiguration.RequestLoggerSource">
@@ -241,6 +230,14 @@
             <summary>
             Drops <see cref="T:Microsoft.AspNetCore.Mvc.Formatters.StringOutputFormatter"/>: MVC writes a bare string as
             <c>text/plain</c>, which the client's <c>res.json()</c> cannot parse.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Configuration.PlatformConfiguration">
+            <summary>
+            The seam between the generic webmail core and the platform hosting it. Only these three ports
+            know anything about the directory behind the mailboxes; everything else in the service is
+            written against them, so a deployment that administers no mailboxes swaps the registrations
+            rather than the code.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Configuration.SecurityConfiguration.AddSnoopyAuthentication(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
@@ -304,56 +301,14 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetQuota(System.Threading.CancellationToken)">
             <summary>
-            Returns the mailbox quota usage reported by Dovecot
+            Returns the mailbox quota usage, read live over IMAP GETQUOTAROOT INBOX
             </summary>
             <response code="200">Quota information</response>
-            <response code="401">Unauthenticated user</response>
-            <response code="502">Unable to reach Dovecot</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.GetFolders(System.Threading.CancellationToken)">
-            <summary>
-            Returns the list of IMAP folders (mailboxes) for the authenticated user
-            </summary>
-            <response code="200">List of folder names</response>
-            <response code="401">Unauthenticated user</response>
-            <response code="502">Unable to reach Dovecot</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangePassword(weesky.Snoopy.Microservice.Models.SecretChange,System.Threading.CancellationToken)">
-             <summary>
-             Change the mailbox password
-             </summary>
-             <remarks>
-             The credentials cookie carries the password every mail endpoint opens IMAP with, so it
-             is re-issued here. Left alone it would keep the superseded password — and the sliding
-             session would keep renewing it — leaving a live session whose every mail action fails
-             authentication for the rest of the token's lifetime.
-            
-             The connected-account passwords are encrypted under a key the main password derives, so
-             they are re-keyed in the same breath, before the new cookie is written.
-             </remarks>
-             <param name="secretChange">the new secret</param>
-             <param name="cancellationToken">cancellation token</param>
-             <response code="204">Secret changed successfully</response>
-             <response code="400">Wrong credentials</response>
-             <response code="401">Unauthenticated user</response>
-             <response code="429">Too many attempts</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ReKeyConnectedAccountsAsync(weesky.Snoopy.Microservice.Models.SecretChange,System.Threading.CancellationToken)">
-            <summary>
-            Re-encrypts every connected-account password under the key the new main password derives,
-            and returns that key for the cookie. A row that will not decrypt was already orphaned by an
-            out-of-band password change: it is left exactly as it is, so the user can re-enter it.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AccountController.ChangeFullName(weesky.Snoopy.Microservice.Models.FullNameChange,System.Threading.CancellationToken)">
-            <summary>
-            Change the account full name
-            </summary>
-            <param name="fullNameChange">the new full name</param>
-            <param name="cancellationToken">cancellation token</param>
-            <response code="204">Full name changed successfully</response>
-            <response code="400">Invalid request</response>
-            <response code="401">Unauthenticated user</response>
+            <response code="204">The mail server does not advertise the QUOTA capability</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">No such account</response>
+            <response code="409">The connected account's stored credentials no longer decrypt</response>
+            <response code="502">Unable to reach the mail server</response>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.AccountResolution`1">
             <summary>
@@ -361,165 +316,6 @@
             answer with. <see cref="M:weesky.Snoopy.Microservice.Controllers.AccountResolution`1.Failed(Microsoft.AspNetCore.Mvc.ActionResult@,`0@)"/> is the only way to either, so the compiler proves the
             non-null branch at every call site — no null-forgiving reads.
             </summary>
-        </member>
-        <member name="F:weesky.Snoopy.Microservice.Controllers.AdminController.AccountsStillConnected">
-            <summary>Fixed rather than a live count: the store's <c>domain_in_use</c> check does not
-            carry one, and adding a method just for it is not worth it for an admin-only error.</summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetUsers(System.Threading.CancellationToken)">
-            <summary>Returns all users</summary>
-            <response code="200">User list</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateUser(weesky.Snoopy.Microservice.Models.AdminUserRequest,System.Threading.CancellationToken)">
-            <summary>Creates a new user</summary>
-            <response code="201">User created</response>
-            <response code="400">Validation error</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateUser(System.Int32,weesky.Snoopy.Microservice.Models.AdminUserRequest,System.Threading.CancellationToken)">
-            <summary>Updates an existing user</summary>
-            <response code="200">User updated</response>
-            <response code="400">Validation error</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteUser(System.Int32,System.Threading.CancellationToken)">
-            <summary>Deletes a user</summary>
-            <response code="204">User deleted</response>
-            <response code="400">User not found</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetDomains(System.Threading.CancellationToken)">
-            <summary>Returns all domains</summary>
-            <response code="200">Domain list</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateDomain(weesky.Snoopy.Microservice.Models.AdminDomainRequest,System.Threading.CancellationToken)">
-            <summary>Creates a new domain</summary>
-            <response code="201">Domain created</response>
-            <response code="400">Validation error</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateDomain(System.String,weesky.Snoopy.Microservice.Models.AdminDomainRequest,System.Threading.CancellationToken)">
-            <summary>Updates an existing domain</summary>
-            <response code="200">Domain updated</response>
-            <response code="400">Validation error</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetUserQuota(System.Int32,System.Threading.CancellationToken)">
-            <summary>Returns the Dovecot mailbox quota for a specific user</summary>
-            <response code="200">Quota information</response>
-            <response code="400">User not found</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-            <response code="502">Unable to reach Dovecot</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteDomain(System.String,System.Boolean,System.Threading.CancellationToken)">
-            <summary>Deletes a domain</summary>
-            <param name="id">the domain to delete</param>
-            <param name="deleteAliases">
-            Acknowledges that every alias anchored on the domain is deleted with it. Omitted, the
-            request is refused and the refusal names how many there are.
-            </param>
-            <param name="cancellationToken">cancellation token</param>
-            <response code="204">Domain deleted</response>
-            <response code="400">Domain not found, still has users, or holds unacknowledged aliases</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetVirtualDomains(System.Threading.CancellationToken)">
-            <summary>Returns all virtual (alias) domains with their owners</summary>
-            <response code="200">Virtual domain list</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.AddVirtualDomainOwner(System.String,weesky.Snoopy.Microservice.Models.AdminVirtualDomainOwnerRequest,System.Threading.CancellationToken)">
-            <summary>Adds an owner to a virtual domain</summary>
-            <response code="200">Owner added</response>
-            <response code="400">Validation error</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.RemoveVirtualDomainOwner(System.String,System.Int32,System.Threading.CancellationToken)">
-            <summary>Removes a specific owner from a virtual domain</summary>
-            <response code="204">Owner removed</response>
-            <response code="400">Owner not found</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.GetExternalDomains(System.Threading.CancellationToken)">
-            <summary>Returns every admin-curated external mail provider a user may connect from</summary>
-            <response code="200">Domain list</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.CreateExternalDomain(weesky.Snoopy.Microservice.Models.ExternalDomainRequest,System.Threading.CancellationToken)">
-            <summary>Registers a new external mail provider</summary>
-            <response code="200">Domain created</response>
-            <response code="400">Validation error, or the name is already taken</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.UpdateExternalDomain(System.Guid,weesky.Snoopy.Microservice.Models.ExternalDomainRequest,System.Threading.CancellationToken)">
-            <summary>Updates an existing external mail provider, rewriting every field</summary>
-            <response code="204">Domain updated</response>
-            <response code="400">Validation error, or the name is already taken</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-            <response code="404">No such domain</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.DeleteExternalDomain(System.Guid,System.Threading.CancellationToken)">
-            <summary>Removes an external mail provider</summary>
-            <response code="204">Domain deleted</response>
-            <response code="400">Accounts are still connected to this domain</response>
-            <response code="401">Unauthenticated</response>
-            <response code="403">Not an admin</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.Validate(weesky.Snoopy.Microservice.Models.ExternalDomainRequest,System.Boolean)">
-            <summary>
-            Securities are checked by exact, case-sensitive string match against the three literals —
-            not <c>Enum.TryParse</c>, which also accepts a numeric string and would let a value the
-            admin never typed reach the resolver that reads this row back. The cleartext opt-in is the
-            same one the resolver applies, so a row that saves here is a row that resolves there.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AdminController.ValidateSecurity(System.String,System.Boolean)">
-            <summary>Refusing None here rather than at read time is what stops an admin from saving a
-            row that would answer 404 on every use, with nothing on screen saying why.</summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.Add(weesky.Snoopy.Microservice.Models.Alias,System.Threading.CancellationToken)">
-            <summary>
-            Add an aliases to the main mailbox.
-            </summary>
-            <param name="alias">the aliad to create</param>
-            <param name="cancellationToken">cancellation token</param>
-            <response code="204">New alias has been successfully created</response>
-            <response code="400">Bad request</response>
-            <response code="401">Unauthenticated user</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.List(System.Threading.CancellationToken)">
-            <summary>
-            Gets all aliases to the main mailbox
-            </summary>
-            <response code="200">Aliases list generated successfully</response>
-            <response code="401">Unauthenticated user</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.AliasesController.Delete(weesky.Snoopy.Microservice.Models.Alias,System.Threading.CancellationToken)">
-            <summary>
-            Deletes an alias to the main mailbox
-            </summary>
-            <param name="alias">alias to delete</param>
-            <param name="cancellationToken">cancellation token</param>
-            <response code="200">Alias successfully deleted</response>
-            <response code="400">Bad request</response>
-            <response code="401">Unauthenticated user</response>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Controllers.ApiBaseController.AuthenticatedUser">
             <summary>
@@ -592,6 +388,36 @@
             <response code="400">Unknown key, or a value the key does not accept</response>
             <response code="401">Not authenticated</response>
             <response code="403">Not an administrator</response>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.CapabilitiesController">
+            <summary>
+            What the frontend must gate on, in one authenticated call: what the platform wires versus what
+            the mail servers behind this account actually support. Quota needs the primary mailbox's live
+            IMAP session — the same resolution every mail endpoint runs — so a missing or undecryptable
+            credentials cookie answers exactly as it does there, never a partial 200.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CapabilitiesController.#ctor(Microsoft.Extensions.Options.IOptions{weesky.Snoopy.Microservice.Models.PlatformOptions},Microsoft.Extensions.Options.IOptions{weesky.Snoopy.Microservice.Models.SieveOptions},weesky.Snoopy.Microservice.Platform.IAliasDirectory,weesky.Snoopy.Microservice.Platform.IAccountInfoProvider,weesky.Snoopy.Microservice.Services.IAccountConnectionResolver,weesky.Snoopy.Microservice.Services.IImapSessionProvider,weesky.Snoopy.Microservice.Services.ISieveAvailabilityProbe)">
+            <summary>
+            What the frontend must gate on, in one authenticated call: what the platform wires versus what
+            the mail servers behind this account actually support. Quota needs the primary mailbox's live
+            IMAP session — the same resolution every mail endpoint runs — so a missing or undecryptable
+            credentials cookie answers exactly as it does there, never a partial 200.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CapabilitiesController.GetCapabilities(System.Threading.CancellationToken)">
+            <summary>
+            Returns what the platform wires and the servers support
+            </summary>
+            <response code="200">Capabilities</response>
+            <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+            <response code="404">No such account</response>
+            <response code="409">The connected account's stored credentials no longer decrypt</response>
+            <response code="502">Unable to reach the mail server</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CapabilitiesController.IsAdminAsync(System.Threading.CancellationToken)">
+            <summary>A failed account lookup means "not admin", not an error for the whole response —
+            the caller already learned everything wrong about their session from the resolution above.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.ConnectedAccountsController">
              <summary>
@@ -826,43 +652,64 @@
             <response code="401">Not authenticated</response>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.IdentitiesController">
-            <summary>
-            Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
-            no credentials cookie: both verbs are database reads, so this lives outside the mail controllers.
-            The account id is decoded by <see cref="M:weesky.Snoopy.Microservice.Services.IAccountConnectionResolver.AccountIdFrom(Microsoft.AspNetCore.Http.HttpRequest)"/>, the same
-            reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
-            they do there; a connected account's set is validated against the account address itself,
-            since there is no alias list on our server for a mailbox we do not administer.
-            </summary>
+             <summary>
+             Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
+             no credentials cookie: both verbs are database reads, so this lives outside the mail controllers.
+             The account id is decoded by <see cref="M:weesky.Snoopy.Microservice.Services.IAccountConnectionResolver.AccountIdFrom(Microsoft.AspNetCore.Http.HttpRequest)"/>, the same
+             reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
+             they do there; a connected account's set is validated against the account address itself,
+             since there is no alias list on our server for a mailbox we do not administer.
+            
+             A platform that does not enforce ownership (<see cref="P:weesky.Snoopy.Microservice.Platform.IAliasDirectory.EnforcesOwnership"/>)
+             puts the primary mailbox on that very same path: with no alias list to judge against, the rule
+             is the connected one rather than a third one of its own.
+             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.#ctor(weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Repositories.IAliasesRepository,weesky.Snoopy.Microservice.Repositories.IUsersRepository,weesky.Snoopy.Microservice.Repositories.IConnectedAccountStore)">
-            <summary>
-            Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
-            no credentials cookie: both verbs are database reads, so this lives outside the mail controllers.
-            The account id is decoded by <see cref="M:weesky.Snoopy.Microservice.Services.IAccountConnectionResolver.AccountIdFrom(Microsoft.AspNetCore.Http.HttpRequest)"/>, the same
-            reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
-            they do there; a connected account's set is validated against the account address itself,
-            since there is no alias list on our server for a mailbox we do not administer.
-            </summary>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.#ctor(weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Platform.IAliasDirectory,weesky.Snoopy.Microservice.Platform.IProfileReader,weesky.Snoopy.Microservice.Repositories.IConnectedAccountStore)">
+             <summary>
+             Curated sending identities — a webmail preference, not mail-server data. No IMAP session and
+             no credentials cookie: both verbs are database reads, so this lives outside the mail controllers.
+             The account id is decoded by <see cref="M:weesky.Snoopy.Microservice.Services.IAccountConnectionResolver.AccountIdFrom(Microsoft.AspNetCore.Http.HttpRequest)"/>, the same
+             reader every mail endpoint uses, so header and <c>?account=</c> mean the same thing here as
+             they do there; a connected account's set is validated against the account address itself,
+             since there is no alias list on our server for a mailbox we do not administer.
+            
+             A platform that does not enforce ownership (<see cref="P:weesky.Snoopy.Microservice.Platform.IAliasDirectory.EnforcesOwnership"/>)
+             puts the primary mailbox on that very same path: with no alias list to judge against, the rule
+             is the connected one rather than a third one of its own.
+             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.List(System.Threading.CancellationToken)">
             <summary>
-            The resolved list: the primary address always (FullName label unless overridden), then
-            every stored row; a row whose alias vanished comes back stale, never silently dropped.
+            The resolved list. In strict mode (<see cref="P:weesky.Snoopy.Microservice.Platform.IAliasDirectory.EnforcesOwnership"/>): the
+            primary address always first (FullName label unless overridden), then every stored row; a
+            row whose alias vanished comes back stale, never silently dropped. In free mode — a
+            connected account, or a platform that enforces no ownership at all — there is no alias list
+            to check a row against, so the connected-style list applies instead: the account address
+            first, then every stored row as-is, and nothing is ever stale.
             </summary>
             <response code="200">The identities, default first</response>
             <response code="401">Not authenticated</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.Replace(weesky.Snoopy.Microservice.Models.Mail.ReplaceIdentitiesRequest,System.Threading.CancellationToken)">
             <summary>
-            Replaces the whole set. Addresses must belong to the caller (primary, a live alias, or an
-            already-stored row — the last keeps stale identities alive across saves).
+            Replaces the whole set. In strict mode, addresses must belong to the caller (primary, a
+            live alias, or an already-stored row — the last keeps stale identities alive across saves).
+            In free mode there is no alias list to check ownership against, so any well-formed address
+            is accepted as long as the set still contains the account address itself.
             </summary>
             <param name="request">the full identity list</param>
             <param name="cancellationToken">cancellation token</param>
             <response code="204">Saved</response>
             <response code="400">A foreign, duplicate or unparsable address, a bad label, or two defaults</response>
             <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.UnverifiableScope(weesky.Snoopy.Microservice.Data.Preferences.ConnectedAccount)">
+            <summary>
+            The scope whose address is the only one anything can vouch for, and which therefore takes
+            <c>ResolveConnected</c>/<c>ValidateConnected</c>: a connected account, or — when the platform
+            enforces no ownership at all — the primary mailbox itself. Null means the alias-checked path.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.IdentitiesController.ResolveScopeAsync(System.Threading.CancellationToken)">
             <summary>
@@ -1444,9 +1291,9 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.TryResolveAsync(System.Threading.CancellationToken)">
             <summary>
             The ManageSieve target for the active account, or the error to answer with. The only place
-            a <see cref="T:weesky.Snoopy.Microservice.Models.SieveConnection"/> is built, and the only place the SASL shape is chosen. Master
-            impersonation is the primary account's alone; a connected mailbox authenticates with the
-            credentials we hold for it, so revoking its password revokes its filters in the same move.
+            a <see cref="T:weesky.Snoopy.Microservice.Models.SieveConnection"/> is built, and the only place the SASL shape is chosen. Every
+            account authenticates with the credentials we hold for it — no impersonation — so revoking
+            a mailbox's password revokes its filters in the same move.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.RulesController.SieveFailure(System.String)">
@@ -1824,6 +1671,24 @@
         <member name="M:weesky.Snoopy.Microservice.Models.AppSettings.Effective(System.Collections.Generic.IEnumerable{weesky.Snoopy.Microservice.Data.Preferences.AppSetting})">
             <summary>Every default, a stored row winning wherever the registry still accepts it.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.CapabilitiesResponse">
+            <summary>
+            What the frontend must gate on: what the platform wires (<see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Admin"/>,
+            <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Aliases"/>, <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.PasswordChange"/>, <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.ProfileEditing"/>,
+            <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.StrictIdentities"/>) versus what the mail servers behind this account actually
+            support (<see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Quota"/>, <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Rules"/>). The two groups can disagree — a weesky
+            deployment whose Dovecot has no ManageSieve enabled still answers <c>rules: false</c>.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.#ctor(System.String,System.Boolean,System.Boolean,System.Boolean,System.Boolean,System.Boolean,System.Boolean,System.Boolean)">
+            <summary>
+            What the frontend must gate on: what the platform wires (<see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Admin"/>,
+            <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Aliases"/>, <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.PasswordChange"/>, <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.ProfileEditing"/>,
+            <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.StrictIdentities"/>) versus what the mail servers behind this account actually
+            support (<see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Quota"/>, <see cref="P:weesky.Snoopy.Microservice.Models.CapabilitiesResponse.Rules"/>). The two groups can disagree — a weesky
+            deployment whose Dovecot has no ManageSieve enabled still answers <c>rules: false</c>.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.CompatibilityCheckRequest">
             <summary>
             Body of <c>POST /api/Rules/CompatibilityCheck</c>: asks whether the supplied rules can
@@ -2064,16 +1929,6 @@
             Aliases anchored on this domain, which deleting it takes with them. Carried on the listing
             because nothing in this application lets an admin enumerate another user's aliases, so a
             confirmation has no other way to say what the deletion costs.
-            </summary>
-        </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.DovecotOptions.ApiUrl">
-            <summary>
-            Full URL of the doveadm HTTP API endpoint, e.g. https://mail.example.net:8080/doveadm/v1.
-            </summary>
-        </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.DovecotOptions.ApiKey">
-            <summary>
-            Value of the Dovecot `doveadm_api_key` shared with the service.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.ExternalDomainResponse">
@@ -2897,16 +2752,16 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.SieveConnection">
             <summary>
-            One ManageSieve target. SASL PLAIN sends authzid \0 authcid \0 password: the master path
-            impersonates (authzid = mailbox, authcid = master), the own-credentials path does not
-            (authzid empty, authcid = the account itself). Built by <c>RulesController</c>, nowhere else.
+            One ManageSieve target. SASL PLAIN sends authzid \0 authcid \0 password; every account
+            authenticates with its own credentials, so <c>AuthorizationIdentity</c> is always empty and
+            <c>AuthenticationIdentity</c> is the account itself. Built by <c>RulesController</c>, nowhere else.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Models.SieveConnection.#ctor(System.String,System.Int32,System.String,System.String,System.String)">
             <summary>
-            One ManageSieve target. SASL PLAIN sends authzid \0 authcid \0 password: the master path
-            impersonates (authzid = mailbox, authcid = master), the own-credentials path does not
-            (authzid empty, authcid = the account itself). Built by <c>RulesController</c>, nowhere else.
+            One ManageSieve target. SASL PLAIN sends authzid \0 authcid \0 password; every account
+            authenticates with its own credentials, so <c>AuthorizationIdentity</c> is always empty and
+            <c>AuthenticationIdentity</c> is the account itself. Built by <c>RulesController</c>, nowhere else.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Models.SieveConnection.ToString">
@@ -2925,17 +2780,6 @@
         <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.Port">
             <summary>
             TCP port of the ManageSieve service. Default 4190.
-            </summary>
-        </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.MasterUser">
-            <summary>
-            Master username configured in Dovecot (see <c>auth_master_users</c>).
-            Used as the SASL PLAIN authentication identity while impersonating the target user.
-            </summary>
-        </member>
-        <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.MasterPassword">
-            <summary>
-            Master password matching <see cref="P:weesky.Snoopy.Microservice.Models.SieveOptions.MasterUser"/>.
             </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.SieveOptions.ScriptName">
@@ -2958,7 +2802,7 @@
             <summary>
             When true, carry on over an unencrypted socket if the server does not advertise
             STARTTLS. Off by default, and it must stay off anywhere the link is not a loopback:
-            the SASL PLAIN payload carries the master password, and base64 is not encryption. The
+            the SASL PLAIN payload carries the user's own password, and base64 is not encryption. The
             capability banner arrives in the clear, so an attacker on the path can strip STARTTLS
             from it — without this gate that downgrade is silent and the password goes out plain.
             </summary>
@@ -3095,78 +2939,45 @@
             still one the registry accepts.
             </summary>
         </member>
-        <member name="F:weesky.Snoopy.Microservice.Repositories.AdminRepository.CacheWindow">
+        <member name="T:weesky.Snoopy.Microservice.Platform.Generic.ClaimsAccountInfoProvider">
             <summary>
-            How long the admin flag is reused across requests, kept equal to
-            <see cref="F:weesky.Snoopy.Microservice.Authentication.Services.SessionGuard.CacheWindow"/>: both bound how long an
-            account state change made outside this process keeps being answered from memory. Changes
-            made through this repository take effect on the next request.
+            The account as the token describes it, and nothing more: there is no directory to read a numeric
+            id, a display name, owned domains or an admin flag from. <see cref="P:weesky.Snoopy.Microservice.Models.AccountInfo.Mailbox"/> is the
+            domain *id* on the weesky platform; with no domain table here it carries the domain name split
+            off the address, which is the only identifier this deployment has for it — and
+            <see cref="P:weesky.Snoopy.Microservice.Models.AccountInfo.Domains"/> carries that same value as a single synthetic row, since the
+            documented invariant is that Mailbox matches one of the Domains ids and the frontend derives the
+            user's email address from the row it finds there (<c>lib/accountIdentity.ts</c>).
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.AdminFlagQuery(weesky.Snoopy.Microservice.Data.ApplicationDbContext,System.String,System.String)">
+        <member name="T:weesky.Snoopy.Microservice.Platform.Generic.FreeIdentityDirectory">
             <summary>
-            The domain resolves to a single row, as the two-step lookup this replaces did: joining every
-            row bearing the name would let an admin namesake in a second one answer for this account.
+            No platform to ask: nothing outside the mailbox can say which addresses the account owns, so
+            ownership is not enforced at all and the alias list is empty. The sending identities the user
+            declares become the only set — the SMTP server is what finally refuses a sender it will not relay.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.RevokeSessionsAsync(System.String)">
-            <summary>
-            Cuts every live session of an account whose password an administrator just replaced — the
-            one situation that call is made in is a mailbox believed to be in someone else's hands.
-            Without it the intruder's token stays valid for the rest of its lifetime on everything that
-            does not open IMAP: preferences, contacts, identities, aliases, and admin itself.
-            </summary>
-            <remarks>
-            Best effort, and deliberately after the commit: the password is already changed, so throwing
-            here would tell the administrator their change failed when it did not. It is logged at Error
-            rather than Warning because a revocation that did not happen is the thing they must act on —
-            the fallback is <c>DELETE /api/login/All</c> as the account holder, or a second attempt.
-            Not the caller's token, for the same reason <see cref="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.DeleteUserAsync(System.Int32,System.Threading.CancellationToken)"/> does not take it.
-            </remarks>
+        <member name="T:weesky.Snoopy.Microservice.Platform.Generic.NullProfileReader">
+            <summary>No directory behind the mailbox: the account has no display name of its own, and a
+            From falls back to whatever the user stored against the address.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.AdminFlagKey(System.String,System.String)">
-            <summary>
-            One key per account, folding exactly what the query folds and nothing more: the username
-            because it is compared lower-cased on both sides, the domain not at all since it is compared
-            under the database collation. A name differing by a space is another row, so another key.
-            The halves cannot run together because <see cref="T:weesky.Snoopy.Microservice.Models.User"/> refuses an address that is
-            not exactly two '@'-separated parts, and every claim is built from one.
-            </summary>
+        <member name="T:weesky.Snoopy.Microservice.Platform.IAccountInfoProvider">
+            <summary>What the platform can say about the authenticated account itself.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.ForgetAdminFlags">
-            <summary>
-            Invalidates every cached flag, including answers still being computed. One epoch for all of
-            them: a write here is rare, and a per-key removal cannot reach an entry that does not exist
-            yet, which is exactly the entry a revocation must not leave behind.
-            </summary>
+        <member name="T:weesky.Snoopy.Microservice.Platform.IAliasDirectory">
+            <summary>What the platform knows of an account's addresses beyond the primary one.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.CurrentEpoch">
-            <summary>
-            A timestamp rather than a counter, so nothing has to be read before it is written: two
-            writers cannot lose each other's bump, and an epoch that went missing comes back larger than
-            any a live entry carries, which costs a re-read instead of serving a revoked flag.
-            </summary>
+        <member name="P:weesky.Snoopy.Microservice.Platform.IAliasDirectory.EnforcesOwnership">
+            <summary>False when the platform cannot verify ownership: free identities.</summary>
         </member>
-        <member name="T:weesky.Snoopy.Microservice.Repositories.AdminRepository.AdminUserRow">
-            <summary>The columns <see cref="T:weesky.Snoopy.Microservice.Models.AdminUserInfo"/> is built from, and nothing else.</summary>
+        <member name="M:weesky.Snoopy.Microservice.Platform.IAliasDirectory.GetAddressesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
+            <summary>The account's live aliases (empty when <see cref="P:weesky.Snoopy.Microservice.Platform.IAliasDirectory.EnforcesOwnership"/> is false).</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.AdminUserRow.#ctor(System.Int32,System.String,System.String,System.String,System.String,System.Int32,weesky.Snoopy.Microservice.Data.ActiveState,weesky.Snoopy.Microservice.Data.ActiveState)">
-            <summary>The columns <see cref="T:weesky.Snoopy.Microservice.Models.AdminUserInfo"/> is built from, and nothing else.</summary>
+        <member name="T:weesky.Snoopy.Microservice.Platform.IProfileReader">
+            <summary>The profile the platform holds for an account, beyond its address.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AdminRepository.OwnersQuery(System.Linq.Expressions.Expression{System.Func{weesky.Snoopy.Microservice.Data.MailDomainOwnership,System.Boolean}})">
-            <summary>
-            Owners of the ownerships matching <paramref name="scope"/>, each carrying the domain it
-            belongs to. One shape for the single-domain read and the grouped listing, so the two
-            cannot report a different owner set for the same rows.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.AliasesRepository.GetAliasesAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
-            <summary>
-            The account's live aliases. Case is folded on both sides here as it is everywhere else in
-            this repository: what this returns is what decides whether a <c>fromAddress</c> may be sent
-            from (see <see cref="T:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory"/>), so it is an authorization answer,
-            and it must not be the one query in the file that depends on how the database was collated.
-            </summary>
+        <member name="M:weesky.Snoopy.Microservice.Platform.IProfileReader.GetDisplayNameAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
+            <summary>The account's display name, null when the platform holds none.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Repositories.ContactStore.MaxPerUser">
             <summary>
@@ -3197,13 +3008,6 @@
         </member>
         <member name="F:weesky.Snoopy.Microservice.Repositories.ExternalDomainStore.InUse">
             <summary>Machine-readable: the caller turns it into its own message.</summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.IAdminRepository.DeleteDomainAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
-            <remarks>
-            <c>deleteAliases</c> acknowledges that the aliases anchored on the domain go with it —
-            their foreign key cascades. False refuses rather than destroying them silently, and the
-            refusal names how many there are, since that count is all a confirmation has to go on.
-            </remarks>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IAppSettingStore">
             <summary>
@@ -3417,13 +3221,6 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.IUserPreferenceStore.SetAsync(System.Guid,System.String,System.String,System.Threading.CancellationToken)">
             <summary>Sets or corrects one preference. The pair (account, key) is the row.</summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.IUsersRepository.VerifyCredentialsAsync(System.String,System.String,System.Threading.CancellationToken)">
-            <summary>
-            Checks an email and password together. One call rather than a lookup followed by a
-            password check: splitting them made an unknown address cheaper to answer than a wrong
-            password, which is enough to enumerate the mailboxes that exist.
-            </summary>
-        </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.WebmailAccount">
             <summary>The webmail account row as the session layer needs it: its key and its revocation stamp.</summary>
         </member>
@@ -3541,78 +3338,6 @@
             <summary>
             What actually bounds the table. The retention sweep deletes after the fact and bounds
             nothing in the meantime; this refuses the row that would exceed the ceiling.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindByEmailAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Resolves a *usable* account: a deactivated one (<c>active = 'N'</c>) reads as absent.
-            Both authentication paths funnel through here — the login itself and the per-request
-            existence check in <c>OnTokenValidated</c> — so filtering once closes both. Dovecot
-            already refuses IMAP for such an account; without this, everything that does not go
-            through the mail server (aliases, preferences, admin, and Sieve rules, which
-            authenticate as the master user) kept working for a disabled mailbox.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.VerifyCredentialsAsync(System.String,System.String,System.Threading.CancellationToken)">
-             <summary>
-             Checks an email and password in one pass, in time that does not depend on whether the
-             mailbox exists.
-             </summary>
-             <remarks>
-             The SHA-512 crypt is deliberately slow, and it used to run only once a mailbox had been
-             found: an unknown address answered in a fraction of the time a wrong password did, so the
-             login endpoint told anyone who measured it which addresses are real. The hash therefore
-             runs on every call, against <see cref="F:weesky.Snoopy.Microservice.Repositories.UsersRepository.AbsentAccountHash"/> when there is nothing to
-             compare with, and the verdict is formed only once both the lookup and the hash are done.
-            
-             This holds only while the stored hashes and the decoy share their cost parameters. Both
-             come from CryptSharp's default <c>$6$</c> rounds, the same the MariaDB trigger writes.
-             </remarks>
-        </member>
-        <member name="F:weesky.Snoopy.Microservice.Repositories.UsersRepository.AbsentAccountHash">
-            <summary>
-            The hash a login falls back on when no mailbox matches, so the crypt still runs and still
-            costs what a real one costs. Computed once: generating it per call would itself be work an
-            existing account does not do.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.WarnIfUnverifiable(System.String,System.String)">
-             <summary>
-             A stored value that is not a <c>$6$</c> crypt hash cannot be verified at all: CryptSharp
-             reads the salt out of whatever it is handed, so anything else yields a digest that can
-             never match, and the account reads as "wrong password" forever.
-            
-             Nothing else about the failure distinguishes that from a genuinely wrong password, which
-             is exactly why it is worth a line of its own. It names the scheme, never the hash.
-             </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.HashScheme(System.String)">
-            <summary>
-            The scheme marker of a stored password, for diagnostics. Deliberately an allow-list rather
-            than "the text up to the second separator": the one case worth naming is a column holding
-            something that is not a hash at all, and that something must not reach the log.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.BracketedScheme(System.String)">
-            <summary>A Dovecot-style <c>{SCHEME}</c> prefix, or nothing recognisable.</summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.FindMailUserAsync(System.String,System.String,System.Threading.CancellationToken)">
-            <summary>
-            The mailbox and its domain in one round trip, the user name matched case-insensitively.
-            Null when there is no such mailbox.
-            </summary>
-            <remarks>
-            One joined query rather than the two sequential reads this replaced — domain, then user.
-            Beyond the saved round trip that halves the cost of every login, a single query is what
-            makes an unknown domain cost the same as an unknown mailbox: with two, the first returning
-            nothing skipped the second, and the response time said which of the two it was.
-            </remarks>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.UsersRepository.PasswordMatches(System.String,System.String)">
-            <summary>
-            Verifies a password against a stored crypt hash, in time that does not depend on how much
-            of the hash matched. An ordinary string comparison returns at the first differing byte,
-            which times how far a guess got.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.RuleProviders.IRuleProvider">
@@ -3955,30 +3680,6 @@
             mangles every accent. <see cref="T:weesky.Snoopy.Microservice.Services.Csv.CsvReader"/> strips it, so a round trip never sees it.
             </summary>
         </member>
-        <member name="T:weesky.Snoopy.Microservice.Services.DovecotQuotaClient">
-            <summary>
-            Queries a remote Dovecot server via its doveadm HTTP API.
-            See https://doc.dovecot.org/admin_manual/doveadm_http_api/
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.#ctor(System.Net.Http.HttpClient,Microsoft.Extensions.Options.IOptions{weesky.Snoopy.Microservice.Models.DovecotOptions},Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.DovecotQuotaClient})">
-            <summary>
-            Queries a remote Dovecot server via its doveadm HTTP API.
-            See https://doc.dovecot.org/admin_manual/doveadm_http_api/
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.CallDoveadmAsync``1(weesky.Snoopy.Microservice.Models.User,System.String,System.String,System.String,System.String,System.Func{System.Text.Json.JsonElement,CSharpFunctionalExtensions.Result{``0}},System.Threading.CancellationToken)">
-            <summary>
-            Sends a single doveadm command for the given user and hands the response rows
-            (the payload of the "doveadmResponse" envelope) to <paramref name="parseRows"/>.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.DovecotQuotaClient.ExtractDoveadmRows(System.Text.Json.JsonElement,System.String,weesky.Snoopy.Microservice.Models.User,System.String)">
-            <summary>
-            Validates the doveadm response envelope <c>[["doveadmResponse", rows, tag]]</c>
-            and returns the rows array.
-            </summary>
-        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.DraftSaver">
             <summary>
             Orchestrates a draft save: build the message via the shared factory, resolve the drafts-role
@@ -4121,6 +3822,16 @@
             <summary>
             Hierarchy separator, read from the server's personal namespace rather than
             configured: an additional domain may point at a server that uses a different one.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Services.IImapSession.SupportsQuota">
+            <summary>Whether the server advertised the QUOTA (RFC 2087) capability post-authentication.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.GetQuotaAsync(System.Threading.CancellationToken)">
+            <summary>
+            Reads GETQUOTAROOT INBOX. Check <see cref="P:weesky.Snoopy.Microservice.Services.IImapSession.SupportsQuota"/> first — a server that
+            never advertised QUOTA has nothing to answer this with, which is not this method's
+            failure to report.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.IImapSession.ListFoldersAsync(System.Threading.CancellationToken)">
@@ -4293,8 +4004,7 @@
         <member name="T:weesky.Snoopy.Microservice.Services.IManageSieveClient">
             <summary>
             Opens authenticated ManageSieve sessions against the target a <see cref="T:weesky.Snoopy.Microservice.Models.SieveConnection"/>
-            describes — our own server through master impersonation, or another provider's server as the
-            mailbox itself.
+            describes, always with the mailbox's own credentials — our server or another provider's.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.IManageSieveClient.OpenSessionAsync(weesky.Snoopy.Microservice.Models.SieveConnection,System.Threading.CancellationToken)">
@@ -4342,6 +4052,13 @@
             The folder half of the IMAP protocol adapter: tree listing, CRUD, subscription, status and
             emptying. Runs every operation through the owning session's ExecuteAsync so the failure
             contract — cancellation, sentinels, the opaque message — stays in one place.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ImapFolderCommands.GetQuotaAsync(System.Threading.CancellationToken)">
+            <summary>
+            GETQUOTAROOT INBOX. RFC 2087 reports STORAGE in 1024-octet blocks; the model is
+            bytes, so both storage figures are scaled up. A resource the server did not return
+            at all comes back null from MailKit — mapped to 0, the model's "no limit" convention.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ImapMessageCommands">
@@ -4499,6 +4216,20 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IQuotePreparer">
             <summary>Builds the quotable body of an original and stages the parts a reply/forward carries over.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.ISieveAvailabilityProbe">
+             <summary>
+             Whether a ManageSieve server is reachable at all — settled by reading its RFC 5804 greeting,
+             never by opening a full session. The greeting arrives before STARTTLS on every ManageSieve
+             server, so no credential is ever at risk here; a passive observer of the banner already sees
+             everything this probe reads.
+            
+             The result is memoised per (host, port) for the life of the process: the target only changes on
+             redeploy, so a UI capability check must not open a fresh socket on every page load.
+             </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ISieveAvailabilityProbe.IsAvailableAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <summary>False without connecting when <paramref name="host"/> is empty or blank.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ISmtpConnectionFactory.OpenAsync(weesky.Snoopy.Microservice.Models.Mail.MailAccountConnection,System.Threading.CancellationToken)">
             <summary>Opens an authenticated SMTP session with the account's own credentials.</summary>
@@ -5071,7 +4802,7 @@
             desync fails the whole request rather than producing a half-built message.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.#ctor(weesky.Snoopy.Microservice.Repositories.IUsersRepository,weesky.Snoopy.Microservice.Repositories.IAliasesRepository,weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Services.IOutgoingMailSanitizer,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.OutgoingMessageFactory})">
+        <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.#ctor(weesky.Snoopy.Microservice.Platform.IAliasDirectory,weesky.Snoopy.Microservice.Platform.IProfileReader,weesky.Snoopy.Microservice.Repositories.ISendingIdentityStore,weesky.Snoopy.Microservice.Services.IOutgoingMailSanitizer,weesky.Snoopy.Microservice.Services.IStagedAttachmentStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.OutgoingMessageFactory})">
             <summary>
             The one place an outgoing message is assembled, so Send and Drafts cannot drift apart. Order is
             load-bearing: the From is validated before anything else runs, and staged ids resolve next — a
@@ -5085,13 +4816,16 @@
             <summary>
             A connected account sends through its own server, so the home server's alias list says
             nothing about it: it owns its login address and whatever identities were stored for it.
+            Also the home mailbox's path when the platform vouches for no address — its
+            <see cref="P:weesky.Snoopy.Microservice.Models.Mail.MailAccountConnection.Username"/> is then the caller's own email.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.LabelForAsync(weesky.Snoopy.Microservice.Models.User,System.Boolean,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Data.Preferences.SendingIdentity},System.String,System.Threading.CancellationToken)">
             <summary>
-            The label the From carries. The home mailbox falls back to its FullName — read from the
-            database, not the JWT claims; a connected account has only its stored rows, and no row (or
-            a blank one) means the address travels alone rather than borrowing the main account's name.
+            The label the From carries. The home mailbox falls back to the display name the platform
+            holds — never the JWT claims; a connected account, and a home mailbox on a platform that
+            vouches for nothing, has only its stored rows, and no row (or a blank one) means the address
+            travels alone rather than borrowing a name nothing confirms.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.OutgoingMessageFactory.ApplyThreadingHeaders(MimeKit.MimeMessage,weesky.Snoopy.Microservice.Models.Mail.SendMessageRequest)">
@@ -5187,6 +4921,22 @@
              so it is not reusable by anybody else and must not outlive the request that carried the
              credentials.
              </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.SieveAvailabilityProbe">
+            <summary>
+            Connects, reads capability lines up to the greeting's OK/NO/BYE, and disconnects — the same
+            framing <see cref="T:weesky.Snoopy.Microservice.Services.ManageSieveClient"/> reads before it ever writes AUTHENTICATE. Registered as
+            a singleton so the per-(host, port) cache lives for the whole process; a failed probe (including
+            one that timed out) is cached exactly like a successful one; both only change on redeploy.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.SieveAvailabilityProbe.#ctor(Microsoft.Extensions.Options.IOptions{weesky.Snoopy.Microservice.Models.SieveOptions},Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Services.SieveAvailabilityProbe})">
+            <summary>
+            Connects, reads capability lines up to the greeting's OK/NO/BYE, and disconnects — the same
+            framing <see cref="T:weesky.Snoopy.Microservice.Services.ManageSieveClient"/> reads before it ever writes AUTHENTICATE. Registered as
+            a singleton so the per-(host, port) cache lives for the whole process; a failed probe (including
+            one that timed out) is cached exactly like a successful one; both only change on redeploy.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.SieveErrors">
              <summary>
@@ -5655,6 +5405,46 @@
         </member>
         <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_indexOfString_with_OrdinalIgnoreCase">
             <summary>Supports searching for the string "with".</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.PlatformConfiguration.UsesWeeskyPlatform(Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>
+            Reads the root <c>Platform</c> key. Both failure modes name the key and the two values it
+            accepts: a service that guessed would either address a dovecot database that is not there
+            or silently stop enforcing address ownership, and neither says so anywhere a reader looks.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Configuration.PlatformConfiguration.AddGenericPlatform(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>
+            No platform behind the mailbox: the three ports answer from the token and from nothing else.
+            Singletons, unlike the weesky adapters — these hold no per-request state and no DbContext.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.PlatformOptions">
+            <summary>
+            Which platform hosts this deployment, read from the root <c>Platform</c> key. There is no
+            default: a deployment that does not say refuses to start, because guessing either way is a
+            silent answer to "does this service administer the mailboxes it serves".
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.PlatformOptions.Weesky">
+            <summary>weesky.net: the dovecot database answers for accounts, aliases and admin rights.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Models.PlatformOptions.Generic">
+            <summary>Any IMAP server: nothing behind the mailbox, so no directory to administer.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Platform.Generic.ClaimsAccountInfoProvider.IsUsableAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            No directory holds this mailbox, so nothing here can deactivate or delete it: the token and
+            its security stamp are the whole of what makes a session current. The mail server still has
+            the last word — an account it no longer serves fails IMAP authentication.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Platform.IAccountInfoProvider.IsUsableAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Whether the platform still holds this address as a usable mailbox. It is what a live session
+            is re-checked against on every request, so it must answer for a deleted *and* a deactivated
+            account — a platform holding no directory has nothing to revoke and answers true.
+            </summary>
         </member>
     </members>
 </doc>

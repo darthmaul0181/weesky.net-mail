@@ -20,6 +20,10 @@ jobs:
               - 'src/frontend/**'
             backend:
               - 'src/snoopy.microservice/**'
+              - 'src/snoopy.microservice.host/**'
+              - 'src/snoopy.providers.weesky/**'
+              - 'src/snoopy.providers.weesky.Tests/**'
+              - 'src/snoopy.microservice.sln'
 
   ci-frontend:
     needs: detect-changes
@@ -91,7 +95,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build
         with:
-          working-directory: src/snoopy.microservice
+          # The solution root: one restore, one build, both test projects.
+          working-directory: src
       - name: Find PR
         id: pr
         env:
@@ -107,10 +112,10 @@ jobs:
           recreate: true
           path: code-coverage-results.md
       - name: Restore for publish
-        run: dotnet restore src/snoopy.microservice/snoopy.microservice.csproj -r linux-x64
+        run: dotnet restore src/snoopy.microservice.host/snoopy.microservice.host.csproj -r linux-x64
       - name: Publish
         run: >
-          dotnet publish src/snoopy.microservice/snoopy.microservice.csproj
+          dotnet publish src/snoopy.microservice.host/snoopy.microservice.host.csproj
           -c Release -r linux-x64 --self-contained
           --no-restore
           -p:SatelliteResourceLanguages=

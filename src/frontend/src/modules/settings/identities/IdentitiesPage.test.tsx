@@ -302,4 +302,38 @@ describe('IdentitiesPage', () => {
       expect(screen.queryByText(/linked to one of your aliases/)).toBeNull()
     })
   })
+
+  // A generic-platform deployment (Task 6's capabilities.strictIdentities: false) has no aliases
+  // to curate From addresses from, so the primary account takes the connected-account branch that
+  // already exists — a freely typed address, no star, no useAliases call — rather than a third
+  // rendering path.
+  describe('on the primary account when capabilities.strictIdentities is false', () => {
+    beforeEach(() => {
+      vi.mocked(useAuth).mockReturnValue({
+        identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+        capabilities: { strictIdentities: false },
+      } as never)
+    })
+
+    it('tags the primary tile as an account address, editable but not removable or starrable', () => {
+      render(<IdentitiesPage />)
+      expect(screen.getByText('Account address')).toBeInTheDocument()
+      expect(screen.queryByText('primary')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Edit mick@weesky.be' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Remove mick@weesky.be' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Make mick@weesky.be the default' })).toBeNull()
+    })
+
+    it('opens the add dialog in free-input mode, with no alias combobox', () => {
+      render(<IdentitiesPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'Add identity' }))
+      expect(screen.getByLabelText('Address')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Alias')).toBeNull()
+    })
+
+    it('disables the alias query (useAliases(false))', () => {
+      render(<IdentitiesPage />)
+      expect(useAliases).toHaveBeenLastCalledWith(false)
+    })
+  })
 })

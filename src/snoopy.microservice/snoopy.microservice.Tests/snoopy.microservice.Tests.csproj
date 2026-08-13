@@ -25,7 +25,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\snoopy.microservice.csproj" />
+    <ProjectReference Include="..\snoopy.microservice.core.csproj" />
+    <!-- The core never references the platform provider; this suite does, to prove that the two
+         platforms wire up and that the weesky routes exist only when its assembly is loaded. -->
+    <ProjectReference Include="..\..\snoopy.providers.weesky\snoopy.providers.weesky.csproj" />
+    <!-- For the host assembly itself: PlatformRouteSurfaceTests reads the application parts MVC
+         would discover from it, which is where an SDK-generated attribute would smuggle the
+         provider back in behind the Platform switch. -->
+    <ProjectReference Include="..\..\snoopy.microservice.host\snoopy.microservice.host.csproj" />
   </ItemGroup>
 
 </Project>

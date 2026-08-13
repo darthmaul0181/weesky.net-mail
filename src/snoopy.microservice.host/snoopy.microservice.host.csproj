@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The deployed unit is still called snoopy.microservice: the systemd unit and the release
+         chmod name the executable, so the project split must not rename it. -->
+    <AssemblyName>snoopy.microservice</AssemblyName>
+    <RootNamespace>weesky.Snoopy.Microservice</RootNamespace>
+    <UserSecretsId>b81de570-7bd0-40c9-a3c5-bb7a63bbfe84</UserSecretsId>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- On by default, this stamps [assembly: ApplicationPart] for every MVC-referencing assembly,
+         including the provider — MVC would then discover the weesky controllers on its own and the
+         Platform switch in Program.cs would decide nothing. The parts are named there instead. -->
+    <GenerateMvcApplicationPartsAssemblyAttributes>false</GenerateMvcApplicationPartsAssemblyAttributes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\snoopy.microservice\snoopy.microservice.core.csproj" />
+    <!-- The host is the only assembly allowed to know both platforms: it picks one from
+         configuration. Nothing in the core references this project. -->
+    <ProjectReference Include="..\snoopy.providers.weesky\snoopy.providers.weesky.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The core's XML comments do not share its assembly name, so the reference resolver does not
+         copy them; Swagger reads the file from the running binary's directory at startup. -->
+    <None Include="..\snoopy.microservice\ApiDocumentation.xml" Link="ApiDocumentation.xml"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

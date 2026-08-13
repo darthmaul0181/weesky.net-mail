@@ -8,6 +8,7 @@ import { useWebAppManifest } from '../hooks/useWebAppManifest'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
+  getCapabilities: vi.fn(),
   logout: vi.fn(),
   getAppSettings: vi.fn(),
   getConnectedAccounts: vi.fn(),
@@ -19,8 +20,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../api.js', () => ({
   api: {
-    getAccount: mocks.getAccount, logout: mocks.logout, getAppSettings: mocks.getAppSettings,
-    getConnectedAccounts: mocks.getConnectedAccounts,
+    getAccount: mocks.getAccount, getCapabilities: mocks.getCapabilities, logout: mocks.logout,
+    getAppSettings: mocks.getAppSettings, getConnectedAccounts: mocks.getConnectedAccounts,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -31,7 +32,7 @@ vi.mock('../api.js', () => ({
 function Probe() {
   const {
     isLoggedIn, isAdmin, identity, accountLoaded, accounts, activeAccount, accountsLoading,
-    logout, switchAccount,
+    capabilities, logout, switchAccount,
   } = useAuth()
   return (
     <div>
@@ -45,6 +46,7 @@ function Probe() {
       <span data-testid="accounts">
         {accounts.map(a => `${a.id}:${a.email}:${a.displayName}`).join('|')}
       </span>
+      <span data-testid="capabilities">{capabilities ? JSON.stringify(capabilities) : ''}</span>
       <button onClick={() => logout()}>out</button>
       <button onClick={() => switchAccount('acct-1')}>go-1</button>
       <button onClick={() => switchAccount('acct-2')}>go-2</button>
@@ -414,6 +416,65 @@ describe('AuthContext', () => {
       await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
       expect(localStorage.getItem('mail.activeAccount')).toBeNull()
       expect(screen.getByTestId('active')).toBeEmptyDOMElement()
+    })
+  })
+
+  describe('capabilities', () => {
+    it('loads capabilities alongside the account', async () => {
+      mocks.hasSession.mockReturnValue(true)
+      mocks.getCapabilities.mockResolvedValue({ platform: 'generic', admin: false, aliases: false })
+      renderProbe()
+
+      await waitFor(() => expect(screen.getByTestId('capabilities')).toHaveTextContent('generic'))
+      expect(screen.getByTestId('capabilities')).toHaveTextContent('"admin":false')
+    })
+
+    // An older backend answers 404 (or has no such route mocked at all, as every other test in
+    // this file leaves it) — that must read as "no capabilities", not as a broken render.
+    it('treats a failed or missing capabilities endpoint as null, not a crash', async () => {
+      mocks.hasSession.mockReturnValue(true)
+      mocks.getCapabilities.mockRejectedValue(new Error('Not Found'))
+      renderProbe()
+
+      await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
+      expect(screen.getByTestId('capabilities')).toBeEmptyDOMElement()
+    })
+
+    it('clears capabilities when the session ends', async () => {
+      mocks.hasSession.mockReturnValue(true)
+      mocks.getCapabilities.mockResolvedValue({ admin: false })
+      renderProbe()
+      await waitFor(() => expect(screen.getByTestId('capabilities')).toHaveTextContent('"admin":false'))
+
+      fireEvent.click(screen.getByText('out'))
+
+      await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
+      expect(screen.getByTestId('capabilities')).toBeEmptyDOMElement()
+    })
+
+    // A slow getAccount/getCapabilities answer from a session that already ended (logout landed
+    // first) must not resurrect account/isAdmin/capabilities once it finally resolves — that would
+    // leak one session's data into whatever comes after it.
+    it('drops a stale account/capabilities resolution from a session that already ended', async () => {
+      mocks.hasSession.mockReturnValue(true)
+      let resolveAccount: (v: unknown) => void = () => {}
+      mocks.getAccount.mockReturnValue(new Promise(resolve => { resolveAccount = resolve }))
+      let resolveCapabilities: (v: unknown) => void = () => {}
+      mocks.getCapabilities.mockReturnValue(new Promise(resolve => { resolveCapabilities = resolve }))
+      renderProbe()
+
+      fireEvent.click(screen.getByText('out'))
+      await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
+
+      await act(async () => {
+        resolveAccount(account)
+        resolveCapabilities({ admin: false })
+      })
+
+      expect(screen.getByTestId('loaded')).toHaveTextContent('false')
+      expect(screen.getByTestId('admin')).toHaveTextContent('false')
+      expect(screen.getByTestId('capabilities')).toBeEmptyDOMElement()
+      expect(mocks.setIsAdmin).not.toHaveBeenCalledWith(true)
     })
   })
 })

@@ -28,14 +28,21 @@ interface NavItem {
 }
 
 export default function SettingsLayout() {
-  const { isAdmin, activeAccount } = useAuth()
+  const { isAdmin, activeAccount, capabilities } = useAuth()
   const { t } = useTranslation('settings')
   const { pathname } = useLocation()
   const drawer = useContextDrawer()
   // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the
-  // primary nav must stay full during that window rather than flash away and back.
+  // primary nav must stay full during that window rather than flash away and back. Capabilities
+  // read the same way, and for the same reason — null while it loads, absent on a backend that
+  // predates it — and the two never gate the same tab: a connected account's Rules answers to its
+  // own sieveSupported, never to the platform's capabilities.
   const isPrimary = activeAccount?.isPrimary !== false
-  const rulesAvailable = isPrimary || activeAccount?.sieveSupported !== false
+  const aliasesAvailable = capabilities?.aliases !== false
+  const adminAvailable = capabilities?.admin !== false
+  const rulesAvailable = isPrimary
+    ? capabilities?.rules !== false
+    : activeAccount?.sieveSupported !== false
 
   // One list, two readers: the rows below and the narrow bar's title. A second copy of the
   // labels would drift the day one of them is renamed.
@@ -45,10 +52,10 @@ export default function SettingsLayout() {
     { to: '/settings/accounts', label: t('nav.accounts'), icon: <PersonPlusIcon size={16} /> },
     { to: '/settings/appearance', label: t('nav.appearance'), icon: <DropletIcon size={16} /> },
     { to: '/settings/folders', label: t('nav.folders'), icon: <FolderIcon size={16} /> },
-    ...(isPrimary ? [{ to: '/settings/aliases', label: t('nav.aliases'), icon: <AtSignIcon size={16} /> }] : []),
+    ...(isPrimary && aliasesAvailable ? [{ to: '/settings/aliases', label: t('nav.aliases'), icon: <AtSignIcon size={16} /> }] : []),
     { to: '/settings/identities', label: t('nav.identities'), icon: <MailIcon size={16} /> },
     ...(rulesAvailable ? [{ to: '/settings/rules', label: t('nav.rules'), icon: <FunnelIcon size={16} /> }] : []),
-    ...(isAdmin && isPrimary ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} /> }] : []),
+    ...(isAdmin && isPrimary && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} /> }] : []),
   ]
 
   // The module name is the fallback, not the answer: it is what /settings shows for the frame of

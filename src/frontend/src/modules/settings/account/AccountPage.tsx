@@ -34,8 +34,10 @@ function XIcon(): JSX.Element {
 }
 
 export default function AccountPage() {
-  const { identity, account, refreshAccount } = useAuth()
+  const { identity, account, refreshAccount, capabilities } = useAuth()
   const { t } = useTranslation('settings')
+  const canEditProfile = capabilities?.profileEditing !== false
+  const canChangePassword = capabilities?.passwordChange !== false
   const { toasts, addToast, removeToast } = useToasts()
   const [quota, setQuota] = useState<Quota | null>(null)
   const [editingName, setEditingName] = useState(false)
@@ -112,14 +114,16 @@ export default function AccountPage() {
         ) : (
           <div className="panel-fullname-row">
             <span className="panel-fullname">{identity.displayName}</span>
-            <button
-              className="panel-fullname-pencil"
-              onClick={startEdit}
-              aria-label={t('account.editName')}
-              title={t('account.editName')}
-            >
-              <PencilIcon />
-            </button>
+            {canEditProfile && (
+              <button
+                className="panel-fullname-pencil"
+                onClick={startEdit}
+                aria-label={t('account.editName')}
+                title={t('account.editName')}
+              >
+                <PencilIcon />
+              </button>
+            )}
           </div>
         )}
         <div className="panel-mailbox-row">
@@ -143,10 +147,12 @@ export default function AccountPage() {
         <QuotaBlock quota={quota} />
       </section>
 
-      <section className="account-section">
-        <h2>{t('account.password')}</h2>
-        <ChangePasswordSection onDone={() => addToast(t('account.passwordChanged'))} />
-      </section>
+      {canChangePassword && (
+        <section className="account-section">
+          <h2>{t('account.password')}</h2>
+          <ChangePasswordSection onDone={() => addToast(t('account.passwordChanged'))} />
+        </section>
+      )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />
     </div>

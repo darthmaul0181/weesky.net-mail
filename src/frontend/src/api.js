@@ -148,6 +148,13 @@ export const api = {
   getAccount: () =>
     request('GET', '/api/Account'),
 
+  // Every field is optional and an older backend answers 404 — callers treat both as "no
+  // capabilities", not as an error.
+  getCapabilities: () =>
+    request('GET', '/api/Capabilities'),
+
+  // 204 when the IMAP server advertises no QUOTA capability — request() already resolves that to
+  // null before attempting to parse a body.
   getQuota: () =>
     request('GET', '/api/Account/Quota'),
 

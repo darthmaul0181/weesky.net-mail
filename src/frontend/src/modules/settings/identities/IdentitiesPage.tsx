@@ -30,11 +30,14 @@ export default function IdentitiesPage() {
 }
 
 function IdentitiesPanel() {
-  const { identity, activeAccount, accountsLoading } = useAuth()
+  const { identity, activeAccount, accountsLoading, capabilities } = useAuth()
   const { t } = useTranslation('settings')
   // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the page
   // must open on the variant the settings nav already assumed rather than swap wording under way.
-  const ownMailbox = activeAccount?.isPrimary !== false
+  // A generic platform with no aliases to curate From addresses from (capabilities.strictIdentities
+  // === false) forces the primary through the connected-account branch that already exists below —
+  // free-input address, no star, no useAliases — rather than growing a third rendering path.
+  const ownMailbox = activeAccount?.isPrimary !== false && capabilities?.strictIdentities !== false
   // In that window the variant is only a guess, while the list below may already be a connected
   // mailbox's — a save built on the wrong one is refused — so nothing is actionable yet.
   const locked = accountsLoading === true

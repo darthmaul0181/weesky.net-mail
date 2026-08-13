@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
+using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 
 namespace weesky.Snoopy.Microservice.Services;
@@ -186,6 +187,27 @@ internal sealed class ImapFolderCommands(ImapSession session, ImapClient client,
             "Unable to read the folder",
             ex => logger.LogError(ex, "Failed to read the status of {Folder}", path),
             ImapSession.FolderSentinel);
+
+    /// <summary>
+    /// GETQUOTAROOT INBOX. RFC 2087 reports STORAGE in 1024-octet blocks; the model is
+    /// bytes, so both storage figures are scaled up. A resource the server did not return
+    /// at all comes back null from MailKit — mapped to 0, the model's "no limit" convention.
+    /// </summary>
+    public Task<Result<Quota>> GetQuotaAsync(CancellationToken cancellationToken) =>
+        session.ExecuteAsync(cancellationToken, async () =>
+        {
+            var quota = await client.Inbox.GetQuotaAsync(cancellationToken);
+
+            return Result.Success(new Quota
+            {
+                StorageBytesUsed = (long)(quota.CurrentStorageSize ?? 0) * 1024,
+                StorageBytesLimit = (long)(quota.StorageLimit ?? 0) * 1024,
+                MessageCount = quota.CurrentMessageCount ?? 0,
+                MessageLimit = quota.MessageLimit ?? 0
+            });
+        },
+            "Unable to read the mailbox quota",
+            ex => logger.LogError(ex, "Failed to read the mailbox quota"));
 
     public Task<Result> EmptyAsync(string folderPath, string? targetPath, CancellationToken cancellationToken)
     {
