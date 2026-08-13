@@ -1601,15 +1601,26 @@
 
     // 4. Appearance. Its palette cards are the module's only grid, and `.palette-zoom` is its only
     //    hover-revealed control: `opacity: 0` until `:hover`/`:focus-within`, 24px square, and the
-    //    single route to the enlarged preview. The radio rows above it are ~25px label boxes.
+    //    single route to the enlarged preview. Language and Theme are welded `.seg` controls whose
+    //    intrinsic width has to clear the 320px column — Language is the wider of the two.
     CASES.push({
       name: 'settings-appearance',
       html: settingsPage(`
         <div class="settings-page">
           <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Appearance</h1></div>
+          <section class="account-section"><h2>Language</h2>
+            <div class="seg">
+              <label><input type="radio" name="lg" checked />Automatic</label>
+              <label><input type="radio" name="lg" />English</label>
+              <label><input type="radio" name="lg" />Français</label>
+            </div>
+          </section>
           <section class="account-section"><h2>Theme</h2>
-            <label class="radio-row"><input type="radio" name="th" />Follow the system</label>
-            <label class="radio-row"><input type="radio" name="th" />Light</label>
+            <div class="seg">
+              <label><input type="radio" name="th" />Light</label>
+              <label><input type="radio" name="th" />Dark</label>
+              <label><input type="radio" name="th" checked />System</label>
+            </div>
           </section>
           <section class="account-section"><h2>Palette</h2>
             <div class="palette-grid">
@@ -1628,7 +1639,7 @@
             </div>
           </section>
         </div>`),
-      touch: '.radio-row, .palette-zoom',
+      touch: '.seg label, .palette-zoom',
     })
 
     // 5. The navigation as the drawer draws it, which is the one place below 1024px it appears.

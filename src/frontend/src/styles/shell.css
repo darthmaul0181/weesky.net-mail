@@ -439,7 +439,35 @@ a.dropdown-item { text-decoration: none; }
    here it stretched the button across the whole settings column. */
 .change-password-form .btn { width: auto; }
 
-.radio-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+/* One welded control per exclusive choice: the lit segment wears --action-primary, the action
+   chips' "this one is live" language. The radios stay real inputs, visually hidden rather than
+   unmounted, so the group keeps its arrow-key navigation and its focus ring. */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.seg label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.seg label:hover { color: var(--text); }
+.seg label:has(input:checked) {
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+  font-weight: 500;
+}
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--action-primary); outline-offset: 1px; }
 
 /* Settings rows. `.field-h` was drawn for the admin dialogs — a narrow box with one-word
    labels — and a settings page is the opposite shape: a wide column with sentence-length
@@ -668,6 +696,15 @@ a.dropdown-item { text-decoration: none; }
 
 .pane-glyph.is-right .pane-glyph-pane { left: 50%; top: 4px; right: 4px; bottom: 4px; }
 .pane-glyph.is-bottom .pane-glyph-pane { left: 4px; right: 4px; top: 50%; bottom: 4px; }
+
+/* The default-editor glyphs share the frame: Formatted adds the composer's toolbar — first
+   button in the accent — and a heading over the body lines; Plain text is the bare lines. */
+.editor-glyph-tools { position: absolute; top: 4px; left: 5px; right: 5px; display: flex; gap: 2px; }
+.editor-glyph-tools > span { width: 5px; height: 4px; background: var(--text-muted); opacity: 0.8; border-radius: 1px; }
+.editor-glyph-tools > .is-accent { background: var(--accent-unread); opacity: 1; }
+.editor-glyph-sep { position: absolute; top: 11px; left: 5px; right: 5px; height: 1px; background: var(--text-muted); opacity: 0.35; }
+.editor-glyph-heading { position: absolute; top: 14px; left: 5px; width: 50%; height: 3px; background: var(--text-muted); opacity: 0.95; border-radius: 1px; }
+.pane-glyph.is-editor-html .pane-glyph-lines { top: 19px; }
 
 .palette-name {
   display: flex;
@@ -1020,9 +1057,9 @@ a.dropdown-item { text-decoration: none; }
      nothing; at 320 they run 30px past it, measured with every other rule here in place. */
   .layout-cards { flex-wrap: wrap; }
 
-  /* A 36px chip and a 29px radio row, each the whole of the control it carries. */
+  /* A 36px chip and a 31px segment, each the whole of the control it carries. */
   .action-chip { min-height: var(--touch); }
-  .radio-row { min-height: var(--touch); }
+  .seg label { min-height: var(--touch); }
 
   /* The loupe keeps its painted box and grows an inset ::before — .reader-back's idiom, because a
      44px chip covers a fifth of a 168px thumbnail. The insets are measured from the button's
