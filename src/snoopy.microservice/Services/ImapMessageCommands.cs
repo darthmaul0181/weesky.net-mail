@@ -309,7 +309,7 @@ internal sealed class ImapMessageCommands(
         return kept;
     }
 
-    public Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken) =>
+    public Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, bool grouped, CancellationToken cancellationToken) =>
         session.ExecuteAsync(cancellationToken, async () =>
         {
             var folder = await client.GetFolderAsync(folderPath, cancellationToken);
@@ -323,6 +323,40 @@ internal sealed class ImapMessageCommands(
                 Page = page,
                 PageSize = pageSize
             };
+
+            // Grouped needs both capabilities: THREAD for the tree, SORT for the order threads and
+            // members take. Missing either, the page silently stays flat — the SORT fallback's pattern:
+            // a capability the server lacks degrades the shape, never the request.
+            if (grouped
+                && client.Capabilities.HasFlag(ImapCapabilities.Sort)
+                && client.Capabilities.HasFlag(ImapCapabilities.Thread)
+                && client.ThreadingAlgorithms.Contains(ThreadingAlgorithm.References))
+            {
+                var sorted = await folder.SortAsync(
+                    SearchQuery.All, [OrderBy.ReverseDate], cancellationToken);
+                var tree = await folder.ThreadAsync(ThreadingAlgorithm.References, SearchQuery.All, cancellationToken);
+
+                var threads = MailThreading.Arrange(tree, sorted);
+                result.TotalThreads = threads.Count;
+                result.Threads = [];
+
+                var wantedThreads = MailPaging.PageOf(threads, page, pageSize);
+                var uids = wantedThreads.SelectMany(thread => thread).ToList();
+                if (uids.Count == 0) return Result.Success(result);
+
+                // One FETCH for every member of the page's threads — expanding a row client-side costs
+                // nothing, and a page of 50 threads stays one round trip like a flat page of 50 rows.
+                var fetched = await folder.FetchAsync(uids, SummaryItems, SummaryHeaders, cancellationToken);
+                var byUid = fetched.ToDictionary(item => item.UniqueId);
+
+                foreach (var thread in wantedThreads)
+                {
+                    var members = thread.Where(byUid.ContainsKey).Select(uid => ToSummary(byUid[uid])).ToList();
+                    if (members.Count > 0) result.Threads.Add(new MailThread { Messages = members });
+                }
+
+                return Result.Success(result);
+            }
 
             // SORT asks the server for date order. Without it the page is a window on the
             // sequence numbers, which is arrival-into-the-folder order — the same thing in an

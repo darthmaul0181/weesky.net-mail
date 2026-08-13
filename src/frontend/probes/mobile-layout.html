@@ -591,6 +591,108 @@
       CASES.push({ name, html: row(selecting), touch: '.message-row' })
     }
 
+    // A conversation unfolded: the collapsed head, then one `.is-thread-member` sub-row per
+    // message — the head's own message included, which is what MessageList renders (the parent
+    // stands for the thread, the members are every message in it), so a two-message thread is
+    // three rows and not two.
+    //
+    // The head is drawn in the SAME loaded state `row` above draws, item for item — dot, Draft
+    // badge, priority mark, sender, paperclip, date, star, four-action cluster — and adds only
+    // what Task 9 put on that line: the count badge and the chevron. That is deliberate rather
+    // than copy-paste: `.message-row-top` is a flex line whose free width is what
+    // `.message-row-from` absorbs, so a `clipped` here that `row-360` does not report is
+    // attributable to those two items alone. The members carry the same items minus the thread
+    // bits, again what the component renders — `renderRow(m, …, undefined, true)` passes no
+    // thread — inside a 46px left padding that the base skin's own 34px gutter rule does not
+    // have; the checkbox stays absolutely positioned at 12px, so the indent is the row's and the
+    // box is not carried along with it.
+    //
+    // `touch` names the chevron AND the badge, which is what the task asked to read, and the
+    // consequence has to be stated rather than discovered: the badge is a `<span>` label, not a
+    // tap target, so it is `undersized` by construction at its designed 18px and this case's
+    // count is one higher than the number of real touch defects in it. `short` is the field to
+    // read here — it names each element with both axes — not `smallest`, which is the badge's 18
+    // whatever the chevron does.
+    //
+    // Two widths, each read at its own viewport for the reason the 520 toolbar pair carries: the
+    // column is an explicit width, so measuring the 360 fixture on a 320px page reports the stage
+    // overflowing the document and says nothing about the row. 320 is the narrowest viewport this
+    // product supports and the one the 46px indent has least room in.
+    const threadRow = (width) => `
+      <div class="mail-list" style="width:${width}px">
+        <div class="mail-list-scroll">
+          <ul class="message-list">
+            <li>
+              <div role="button" class="message-row is-unread" style="--row-actions:4">
+                <input type="checkbox" class="message-row-check" />
+                <div class="message-row-top">
+                  <span class="message-row-unread-dot"></span>
+                  <span class="message-row-draft">Draft</span>
+                  <span class="message-row-priority is-high">HIGH</span>
+                  <span class="message-row-from">Alice Martin</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                  <span class="message-row-date">18 Jul</span>
+                  <span class="message-row-thread-count" title="2 messages in this conversation">2</span>
+                  <button type="button" class="row-btn thread-toggle is-open" aria-expanded="true" aria-label="Collapse conversation">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7.5 4.5l6 5.5-6 5.5"/></svg>
+                  </button>
+                  <button class="row-btn row-star">★</button>
+                </div>
+                <div class="message-row-subject">Re: facture du mois de juillet</div>
+                <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+                <div class="message-row-cluster">
+                  <button class="row-btn">S</button>
+                  <button class="row-btn">A</button>
+                  <button class="row-btn">J</button>
+                  <button class="row-btn is-danger">D</button>
+                </div>
+              </div>
+              <div role="button" class="message-row is-thread-member is-unread" style="--row-actions:4">
+                <input type="checkbox" class="message-row-check" />
+                <div class="message-row-top">
+                  <span class="message-row-unread-dot"></span>
+                  <span class="message-row-draft">Draft</span>
+                  <span class="message-row-priority is-high">HIGH</span>
+                  <span class="message-row-from">Alice Martin</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                  <span class="message-row-date">18 Jul</span>
+                  <button class="row-btn row-star">★</button>
+                </div>
+                <div class="message-row-subject">Re: facture du mois de juillet</div>
+                <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+                <div class="message-row-cluster">
+                  <button class="row-btn">S</button>
+                  <button class="row-btn">A</button>
+                  <button class="row-btn">J</button>
+                  <button class="row-btn is-danger">D</button>
+                </div>
+              </div>
+              <div role="button" class="message-row is-thread-member" style="--row-actions:4">
+                <input type="checkbox" class="message-row-check" />
+                <div class="message-row-top">
+                  <span class="message-row-draft">Draft</span>
+                  <span class="message-row-from">Bertrand Dupont</span>
+                  <span class="message-row-date">17 Jul</span>
+                  <button class="row-btn row-star">★</button>
+                </div>
+                <div class="message-row-subject">Re: facture du mois de juillet</div>
+                <div class="message-row-preview">Je vous confirme la réception, bonne journée</div>
+                <div class="message-row-cluster">
+                  <button class="row-btn">S</button>
+                  <button class="row-btn">A</button>
+                  <button class="row-btn">J</button>
+                  <button class="row-btn is-danger">D</button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>`
+    for (const [name, width] of [
+      ['thread-row-expanded-360', 360],
+      ['thread-row-expanded-320 (read at 320x640)', 320],
+    ]) CASES.push({ name, html: threadRow(width), touch: '.thread-toggle, .message-row-thread-count' })
+
     // The one mechanism in this repo that can catch this, and no unit test can stand in for it:
     // jsdom computes no layout. `.mail-list` carries `container-type: inline-size`, and MessageList
     // renders four dialogs INSIDE that column with no portal anywhere in the codebase. Layout
@@ -1499,15 +1601,26 @@
 
     // 4. Appearance. Its palette cards are the module's only grid, and `.palette-zoom` is its only
     //    hover-revealed control: `opacity: 0` until `:hover`/`:focus-within`, 24px square, and the
-    //    single route to the enlarged preview. The radio rows above it are ~25px label boxes.
+    //    single route to the enlarged preview. Language and Theme are welded `.seg` controls whose
+    //    intrinsic width has to clear the 320px column — Language is the wider of the two.
     CASES.push({
       name: 'settings-appearance',
       html: settingsPage(`
         <div class="settings-page">
           <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>Appearance</h1></div>
+          <section class="account-section"><h2>Language</h2>
+            <div class="seg">
+              <label><input type="radio" name="lg" checked />Automatic</label>
+              <label><input type="radio" name="lg" />English</label>
+              <label><input type="radio" name="lg" />Français</label>
+            </div>
+          </section>
           <section class="account-section"><h2>Theme</h2>
-            <label class="radio-row"><input type="radio" name="th" />Follow the system</label>
-            <label class="radio-row"><input type="radio" name="th" />Light</label>
+            <div class="seg">
+              <label><input type="radio" name="th" />Light</label>
+              <label><input type="radio" name="th" />Dark</label>
+              <label><input type="radio" name="th" checked />System</label>
+            </div>
           </section>
           <section class="account-section"><h2>Palette</h2>
             <div class="palette-grid">
@@ -1526,7 +1639,7 @@
             </div>
           </section>
         </div>`),
-      touch: '.radio-row, .palette-zoom',
+      touch: '.seg label, .palette-zoom',
     })
 
     // 5. The navigation as the drawer draws it, which is the one place below 1024px it appears.

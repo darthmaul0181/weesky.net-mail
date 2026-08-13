@@ -1,21 +1,23 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
+import { pageSummaries } from '../list/listPatch'
 import { mailKeys, useAccountId, useSetFlags, type SetFlagsArgs } from '../queries'
 
 /** A cached view of one message — the first match, pages then stream blocks. */
 export function findCachedSummary(
   queryClient: QueryClient, accountId: string, folderPath: string, uid: number,
 ): MailMessageSummary | undefined {
+  // pageSummaries, not `page.messages`: a grouped page holds its rows in `threads` alone.
   for (const [, page] of queryClient.getQueriesData<MailFolderPage>(
     { queryKey: mailKeys.messagesIn(accountId, folderPath) })) {
-    const hit = page?.messages.find(message => message.uid === uid)
+    const hit = page && pageSummaries(page).find(message => message.uid === uid)
     if (hit) return hit
   }
   for (const [, stream] of queryClient.getQueriesData<InfiniteData<MailFolderPage>>(
     { queryKey: mailKeys.messageStreamIn(accountId, folderPath) })) {
     for (const page of stream?.pages ?? []) {
-      const hit = page.messages.find(message => message.uid === uid)
+      const hit = pageSummaries(page).find(message => message.uid === uid)
       if (hit) return hit
     }
   }

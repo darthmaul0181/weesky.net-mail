@@ -118,33 +118,37 @@ export default function AppearancePage() {
       </div>
 
       <section className="account-section">
-        <h2>{t('appearance.language.heading')}</h2>
-        {LANGUAGES.map(({ value, label, labelKey }) => (
-          <label key={value} className="radio-row">
-            <input
-              type="radio"
-              name="language"
-              checked={preference === value}
-              onChange={() => setPreference(value)}
-            />
-            {labelKey ? t(labelKey) : label}
-          </label>
-        ))}
+        <h2 id="language-heading">{t('appearance.language.heading')}</h2>
+        <div className="seg" role="radiogroup" aria-labelledby="language-heading">
+          {LANGUAGES.map(({ value, label, labelKey }) => (
+            <label key={value}>
+              <input
+                type="radio"
+                name="language"
+                checked={preference === value}
+                onChange={() => setPreference(value)}
+              />
+              {labelKey ? t(labelKey) : label}
+            </label>
+          ))}
+        </div>
       </section>
 
       <section className="account-section">
-        <h2>{t('appearance.theme.heading')}</h2>
-        {THEMES.map(({ value, labelKey }) => (
-          <label key={value} className="radio-row">
-            <input
-              type="radio"
-              name="theme"
-              checked={theme === value}
-              onChange={() => setTheme(value)}
-            />
-            {t(labelKey)}
-          </label>
-        ))}
+        <h2 id="theme-heading">{t('appearance.theme.heading')}</h2>
+        <div className="seg" role="radiogroup" aria-labelledby="theme-heading">
+          {THEMES.map(({ value, labelKey }) => (
+            <label key={value}>
+              <input
+                type="radio"
+                name="theme"
+                checked={theme === value}
+                onChange={() => setTheme(value)}
+              />
+              {t(labelKey)}
+            </label>
+          ))}
+        </div>
       </section>
 
       <section className="account-section">

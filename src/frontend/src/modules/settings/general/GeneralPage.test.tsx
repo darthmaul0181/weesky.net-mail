@@ -100,6 +100,21 @@ describe('GeneralPage', () => {
     expect(container.querySelector('.toggle-switch')).toBeTruthy()
   })
 
+  it('shows the group-conversations toggle off by default', async () => {
+    renderPage()
+
+    expect(await screen.findByLabelText('Group conversations')).not.toBeChecked()
+  })
+
+  it('saves the group-conversations toggle as a string the backend accepts', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Group conversations'))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.groupConversations', 'true'))
+  })
+
   // Off unless the account asked for it — the folder column has never carried icons.
   it('shows the folder-icon toggle off when nothing is stored', async () => {
     renderPage()
@@ -107,11 +122,19 @@ describe('GeneralPage', () => {
     expect(await screen.findByLabelText('Folder icons')).not.toBeChecked()
   })
 
-  it('puts the folder-icon row straight under the preview row', async () => {
+  it('puts the group-conversations row straight under the preview row', async () => {
     renderPage()
     const preview = (await screen.findByLabelText('Preview in the message list')).closest('.field-h')
 
     expect(preview?.nextElementSibling)
+      .toBe(screen.getByLabelText('Group conversations').closest('.field-h'))
+  })
+
+  it('puts the folder-icon row straight under the group-conversations row', async () => {
+    renderPage()
+    const group = (await screen.findByLabelText('Group conversations')).closest('.field-h')
+
+    expect(group?.nextElementSibling)
       .toBe(screen.getByLabelText('Folder icons').closest('.field-h'))
   })
 

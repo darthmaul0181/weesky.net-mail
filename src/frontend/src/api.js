@@ -302,7 +302,8 @@ export const api = {
     request('PUT', '/api/Mail/Folders/Subscription', { path, subscribed }, options),
 
   getMailMessages: (folder, page, pageSize, options) =>
-    request('GET', `/api/Mail/Messages?folder=${encodeURIComponent(folder)}&page=${page}&pageSize=${pageSize}`, undefined, options),
+    request('GET', `/api/Mail/Messages?folder=${encodeURIComponent(folder)}&page=${page}&pageSize=${pageSize}`
+      + (options?.grouped ? '&grouped=true' : ''), undefined, options),
 
   getMailMessage: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),

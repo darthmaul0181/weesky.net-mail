@@ -30,6 +30,12 @@ const pageOf = (messages: MailMessageSummary[]): MailFolderPage => ({
   folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages,
 })
 
+/** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
+const groupedPageOf = (groups: MailMessageSummary[][]): MailFolderPage => ({
+  ...pageOf([]),
+  threads: groups.map(messages => ({ messages })), totalThreads: groups.length,
+})
+
 const node = (path: string, unread: number | null, children: MailFolderNode[] = []): MailFolderNode => ({
   path, name: path, specialUse: null, selectable: true, subscribed: true,
   total: 10, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children,
@@ -269,6 +275,32 @@ describe('useSetFlags', () => {
 
     // The row stays put, so patchSearchResults suffices: no invalidate, no reconcile refetch.
     expect(mocks.searchMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it('patches a grouped page inside its threads, and the badge with it', async () => {
+    // The grouped shape: every row is a thread member and `messages` is empty, so a patch that
+    // only rewrote the flat list would leave the star and the unread mark on screen till the poll.
+    const groupedPagesKey = mailKeys.messages('primary', 'INBOX', 0, 50, true)
+    const groupedStreamKey = mailKeys.messageStream('primary', 'INBOX', 100, true)
+    client.setQueryData(groupedPagesKey, groupedPageOf([[summary(1), summary(2)], [summary(3)]]))
+    client.setQueryData<InfiniteData<MailFolderPage>>(groupedStreamKey, {
+      pages: [groupedPageOf([[summary(1), summary(2)]])], pageParams: [0],
+    })
+    client.setQueryData(foldersKey, [node('INBOX', 5)])
+    mocks.setMessageFlags.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => useSetFlags(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [2], flag: 'seen', value: true })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    const patched = client.getQueryData<MailFolderPage>(groupedPagesKey)!
+    expect(patched.threads!.map(t => t.messages.map(m => m.seen))).toEqual([[false, true], [false]])
+    const stream = client.getQueryData<InfiniteData<MailFolderPage>>(groupedStreamKey)!
+    expect(stream.pages[0].threads![0].messages[1].seen).toBe(true)
+    // One badge move for the two caches, counted off the thread members themselves.
+    expect(treeIn()![0].unread).toBe(4)
   })
 
   it('never invalidates the stream key', async () => {

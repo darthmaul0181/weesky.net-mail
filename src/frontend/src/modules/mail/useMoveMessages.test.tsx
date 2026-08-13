@@ -37,6 +37,12 @@ const streamOf = (folderPath: string, blocks: MailMessageSummary[][]): InfiniteD
   pageParams: blocks.map((_, index) => index),
 })
 
+/** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
+const groupedPageOf = (folderPath: string, groups: MailMessageSummary[][]): MailFolderPage => ({
+  ...pageOf(folderPath, []),
+  threads: groups.map(messages => ({ messages })), totalThreads: groups.length,
+})
+
 const node = (path: string, total: number, unread: number): MailFolderNode => ({
   path, name: path, specialUse: null, selectable: true, subscribed: true,
   total, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children: [],
@@ -129,6 +135,31 @@ describe('useMoveMessages', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(uidsOf(sourcePage()!.messages)).toEqual([3])
     expect(folder('INBOX').total).toBe(18)
+  })
+
+  it('takes the rows out of a grouped page, dropping a thread it emptied', async () => {
+    const groupedKey = mailKeys.messages('primary', 'INBOX', 0, 50, true)
+    client.setQueryData(groupedKey,
+      groupedPageOf('INBOX', [[summary(1), summary(2, { seen: true })], [summary(3)]]))
+    client.setQueryData(foldersKey, [node('INBOX', 20, 5), node('Archive', 3, 1)])
+    mocks.moveMessages.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({
+        folderPath: 'INBOX', uids: [2, 3], targetFolderPath: 'Archive', copy: false,
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    // uid 3 was its thread's only member, so the row leaves with it; uid 2's thread keeps uid 1.
+    expect(client.getQueryData<MailFolderPage>(groupedKey)!.threads!
+      .map(thread => thread.messages.map(message => message.uid))).toEqual([[1]])
+    // Both counters move off the thread members — `messages` holds nothing to count here.
+    expect(folder('INBOX').total).toBe(18)
+    expect(folder('INBOX').unread).toBe(4)
+    expect(folder('Archive').total).toBe(5)
+    expect(folder('Archive').unread).toBe(2)
   })
 
   it('counts a uid held by two source caches only once', async () => {

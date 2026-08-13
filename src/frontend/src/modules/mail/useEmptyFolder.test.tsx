@@ -55,6 +55,27 @@ describe('useEmptyFolder', () => {
     expect(trash.unread).toBe(0)
   })
 
+  it('purges: a grouped page answers empty on both of its faces', async () => {
+    const client = seededClient()
+    const groupedKey = mailKeys.messages(ACC, 'Trash', 0, 50, true)
+    client.setQueryData(groupedKey, {
+      messages: [], total: 2, page: 0, pageSize: 50,
+      threads: [{ messages: [{ uid: 5, seen: false }] }, { messages: [{ uid: 6, seen: true }] }],
+      totalThreads: 2,
+    })
+    const { result } = renderHook(() => useEmptyFolder(), { wrapper: wrapperFor(client) })
+
+    await act(async () => { result.current.mutate({ folderPath: 'Trash' }); await settle() })
+
+    // Symmetry with the flat pair: what messages/total say, threads/totalThreads say too.
+    const page = client.getQueryData(groupedKey) as
+      { threads: unknown[]; totalThreads: number; messages: unknown[]; total: number }
+    expect(page.threads).toEqual([])
+    expect(page.totalThreads).toBe(0)
+    expect(page.messages).toEqual([])
+    expect(page.total).toBe(0)
+  })
+
   it('moves: zeroes the source and adds its counts to the target', async () => {
     const client = seededClient()
     client.setQueryData(mailKeys.messages(ACC, 'Projects', 0, 50), {

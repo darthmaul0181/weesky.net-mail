@@ -9,16 +9,24 @@ const node = (partial: Partial<MailFolderNode>): MailFolderNode => ({
 
 describe('dragUids', () => {
   it('carries the whole selection when the dragged row belongs to it', () => {
-    expect(dragUids([3, 7, 9], 7)).toEqual([3, 7, 9])
+    expect(dragUids([3, 7, 9], [7])).toEqual([3, 7, 9])
   })
 
   it('carries the dragged row alone when it is not in the selection', () => {
     // An unchecked row dragged while others are checked must not disturb that selection.
-    expect(dragUids([3, 7, 9], 5)).toEqual([5])
+    expect(dragUids([3, 7, 9], [5])).toEqual([5])
   })
 
   it('carries the row alone when nothing is selected', () => {
-    expect(dragUids([], 5)).toEqual([5])
+    expect(dragUids([], [5])).toEqual([5])
+  })
+
+  it('carries the selection when every member of a thread row is checked', () => {
+    expect(dragUids([3, 7, 9], [7, 9])).toEqual([3, 7, 9])
+  })
+
+  it('carries the thread alone when only part of it is checked', () => {
+    expect(dragUids([3, 7], [7, 9])).toEqual([7, 9])
   })
 })
 

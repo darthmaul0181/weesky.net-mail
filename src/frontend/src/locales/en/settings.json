@@ -34,7 +34,7 @@
   "appearance": {
     "language": {
       "heading": "Language",
-      "auto": "Automatic (browser)"
+      "auto": "Automatic"
     },
     "theme": {
       "heading": "Theme",
@@ -74,6 +74,12 @@
       "hint": "Show the first line of each message under its subject.",
       "on": "Previews are shown",
       "off": "Previews are hidden"
+    },
+    "groupConversations": {
+      "label": "Group conversations",
+      "hint": "Show the messages of one conversation as a single expandable row.",
+      "on": "Conversations will be grouped",
+      "off": "Messages will be listed individually"
     },
     "folderIcons": {
       "label": "Folder icons",

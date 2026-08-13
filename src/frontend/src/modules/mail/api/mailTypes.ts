@@ -39,6 +39,11 @@ export interface MailMessageSummary {
   priority: MailPriority
 }
 
+/** One conversation of a grouped page: its messages, newest first. */
+export interface MailThread {
+  messages: MailMessageSummary[]
+}
+
 export interface MailFolderPage {
   folderPath: string
   /** When this changes, cached UIDs for the folder are stale and must be dropped. */
@@ -47,6 +52,10 @@ export interface MailFolderPage {
   page: number
   pageSize: number
   messages: MailMessageSummary[]
+  /** Grouped mode only — absent on a flat page, which is how the client tells the modes apart. */
+  threads?: MailThread[]
+  /** Grouped mode only: what the pager pages. `total` keeps counting messages. */
+  totalThreads?: number
 }
 
 /** One search hit: a summary plus where it lives — in all-folders scope each row names its folder. */

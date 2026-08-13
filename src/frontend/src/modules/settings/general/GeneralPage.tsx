@@ -7,8 +7,9 @@ import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
   ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf,
-  notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
-  showSpamScoreOf, trustContactsOf, usePreferences, useSetPreference,
+  groupConversationsOf, notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf,
+  showFolderIconsOf, showPreviewOf, showSpamScoreOf, trustContactsOf, usePreferences,
+  useSetPreference,
   type ComposeFormat, type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
@@ -44,8 +45,6 @@ const READING_PANES = [
   { value: 'none', labelKey: 'general.readingPane.none', toastKey: 'general.readingPane.noneToast' },
 ] as const satisfies { value: ReadingPane; labelKey: string; toastKey: string }[]
 
-/** No glyph beside these two: PaneGlyph draws three arrangements, a shape a miniature can carry.
-    Two editors are not, and a decorative square would say nothing the label does not. */
 const COMPOSE_FORMATS = [
   { value: 'html', labelKey: 'general.composeFormat.html', toastKey: 'general.composeFormat.htmlToast' },
   { value: 'text', labelKey: 'general.composeFormat.text', toastKey: 'general.composeFormat.textToast' },
@@ -58,6 +57,28 @@ function PaneGlyph({ variant }: { variant: ReadingPane }) {
     <span className={`pane-glyph is-${variant}`} aria-hidden="true">
       <span className="pane-glyph-lines" />
       {variant !== 'none' && <span className="pane-glyph-pane" />}
+    </span>
+  )
+}
+
+/** Same frame as PaneGlyph, drawing what the choice changes in the composer: Formatted adds
+    the toolbar — its first button in the accent — and a heading over the body lines; Plain
+    text is the bare lines the Hidden card already wears. */
+function EditorGlyph({ variant }: { variant: ComposeFormat }) {
+  return (
+    <span className={`pane-glyph${variant === 'html' ? ' is-editor-html' : ''}`} aria-hidden="true">
+      {variant === 'html' && (
+        <>
+          <span className="editor-glyph-tools">
+            <span className="is-accent" />
+            <span />
+            <span />
+          </span>
+          <span className="editor-glyph-sep" />
+          <span className="editor-glyph-heading" />
+        </>
+      )}
+      <span className="pane-glyph-lines" />
     </span>
   )
 }
@@ -229,6 +250,16 @@ export default function GeneralPage() {
             />
 
             <ToggleRow
+              id="group-conversations"
+              label={t('general.groupConversations.label')}
+              hint={t('general.groupConversations.hint')}
+              checked={groupConversationsOf(preferences)}
+              disabled={setPreference.isPending}
+              onChange={on => save(PREFERENCE_KEYS.groupConversations, String(on),
+                t(on ? 'general.groupConversations.on' : 'general.groupConversations.off'))}
+            />
+
+            <ToggleRow
               id="show-folder-icons"
               label={t('general.folderIcons.label')}
               hint={t('general.folderIcons.hint')}
@@ -321,6 +352,7 @@ export default function GeneralPage() {
               <div className="layout-cards" role="radiogroup" aria-labelledby="compose-format-label">
                 {COMPOSE_FORMATS.map(({ value, labelKey, toastKey }) => (
                   <label key={value} className="layout-card">
+                    <EditorGlyph variant={value} />
                     <span className="layout-card-name">
                       <input
                         type="radio"

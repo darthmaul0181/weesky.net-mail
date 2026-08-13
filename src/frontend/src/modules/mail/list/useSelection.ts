@@ -27,6 +27,14 @@ export function useSelection<T = number>(resetKey: string) {
       })
       anchor.current = index
     },
+    /** A batch on or off in one call — the thread row's checkbox, whatever mix it covered. */
+    setMany(keys: T[], on: boolean) {
+      setSelected(prev => {
+        const next = new Set(prev)
+        keys.forEach(key => { if (on) next.add(key); else next.delete(key) })
+        return next
+      })
+    },
     toggleRange(keys: T[], index: number) {
       const from = anchor.current ?? index
       const [lo, hi] = from <= index ? [from, index] : [index, from]

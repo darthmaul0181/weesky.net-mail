@@ -110,7 +110,7 @@ describe('AppearancePage', () => {
   it('offers Automatic, English and Français, and writes the chosen one', async () => {
     renderPage()
 
-    expect(screen.getByRole('radio', { name: 'Automatic (browser)' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Automatic' })).toBeChecked()
     // Written in their own language: someone stranded in an English interface does not look
     // for "French".
     expect(screen.getByRole('radio', { name: 'English' })).toBeInTheDocument()

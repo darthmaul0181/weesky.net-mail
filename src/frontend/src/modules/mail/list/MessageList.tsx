@@ -7,6 +7,7 @@ import {
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
+import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import MailIcon from '../../../icons/MailIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
@@ -26,6 +27,7 @@ import type { AdvancedForm, SearchCriteria } from './searchCriteria'
 import { DRAG_MIME, dragUids, serializeDrag } from './dragMessages'
 import { buildDragPill } from './dragImage'
 import { formatListDate } from './formatDate'
+import { memberUids } from './threading'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
 import Pagination from './Pagination'
@@ -131,6 +133,9 @@ export default function MessageList(
   // One shape for the render, whichever source fills it — rows/pager/footer never learn which.
   const view = searching
     ? {
+        // Search hits are never threaded: each result is its own one-member group.
+        groups: ((searchQuery.data?.results ?? []) as MailMessageSummary[])
+          .map(result => ({ key: result.uid, messages: [result] })),
         messages: (searchQuery.data?.results ?? []) as MailMessageSummary[],
         total: searchQuery.data?.total ?? 0,
         isLoading: searchQuery.isLoading,
@@ -145,7 +150,7 @@ export default function MessageList(
         streaming: null,
       }
     : list
-  const { messages, total, isLoading, isError, paging, streaming } = view
+  const { groups, messages, total, isLoading, isError, paging, streaming } = view
   const scrollRef = useRef<HTMLDivElement>(null)
   const { pull, armed } = usePullToRefresh(scrollRef, () => onRefresh?.())
   const setFlags = useSetFlags(onNotify)
@@ -154,7 +159,8 @@ export default function MessageList(
   const emptyFolder = useEmptyFolder(onNotify)
   const { data: folders } = useFolders()
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
-  const [expunging, setExpunging] = useState<MailMessageSummary | null>(null)
+  // Named for the confirm dialog; the uids are the whole thread when the row is one.
+  const [expunging, setExpunging] = useState<{ label: string; uids: number[] } | null>(null)
   const [confirmingBulk, setConfirmingBulk] = useState(false)
   const [confirmingEmpty, setConfirmingEmpty] = useState(false)
   const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
@@ -177,7 +183,17 @@ export default function MessageList(
   // and paged-page change, never while streaming more blocks into the same folder.
   const resetKey = `${folderPath}::${searching ? `search:${searchPage}` : (paging ? paging.page : 'stream')}`
   const selection = useSelection(resetKey)
-  const loadedUids = messages.map(message => message.uid)
+  const loadedUids = memberUids(groups)
+
+  // Which threads are unfolded; a look at this folder's page, not a preference, so it resets
+  // with the selection: on a folder change, a page change, and entering or leaving a search.
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
+  useEffect(() => { setExpanded(new Set()) }, [resetKey])
+  const toggleExpanded = (key: number) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
   const selectedUids = loadedUids.filter(uid => selection.has(uid))
   const count = selectedUids.length
   const allSelected = count > 0 && count === messages.length
@@ -237,23 +253,30 @@ export default function MessageList(
     }
   }
 
-  function toggle(message: MailMessageSummary, flag: 'seen' | 'flagged') {
+  function toggle(uids: number[], flag: 'seen' | 'flagged', value: boolean) {
     if (!folderPath) return
-    const value = flag === 'seen' ? !message.seen : !message.flagged
-    setFlags.mutate({ folderPath, uids: [message.uid], flag, value })
+    setFlags.mutate({ folderPath, uids, flag, value })
   }
 
-  function moveTo(target: string | null, uid: number) {
+  // A single row reports itself; a thread hands the whole batch over, led by the open member
+  // when it holds one — the layout only advances the reader off the uid that is actually open.
+  function reportDeparted(uids: number[]) {
+    if (uids.length === 1) { onDeparted?.(uids[0]); return }
+    if (selectedUid !== null && uids.includes(selectedUid)) onDeparted?.(selectedUid, uids)
+    else onDeparted?.(uids[0], uids)
+  }
+
+  function moveTo(target: string | null, uids: number[]) {
     if (!folderPath || !target) return
-    moveMessages.mutate({ folderPath, uids: [uid], targetFolderPath: target, copy: false })
-    onDeparted?.(uid)
+    moveMessages.mutate({ folderPath, uids, targetFolderPath: target, copy: false })
+    reportDeparted(uids)
   }
 
-  // A drag carries the checked selection when the grabbed row belongs to it, that row alone
-  // otherwise. The pill lives off-screen just long enough for the browser to snapshot it.
-  function onRowDragStart(event: DragEvent<HTMLDivElement>, uid: number) {
+  // The selection-or-row rule lives in dragUids; the pill lives off-screen just long enough
+  // for the browser to snapshot it.
+  function onRowDragStart(event: DragEvent<HTMLDivElement>, rowUids: number[]) {
     if (crossFolder || !folderPath) return
-    const uids = dragUids(selectedUids, uid)
+    const uids = dragUids(selectedUids, rowUids)
     event.dataTransfer.setData(DRAG_MIME, serializeDrag({ sourcePath: folderPath, uids }))
     event.dataTransfer.effectAllowed = 'move'
     const pill = buildDragPill(uids.length)
@@ -267,10 +290,10 @@ export default function MessageList(
 
   function expunge() {
     if (!folderPath || !expunging) return
-    const uid = expunging.uid
-    deleteMessages.mutate({ folderPath, uids: [uid] })
+    const uids = expunging.uids
+    deleteMessages.mutate({ folderPath, uids })
     setExpunging(null)
-    onDeparted?.(uid)
+    reportDeparted(uids)
   }
 
   // Trash/junk purge permanently, so they confirm first; elsewhere it's a move to trash, undoable.
@@ -350,6 +373,244 @@ export default function MessageList(
   // names who the draft is going to instead, with a marker calling out that it isn't sent mail.
   const drafts = folderRole === 'drafts'
 
+  /**
+   * One row — a plain message, a collapsed thread head, or an unfolded member. With `thread`
+   * present the row is a whole conversation: its dot, star and paperclip aggregate the members,
+   * and every control acts on all of them at once. `rowIndex` runs over the flattened members,
+   * the order `loadedUids` publishes, so shift-ranges stay coherent across both shapes.
+   */
+  function renderRow(message: MailMessageSummary, rowIndex: number, thread?: {
+    count: number; uids: number[]; expanded: boolean; onToggle: () => void
+    anyUnread: boolean; anyFlagged: boolean; anyAttachments: boolean
+  }, member = false): ReactNode {
+    const unread = thread ? thread.anyUnread : !message.seen
+    const flagged = thread ? thread.anyFlagged : message.flagged
+    const attachments = thread ? thread.anyAttachments : message.hasAttachments
+    const rowUids = thread ? thread.uids : [message.uid]
+
+    const classes = ['message-row']
+    if (wide) classes.push('is-line')
+    if (member) classes.push('is-thread-member')
+    if (unread) classes.push('is-unread')
+    // The collapsed row stands for every member, so it highlights whichever of them is open —
+    // reading an older member then collapsing must not leave the list with no selected row.
+    if (selectedUid !== null && rowUids.includes(selectedUid)) classes.push('is-selected')
+    if (draggingUids?.includes(message.uid)) classes.push('is-dragging')
+
+    const from = drafts
+      ? (message.to.length > 0
+          ? message.to.map(a => a.name || a.address).join(', ')
+          : t('list.noRecipient'))
+      : (message.fromName || message.fromAddress)
+    const subject = message.subject || t('list.noSubject')
+    const when = formatListDate(message.date)
+    const seenLabel = t(unread ? 'toolbar.markRead' : 'toolbar.markUnread')
+    const priorityLabel = message.priority === 'high' ? t('list.highPriority')
+      : message.priority === 'low' ? t('list.lowPriority') : null
+    // A word in the Draft badge's slot, not a glyph in the subject line: a glyph there sat
+    // in the text flow, so a marked row started its subject 17px right of every other one
+    // and the column lost the axis the eye scans down.
+    const priorityMark = priorityLabel && (
+      <span className={`message-row-priority is-${message.priority}`} title={priorityLabel}>
+        {t(message.priority === 'high' ? 'list.high' : 'list.low')}
+      </span>
+    )
+    // role=button is children-presentational: nothing inside the row is exposed on its
+    // own, so everything the row states visually has to be said in its name.
+    const label = t('list.rowLabel', {
+      prefix: `${thread ? `${t('list.threadCount', { count: thread.count })}. ` : ''}`
+        + `${unread ? t('list.aria.unread') : ''}`
+        + `${drafts ? t('list.aria.draft') : ''}`
+        + `${priorityLabel ? t('list.aria.priority', { label: priorityLabel }) : ''}`,
+      from,
+      subject,
+      attachments: attachments ? t('list.aria.hasAttachments') : '',
+      when,
+    })
+
+    // Cross-folder results neutralize row selection and actions: the row lives in another
+    // folder, so a checkbox, star or cluster acting on this one would act on the wrong mailbox.
+    const allChecked = rowUids.every(uid => selection.has(uid))
+    const check = crossFolder ? null : (
+      <input
+        type="checkbox"
+        className="message-row-check"
+        aria-label={t(thread ? 'list.selectThread' : 'list.selectMessage', { from })}
+        checked={allChecked}
+        onClick={event => {
+          event.stopPropagation()
+          if (thread) selection.setMany(thread.uids, !allChecked)
+          else if (event.shiftKey) selection.toggleRange(loadedUids, rowIndex)
+          else selection.toggle(message.uid, rowIndex)
+        }}
+        onChange={() => {}}
+      />
+    )
+
+    const star = crossFolder ? null : (
+      <button
+        type="button"
+        className={`row-btn row-star${flagged ? ' is-on' : ''}`}
+        aria-label={t(flagged ? 'list.unstar' : 'list.star')}
+        onClick={event => { event.stopPropagation(); toggle(rowUids, 'flagged', !flagged) }}
+      >
+        <StarIcon filled={flagged} size={18} />
+      </button>
+    )
+
+    // Withheld here is the user's own choice, made in Settings. A button whose role no
+    // folder holds is still drawn, disabled, with its reason: that absence would read as
+    // a bug, this one was asked for.
+    const buttons: Record<RowAction, ReactNode> = {
+      seen: (
+        <button
+          key="seen"
+          type="button"
+          className="row-btn"
+          aria-label={seenLabel}
+          title={seenLabel}
+          onClick={event => { event.stopPropagation(); toggle(rowUids, 'seen', unread) }}
+        >
+          {unread ? <MailOpenIcon size={18} /> : <MailIcon size={18} />}
+        </button>
+      ),
+      archive: (
+        <button
+          key="archive"
+          type="button"
+          className="row-btn"
+          aria-label={t('toolbar.archive')}
+          disabled={archiveOff}
+          title={archiveOff ? archiveReason : t('toolbar.archive')}
+          onClick={event => { event.stopPropagation(); moveTo(roles.archive, rowUids) }}
+        >
+          <ArchiveIcon size={18} />
+        </button>
+      ),
+      junk: (
+        <button
+          key="junk"
+          type="button"
+          className="row-btn"
+          aria-label={t('toolbar.junk')}
+          disabled={junkOff}
+          title={junkOff ? junkReason : t('toolbar.junk')}
+          onClick={event => { event.stopPropagation(); moveTo(roles.junk, rowUids) }}
+        >
+          <JunkIcon size={18} />
+        </button>
+      ),
+      delete: (
+        <button
+          key="delete"
+          type="button"
+          className="row-btn is-danger"
+          aria-label={deleteLabel}
+          disabled={trashOff}
+          title={trashOff ? t('actions.noTrashFolder') : deleteLabel}
+          onClick={event => {
+            event.stopPropagation()
+            if (inTrash) setExpunging({ label: subject, uids: rowUids })
+            else moveTo(roles.trash, rowUids)
+          }}
+        >
+          <TrashIcon size={18} />
+        </button>
+      ),
+    }
+
+    // One value behind both the cluster and the width the row reserves for it: the reserve
+    // is what ends the line above in an ellipsis, and a count it derived on its own could
+    // disagree with what is actually drawn.
+    const shownActions = crossFolder ? [] : rowActions
+    const cluster = shownActions.length === 0 ? null : (
+      <div className="message-row-cluster">{shownActions.map(action => buttons[action])}</div>
+    )
+
+    // After the date in both skins: how many messages the row stands for, and the way in.
+    const threadBits = thread && (
+      <>
+        <span
+          className="message-row-thread-count"
+          title={t('list.threadCount', { count: thread.count })}
+        >
+          {thread.count}
+        </span>
+        <button
+          type="button"
+          className={`row-btn thread-toggle${thread.expanded ? ' is-open' : ''}`}
+          aria-expanded={thread.expanded}
+          aria-label={t(thread.expanded ? 'list.collapseThread' : 'list.expandThread')}
+          onClick={event => { event.stopPropagation(); thread.onToggle() }}
+        >
+          <ChevronRightIcon size={14} />
+        </button>
+      </>
+    )
+
+    return (
+      <Row
+        key={message.uid}
+        role="button"
+        tabIndex={0}
+        aria-label={label}
+        className={classes.join(' ')}
+        style={{ '--row-actions': shownActions.length } as CSSProperties}
+        draggable={!crossFolder}
+        onClick={() => openRow(message)}
+        onKeyDown={event => onRowKey(event, message)}
+        onDragStart={event => onRowDragStart(event, rowUids)}
+        onDragEnd={() => setDraggingUids(null)}
+        // Entering selection with no visible checkbox to aim at: the row itself is the target.
+        onLongPress={crossFolder ? undefined : () => {
+          if (thread) selection.setMany(thread.uids, !allChecked)
+          else selection.toggle(message.uid, rowIndex)
+        }}
+      >
+        {wide ? (
+          <>
+            {check}
+            {unread && <span className="message-row-unread-dot" />}
+            {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
+            {priorityMark}
+            <span className="message-row-from">{from}</span>
+            {attachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
+            <span className="message-row-line">
+              {subject}
+              {showsPreview && message.preview && (
+                <span className="message-row-line-preview"> — {message.preview}</span>
+              )}
+            </span>
+            <span className="message-row-date">{when}</span>
+            {threadBits}
+            {cluster}
+            {star}
+          </>
+        ) : (
+          <>
+            {check}
+            <div className="message-row-top">
+              {unread && <span className="message-row-unread-dot" />}
+              {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
+              {priorityMark}
+              <span className="message-row-from">{from}</span>
+              {attachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
+              <span className="message-row-date">{when}</span>
+              {threadBits}
+              {star}
+            </div>
+            <div className="message-row-subject">{subject}</div>
+            {/* Always rendered when previews are on, even empty: a message with no body
+                would otherwise make a shorter row than its neighbours and break the rhythm
+                of the column. The reserved height lives in CSS. */}
+            {showsPreview && <div className="message-row-preview">{message.preview}</div>}
+            {cluster}
+          </>
+        )}
+      </Row>
+    )
+  }
+
   function rows() {
     if (isLoading) return <p className="mail-empty">{t(searching ? 'search.searching' : 'list.loading')}</p>
     if (isError) return <p className="mail-empty">{t('list.loadFailed')}</p>
@@ -357,201 +618,36 @@ export default function MessageList(
       return <p className="mail-empty">{t(searching ? 'list.noResults' : 'list.noMessages')}</p>
     }
 
-    const sentinelRow = streaming?.hasMore ? sentinelIndexOf(messages.length) : -1
+    // The sentinel counts list rows, and a collapsed thread is one row: groups, not messages.
+    const sentinelRow = streaming?.hasMore ? sentinelIndexOf(groups.length) : -1
+    let rowIndex = 0
 
     return (
       <>
         <ul className={`message-list${count > 0 ? ' has-selection' : ''}`}>
-          {messages.map((message, index) => {
-            const classes = ['message-row']
-            if (wide) classes.push('is-line')
-            if (!message.seen) classes.push('is-unread')
-            if (message.uid === selectedUid) classes.push('is-selected')
-            if (draggingUids?.includes(message.uid)) classes.push('is-dragging')
-
-            const from = drafts
-              ? (message.to.length > 0
-                  ? message.to.map(a => a.name || a.address).join(', ')
-                  : t('list.noRecipient'))
-              : (message.fromName || message.fromAddress)
-            const subject = message.subject || t('list.noSubject')
-            const when = formatListDate(message.date)
-            const seenLabel = t(message.seen ? 'toolbar.markUnread' : 'toolbar.markRead')
-            const priorityLabel = message.priority === 'high' ? t('list.highPriority')
-              : message.priority === 'low' ? t('list.lowPriority') : null
-            // A word in the Draft badge's slot, not a glyph in the subject line: a glyph there sat
-            // in the text flow, so a marked row started its subject 17px right of every other one
-            // and the column lost the axis the eye scans down.
-            const priorityMark = priorityLabel && (
-              <span className={`message-row-priority is-${message.priority}`} title={priorityLabel}>
-                {t(message.priority === 'high' ? 'list.high' : 'list.low')}
-              </span>
-            )
-            // role=button is children-presentational: nothing inside the row is exposed on its
-            // own, so everything the row states visually has to be said in its name.
-            const label = t('list.rowLabel', {
-              prefix: `${message.seen ? '' : t('list.aria.unread')}`
-                + `${drafts ? t('list.aria.draft') : ''}`
-                + `${priorityLabel ? t('list.aria.priority', { label: priorityLabel }) : ''}`,
-              from,
-              subject,
-              attachments: message.hasAttachments ? t('list.aria.hasAttachments') : '',
-              when,
-            })
-
-            // Cross-folder results neutralize row selection and actions: the row lives in another
-            // folder, so a checkbox, star or cluster acting on this one would act on the wrong mailbox.
-            const check = crossFolder ? null : (
-              <input
-                type="checkbox"
-                className="message-row-check"
-                aria-label={t('list.selectMessage', { from })}
-                checked={selection.has(message.uid)}
-                onClick={event => {
-                  event.stopPropagation()
-                  if (event.shiftKey) selection.toggleRange(loadedUids, index)
-                  else selection.toggle(message.uid, index)
-                }}
-                onChange={() => {}}
-              />
-            )
-
-            const star = crossFolder ? null : (
-              <button
-                type="button"
-                className={`row-btn row-star${message.flagged ? ' is-on' : ''}`}
-                aria-label={t(message.flagged ? 'list.unstar' : 'list.star')}
-                onClick={event => { event.stopPropagation(); toggle(message, 'flagged') }}
-              >
-                <StarIcon filled={message.flagged} size={18} />
-              </button>
-            )
-
-            {/* Withheld here is the user's own choice, made in Settings. A button whose role no
-                folder holds is still drawn, disabled, with its reason: that absence would read as
-                a bug, this one was asked for. */}
-            const buttons: Record<RowAction, ReactNode> = {
-              seen: (
-                <button
-                  key="seen"
-                  type="button"
-                  className="row-btn"
-                  aria-label={seenLabel}
-                  title={seenLabel}
-                  onClick={event => { event.stopPropagation(); toggle(message, 'seen') }}
-                >
-                  {message.seen ? <MailIcon size={18} /> : <MailOpenIcon size={18} />}
-                </button>
-              ),
-              archive: (
-                <button
-                  key="archive"
-                  type="button"
-                  className="row-btn"
-                  aria-label={t('toolbar.archive')}
-                  disabled={archiveOff}
-                  title={archiveOff ? archiveReason : t('toolbar.archive')}
-                  onClick={event => { event.stopPropagation(); moveTo(roles.archive, message.uid) }}
-                >
-                  <ArchiveIcon size={18} />
-                </button>
-              ),
-              junk: (
-                <button
-                  key="junk"
-                  type="button"
-                  className="row-btn"
-                  aria-label={t('toolbar.junk')}
-                  disabled={junkOff}
-                  title={junkOff ? junkReason : t('toolbar.junk')}
-                  onClick={event => { event.stopPropagation(); moveTo(roles.junk, message.uid) }}
-                >
-                  <JunkIcon size={18} />
-                </button>
-              ),
-              delete: (
-                <button
-                  key="delete"
-                  type="button"
-                  className="row-btn is-danger"
-                  aria-label={deleteLabel}
-                  disabled={trashOff}
-                  title={trashOff ? t('actions.noTrashFolder') : deleteLabel}
-                  onClick={event => {
-                    event.stopPropagation()
-                    if (inTrash) setExpunging(message)
-                    else moveTo(roles.trash, message.uid)
-                  }}
-                >
-                  <TrashIcon size={18} />
-                </button>
-              ),
+          {groups.map((group, groupIndex) => {
+            const single = group.messages.length === 1
+            const latest = group.messages[0]
+            const startIndex = rowIndex
+            rowIndex += group.messages.length
+            const isOpen = expanded.has(group.key)
+            const thread = single ? undefined : {
+              count: group.messages.length,
+              uids: group.messages.map(m => m.uid),
+              expanded: isOpen,
+              onToggle: () => toggleExpanded(group.key),
+              anyUnread: group.messages.some(m => !m.seen),
+              anyFlagged: group.messages.some(m => m.flagged),
+              anyAttachments: group.messages.some(m => m.hasAttachments),
             }
-
-            // One value behind both the cluster and the width the row reserves for it: the reserve
-            // is what ends the line above in an ellipsis, and a count it derived on its own could
-            // disagree with what is actually drawn.
-            const shownActions = crossFolder ? [] : rowActions
-            const cluster = shownActions.length === 0 ? null : (
-              <div className="message-row-cluster">{shownActions.map(action => buttons[action])}</div>
-            )
-
             return (
-              <li key={message.uid}>
-                {streaming && index === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
-                <Row
-                  role="button"
-                  tabIndex={0}
-                  aria-label={label}
-                  className={classes.join(' ')}
-                  style={{ '--row-actions': shownActions.length } as CSSProperties}
-                  draggable={!crossFolder}
-                  onClick={() => openRow(message)}
-                  onKeyDown={event => onRowKey(event, message)}
-                  onDragStart={event => onRowDragStart(event, message.uid)}
-                  onDragEnd={() => setDraggingUids(null)}
-                  // Entering selection with no visible checkbox to aim at: the row itself is the target.
-                  onLongPress={crossFolder ? undefined : () => selection.toggle(message.uid, index)}
-                >
-                  {wide ? (
-                    <>
-                      {check}
-                      {!message.seen && <span className="message-row-unread-dot" />}
-                      {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
-                      {priorityMark}
-                      <span className="message-row-from">{from}</span>
-                      {message.hasAttachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
-                      <span className="message-row-line">
-                        {subject}
-                        {showsPreview && message.preview && (
-                          <span className="message-row-line-preview"> — {message.preview}</span>
-                        )}
-                      </span>
-                      <span className="message-row-date">{when}</span>
-                      {cluster}
-                      {star}
-                    </>
-                  ) : (
-                    <>
-                      {check}
-                      <div className="message-row-top">
-                        {!message.seen && <span className="message-row-unread-dot" />}
-                        {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
-                        {priorityMark}
-                        <span className="message-row-from">{from}</span>
-                        {message.hasAttachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
-                        <span className="message-row-date">{when}</span>
-                        {star}
-                      </div>
-                      <div className="message-row-subject">{subject}</div>
-                      {/* Always rendered when previews are on, even empty: a message with no body
-                          would otherwise make a shorter row than its neighbours and break the rhythm
-                          of the column. The reserved height lives in CSS. */}
-                      {showsPreview && <div className="message-row-preview">{message.preview}</div>}
-                      {cluster}
-                    </>
-                  )}
-                </Row>
+              <li key={group.key}>
+                {streaming && groupIndex === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
+                {renderRow(latest, startIndex, thread)}
+                {/* The parent stands for the thread; unfolded, every member gets its own line,
+                    the latest included. */}
+                {isOpen && !single &&
+                  group.messages.map((m, i) => renderRow(m, startIndex + i, undefined, true))}
               </li>
             )
           })}
@@ -647,7 +743,7 @@ export default function MessageList(
       {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
       {expunging && (
         <DeleteConfirmModal
-          entityLabel={expunging.subject || t('list.noSubject')}
+          entityLabel={expunging.label}
           onConfirm={expunge}
           onClose={() => setExpunging(null)}
           loading={deleteMessages.isPending}

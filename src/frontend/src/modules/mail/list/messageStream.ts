@@ -20,11 +20,13 @@ export function dedupeByUid(pages: MailFolderPage[]): MailMessageSummary[] {
   return messages
 }
 
-/** Stops on a short block rather than on `total`: the total moves when mail arrives. */
+/** Stops on a short block rather than on `total`: the total moves when mail arrives. A grouped
+    block is measured in threads — its unit of request. */
 export function nextBlockIndex(
   lastPage: MailFolderPage, loadedBlocks: number, requestSize: number,
 ): number | undefined {
-  return lastPage.messages.length < requestSize ? undefined : loadedBlocks
+  const count = lastPage.threads ? lastPage.threads.length : lastPage.messages.length
+  return count < requestSize ? undefined : loadedBlocks
 }
 
 export function sentinelIndexOf(messageCount: number): number {

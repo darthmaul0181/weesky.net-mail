@@ -67,7 +67,7 @@ function createWrapper() {
 describe('mailKeys', () => {
   it('scopes every key by account id', () => {
     expect(mailKeys.folders('primary')).toEqual(['mail', 'primary', 'folders'])
-    expect(mailKeys.messages('primary', 'INBOX', 0, 30)).toEqual(['mail', 'primary', 'messages', 'INBOX', 0, 30])
+    expect(mailKeys.messages('primary', 'INBOX', 0, 30)).toEqual(['mail', 'primary', 'messages', 'INBOX', 0, 30, false])
     expect(mailKeys.message('primary', 'INBOX', 42)).toEqual(['mail', 'primary', 'message', 'INBOX', 42])
   })
 
@@ -75,9 +75,23 @@ describe('mailKeys', () => {
   // would only show at runtime.
   it('keeps the stream key apart from the page key', () => {
     expect(mailKeys.messageStream('primary', 'INBOX', 100))
-      .toEqual(['mail', 'primary', 'messageStream', 'INBOX', 100])
+      .toEqual(['mail', 'primary', 'messageStream', 'INBOX', 100, false])
     expect(mailKeys.messageStream('primary', 'INBOX', 100))
       .not.toEqual(mailKeys.messages('primary', 'INBOX', 0, 100))
+  })
+
+  // A grouped page holds conversations where the flat one holds messages: same folder, same
+  // size, two different things. And `grouped` sits last, so the messagesIn prefix still catches
+  // both — a mutation or a refresh patches every cached page of a folder whatever its mode.
+  it('gives the two modes different keys under one prefix', () => {
+    expect(mailKeys.messages('primary', 'INBOX', 0, 30, true))
+      .toEqual(['mail', 'primary', 'messages', 'INBOX', 0, 30, true])
+    expect(mailKeys.messageStream('primary', 'INBOX', 100, true))
+      .toEqual(['mail', 'primary', 'messageStream', 'INBOX', 100, true])
+    expect(mailKeys.messages('primary', 'INBOX', 0, 30, true).slice(0, 4))
+      .toEqual(mailKeys.messagesIn('primary', 'INBOX'))
+    expect(mailKeys.messageStream('primary', 'INBOX', 100, true).slice(0, 4))
+      .toEqual(mailKeys.messageStreamIn('primary', 'INBOX'))
   })
 
   it('gives different accounts different keys', () => {
@@ -257,6 +271,22 @@ describe('account scoping on the wire', () => {
     expect(result.current.data).toBeUndefined()
   })
 
+  // A flat page held under a grouped query paces the pager on the message count: ten page
+  // buttons that collapse to two when the grouped answer lands.
+  it('does not hold the flat page on screen while the grouped one loads', async () => {
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 300))
+    const { wrapper } = createWrapper()
+    const { result, rerender } = renderHook(
+      ({ grouped }: { grouped: boolean }) => useMessages('INBOX', 0, 30, true, grouped),
+      { wrapper, initialProps: { grouped: false } })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    mocks.getMailMessages.mockImplementation(() => new Promise(() => {}))
+    rerender({ grouped: true })
+
+    expect(result.current.data).toBeUndefined()
+  })
+
   // The search hook carries its own placeholder, so it needs its own guard: results found in one
   // mailbox listed under another's heading is the same lie the page guard above prevents.
   it('does not hold the previous account search results on screen while the new ones load', async () => {
@@ -347,6 +377,21 @@ describe('useMessages', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 30, expect.anything())
   })
+
+  // The two modes answer different shapes for the same folder and page, so they cannot share a
+  // cache entry: switching the setting must fetch rather than serve the other mode's rows.
+  it('passes grouped to the api and keys the query on it', async () => {
+    mocks.getMailMessages.mockResolvedValue({ ...pageOf([], 0), threads: [], totalThreads: 0 })
+    const { client, wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessages('INBOX', 0, 30, true, true), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mocks.getMailMessages).toHaveBeenCalledWith(
+      'INBOX', 0, 30, expect.objectContaining({ grouped: true }))
+    expect(client.getQueryData(mailKeys.messages('primary', 'INBOX', 0, 30, true))).toBeDefined()
+    expect(client.getQueryData(mailKeys.messages('primary', 'INBOX', 0, 30, false))).toBeUndefined()
+  })
 })
 
 describe('useMessage', () => {
@@ -410,6 +455,20 @@ describe('useMessageStream', () => {
 
     await waitFor(() => expect(result.current.data).toBeDefined())
     expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100, expect.anything())
+  })
+
+  it('passes grouped to the api and keys its blocks on it', async () => {
+    mocks.getMailMessages.mockResolvedValue({ ...pageOf([], 0), threads: [], totalThreads: 0 })
+    const { client, wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessageStream('INBOX', 100, true, true), { wrapper })
+
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(mocks.getMailMessages).toHaveBeenCalledWith(
+      'INBOX', 0, 100, expect.objectContaining({ grouped: true }))
+    expect(client.getQueryData(mailKeys.messageStream('primary', 'INBOX', 100, true))).toBeDefined()
+    expect(client.getQueryData(mailKeys.messageStream('primary', 'INBOX', 100, false)))
+      .toBeUndefined()
   })
 
   it('issues no request when it is not the active mode', () => {

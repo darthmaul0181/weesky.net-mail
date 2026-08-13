@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
+import type { MailFolderNode, MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { mailKeys, useMoveMessages, useSetFlags } from '../queries'
 import { dedupeByUid } from './messageStream'
 import { settle } from '../../../test-utils'
@@ -30,20 +30,36 @@ function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {
   }
 }
 
+function summariesOf(uids: number[]): MailMessageSummary[] {
+  return uids.map(uid => ({
+    uid, subject: '', fromName: '', fromAddress: '', to: [], date: '2026-07-21T00:00:00Z',
+    seen: true, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
+    priority: 'normal',
+  }))
+}
+
 function pageOf(uids: number[]): MailFolderPage {
   return {
     folderPath: 'INBOX', uidValidity: 100, total: 5, page: 0, pageSize: uids.length,
-    messages: uids.map(uid => ({
-      uid, subject: '', fromName: '', fromAddress: '', to: [], date: '2026-07-21T00:00:00Z',
-      seen: true, flagged: false, answered: false, hasAttachments: false, size: 0, preview: '',
-      priority: 'normal',
-    })),
+    messages: summariesOf(uids),
+  }
+}
+
+/** A grouped page: `threads` is what the client reads, `messages` stays the flat members. */
+function groupedPageOf(groups: number[][]): MailFolderPage {
+  return {
+    ...pageOf(groups.flat()),
+    threads: groups.map(uids => ({ messages: summariesOf(uids) })),
+    totalThreads: groups.length,
   }
 }
 
 /** Renders the hook, waits for the baseline snapshot, then applies the next poll answer. */
-async function renderWithBaseline(pageSize: string, first: MailFolderNode) {
-  mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': pageSize, 'mail.showPreview': 'true' })
+async function renderWithBaseline(pageSize: string, first: MailFolderNode, grouped = false) {
+  mocks.getPreferences.mockResolvedValue({
+    'mail.pageSize': pageSize, 'mail.showPreview': 'true',
+    'mail.groupConversations': grouped ? 'true' : 'false',
+  })
   mocks.getMailFolders.mockResolvedValue([first])
 
   // The mutations render beside the hook because the bug is the pair: the optimistic patch
@@ -112,7 +128,8 @@ describe('useListRefresh', () => {
     await tick(inbox({ uidNext: 12 }))
 
     await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalledTimes(1))
-    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100, { accountId: 'primary' })
+    expect(mocks.getMailMessages).toHaveBeenCalledWith(
+      'INBOX', 0, 100, { accountId: 'primary', grouped: false })
     expect(spy).not.toHaveBeenCalled()
 
     const data = client.getQueryData<InfiniteData<MailFolderPage>>(key)!
@@ -122,6 +139,35 @@ describe('useListRefresh', () => {
     expect(data.pages[1].messages.map(m => m.uid)).toEqual([28, 27])
     // The decisive one: nothing lost, nothing duplicated across the whole visible stream.
     expect(dedupeByUid(data.pages).map(m => m.uid)).toEqual([31, 30, 29, 28, 27, 26, 25])
+  })
+
+  // The grouped twin of the lock above: one request, block 0 merged by thread key rather than
+  // by uid, and the later blocks untouched. The old thread [5] is the survivor the fresh block
+  // no longer sends — without it a plain replace would pass, since [40, 30, 10] absorbs [30, 10].
+  it('merges a grouped fresh block 0 by thread key, fresh first', async () => {
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    const { tick } = await renderWithBaseline('all', inbox(), true)
+
+    const key = mailKeys.messageStream('primary', 'INBOX', 100, true)
+    client.setQueryData<InfiniteData<MailFolderPage>>(key, {
+      pages: [groupedPageOf([[30, 10], [5]]), groupedPageOf([[3, 1]])], pageParams: [0, 1],
+    })
+    mocks.getMailMessages.mockResolvedValue(groupedPageOf([[40, 30, 10], [20]]))
+
+    await tick(inbox({ uidNext: 12 }))
+
+    await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalledTimes(1))
+    expect(mocks.getMailMessages).toHaveBeenCalledWith(
+      'INBOX', 0, 100, { accountId: 'primary', grouped: true })
+    expect(spy).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      const merged = client.getQueryData<InfiniteData<MailFolderPage>>(key)!
+      expect(merged.pages).toHaveLength(2)
+      expect(merged.pages[0].threads!.map(t => t.messages.map(m => m.uid)))
+        .toEqual([[40, 30, 10], [20], [5]])
+      expect(merged.pages[1].threads!.map(t => t.messages.map(m => m.uid))).toEqual([[3, 1]])
+    })
   })
 
   it('resets the folder outright when uidValidity broke', async () => {

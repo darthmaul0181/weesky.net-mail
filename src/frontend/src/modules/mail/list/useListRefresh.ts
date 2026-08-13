@@ -1,27 +1,40 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
-import { BLOCK_SIZE, isStreaming, usePreferences } from '../../../hooks/usePreferences'
+import {
+  BLOCK_SIZE, groupConversationsOf, isStreaming, usePreferences,
+} from '../../../hooks/usePreferences'
 import type { MailFolderPage } from '../api/mailTypes'
 import { flatten } from '../folders/folderNodes'
 import { mailKeys, useAccountId, useFolders } from '../queries'
 import { folderChanged, snapshotOf, uidValidityBroke, type FolderSnapshot } from './folderDelta'
 import { dedupeByUid } from './messageStream'
+import { dedupeThreads } from './threading'
 
 /** Fetches block 0 alone and merges it in. Never invalidates: that would refetch EVERY loaded
     block — forty blocks would be forty IMAP connections and forty full folder sorts. */
-async function refreshFirstBlock(client: QueryClient, accountId: string, folder: string) {
-  const key = mailKeys.messageStream(accountId, folder, BLOCK_SIZE)
+async function refreshFirstBlock(
+  client: QueryClient, accountId: string, folder: string, grouped: boolean,
+) {
+  const key = mailKeys.messageStream(accountId, folder, BLOCK_SIZE, grouped)
   try {
-    const fresh: MailFolderPage = await api.getMailMessages(folder, 0, BLOCK_SIZE, { accountId })
+    const fresh: MailFolderPage =
+      await api.getMailMessages(folder, 0, BLOCK_SIZE, { accountId, grouped })
     client.setQueryData<InfiniteData<MailFolderPage>>(key, old =>
       old
         ? {
             ...old,
             // Merged, not replaced: arrivals push old block-0 rows out of the fresh window,
             // and the frozen later blocks do not hold them — a replace would drop them.
+            // Grouped, the unit is the thread: a reply joins its own rather than opening a row.
             pages: [
-              { ...fresh, messages: dedupeByUid([fresh, old.pages[0]]) },
+              grouped
+                ? {
+                    ...fresh,
+                    threads: dedupeThreads([fresh, old.pages[0]])
+                      .map(group => ({ messages: group.messages })),
+                  }
+                : { ...fresh, messages: dedupeByUid([fresh, old.pages[0]]) },
               ...old.pages.slice(1),
             ],
           }
@@ -72,7 +85,7 @@ export function useListRefresh(folderPath: string | null, enabled = true): void 
     if (!folderChanged(last.snapshot, snapshot)) return
 
     if (isStreaming(preferences)) {
-      refreshFirstBlock(client, accountId, folderPath)
+      refreshFirstBlock(client, accountId, folderPath, groupConversationsOf(preferences))
     } else {
       client.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, folderPath) })
     }

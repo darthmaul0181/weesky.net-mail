@@ -56,8 +56,10 @@ public interface IImapSession : IAsyncDisposable
     /// <summary>
     /// One page of a folder, newest message first, envelope-level only. Carries the
     /// folder's UidValidity so the client knows when its cached UIDs went stale.
+    /// <paramref name="grouped"/> pages conversations instead of messages, filling Threads
+    /// rather than Messages — and falls back to a flat page when the server lacks THREAD.
     /// </summary>
-    Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, CancellationToken cancellationToken);
+    Task<Result<MailFolderPage>> ListMessagesAsync(string folderPath, int page, int pageSize, bool grouped, CancellationToken cancellationToken);
 
     /// <summary>
     /// A single message: sanitised HTML body, plain-text body, headers and the attachment
