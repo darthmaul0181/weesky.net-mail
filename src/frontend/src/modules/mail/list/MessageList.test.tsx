@@ -6,6 +6,7 @@ import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
 import { fireTouch as dispatchTouch, settle } from '../../../test-utils'
 import { DRAG_MIME, serializeDrag } from './dragMessages'
+import type { RowExit } from './useRowExit'
 
 const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
@@ -95,6 +96,10 @@ type ListProps = Parameters<typeof MessageList>[0]
 // The only press useLongPress answers to. A mouse hold is deliberately inert — see its own suite.
 const FINGER = { pointerType: 'touch', isPrimary: true, button: 0 }
 
+/* The exit's own timing is useRowExit's business and is tested there; here it is stubbed through,
+   so every assertion about what a row action fires stays on the click that fires it. */
+const NOW: RowExit = { departing: new Set(), depart: (_uids, fire) => fire() }
+
 function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record<string, string>) {
   if (preferencesOverride) {
     mocks.getPreferences.mockResolvedValue(
@@ -102,7 +107,7 @@ function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record
   }
   return render(
     <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
-      search={null} onSearchChange={() => {}} {...props} />,
+      rowExit={NOW} search={null} onSearchChange={() => {}} {...props} />,
     { wrapper })
 }
 
@@ -186,7 +191,7 @@ describe('MessageList', () => {
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
     rerender(
       <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()}
-        search={null} onSearchChange={() => {}} />)
+        rowExit={NOW} search={null} onSearchChange={() => {}} />)
 
     expect(screen.getByText(/no messages/i)).toBeInTheDocument()
     expect(bar().getByText('INBOX')).toBeInTheDocument()
@@ -736,7 +741,7 @@ describe('archive and trash from the row', () => {
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
     rerender(
       <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} onRows={onRows}
-        search={null} onSearchChange={() => {}} />)
+        rowExit={NOW} search={null} onSearchChange={() => {}} />)
 
     await settle()
     expect(onRows).toHaveBeenLastCalledWith([3, 4])
@@ -751,6 +756,26 @@ describe('archive and trash from the row', () => {
 
     expect(onNotify).toHaveBeenCalledWith('Could not move the message')
     expect(onNotify).toHaveBeenCalledWith('Could not delete the message')
+  })
+})
+
+// The timing is useRowExit's; what belongs here is that the set it publishes reaches the DOM, and
+// reaches the slot rather than the row — the row only fades, the slot is the box that collapses.
+describe('a row on its way out', () => {
+  const slotOf = (name: RegExp) =>
+    screen.getByRole('button', { name }).closest('.message-row-slot')
+
+  it('marks the slot of every uid the exit is holding', () => {
+    renderList({ rowExit: { departing: new Set([2]), depart: (_uids, fire) => fire() } })
+
+    expect(slotOf(/alice martin/i)).toHaveClass('is-leaving')
+    expect(slotOf(/bob@x\.be/i)).not.toHaveClass('is-leaving')
+  })
+
+  it('leaves every slot alone while nothing is departing', () => {
+    renderList()
+
+    expect(slotOf(/alice martin/i)).not.toHaveClass('is-leaving')
   })
 })
 
@@ -993,7 +1018,7 @@ describe('MessageList streaming', () => {
     const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
     band.scrollTop = 900
     rerender(<MessageList folderPath="Archive" selectedUid={null} onSelect={vi.fn()}
-      search={null} onSearchChange={() => {}} />)
+      rowExit={NOW} search={null} onSearchChange={() => {}} />)
 
     expect(band.scrollTop).toBe(0)
   })
@@ -1185,7 +1210,7 @@ describe('multi-select', () => {
     expect(screen.getByText('2 selected')).toBeInTheDocument()
     rerender(
       <MessageList folderPath="Archives" folderName="Archive" folderRole="archive"
-        selectedUid={null} onSelect={vi.fn()} search={null} onSearchChange={() => {}} />)
+        selectedUid={null} onSelect={vi.fn()} rowExit={NOW} search={null} onSearchChange={() => {}} />)
     await settle()
     expect(screen.queryByText('2 selected')).not.toBeInTheDocument()
   })
@@ -1447,7 +1472,7 @@ describe('MessageList searching', () => {
 
     mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
     rerender(
-      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
+      <MessageList rowExit={NOW} folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
         search={criteria} onSearchChange={vi.fn()} />)
     expect(screen.getByText('No results.')).toBeInTheDocument()
   })
@@ -1882,7 +1907,7 @@ describe('conversation rows', () => {
 
     rerender(
       <MessageList folderPath="Archives" selectedUid={null} onSelect={vi.fn()}
-        search={null} onSearchChange={() => {}} />)
+        rowExit={NOW} search={null} onSearchChange={() => {}} />)
 
     expect(container.querySelectorAll('.message-row')).toHaveLength(1)
     expect(screen.getByLabelText('Expand conversation'))

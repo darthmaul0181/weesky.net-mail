@@ -61,13 +61,16 @@ interface Props {
   onBack?: () => void
   onNotify?: (message: string) => void
   onDeparted?: (uid: number) => void
+  /** The list's exit, so a message deleted from here leaves its row the way the row's own icon
+      would. Absent means "remove it now" — the reader itself animates nothing. */
+  depart?: (uids: number[], fire: () => void) => void
   /** Draw the actions across the foot of the column instead of inside the header. The caller's
       call, not this component's: only the layout knows whether the reader owns the screen. */
   bottomActions?: boolean
 }
 
 export default function MessageReader(
-  { folderPath, uid, folderRole, onBack, onNotify, onDeparted, bottomActions }: Props) {
+  { folderPath, uid, folderRole, onBack, onNotify, onDeparted, depart, bottomActions }: Props) {
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
@@ -102,6 +105,7 @@ export default function MessageReader(
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
+  const leave = depart ?? ((_uids: number[], fire: () => void) => fire())
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
   const navigate = useNavigate()
   const { identity, activeAccount } = useAuth()
@@ -230,8 +234,12 @@ export default function MessageReader(
 
   function moveTo(target: string | null, copy: boolean) {
     if (!target) return
-    moveMessages.mutate({ folderPath: folderPath!, uids: [uid!], targetFolderPath: target, copy })
-    if (!copy) onDeparted?.(uid!)  // A copy departs nothing; the row stays.
+    const fire = () =>
+      moveMessages.mutate({ folderPath: folderPath!, uids: [uid!], targetFolderPath: target, copy })
+    // A copy departs nothing; the row stays, so there is nothing to play out.
+    if (copy) { fire(); return }
+    leave([uid!], fire)
+    onDeparted?.(uid!)
   }
 
   function onDelete() {
@@ -240,7 +248,7 @@ export default function MessageReader(
   }
 
   function expunge() {
-    deleteMessages.mutate({ folderPath: folderPath!, uids: [uid!] })
+    leave([uid!], () => deleteMessages.mutate({ folderPath: folderPath!, uids: [uid!] }))
     setConfirmDelete(false)
     onDeparted?.(uid!)
   }

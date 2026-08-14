@@ -33,6 +33,8 @@ import { sentinelIndexOf } from './messageStream'
 import Pagination from './Pagination'
 import SelectionToolbar from './SelectionToolbar'
 import { useSelection } from './useSelection'
+import { ROW_EXIT_MS } from './useRowExit'
+import type { RowExit } from './useRowExit'
 import { useMessageList } from './useMessageList'
 import { useLongPress } from '../../../hooks/useLongPress'
 import { usePullToRefresh } from '../../../hooks/usePullToRefresh'
@@ -93,6 +95,8 @@ interface Props {
   onRows?: (uids: number[]) => void
   /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
   onDeparted?: (uid: number, batch?: number[]) => void
+  /** Lives in the layout, which also owns the drop and the reader — the three share one set. */
+  rowExit: RowExit
   /** The active search, lifted to the layout; null is the ordinary folder view. */
   search: SearchCriteria | null
   onSearchChange: (criteria: SearchCriteria | null) => void
@@ -106,7 +110,7 @@ interface Props {
  */
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
-    inDrawer = false, onNotify, onRows, onDeparted, search = null, onSearchChange,
+    inDrawer = false, onNotify, onRows, onDeparted, rowExit, search = null, onSearchChange,
     onOpenResult }: Props) {
   const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
@@ -156,6 +160,7 @@ export default function MessageList(
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
+  const { departing } = rowExit
   const emptyFolder = useEmptyFolder(onNotify)
   const { data: folders } = useFolders()
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
@@ -202,8 +207,9 @@ export default function MessageList(
 
   // Fires the batch, advances the reader when the open row is in it, then drops the selection.
   // The whole batch is handed on so the reader can skip every departing row, not just the open one.
+  // The rows leave together — a stagger over a batch of fifty is two seconds of waiting.
   function runBulk(uids: number[], fire: () => void) {
-    fire()
+    rowExit.depart(uids, fire)
     if (selectedUid !== null && uids.includes(selectedUid)) onDeparted?.(selectedUid, uids)
     selection.clear()
   }
@@ -266,9 +272,12 @@ export default function MessageList(
     else onDeparted?.(uids[0], uids)
   }
 
+  // The reader is told at the click and the list takes its time: only the rows are animating, and
+  // an open message that waits 300ms to be replaced reads as the action having missed.
   function moveTo(target: string | null, uids: number[]) {
     if (!folderPath || !target) return
-    moveMessages.mutate({ folderPath, uids, targetFolderPath: target, copy: false })
+    rowExit.depart(uids, () =>
+      moveMessages.mutate({ folderPath, uids, targetFolderPath: target, copy: false }))
     reportDeparted(uids)
   }
 
@@ -291,7 +300,7 @@ export default function MessageList(
   function expunge() {
     if (!folderPath || !expunging) return
     const uids = expunging.uids
-    deleteMessages.mutate({ folderPath, uids })
+    rowExit.depart(uids, () => deleteMessages.mutate({ folderPath, uids }))
     setExpunging(null)
     reportDeparted(uids)
   }
@@ -548,9 +557,14 @@ export default function MessageList(
       </>
     )
 
+    // The slot is the box that collapses; the row inside it only fades. A thread member has its
+    // own, so one member can leave without taking the fold's other lines with it.
     return (
-      <Row
+      <div
         key={message.uid}
+        className={`message-row-slot${rowUids.some(uid => departing.has(uid)) ? ' is-leaving' : ''}`}
+      >
+      <Row
         role="button"
         tabIndex={0}
         aria-label={label}
@@ -608,6 +622,7 @@ export default function MessageList(
           </>
         )}
       </Row>
+      </div>
     )
   }
 
@@ -667,7 +682,13 @@ export default function MessageList(
   return (
     // display:contents band wrapper: it owns no box, so the three bands still stack under
     // .mail-list, but its keydown catches Escape from the toolbar as well as the rows.
-    <div className="message-list-root" onKeyDown={onListKeyDown}>
+    // The exit's duration is written once, here, from the constant the hook waits on: the keyframes
+    // hold the split as percentages, so the two can never drift.
+    <div
+      className="message-list-root"
+      style={{ '--row-exit': `${ROW_EXIT_MS}ms` } as CSSProperties}
+      onKeyDown={onListKeyDown}
+    >
       {/* Replaces the old heading band: the toolbar names the folder until a selection is on. */}
       <SelectionToolbar
         leading={leading}

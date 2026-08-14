@@ -29,7 +29,8 @@ l'écran a déjà répondu, et rien à l'écran n'attend la réponse.
 | Découpage | 140 ms de fondu, puis 160 ms de repli — 300 ms | Le repli ne démarre qu'une fois la ligne invisible : c'est un trou qui se referme, pas un contenu qu'on écrase. |
 | Moment de la mutation | À la fin de l'animation | Voir ci-dessus : son `onMutate` est ce qui démonte la ligne. |
 | Où vit l'état | Un hook dans `MailLayout` | C'est le seul composant qui voit à la fois la liste, le drop sur un dossier et le lecteur. |
-| Support du repli | Un conteneur autour de la ligne | Sur `.message-row` seule, `box-sizing: border-box` oblige à animer aussi `padding-block` et `border-bottom-width`, donc à les relire au préalable. Le conteneur n'anime qu'une hauteur. |
+| Support du repli | Un conteneur autour de la ligne | Il faut un box qui atteigne vraiment zéro. Sur `.message-row` seule, `box-sizing: border-box` la plancherait à son propre padding. |
+| Forme du repli | Une piste de grille `1fr → 0fr` | Une hauteur devrait être **mesurée** — on n'anime ni vers ni depuis `auto` — donc chaque appelant (la ligne, le lot, le drop) devrait aller chercher les nœuds et y écrire des pixels au clic. La grille replie sans rien mesurer. |
 | Suppression en lot | **Tout d'un bloc** | Choix du propriétaire. Une cascade sur cinquante lignes est deux secondes d'attente. |
 | Mouvement réduit | Suppression instantanée | C'est le comportement d'aujourd'hui, et c'est le bon repli. |
 | Démontage avec des départs en attente | On **vide la file**, on n'annule pas | Une suppression demandée ne doit pas se perdre parce qu'on a cliqué Contacts dans la foulée. |
@@ -52,10 +53,10 @@ Quatre règles :
    dans `departing`. C'est exactement le comportement actuel.
 2. **Un uid déjà en partance est ignoré.** Un double-clic sur la corbeille ne doit pas armer deux
    fois la même mutation.
-3. **À l'échéance, `fire()` d'abord, puis le retrait du set**, dans le même tick. React groupe les
-   deux : la ligne est démontée par le retrait du cache, ou — sur un `onError` qui restaure le cache
-   par rollback — elle revient à sa taille normale sans animation inverse, avec le toast existant.
-   Un uid resté bloqué dans `departing` laisserait une ligne invisible et non cliquable.
+3. **À l'échéance, le retrait du set et `fire()` tombent dans le même lot de rendu**, donc leur ordre
+   ne change aucune image. Le set est libéré en premier pour qu'un `fire` qui lèverait ne puisse pas
+   y laisser un uid coincé — invisible et non cliquable. Sur un `onError`, le rollback du cache
+   ramène la ligne à sa taille normale sans animation inverse, avec le toast existant.
 4. **Au démontage, les départs en attente sont tirés immédiatement** (`clearTimeout` puis appel),
    jamais annulés.
 
@@ -83,10 +84,20 @@ Les quatre seuls combinateurs qui touchent la ligne (`mail.css:662-663` et leur 
 téléphone, `mail.css:1986-1987`) portent sur ses **enfants** — la réserve de largeur du cluster — pas
 sur ses ancêtres. Aucun sélecteur frère (`+`, `~`) n'existe sur `.message-row`.
 
-Le slot porte `overflow: hidden` et, en partance, le repli de `height` ; la ligne à l'intérieur porte
-le fondu d'`opacity`. La hauteur de départ est mesurée au clic (`offsetHeight`) et posée en
-`--leave-h` sur le slot : on n'anime ni vers ni depuis `auto`. Le slot en partance porte
-`pointer-events: none`.
+Le slot est une grille à une piste (`grid-template-rows: 1fr`) au repos comme en partance, pour que
+l'image où la classe arrive ne soit pas aussi un changement de `display` ; en partance il replie
+`1fr → 0fr` sous `overflow: hidden` et porte `pointer-events: none`. La ligne à l'intérieur porte le
+fondu d'`opacity`.
+
+Sa colonne est `minmax(0, 1fr)` et non `1fr`. Le minimum automatique d'un item de grille est son
+min-content, ce qu'un enfant de bloc ne pouvait pas imposer : **mesuré dans Chrome, une ligne à
+l'expéditeur insécable passe à 743 px dans une colonne de 378** sans cette garde. C'est le piège que
+la grille de détails du lecteur documente déjà.
+
+Le padding vertical de la ligne devient `--pad-y` (10 px, 8 px dans le skin étroit) pour que les
+keyframes puissent le retenir jusqu'à la fin du fondu puis le faire partir avec la piste. **Sans
+cela le repli plafonne à 17 px** — 8 + 8 de padding et 1 de bordure sous `border-box` — et le trou ne
+se referme jamais : constaté au navigateur, pas déduit.
 
 Le CSS va dans `mail.css`, sous les règles de la ligne.
 
@@ -103,10 +114,14 @@ Le CSS va dans `mail.css`, sous les règles de la ligne.
 Un fil replié supprimé emporte tout le lot : `rowUids` est déjà l'ensemble des membres, et une seule
 ligne est à l'écran. Un membre d'un fil déplié a son propre slot et part seul.
 
-**Hors périmètre**, et délibérément : `Move to…` et `Copy to…` (le premier fait partir la ligne mais
-passe par une modale, où le rideau qui se ferme tient déjà lieu de transition ; le second ne fait
-rien partir), « Empty folder » (la liste entière se vide, il n'y a pas de trou à refermer), et le
-module contacts, dont la suppression de tuiles pose la même question mais dans un autre écran.
+`Move to…` suit, sans code en plus : il passe par le même `runBulk` que les trois autres actions de
+la barre. Le retenir aurait demandé un drapeau pour le distinguer de ses voisins immédiats, ce qui
+est exactement l'écart que le reste du document cherche à éviter.
+
+**Hors périmètre**, et délibérément : `Copy to…` (une copie ne fait rien partir — la branche `copy`
+ne passe pas par `runBulk`, et le lecteur la court-circuite explicitement), « Empty folder » (la
+liste entière se vide, il n'y a pas de trou à refermer), et le module contacts, dont la suppression
+de tuiles pose la même question mais dans un autre écran.
 
 ## Tests
 
@@ -118,14 +133,28 @@ module contacts, dont la suppression de tuiles pose la même question mais dans 
 - un second `depart` sur un uid déjà en partance n'arme pas une deuxième mutation ;
 - le démontage tire les départs en attente au lieu de les perdre.
 
-`MessageList.test.tsx` et `MessageReader.test.tsx` : la douzaine d'assertions qui vérifient l'appel à
-`mutate` après un clic passent en `await waitFor(…)`. **Aucune n'est supprimée** — elles sont
-seulement déplacées dans le temps. Coût mesuré attendu : ~4 s de suite.
+`MessageList.test.tsx` : le hook entre par une prop, donc le fichier passe un `rowExit` qui tire
+`fire` sur-le-champ. **Aucune assertion existante ne bouge** — la douzaine de `waitFor` qu'un délai
+en dur aurait imposée n'a pas lieu d'être, et ce que ces tests vérifient (quel clic arme quelle
+mutation, avec quels uids) reste vérifié au même endroit. Deux cas s'ajoutent pour la seule chose que
+jsdom peut voir de la sortie : que `departing` atteigne le **slot** — et non la ligne — et qu'aucun
+slot ne soit marqué quand rien ne part.
 
-L'animation elle-même ne se teste pas ici. jsdom ne calcule aucune mise en page, et un relevé de rect
-statique — ce que fait `probes/mobile-layout.html` — ne voit pas une transition. La vérification est
-manuelle, dans Chrome ou Edge : les deux skins (étroit et `is-line`), les deux thèmes, un membre de
-fil déplié, un lot depuis la barre de sélection, et un drop sur un dossier.
+`probes/row-exit.html` (nouveau) est la vérification de ce que jsdom ne voit pas. Il ne s'échantillonne
+pas au chronomètre — un onglet en arrière-plan bride `setTimeout` à la seconde et rend tout relevé
+faux, ce qui a d'abord produit une mesure incohérente — mais en pilotant `currentTime` via
+`getAnimations()`, ce qui est déterministe. Relevé dans Chrome, palette night :
+
+| t | hauteur du slot | opacité | padding | hauteur de la liste |
+|---|---|---|---|---|
+| 0 | 80 | 1,00 | 8px | 320 |
+| 141 | 80 | 0,00 | 8px | 320 |
+| 220 | 8,3 | 0,00 | 1,6px | 248,3 |
+| 300 | 0 | 0,00 | 0 | 240 |
+
+La ligne s'efface sans que rien ne bouge, puis les 80 px partent en entier. `escapeRight` reste à 0
+sur toute la durée. Restent hors de portée de ce relevé et vérifiés à l'œil : les deux thèmes, le
+skin `is-line`, un membre de fil déplié, un lot, un drop.
 
 ## Questions ouvertes
 
