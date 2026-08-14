@@ -14,6 +14,7 @@ import IdentityMenu from '../../layouts/IdentityMenu'
 import MessageList from './list/MessageList'
 import { nextUidOf } from './list/nextUid'
 import { useListRefresh } from './list/useListRefresh'
+import { useRowExit } from './list/useRowExit'
 import MessageReader from './reader/MessageReader'
 import type { DragPayload } from './list/dragMessages'
 import {
@@ -65,6 +66,9 @@ export default function MailLayout() {
   const { refresh, fetching: refreshFetching } = useMailRefresh()
   const { toasts, addToast, removeToast } = useToasts()
   const moveMessages = useMoveMessages(addToast)
+  // Owned here rather than in the list: the drop on a folder and the reader's own actions remove
+  // rows too, and three sets would let one surface animate a row another has already dropped.
+  const rowExit = useRowExit()
   const openDraft = useOpenDraft()
   const { data: identityList } = useIdentities()
   const queryClient = useQueryClient()
@@ -237,11 +241,11 @@ export default function MailLayout() {
   // A drop reuses the same optimistic move the toolbar fires; the payload already names its source
   // folder. If the open message is in the batch, the reader advances past it like any bulk action.
   const dropMessages = useCallback((targetFolderPath: string, payload: DragPayload) => {
-    moveMessages.mutate({
+    rowExit.depart(payload.uids, () => moveMessages.mutate({
       folderPath: payload.sourcePath, uids: payload.uids, targetFolderPath, copy: false,
-    })
+    }))
     if (uid !== null && payload.uids.includes(uid)) departed(uid, payload.uids)
-  }, [moveMessages, uid, departed])
+  }, [moveMessages, rowExit, uid, departed])
 
   // `wide` is the one-line row layout, whose .message-row-from is pinned at 180px — half of a
   // 360px screen for the sender alone. A phone always takes the stacked one.
@@ -261,6 +265,7 @@ export default function MailLayout() {
       onNotify={addToast}
       onRows={keepRows}
       onDeparted={departed}
+      rowExit={rowExit}
       search={search}
       onSearchChange={changeSearch}
       onOpenResult={openResult}
@@ -349,7 +354,7 @@ export default function MailLayout() {
               )}
               <div className="mail-reader">
                 <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                  onDeparted={departed} onNotify={addToast} />
+                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
               </div>
             </div>
           )}
@@ -363,7 +368,7 @@ export default function MailLayout() {
               />
               <div className="mail-reader">
                 <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                  onDeparted={departed} onNotify={addToast} />
+                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
               </div>
             </div>
           )}
@@ -377,7 +382,7 @@ export default function MailLayout() {
                 <div className="mail-reader">
                   <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
                     bottomActions={viewport === 'phone'}
-                    onBack={closeMessage} onDeparted={departed} onNotify={addToast} />
+                    onBack={closeMessage} onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
                 </div>
               )}
             </>

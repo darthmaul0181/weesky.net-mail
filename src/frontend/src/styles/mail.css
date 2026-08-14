@@ -442,7 +442,12 @@
   display: block;
   position: relative;
   width: 100%;
-  padding: 10px 12px;
+  /* Named rather than written into the shorthand so the exit's keyframes can restate it: the
+     padding has to hold its value while the row fades, then leave with the collapse. Under
+     border-box a row that keeps it floors at its own padding plus border — measured, 17px that
+     the gap never closes past. */
+  --pad-y: 10px;
+  padding: var(--pad-y) 12px;
   border: none;
   border-bottom: 1px solid var(--list-separator);
   background: var(--surface);
@@ -472,6 +477,55 @@
 
 /* Dimmed while it rides the cursor: the pill is the thing being moved, the row is its origin. */
 .message-row.is-dragging { opacity: 0.45; }
+
+/* ── A row leaving ───────────────────────────────────────── */
+
+/* The slot is what collapses, and it exists for that alone: on .message-row itself, border-box
+   bottoms `height: 0` out at the row's own padding plus border, so both would have to be animated
+   too — and read off the element first, the two skins not sharing them.
+
+   A one-track grid rather than a height, because a height would have to be measured: there is no
+   animating to or from `auto`, so every caller — the row, the toolbar's batch, the drop in
+   MailLayout — would have to find the nodes and write a pixel value on them at the click.
+   `1fr → 0fr` is the same collapse with nothing to measure. It is a `grid` at rest too, so the
+   frame the class lands on is not also a change of display.
+
+   `--row-exit` comes from ROW_EXIT_MS, so the duration has one source; the 47% below is the
+   design's 140ms / 160ms and follows it on its own. The fade runs first — the collapse closes a
+   gap, never a row still being read. */
+/* `minmax(0, 1fr)` and not `1fr`: a grid item's automatic minimum is min-content, so a row whose
+   sender or subject does not fit would widen the track past the column — the trap the reader's
+   details grid documents. A block child could never do that, which is what changes here. */
+.message-row-slot { display: grid; grid-template-rows: 1fr; grid-template-columns: minmax(0, 1fr); }
+
+.message-row-slot.is-leaving {
+  overflow: hidden;
+  pointer-events: none;
+  animation: row-slot-leave var(--row-exit) forwards;
+}
+.message-row-slot.is-leaving > .message-row {
+  min-height: 0;
+  overflow: hidden;
+  animation: row-leave-fade var(--row-exit) forwards;
+}
+
+@keyframes row-slot-leave {
+  0%, 47% { grid-template-rows: 1fr; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  100% { grid-template-rows: 0fr; }
+}
+/* The padding and the border are spelled at both ends of the fade so they do not start shrinking
+   under a row that is still legible; they leave on the second half, with the track. Without them
+   the row's border box floors at 17px and the gap stops there. */
+@keyframes row-leave-fade {
+  0% {
+    opacity: 1;
+    padding-block: var(--pad-y);
+    border-bottom-width: 1px;
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  47% { opacity: 0; padding-block: var(--pad-y); border-bottom-width: 1px; }
+  100% { opacity: 0; padding-block: 0; border-bottom-width: 0; }
+}
 
 /* The custom drag image. Detached and appended to <body>, so it is styled globally rather than
    under .mail-layout. Accent pair borrowed from the count badge — no new token. */
@@ -586,7 +640,7 @@
 
 /* The narrow skin is a block stack: the box floats over a reserved left gutter. Its vertical
    padding is 2px tighter than the base on each side, for a denser row; the wide skin keeps 10px. */
-.message-row:not(.is-line) { padding-top: 8px; padding-bottom: 8px; padding-left: 34px; }
+.message-row:not(.is-line) { --pad-y: 8px; padding-left: 34px; }
 /* Vertically centred over the reserved gutter, so it stays centred whether or not the preview
    line is shown — the row's height changes with it. */
 .message-row:not(.is-line) .message-row-check {

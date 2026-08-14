@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-palette="night">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — a row leaving</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    /* The probe's own chrome only. Nothing here may restate a rule under test. */
+    body { font-family: var(--font); background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+    .frame { width: 380px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .bar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; }
+    button.probe { font: inherit; padding: 5px 11px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); border-radius: 6px; cursor: pointer; }
+    #out { margin-top: 14px; font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+      white-space: pre; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <button class="probe" id="go">Delete row 2</button>
+    <button class="probe" id="reset">Reset</button>
+    <button class="probe" id="theme">Toggle theme</button>
+    <span id="tick"></span>
+  </div>
+
+  <!-- The message list's own markup: .message-list-root carries --row-exit exactly as
+       MessageList does, and each row sits in its slot. -->
+  <div class="message-list-root" style="--row-exit: 300ms">
+    <div class="frame">
+      <ul class="message-list" id="list"></ul>
+    </div>
+  </div>
+
+  <div id="out"></div>
+
+  <script type="module">
+    const ROWS = [
+      ['GitHub', '09:41', '[weesky.net-mail] Run failed: Deploy', 'The run failed on branch various-fixes-7.'],
+      ['Sophie Marchand', '08:57', 'Re: Devis maintenance Q3', 'Merci pour l’envoi, deux remarques sur la ligne 4.'],
+      ['Dovecot Monitoring', 'hier', 'Quota warning: 82% used', 'Mailbox has reached 82% of its quota.'],
+      ['Antoine Delcourt', 'hier', 'Compte rendu — réunion produit', 'J’ai repris les points ouverts.'],
+    ]
+
+    const list = document.getElementById('list')
+    const out = document.getElementById('out')
+
+    function build() {
+      list.innerHTML = ROWS.map(([from, date, subject, preview]) => `
+        <li>
+          <div class="message-row-slot">
+            <div class="message-row" role="button" tabindex="0">
+              <div class="message-row-top">
+                <span class="message-row-from">${from}</span>
+                <span class="message-row-date">${date}</span>
+              </div>
+              <div class="message-row-subject">${subject}</div>
+              <div class="message-row-preview">${preview}</div>
+            </div>
+          </div>
+        </li>`).join('')
+    }
+
+    const slots = () => [...document.querySelectorAll('.message-row-slot')]
+
+    function report(label) {
+      const frame = document.querySelector('.frame').getBoundingClientRect()
+      const lines = slots().map((s, i) => {
+        const r = s.getBoundingClientRect()
+        const row = s.querySelector('.message-row').getBoundingClientRect()
+        return `  slot ${i}: h=${r.height.toFixed(1)} w=${r.width.toFixed(1)}`
+          + ` row.h=${row.height.toFixed(1)} opacity=${getComputedStyle(s.querySelector('.message-row')).opacity}`
+          + ` escapeRight=${Math.max(0, row.right - frame.right).toFixed(1)}`
+      })
+      out.textContent += `${label}\n${lines.join('\n')}\n`
+    }
+
+    document.getElementById('go').onclick = () => {
+      out.textContent = ''
+      const target = slots()[1]
+      report('t=0 (before)')
+      target.classList.add('is-leaving')
+      // 140ms in: the fade is done, the collapse has not started — the slot is still full height.
+      setTimeout(() => report('t=140 (fade done, collapse starting)'), 140)
+      setTimeout(() => report('t=220 (mid collapse)'), 220)
+      setTimeout(() => report('t=340 (settled)'), 340)
+    }
+    document.getElementById('reset').onclick = () => { build(); out.textContent = '' }
+    document.getElementById('theme').onclick = () => {
+      const root = document.documentElement
+      root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'
+    }
+
+    build()
+  </script>
+</body>
+</html>
