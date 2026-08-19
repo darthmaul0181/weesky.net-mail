@@ -213,6 +213,23 @@ body {
   background: var(--action-primary-hover);
 }
 
+/* ── Column action row ───────────────────────────────────── */
+
+/* The row a module column opens with: one primary action taking the width, one square button
+   beside it. Mail (New message + Refresh) and contacts (Add contact + import/export) draw the
+   same row — transcribed rather than shared, the two had drifted 4px wide and 2px tall apart.
+   The square costs the label 47px (40 plus the gap): measured in probes/localisation-widths.html,
+   `+ Ajouter un contact` is 131.9px of ink against the 141 a 240px column leaves. It fits in both
+   shipped languages and in neither with much to spare, so a third language, a reworded label or a
+   wider square has to be re-measured there rather than reasoned about. */
+.column-actions { flex: none; display: flex; gap: 7px; padding: 10px 10px 4px; }
+.column-actions-main { flex: 1; min-width: 0; padding: 11px 16px; }
+/* The rule lands on the wrapper, not on the button, and that is `.actionbar .dropdown-root`'s
+   reason exactly: DropdownMenu wraps its trigger, so the flex item of the row is the wrapper while
+   the class is on the button inside it. Without this the button sizes to its 16px icon. */
+.column-actions .dropdown-root { display: flex; }
+.column-actions-square { flex: none; width: 40px; padding: 0; }
+
 /* ── Alert ───────────────────────────────────────────────── */
 
 .alert {
@@ -2196,29 +2213,12 @@ body {
   width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0;
   overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
 }
-/* The mail folder column's own top row (.mail-folders-compose), transcribed: the primary action
-   takes the width and one square sits beside it. Import and export used to be two filled buttons
-   across the foot of this column — the heaviest pair in it after Add contact, for the two rarest
-   actions in the module, and a footer shape nothing else in the app wears. There is no footer band
-   any more; the column ends on the scopes.
-
-   The trigger costs the Add button 47px (40 plus the row's gap), which is the whole of the label's
-   remaining headroom: measured in probes/localisation-widths.html, `+ Ajouter un contact` is
-   131.9px of ink against the 136 the button now leaves — English spends 90.8. It fits in both
-   shipped languages and in neither with anything to spare, so a third language, a reworded label
-   or a wider trigger has to be re-measured there rather than reasoned about. */
-.contacts-scopes-add { flex: none; display: flex; gap: 7px; padding: 12px; }
-.contacts-add-btn { flex: 1; min-width: 0; justify-content: center; }
-/* The rule lands on the wrapper, not on the button, and that is `.actionbar .dropdown-root`'s
-   reason exactly: DropdownMenu wraps its trigger, so the flex item of this row is the wrapper while
-   the class is on the button inside it. Without this the button is not a flex item of anything and
-   sizes to its 16px icon — measured, a 16px-tall square beside a 39px Add. */
-.contacts-scopes-add .dropdown-root { display: flex; }
-.contacts-transfer-trigger {
-  flex: none; width: 40px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.contacts-scopes-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
+/* The top row is `.column-actions`, shared with the mail folder column rather than transcribed
+   from it. Import and export used to be two filled buttons across the foot of this column — the
+   heaviest pair in it after Add contact, for the two rarest actions in the module, and a footer
+   shape nothing else in the app wears. There is no footer band any more; the column ends on the
+   scopes. */
+.contacts-scopes-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
 
 .contact-scopes { display: flex; flex-direction: column; gap: 2px; }
 .contact-scope {
@@ -2493,9 +2493,11 @@ body {
      56px tall on a 16px inset, so 72px, plus the 8px the stack already puts between toasts. */
   .toast-container { bottom: 80px; }
 
-  /* Contacts' own primary action becomes the floating button below 1024px, the way compose does
-     in mail: opening a drawer to add a contact is one gesture too many. */
-  .context-drawer-panel .contacts-scopes-add { display: none; }
+  /* A column's primary action becomes the floating button below 1024px: opening a drawer to write
+     a message, to check for new mail or to add a contact is one gesture too many. Refresh moves
+     into the list toolbar's kebab, which MessageList adds under this same condition (`inDrawer`)
+     and nowhere else, so a desktop keeps one Refresh rather than two. */
+  .context-drawer-panel .column-actions { display: none; }
 }
 
 /* There is no hover on a touch screen, and on several touch browsers :hover sticks after a tap,

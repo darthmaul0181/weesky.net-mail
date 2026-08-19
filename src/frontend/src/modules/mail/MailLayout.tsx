@@ -303,8 +303,8 @@ export default function MailLayout() {
   // the pager stay put instead of hiding below their own content.
   const folderColumn = (
     <div className="mail-folders">
-      <div className="mail-folders-compose">
-        <button type="button" className="btn btn-primary mail-compose-btn" onClick={openCompose}>
+      <div className="column-actions">
+        <button type="button" className="btn btn-primary column-actions-main" onClick={openCompose}>
           <RocketIcon size={15} /> {t('layout.newMessage')}
         </button>
         <RefreshButton fetching={refreshFetching} onRefresh={refresh} />

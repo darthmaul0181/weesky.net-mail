@@ -31,7 +31,7 @@ function renderTransfer(contacts: Contact[] | undefined, onError = vi.fn()) {
   render(
     <QueryClientProvider client={client}>
       <ContactsTransfer contacts={contacts} onError={onError}
-        triggerClassName="btn contacts-transfer-trigger" />
+        triggerClassName="btn btn-primary column-actions-square" />
     </QueryClientProvider>,
   )
   return onError

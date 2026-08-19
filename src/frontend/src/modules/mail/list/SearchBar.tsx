@@ -24,8 +24,8 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
   return (
     <div className="search-bar">
       <input
-        type="text"
-        className="search-bar-input"
+        type="search"
+        className="search-input"
         placeholder={t('search.placeholder', { folder: folderTitle })}
         value={text}
         autoFocus

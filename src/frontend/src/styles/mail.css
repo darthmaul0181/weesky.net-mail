@@ -31,16 +31,6 @@
   background: var(--folders-bg);
 }
 
-.mail-folders-compose { flex: none; display: flex; gap: 7px; padding: 10px 10px 4px; }
-.mail-compose-btn { flex: 1; min-width: 0; padding: 11px 16px; }
-.mail-refresh-btn {
-  flex: none;
-  width: 40px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .mail-refresh-icon { display: flex; }
 .mail-refresh-icon.is-spinning { animation: mail-refresh-spin 0.7s linear infinite; }
 @keyframes mail-refresh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -406,16 +396,10 @@
   border-bottom: 1px solid var(--list-separator);
 }
 
-.search-bar-input {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13px;
-}
+/* The app's one text box (`.search-input`), not a second one: this band used to carry its own
+   border, radius and type size, and stood apart from every field in the contacts list, the move
+   dialog and the modals. */
+.search-bar .search-input { flex: 1; min-width: 0; }
 
 .search-bar-advanced {
   flex: none;
@@ -1763,11 +1747,7 @@ textarea.compose-editor {
 .source-truncated { margin: 10px 0 0; color: var(--text-muted); font-size: 0.8rem; }
 
 @media (max-width: 1023px) {
-  /* Compose and Refresh both leave the drawer: opening a drawer to write a message, or to
-     check for new mail, is one gesture too many. Compose becomes the floating button below;
-     Refresh moves into the list toolbar's kebab, which MessageList adds under this same
-     condition (`inDrawer`) and nowhere else, so a desktop keeps one Refresh rather than two. */
-  .context-drawer-panel .mail-folders-compose { display: none; }
+  /* Compose and Refresh both leave the drawer — see `.context-drawer-panel .column-actions`. */
 
   .floating-action {
     position: fixed;

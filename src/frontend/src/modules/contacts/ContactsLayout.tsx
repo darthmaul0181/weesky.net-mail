@@ -174,12 +174,12 @@ export default function ContactsLayout() {
 
   const scopeColumn = (
     <div className="contacts-scopes-column">
-      <div className="contacts-scopes-add">
-        <button type="button" className="btn btn-primary contacts-add-btn"
+      <div className="column-actions">
+        <button type="button" className="btn btn-primary column-actions-main"
           onClick={() => navigate('/contacts/new')}>
           {t('layout.add')}
         </button>
-        {!drawer.inDrawer && transfer('btn contacts-transfer-trigger')}
+        {!drawer.inDrawer && transfer('btn btn-primary column-actions-square')}
       </div>
       <div className="contacts-scopes-scroll">
         <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope}
