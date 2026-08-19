@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  Probe: the two module columns' top action row — mail (New message + Refresh) against
+  contacts (Add contact + kebab). Real markup, real class names, real stylesheets in main.tsx's
+  order, real strings. #out reports each box; document.title becomes 'probe-done' when measured.
+-->
+<html lang="en" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — column action rows</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/selection.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/tooltip.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    body { padding: 20px; display: flex; gap: 24px; align-items: flex-start; }
+    .case { outline: 1px dashed #f0f; }
+    #out { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre; }
+  </style>
+</head>
+<body>
+  <div class="case">
+    <div class="mail-folders" id="mail-col">
+      <div class="column-actions">
+        <button type="button" class="btn btn-primary column-actions-main" id="compose">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19l3-3m6-10l4 4-8 8-6 2 2-6z"/></svg>
+          <span id="compose-label">New message</span>
+        </button>
+        <button type="button" class="btn btn-primary column-actions-square" id="refresh" aria-label="Refresh">
+          <span class="mail-refresh-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7M21 3v6h-6"/></svg></span>
+        </button>
+      </div>
+      <div class="mail-folders-scroll"><div class="folder-line"><div class="folder-row">Inbox</div></div></div>
+    </div>
+  </div>
+
+  <div class="case">
+    <div class="contacts-scopes-column" id="contacts-col">
+      <div class="column-actions">
+        <button type="button" class="btn btn-primary column-actions-main" id="add"><span id="add-label">+ Add contact</span></button>
+        <div class="dropdown-root">
+          <button type="button" class="btn btn-primary column-actions-square" id="kebab" aria-label="Actions">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="contacts-scopes-scroll"><div class="contact-scope is-active">All contacts</div></div>
+    </div>
+  </div>
+
+  <div class="case" style="width: 420px">
+    <div class="search-bar">
+      <input type="text" class="search-input" id="qs" placeholder="Search in Inbox…" />
+      <button type="button" class="search-bar-advanced"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+    <div style="height:16px"></div>
+    <div class="modal" style="position: static; padding: 18px">
+      <div class="field-h"><label>Reference</label><input type="text" id="ref" value="modal field" /></div>
+    </div>
+  </div>
+
+  <pre id="out">measuring…</pre>
+
+  <script type="module">
+    const box = el => { const r = el.getBoundingClientRect(); return `${r.width.toFixed(1)} x ${r.height.toFixed(1)}` }
+    const bg = el => getComputedStyle(el).backgroundColor
+    const ids = ['compose', 'refresh', 'add', 'kebab', 'qs', 'ref']
+    const lines = ids.map(id => {
+      const el = document.getElementById(id)
+      const cs = getComputedStyle(el)
+      return `${id.padEnd(9)} ${box(el).padEnd(16)} pad=${cs.padding.padEnd(14)} font=${cs.fontSize.padEnd(6)} radius=${cs.borderRadius.padEnd(6)} border=${cs.borderTopWidth} ${cs.borderTopStyle} bg=${bg(el)}`
+    })
+    document.getElementById('out').textContent = lines.join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>

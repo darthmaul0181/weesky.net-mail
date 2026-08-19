@@ -39,7 +39,8 @@ export default function RefreshButton({ fetching, onRefresh }: Props) {
   }, [])
 
   return (
-    <button type="button" className="btn btn-primary mail-refresh-btn" aria-label={t('folders.refresh')}
+    <button type="button" className="btn btn-primary column-actions-square"
+      aria-label={t('folders.refresh')}
       title={t('folders.refreshHint')}
       onClick={() => { if (!spinning) onRefresh() }}>
       <span ref={iconRef} className={`mail-refresh-icon${spinning ? ' is-spinning' : ''}`}>
