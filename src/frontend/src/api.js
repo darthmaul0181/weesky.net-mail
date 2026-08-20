@@ -171,6 +171,15 @@ export const api = {
   getContacts: () =>
     request('GET', '/api/Contacts'),
 
+  // The whole card, which the list does not carry: only the open contact pays for it.
+  getContact: (id) =>
+    request('GET', `/api/Contacts/${id}`),
+
+  // A blob, not a URL handed to <img>: the picture sits behind the session cookie on another
+  // origin, which an image element cannot send.
+  getContactPhoto: (id) =>
+    requestBlob(`/api/Contacts/${id}/Photo`).then(({ blob }) => blob),
+
   createContact: (contact) =>
     request('POST', '/api/Contacts', contact),
 

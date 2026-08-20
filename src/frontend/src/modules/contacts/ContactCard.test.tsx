@@ -1,12 +1,36 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ContactCard from './ContactCard'
-import type { Contact } from './contactTypes'
+import type { Contact, ContactDetail } from './contactTypes'
+
+vi.mock('../../api.js', () => ({
+  api: { getContact: vi.fn(), getContactPhoto: vi.fn() },
+  ApiError: class extends Error {},
+}))
+vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
+
+const { api } = await import('../../api.js') as unknown as {
+  api: Record<'getContact' | 'getContactPhoto', ReturnType<typeof vi.fn>>
+}
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
     firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+  }
+}
+
+function detail(fields: Partial<ContactDetail> = {}): ContactDetail {
+  return {
+    id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: 'bru', displayName: 'Bruno Mertens',
+    middleName: null, namePrefix: null, nameSuffix: null, organization: null, department: null,
+    jobTitle: null, birthday: null, website: null, notes: null, isFavorite: false, hasPhoto: false,
+    addresses: [
+      { position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 101, params: '', groupName: '' },
+      { position: 1, address: 'b.mertens@wk.be', type: 'INTERNET', pref: 101, params: '', groupName: '' },
+    ],
+    phones: [], postalAddresses: [], ...fields,
   }
 }
 
@@ -15,11 +39,24 @@ const bruno = contact({
   addresses: ['bruno@x.be', 'b.mertens@wk.be'],
 })
 
+beforeEach(() => {
+  vi.clearAllMocks()
+  api.getContact.mockResolvedValue(detail())
+  api.getContactPhoto.mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
+  // jsdom n'implémente pas l'API des URL objet ; la carte s'en sert pour l'avatar.
+  URL.createObjectURL = vi.fn(() => 'blob:photo')
+  URL.revokeObjectURL = vi.fn()
+})
+
 function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}) {
   const props = {
     contact: bruno, onEdit: vi.fn(), onDelete: vi.fn(), onToggleFavorite: vi.fn(), ...overrides,
   }
-  return { ...props, ...render(<ContactCard {...props} />) }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return {
+    ...props,
+    ...render(<QueryClientProvider client={client}><ContactCard {...props} /></QueryClientProvider>),
+  }
 }
 
 describe('ContactCard', () => {
@@ -50,6 +87,75 @@ describe('ContactCard', () => {
     setup()
 
     expect(screen.getByText('bru')).toBeInTheDocument()
+  })
+
+  // Ce que la liste ne transporte pas : la fiche va le chercher, sans quoi une carte importée
+  // n'affiche que son nom et son adresse alors que le serveur en détient bien plus.
+  it('shows the phone numbers the detail carries', async () => {
+    api.getContact.mockResolvedValue(detail({
+      phones: [{ position: 0, number: '+32 492 80 90 00', type: 'CELL', pref: 101, params: '', groupName: '' }],
+    }))
+    setup()
+
+    expect(await screen.findByText('+32 492 80 90 00')).toBeInTheDocument()
+  })
+
+  it('shows the birthday in the interface language', async () => {
+    api.getContact.mockResolvedValue(detail({ birthday: '19930621T115900Z' }))
+    setup()
+
+    expect(await screen.findByText('June 21, 1993')).toBeInTheDocument()
+  })
+
+  it('shows the organisation and the job title', async () => {
+    api.getContact.mockResolvedValue(detail({ organization: 'Acme', jobTitle: 'Plombier' }))
+    setup()
+
+    expect(await screen.findByText('Acme')).toBeInTheDocument()
+    expect(await screen.findByText('Plombier')).toBeInTheDocument()
+  })
+
+  it('shows the postal address on one line per component that exists', async () => {
+    api.getContact.mockResolvedValue(detail({
+      postalAddresses: [{
+        position: 0, type: 'HOME', pref: 101, params: '', groupName: '', poBox: null,
+        extended: null, street: 'Rue Haute 1', locality: 'Bruxelles', region: null,
+        postalCode: '1000', country: 'Belgique',
+      }],
+    }))
+    setup()
+
+    const postal = await screen.findByTestId('card-postal')
+    expect(postal).toHaveTextContent('Rue Haute 1')
+    expect(postal).toHaveTextContent('1000')
+    expect(postal).toHaveTextContent('Bruxelles')
+    expect(postal).toHaveTextContent('Belgique')
+  })
+
+  it('shows the photo the card carries', async () => {
+    api.getContact.mockResolvedValue(detail({ hasPhoto: true }))
+    setup()
+
+    expect(await screen.findByTestId('card-photo')).toBeInTheDocument()
+    expect(api.getContactPhoto).toHaveBeenCalledWith('b')
+  })
+
+  it('asks for no photo when the card carries none', async () => {
+    setup()
+
+    expect(await screen.findByText('bruno@x.be')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-photo')).not.toBeInTheDocument()
+    expect(api.getContactPhoto).not.toHaveBeenCalled()
+  })
+
+  // Le détail arrive après coup : la fiche doit peindre tout de suite avec ce que la liste sait,
+  // sinon chaque sélection passe par un vide.
+  it("paints the list's name and addresses before the detail lands", () => {
+    api.getContact.mockReturnValue(new Promise(() => {}))
+    setup()
+
+    expect(screen.getByRole('heading', { name: 'Bruno Mertens' })).toBeInTheDocument()
+    expect(screen.getByText('bruno@x.be')).toBeInTheDocument()
   })
 
   // A field that does not exist renders nothing at all — an empty labelled row reads as data lost.

@@ -19,7 +19,15 @@
   "fields": {
     "nickname": "Surnom",
     "addresses": "Adresses",
-    "primary": "principale"
+    "primary": "principale",
+    "phones": "Téléphones",
+    "birthday": "Anniversaire",
+    "organization": "Organisation",
+    "department": "Service",
+    "jobTitle": "Fonction",
+    "postal": "Adresse postale",
+    "website": "Site web",
+    "notes": "Notes"
   },
   "favourites": {
     "add": "Ajouter aux favoris",

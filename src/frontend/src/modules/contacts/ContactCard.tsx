@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../components/DropdownMenu'
 import ArrowLeftIcon from '../../icons/ArrowLeftIcon'
@@ -6,8 +6,10 @@ import KebabIcon from '../../icons/KebabIcon'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
+import { formatBirthday } from './contactBirthday'
 import { displayNameOf } from './contactName'
-import type { Contact } from './contactTypes'
+import type { Contact, ContactDetailPostal } from './contactTypes'
+import { useContact, useContactPhoto } from './queries'
 
 interface Props {
   contact: Contact | null
@@ -33,6 +35,11 @@ export default function ContactCard({
   contact, onBack, onEdit, onDelete, onToggleFavorite, bottomActions = false,
 }: Props) {
   const { t } = useTranslation('contacts')
+
+  // The list paints the card at once and the detail enriches it when it lands: a selection that
+  // began with a blank would flicker on every click, for a request that costs one round trip.
+  const { data: detail } = useContact(contact?.id ?? null)
+  const photo = usePhotoUrl(contact?.id ?? null, detail?.hasPhoto ?? false)
 
   // Escape mirrors the ← button, MessageReader's arrangement, and like it exists only where the
   // card has replaced the list. The layout withholds onBack while its delete confirm is open, so
@@ -62,6 +69,10 @@ export default function ContactCard({
       </div>
     )
   }
+
+  // The card's own once it is here — the server ranked them by pref then position — the list's
+  // until then.
+  const addresses = detail?.addresses.map(line => line.address) ?? contact.addresses
 
   const favouriteLabel = t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')
   const editLabel = t('actions.edit', { ns: 'common' })
@@ -116,23 +127,25 @@ export default function ContactCard({
     <div className="contact-card">
       <div className="contact-card-head">
         {back}
+        {photo && (
+          <img className="contact-card-photo" src={photo} alt="" data-testid="card-photo" />
+        )}
         <h2 className="contact-card-name">{displayNameOf(contact)}</h2>
         {!bottomActions && cluster}
       </div>
 
       <div className="contact-card-body">
-        {contact.nickname && (
-          <div className="contact-card-row">
-            <span className="contact-card-label">{t('fields.nickname')}</span>
-            <span className="contact-card-value">{contact.nickname}</span>
-          </div>
-        )}
+        <Row label={t('fields.nickname')} value={contact.nickname} />
 
-        {contact.addresses.length > 0 && (
+        <Row label={t('fields.organization')} value={detail?.organization} />
+        <Row label={t('fields.department')} value={detail?.department} />
+        <Row label={t('fields.jobTitle')} value={detail?.jobTitle} />
+
+        {addresses.length > 0 && (
           <div className="contact-card-row">
             <span className="contact-card-label">{t('fields.addresses')}</span>
             <span className="contact-card-values">
-              {contact.addresses.map((address, index) => (
+              {addresses.map((address, index) => (
                 <span key={address} className="contact-card-value" data-testid="card-address">
                   <a href={`mailto:${address}`}>{address}</a>
                   {index === 0 && <span className="contact-card-primary">{t('fields.primary')}</span>}
@@ -141,10 +154,88 @@ export default function ContactCard({
             </span>
           </div>
         )}
+
+        {detail && detail.phones.length > 0 && (
+          <div className="contact-card-row">
+            <span className="contact-card-label">{t('fields.phones')}</span>
+            <span className="contact-card-values">
+              {detail.phones.map(phone => (
+                <span key={`${phone.position}-${phone.number}`} className="contact-card-value"
+                  data-testid="card-phone">
+                  <a href={`tel:${phone.number.replace(/\s/g, '')}`}>{phone.number}</a>
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+
+        {detail && detail.postalAddresses.length > 0 && (
+          <div className="contact-card-row">
+            <span className="contact-card-label">{t('fields.postal')}</span>
+            <span className="contact-card-values">
+              {detail.postalAddresses.map(postal => (
+                <span key={postal.position} className="contact-card-value" data-testid="card-postal">
+                  {postalLines(postal).map(line => <span key={line}>{line}</span>)}
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+
+        <Row label={t('fields.birthday')} value={formatBirthday(detail?.birthday)} />
+        {detail?.website && (
+          <div className="contact-card-row">
+            <span className="contact-card-label">{t('fields.website')}</span>
+            <span className="contact-card-value">
+              <a href={detail.website} target="_blank" rel="noreferrer noopener">{detail.website}</a>
+            </span>
+          </div>
+        )}
+        <Row label={t('fields.notes')} value={detail?.notes} />
       </div>
 
       {/* Last band of the column, so it sits on the screen's own edge. */}
       {bottomActions && bar}
     </div>
   )
+}
+
+/** A labelled row, or nothing at all: a label with no value reads as data that went missing. */
+function Row({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null
+  return (
+    <div className="contact-card-row">
+      <span className="contact-card-label">{label}</span>
+      <span className="contact-card-value">{value}</span>
+    </div>
+  )
+}
+
+/** The postal address as it is written on an envelope, empty components skipped. */
+function postalLines(postal: ContactDetailPostal): string[] {
+  const city = [postal.postalCode, postal.locality].filter(Boolean).join(' ')
+  return [postal.poBox, postal.extended, postal.street, city, postal.region, postal.country]
+    .map(part => part?.trim())
+    .filter((part): part is string => !!part)
+}
+
+/**
+ * The avatar's object URL, revoked with the blob that produced it: without the revocation every
+ * contact opened would leave its picture in memory for the life of the tab.
+ */
+function usePhotoUrl(contactId: string | null, hasPhoto: boolean): string | null {
+  const { data: blob } = useContactPhoto(contactId, hasPhoto)
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!blob) {
+      setUrl(null)
+      return
+    }
+    const objectUrl = URL.createObjectURL(blob)
+    setUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [blob])
+
+  return url
 }
