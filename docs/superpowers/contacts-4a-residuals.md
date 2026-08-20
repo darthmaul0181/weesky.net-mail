@@ -12,6 +12,7 @@ n'aient pas à redécouvrir à leurs frais ce qui a déjà coûté une sonde.
 | `Fold` compte des unités UTF-16 et peut couper une paire de substitution | `VCardComposer.Fold` | Atteignable par une ligne réparée de plus de 75 caractères contenant un caractère hors BMP. Rare aujourd'hui, plus probable dès que l'éditeur écrit du texte libre. |
 | Une édition qui ramène une famille effondrée à une seule occurrence perd ses paramètres `X-` | `VCardComposer.SpliceFamily`, garde `model.Count < 2` | Forme d'éditeur : c'est 4b qui la rendra courante. |
 | Aucun test n'épingle la troncature des scalaires ni des composantes d'adresse | tests du projecteur | Assurance à bas coût avant que l'éditeur n'écrive ces colonnes. |
+| Une composante de `N` à plusieurs valeurs dont une seule est le remplissage laisse passer le `?` | `VCardProjector.NamePart` | `N:Smith,?;John;;;` projette `Smith,?`. Le filtre porte sur la composante entière, pas sur chaque valeur. Aucun client connu n'émet cette forme — le remplissage est toujours seul — mais le correctif tient en une ligne : filtrer les valeurs avant la jointure. |
 
 ## À traiter en 4c
 
@@ -44,5 +45,6 @@ composeur porte une passe de réparation et un collage verbatim.
 - **`Preference` vaut 100 par défaut** et le `TYPE` d'un e-mail n'est pas exposé sur le modèle : le projecteur dérive `type` et `pref` du texte brut, ce qui rend une désynchronisation scanner/bibliothèque plus grave qu'une colonne d'affichage.
 - **`Parameters.MediaType` est normalisé depuis le `data:` URI** — mais en 3.0 `ENCODING=b`, ce que produisent iPhone et Outlook, seul le paramètre déclare le type. D'où le reniflage des octets.
 - **`ContactID.Create("urn:uuid:X")` garde la chaîne** ; un `UID:urn:uuid:X` parsé rend `String` **et** `Uri` nuls et ne remplit que `Guid`.
+- **`N` et `FN` sont obligatoires et la bibliothèque remplit un vide avec `?`** : `N:?;;;;` en 3.0 seulement, `FN:?` dans les deux versions, et l'écrivain **synthétise** `FN` depuis un `N` nommé quand `DisplayNames` manque. C'est ce remplissage qui a produit le bug de production du 20 août : six fiches sans nom affichaient « ? ». Le composeur le blanchit quand le vide est le nôtre, le projecteur refuse de l'admettre quelle que soit la carte.
 - **`X-ABLabel` garde son groupe** à la réécriture, y compris avec le collage désactivé : la réserve que la spec portait sur ce point est levée.
 - **`TYPE` est fusionné et réordonné** (`type=CELL;type=VOICE;type=pref` → `TYPE=VOICE,CELL,PREF`, `INTERNET` ajouté) : toute assertion d'égalité octet à octet sur un bloc de paramètres est impossible par construction.
