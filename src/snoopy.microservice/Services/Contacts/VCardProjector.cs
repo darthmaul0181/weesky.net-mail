@@ -2,6 +2,7 @@ using System.Text;
 using FolkerKinzel.VCards;
 using FolkerKinzel.VCards.Enums;
 using FolkerKinzel.VCards.Formatters;
+using FolkerKinzel.VCards.Models;
 using FolkerKinzel.VCards.Models.Properties;
 using FolkerKinzel.VCards.Models.Properties.Parameters;
 using weesky.Snoopy.Microservice.Models.Contacts;
@@ -34,6 +35,9 @@ internal static class VCardProjector
     private const int MaxPostalCodeLength = 32;
     private const int MaxCountryLength = 128;
 
+    // What a writer puts in a mandatory N or FN it has nothing to fill.
+    private const string Placeholder = "?";
+
     private static readonly ContactProjection Empty = new(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         [], [], [], null);
@@ -48,14 +52,14 @@ internal static class VCardProjector
         if (card == null) return Empty;
 
         var raw = new RawCard(vcardRaw);
-        var name = First(card.NameViews)?.Value;
+        var name = WithoutPlaceholder(First(card.NameViews)?.Value);
         var org = First(card.Organizations)?.Value;
 
         return new ContactProjection(
             Joined(name?.Given, ContactValidator.MaxNameLength),
             Joined(name?.Surnames, ContactValidator.MaxNameLength),
             Joined(First(card.NickNames)?.Value, ContactValidator.MaxNameLength),
-            Scalar(First(card.DisplayNames)?.Value, MaxDisplayNameLength),
+            Scalar(WithoutPlaceholder(First(card.DisplayNames)?.Value), MaxDisplayNameLength),
             Joined(name?.Given2, ContactValidator.MaxMiddleNameLength),
             Joined(name?.Prefixes, ContactValidator.MaxNamePartLength),
             Joined(name?.Suffixes, ContactValidator.MaxNamePartLength),
@@ -269,6 +273,17 @@ internal static class VCardProjector
         card.ContactID?.Value is { } id
             ? id.String ?? id.Uri?.OriginalString ?? id.Guid?.ToString()
             : null;
+
+    // N and FN are mandatory, and more than one writer fills an empty one with a question mark —
+    // ours did, until the composer's repair. A card stored verbatim keeps it (décision 1), so the
+    // guard is here: a name holding nothing else is read as no name at all, never as data, while
+    // a "?" standing beside a real component is that card's own data and stays.
+    private static Name? WithoutPlaceholder(Name? name) =>
+        new[] { name?.Given, name?.Surnames, name?.Given2, name?.Prefixes, name?.Suffixes }
+            .SelectMany(c => c ?? []).Any(v => v.Length > 0 && v != Placeholder) ? name : null;
+
+    private static string? WithoutPlaceholder(string? value) =>
+        value == Placeholder ? null : value;
 
     private static T? First<T>(IEnumerable<T?>? properties) where T : VCardProperty =>
         properties?.FirstOrDefault(p => p != null);

@@ -5873,6 +5873,15 @@
             the writer made of them — verbatim bytes, groups, X- parameters and occurrences included.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.StripNamePlaceholders(System.Collections.Generic.List{System.String},FolkerKinzel.VCards.VCard)">
+            <summary>
+            FolkerKinzel 8.2.0 fills a nameless card's mandatory N (vCard 3.0 only) and FN (both
+            versions) with a question mark, which the total projection then reads back as a name.
+            Repaired to the RFC 2426 empty forms, and only where the emptiness is ours: a card that
+            genuinely declares <c>N:?;;;;</c> is not ours to rewrite (décision 1) — the projector's
+            guard is what keeps that one out of the columns.
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.EnforceBirthday(System.Collections.Generic.List{System.String},FolkerKinzel.VCards.VCard,System.String)">
             <summary>
             Décision 11: the column's spelling is what the card carries, whatever the version. The

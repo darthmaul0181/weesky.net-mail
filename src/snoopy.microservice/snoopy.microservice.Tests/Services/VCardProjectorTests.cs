@@ -47,6 +47,41 @@ public sealed class VCardProjectorTests
         Assert.Equal("--03-15", p.Birthday); // forme vCard telle quelle (décision 11)
     }
 
+    // Défense en profondeur : plusieurs clients remplissent un N ou un FN vide d'un « ? ». Une
+    // carte étrangère est stockée verbatim (décision 1), donc le garde est ici, à la lecture.
+    [Theory]
+    [InlineData("N:?;;;;")]
+    [InlineData("N:?;?;;;")]
+    [InlineData("N:?;?;?;?;?")]
+    public void Project_PlaceholderName_ReadsAsNoNameAtAll(string line)
+    {
+        var p = VCardProjector.Project(Card(line));
+
+        Assert.Null(p.FirstName);
+        Assert.Null(p.LastName);
+        Assert.Null(p.MiddleName);
+        Assert.Null(p.NamePrefix);
+        Assert.Null(p.NameSuffix);
+    }
+
+    [Fact] // FN:? est le même remplissage, sur la propriété obligatoire des deux versions
+    public void Project_PlaceholderDisplayName_ReadsAsNull()
+    {
+        var p = VCardProjector.Project(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:?\r\nN:?;;;;\r\nEND:VCARD\r\n");
+
+        Assert.Null(p.DisplayName);
+    }
+
+    // La règle est stricte : un « ? » aux côtés d'un vrai nom est une donnée, pas un remplissage.
+    [Fact]
+    public void Project_QuestionMarkBesideARealName_IsKept()
+    {
+        var p = VCardProjector.Project(Card("N:?;Jean;;;"));
+
+        Assert.Equal(("Jean", "?"), (p.FirstName, p.LastName));
+    }
+
     [Fact] // décision 8, exception nommée : EMAIL invalide → ligne abandonnée, pas tronquée
     public void Project_DropsAnUnparsableEmail()
     {

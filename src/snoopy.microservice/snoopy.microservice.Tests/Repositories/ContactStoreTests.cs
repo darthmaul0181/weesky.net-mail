@@ -40,6 +40,24 @@ public sealed class ContactStoreTests
         Assert.Equal("bruno@example.com", Assert.Single(stored.Addresses));
     }
 
+    // Nothing to name the contact but its address: the 3.0 writer fills the mandatory N with a
+    // question mark, and a total projection would store it as the surname.
+    [Fact]
+    public async Task Create_ContactWithNoName_LeavesTheNameColumnsNull()
+    {
+        var db = nameof(Create_ContactWithNoName_LeavesTheNameColumnsNull);
+        var user = Guid.NewGuid();
+
+        var created = await CreateStore(db).CreateAsync(
+            user, Write(first: null, last: null, addresses: "bruno@example.com"), CancellationToken.None);
+
+        var row = new PreferencesTestDbContext(db).Contacts.Single(c => c.Id == created.Value);
+        Assert.Null(row.LastName);
+        Assert.Null(row.FirstName);
+        Assert.Equal("bruno@example.com", row.DisplayName);
+        Assert.DoesNotContain('?', row.VCardRaw!);
+    }
+
     // The table collates binary, so folding on the way in is the only thing stopping one address
     // from becoming two rows the client can never reconcile.
     [Fact]

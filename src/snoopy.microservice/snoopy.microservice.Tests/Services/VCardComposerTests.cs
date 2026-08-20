@@ -208,6 +208,58 @@ public sealed class VCardComposerTests
         Assert.Contains("FN:Ana", output);
     }
 
+    // FolkerKinzel 8.2.0 remplit le N obligatoire de la 3.0 d'un « ? » quand notre nom est vide.
+    // La forme vide conforme à RFC 2426 est N:;;;;, celle qu'émettent les autres clients.
+    [Fact]
+    public void ComposeNew_NamelessCard_WritesTheEmptyNRatherThanThePlaceholder()
+    {
+        var output = VCardComposer.ComposeNew("u1", WriteWith(
+            nickname: "Marie-Rose Molhan",
+            addresses: [new ContactWriteEmail(null, "marie-rose.molhan@weesky.be", string.Empty)]));
+
+        Assert.Contains("N:;;;;", output);
+        Assert.DoesNotContain('?', output);
+    }
+
+    // FN est obligatoire dans les deux versions, et l'écrivain le remplit du même « ? » : sans nom,
+    // sans pseudo et sans adresse la chaîne de repli rend "", et display_name gagnait le remplissage.
+    [Theory]
+    [InlineData("3.0")]
+    [InlineData("4.0")]
+    public void Compose_CardWithNothingToNameIt_WritesAnEmptyFn(string version)
+    {
+        var card = $"BEGIN:VCARD\r\nVERSION:{version}\r\nFN:X\r\nEND:VCARD\r\n";
+
+        var output = VCardComposer.Compose(card, Uid, MinimalWrite);
+
+        Assert.Contains("FN:\r\n", output);
+        Assert.DoesNotContain('?', output);
+    }
+
+    [Fact] // le remplissage du N est un fait de la 3.0 : la 4.0 n'écrit aucune ligne N
+    public void Compose_NamelessCardIn40_WritesNoNLine()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:X\r\nEND:VCARD\r\n";
+
+        var output = VCardComposer.Compose(card, Uid, MinimalWrite);
+
+        Assert.DoesNotContain("\r\nN:", output);
+        Assert.DoesNotContain('?', output);
+    }
+
+    // Décision 1 : une carte étrangère qui déclare vraiment N:?;;;; n'est pas la nôtre à réécrire.
+    // La réparation ne vise que notre propre vide ; c'est le garde du projecteur qui traite l'autre.
+    [Fact]
+    public void Compose_ForeignQuestionMarkName_IsLeftAlone()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:?\r\nN:?;;;;\r\nEND:VCARD\r\n";
+
+        var output = VCardComposer.Compose(card, Uid, WriteWith(lastName: "?", displayName: "?"));
+
+        Assert.Contains("N:?;;;;", output);
+        Assert.Contains("FN:?", output);
+    }
+
     // Le jumeau de Backfill_ReconcilesWithoutDestroyingTheCard côté import : un CSV Outlook qui
     // porte un Middle Name sans Display Name doit garder le FN de 3d, prénom + milieu + nom.
     [Fact]

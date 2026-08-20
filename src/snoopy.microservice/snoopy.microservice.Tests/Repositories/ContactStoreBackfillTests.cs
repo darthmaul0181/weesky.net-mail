@@ -199,6 +199,26 @@ public sealed class ContactStoreBackfillTests
         Assert.Empty(new PreferencesTestDbContext(db).ContactPhones);
     }
 
+    // La régression de production : six fiches sur trente-trois sont ressorties du rattrapage avec
+    // « ? » pour nom. Sans prénom ni nom, l'écrivain 3.0 remplit le N obligatoire d'un point
+    // d'interrogation, et la projection totale le relit comme une donnée.
+    [Fact]
+    public async Task Backfill_CardlessNicknameOnlyContact_LeavesTheNameNull()
+    {
+        var db = nameof(Backfill_CardlessNicknameOnlyContact_LeavesTheNameNull);
+        var row = SeedLegacy(db, Guid.NewGuid(), firstName: null, lastName: null,
+            nickname: "Marie-Rose Molhan", addresses: "marie-rose.molhan@weesky.be");
+
+        var outcome = await CreateStore(db).BackfillAsync(100, CancellationToken.None);
+
+        Assert.Equal(1, outcome.Processed);
+        var after = Reload(db, row.Id);
+        Assert.Null(after.LastName);
+        Assert.Null(after.FirstName);
+        Assert.Equal("Marie-Rose Molhan", after.DisplayName);
+        Assert.DoesNotContain('?', after.VCardRaw!);
+    }
+
     private static async Task<(int, int)> Run(string db)
     {
         var outcome = await CreateStore(db).BackfillAsync(1, CancellationToken.None);

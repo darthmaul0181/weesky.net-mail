@@ -365,6 +365,7 @@ internal static class VCardComposer
             SpliceUnmodelledFamilies(lines, source);
         }
 
+        StripNamePlaceholders(lines, card);
         EnforceBirthday(lines, card, birthday);
         return string.Join("\r\n", lines) + "\r\n";
     }
@@ -536,6 +537,35 @@ internal static class VCardComposer
             var eq = p.IndexOf('=');
             return (eq < 0 ? p : p[..eq]).Trim().Equals(key, StringComparison.OrdinalIgnoreCase);
         });
+
+    /// <summary>
+    /// FolkerKinzel 8.2.0 fills a nameless card's mandatory N (vCard 3.0 only) and FN (both
+    /// versions) with a question mark, which the total projection then reads back as a name.
+    /// Repaired to the RFC 2426 empty forms, and only where the emptiness is ours: a card that
+    /// genuinely declares <c>N:?;;;;</c> is not ours to rewrite (décision 1) — the projector's
+    /// guard is what keeps that one out of the columns.
+    /// </summary>
+    private static void StripNamePlaceholders(List<string> lines, VCard card)
+    {
+        if (Nameless(card.NameViews)) Blank(lines, "N", ";;;;");
+        if (Nameless(card.DisplayNames)) Blank(lines, "FN", string.Empty);
+    }
+
+    private static bool Nameless(IEnumerable<VCardProperty?>? properties) =>
+        !(properties ?? []).Any(p => p is { IsEmpty: false });
+
+    // Only a value holding nothing but the placeholder and its component separators is replaced,
+    // so a writer that stops filling the blank leaves the line exactly as it put it.
+    private static void Blank(List<string> lines, string name, string empty)
+    {
+        var index = lines.FindIndex(c =>
+            NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (index < 0) return;
+        var unfolded = Unfold(lines[index]);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        if (colon < 0 || !unfolded[(colon + 1)..].All(c => c is '?' or ';')) return;
+        lines[index] = Fold(unfolded[..(colon + 1)] + empty);
+    }
 
     /// <summary>
     /// Décision 11: the column's spelling is what the card carries, whatever the version. The
