@@ -12,7 +12,8 @@ public sealed class ContactStoreBulkTests
         new(new PreferencesTestDbContext(dbName));
 
     private static ContactWrite Write(string first, string address, bool favorite = false) =>
-        new(first, null, null, favorite, [address], "manual");
+        new(first, null, null, null, null, null, null, null, null, null, null, null, null,
+            favorite, [new ContactWriteEmail(null, address, string.Empty)], [], [], "manual");
 
     [Fact]
     public async Task DeleteManyAsync_RemovesEveryContactAndItsAddresses()

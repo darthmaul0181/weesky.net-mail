@@ -543,6 +543,48 @@
              one that found a password.
              </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController">
+            <summary>
+            The one-shot operator route of slice 4a: it gives a card, a hash and a projection to every
+            contact stored before the vCard model existed. Its own controller rather than an action of
+            <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactsController"/>, whose class-level <c>[Authorize]</c> says "any signed-in
+            user, their own book only" — the exact opposite of what this route is. It shares that
+            controller's prefix by an explicit route, for the same reason the four <c>api/Mail</c>
+            controllers do: <c>[controller]</c> would move the URL.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController.#ctor(weesky.Snoopy.Microservice.Repositories.IContactStore,Microsoft.Extensions.Logging.ILogger{weesky.Snoopy.Microservice.Controllers.ContactsBackfillController})">
+            <summary>
+            The one-shot operator route of slice 4a: it gives a card, a hash and a projection to every
+            contact stored before the vCard model existed. Its own controller rather than an action of
+            <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactsController"/>, whose class-level <c>[Authorize]</c> says "any signed-in
+            user, their own book only" — the exact opposite of what this route is. It shares that
+            controller's prefix by an explicit route, for the same reason the four <c>api/Mail</c>
+            controllers do: <c>[controller]</c> would move the URL.
+            </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController.DefaultBatchSize">
+            <summary>Contacts converted per call when the operator names no size.</summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController.MaxBatchSize">
+            <summary>
+            What one call may convert. The pass rewrites a card and re-projects four child tables per
+            contact, all in one transaction, so the ceiling is what keeps a batch inside an HTTP
+            request rather than a number of rows the table cares about.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController.Backfill(System.Nullable{System.Int32},System.Threading.CancellationToken)">
+            <summary>
+            Converts one batch and says how many contacts are still waiting. Idempotent: the queue is
+            the contacts whose <c>card_hash</c> is still empty, so a replay converts nothing and
+            answers zero. Call it again while <c>remaining</c> is above zero.
+            </summary>
+            <param name="batchSize">contacts to convert in this call; clamped to 1..1000</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Converted and remaining counts</response>
+            <response code="401">Not authenticated</response>
+            <response code="403">Not an administrator</response>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.ContactsController">
             <summary>
             The user's contacts — webmail data, not mail-server data. No IMAP session and no credentials
@@ -562,6 +604,26 @@
             <param name="cancellationToken">cancellation token</param>
             <response code="200">The contacts</response>
             <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Get(System.Guid,System.Threading.CancellationToken)">
+            <summary>The full card, child lines carrying their <c>position</c> handle plus display fields.</summary>
+            <param name="id">the contact's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The contact</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such contact for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.GetPhoto(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            The projected avatar. Always an attachment disposition plus nosniff, and an <c>ETag</c> on
+            <c>card_hash</c> so a client that already has the picture gets a bare 304.
+            </summary>
+            <param name="id">the contact's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The picture</response>
+            <response code="304">Unchanged since the ETag the client sent</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such contact, or none carries a picture</response>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Create(weesky.Snoopy.Microservice.Models.Contacts.ContactRequest,System.Threading.CancellationToken)">
             <summary>Creates a contact and answers it, id included.</summary>
@@ -628,18 +690,19 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Refuse(System.Collections.Generic.IReadOnlyList{System.Guid})">
             <summary>The one gate both bulk routes pass, so the two cannot drift on what they refuse.</summary>
         </member>
-        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxImportBytes">
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxUploadBytes">
             <summary>
             What bounds the request. A constant rather than configuration, so the attribute can carry
-            it and the read is capped before model binding buffers the body to disk.
+            it and the read is capped before model binding buffers the body to disk. A vCard export of
+            a whole address book carries its photos, which a CSV never did.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Import(Microsoft.AspNetCore.Http.IFormFile,System.Threading.CancellationToken)">
             <summary>
-            Merges a CSV file into the book and answers what it did. Nothing is overwritten and a row
-            whose address is already on two contacts is skipped rather than filed at random.
+            Merges a CSV or vCard file into the book and answers what it did. Nothing is overwritten and
+            a row whose address is already on two contacts is skipped rather than filed at random.
             </summary>
-            <param name="file">the CSV file</param>
+            <param name="file">the CSV or vCard file</param>
             <param name="cancellationToken">cancellation token</param>
             <response code="200">The report</response>
             <response code="400">No file, an empty file, or no recognised column</response>
@@ -1454,6 +1517,24 @@
             <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Id"/> for a contact born here.
             </summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.DisplayName">
+            <summary>
+            The card's FN, stored because the frontend otherwise guesses it (first + last, else
+            nickname, else first address). A card carrying "Dr. John Smith Jr." must not be flattened.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Department">
+            <summary>ORG components 2..n, joined by ';' as they appear on the card.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Birthday">
+            <summary>
+            vCard form verbatim: a partial date (--0315) or free text is valid. Interpretation is a
+            display concern, left to 4b.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Website">
+            <summary>First occurrence of URL; the following ones stay in the card.</summary>
+        </member>
         <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.Source">
             <summary>
             Where the card came from. Written at creation and never afterwards: editing a captured
@@ -1466,12 +1547,51 @@
             is what stops a property we do not model from being destroyed on a future CardDAV sync.
             </summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.CardHash">
+            <summary>SHA-256 hex of <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.Contact.VCardRaw"/>; base of the CardDAV ETag. "" = not computed yet.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.ContactAddress">
+            <summary>
+            One postal address of one contact. <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.ContactAddress.Position"/> is the rank of the ADR property on
+            the card, the composer's handle — display order comes from <c>(Pref, Position)</c> instead.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.ContactAddress.Params">
+            <summary>Verbatim, LABEL included — the formatted 4.0 address can be long.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail">
             <summary>
             One address of one contact. Stored canonical (trimmed, lower-case): the table collates in
             binary, so a casing difference would split one address into two rows. <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail.Position"/>
-            carries the order, and position 0 is the primary address by definition — there is no flag to
-            keep in step with it.
+            is the rank of the EMAIL property on the card, the composer's handle — display order comes
+            from <c>(Pref, Position)</c> instead.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail.Type">
+            <summary>TYPE extracted from Params, for display; empty = untyped.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail.Pref">
+            <summary>Normalised PREF (1..100); 101 = the card says nothing. Sort: (Pref, Position).</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail.Params">
+            <summary>Verbatim parameter block (TYPE=WORK;PREF=1); display only, never re-emitted.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.ContactEmail.GroupName">
+            <summary>Property group (item1); what ties in an Apple X-ABLabel.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.ContactPhone">
+            <summary>
+            One phone number of one contact. <see cref="P:weesky.Snoopy.Microservice.Data.Preferences.ContactPhone.Position"/> is the rank of the TEL property on the
+            card, the composer's handle — display order comes from <c>(Pref, Position)</c> instead.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Data.Preferences.ContactPhone.Number">
+            <summary>As carried by the card; no canonicalisation.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Data.Preferences.ContactPhoto">
+            <summary>
+            The first raster-image PHOTO occurrence of one contact, projected so serving an avatar does
+            not require loading the whole card. Kept out of <c>GET /api/Contacts</c>; served by its own route.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Data.Preferences.ExternalDomain">
@@ -1767,11 +1887,55 @@
             transport security are administrator information.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.BackfillOutcome">
+            <summary>
+            One batch of the 4a backfill: how many contacts it gave a card, a hash and a projection to,
+            and how many are still waiting. The caller calls again while <c>Remaining</c> is above zero.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.BackfillOutcome.#ctor(System.Int32,System.Int32)">
+            <summary>
+            One batch of the 4a backfill: how many contacts it gave a card, a hash and a projection to,
+            and how many are still waiting. The caller calls again while <c>Remaining</c> is above zero.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.BulkContactsRequest">
             <summary>The batch a bulk contact write names. Empty and over-cap are both refused.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.BulkFavoriteRequest">
             <summary>The batch, plus the flag it is being given.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactDetailEmail">
+            <summary>One read-side e-mail line. <c>Params</c> and <c>GroupName</c> are display-only: they never enter a write.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactDetailEmail.#ctor(System.Int32,System.String,System.String,System.Int32,System.String,System.String)">
+            <summary>One read-side e-mail line. <c>Params</c> and <c>GroupName</c> are display-only: they never enter a write.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactDetailPhone">
+            <summary>One read-side phone line.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactDetailPhone.#ctor(System.Int32,System.String,System.String,System.Int32,System.String,System.String)">
+            <summary>One read-side phone line.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactDetailAddress">
+            <summary>One read-side postal address line.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactDetailAddress.#ctor(System.Int32,System.String,System.Int32,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String)">
+            <summary>One read-side postal address line.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactDetail">
+            <summary>
+            The full contact card, as answered by GET /api/Contacts/{id}. Every child line carries its
+            <c>Position</c> — the handle a PUT must return — plus <c>Type</c>, <c>Pref</c>, <c>Params</c>
+            and <c>GroupName</c> for display; the last two never travel back on a write.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactDetail.#ctor(System.Guid,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Boolean,System.Boolean,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactDetailEmail},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactDetailPhone},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactDetailAddress})">
+            <summary>
+            The full contact card, as answered by GET /api/Contacts/{id}. Every child line carries its
+            <c>Position</c> — the handle a PUT must return — plus <c>Type</c>, <c>Pref</c>, <c>Params</c>
+            and <c>GroupName</c> for display; the last two never travel back on a write.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactImportOutcome">
             <summary>What the store did. Its error list is unbounded — the controller caps it.</summary>
@@ -1795,16 +1959,47 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow">
             <summary>
-            One row on its way into the book. Free of any notion of CSV, so the vCard import of the next
-            slice feeds the same merge rather than a second one. <c>Line</c> is the line in the source
-            file, header included — what the user reads.
+            One row on its way into the book. Free of any notion of CSV, so a vCard file feeds the same
+            merge rather than a second one. <c>Line</c> is the line in the source file, header included —
+            what the user reads. A row carries <b>either</b> the card a file brought — <c>VCard</c>, filed
+            verbatim, with the <c>Uid</c> it declares as the merge key tried before the address and the
+            name — <b>or</b> <c>Write</c>, the columns to compose one from. Never a UID of our making: the
+            identity a client synchronises on is the card's or the store's, never a reader's.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow.#ctor(System.Int32,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String)">
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow.#ctor(System.Int32,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String,System.String,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite)">
             <summary>
-            One row on its way into the book. Free of any notion of CSV, so the vCard import of the next
-            slice feeds the same merge rather than a second one. <c>Line</c> is the line in the source
-            file, header included — what the user reads.
+            One row on its way into the book. Free of any notion of CSV, so a vCard file feeds the same
+            merge rather than a second one. <c>Line</c> is the line in the source file, header included —
+            what the user reads. A row carries <b>either</b> the card a file brought — <c>VCard</c>, filed
+            verbatim, with the <c>Uid</c> it declares as the merge key tried before the address and the
+            name — <b>or</b> <c>Write</c>, the columns to compose one from. Never a UID of our making: the
+            identity a client synchronises on is the card's or the store's, never a reader's.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactEmailPayload">
+            <summary>
+            One address line as bound from the wire. Settable, not a record: <see cref="T:weesky.Snoopy.Microservice.Models.Contacts.ContactLineJsonConverter"/>
+            fills it from either a bare JSON string or an object. The implicit conversion from
+            <see cref="T:System.String"/> is what lets the legacy shape the live frontend still posts —
+            <c>["a@b.c"]</c> — and a hand-built <see cref="T:weesky.Snoopy.Microservice.Models.Contacts.ContactRequest"/> agree on the same payload.
+            </summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactEmailPayload.Position">
+            <summary>The card position this line replaces. Null = a new line (decision 4).</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactPhonePayload">
+            <summary>One phone line as bound from the wire — no legacy string shape, this field is new.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactAddressPayload">
+            <summary>One postal address line as bound from the wire.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactLineJsonConverter">
+            <summary>
+            Backward compatibility for POST/PUT /api/Contacts: the live frontend still posts addresses as
+            a bare string array, and no screen changes in 4a. A JSON string element becomes an address with
+            no position and no type; a JSON object element deserialises normally. Any other token is
+            refused rather than silently ignored.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactListResponse">
@@ -1824,7 +2019,11 @@
             </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactRequest.Addresses">
-            <summary>Ordered; the first surviving entry becomes the primary address.</summary>
+            <summary>
+            Ordered; the first surviving entry becomes the primary address. Accepts a bare string —
+            the shape every current screen still sends — or an object naming a position and a type;
+            see <see cref="T:weesky.Snoopy.Microservice.Models.Contacts.ContactLineJsonConverter"/>.
+            </summary>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactRequest.Source">
             <summary>Where the card came from. Absent or unknown is filed as "manual".</summary>
@@ -1840,8 +2039,10 @@
             <param name="Nickname">The contact's nickname, if any.</param>
             <param name="IsFavorite">Whether the contact is starred.</param>
             <param name="Addresses">Ordered; the first entry is the primary address.</param>
+            <param name="DisplayName">The card's FN, if the projection has set one yet.</param>
+            <param name="HasPhoto">Whether GET /api/Contacts/{id}/Photo answers a picture.</param>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactView.#ctor(System.Guid,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String})">
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactView.#ctor(System.Guid,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String,System.Boolean)">
             <summary>
             One contact as the client reads it. Carries neither <c>Uid</c> nor <c>VCardRaw</c>: no screen
             reads either, and the raw card would multiply the payload of a list already fetched whole.
@@ -1852,6 +2053,8 @@
             <param name="Nickname">The contact's nickname, if any.</param>
             <param name="IsFavorite">Whether the contact is starred.</param>
             <param name="Addresses">Ordered; the first entry is the primary address.</param>
+            <param name="DisplayName">The card's FN, if the projection has set one yet.</param>
+            <param name="HasPhoto">Whether GET /api/Contacts/{id}/Photo answers a picture.</param>
         </member>
         <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.Id">
             <summary>The contact's identifier.</summary>
@@ -1871,17 +2074,41 @@
         <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.Addresses">
             <summary>Ordered; the first entry is the primary address.</summary>
         </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.DisplayName">
+            <summary>The card's FN, if the projection has set one yet.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactView.HasPhoto">
+            <summary>Whether GET /api/Contacts/{id}/Photo answers a picture.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactWriteEmail">
+            <summary>A validated write-side e-mail line. <c>Position</c> null = a new line (decision 4).</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactWriteEmail.#ctor(System.Nullable{System.Int32},System.String,System.String)">
+            <summary>A validated write-side e-mail line. <c>Position</c> null = a new line (decision 4).</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactWritePhone">
+            <summary>A validated write-side phone line.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactWritePhone.#ctor(System.Nullable{System.Int32},System.String,System.String)">
+            <summary>A validated write-side phone line.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactWriteAddress">
+            <summary>A validated write-side postal address line.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactWriteAddress.#ctor(System.Nullable{System.Int32},System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String)">
+            <summary>A validated write-side postal address line.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactWrite">
             <summary>
             A validated, normalised contact on its way to the store: names trimmed and nulled when blank,
-            addresses non-blank and in the order they must be stored. Only
+            child lines non-blank and in the order they must be stored. Only
             <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> produces one, so the store never re-checks the rules.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactWrite.#ctor(System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String)">
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactWrite.#ctor(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactWriteEmail},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactWritePhone},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactWriteAddress},System.String)">
             <summary>
             A validated, normalised contact on its way to the store: names trimmed and nulled when blank,
-            addresses non-blank and in the order they must be stored. Only
+            child lines non-blank and in the order they must be stored. Only
             <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> produces one, so the store never re-checks the rules.
             </summary>
         </member>
@@ -2993,13 +3220,6 @@
             that one folds addresses, and borrowing it here would blur what either of them means.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.AddAddresses(System.Guid,System.Collections.Generic.IReadOnlyList{System.String},System.Int32)">
-            <summary>
-            Folds every address, drops what folds together, and numbers what survives from 0. The
-            position is reassigned here rather than taken from the caller: a gap or a repeat coming
-            off the wire would leave two rows claiming to be the primary.
-            </summary>
-        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.ContactStore.FindAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
             <summary>
             Scoped by user on purpose: a contact belonging to somebody else must be indistinguishable
@@ -3040,11 +3260,29 @@
             belonging to somebody else is simply not found.
             </summary>
         </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.GetAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
+            <summary>The whole card of one contact. Null when this user does not own it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.GetPhotoAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            The projected avatar and the card hash the caller turns into an ETag. Null when the
+            contact carries no picture, and equally when this user does not own it.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.ExportAsync(System.Guid,System.Threading.CancellationToken)">
+            <summary>Every contact of the user, in the shape the CSV export reads.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.CreateAsync(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite,System.Threading.CancellationToken)">
-            <summary>Creates it and answers its new id. Fails only when the per-user cap is reached.</summary>
+            <summary>
+            Composes the contact's card, stores it and projects it. Fails when the per-user cap is
+            reached or the card overruns the 1 MB ceiling.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.UpdateAsync(System.Guid,System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite,System.Threading.CancellationToken)">
-            <summary>Replaces names, favourite flag and the whole address list. Fails when not found.</summary>
+            <summary>
+            Rewrites the contact's card from the write and re-projects it whole. Fails when not found
+            or over the 1 MB ceiling; a write that changes nothing leaves the card and its hash alone.
+            </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.DeleteAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
             <summary>Removes it and its addresses. Fails when not found.</summary>
@@ -3059,6 +3297,15 @@
             <summary>
             Merges a whole file into the book in one transaction. Never fails as a whole: a row that
             cannot be filed comes back in the outcome rather than as an error status.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactStore.BackfillAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            One batch of the 4a backfill, over every user of the table: the contacts stored before the
+            vCard model existed get the card, the hash and the projection that model requires of every
+            row. Deliberately unscoped — it is an operator sweep, which is why its route carries the
+            admin policy. The queue is <c>card_hash = ''</c>, so calling it again resumes where it
+            stopped and calling it once more than needed answers <c>{ 0, 0 }</c>.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IExternalDomainStore">
@@ -3559,25 +3806,38 @@
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter">
             <summary>
-            The book as a file. The first address goes in the column Rainloop and Outlook understand, the
-            rest in columns only we read back — so the export is complete here and usable elsewhere rather
-            than truncated on both sides.
+            The book as a file, in the Outlook column set 3d already reads on import — adding columns makes
+            the file symmetric, since the mapper is what merges every one of them back in on the way back.
+            The first address goes in the column Rainloop and Outlook understand, the rest in columns only
+            we read back.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.Neutralise(System.String)">
             <summary>
-            A leading apostrophe, which a spreadsheet eats on read, so a crafted name lands as text
+            A leading apostrophe, which a spreadsheet eats on read, so a crafted value lands as text
             rather than as a formula. The apostrophe is a trigger itself, so
-            <see cref="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper"/>'s strip is symmetric and a name really beginning with one
-            survives the round trip. Names only: a trigger-led address is forced into an unquoted
-            local part, which always carries a mandatory <c>@</c> and non-empty domain — never a
-            parseable formula in Excel or LibreOffice. The design doc carries the full argument.
+            <see cref="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvMapper"/>'s strip is symmetric on every column it reads back — the pair
+            is lossless, a phone number legitimately opening on '+' included, and a value really
+            beginning with one survives the round trip. E-mail addresses are the only field left out: a
+            trigger-led address is forced into an unquoted local part, which always carries a mandatory
+            <c>@</c> and non-empty domain — never a parseable formula in Excel or LibreOffice.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.NameOf(weesky.Snoopy.Microservice.Models.Contacts.ContactView)">
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.NameOf(weesky.Snoopy.Microservice.Models.Contacts.ContactDetail)">
             <summary>
             Mirrors the frontend's displayNameOf, minus its address fallback: written verbatim, an
             address would come back as a nickname on the next import — a name nobody typed.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.DisplayNameOf(weesky.Snoopy.Microservice.Models.Contacts.ContactDetail)">
+            <summary>
+            The card's own FN wherever it has one — décision 10 stored <c>display_name</c> precisely so
+            that <c>FN:Dr. John Smith Jr.</c> stops reading as "John Smith", and a file that flattens it
+            back loses it user-visibly. One shape is excluded, and it is the one
+            <see cref="M:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvExporter.NameOf(weesky.Snoopy.Microservice.Models.Contacts.ContactDetail)"/> exists to refuse: <c>VCardComposer.FallbackDisplayName</c> ends on the
+            first address, so an address-only contact's stored FN <em>is</em> that address, which the
+            mapper reads back as a nickname. Compared ignoring case — the column is canonical, the
+            card's own spelling need not be.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactCsvRow">
@@ -3629,11 +3889,68 @@
             never on an address, where one may be part of the address itself.
             </summary>
         </member>
-        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.ContactVCardWriter">
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine">
             <summary>
-            Turns the columns the tables do not model into a vCard 3.0, stored verbatim in
-            <c>contacts.vcard_raw</c>. Nothing reads it yet: it is what stops a phone number from being
-            destroyed by an import, per the slice 3a rule that an unstored property is found nowhere.
+            What the child tables hold for one property line: <see cref="P:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.Position"/> is the rank of the
+            property in the card (the composer's handle), <see cref="P:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.Pref"/> the normalised PREF (1..100,
+            101 when the card says nothing), <see cref="P:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.Params"/> the verbatim parameter block.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.#ctor(System.Int32,System.String,System.Int32,System.String,System.String)">
+            <summary>
+            What the child tables hold for one property line: <see cref="P:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.Position"/> is the rank of the
+            property in the card (the composer's handle), <see cref="P:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.Pref"/> the normalised PREF (1..100,
+            101 when the card says nothing), <see cref="P:weesky.Snoopy.Microservice.Models.Contacts.ProjectedLine.Params"/> the verbatim parameter block.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactProjection">
+            <summary>
+            The projection of one stored vCard — everything the database columns derive from the card.
+            Produced by <c>VCardProjector</c>, the read half of the total re-projection cycle.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactProjection.#ctor(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ProjectedEmail},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ProjectedPhone},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ProjectedAddress},weesky.Snoopy.Microservice.Models.Contacts.ProjectedPhoto)">
+            <summary>
+            The projection of one stored vCard — everything the database columns derive from the card.
+            Produced by <c>VCardProjector</c>, the read half of the total re-projection cycle.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardProjector">
+            <summary>
+            The read half of the projection cycle: stored card in, the columns' content out. Pure and
+            total — an unreadable card yields an empty projection, never an exception (spec, décision 8).
+            Decoded values come from FolkerKinzel; <c>Params</c> (and the TYPE and PREF it carries) comes
+            verbatim from the raw text, aligned with the library's collections by document rank.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardProjector.RawCard">
+            <summary>
+            The raw-text side of the projection: one unfolding, one pass over the lines, and per family
+            the verbatim parameter block of each property in document order — what separates the first
+            ';' from the first ':' outside quotes, no decoding. BDAY's value is kept as written too,
+            because the library types the date and the column stores the card's own form (décision 11).
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardChunk">
+            <summary>
+            One card of a <c>.vcf</c> file: <see cref="P:weesky.Snoopy.Microservice.Services.Contacts.VCardChunk.Line"/> is the 1-based line of its
+            <c>BEGIN:VCARD</c>, what the import report cites; <see cref="P:weesky.Snoopy.Microservice.Services.Contacts.VCardChunk.Text"/> its own bytes.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardSplitter">
+            <summary>
+            A file cut into cards, on the <c>BEGIN</c>/<c>END:VCARD</c> boundaries and nothing else. It
+            parses none of it: <c>Vcf.Parse</c> gives no access to a card's source text, so a file read in
+            one go could only be stored re-serialised — an ETag false from the first sync (décision 1).
+            The cut is made on the input's own offsets, which is what makes every chunk verbatim, its
+            weight measurable against the 1 MB ceiling and its line citable in the report.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardImportMapper">
+            <summary>
+            A card turned into an import row, through the projector rather than a second reading of the
+            card: a <c>.vcf</c> then enters the merge of slice 3d as it is, with the <c>UID</c> as the key
+            placed before the address and the name. The card itself travels verbatim (décision 1).
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.ContactValidator">
@@ -3656,6 +3973,27 @@
             here, an over-long value reaches a strict-mode MariaDB and comes back as a 500.
             </summary>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.ContactValidator.MaxNotesLength">
+            <summary>
+            <c>contacts.notes</c> is TEXT — 65 535 <em>bytes</em>. The ceiling is counted in characters,
+            so it is set low enough that even a card entirely made of 4-byte code points still fits.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ContactValidator.IsValidTypeToken(System.String)">
+            <summary>
+            The gabarit a TYPE fragment must fit: ASCII letters, digits, dash and comma, at most
+            <see cref="F:weesky.Snoopy.Microservice.Services.ContactValidator.MaxTypeLength"/> characters. Empty is accepted — no type at all.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ContactValidator.IsMeaningful(weesky.Snoopy.Microservice.Models.Contacts.ContactWriteEmail)">
+            <summary>
+            Whether a line says anything. Blank rows are what an editor leaves behind when the user
+            opens a line and changes their mind; they are dropped, never refused. Exposed so that every
+            producer of a <see cref="T:weesky.Snoopy.Microservice.Models.Contacts.ContactWrite"/> — the import reader as much as this validator —
+            filters by the same rule, and the promise that only validated lines reach the composer
+            holds line for line.
+            </summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Services.Csv.CsvRecord">
             <summary>One record, carrying the file line it started on.</summary>
         </member>
@@ -3666,12 +4004,6 @@
             <summary>
             RFC 4180 with the three things a real file needs beyond it: a byte-order mark, an encoding that
             may not be UTF-8, and a delimiter that may not be a comma.
-            </summary>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Services.Csv.CsvReader.Decode(System.Byte[])">
-            <summary>
-            UTF-8 when the bytes decode strictly, Latin-1 otherwise. Latin-1 differs from Windows-1252
-            only over 0x80–0x9F — typographic quotes and the euro sign, never a letter in a name.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.Csv.CsvWriter.Write(System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IEnumerable{System.Collections.Generic.IReadOnlyList{System.String}})">
@@ -3750,6 +4082,20 @@
         <member name="M:weesky.Snoopy.Microservice.Services.IAccountConnectionResolver.ResolveAsync(weesky.Snoopy.Microservice.Models.User,Microsoft.AspNetCore.Http.HttpRequest,System.Threading.CancellationToken)">
             <summary>Failure codes: "credentials_unavailable" (401), "account_not_found" (404),
             <see cref="F:weesky.Snoopy.Microservice.Services.ConnectedAccountErrors.CredentialsInvalid"/> (409).</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.FileText">
+            <summary>
+            How an uploaded text file is turned into a string. Not specific to one format: a CSV and a
+            vCard come off the same pickers, from the same address books, in the same encodings.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.FileText.Decode(System.Byte[])">
+            <summary>
+            UTF-8 when the bytes decode strictly, Latin-1 otherwise, byte-order mark dropped. Latin-1
+            differs from Windows-1252 only over 0x80–0x9F — typographic quotes and the euro sign, never
+            a letter in a name. Decoding with the replacement fallback instead would turn every accent
+            of an Outlook or phone export into U+FFFD, and a card stored verbatim keeps that forever.
+            </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Services.IdentityResolver">
             <summary>
@@ -5444,6 +5790,95 @@
             Whether the platform still holds this address as a usable mailbox. It is what a live session
             is re-checked against on every request, so it must answer for a deleted *and* a deactivated
             account — a platform holding no directory has nothing to revoke and answers true.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.MergeWrite">
+            <summary>
+            An import merge's write: only the fields the merge actually filled (non-null), plus the
+            addresses it appended. A merge never overwrites what the contact already had.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.MergeWrite.#ctor(System.String,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            An import merge's write: only the fields the merge actually filled (non-null), plus the
+            addresses it appended. A merge never overwrites what the contact already had.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ReconcileWrite">
+            <summary>
+            The backfill's write (task 8): only the columns that were already modelled before this slice —
+            names, nickname and the e-mail block. Everything else on the card is out of bounds.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ReconcileWrite.#ctor(System.String,System.String,System.String,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            The backfill's write (task 8): only the columns that were already modelled before this slice —
+            names, nickname and the e-mail block. Everything else on the card is out of bounds.
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer">
+            <summary>
+            The write half of the projection cycle: it replaces values inside the stored card, it never
+            rewrites a property (spec, décision 4). Group, PID, ALTID, LABEL and every X- parameter are
+            never read and never rebuilt; child lines are paired to card properties by rank. The library
+            serializer loses some of that on vCard 3.0, so <see cref="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.Emit(weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SourceCard,System.String,System.String)"/> restores what a probe of
+            FolkerKinzel 8.2.0 proved dropped: X- parameters on EMAIL/TEL/URL/BDAY, occurrences past the
+            most preferred of the families its 3.0 writer collapses, every family no entry point models —
+            spliced back verbatim from the input card — and any BDAY the library refuses to spell as the
+            column does (décision 11).
+            </summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SourceCard">
+            <summary>
+            The parsed card plus what the splice repairs need from the raw input: its logical lines,
+            and — for the families the 3.0 writer collapses to one occurrence — the verbatim line of
+            each parsed property, keyed by reference so untouched occurrences find their own bytes
+            back after an edit. Both stay empty unless input and output are the same vCard 3.0 (a 2.1
+            promotion re-encodes every line, so nothing of it may be spliced).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SourceCard.#ctor(FolkerKinzel.VCards.VCard,FolkerKinzel.VCards.Enums.VCdVersion,System.Collections.Generic.List{System.String},System.Collections.Generic.Dictionary{FolkerKinzel.VCards.Models.Properties.VCardProperty,System.String})">
+            <summary>
+            The parsed card plus what the splice repairs need from the raw input: its logical lines,
+            and — for the families the 3.0 writer collapses to one occurrence — the verbatim line of
+            each parsed property, keyed by reference so untouched occurrences find their own bytes
+            back after an edit. Both stay empty unless input and output are the same vCard 3.0 (a 2.1
+            promotion re-encodes every line, so nothing of it may be spliced).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.NamePart(System.Collections.Generic.IEnumerable{System.String}[])">
+            <summary>Name components as one display token, blanks dropped — the legacy FN's own join.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.RestoreDroppedParameters(System.Collections.Generic.List{System.String},FolkerKinzel.VCards.VCard)">
+            <summary>
+            What FolkerKinzel 8.2.0's vCard 3.0 writer provably drops even with the two flags set: the
+            non-standard parameters of TEL, EMAIL, URL and BDAY (its ADR and text-scalar builders do
+            write them). Output lines are matched to model properties by rank, in the writer's own
+            order — stable ascending on Preference — and any count mismatch degrades to no repair
+            rather than a wrong one.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SpliceCollapsedFamilies(System.Collections.Generic.List{System.String},FolkerKinzel.VCards.VCard,weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SourceCard)">
+            <summary>
+            The 3.0 writer also emits only the most preferred occurrence of NICKNAME, ORG, TITLE, NOTE
+            and URL. Décision 5 guarantees occurrences past the first are semantically untouched, so
+            each one takes its own raw input line back, verbatim; the edited first occurrence keeps the
+            writer's line. Any shape the mapping cannot vouch for is left exactly as the writer put it.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SpliceUnmodelledFamilies(System.Collections.Generic.List{System.String},weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.SourceCard)">
+            <summary>
+            Décision 4, taken literally for everything the composer does not model: PHOTO, KEY, IMPP,
+            CATEGORIES, GEO, the X- families… were not edited, so their input lines replace whatever
+            the writer made of them — verbatim bytes, groups, X- parameters and occurrences included.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.Contacts.VCardComposer.EnforceBirthday(System.Collections.Generic.List{System.String},FolkerKinzel.VCards.VCard,System.String)">
+            <summary>
+            Décision 11: the column's spelling is what the card carries, whatever the version. The
+            library corrupts a partial date in 3.0 (<c>--0315</c> gains year 4), drops a text form
+            outright, or re-labels it VALUE=TEXT in 4.0 — whenever the emitted value is not the
+            column's, the whole BDAY line is re-emitted verbatim with the property's X- parameters.
             </summary>
         </member>
     </members>

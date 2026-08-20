@@ -67,7 +67,7 @@ export default function ContactsTransfer({ contacts, onError, triggerClassName }
 
   return (
     <>
-      <input ref={input} type="file" accept=".csv,text/csv" hidden onChange={pick}
+      <input ref={input} type="file" accept=".csv,.vcf,.vcard,text/csv,text/vcard,text/x-vcard" hidden onChange={pick}
         data-testid="contacts-import-input" />
 
       <DropdownMenu

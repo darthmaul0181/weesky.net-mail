@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace weesky.Snoopy.Microservice.Models.Contacts;
 
 /// <summary>
@@ -14,10 +16,39 @@ public sealed class ContactRequest
 
     public string? Nickname { get; set; }
 
+    public string? DisplayName { get; set; }
+
+    public string? MiddleName { get; set; }
+
+    public string? NamePrefix { get; set; }
+
+    public string? NameSuffix { get; set; }
+
+    public string? Organization { get; set; }
+
+    public string? Department { get; set; }
+
+    public string? JobTitle { get; set; }
+
+    public string? Birthday { get; set; }
+
+    public string? Website { get; set; }
+
+    public string? Notes { get; set; }
+
     public bool IsFavorite { get; set; }
 
-    /// <summary>Ordered; the first surviving entry becomes the primary address.</summary>
-    public List<string>? Addresses { get; set; }
+    /// <summary>
+    /// Ordered; the first surviving entry becomes the primary address. Accepts a bare string —
+    /// the shape every current screen still sends — or an object naming a position and a type;
+    /// see <see cref="ContactLineJsonConverter"/>.
+    /// </summary>
+    [JsonConverter(typeof(ContactLineJsonConverter))]
+    public List<ContactEmailPayload>? Addresses { get; set; }
+
+    public List<ContactPhonePayload>? Phones { get; set; }
+
+    public List<ContactAddressPayload>? PostalAddresses { get; set; }
 
     /// <summary>Where the card came from. Absent or unknown is filed as "manual".</summary>
     public string? Source { get; set; }

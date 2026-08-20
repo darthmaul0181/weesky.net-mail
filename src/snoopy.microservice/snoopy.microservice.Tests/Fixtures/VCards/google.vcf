@@ -1,0 +1,25 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Jeanne Exemple
+N:Exemple;Jeanne;;;
+EMAIL;TYPE=INTERNET;TYPE=HOME:jeanne.exemple@exemple.example
+EMAIL;TYPE=INTERNET;TYPE=WORK:j.exemple@societe.exemple.example
+item1.EMAIL;TYPE=INTERNET:jeanne.autre@exemple.example
+item1.X-ABLabel:Perso
+TEL;TYPE=CELL:+32470000001
+TEL;TYPE=WORK:+3242230000
+ADR;TYPE=HOME:;;Avenue des Tests 12;Liege;;4000;Belgique
+ORG:Societe Exemple;Comptabilite
+TITLE:Analyste
+BDAY:--03-15
+NOTE:Importe de Google Contacts.
+PHOTO;VALUE=URI:https://lh3.exemple.example/contacts/jeanne
+CATEGORIES:myContacts,Collegues
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Paul Sansnom
+N:;;;;
+EMAIL;TYPE=INTERNET:paul.sansnom@exemple.example
+CATEGORIES:myContacts
+END:VCARD

@@ -69,12 +69,12 @@
   },
   "transfer": {
     "actions": "Importer et exporter",
-    "importHint": "Fusionner un fichier CSV dans ce carnet",
+    "importHint": "Fusionner un fichier CSV ou vCard dans ce carnet",
     "import": "Importer…",
     "nothingToExport": "Rien à exporter",
     "exportHint": "Télécharger ce carnet au format CSV",
     "export": "Exporter",
-    "tooLarge": "Ce fichier est trop volumineux — la limite est de 5 Mo.",
+    "tooLarge": "Ce fichier est trop volumineux — la limite est de 20 Mo.",
     "importFailed": "Impossible d’importer le fichier",
     "exportFailed": "Impossible d’exporter les contacts"
   },

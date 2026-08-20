@@ -69,12 +69,12 @@
   },
   "transfer": {
     "actions": "Import and export",
-    "importHint": "Merge a CSV file into this book",
+    "importHint": "Merge a CSV or vCard file into this book",
     "import": "Import…",
     "nothingToExport": "Nothing to export",
     "exportHint": "Download this book as CSV",
     "export": "Export",
-    "tooLarge": "That file is too large — the limit is 5 MB.",
+    "tooLarge": "That file is too large — the limit is 20 MB.",
     "importFailed": "Could not import the file",
     "exportFailed": "Could not export the contacts"
   },

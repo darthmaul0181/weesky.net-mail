@@ -1,0 +1,22 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//Mozilla.org/NONSGML Thunderbird VCard V1.0//EN
+UID:4c1f6b8e-0d2a-4a5f-9c31-6b7d8e9f0a1b
+FN:Marc Essai
+N:Essai;Marc;;;
+NICKNAME:Mac
+EMAIL;PREF=1:marc.essai@exemple.example
+EMAIL:m.essai@bureau.exemple.example
+TEL;VALUE=TEXT;TYPE="voice,work":+3221230002
+TEL;VALUE=TEXT;TYPE="voice,cell";PREF=1:+32470000003
+ADR;TYPE=work:;;Chaussee du Test 8;Namur;;5000;Belgique
+ORG:Essai et Fils;Atelier
+TITLE:Menuisier
+URL;TYPE=work:https://essai.exemple.example
+BDAY:--0315
+ANNIVERSARY:20100601
+IMPP:xmpp:marc@exemple.example
+NOTE:Fiche Thunderbird 115.
+X-MOZILLA-HTML:FALSE
+REV:20260101T120000Z
+END:VCARD

@@ -1,0 +1,672 @@
+using System.Text;
+using FolkerKinzel.VCards;
+using FolkerKinzel.VCards.Enums;
+using FolkerKinzel.VCards.Extensions;
+using FolkerKinzel.VCards.Models;
+using FolkerKinzel.VCards.Models.Properties;
+using FolkerKinzel.VCards.Models.Properties.Parameters;
+using weesky.Snoopy.Microservice.Models.Contacts;
+
+namespace weesky.Snoopy.Microservice.Services.Contacts;
+
+/// <summary>
+/// The write half of the projection cycle: it replaces values inside the stored card, it never
+/// rewrites a property (spec, décision 4). Group, PID, ALTID, LABEL and every X- parameter are
+/// never read and never rebuilt; child lines are paired to card properties by rank. The library
+/// serializer loses some of that on vCard 3.0, so <see cref="Emit"/> restores what a probe of
+/// FolkerKinzel 8.2.0 proved dropped: X- parameters on EMAIL/TEL/URL/BDAY, occurrences past the
+/// most preferred of the families its 3.0 writer collapses, every family no entry point models —
+/// spliced back verbatim from the input card — and any BDAY the library refuses to spell as the
+/// column does (décision 11).
+/// </summary>
+internal static class VCardComposer
+{
+    internal static readonly VcfOpts SerializationOptions = VcfOpts.Default
+        .Set(VcfOpts.WriteNonStandardProperties)
+        .Set(VcfOpts.WriteNonStandardParameters);
+
+    private enum Family { Email, Phone, Postal }
+
+    internal static string ComposeNew(string uid, ContactWrite write) =>
+        Apply(SourceCard.Fresh(), uid, write);
+
+    internal static string Compose(string existingCard, string uid, ContactWrite write) =>
+        Apply(SourceCard.Read(existingCard), uid, write);
+
+    internal static string Reconcile(string existingCard, string uid, ReconcileWrite write)
+    {
+        var source = SourceCard.Read(existingCard);
+        var card = source.Card;
+        // A reconciliation, not an edit: an empty column leaves the card's property alone —
+        // deletion semantics belong to Compose, where a cleared field is the user clearing it.
+        SetName(card, Components(write.FirstName), Components(write.LastName), null, null, null);
+        // Off the reconciled N, never off the columns: the pre-4a FN was first + middle + last and
+        // no column of that era held a middle name, so reading it from the write would flatten
+        // "Jean Pierre Dupont" to "Jean Dupont" on the one pass that cannot be replayed.
+        var name = (card.NameViews ?? []).FirstOrDefault(p => p is { IsEmpty: false })?.Value;
+        var fallback = FallbackDisplayName(
+            NamePart(name?.Given, name?.Given2), null, NamePart(name?.Surnames),
+            write.Nickname, write.Addresses.FirstOrDefault());
+        if (fallback.Length > 0) card.DisplayNames = ReplaceFirstText(card.DisplayNames, fallback);
+        if (write.Nickname != null)
+            card.NickNames = ReplaceFirstNickname(card.NickNames, write.Nickname);
+        if (write.Addresses.Count > 0) ReplaceEmailBlock(card, write.Addresses);
+        return Emit(source, uid, RawBirthday(existingCard));
+    }
+
+    internal static string MergeFill(string existingCard, string uid, MergeWrite write)
+    {
+        var source = SourceCard.Read(existingCard);
+        var card = source.Card;
+        SetName(card, Components(write.FirstName), Components(write.LastName), null, null, null);
+        if (write.Nickname != null)
+            card.NickNames = ReplaceFirstNickname(card.NickNames, write.Nickname);
+        // No middle name: a 3d merge carried none, and never composed an FN either.
+        if (!(card.DisplayNames ?? []).Any(p => p is { IsEmpty: false }))
+            card.DisplayNames = ReplaceFirstText(card.DisplayNames,
+                FallbackDisplayName(write.FirstName, null, write.LastName, write.Nickname,
+                    write.AddedAddresses.FirstOrDefault()));
+        var emails = (card.EMails ?? []).OfType<TextProperty>().ToList();
+        emails.AddRange(write.AddedAddresses.Select(a => new TextProperty(a)));
+        card.EMails = emails;
+        return Emit(source, uid, RawBirthday(existingCard));
+    }
+
+    private static string Apply(SourceCard source, string uid, ContactWrite write)
+    {
+        var card = source.Card;
+        SetName(card,
+            Components(write.FirstName) ?? [], Components(write.LastName) ?? [],
+            Components(write.MiddleName) ?? [], Components(write.NamePrefix) ?? [],
+            Components(write.NameSuffix) ?? []);
+        card.DisplayNames = ReplaceFirstText(card.DisplayNames,
+            write.DisplayName ?? FallbackDisplayName(write.FirstName, write.MiddleName, write.LastName,
+                write.Nickname, write.Addresses.Count > 0 ? write.Addresses[0].Address : null));
+        card.NickNames = ReplaceFirstNickname(card.NickNames, write.Nickname);
+        card.Organizations = ReplaceFirstOrg(card.Organizations, write.Organization, write.Department);
+        card.Titles = ReplaceFirstText(card.Titles, write.JobTitle);
+        card.Notes = ReplaceFirstText(card.Notes, write.Notes);
+        card.Urls = ReplaceFirstText(card.Urls, write.Website);
+        card.BirthDayViews = ReplaceFirstBday(card.BirthDayViews, write.Birthday);
+        card.EMails = Paired(card.EMails, write.Addresses, l => l.Position,
+            (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email));
+        card.Phones = Paired(card.Phones, write.Phones, l => l.Position,
+            (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone));
+        card.Addresses = Paired(card.Addresses, write.PostalAddresses, l => l.Position, PostalLine);
+        return Emit(source, uid, write.Birthday);
+    }
+
+    /// <summary>
+    /// The parsed card plus what the splice repairs need from the raw input: its logical lines,
+    /// and — for the families the 3.0 writer collapses to one occurrence — the verbatim line of
+    /// each parsed property, keyed by reference so untouched occurrences find their own bytes
+    /// back after an edit. Both stay empty unless input and output are the same vCard 3.0 (a 2.1
+    /// promotion re-encodes every line, so nothing of it may be spliced).
+    /// </summary>
+    private sealed record SourceCard(
+        VCard Card, VCdVersion Version, List<string> InputChunks,
+        Dictionary<VCardProperty, string> RawLineOf)
+    {
+        internal static SourceCard Fresh() => new(new VCard(), VCdVersion.V3_0, [], []);
+
+        internal static SourceCard Read(string existingCard)
+        {
+            VCard? parsed;
+            try { parsed = Vcf.Parse(existingCard).FirstOrDefault(); }
+            catch { parsed = null; }
+
+            // Décision 7: the card's version, 2.1 promoted; an unreadable card starts over in 3.0.
+            var version = parsed == null || parsed.Version == VCdVersion.V2_1
+                ? VCdVersion.V3_0 : parsed.Version;
+            if (parsed == null || parsed.Version != VCdVersion.V3_0)
+                return new SourceCard(parsed ?? new VCard(), version, [], []);
+
+            // A lone \r is a line break to the parser too — left in place it would splice a card
+            // boundary back in. And only the first card's lines may feed the splices.
+            var all = LogicalLines(existingCard
+                .Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n"));
+            var end = all.FindIndex(c =>
+                NameOf(Unfold(c)).Equals("END", StringComparison.OrdinalIgnoreCase));
+            var chunks = end < 0 ? all : all.Take(end + 1).ToList();
+            var rawOf = new Dictionary<VCardProperty, string>(ReferenceEqualityComparer.Instance);
+            MapFamily(rawOf, chunks, "NICKNAME", parsed.NickNames);
+            MapFamily(rawOf, chunks, "ORG", parsed.Organizations);
+            MapFamily(rawOf, chunks, "TITLE", parsed.Titles);
+            MapFamily(rawOf, chunks, "NOTE", parsed.Notes);
+            MapFamily(rawOf, chunks, "URL", parsed.Urls);
+            return new SourceCard(parsed, version, chunks, rawOf);
+        }
+
+        // Raw lines pair with parsed properties by rank, only when the two counts agree.
+        private static void MapFamily(
+            Dictionary<VCardProperty, string> map, List<string> chunks, string name,
+            IEnumerable<VCardProperty?>? properties)
+        {
+            var lines = chunks
+                .Where(c => NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var list = (properties ?? []).ToList();
+            if (lines.Count != list.Count) return;
+            for (var i = 0; i < list.Count; i++)
+                if (list[i] is { } property)
+                    map[property] = lines[i];
+        }
+    }
+
+    // ---- names --------------------------------------------------------------------------------
+
+    // null = keep the card's component (Reconcile/MergeFill bounds); a list = pose it. The comma
+    // split is the inverse of the projector's join: a multi-valued component round-trips as one.
+    private static string[]? Components(string? value) =>
+        value == null ? null : value.Length == 0 ? [] : value.Split(',');
+
+    private static void SetName(
+        VCard card, string[]? given, string[]? surname, string[]? given2,
+        string[]? prefixes, string[]? suffixes)
+    {
+        var old = (card.NameViews ?? []).FirstOrDefault(p => p is { IsEmpty: false });
+        var builder = NameBuilder.Create();
+        AddAll(v => builder.AddGiven(v), given ?? [.. old?.Value.Given ?? []]);
+        AddAll(v => builder.AddSurname(v), surname ?? [.. old?.Value.Surnames ?? []]);
+        AddAll(v => builder.AddGiven2(v), given2 ?? [.. old?.Value.Given2 ?? []]);
+        AddAll(v => builder.AddPrefix(v), prefixes ?? [.. old?.Value.Prefixes ?? []]);
+        AddAll(v => builder.AddSuffix(v), suffixes ?? [.. old?.Value.Suffixes ?? []]);
+        AddAll(v => builder.AddSurname2(v), [.. old?.Value.Surnames2 ?? []]);
+        AddAll(v => builder.AddGeneration(v), [.. old?.Value.Generations ?? []]);
+
+        var replaced = new NameProperty(builder.Build(), old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        card.NameViews = [replaced,
+            .. (card.NameViews ?? []).OfType<NameProperty>().Where(p => !ReferenceEquals(p, old))];
+    }
+
+    private static void AddAll(Action<string> add, IReadOnlyList<string> values)
+    {
+        foreach (var value in values) add(value);
+    }
+
+    /// <summary>Name components as one display token, blanks dropped — the legacy FN's own join.</summary>
+    private static string NamePart(params IEnumerable<string>?[] components) =>
+        string.Join(' ', components.SelectMany(c => c ?? []).Where(v => !string.IsNullOrEmpty(v)));
+
+    private static string FallbackDisplayName(
+        string? first, string? middle, string? last, string? nickname, string? firstAddress)
+    {
+        var name = string.Join(' ', new[] { first, middle, last }.Where(p => !string.IsNullOrEmpty(p)));
+        return name.Length > 0 ? name : nickname ?? firstAddress ?? string.Empty;
+    }
+
+    // ---- scalars: replace the first occurrence, leave the others (décision 5) ------------------
+
+    private static IEnumerable<TextProperty>? ReplaceFirstText(
+        IEnumerable<TextProperty?>? properties, string? value)
+    {
+        var list = (properties ?? []).OfType<TextProperty>().ToList();
+        if (string.IsNullOrEmpty(value)) return list.Count == 0 ? null : list.Skip(1).ToList();
+        var old = list.FirstOrDefault();
+        var replaced = new TextProperty(value, old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        return [replaced, .. list.Skip(1)];
+    }
+
+    private static IEnumerable<StringCollectionProperty>? ReplaceFirstNickname(
+        IEnumerable<StringCollectionProperty?>? properties, string? value)
+    {
+        var list = (properties ?? []).OfType<StringCollectionProperty>().ToList();
+        if (string.IsNullOrEmpty(value)) return list.Count == 0 ? null : list.Skip(1).ToList();
+        var old = list.FirstOrDefault();
+        var replaced = new StringCollectionProperty(value.Split(','), old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        return [replaced, .. list.Skip(1)];
+    }
+
+    private static IEnumerable<OrgProperty>? ReplaceFirstOrg(
+        IEnumerable<OrgProperty?>? properties, string? organization, string? department)
+    {
+        var list = (properties ?? []).OfType<OrgProperty>().ToList();
+        if (organization == null && department == null)
+            return list.Count == 0 ? null : list.Skip(1).ToList();
+        var old = list.FirstOrDefault();
+        var replaced = new OrgProperty(
+            new Organization(organization, department?.Split(';')), old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        return [replaced, .. list.Skip(1)];
+    }
+
+    private static IEnumerable<DateAndOrTimeProperty>? ReplaceFirstBday(
+        IEnumerable<DateAndOrTimeProperty?>? properties, string? value)
+    {
+        var list = (properties ?? []).OfType<DateAndOrTimeProperty>().ToList();
+        if (string.IsNullOrEmpty(value)) return list.Count == 0 ? null : list.Skip(1).ToList();
+        var old = list.FirstOrDefault();
+        var replaced = new DateAndOrTimeProperty(DateAndOrTime.Create(value), old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        return [replaced, .. list.Skip(1)];
+    }
+
+    // ---- child lines: paired to card properties by rank (décision 4) ---------------------------
+
+    private static List<TProp> Paired<TLine, TProp>(
+        IEnumerable<TProp?>? existing, IReadOnlyList<TLine> lines,
+        Func<TLine, int?> positionOf, Func<TLine, TProp?, TProp> build) where TProp : VCardProperty
+    {
+        var properties = (existing ?? []).ToList();
+        var claims = new Dictionary<int, TLine>();
+        var added = new List<TLine>();
+        foreach (var line in lines)
+        {
+            // A position the card does not hold — or one already claimed — is a new line at the end.
+            if (positionOf(line) is { } p && p >= 0 && p < properties.Count
+                && properties[p] != null && claims.TryAdd(p, line))
+                continue;
+            added.Add(line);
+        }
+
+        var result = new List<TProp>();
+        for (var i = 0; i < properties.Count; i++)
+            if (claims.TryGetValue(i, out var line))
+                result.Add(build(line, properties[i]));
+        result.AddRange(added.Select(line => build(line, null)));
+        return result;
+    }
+
+    private static TextProperty TextLine(string value, string type, TextProperty? old, Family family)
+    {
+        var replaced = new TextProperty(value, old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        ApplyType(replaced.Parameters, family, type);
+        return replaced;
+    }
+
+    private static AddressProperty PostalLine(ContactWriteAddress line, AddressProperty? old)
+    {
+        var builder = AddressBuilder.Create();
+        AddAll(v => builder.AddPOBox(v), Components(line.PoBox) ?? []);
+        AddAll(v => builder.AddExtended(v), Components(line.Extended) ?? []);
+        AddAll(v => builder.AddStreet(v), Components(line.Street) ?? []);
+        AddAll(v => builder.AddLocality(v), Components(line.Locality) ?? []);
+        AddAll(v => builder.AddRegion(v), Components(line.Region) ?? []);
+        AddAll(v => builder.AddPostalCode(v), Components(line.PostalCode) ?? []);
+        AddAll(v => builder.AddCountry(v), Components(line.Country) ?? []);
+        if (old?.Value is { } kept)
+        {
+            // The RFC 9554 components stay on the property, never read from the write (décision 4).
+            AddAll(v => builder.AddRoom(v), kept.Room);
+            AddAll(v => builder.AddApartment(v), kept.Apartment);
+            AddAll(v => builder.AddFloor(v), kept.Floor);
+            AddAll(v => builder.AddStreetNumber(v), kept.StreetNumber);
+            AddAll(v => builder.AddStreetName(v), kept.StreetName);
+            AddAll(v => builder.AddBuilding(v), kept.Building);
+            AddAll(v => builder.AddBlock(v), kept.Block);
+            AddAll(v => builder.AddSubDistrict(v), kept.SubDistrict);
+            AddAll(v => builder.AddDistrict(v), kept.District);
+            AddAll(v => builder.AddLandmark(v), kept.Landmark);
+            AddAll(v => builder.AddDirection(v), kept.Direction);
+        }
+
+        var replaced = new AddressProperty(builder.Build(), old?.Group);
+        if (old != null) replaced.Parameters.Assign(old.Parameters);
+        ApplyType(replaced.Parameters, Family.Postal, line.Type);
+        return replaced;
+    }
+
+    // TYPE is replaced whole from the field, PREF excepted: Preference is left alone, so the 3.0
+    // token and the 4.0 parameter both survive. Every other parameter of the block stays untouched.
+    private static void ApplyType(ParameterSection parameters, Family family, string type)
+    {
+        parameters.PropertyClass = null;
+        if (family == Family.Phone) parameters.PhoneType = null;
+        if (family == Family.Email) parameters.EMailType = null;
+        if (family == Family.Postal) parameters.AddressType = null;
+        var kept = (parameters.NonStandard ?? [])
+            .Where(p => !p.Key.Equals("TYPE", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        // PREF is dropped — Preference already carries it and the projection echoes the token back
+        // in the field; EMAIL's INTERNET too: the 3.0 writer adds it itself, 4.0 does not define it.
+        var tokens = type
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(t => !t.Equals("PREF", StringComparison.OrdinalIgnoreCase)
+                && (family != Family.Email || !t.Equals("INTERNET", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (tokens.Count > 0) kept.Add(new("TYPE", string.Join(',', tokens)));
+        parameters.NonStandard = kept.Count == 0 ? null : kept;
+    }
+
+    private static void ReplaceEmailBlock(VCard card, IReadOnlyList<string> addresses)
+    {
+        var properties = (card.EMails ?? []).ToList();
+        var result = new List<TextProperty>();
+        for (var i = 0; i < addresses.Count; i++)
+        {
+            var old = i < properties.Count ? properties[i] : null;
+            var replaced = new TextProperty(addresses[i], old?.Group);
+            if (old != null) replaced.Parameters.Assign(old.Parameters);
+            result.Add(replaced);
+        }
+
+        card.EMails = result;
+    }
+
+    // ---- serialization and the 8.2.0 repairs ----------------------------------------------------
+
+    private static string Emit(SourceCard source, string uid, string? birthday)
+    {
+        var card = source.Card;
+        var old = card.ContactID;
+        var id = new ContactIDProperty(ContactID.Create(uid), old?.Group);
+        if (old != null) id.Parameters.Assign(old.Parameters);
+        card.ContactID = id;
+
+        var lines = LogicalLines(Serialize(card, source.Version));
+        if (source.Version == VCdVersion.V3_0)
+        {
+            RestoreDroppedParameters(lines, card);
+            SpliceCollapsedFamilies(lines, card, source);
+            SpliceUnmodelledFamilies(lines, source);
+        }
+
+        EnforceBirthday(lines, card, birthday);
+        return string.Join("\r\n", lines) + "\r\n";
+    }
+
+    private static string Serialize(VCard card, VCdVersion version) =>
+        Vcf.AsString([card], version, null, SerializationOptions);
+
+    /// <summary>
+    /// What FolkerKinzel 8.2.0's vCard 3.0 writer provably drops even with the two flags set: the
+    /// non-standard parameters of TEL, EMAIL, URL and BDAY (its ADR and text-scalar builders do
+    /// write them). Output lines are matched to model properties by rank, in the writer's own
+    /// order — stable ascending on Preference — and any count mismatch degrades to no repair
+    /// rather than a wrong one.
+    /// </summary>
+    private static void RestoreDroppedParameters(List<string> lines, VCard card)
+    {
+        Restore(lines, "EMAIL", Predicted(card.EMails));
+        Restore(lines, "TEL", Predicted(card.Phones));
+        Restore(lines, "URL", Predicted(card.Urls), firstOnly: true);
+        Restore(lines, "BDAY", Predicted(card.BirthDayViews), firstOnly: true);
+    }
+
+    private static List<VCardProperty> Predicted(IEnumerable<VCardProperty?>? properties) =>
+        [.. (properties ?? []).Where(p => p is { IsEmpty: false })
+            .OrderBy(p => p!.Parameters.Preference).Cast<VCardProperty>()];
+
+    private static void Restore(
+        List<string> lines, string name, List<VCardProperty> predicted, bool firstOnly = false)
+    {
+        var indices = FamilyIndices(lines, name);
+        if (firstOnly)
+        {
+            if (indices.Count > 0 && predicted.Count > 0)
+                lines[indices[0]] = RestoreParams(lines[indices[0]], predicted[0]);
+            return;
+        }
+
+        if (indices.Count != predicted.Count) return;
+        for (var i = 0; i < indices.Count; i++)
+            lines[indices[i]] = RestoreParams(lines[indices[i]], predicted[i]);
+    }
+
+    private static string RestoreParams(string chunk, VCardProperty property)
+    {
+        var unfolded = Unfold(chunk);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        if (colon < 0) return chunk;
+        var head = unfolded[..colon];
+        var semi = IndexOutsideQuotes(head, ';');
+        var block = semi < 0 ? string.Empty : head[(semi + 1)..];
+        var missing = (property.Parameters.NonStandard ?? [])
+            .Where(p => !HasParameter(block, p.Key))
+            .Select(p => $";{p.Key}={p.Value}")
+            .ToList();
+        return missing.Count == 0 ? chunk
+            : Fold(head + string.Concat(missing) + unfolded[colon..]);
+    }
+
+    /// <summary>
+    /// The 3.0 writer also emits only the most preferred occurrence of NICKNAME, ORG, TITLE, NOTE
+    /// and URL. Décision 5 guarantees occurrences past the first are semantically untouched, so
+    /// each one takes its own raw input line back, verbatim; the edited first occurrence keeps the
+    /// writer's line. Any shape the mapping cannot vouch for is left exactly as the writer put it.
+    /// </summary>
+    private static void SpliceCollapsedFamilies(List<string> lines, VCard card, SourceCard source)
+    {
+        SpliceFamily(lines, "NICKNAME", card.NickNames, source,
+            (solo, p) => solo.NickNames = [(StringCollectionProperty)p]);
+        SpliceFamily(lines, "ORG", card.Organizations, source,
+            (solo, p) => solo.Organizations = [(OrgProperty)p]);
+        SpliceFamily(lines, "TITLE", card.Titles, source,
+            (solo, p) => solo.Titles = [(TextProperty)p]);
+        SpliceFamily(lines, "NOTE", card.Notes, source,
+            (solo, p) => solo.Notes = [(TextProperty)p]);
+        SpliceFamily(lines, "URL", card.Urls, source,
+            (solo, p) => solo.Urls = [(TextProperty)p]);
+    }
+
+    private static void SpliceFamily(
+        List<string> lines, string name, IEnumerable<VCardProperty?>? properties, SourceCard source,
+        Action<VCard, VCardProperty> assignAlone)
+    {
+        var model = (properties ?? []).Where(p => p is { IsEmpty: false })
+            .Cast<VCardProperty>().ToList();
+        if (model.Count < 2) return;
+        var indices = FamilyIndices(lines, name);
+        if (indices.Count >= model.Count || indices.Count > 1) return;
+
+        // Only rank 0 — the one occurrence the entry points ever edit — may lack a raw line. It is
+        // re-rendered alone through the library, never taken from the writer's collapsed line:
+        // that line is the *most preferred* occurrence, which a later PREF can make a different
+        // property, and standing it in for the edit would discard the edit.
+        var block = new List<string>();
+        for (var i = 0; i < model.Count; i++)
+        {
+            if (source.RawLineOf.TryGetValue(model[i], out var raw)) block.Add(raw);
+            else if (i == 0 && RenderAlone(name, model[0], assignAlone) is { } rendered) block.Add(rendered);
+            else return;
+        }
+
+        var at = indices.Count == 1 ? indices[0] : lines.Count - 1;
+        if (indices.Count == 1) lines.RemoveAt(indices[0]);
+        lines.InsertRange(at, block);
+    }
+
+    // The library's own rendering of a single property: a solo card cannot collapse anything, and
+    // the parameter repair still applies (the 3.0 URL builder writes no parameters at all).
+    private static string? RenderAlone(
+        string name, VCardProperty property, Action<VCard, VCardProperty> assignAlone)
+    {
+        var solo = new VCard();
+        assignAlone(solo, property);
+        var rendered = LogicalLines(Serialize(solo, VCdVersion.V3_0));
+        var indices = FamilyIndices(rendered, name);
+        return indices.Count == 1 ? RestoreParams(rendered[indices[0]], property) : null;
+    }
+
+    // Every name no entry point edits. The writer owns the rest: LABEL lines are derived from ADR
+    // parameters and AGENT can nest a whole card, so neither may be spliced from the input.
+    private static readonly HashSet<string> OwnedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "N", "FN", "NICKNAME", "ORG", "TITLE",
+        "NOTE", "URL", "BDAY", "EMAIL", "TEL", "ADR", "LABEL", "AGENT",
+    };
+
+    /// <summary>
+    /// Décision 4, taken literally for everything the composer does not model: PHOTO, KEY, IMPP,
+    /// CATEGORIES, GEO, the X- families… were not edited, so their input lines replace whatever
+    /// the writer made of them — verbatim bytes, groups, X- parameters and occurrences included.
+    /// </summary>
+    private static void SpliceUnmodelledFamilies(List<string> lines, SourceCard source)
+    {
+        var families = new List<string>();
+        var inputLines = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var chunk in source.InputChunks)
+        {
+            var name = NameOf(Unfold(chunk));
+            if (name.Length == 0 || OwnedNames.Contains(name)) continue;
+            if (!inputLines.TryGetValue(name, out var group))
+            {
+                inputLines[name] = group = [];
+                families.Add(name);
+            }
+
+            group.Add(chunk);
+        }
+
+        foreach (var name in families)
+        {
+            var indices = FamilyIndices(lines, name);
+            var at = indices.Count > 0 ? indices[0] : lines.Count - 1;
+            for (var i = indices.Count - 1; i >= 0; i--) lines.RemoveAt(indices[i]);
+            lines.InsertRange(at, inputLines[name]);
+        }
+    }
+
+    private static List<int> FamilyIndices(List<string> lines, string name)
+    {
+        var indices = new List<int>();
+        for (var i = 0; i < lines.Count; i++)
+            if (NameOf(Unfold(lines[i])).Equals(name, StringComparison.OrdinalIgnoreCase))
+                indices.Add(i);
+        return indices;
+    }
+
+    private static bool HasParameter(string block, string key) =>
+        SplitOutsideQuotes(block).Any(p =>
+        {
+            var eq = p.IndexOf('=');
+            return (eq < 0 ? p : p[..eq]).Trim().Equals(key, StringComparison.OrdinalIgnoreCase);
+        });
+
+    /// <summary>
+    /// Décision 11: the column's spelling is what the card carries, whatever the version. The
+    /// library corrupts a partial date in 3.0 (<c>--0315</c> gains year 4), drops a text form
+    /// outright, or re-labels it VALUE=TEXT in 4.0 — whenever the emitted value is not the
+    /// column's, the whole BDAY line is re-emitted verbatim with the property's X- parameters.
+    /// </summary>
+    private static void EnforceBirthday(List<string> lines, VCard card, string? birthday)
+    {
+        if (string.IsNullOrEmpty(birthday)) return;
+        var index = -1;
+        for (var i = 0; i < lines.Count && index < 0; i++)
+            if (NameOf(Unfold(lines[i])).Equals("BDAY", StringComparison.OrdinalIgnoreCase))
+                index = i;
+
+        if (index >= 0)
+        {
+            var unfolded = Unfold(lines[index]);
+            var colon = IndexOutsideQuotes(unfolded, ':');
+            var relabelled = unfolded[..Math.Max(colon, 0)]
+                .Contains("VALUE=TEXT", StringComparison.OrdinalIgnoreCase);
+            if (colon >= 0 && unfolded[(colon + 1)..] == birthday && !relabelled) return;
+        }
+
+        var property = (card.BirthDayViews ?? []).FirstOrDefault(p => p != null);
+        var line = BuildLine("BDAY", property, EscapeLineBreaks(birthday));
+        if (index >= 0) lines[index] = line;
+        else lines.Insert(lines.Count - 1, line); // before END:VCARD
+    }
+
+    private static string BuildLine(string name, VCardProperty? property, string value)
+    {
+        var builder = new StringBuilder();
+        if (property?.Group is { Length: > 0 } group) builder.Append(group).Append('.');
+        builder.Append(name);
+        foreach (var pair in property?.Parameters.NonStandard ?? [])
+            builder.Append(';').Append(pair.Key).Append('=').Append(pair.Value);
+        return Fold(builder.Append(':').Append(value).ToString());
+    }
+
+    // ---- raw-text primitives --------------------------------------------------------------------
+
+    private static List<string> LogicalLines(string text)
+    {
+        var lines = new List<string>();
+        foreach (var physical in text.Split("\r\n"))
+        {
+            if (physical.Length == 0) continue;
+            if ((physical[0] == ' ' || physical[0] == '\t') && lines.Count > 0)
+                lines[^1] += "\r\n" + physical;
+            else
+                lines.Add(physical);
+        }
+
+        return lines;
+    }
+
+    private static string Unfold(string chunk) =>
+        chunk.Replace("\r\n ", string.Empty).Replace("\r\n\t", string.Empty);
+
+    private static string Fold(string line)
+    {
+        if (line.Length <= 75) return line;
+        var builder = new StringBuilder().Append(line, 0, 75);
+        for (var i = 75; i < line.Length; i += 74)
+            builder.Append("\r\n ").Append(line, i, Math.Min(74, line.Length - i));
+        return builder.ToString();
+    }
+
+    // The property name of an unfolded line, its group prefix stripped — "" when not a property.
+    internal static string NameOf(string line)
+    {
+        var start = 0;
+        var end = line.IndexOfAny([';', ':', '.']);
+        if (end >= 0 && line[end] == '.')
+        {
+            start = end + 1;
+            var next = line[start..].IndexOfAny([';', ':']);
+            end = next < 0 ? -1 : start + next;
+        }
+
+        return end < 0 ? string.Empty : line[start..end];
+    }
+
+    private static int IndexOutsideQuotes(string text, char target)
+    {
+        var inQuotes = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '"') inQuotes = !inQuotes;
+            else if (!inQuotes && text[i] == target) return i;
+        }
+
+        return -1;
+    }
+
+    private static List<string> SplitOutsideQuotes(string parameters)
+    {
+        var parts = new List<string>();
+        var start = 0;
+        var inQuotes = false;
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i] == '"') inQuotes = !inQuotes;
+            else if (parameters[i] == ';' && !inQuotes)
+            {
+                parts.Add(parameters[start..i]);
+                start = i + 1;
+            }
+        }
+
+        if (start < parameters.Length) parts.Add(parameters[start..]);
+        return parts;
+    }
+
+    // The first BDAY's raw value in the stored card — what Reconcile and MergeFill, which carry no
+    // birthday of their own, must keep the card spelling through re-serialization (décision 11).
+    private static string? RawBirthday(string vcardRaw)
+    {
+        var unfolded = vcardRaw.Replace("\r\n", "\n").Replace("\n ", "").Replace("\n\t", "");
+        foreach (var line in unfolded.Split('\n'))
+        {
+            if (NameOf(line).Equals("END", StringComparison.OrdinalIgnoreCase)) break;
+            if (!NameOf(line).Equals("BDAY", StringComparison.OrdinalIgnoreCase)) continue;
+            var colon = IndexOutsideQuotes(line, ':');
+            if (colon >= 0) return line[(colon + 1)..];
+        }
+
+        return null;
+    }
+
+    private static string EscapeLineBreaks(string value) =>
+        value.Replace("\r\n", "\\n").Replace("\r", "\\n").Replace("\n", "\\n");
+}

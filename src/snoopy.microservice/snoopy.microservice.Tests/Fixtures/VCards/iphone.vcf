@@ -1,0 +1,40 @@
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//iPhone OS 17.5//EN
+N:Test;Prenom;Marie;Dr.;Jr.
+FN:Prenom Test
+NICKNAME:Pino
+ORG:Exemple SPRL;Support technique
+TITLE:Responsable
+item1.EMAIL;type=INTERNET;type=HOME;type=pref:prenom.test@exemple.example
+item1.X-ABLabel:_$!<Home>!$_
+EMAIL;type=INTERNET;type=WORK:p.test@bureau.exemple.example
+TEL;type=CELL;type=VOICE;type=pref:+32470000000
+item2.TEL;type=HOME;type=VOICE:+3221230000
+item2.X-ABLabel:_$!<Home>!$_
+item3.ADR;type=HOME;type=pref:;;Rue Neuve 1;Bruxelles;;1000;Belgique
+item3.X-ABADR:be
+item4.URL;type=pref:https://exemple.example/prenom
+item4.X-ABLabel:_$!<HomePage>!$_
+BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-15
+NOTE:Fiche de test iPhone.
+PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==
+X-ABUID:8F1C3A2E-1234-4B5A-9E0F-ABCDEF012345:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//iPhone OS 17.5//EN
+N:Atelier Exemple;;;;
+FN:Atelier Exemple
+ORG:Atelier Exemple;
+X-ABShowAs:COMPANY
+item1.EMAIL;type=INTERNET;type=WORK;type=pref:contact@atelier.exemple.example
+item1.X-ABLabel:_$!<Work>!$_
+TEL;type=WORK;type=VOICE:+3221230001
+item2.ADR;type=WORK;type=pref:;;Quai du Test 7;Liege;;4000;Belgique
+item2.X-ABADR:be
+item3.X-ABDATE;type=pref:2019-09-01
+item3.X-ABLabel:_$!<Anniversary>!$_
+item4.X-ABRELATEDNAMES;type=pref:Prenom Test
+item4.X-ABLabel:_$!<Friend>!$_
+END:VCARD

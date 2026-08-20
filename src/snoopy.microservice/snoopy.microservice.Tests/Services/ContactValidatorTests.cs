@@ -1,3 +1,4 @@
+using System.Text.Json;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
@@ -6,9 +7,32 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 
 public sealed class ContactValidatorTests
 {
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+
+    // A local stand-in for the wire payload: the phone list needs no legacy string shape, so a
+    // plain (Number, Type) pair is all a test needs to build one.
+    private sealed record PhonePayload(string Number, string Type);
+
     private static ContactRequest Request(
-        string? first = null, string? last = null, string? nick = null, params string[] addresses) =>
-        new() { FirstName = first, LastName = last, Nickname = nick, Addresses = [.. addresses] };
+        string? first = null, string? last = null, string? nick = null,
+        string? birthday = null, string? notes = null,
+        IReadOnlyList<PhonePayload>? phones = null,
+        params string[] addresses) =>
+        new()
+        {
+            FirstName = first,
+            LastName = last,
+            Nickname = nick,
+            Birthday = birthday,
+            Notes = notes,
+            Addresses = [.. addresses],
+            Phones = phones is null
+                ? null
+                : [.. phones.Select(p => new ContactPhonePayload { Number = p.Number, Type = p.Type })],
+        };
+
+    private static ContactRequest FromJson(string json) =>
+        JsonSerializer.Deserialize<ContactRequest>(json, Web)!;
 
     [Fact]
     public void Validate_WithANameOnly_Succeeds()
@@ -27,7 +51,7 @@ public sealed class ContactValidatorTests
 
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value.FirstName);
-        Assert.Equal("bruno@example.com", Assert.Single(result.Value.Addresses));
+        Assert.Equal("bruno@example.com", Assert.Single(result.Value.Addresses).Address);
     }
 
     [Fact]
@@ -73,7 +97,7 @@ public sealed class ContactValidatorTests
     {
         var result = ContactValidator.Validate(Request(first: "Bruno", addresses: ["bruno@example.com", "  ", ""]));
 
-        Assert.Equal("bruno@example.com", Assert.Single(result.Value.Addresses));
+        Assert.Equal("bruno@example.com", Assert.Single(result.Value.Addresses).Address);
     }
 
     [Fact]
@@ -94,7 +118,8 @@ public sealed class ContactValidatorTests
         var result = ContactValidator.Validate(
             Request(addresses: ["second@example.com", "first@example.com"]));
 
-        Assert.Equal(["second@example.com", "first@example.com"], result.Value.Addresses);
+        Assert.Equal(["second@example.com", "first@example.com"],
+            result.Value.Addresses.Select(a => a.Address));
     }
 
     // The column widths, not a taste: unbounded, a 150-character name reaches a strict-mode
@@ -179,5 +204,86 @@ public sealed class ContactValidatorTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("manual", result.Value.Source);
+    }
+
+    [Fact]
+    public void Validate_AcceptsTheLegacyStringAddressShape()
+    {
+        // The frontend currently sends ["a@b.c"]; no screen changes in 4a.
+        var result = ContactValidator.Validate(FromJson("""{"firstName":"Ana","addresses":["a@b.c"]}"""));
+        Assert.True(result.IsSuccess);
+        var line = Assert.Single(result.Value.Addresses);
+        Assert.Null(line.Position);
+        Assert.Equal("a@b.c", line.Address);
+    }
+
+    [Fact]
+    public void Validate_RefusesATypeThatIsNotAToken()
+    {
+        // Token: ASCII letters, digits, dash, comma, <= 64 (spec, § Limites). A ';' or a CR is
+        // the same injection vector a closed params has already shut.
+        var result = ContactValidator.Validate(Request(first: "Ana", phones: [new("+322", "WORK;PREF=1")]));
+        Assert.True(result.IsFailure);
+        Assert.Contains("type", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_CapsPhonesAtTen()
+    {
+        var result = ContactValidator.Validate(Request(first: "Ana", phones: [.. Enumerable.Range(0, 11)
+            .Select(i => new PhonePayload($"+32{i}", "CELL"))]));
+        Assert.True(result.IsFailure);
+        Assert.Contains(ContactValidator.MaxPhonesPerContact.ToString(), result.Error);
+    }
+
+    [Fact]
+    public void Validate_MirrorsTheNewColumnWidths()
+    {
+        // birthday VARCHAR(64), website VARCHAR(512), organization 255, number 64… — unbounded,
+        // an over-long value reaches MariaDB in strict mode and comes back as a 500.
+        var result = ContactValidator.Validate(Request(first: "Ana", birthday: new string('x', 65)));
+        Assert.True(result.IsFailure);
+        Assert.Contains("birthday", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Blank rows are what an editor leaves behind when the user opens a line and changes their
+    // mind — the same rule Validate_DropsBlankAddressRows pins for e-mail, now for every child
+    // collection: ContactWrite's doc promises the store never has to re-check this.
+    [Fact]
+    public void Validate_DropsABlankPhoneRow()
+    {
+        var result = ContactValidator.Validate(FromJson("""{"firstName":"Ana","phones":[{}]}"""));
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Phones);
+    }
+
+    [Fact]
+    public void Validate_DropsABlankPostalAddressRow()
+    {
+        var result = ContactValidator.Validate(FromJson("""{"firstName":"Ana","postalAddresses":[{}]}"""));
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.PostalAddresses);
+    }
+
+    // notes is TEXT (65,535 bytes) — the one column left unmirrored, and the editor gate a user
+    // can act on: unbounded, an over-long note came back as a 500 from a strict-mode MariaDB.
+    [Fact]
+    public void Validate_MirrorsTheNotesColumnWidth()
+    {
+        var result = ContactValidator.Validate(
+            Request(first: "Ana", notes: new string('x', ContactValidator.MaxNotesLength + 1)));
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("notes", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IsValidTypeToken_RefusesATrailingNewline()
+    {
+        // .NET's $ also matches immediately before a trailing '\n'; \z does not. This method is
+        // called directly by later tasks on values they may not have trimmed themselves.
+        Assert.False(ContactValidator.IsValidTypeToken("HOME\n"));
     }
 }

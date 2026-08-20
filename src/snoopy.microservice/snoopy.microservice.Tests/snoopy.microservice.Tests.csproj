@@ -25,6 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Fixtures\VCards\*.vcf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\snoopy.microservice.core.csproj" />
     <!-- The core never references the platform provider; this suite does, to prove that the two
          platforms wire up and that the weesky routes exist only when its assembly is loaded. -->

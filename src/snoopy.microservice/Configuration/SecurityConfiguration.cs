@@ -22,8 +22,8 @@ internal static class SecurityConfiguration
         services.AddJwtBearerAuthentication(cookiesSupport: true);
 
         // No handler is registered here: the platform brings one, and a deployment whose platform
-        // has no admin directory leaves the policy unsatisfiable — which is the right answer,
-        // since no route it serves carries it.
+        // has no admin directory leaves the policy unsatisfiable — the right answer for the two
+        // core routes carrying it: PUT /api/AppSettings and POST /api/Contacts/Backfill (4a).
         services.AddAuthorization(options =>
         {
             options.AddPolicy(AdminRequirement.PolicyName, policy =>

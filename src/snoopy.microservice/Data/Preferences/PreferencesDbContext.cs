@@ -26,7 +26,10 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
         modelBuilder.Entity<Contact>().HasKey(c => c.Id);
         modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.Uid }).IsUnique();
-        modelBuilder.Entity<ContactEmail>().HasKey(e => new { e.ContactId, e.Address });
+        modelBuilder.Entity<ContactEmail>().HasKey(e => new { e.ContactId, e.Position });
+        modelBuilder.Entity<ContactPhone>().HasKey(p => new { p.ContactId, p.Position });
+        modelBuilder.Entity<ContactAddress>().HasKey(a => new { a.ContactId, a.Position });
+        modelBuilder.Entity<ContactPhoto>().HasKey(p => p.ContactId);
         // Without this edge EF has no dependency between the two and orders their INSERTs by table
         // name — contact_emails before contacts — breaking fk_contact_emails_contact on any create
         // carrying an address. Declared without navigation: the entities stay flat, the order does
@@ -36,6 +39,13 @@ public class PreferencesDbContext : DbContext
             .WithMany()
             .HasForeignKey(e => e.ContactId)
             .OnDelete(DeleteBehavior.Cascade);
+        // Same mechanism as ContactEmail -> Contact above, for the three sibling projection tables.
+        modelBuilder.Entity<ContactPhone>()
+            .HasOne<Contact>().WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactAddress>()
+            .HasOne<Contact>().WithMany().HasForeignKey(a => a.ContactId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactPhoto>()
+            .HasOne<Contact>().WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
 
@@ -107,6 +117,12 @@ public class PreferencesDbContext : DbContext
     public DbSet<Contact> Contacts { get; set; }
 
     public DbSet<ContactEmail> ContactEmails { get; set; }
+
+    public DbSet<ContactPhone> ContactPhones { get; set; }
+
+    public DbSet<ContactAddress> ContactAddresses { get; set; }
+
+    public DbSet<ContactPhoto> ContactPhotos { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
 

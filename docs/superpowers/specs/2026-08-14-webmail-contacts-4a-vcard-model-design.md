@@ -54,7 +54,11 @@ par le composeur, sans quoi les colonnes divergent de la carte au premier import
 quand une carte `.vcf` fusionne dans une fiche qui a déjà la sienne, les propriétés non modélisées
 de la carte **entrante** sont perdues — celles de la carte existante survivent, c'est elle qui
 fait foi. Quand la fiche visée n'en a **aucune**, en revanche, la carte entrante est posée
-verbatim : c'est la troisième porte, et la seule qui préserve ses `X-`.
+verbatim : c'est la troisième porte, et la seule qui préserve ses `X-`. Verbatim à une ligne
+près : une carte qui ne déclare aucun `UID` s'en voit insérer un, égal à la colonne, juste après
+`VERSION` — l'invariant vaut pour toute carte stockée, et le synthétiser au moment de servir ferait
+diverger les octets servis des octets hachés. Celle qui en déclare un n'est jamais touchée :
+remplacer son `UID` ferait tourner l'identité sur laquelle un client se synchronise.
 
 L'inverse — colonnes souveraines, carte régénérée à la lecture — a été écarté sur une conséquence
 qui ne se paie qu'en 4c : une carte reconstruite n'est jamais octet-pour-octet identique à celle
@@ -465,7 +469,9 @@ décision 1 ne permet plus. Toute fiche a une carte, y compris celle qui n'est q
 l'invariant est rompu par le premier import CSV du lendemain du rattrapage.
 
 Le calcul de `card_hash` vit dans le store, à l'endroit unique où `vcard_raw` est écrit — un hash
-calculé par les appelants est un hash qu'un appelant oubliera.
+calculé par les appelants est un hash qu'un appelant oubliera. C'est là aussi qu'une carte sans
+`UID` reçoit celui de sa colonne, avant le plafond et avant le hash (décision 1) : le composeur ne
+couvre que ce qu'il produit, le point d'écriture couvre la voie verbatim avec.
 
 **`uid` et `source` restent intouchés par l'édition**, comme aujourd'hui : le premier est l'identité
 sur laquelle un client se synchronise et le réécrire dupliquerait la fiche à sa prochaine passe ; le

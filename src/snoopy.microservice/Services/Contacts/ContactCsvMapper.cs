@@ -107,7 +107,9 @@ internal static partial class ContactCsvMapper
                         rejected.Add(value);
                     else if (seen.Add(IdentityResolver.Canonical(value))) addresses.Add(value);
                     break;
-                default: extras.TryAdd(keys[i], value); break;
+                default:
+                    if (Unescaped(value) is { } unescaped) extras.TryAdd(keys[i], unescaped);
+                    break;
             }
         }
 
