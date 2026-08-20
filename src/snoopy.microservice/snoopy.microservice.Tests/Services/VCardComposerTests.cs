@@ -247,10 +247,10 @@ public sealed class VCardComposerTests
         Assert.DoesNotContain('?', output);
     }
 
-    // Décision 1 : une carte étrangère qui déclare vraiment N:?;;;; n'est pas la nôtre à réécrire.
-    // La réparation ne vise que notre propre vide ; c'est le garde du projecteur qui traite l'autre.
+    // La réparation ne vise que notre propre vide : un « ? » que l'utilisateur a tapé comme nom de
+    // famille est une valeur, pas un remplissage, et le composeur ne la lui reprend pas.
     [Fact]
-    public void Compose_ForeignQuestionMarkName_IsLeftAlone()
+    public void Compose_QuestionMarkTypedAsASurname_IsKept()
     {
         var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:?\r\nN:?;;;;\r\nEND:VCARD\r\n";
 
@@ -258,6 +258,36 @@ public sealed class VCardComposerTests
 
         Assert.Contains("N:?;;;;", output);
         Assert.Contains("FN:?", output);
+    }
+
+    // Le vrai sort d'une carte étrangère portant N:?;;;; quand elle passe par l'éditeur : Apply
+    // écrase le nom du modèle par celui des colonnes — que le projecteur rend désormais vides —
+    // donc ce que la réparation efface est le remplissage de l'écrivain, jamais les octets reçus.
+    // Les chemins verbatim (import .vcf, PUT de 4c) n'appellent pas Emit et ne voient rien de ceci.
+    [Fact]
+    public void Compose_ForeignPlaceholderCard_EmitsTheColumnsEmptyName()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:?\r\nN:?;;;;\r\nEND:VCARD\r\n";
+
+        var output = VCardComposer.Compose(card, Uid, MinimalWrite);
+
+        Assert.Contains("N:;;;;", output);
+        Assert.DoesNotContain('?', output);
+    }
+
+    // Le second verrou — la valeur émise ne doit être faite que de « ? » et de « ; » — porte sur un
+    // chemin réel : avec un N nommé et aucun FN, l'écrivain 8.2.0 synthétise FN depuis le N, et
+    // MergeFill calcule son repli sur les noms de l'import, pas sur ceux de la carte. Un merge vide
+    // laisse donc DisplayNames nul, Nameless vrai — sans ce verrou, Blank effacerait un vrai nom.
+    [Fact]
+    public void MergeFill_EmptyWriteOnANamedCardWithoutFn_KeepsTheSynthesisedFn()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Smith;John;;;\r\nEND:VCARD\r\n";
+
+        var output = VCardComposer.MergeFill(card, "u1", new MergeWrite(null, null, null, []));
+
+        Assert.Contains("FN:John Smith", output);
+        Assert.Contains("N:Smith;John;;;", output);
     }
 
     // Le jumeau de Backfill_ReconcilesWithoutDestroyingTheCard côté import : un CSV Outlook qui

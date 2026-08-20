@@ -73,13 +73,14 @@ public sealed class VCardProjectorTests
         Assert.Null(p.DisplayName);
     }
 
-    // La règle est stricte : un « ? » aux côtés d'un vrai nom est une donnée, pas un remplissage.
+    // Le tri est par composante, pas tout-ou-rien : le prénom réel reste et le « ? » qui lui sert de
+    // nom de famille n'atteint pas la colonne — sans quoi la tuile réafficherait « Jean ? ».
     [Fact]
-    public void Project_QuestionMarkBesideARealName_IsKept()
+    public void Project_PlaceholderBesideARealName_DropsThatComponentAlone()
     {
         var p = VCardProjector.Project(Card("N:?;Jean;;;"));
 
-        Assert.Equal(("Jean", "?"), (p.FirstName, p.LastName));
+        Assert.Equal(("Jean", null), (p.FirstName, p.LastName));
     }
 
     [Fact] // décision 8, exception nommée : EMAIL invalide → ligne abandonnée, pas tronquée

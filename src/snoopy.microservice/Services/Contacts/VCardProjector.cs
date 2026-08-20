@@ -2,7 +2,6 @@ using System.Text;
 using FolkerKinzel.VCards;
 using FolkerKinzel.VCards.Enums;
 using FolkerKinzel.VCards.Formatters;
-using FolkerKinzel.VCards.Models;
 using FolkerKinzel.VCards.Models.Properties;
 using FolkerKinzel.VCards.Models.Properties.Parameters;
 using weesky.Snoopy.Microservice.Models.Contacts;
@@ -52,17 +51,17 @@ internal static class VCardProjector
         if (card == null) return Empty;
 
         var raw = new RawCard(vcardRaw);
-        var name = WithoutPlaceholder(First(card.NameViews)?.Value);
+        var name = First(card.NameViews)?.Value;
         var org = First(card.Organizations)?.Value;
 
         return new ContactProjection(
-            Joined(name?.Given, ContactValidator.MaxNameLength),
-            Joined(name?.Surnames, ContactValidator.MaxNameLength),
+            NamePart(name?.Given, ContactValidator.MaxNameLength),
+            NamePart(name?.Surnames, ContactValidator.MaxNameLength),
             Joined(First(card.NickNames)?.Value, ContactValidator.MaxNameLength),
             Scalar(WithoutPlaceholder(First(card.DisplayNames)?.Value), MaxDisplayNameLength),
-            Joined(name?.Given2, ContactValidator.MaxMiddleNameLength),
-            Joined(name?.Prefixes, ContactValidator.MaxNamePartLength),
-            Joined(name?.Suffixes, ContactValidator.MaxNamePartLength),
+            NamePart(name?.Given2, ContactValidator.MaxMiddleNameLength),
+            NamePart(name?.Prefixes, ContactValidator.MaxNamePartLength),
+            NamePart(name?.Suffixes, ContactValidator.MaxNamePartLength),
             Scalar(org?.Name, ContactValidator.MaxOrganizationLength),
             Scalar(org?.Units == null ? null : string.Join(';', org.Units), ContactValidator.MaxOrganizationLength),
             Scalar(First(card.Titles)?.Value, ContactValidator.MaxOrganizationLength),
@@ -276,11 +275,11 @@ internal static class VCardProjector
 
     // N and FN are mandatory, and more than one writer fills an empty one with a question mark —
     // ours did, until the composer's repair. A card stored verbatim keeps it (décision 1), so the
-    // guard is here: a name holding nothing else is read as no name at all, never as data, while
-    // a "?" standing beside a real component is that card's own data and stays.
-    private static Name? WithoutPlaceholder(Name? name) =>
-        new[] { name?.Given, name?.Surnames, name?.Given2, name?.Prefixes, name?.Suffixes }
-            .SelectMany(c => c ?? []).Any(v => v.Length > 0 && v != Placeholder) ? name : null;
+    // guard is here, and it drops the placeholder component by component: a "?" beside a real name
+    // would otherwise reach the column and put the character back on the tile.
+    private static string? NamePart(IReadOnlyList<string>? values, int width) =>
+        values != null && values.Any(v => v.Length > 0 && v != Placeholder)
+            ? Joined(values, width) : null;
 
     private static string? WithoutPlaceholder(string? value) =>
         value == Placeholder ? null : value;

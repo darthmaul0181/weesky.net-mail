@@ -51,6 +51,7 @@ public sealed class ContactStoreTests
         var created = await CreateStore(db).CreateAsync(
             user, Write(first: null, last: null, addresses: "bruno@example.com"), CancellationToken.None);
 
+        Assert.True(created.IsSuccess);
         var row = new PreferencesTestDbContext(db).Contacts.Single(c => c.Id == created.Value);
         Assert.Null(row.LastName);
         Assert.Null(row.FirstName);
