@@ -39,6 +39,8 @@ public sealed record ContactWrite(
     string? Notes,
     bool IsFavorite,
     IReadOnlyList<ContactWriteEmail> Addresses,
-    IReadOnlyList<ContactWritePhone> Phones,
-    IReadOnlyList<ContactWriteAddress> PostalAddresses,
+    /// <summary>Null = the request did not name them, so the card keeps its own; empty = cleared.</summary>
+    IReadOnlyList<ContactWritePhone>? Phones,
+    /// <inheritdoc cref="Phones"/>
+    IReadOnlyList<ContactWriteAddress>? PostalAddresses,
     string Source);

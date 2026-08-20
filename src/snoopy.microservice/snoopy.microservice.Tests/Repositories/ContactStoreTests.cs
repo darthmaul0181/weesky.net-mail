@@ -22,7 +22,7 @@ public sealed class ContactStoreTests
         params string[] addresses) =>
         new(first, last, nick, null, null, null, null, null, null, null, null, null, notes,
             favorite, emails ?? [.. addresses.Select(a => new ContactWriteEmail(null, a, string.Empty))],
-            phones ?? [], postal ?? [], source);
+            phones, postal, source);
 
     [Fact]
     public async Task Create_ThenList_ReturnsTheContact()
@@ -248,6 +248,45 @@ public sealed class ContactStoreTests
         Assert.Equal("new@example.com", Assert.Single(stored.Addresses));
     }
 
+    // Absent n'est pas vide : un PUT qui ne nomme ni les téléphones ni l'anniversaire les conserve.
+    // C'est le seul écran qui écrit, et il n'en montre aucun — les effacer serait détruire ce que
+    // l'utilisateur n'a jamais vu.
+    [Fact]
+    public async Task Update_WithoutPhonesOrBirthday_KeepsThem()
+    {
+        var db = nameof(Update_WithoutPhonesOrBirthday_KeepsThem);
+        var user = Guid.NewGuid();
+        var seeded = await CreateStore(db).CreateAsync(user, Write(
+            phones: [new ContactWritePhone(null, "+32470000000", "CELL")],
+            addresses: "bruno@example.com") with { Birthday = "1993-06-21" }, CancellationToken.None);
+
+        var result = await CreateStore(db).UpdateAsync(user, seeded.Value,
+            Write(first: "Bruno", last: "Mertens", phones: null, addresses: "bruno@example.com"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var detail = await CreateStore(db).GetAsync(user, seeded.Value, CancellationToken.None);
+        Assert.Equal("+32470000000", Assert.Single(detail!.Phones).Number);
+        Assert.Equal("1993-06-21", detail.Birthday);
+    }
+
+    // L'autre moitié de la règle, sans laquelle « conserver » deviendrait « impossible à effacer ».
+    [Fact]
+    public async Task Update_WithAnEmptyPhoneList_ClearsThePhones()
+    {
+        var db = nameof(Update_WithAnEmptyPhoneList_ClearsThePhones);
+        var user = Guid.NewGuid();
+        var seeded = await CreateStore(db).CreateAsync(user, Write(
+            phones: [new ContactWritePhone(null, "+32470000000", "CELL")],
+            addresses: "bruno@example.com"), CancellationToken.None);
+
+        await CreateStore(db).UpdateAsync(user, seeded.Value,
+            Write(phones: [], addresses: "bruno@example.com"), CancellationToken.None);
+
+        var detail = await CreateStore(db).GetAsync(user, seeded.Value, CancellationToken.None);
+        Assert.Empty(detail!.Phones);
+    }
+
     // Replace, not merge: the editor sends the list it shows, so an address the user removed has
     // to disappear. Merging would make removal impossible from the only screen that offers it.
     [Fact]
@@ -467,7 +506,9 @@ public sealed class ContactStoreTests
         Assert.Equal("+9", phone.Number);
         Assert.Equal("HOME", phone.Type);
         Assert.Equal(0, phone.Position);
-        Assert.Empty(context.ContactAddresses.Where(a => a.ContactId == id));
+        // Les téléphones sont remplacés en bloc parce que l'écriture les nomme ; l'adresse postale,
+        // qu'elle ne nomme pas, survit. La projection reste totale : elle relit la carte gardée.
+        Assert.Single(context.ContactAddresses.Where(a => a.ContactId == id));
         Assert.DoesNotContain("+2", context.Contacts.Single(c => c.Id == id).VCardRaw!);
     }
 

@@ -69,15 +69,15 @@ internal static class ContactValidator
         var last = Blank(request.LastName);
         var nick = Blank(request.Nickname);
         var displayName = Blank(request.DisplayName);
-        var middleName = Blank(request.MiddleName);
-        var namePrefix = Blank(request.NamePrefix);
-        var nameSuffix = Blank(request.NameSuffix);
-        var organization = Blank(request.Organization);
-        var department = Blank(request.Department);
-        var jobTitle = Blank(request.JobTitle);
-        var birthday = Blank(request.Birthday);
-        var website = Blank(request.Website);
-        var notes = Blank(request.Notes);
+        var middleName = Given(request.MiddleName);
+        var namePrefix = Given(request.NamePrefix);
+        var nameSuffix = Given(request.NameSuffix);
+        var organization = Given(request.Organization);
+        var department = Given(request.Department);
+        var jobTitle = Given(request.JobTitle);
+        var birthday = Given(request.Birthday);
+        var website = Given(request.Website);
+        var notes = Given(request.Notes);
 
         var addresses = (request.Addresses ?? [])
             .Where(a => a != null)
@@ -86,14 +86,16 @@ internal static class ContactValidator
             .Where(IsMeaningful)
             .ToList();
 
-        var phones = (request.Phones ?? [])
+        // Null travels through: it is a request that does not name the family, and the composer
+        // then keeps the card's own. An empty list is still a clearing, an explicit one.
+        var phones = request.Phones?
             .Where(p => p != null)
             .Select(p => new ContactWritePhone(
                 p.Position, (p.Number ?? string.Empty).Trim(), (p.Type ?? string.Empty).Trim()))
             .Where(IsMeaningful)
             .ToList();
 
-        var postalAddresses = (request.PostalAddresses ?? [])
+        var postalAddresses = request.PostalAddresses?
             .Where(a => a != null)
             .Select(a => new ContactWriteAddress(
                 a.Position, (a.Type ?? string.Empty).Trim(),
@@ -123,10 +125,10 @@ internal static class ContactValidator
         if (addresses.Count > MaxAddressesPerContact)
             return Result.Failure<ContactWrite>(
                 $"A contact cannot carry more than {MaxAddressesPerContact} addresses");
-        if (phones.Count > MaxPhonesPerContact)
+        if (phones?.Count > MaxPhonesPerContact)
             return Result.Failure<ContactWrite>(
                 $"A contact cannot carry more than {MaxPhonesPerContact} phone numbers");
-        if (postalAddresses.Count > MaxPostalAddressesPerContact)
+        if (postalAddresses?.Count > MaxPostalAddressesPerContact)
             return Result.Failure<ContactWrite>(
                 $"A contact cannot carry more than {MaxPostalAddressesPerContact} postal addresses");
 
@@ -140,7 +142,7 @@ internal static class ContactValidator
                 return Result.Failure<ContactWrite>($"'{address.Type}' is not a valid type");
         }
 
-        foreach (var phone in phones)
+        foreach (var phone in phones ?? [])
         {
             if (phone.Number.Length > MaxPhoneNumberLength)
                 return Result.Failure<ContactWrite>($"A phone number must be at most {MaxPhoneNumberLength} characters");
@@ -148,7 +150,7 @@ internal static class ContactValidator
                 return Result.Failure<ContactWrite>($"'{phone.Type}' is not a valid type");
         }
 
-        foreach (var postal in postalAddresses)
+        foreach (var postal in postalAddresses ?? [])
         {
             if (!IsValidTypeToken(postal.Type))
                 return Result.Failure<ContactWrite>($"'{postal.Type}' is not a valid type");
@@ -184,6 +186,15 @@ internal static class ContactValidator
         var trimmed = value?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
+
+    /// <summary>
+    /// <see cref="Blank"/>, except that absent and empty stop being the same thing: null when the
+    /// request does not carry the field — the composer then keeps the card's own — and the empty
+    /// string when it carries it empty, which is a clearing the caller asked for. The distinction
+    /// only means something on the fields no screen writes yet; for the first name / last name /
+    /// nickname trio, null is the user who emptied the box, and <see cref="Blank"/> reads it right.
+    /// </summary>
+    private static string? Given(string? value) => value?.Trim();
 
     private static string Source(string? raw) =>
         raw != null && KnownSources.Contains(raw, StringComparer.Ordinal) ? raw : "manual";

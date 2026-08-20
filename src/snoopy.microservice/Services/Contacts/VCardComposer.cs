@@ -31,7 +31,7 @@ internal static class VCardComposer
         Apply(SourceCard.Fresh(), uid, write);
 
     internal static string Compose(string existingCard, string uid, ContactWrite write) =>
-        Apply(SourceCard.Read(existingCard), uid, write);
+        Apply(SourceCard.Read(existingCard), uid, write, RawBirthday(existingCard));
 
     internal static string Reconcile(string existingCard, string uid, ReconcileWrite write)
     {
@@ -72,28 +72,37 @@ internal static class VCardComposer
         return Emit(source, uid, RawBirthday(existingCard));
     }
 
-    private static string Apply(SourceCard source, string uid, ContactWrite write)
+    private static string Apply(SourceCard source, string uid, ContactWrite write, string? rawBirthday = null)
     {
         var card = source.Card;
+        // The five fields an editor owns are replaced, null included: there, null is the user who
+        // emptied the box. Nothing writes the rest yet, so absent means untouched for them — without
+        // which a PUT that does not name them destroys them.
         SetName(card,
             Components(write.FirstName) ?? [], Components(write.LastName) ?? [],
-            Components(write.MiddleName) ?? [], Components(write.NamePrefix) ?? [],
-            Components(write.NameSuffix) ?? []);
+            Components(write.MiddleName), Components(write.NamePrefix), Components(write.NameSuffix));
+        // The middle name read back off the recomposed N, never off the write: kept by the line
+        // above, it would be missing from the FN of an edit that does not carry it (Reconcile's own
+        // reason).
+        var name = (card.NameViews ?? []).FirstOrDefault(p => p is { IsEmpty: false })?.Value;
         card.DisplayNames = ReplaceFirstText(card.DisplayNames,
-            write.DisplayName ?? FallbackDisplayName(write.FirstName, write.MiddleName, write.LastName,
+            write.DisplayName ?? FallbackDisplayName(write.FirstName, NamePart(name?.Given2), write.LastName,
                 write.Nickname, write.Addresses.Count > 0 ? write.Addresses[0].Address : null));
         card.NickNames = ReplaceFirstNickname(card.NickNames, write.Nickname);
-        card.Organizations = ReplaceFirstOrg(card.Organizations, write.Organization, write.Department);
-        card.Titles = ReplaceFirstText(card.Titles, write.JobTitle);
-        card.Notes = ReplaceFirstText(card.Notes, write.Notes);
-        card.Urls = ReplaceFirstText(card.Urls, write.Website);
-        card.BirthDayViews = ReplaceFirstBday(card.BirthDayViews, write.Birthday);
+        if (write.Organization != null || write.Department != null)
+            card.Organizations = ReplaceFirstOrg(card.Organizations, write.Organization, write.Department);
+        if (write.JobTitle != null) card.Titles = ReplaceFirstText(card.Titles, write.JobTitle);
+        if (write.Notes != null) card.Notes = ReplaceFirstText(card.Notes, write.Notes);
+        if (write.Website != null) card.Urls = ReplaceFirstText(card.Urls, write.Website);
+        if (write.Birthday != null) card.BirthDayViews = ReplaceFirstBday(card.BirthDayViews, write.Birthday);
         card.EMails = Paired(card.EMails, write.Addresses, l => l.Position,
             (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email));
-        card.Phones = Paired(card.Phones, write.Phones, l => l.Position,
-            (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone));
-        card.Addresses = Paired(card.Addresses, write.PostalAddresses, l => l.Position, PostalLine);
-        return Emit(source, uid, write.Birthday);
+        if (write.Phones != null)
+            card.Phones = Paired(card.Phones, write.Phones, l => l.Position,
+                (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone));
+        if (write.PostalAddresses != null)
+            card.Addresses = Paired(card.Addresses, write.PostalAddresses, l => l.Position, PostalLine);
+        return Emit(source, uid, write.Birthday ?? rawBirthday);
     }
 
     /// <summary>
