@@ -1,5 +1,30 @@
+import type { TFunction } from 'i18next'
+
 /** The type tokens the editor offers, and the labels they wear. The table is the CSV exporter's,
     which is where the mapping between a vCard type and a human word already lives. */
+/** The word a type token wears on screen. The editor puts it in a select and the card puts it in a
+    chip, so it lives here rather than in either: the two naming one token two ways is the bug.
+    An unknown token is shown verbatim — an imported card's own word beats a wrong guess, and
+    `typeOptions` keeps it selectable for the same reason.
+
+    `{ ns: 'contacts' }` is redundant to i18next, which reads the namespace off the TFunction, and
+    is not redundant to `locales/keys.test.ts`: that guard binds a file's namespace from its
+    `useTranslation(...)` call, and this file has none to bind from. Without it every key here is
+    checked against `common` and the build reddens. Do not tidy it away. */
+export function typeLabel(token: string, t: TFunction<'contacts'>): string {
+  switch (token.trim().toUpperCase()) {
+    case 'CELL': return t('editor.types.cell', { ns: 'contacts' })
+    case 'HOME,VOICE': return t('editor.types.home_voice', { ns: 'contacts' })
+    case 'WORK,VOICE': return t('editor.types.work_voice', { ns: 'contacts' })
+    case 'HOME,FAX': return t('editor.types.home_fax', { ns: 'contacts' })
+    case 'WORK,FAX': return t('editor.types.work_fax', { ns: 'contacts' })
+    case 'VOICE': return t('editor.types.voice', { ns: 'contacts' })
+    case 'HOME': return t('editor.types.home', { ns: 'contacts' })
+    case 'WORK': return t('editor.types.work', { ns: 'contacts' })
+    default: return token
+  }
+}
+
 export const PHONE_TYPES = ['CELL', 'HOME,VOICE', 'WORK,VOICE', 'HOME,FAX', 'WORK,FAX', 'VOICE'] as const
 export const POSTAL_TYPES = ['HOME', 'WORK'] as const
 

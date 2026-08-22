@@ -10,7 +10,8 @@ import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
 import PhoneIcon from '../../icons/PhoneIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
-import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeOptions } from './contactLineTypes'
+import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeLabel, typeOptions } from './contactLineTypes'
+import { initialsOf } from './contactName'
 import type {
   ContactDetail, ContactDraft, ContactDraftEmail, ContactDraftPhone, ContactDraftPostal,
 } from './contactTypes'
@@ -104,15 +105,6 @@ const emptyPostal = (): ContactDraftPostal => ({
   position: null, type: '', poBox: null, extended: null, street: null,
   locality: null, region: null, postalCode: null, country: null,
 })
-
-/** The two letters the avatar falls back to while the card carries no picture. Read off what is
-    in the boxes rather than off the saved contact, so a name typed in a create shows at once. */
-function initialsOf(first: string, last: string, nickname: string): string {
-  const letters = [first.trim(), last.trim()].filter(Boolean).map(part => part[0])
-  if (letters.length > 0) return letters.join('').toUpperCase()
-  const fallback = nickname.trim()
-  return fallback === '' ? '' : fallback[0].toUpperCase()
-}
 
 /** The primary is the line the user designated, and the first one until they do. */
 function primaryIndexOf(lines: ContactDraftEmail[]): number {
@@ -228,20 +220,6 @@ export default function ContactEditView({
   }
 
   /** The design's fixed table (décision 4): a token the table does not name is shown raw. */
-  function typeLabel(token: string): string {
-    switch (token.trim().toUpperCase()) {
-      case 'CELL': return t('editor.types.cell')
-      case 'HOME,VOICE': return t('editor.types.home_voice')
-      case 'WORK,VOICE': return t('editor.types.work_voice')
-      case 'HOME,FAX': return t('editor.types.home_fax')
-      case 'WORK,FAX': return t('editor.types.work_fax')
-      case 'VOICE': return t('editor.types.voice')
-      case 'HOME': return t('editor.types.home')
-      case 'WORK': return t('editor.types.work')
-      default: return token
-    }
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!valid || saving) return
@@ -403,7 +381,7 @@ export default function ContactEditView({
                 <select id={`contact-phone-type-${index}`} value={line.type}
                   onChange={event => changePhoneType(index, event.target.value)}>
                   {typeOptions(PHONE_TYPES, line.type).map(option => (
-                    <option key={option} value={option}>{typeLabel(option)}</option>
+                    <option key={option} value={option}>{typeLabel(option, t)}</option>
                   ))}
                 </select>
                 <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
@@ -464,7 +442,7 @@ export default function ContactEditView({
                     className="contact-postal-type"
                     onChange={event => changePostalType(index, event.target.value)}>
                     {typeOptions(POSTAL_TYPES, line.type).map(option => (
-                      <option key={option} value={option}>{typeLabel(option)}</option>
+                      <option key={option} value={option}>{typeLabel(option, t)}</option>
                     ))}
                   </select>
                   <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}

@@ -28,3 +28,14 @@ export function displayNameOf(contact: Contact): string {
 export function primaryAddressOf(contact: Contact): string | null {
   return contact.addresses[0] ?? null
 }
+
+/** The two letters an avatar falls back to while the contact carries no picture. The editor reads
+    it off the boxes so a name typed in a create shows at once; the card reads it off the list row,
+    which carries the same three fields. Shared rather than copied: two screens drawing one disc
+    two ways is what the display-name rule above already exists to prevent. */
+export function initialsOf(first: string, last: string, nickname: string): string {
+  const letters = [first.trim(), last.trim()].filter(Boolean).map(part => part[0])
+  if (letters.length > 0) return letters.join('').toUpperCase()
+  const fallback = nickname.trim()
+  return fallback === '' ? '' : fallback[0].toUpperCase()
+}
