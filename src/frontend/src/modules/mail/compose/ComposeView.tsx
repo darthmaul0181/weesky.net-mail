@@ -97,7 +97,8 @@ export default function ComposeView({ onNotify }: Props) {
   const [editor, setEditor] = useState<EditorHandle | null>(null)
   const [active, setActive] = useState<ActiveFormats>(NO_FORMATS)
 
-  const state = location.state as { from?: string; seed?: ComposeSeed } | null
+  const state = location.state as
+    { from?: string; seed?: ComposeSeed; backTo?: string } | null
   const from = state?.from
   // A mailto: arrives through the URL, not through the history state: the operating system opens
   // a cold address, with no React navigation behind it.
@@ -316,7 +317,11 @@ export default function ComposeView({ onNotify }: Props) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
 
-  const backTarget = from ? `/mail?folder=${encodeURIComponent(from)}` : '/mail'
+  /* `from` is a folder and only the mail module has one. `backTo` is a whole path, for a caller
+     outside the module — the contact card's Write — so leaving the composer returns to the fiche
+     that opened it rather than dropping the reader into a mailbox they never asked for. */
+  const backTarget = state?.backTo
+    ?? (from ? `/mail?folder=${encodeURIComponent(from)}` : '/mail')
 
   const leave = useCallback(() => {
     leavingRef.current = true

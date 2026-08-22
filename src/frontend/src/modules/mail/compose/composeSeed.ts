@@ -42,6 +42,19 @@ export interface ComposeSeed {
   nameHints: Record<string, string>
 }
 
+/** A composer opening on nothing but its recipients — what a mailto: and a Write-to-this-contact
+    both are. `editAsNew` is not "edit as new" here so much as "neither reply nor forward nor
+    draft": `composeTitle` falls it through to Nouveau message, which is what both cases are. */
+export function newMessageSeed(to: string[]): ComposeSeed {
+  return {
+    action: 'editAsNew',
+    to, cc: [], bcc: [],
+    subject: '', html: '', text: null,
+    fromAddress: null, priority: 'normal', attachments: [],
+    inReplyTo: null, references: [], draftRef: null, nameHints: {},
+  }
+}
+
 /** Every mailbox the original names, so a reply-all captures its Cc recipients by name too. */
 function nameHintsFrom(detail: MailMessageDetail): Record<string, string> {
   const hints: Record<string, string> = {}
