@@ -2457,13 +2457,18 @@ body {
 }
 .contact-editor-body > .alert { margin: 18px 28px 0; }
 
-/* What identifies the contact, before the ways of reaching them. */
+/* What identifies the contact, before the ways of reaching them: the split the reader draws
+   between a message's envelope and its body, so the band carries the tint and the sheet below
+   stays plain. The reader draws that same split with a rule and no fill — deliberately not
+   followed here, the owner's call, so the two modules mark one boundary two ways for now. Sunk
+   rather than raised: --surface is already the lightest step in every palette, so a band lighter
+   than the form it heads has nowhere to go. */
 .contact-editor-hero {
   display: flex;
   align-items: center;
   gap: 22px;
   padding: 24px 28px;
-  background: var(--surface);
+  background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
 }
 
@@ -2507,8 +2512,8 @@ body {
   gap: 14px 20px;
 }
 
-/* The two columns are one sheet split in two, so they run to the foot of the pane together: left
-   to its own content height, the tinted aside stops mid-air beside it. */
+/* The two columns are one sheet split in two, so they run to the foot of the pane together rather
+   than each stopping at its own content height. */
 .contact-editor-cols {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
@@ -2516,8 +2521,10 @@ body {
   min-height: 0;
 }
 
-/* One step, and it has to be visible: --bg and --surface-sunken are two points apart, so tinting
-   both columns made the aside indistinguishable. The sheet is white, the aside alone is sunk. */
+/* The step is horizontal, not vertical: the hero carries it and both columns stay plain. Tinting
+   one column alone put the step on the vertical split, where it read as a difference of rank
+   between two halves of equal rank — and its tint sat in the same family as the groups column
+   next door, which is what made the two read as the same surface. */
 .contact-editor-col {
   padding: 26px 28px 34px;
   background: var(--surface);
@@ -2527,11 +2534,9 @@ body {
   min-width: 0;
 }
 
-/* Sunk rather than ruled: the tint separates the two halves without a second vertical line beside
-   the splitter the pane already carries. */
+/* The two halves are the same surface now, so the rule is what separates them. */
 .contact-editor-col.is-aside {
   border-left: 1px solid var(--border);
-  background: var(--surface-sunken);
 }
 
 /* The label above its control, not beside it. That is what frees the 110px .field-h reserves on
