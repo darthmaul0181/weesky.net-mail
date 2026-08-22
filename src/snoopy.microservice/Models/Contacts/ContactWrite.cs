@@ -22,6 +22,12 @@ public sealed record ContactWriteAddress(
 /// A validated, normalised contact on its way to the store: names trimmed and nulled when blank,
 /// child lines non-blank and in the order they must be stored. Only
 /// <see cref="Services.ContactValidator"/> produces one, so the store never re-checks the rules.
+/// <para>
+/// Two conventions for <c>null</c> live here, and they are opposites. On the fields the editor
+/// owns — the names, the display name, the addresses — <c>null</c> is the user emptying the box,
+/// and the card follows. On everything else, <c>null</c> means the request did not name the field
+/// at all and the card keeps its own; an empty string, or an empty list, is what clears it.
+/// </para>
 /// </summary>
 /// <param name="FirstName">The contact's first name, if any.</param>
 /// <param name="LastName">The contact's last name, if any.</param>
