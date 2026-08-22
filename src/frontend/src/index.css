@@ -2458,17 +2458,16 @@ body {
 .contact-editor-body > .alert { margin: 18px 28px 0; }
 
 /* What identifies the contact, before the ways of reaching them: the split the reader draws
-   between a message's envelope and its body, so the band carries the tint and the sheet below
-   stays plain. The reader draws that same split with a rule and no fill — deliberately not
-   followed here, the owner's call, so the two modules mark one boundary two ways for now. Sunk
-   rather than raised: --surface is already the lightest step in every palette, so a band lighter
-   than the form it heads has nowhere to go. */
+   between a message's envelope and its body. The band is the crest here and the form below it the
+   trough — --surface is the lightest step in every palette, so the band keeps it and the tint goes
+   under. The reader marks that same boundary with a rule and no fill; the two modules draw one
+   boundary two ways for now, deliberately. */
 .contact-editor-hero {
   display: flex;
   align-items: center;
   gap: 22px;
   padding: 24px 28px;
-  background: var(--surface-sunken);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -2521,13 +2520,15 @@ body {
   min-height: 0;
 }
 
-/* The step is horizontal, not vertical: the hero carries it and both columns stay plain. Tinting
-   one column alone put the step on the vertical split, where it read as a difference of rank
-   between two halves of equal rank — and its tint sat in the same family as the groups column
-   next door, which is what made the two read as the same surface. */
+/* The step is horizontal, not vertical: both columns take the same tint, so the form is one
+   surface under the hero rather than two halves of unequal rank. Tinting one column alone put the
+   step on the vertical split — and its tint sat in the same family as the groups column next door,
+   which is what made the two read as the same surface. Watch the floor: --surface-sunken and --bg
+   are two points apart in the light palettes, and nothing here lets them meet only because the
+   columns cover .contact-editor-body whole. */
 .contact-editor-col {
   padding: 26px 28px 34px;
-  background: var(--surface);
+  background: var(--surface-sunken);
   display: grid;
   gap: 26px;
   align-content: start;
