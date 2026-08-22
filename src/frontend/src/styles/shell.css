@@ -843,6 +843,55 @@ a.dropdown-item { text-decoration: none; }
   background: var(--action-primary);
 }
 
+/* ── Quiet scrollbars ─────────────────────────────────────────────────────────
+   A scroller listed here paints its thumb under the cursor only, each on its own hover — but the
+   gutter stays reserved whether the thumb is painted or not. Toggling `overflow` instead would
+   resize the scroller, and the message list's load-more sentinel is placed by geometry: a reflow
+   on every pointer entry would fire it. `overflow-y: auto` already keeps the gutter away when the
+   content fits, so a list that does not scroll costs nothing here.
+
+   The four live in one selector list, in this file rather than in each module's own, because two
+   copies of a hover treatment are two copies that drift — `.column-actions` already cost this
+   codebase 4px of width and 2px of height that way. A new scroller opts in by joining the list.
+   The contacts scope column is in it before it can ever scroll: two rows never overflow, but the
+   day groups land beside them it would be the one column in either module still showing a
+   permanent bar next to a list that hides its own.
+
+   `scrollbar-color` covers Firefox and `::-webkit-scrollbar` the Blink/WebKit side; both are
+   needed, and neither alone is enough. */
+.mail-folders-scroll,
+.mail-list-scroll,
+.contacts-list-scroll,
+.contacts-scopes-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.mail-folders-scroll:hover,
+.mail-list-scroll:hover,
+.contacts-list-scroll:hover,
+.contacts-scopes-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
+
+.mail-folders-scroll::-webkit-scrollbar,
+.mail-list-scroll::-webkit-scrollbar,
+.contacts-list-scroll::-webkit-scrollbar,
+.contacts-scopes-scroll::-webkit-scrollbar { width: 8px; }
+
+.mail-folders-scroll::-webkit-scrollbar-track,
+.mail-list-scroll::-webkit-scrollbar-track,
+.contacts-list-scroll::-webkit-scrollbar-track,
+.contacts-scopes-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.mail-folders-scroll::-webkit-scrollbar-thumb,
+.mail-list-scroll::-webkit-scrollbar-thumb,
+.contacts-list-scroll::-webkit-scrollbar-thumb,
+.contacts-scopes-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+
+.mail-folders-scroll:hover::-webkit-scrollbar-thumb,
+.mail-list-scroll:hover::-webkit-scrollbar-thumb,
+.contacts-list-scroll:hover::-webkit-scrollbar-thumb,
+.contacts-scopes-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
+
 /* ── Narrow tiers ─────────────────────────────────────────────────────────────
    Desktop is the unqualified base above. These two blocks only override it, the
    second refining the first through the ordinary cascade. Never invert this:
