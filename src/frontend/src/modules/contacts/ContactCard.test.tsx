@@ -49,7 +49,8 @@ beforeEach(() => {
 
 function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}) {
   const props = {
-    contact: bruno, onEdit: vi.fn(), onDelete: vi.fn(), onToggleFavorite: vi.fn(), ...overrides,
+    contact: bruno, onEdit: vi.fn(), onDelete: vi.fn(), onToggleFavorite: vi.fn(),
+    onWrite: vi.fn(), ...overrides,
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {
@@ -112,6 +113,51 @@ describe('ContactCard', () => {
 
     expect(await screen.findByText('Acme')).toBeInTheDocument()
     expect(await screen.findByText('Plombier')).toBeInTheDocument()
+  })
+
+  /* Every imported card carries INTERNET,PREF on its e-mail lines and `typeLabel` has no word
+     for it, so the chip printed the raw vCard token in capitals beside a phone reading Mobile. */
+  it('draws no type chip when the stored token names no kind', async () => {
+    api.getContact.mockResolvedValue(detail({
+      addresses: [{
+        position: 0, address: 'bruno@x.be', type: 'INTERNET,PREF', pref: 1, params: '',
+        groupName: '',
+      }],
+      phones: [{
+        position: 0, number: '+32 470 11 22 33', type: 'CELL', pref: 101, params: '',
+        groupName: '',
+      }],
+    }))
+    setup()
+
+    expect(await screen.findByTestId('card-phone')).toHaveTextContent(/mobile/i)
+    expect(screen.getByTestId('card-address')).not.toHaveTextContent(/internet/i)
+  })
+
+  /* A card that does name a kind alongside the noise keeps it. */
+  it('keeps the kind when the token carries one beside INTERNET', async () => {
+    api.getContact.mockResolvedValue(detail({
+      addresses: [{
+        position: 0, address: 'bruno@x.be', type: 'INTERNET,PREF,WORK', pref: 1, params: '',
+        groupName: '',
+      }],
+    }))
+    setup()
+
+    expect(await screen.findByTestId('card-address')).toHaveTextContent(/work|bureau/i)
+  })
+
+  /* The composer is this application's own; handing a mailto: to the operating system on a
+     machine with no mail client does nothing at all. */
+  it('opens the composer on the primary address rather than a mailto:', async () => {
+    const onWrite = vi.fn()
+    setup({ onWrite })
+
+    const button = await screen.findByRole('button', { name: /write/i })
+    expect(button).not.toHaveAttribute('href')
+    await userEvent.click(button)
+
+    expect(onWrite).toHaveBeenCalledWith('bruno@x.be')
   })
 
   const postalOf = (fields: Record<string, string | null>) => ({

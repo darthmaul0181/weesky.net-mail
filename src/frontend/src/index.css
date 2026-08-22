@@ -2367,14 +2367,18 @@ body {
 .contact-card { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .contacts-card-invite { margin: auto; }
 
-/* The band the identity sits against, in the colour the rail and the topbar already wear — the
-   app's dark L, not a fourth colour. It carries no text of its own: the only things on it are the
-   back arrow and the action cluster, and both take --topbar-fg below, because a foreground
-   inherited from the column would be the reader action bar's 1.09:1 defect all over again. */
+/* The band the identity sits against, in the tone the editor's form area wears — the same step
+   below the sheet, so the fiche and the editor read as one screen in two states.
+
+   It took --topbar-bg first, the app's dark L. That failed for a reason no palette file could
+   show: this column sits directly under the topbar, so the two dark bands ran together into one
+   thick header and the card lost its own top edge. The rule is about what it is adjacent to, not
+   about the colour being wrong. */
 .contact-card-banner {
   flex: none; height: 96px;
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 12px 14px; background: var(--topbar-bg);
+  padding: 12px 14px;
+  background: var(--surface-sunken); border-bottom: 1px solid var(--border);
 }
 /* .reader-back's box, and it is only ever drawn where the card has replaced the list. It grows to
    the touch floor as a painted box rather than a pseudo hit area, unlike the reader's: nothing
@@ -2382,31 +2386,15 @@ body {
 .contact-card-back {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; padding: 0;
-  border: 1px solid color-mix(in oklab, var(--topbar-fg) 40%, transparent);
-  border-radius: var(--radius-sm);
-  background: none; color: var(--topbar-fg); cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: none; color: var(--text-muted); cursor: pointer;
 }
-.contact-card-back:hover { background: color-mix(in oklab, var(--topbar-fg) 16%, transparent); }
-/* The cluster is the tile's, drawn on the band instead of on the sheet, so every colour it wears
-   has to be restated against this ground. Two of them were measured across all sixteen
-   palette/mode combinations rather than reasoned about, and both readings changed the rule.
-
-   The favourite keeps --topbar-fg when it is on instead of taking --badge-count-bg: that token
-   measures 1.00:1 on classic's banner — the same colour, an invisible star — 2.36 on indigo, 2.37
-   on slate and 2.69 on azure. The star is already filled in that state, so the fill carries it
-   without the colour, and --topbar-fg is 7.44:1 or better everywhere.
-
-   And hover is a wash rather than a recolour, the same one the back arrow takes: --icon-hover-
-   accent, which is what this cluster wears on the sheet, measures 3.09:1 on classic's banner. A
-   background that lifts by 16% keeps the glyph at --topbar-fg and cannot fail in any palette. */
-.contact-card-banner .contact-star,
-.contact-card-banner .admin-icon-btn { color: var(--topbar-fg); border-radius: var(--radius-sm); }
-.contact-card-banner .contact-star.is-on { color: var(--topbar-fg); }
-.contact-card-banner .contact-star:hover,
-.contact-card-banner .admin-icon-btn:hover:not(:disabled) {
-  color: var(--topbar-fg);
-  background: color-mix(in oklab, var(--topbar-fg) 16%, transparent);
-}
+.contact-card-back:hover { background: var(--list-row-hover); color: var(--text); }
+/* No foreground override for the cluster: the band is a sheet tone, so the star and the icon
+   buttons wear here exactly what they wear on the tile. The overrides this replaced existed only
+   to survive a coloured ground, and one of them was load-bearing — on --topbar-bg the favourite's
+   --badge-count-bg measured 1.00:1 in the classic palette, the same colour as the band. Worth
+   remembering before anyone tints this band again. */
 
 /* The avatar straddles the band's lower edge — half on the colour, half on the sheet — which is
    what ties the two together. The ring is the sheet's own colour rather than a border token, so
@@ -2445,10 +2433,13 @@ body {
 
 /* The two links the rows already carry, promoted to where the eye lands after the name. */
 .contact-card-quick { flex: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 22px 0; }
+/* Write is a <button> — it opens a route, not a URL — while Call and Directions stay <a>. The
+   reset is what lets one rule dress both: a bare <button> otherwise brings the platform's own
+   border and font and sits a pixel off its neighbours. */
 .contact-quick-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 14px; border-radius: var(--radius-sm);
-  font-size: 13px; font-weight: 500; text-decoration: none;
+  padding: 7px 14px; border: 0; border-radius: var(--radius-sm);
+  font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer;
   background: var(--action-primary); color: var(--action-primary-fg);
 }
 .contact-quick-btn:hover { background: var(--action-primary-hover); }

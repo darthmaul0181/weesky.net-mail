@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,7 +16,7 @@ import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
 import UserIcon from '../../icons/UserIcon'
 import { formatBirthday } from './contactBirthday'
-import { typeLabel } from './contactLineTypes'
+import { typeLabel, visibleType } from './contactLineTypes'
 import { displayNameOf, initialsOf } from './contactName'
 import type { Contact, ContactDetailPostal } from './contactTypes'
 import { useContact } from './queries'
@@ -28,6 +29,9 @@ interface Props {
   onEdit: (id: string) => void
   onDelete: (contact: Contact) => void
   onToggleFavorite: (contact: Contact) => void
+  /** Opens the composer on this address. The layout owns it, like onEdit — the card knows the
+      contact, the layout knows the router. */
+  onWrite: (address: string) => void
   /** The phone's foot-of-screen shape: named cells in a band instead of a header cluster. Set by
       the layout, which is the only thing that knows the tier — never a `useViewport` of the card's
       own, for the reason `MessageReader.bottomActions` is a prop too.
@@ -48,7 +52,7 @@ interface Props {
  * that was never entered.
  */
 export default function ContactCard({
-  contact, onBack, onEdit, onDelete, onToggleFavorite, bottomActions = false,
+  contact, onBack, onEdit, onDelete, onToggleFavorite, onWrite, bottomActions = false,
 }: Props) {
   const { t } = useTranslation('contacts')
 
@@ -147,9 +151,11 @@ export default function ContactCard({
     </div>
   )
 
-  /* Write and Call are the two links the rows already carry, promoted to where the eye lands
-     first. They are `<a>` and not buttons because that is what they were before: the browser owns
-     what a mailto: and a tel: do. Neither is drawn when the contact holds nothing to aim it at.
+  /* Write opens this webmail's own composer rather than handing a mailto: to whatever the
+     operating system has registered — which on a machine with no mail client does nothing at all,
+     and on one with a client opens the wrong application to write from. Call stays a `tel:` link:
+     there is nothing here to place a call with. Neither is drawn when the contact holds nothing
+     to aim it at.
 
      Directions is the same idea and the same reason it is phone-only: `geo:` hands the address to
      whatever maps application the device already has, so nothing about this contact reaches a
@@ -162,9 +168,10 @@ export default function ContactCard({
   const quick = (primaryAddress || firstPhone || geoHref) ? (
     <div className="contact-card-quick">
       {primaryAddress && (
-        <a className="contact-quick-btn" href={`mailto:${primaryAddress}`}>
+        <button type="button" className="contact-quick-btn"
+          onClick={() => onWrite(primaryAddress)}>
           <MailIcon size={15} />{t('card.write')}
-        </a>
+        </button>
       )}
       {firstPhone && (
         <a className="contact-quick-btn is-ghost" href={`tel:${firstPhone.replace(/\s/g, '')}`}>
@@ -209,7 +216,7 @@ export default function ContactCard({
               {addresses.map((line, index) => (
                 <span key={line.address} className="contact-card-value" data-testid="card-address">
                   <a href={`mailto:${line.address}`}>{line.address}</a>
-                  {line.type && <span className="contact-card-type">{typeLabel(line.type, t)}</span>}
+                  <TypeChip type={line.type} t={t} />
                   {index === 0 && <span className="contact-card-primary">{t('fields.primary')}</span>}
                 </span>
               ))}
@@ -222,7 +229,7 @@ export default function ContactCard({
                 <span key={`${phone.position}-${phone.number}`} className="contact-card-value"
                   data-testid="card-phone">
                   <a href={`tel:${phone.number.replace(/\s/g, '')}`}>{phone.number}</a>
-                  {phone.type && <span className="contact-card-type">{typeLabel(phone.type, t)}</span>}
+                  <TypeChip type={phone.type} t={t} />
                 </span>
               ))}
             </CardRow>
@@ -233,7 +240,7 @@ export default function ContactCard({
               {postals.map(postal => (
                 <span key={postal.position} className="contact-card-value is-postal"
                   data-testid="card-postal">
-                  {postal.type && <span className="contact-card-type">{typeLabel(postal.type, t)}</span>}
+                  <TypeChip type={postal.type} t={t} />
                   {postalLines(postal).map(line => <span key={line}>{line}</span>)}
                 </span>
               ))}
@@ -258,6 +265,14 @@ export default function ContactCard({
       {bottomActions && bar}
     </div>
   )
+}
+
+/** The kind of line this is — Mobile, Domicile, Bureau — or nothing when the stored token names
+    no kind a reader would recognise. */
+function TypeChip({ type, t }: { type: string; t: TFunction<'contacts'> }) {
+  const shown = visibleType(type)
+  if (shown === '') return null
+  return <span className="contact-card-type">{typeLabel(shown, t)}</span>
 }
 
 /** A labelled row. The icon is the editor's own for that family, so the two screens name one

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { newMessageSeed } from '../mail/compose/composeSeed'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
 import Toasts from '../../components/Toasts.jsx'
@@ -37,6 +38,13 @@ export default function ContactsLayout() {
   const [params, setParams] = useSearchParams()
   const { id: routeId } = useParams()
   const navigate = useNavigate()
+
+  /* The composer is a route, not a dialog, so writing to a contact is a navigation carrying a
+     seed — the shape a reply and a mailto: already arrive in. `backTo` sends the ✕ and the leave
+     guard back to this fiche instead of to a mailbox the reader never opened. */
+  const writeTo = (address: string) => navigate('/mail/compose', {
+    state: { seed: newMessageSeed([address]), backTo: `/contacts?id=${selectedId}` },
+  })
   const { toasts, addToast, removeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
   const { data: detail, isLoading: detailLoading, isError: detailError } = useContact(routeId ?? null)
@@ -247,7 +255,8 @@ export default function ContactsLayout() {
               <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
                 onBack={phone && !pendingDelete ? backToList : undefined}
                 bottomActions={phone}
-                onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)} />
+                onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)}
+                onWrite={writeTo} />
             </div>
           )}
         </div>

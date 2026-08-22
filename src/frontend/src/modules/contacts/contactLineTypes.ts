@@ -2,6 +2,25 @@ import type { TFunction } from 'i18next'
 
 /** The type tokens the editor offers, and the labels they wear. The table is the CSV exporter's,
     which is where the mapping between a vCard type and a human word already lives. */
+/** The parts of a TYPE that say nothing to a reader. `INTERNET` is what every vCard e-mail
+    carries and means only "this is an e-mail address"; `PREF` is the primary flag, which the card
+    already renders as its own badge beside the value. */
+const MUTE = new Set(['INTERNET', 'PREF'])
+
+/** What is left of a type token once the parts that name no kind are dropped, or '' when nothing
+    is. The card asks this before drawing a chip at all: an e-mail line's type is `INTERNET,PREF`
+    on essentially every imported card, and `typeLabel` has no word for it, so its `default` arm
+    put the raw vCard token on screen in capitals — measured on a real contact, reading
+    `INTERNET,PREF` where the phone beside it read `Mobile`.
+
+    The editor never showed this because it offers no type control for an address: only phones and
+    postal addresses have one. So the chip is where these tokens first became visible. */
+export function visibleType(token: string): string {
+  return token.split(',').map(part => part.trim())
+    .filter(part => part !== '' && !MUTE.has(part.toUpperCase()))
+    .join(',')
+}
+
 /** The word a type token wears on screen. The editor puts it in a select and the card puts it in a
     chip, so it lives here rather than in either: the two naming one token two ways is the bug.
     An unknown token is shown verbatim — an imported card's own word beats a wrong guess, and
