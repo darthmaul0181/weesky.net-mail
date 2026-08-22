@@ -2506,11 +2506,11 @@ body {
   align-items: start;
 }
 
-/* Three tones, lightest at the top: the hero on --surface, this column on the app's own ground,
-   the aside sunk below it. Two of the three the same is what made the aside read as a lone slab. */
+/* One step, and it has to be visible: --bg and --surface-sunken are two points apart, so tinting
+   both columns made the aside indistinguishable. The sheet is white, the aside alone is sunk. */
 .contact-editor-col {
   padding: 26px 28px 34px;
-  background: var(--bg);
+  background: var(--surface);
   display: grid;
   gap: 26px;
   align-content: start;
@@ -2542,8 +2542,15 @@ body {
   color: var(--text-muted);
 }
 
-.field-v > label > svg,
-.field-v > .field-v-label > svg { flex: none; color: var(--action-primary); }
+/* A section title, not a field label: it names a whole group, so it takes the accent and a heavier
+   weight while the labels under it stay muted. */
+.field-v > .field-v-label {
+  color: var(--action-primary);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.field-v > .field-v-label > svg { flex: none; }
 
 /* Street takes the row and the type sizes to its own widest option, the way a select always
    should; the postcode is the one box that must not grow. */
@@ -2578,8 +2585,11 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .contact-postal-item:last-child { border-bottom: 0; padding-bottom: 0; }
-.contact-postal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.contact-postal-full { grid-column: 1 / -1; }
+/* Flex, not a 1fr 1fr grid: the street shares its line with the type select and the bin, which a
+   two-track grid could only do by wrapping them onto a line of their own. */
+.contact-postal-row { display: flex; align-items: center; gap: 6px; }
+.contact-postal-row > input { flex: 1; min-width: 0; }
+.contact-postal-full { flex: 1; }
 
 /* The dropdown is anchored beneath the box, the shape website-design.md prescribes for a
    combobox. The tokens stay inline in the box rather than becoming chips above it: that is what

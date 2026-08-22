@@ -106,7 +106,8 @@
       "home": "Home",
       "work": "Work"
     },
-    "favourite": "Favourite"
+    "favourite": "Favourite",
+    "misc": "Other"
   },
   "transfer": {
     "actions": "Import and export",

@@ -106,7 +106,8 @@
       "home": "Domicile",
       "work": "Bureau"
     },
-    "favourite": "Favori"
+    "favourite": "Favori",
+    "misc": "Divers"
   },
   "transfer": {
     "actions": "Importer et exporter",
