@@ -233,14 +233,22 @@ internal static class VCardComposer
         IEnumerable<OrgProperty?>? properties, string? organization, string? department)
     {
         var list = (properties ?? []).OfType<OrgProperty>().ToList();
-        if (organization == null && department == null)
-            return list.Count == 0 ? null : list.Skip(1).ToList();
         var old = list.FirstOrDefault();
-        var replaced = new OrgProperty(
-            new Organization(organization, department?.Split(';')), old?.Group);
+        // The two halves share one line, so the one the write leaves absent is read back off the
+        // card: rebuilding the line from the named half alone would erase the other.
+        var name = Cleared(organization ?? old?.Value?.Name);
+        var units = Cleared(department ?? Units(old?.Value));
+        if (name == null && units == null)
+            return list.Count == 0 ? null : list.Skip(1).ToList();
+        var replaced = new OrgProperty(new Organization(name, units?.Split(';')), old?.Group);
         if (old != null) replaced.Parameters.Assign(old.Parameters);
         return [replaced, .. list.Skip(1)];
     }
+
+    private static string? Cleared(string? value) => string.IsNullOrEmpty(value) ? null : value;
+
+    private static string? Units(Organization? organization) =>
+        organization?.Units is { Count: > 0 } units ? string.Join(';', units) : null;
 
     private static IEnumerable<DateAndOrTimeProperty>? ReplaceFirstBday(
         IEnumerable<DateAndOrTimeProperty?>? properties, string? value)

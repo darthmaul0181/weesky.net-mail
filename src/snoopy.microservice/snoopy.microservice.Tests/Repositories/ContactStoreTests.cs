@@ -287,6 +287,78 @@ public sealed class ContactStoreTests
         Assert.Empty(detail!.Phones);
     }
 
+    // ORG est la seule propriété dont deux champs partagent une ligne de carte : nommer une moitié
+    // sans relire l'autre la détruirait, la destruction même que la règle « absent = conservé » ferme.
+    [Fact]
+    public async Task Update_NamingOneHalfOfTheOrganization_KeepsTheOther()
+    {
+        var db = nameof(Update_NamingOneHalfOfTheOrganization_KeepsTheOther);
+        var user = Guid.NewGuid();
+        var seeded = await CreateStore(db).CreateAsync(user,
+            Write(addresses: "bruno@example.com") with { Organization = "Acme", Department = "R&D" },
+            CancellationToken.None);
+
+        await CreateStore(db).UpdateAsync(user, seeded.Value,
+            Write(addresses: "bruno@example.com") with { Organization = "Globex" }, CancellationToken.None);
+
+        var detail = await CreateStore(db).GetAsync(user, seeded.Value, CancellationToken.None);
+        Assert.Equal("Globex", detail!.Organization);
+        Assert.Equal("R&D", detail.Department);
+
+        await CreateStore(db).UpdateAsync(user, seeded.Value,
+            Write(addresses: "bruno@example.com") with { Department = "Legal" }, CancellationToken.None);
+
+        detail = await CreateStore(db).GetAsync(user, seeded.Value, CancellationToken.None);
+        Assert.Equal("Globex", detail!.Organization);
+        Assert.Equal("Legal", detail.Department);
+    }
+
+    // L'autre moitié de la règle pour les scalaires : la chaîne vide efface. Elle n'atteignait
+    // aucun de ces trois chemins avant que « absent = conservé » ne remplace le pliage de Blank.
+    [Fact]
+    public async Task Update_WithEmptyScalars_ClearsThem()
+    {
+        var db = nameof(Update_WithEmptyScalars_ClearsThem);
+        var user = Guid.NewGuid();
+        var seeded = await CreateStore(db).CreateAsync(user,
+            Write(notes: "à rappeler", addresses: "bruno@example.com")
+                with { Organization = "Acme", Department = "R&D", Birthday = "1993-06-21" },
+            CancellationToken.None);
+
+        await CreateStore(db).UpdateAsync(user, seeded.Value,
+            Write(addresses: "bruno@example.com")
+                with { Organization = string.Empty, Department = string.Empty,
+                       Notes = string.Empty, Birthday = string.Empty },
+            CancellationToken.None);
+
+        var detail = await CreateStore(db).GetAsync(user, seeded.Value, CancellationToken.None);
+        Assert.Null(detail!.Organization);
+        Assert.Null(detail.Department);
+        Assert.Null(detail.Notes);
+        Assert.Null(detail.Birthday);
+        Assert.DoesNotContain("ORG", new PreferencesTestDbContext(db).Contacts
+            .Single(c => c.Id == seeded.Value).VCardRaw!, StringComparison.Ordinal);
+    }
+
+    // Effacer une seule moitié laisse la ligne, avec l'autre moitié intacte.
+    [Fact]
+    public async Task Update_ClearingOneHalfOfTheOrganization_KeepsTheLine()
+    {
+        var db = nameof(Update_ClearingOneHalfOfTheOrganization_KeepsTheLine);
+        var user = Guid.NewGuid();
+        var seeded = await CreateStore(db).CreateAsync(user,
+            Write(addresses: "bruno@example.com") with { Organization = "Acme", Department = "R&D" },
+            CancellationToken.None);
+
+        await CreateStore(db).UpdateAsync(user, seeded.Value,
+            Write(addresses: "bruno@example.com") with { Department = string.Empty },
+            CancellationToken.None);
+
+        var detail = await CreateStore(db).GetAsync(user, seeded.Value, CancellationToken.None);
+        Assert.Equal("Acme", detail!.Organization);
+        Assert.Null(detail.Department);
+    }
+
     // Replace, not merge: the editor sends the list it shows, so an address the user removed has
     // to disappear. Merging would make removal impossible from the only screen that offers it.
     [Fact]

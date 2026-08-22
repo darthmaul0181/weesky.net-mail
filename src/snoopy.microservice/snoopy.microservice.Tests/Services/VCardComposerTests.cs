@@ -336,6 +336,31 @@ public sealed class VCardComposerTests
         Assert.Contains("new@x.y", output);
     }
 
+    // ORG porte deux champs sur une seule ligne : recomposer la ligne à partir de la seule moitié
+    // nommée effacerait l'autre, alors que rien dans l'écriture ne l'a demandé.
+    [Theory]
+    [InlineData("NewCorp", null, "ORG:NewCorp;Ventes")]
+    [InlineData(null, "Support", "ORG:Acme;Support")]
+    [InlineData("", null, "ORG:;Ventes")]
+    [InlineData(null, "", "ORG:Acme")]
+    public void Compose_NamingOneHalfOfTheOrganization_KeepsTheOther(
+        string? organization, string? department, string expected)
+    {
+        var output = VCardComposer.Compose(Card("ORG:Acme;Ventes"), Uid,
+            WriteWith(organization: organization, department: department));
+
+        Assert.Equal(expected, LineWith(output, "ORG"));
+    }
+
+    [Fact] // les deux moitiés vides passent par la suppression : la ligne part, les suivantes restent
+    public void Compose_ClearingBothHalvesOfTheOrganization_DropsOnlyTheFirstOccurrence()
+    {
+        var output = VCardComposer.Compose(Card("ORG:Acme;Ventes", "ORG:Umbrella"), Uid,
+            WriteWith(organization: string.Empty, department: string.Empty));
+
+        Assert.Equal("ORG:Umbrella", LineWith(output, "ORG"));
+    }
+
     [Fact] // la 2e occurrence de NOTE/TITLE/ORG/NICKNAME d'une carte 3.0 survit, octet pour octet
     public void Compose_KeepsOccurrenceTwoOfEveryCollapsedScalar()
     {
