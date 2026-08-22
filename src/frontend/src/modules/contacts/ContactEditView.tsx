@@ -514,7 +514,7 @@ export default function ContactEditView({
 
         {/* A native date picker can only express a full date; the vCard admits three others
             (décision 7), so this stays text and the value travels exactly as typed. */}
-        <span className="field-v-label contact-editor-group"><CalendarIcon size={15} />{t('editor.misc')}</span>
+        <span className="field-v-label"><CalendarIcon size={15} />{t('editor.misc')}</span>
 
         <div className="field-v">
           <label htmlFor="contact-birthday">{t('fields.birthday')}</label>

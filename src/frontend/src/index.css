@@ -2447,7 +2447,14 @@ body {
 /* The scroller is the whole pane, so its bar rides the window's edge. No padding and no width cap
    of its own: the hero and the two columns carry their own insets, and a 524px cap in a 1167px
    pane is what made this form read as cramped. */
-.contact-editor-body { flex: 1; min-height: 0; overflow-y: auto; background: var(--bg); }
+.contact-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
 .contact-editor-body > .alert { margin: 18px 28px 0; }
 
 /* What identifies the contact, before the ways of reaching them. */
@@ -2500,10 +2507,13 @@ body {
   gap: 14px 20px;
 }
 
+/* The two columns are one sheet split in two, so they run to the foot of the pane together: left
+   to its own content height, the tinted aside stops mid-air beside it. */
 .contact-editor-cols {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
-  align-items: start;
+  flex: 1;
+  min-height: 0;
 }
 
 /* One step, and it has to be visible: --bg and --surface-sunken are two points apart, so tinting
@@ -2531,7 +2541,7 @@ body {
 /* A section title carries its icon; a plain field label does not, so the gap costs nothing where
    there is no icon to sit beside. */
 .field-v > label,
-.field-v > .field-v-label {
+.field-v-label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -2544,13 +2554,13 @@ body {
 
 /* A section title, not a field label: it names a whole group, so it takes the accent and a heavier
    weight while the labels under it stay muted. */
-.field-v > .field-v-label {
+.field-v-label {
   color: var(--action-primary);
   font-weight: 700;
   letter-spacing: 0.1em;
 }
 
-.field-v > .field-v-label > svg { flex: none; }
+.field-v-label > svg { flex: none; }
 
 /* Street takes the row and the type sizes to its own widest option, the way a select always
    should; the postcode is the one box that must not grow. */
