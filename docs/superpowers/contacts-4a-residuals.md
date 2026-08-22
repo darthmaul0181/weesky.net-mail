@@ -26,6 +26,7 @@ n'aient pas à redécouvrir à leurs frais ce qui a déjà coûté une sonde.
 
 ## Laissé tel quel, et pourquoi
 
+- **La fusion d'import ne verse pas la photo de la carte entrante.** Elle arrive intacte à la création, où la carte est posée verbatim ; sur une fusion, le composeur n'a aucune porte d'écriture `PHOTO` (décision 12) et l'ouvrir ferait passer la fusion sous le plafond de 1 Mo de la carte, avec le cas « la carte grossit au-delà et l'écriture échoue » à traiter. Omission délibérée, tranchée le 22 août avec le reste de l'élargissement.
 - **`VCardImportMapper` promeut l'adresse en pseudonyme** quand la carte ne porte ni prénom ni nom : c'est la carte elle-même qui l'affirme par son `FN`, contrairement à l'export où le nom serait fabriqué.
 - **Le repli d'export est plus large que le défaut ne l'exige** : une fiche nommée dont le `FN` vaut légitimement sa propre adresse exporte un nom calculé. Aucune mutation de données ne s'ensuit — le mapper ne promeut la colonne que si prénom **et** nom manquent.
 - **Une adresse de 256 à 320 caractères échappe au repli** : `display_name` est plafonné à 255, l'adresse à 320, donc l'égalité échoue. Conséquence bornée à une erreur d'import sur notre propre fichier, jamais une mutation.

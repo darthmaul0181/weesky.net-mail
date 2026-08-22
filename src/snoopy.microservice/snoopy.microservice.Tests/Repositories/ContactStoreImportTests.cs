@@ -25,6 +25,13 @@ public sealed class ContactStoreImportTests
         new(first, last, nick, null, null, null, null, null, null, null, null, null, null,
             favorite, [.. addresses.Select(a => new ContactWriteEmail(null, a, string.Empty))], [], [], "manual");
 
+    private static ContactWrite Offer(
+        string? organization = null, string? department = null,
+        IReadOnlyList<ContactWritePhone>? phones = null,
+        IReadOnlyList<ContactWriteAddress>? postalAddresses = null) =>
+        new(null, null, null, null, null, null, null, organization, department, null, null, null,
+            null, false, [], phones, postalAddresses, "imported");
+
     private static string Card(params string[] lines) =>
         "BEGIN:VCARD\r\nVERSION:3.0\r\n" + string.Concat(lines.Select(l => l + "\r\n")) + "END:VCARD\r\n";
 
@@ -698,5 +705,122 @@ public sealed class ContactStoreImportTests
         var rows = new PreferencesTestDbContext(db).ContactEmails.Where(e => e.ContactId == contactId).ToList();
         Assert.Equal(3, rows.Single(e => e.Address == "d@example.com").Position);
         Assert.Equal(rows.Count, rows.Select(e => e.Position).Distinct().Count());
+    }
+
+    // Le trou que ce carnet a paye : une carte iPhone fusionnee dans une fiche deja connue
+    // n'apportait que noms et e-mails, et son ADR disparaissait en silence.
+    [Fact]
+    public async Task Import_FillsAnEmptyTargetsPhonesAndPostalAddressesFromTheCard()
+    {
+        var db = nameof(Import_FillsAnEmptyTargetsPhonesAndPostalAddressesFromTheCard);
+        var user = Guid.NewGuid();
+        await CreateStore(db).CreateAsync(
+            user, Write(first: "Bruno", addresses: "bruno@example.com"), CancellationToken.None);
+
+        await CreateStore(db).ImportAsync(user, [Row(
+            first: "Bruno", write: Offer(
+                phones: [new ContactWritePhone(null, "+32470000000", "CELL")],
+                postalAddresses: [new ContactWriteAddress(
+                    null, "HOME", null, null, "Rue X 1", "Namur", null, "5000", "Belgium")],
+                organization: "Weesky"),
+            addresses: "bruno@example.com")], CancellationToken.None);
+
+        var after = new PreferencesTestDbContext(db);
+        var stored = after.Contacts.Single();
+        Assert.Contains("ADR;TYPE=HOME:;;Rue X 1;Namur;;5000;Belgium", stored.VCardRaw!);
+        Assert.Equal("Weesky", stored.Organization);
+        Assert.Equal("+32470000000", after.ContactPhones.Single(p => p.ContactId == stored.Id).Number);
+        Assert.Equal("Namur", after.ContactAddresses.Single(a => a.ContactId == stored.Id).Locality);
+    }
+
+    // Tout ou rien par famille : deux orthographes du meme numero sont indiscernables sans
+    // normalisation, donc une cible qui en tient deja un garde exactement les siens.
+    [Fact]
+    public async Task Import_LeavesTheFamiliesOfATargetThatAlreadyHoldsThemAlone()
+    {
+        var db = nameof(Import_LeavesTheFamiliesOfATargetThatAlreadyHoldsThemAlone);
+        var user = Guid.NewGuid();
+        await CreateStore(db).CreateAsync(user, Write(first: "Bruno", addresses: "bruno@example.com")
+            with { Phones = [new ContactWritePhone(null, "+3221234567", "HOME")] },
+            CancellationToken.None);
+
+        await CreateStore(db).ImportAsync(user, [Row(
+            first: "Bruno", write: Offer(phones: [new ContactWritePhone(null, "+32470000000", "CELL")]),
+            addresses: "bruno@example.com")], CancellationToken.None);
+
+        var after = new PreferencesTestDbContext(db);
+        var stored = after.Contacts.Single();
+        Assert.Equal("+3221234567", after.ContactPhones.Single(p => p.ContactId == stored.Id).Number);
+    }
+
+    // Les colonnes ne sont ecrites qu'a la fin du fichier : une seconde ligne visant la meme cible
+    // la verrait encore vide et doublerait la famille que la premiere vient de poser.
+    [Fact]
+    public async Task Import_DoesNotDoubleAFamilyWhenTwoRowsMergeIntoTheSameTarget()
+    {
+        var db = nameof(Import_DoesNotDoubleAFamilyWhenTwoRowsMergeIntoTheSameTarget);
+        var user = Guid.NewGuid();
+        await CreateStore(db).CreateAsync(
+            user, Write(first: "Bruno", addresses: "bruno@example.com"), CancellationToken.None);
+
+        await CreateStore(db).ImportAsync(user, [
+            Row(line: 2, first: "Bruno",
+                write: Offer(phones: [new ContactWritePhone(null, "+32470000000", "CELL")]),
+                addresses: "bruno@example.com"),
+            Row(line: 3, first: "Bruno",
+                write: Offer(phones: [new ContactWritePhone(null, "+32480000000", "CELL")]),
+                addresses: "bruno@example.com")], CancellationToken.None);
+
+        var after = new PreferencesTestDbContext(db);
+        var stored = after.Contacts.Single();
+        Assert.Equal("+32470000000",
+            Assert.Single(after.ContactPhones.Where(p => p.ContactId == stored.Id)).Number);
+    }
+
+    // Une cible nee dans le meme fichier n'a pas encore de colonnes : ce qu'elle tient est ce que
+    // sa carte verbatim dit, et une ligne suivante ne doit pas l'ecraser.
+    [Fact]
+    public async Task Import_LeavesABornTargetsOwnOrganizationAlone()
+    {
+        var db = nameof(Import_LeavesABornTargetsOwnOrganizationAlone);
+        var user = Guid.NewGuid();
+
+        await CreateStore(db).ImportAsync(user, [
+            Row(line: 2, first: "Ana",
+                vcard: Card("UID:card-1", "N:;Ana;;;", "FN:Ana", "ORG:Acme;Ventes",
+                    "EMAIL:ana@example.com"),
+                uid: "card-1", write: Offer(organization: "Acme", department: "Ventes"),
+                addresses: "ana@example.com"),
+            Row(line: 3, first: "Ana", write: Offer(organization: "Autre"),
+                addresses: "ana@example.com")], CancellationToken.None);
+
+        var stored = new PreferencesTestDbContext(db).Contacts.Single();
+        Assert.Equal("Acme", stored.Organization);
+        Assert.Contains("ORG:Acme;Ventes", stored.VCardRaw!);
+    }
+
+    // Rejouer le meme fichier ne doit rien remuer : updated_at est ce sur quoi un ETag CardDAV
+    // reposera, et le faire bouger pour rien resynchronise tous les clients.
+    [Fact]
+    public async Task Import_ReplayedAfterFillingTheFamiliesMovesNothing()
+    {
+        var db = nameof(Import_ReplayedAfterFillingTheFamiliesMovesNothing);
+        var user = Guid.NewGuid();
+        await CreateStore(db).CreateAsync(
+            user, Write(first: "Bruno", addresses: "bruno@example.com"), CancellationToken.None);
+        ContactImportRow[] file = [Row(first: "Bruno", write: Offer(
+            phones: [new ContactWritePhone(null, "+32470000000", "CELL")], organization: "Weesky"),
+            addresses: "bruno@example.com")];
+        await CreateStore(db).ImportAsync(user, file, CancellationToken.None);
+
+        var backdate = new PreferencesTestDbContext(db);
+        var before = backdate.Contacts.Single().UpdatedAt = DateTime.UtcNow.AddDays(-1);
+        await backdate.SaveChangesAsync();
+
+        await CreateStore(db).ImportAsync(user, file, CancellationToken.None);
+
+        var after = new PreferencesTestDbContext(db);
+        Assert.Equal(before, after.Contacts.Single().UpdatedAt);
+        Assert.Single(after.ContactPhones);
     }
 }

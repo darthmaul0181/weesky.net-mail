@@ -58,18 +58,40 @@ internal static class VCardComposer
     {
         var source = SourceCard.Read(existingCard);
         var card = source.Card;
-        SetName(card, Components(write.FirstName), Components(write.LastName), null, null, null);
+        SetName(card, Components(write.FirstName), Components(write.LastName),
+            Components(write.MiddleName), Components(write.NamePrefix), Components(write.NameSuffix));
         if (write.Nickname != null)
             card.NickNames = ReplaceFirstNickname(card.NickNames, write.Nickname);
-        // No middle name: a 3d merge carried none, and never composed an FN either.
         if (!(card.DisplayNames ?? []).Any(p => p is { IsEmpty: false }))
             card.DisplayNames = ReplaceFirstText(card.DisplayNames,
-                FallbackDisplayName(write.FirstName, null, write.LastName, write.Nickname,
-                    write.AddedAddresses.FirstOrDefault()));
+                write.DisplayName ?? FallbackDisplayName(write.FirstName, write.MiddleName,
+                    write.LastName, write.Nickname, write.AddedAddresses.FirstOrDefault()));
+        PoseOptional(card, write.Organization, write.Department, write.JobTitle, write.Notes,
+            write.Website, write.Birthday, write.Phones, write.PostalAddresses);
         var emails = (card.EMails ?? []).OfType<TextProperty>().ToList();
         emails.AddRange(write.AddedAddresses.Select(a => new TextProperty(a)));
         card.EMails = emails;
-        return Emit(source, uid, RawBirthday(existingCard));
+        return Emit(source, uid, write.Birthday ?? RawBirthday(existingCard));
+    }
+
+    // The families and scalars an entry point poses only when its write names them — absent means
+    // untouched here, whichever door came in.
+    private static void PoseOptional(
+        VCard card, string? organization, string? department, string? jobTitle, string? notes,
+        string? website, string? birthday, IReadOnlyList<ContactWritePhone>? phones,
+        IReadOnlyList<ContactWriteAddress>? postalAddresses)
+    {
+        if (organization != null || department != null)
+            card.Organizations = ReplaceFirstOrg(card.Organizations, organization, department);
+        if (jobTitle != null) card.Titles = ReplaceFirstText(card.Titles, jobTitle);
+        if (notes != null) card.Notes = ReplaceFirstText(card.Notes, notes);
+        if (website != null) card.Urls = ReplaceFirstText(card.Urls, website);
+        if (birthday != null) card.BirthDayViews = ReplaceFirstBday(card.BirthDayViews, birthday);
+        if (phones != null)
+            card.Phones = Paired(card.Phones, phones, l => l.Position,
+                (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone));
+        if (postalAddresses != null)
+            card.Addresses = Paired(card.Addresses, postalAddresses, l => l.Position, PostalLine);
     }
 
     private static string Apply(SourceCard source, string uid, ContactWrite write, string? rawBirthday = null)
@@ -89,19 +111,10 @@ internal static class VCardComposer
             write.DisplayName ?? FallbackDisplayName(write.FirstName, NamePart(name?.Given2), write.LastName,
                 write.Nickname, write.Addresses.Count > 0 ? write.Addresses[0].Address : null));
         card.NickNames = ReplaceFirstNickname(card.NickNames, write.Nickname);
-        if (write.Organization != null || write.Department != null)
-            card.Organizations = ReplaceFirstOrg(card.Organizations, write.Organization, write.Department);
-        if (write.JobTitle != null) card.Titles = ReplaceFirstText(card.Titles, write.JobTitle);
-        if (write.Notes != null) card.Notes = ReplaceFirstText(card.Notes, write.Notes);
-        if (write.Website != null) card.Urls = ReplaceFirstText(card.Urls, write.Website);
-        if (write.Birthday != null) card.BirthDayViews = ReplaceFirstBday(card.BirthDayViews, write.Birthday);
+        PoseOptional(card, write.Organization, write.Department, write.JobTitle, write.Notes,
+            write.Website, write.Birthday, write.Phones, write.PostalAddresses);
         card.EMails = Paired(card.EMails, write.Addresses, l => l.Position,
             (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email));
-        if (write.Phones != null)
-            card.Phones = Paired(card.Phones, write.Phones, l => l.Position,
-                (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone));
-        if (write.PostalAddresses != null)
-            card.Addresses = Paired(card.Addresses, write.PostalAddresses, l => l.Position, PostalLine);
         return Emit(source, uid, write.Birthday ?? rawBirthday);
     }
 

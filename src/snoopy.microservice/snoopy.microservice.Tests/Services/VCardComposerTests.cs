@@ -44,6 +44,27 @@ public sealed class VCardComposerTests
             department, jobTitle, birthday, website, notes, false,
             addresses ?? [], phones ?? [], postalAddresses ?? [], "manual");
 
+    private static MergeWrite MergeWith(
+        string? firstName = null,
+        string? lastName = null,
+        string? nickname = null,
+        IReadOnlyList<string>? addedAddresses = null,
+        string? middleName = null,
+        string? namePrefix = null,
+        string? nameSuffix = null,
+        string? displayName = null,
+        string? organization = null,
+        string? department = null,
+        string? jobTitle = null,
+        string? birthday = null,
+        string? website = null,
+        string? notes = null,
+        IReadOnlyList<ContactWritePhone>? phones = null,
+        IReadOnlyList<ContactWriteAddress>? postalAddresses = null) =>
+        new(firstName, lastName, nickname, addedAddresses ?? [], middleName, namePrefix, nameSuffix,
+            displayName, organization, department, jobTitle, birthday, website, notes,
+            phones, postalAddresses);
+
     // The unfolded logical line carrying the given fragment.
     private static string LineWith(string output, string fragment) =>
         output.Replace("\r\n ", "").Replace("\r\n\t", "").Split("\r\n")
@@ -514,5 +535,71 @@ public sealed class VCardComposerTests
         var output = VCardComposer.Compose(card, Uid, write);
         Assert.Contains("item1.X-ABLabel:Perso", output);
         Assert.Contains("X-ABUID:ABC-DEF", output);
+    }
+
+    // Une carte entrante apporte une ADR a une fiche qui n'en a aucune : la fusion la pose, la
+    // reconstruction en place de PostalLine comprise.
+    [Fact]
+    public void MergeFill_PosesAPostalAddressOnACardWithoutOne()
+    {
+        var card = Card("EMAIL;TYPE=INTERNET:a@b.c");
+
+        var output = VCardComposer.MergeFill(card, "u1", MergeWith(postalAddresses:
+            [new ContactWriteAddress(null, "HOME", null, null, "Rue X 1", "Namur", null, "5000", "Belgium")]));
+
+        Assert.Contains("ADR;TYPE=HOME:;;Rue X 1;Namur;;5000;Belgium", output);
+    }
+
+    [Fact] // meme chose pour les telephones : les rangs de la carte entrante ne veulent rien dire ici
+    public void MergeFill_PosesThePhonesOfACardThatHasNone()
+    {
+        var card = Card("EMAIL;TYPE=INTERNET:a@b.c");
+
+        var output = VCardComposer.MergeFill(card, "u1", MergeWith(phones:
+            [new ContactWritePhone(null, "+32470000000", "CELL")]));
+
+        Assert.Contains("TEL;TYPE=CELL:+32470000000", output);
+    }
+
+    // ORG porte deux moities sur une ligne : la fusion ne nomme que celle qui manque a la cible,
+    // et recomposer la ligne depuis elle seule effacerait l'autre.
+    [Fact]
+    public void MergeFill_PosesTheOrganizationWithoutDestroyingTheDepartment()
+    {
+        var card = Card("ORG:;Ventes");
+
+        var output = VCardComposer.MergeFill(card, "u1", MergeWith(organization: "Acme"));
+
+        Assert.Contains("ORG:Acme;Ventes", output);
+    }
+
+    [Theory] // les scalaires que la carte entrante apporte a une fiche qui ne les tient pas
+    [InlineData("jobTitle", "Ingenieur", "TITLE:Ingenieur")]
+    [InlineData("notes", "Client fidele", "NOTE:Client fidele")]
+    [InlineData("website", "https://x.be", "URL:https://x.be")]
+    [InlineData("birthday", "1980-01-15", "BDAY:1980-01-15")]
+    public void MergeFill_PosesTheScalarsTheCardIsMissing(string field, string value, string expected)
+    {
+        var write = field switch
+        {
+            "jobTitle" => MergeWith(jobTitle: value),
+            "notes" => MergeWith(notes: value),
+            "website" => MergeWith(website: value),
+            _ => MergeWith(birthday: value),
+        };
+
+        Assert.Contains(expected, VCardComposer.MergeFill(Card("EMAIL:a@b.c"), "u1", write));
+    }
+
+    [Fact] // le milieu du nom atteint N et le FN de repli, comme il le fait deja a la composition
+    public void MergeFill_PosesTheMiddleName()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nEND:VCARD\r\n";
+
+        var output = VCardComposer.MergeFill(
+            card, "u1", MergeWith(firstName: "Jean", lastName: "Dupont", middleName: "Pierre"));
+
+        Assert.Contains("N:Dupont;Jean;Pierre;;", output);
+        Assert.Contains("FN:Jean Pierre Dupont", output);
     }
 }

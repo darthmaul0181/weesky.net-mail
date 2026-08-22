@@ -496,6 +496,7 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
                 .Where(c => c.UserId == userId && wanted.Contains(c.Id))
                 .ToListAsync(cancellationToken);
         var byId = tracked.ToDictionary(c => c.Id);
+        var holdings = new Dictionary<Guid, Holdings>();
 
         foreach (var (target, row, addresses) in merges)
         {
@@ -504,15 +505,17 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
             // the row is dropped rather than failing the whole file on a KeyNotFoundException.
             if (contact == null) continue;
 
+            if (!holdings.TryGetValue(target, out var held))
+                // A contact born of this same file has no column written yet — its verbatim card is
+                // the only account of what it holds. Every other target's columns already are it.
+                holdings[target] = held = born.ContainsKey(target)
+                    ? Holdings.Of(VCardProjector.Project(pending[target].Card))
+                    : Holdings.Of(contact, cache);
+
             // Nothing is overwritten, and no column is written here: the card is what fills them,
             // and a column posed beside it is a column that drifts from it (décision 1).
-            var fill = new MergeWrite(
-                contact.FirstName == null ? row.FirstName : null,
-                contact.LastName == null ? row.LastName : null,
-                contact.Nickname == null ? row.Nickname : null,
-                addresses);
-            var movesTheCard = fill.FirstName != null || fill.LastName != null
-                || fill.Nickname != null || addresses.Count > 0;
+            var fill = held.Fill(row, addresses);
+            var movesTheCard = !fill.IsEmpty;
             var changed = movesTheCard;
             // The star has no vCard property of its own, so it alone never moves the card.
             if (!contact.IsFavorite && row.IsFavorite) { contact.IsFavorite = true; changed = true; }
@@ -616,6 +619,76 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
 
     /// <summary>A contact's card between its composition and the single write that stores it.</summary>
     private sealed record PendingCard(Contact Contact, int Line, string Card);
+
+    /// <summary>
+    /// What a merge target already holds, kept current as the rows of one file fill it. The columns
+    /// are written once, at the very end, so a second row aimed at the same target would otherwise
+    /// read it as empty — overwriting what the first row posed, and doubling its families.
+    /// </summary>
+    private sealed class Holdings
+    {
+        private string? firstName, lastName, nickname, middleName, namePrefix, nameSuffix,
+            displayName, organization, department, jobTitle, birthday, website, notes;
+        private bool phones, postalAddresses;
+
+        internal static Holdings Of(Contact c, ProjectionCache cache) => new()
+        {
+            firstName = c.FirstName, lastName = c.LastName, nickname = c.Nickname,
+            middleName = c.MiddleName, namePrefix = c.NamePrefix, nameSuffix = c.NameSuffix,
+            displayName = c.DisplayName, organization = c.Organization, department = c.Department,
+            jobTitle = c.JobTitle, birthday = c.Birthday, website = c.Website, notes = c.Notes,
+            phones = cache.Phones[c.Id].Any(), postalAddresses = cache.PostalAddresses[c.Id].Any(),
+        };
+
+        internal static Holdings Of(ContactProjection card) => new()
+        {
+            firstName = card.FirstName, lastName = card.LastName, nickname = card.Nickname,
+            middleName = card.MiddleName, namePrefix = card.NamePrefix, nameSuffix = card.NameSuffix,
+            displayName = card.DisplayName, organization = card.Organization,
+            department = card.Department, jobTitle = card.JobTitle, birthday = card.Birthday,
+            website = card.Website, notes = card.Notes,
+            phones = card.Phones.Count > 0, postalAddresses = card.PostalAddresses.Count > 0,
+        };
+
+        /// <summary>
+        /// What this row adds and nothing more: every field the target does not hold yet, each
+        /// family only when it holds none of it. Marks what it hands out, so the next row aimed
+        /// here sees the target as it will be, not as the columns still describe it.
+        /// </summary>
+        internal MergeWrite Fill(ContactImportRow row, IReadOnlyList<string> addresses)
+        {
+            var offered = row.Write;
+            return new MergeWrite(
+                Take(ref firstName, row.FirstName),
+                Take(ref lastName, row.LastName),
+                Take(ref nickname, row.Nickname),
+                addresses,
+                Take(ref middleName, offered?.MiddleName),
+                Take(ref namePrefix, offered?.NamePrefix),
+                Take(ref nameSuffix, offered?.NameSuffix),
+                Take(ref displayName, offered?.DisplayName),
+                Take(ref organization, offered?.Organization),
+                Take(ref department, offered?.Department),
+                Take(ref jobTitle, offered?.JobTitle),
+                Take(ref birthday, offered?.Birthday),
+                Take(ref website, offered?.Website),
+                Take(ref notes, offered?.Notes),
+                Take(ref phones, offered?.Phones),
+                Take(ref postalAddresses, offered?.PostalAddresses));
+        }
+
+        private static string? Take(ref string? held, string? offered) =>
+            held != null || offered == null ? null : held = offered;
+
+        // All or nothing: two spellings of one number are indistinguishable without a
+        // normalisation neither TEL nor ADR has, so a target holding any is handed none.
+        private static IReadOnlyList<T>? Take<T>(ref bool held, IReadOnlyList<T>? offered)
+        {
+            if (held || offered is not { Count: > 0 }) return null;
+            held = true;
+            return offered;
+        }
+    }
 
     /// <summary>
     /// A contact's stored state as a write, so the composer can give a card to one that has none

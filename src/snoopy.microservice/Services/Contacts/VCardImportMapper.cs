@@ -19,8 +19,24 @@ internal static class VCardImportMapper
 
         return new ContactImportRow(
             chunk.Line, projection.FirstName, projection.LastName, nickname, false,
-            [.. projection.Addresses.Select(e => e.Address)], chunk.Text, UidOf(chunk.Text));
+            [.. projection.Addresses.Select(e => e.Address)], chunk.Text, UidOf(chunk.Text),
+            Offered(projection, nickname));
     }
+
+    /// <summary>
+    /// What the card offers a merge, in the shape the CSV path already hands the store: the store
+    /// keeps of it only what the target does not hold. Positions are dropped — the ranks of the
+    /// incoming card mean nothing on the target's own, where a fill only ever appends.
+    /// </summary>
+    private static ContactWrite Offered(ContactProjection card, string? nickname) =>
+        new(card.FirstName, card.LastName, nickname, card.DisplayName, card.MiddleName,
+            card.NamePrefix, card.NameSuffix, card.Organization, card.Department, card.JobTitle,
+            card.Birthday, card.Website, card.Notes, false,
+            [.. card.Addresses.Select(e => new ContactWriteEmail(null, e.Address, e.Line.Type))],
+            [.. card.Phones.Select(p => new ContactWritePhone(null, p.Number, p.Line.Type))],
+            [.. card.PostalAddresses.Select(a => new ContactWriteAddress(null, a.Line.Type, a.PoBox,
+                a.Extended, a.Street, a.Locality, a.Region, a.PostalCode, a.Country))],
+            "imported");
 
     /// <summary>
     /// The UID as the card writes it, untruncated: the projection mirrors the column's 255

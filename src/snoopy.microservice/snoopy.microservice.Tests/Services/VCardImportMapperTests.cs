@@ -1,3 +1,4 @@
+using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Services.Contacts;
 using Xunit;
 
@@ -70,5 +71,41 @@ public sealed class VCardImportMapperTests
         Assert.Null(row.Uid);
         Assert.Empty(row.Addresses);
         Assert.False(row.IsFavorite);
+    }
+
+    // Ce que la carte propose a une fusion : le store y puise pour remplir ce que la cible ne tient
+    // pas. Sans ce Write, un .vcf fusionne dans une fiche existante n'apporte que noms et e-mails.
+    [Fact]
+    public void Map_OffersWhatTheCardHoldsBeyondTheNamesAndAddresses()
+    {
+        var row = VCardImportMapper.Map(Chunk(Card(
+            "N:Mertens;Bruno;J;Mr;", "FN:Bruno Mertens", "ORG:Weesky;Support", "TITLE:Ingenieur",
+            "BDAY:1980-01-15", "URL:https://x.be", "NOTE:Client fidele",
+            "TEL;TYPE=CELL:+32470000000",
+            "ADR;TYPE=HOME:;;Rue X 1;Namur;;5000;Belgium")));
+
+        var offered = Assert.IsType<ContactWrite>(row.Write);
+        Assert.Equal("J", offered.MiddleName);
+        Assert.Equal("Mr", offered.NamePrefix);
+        Assert.Equal("Weesky", offered.Organization);
+        Assert.Equal("Support", offered.Department);
+        Assert.Equal("Ingenieur", offered.JobTitle);
+        Assert.Equal("1980-01-15", offered.Birthday);
+        Assert.Equal("https://x.be", offered.Website);
+        Assert.Equal("Client fidele", offered.Notes);
+        Assert.Equal("+32470000000", Assert.Single(offered.Phones!).Number);
+        Assert.Equal("Namur", Assert.Single(offered.PostalAddresses!).Locality);
+    }
+
+    // Les rangs de la carte entrante ne veulent rien dire sur la carte de la cible : un remplissage
+    // ajoute toujours a la fin, il ne reclame jamais une place.
+    [Fact]
+    public void Map_OffersItsLinesWithoutAPosition()
+    {
+        var row = VCardImportMapper.Map(Chunk(Card(
+            "FN:Ana", "TEL:+3221234567", "ADR;TYPE=WORK:;;Rue Y 2;Liege;;4000;Belgium")));
+
+        Assert.Null(Assert.Single(row.Write!.Phones!).Position);
+        Assert.Null(Assert.Single(row.Write!.PostalAddresses!).Position);
     }
 }

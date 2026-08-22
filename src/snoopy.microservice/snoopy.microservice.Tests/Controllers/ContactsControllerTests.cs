@@ -414,6 +414,25 @@ public sealed class ContactsControllerTests
             });
     }
 
+    // Le chemin complet du .vcf : ce que le controleur remet au store porte l'ADR de la carte, la
+    // seule chose qui permet a une fusion de la poser sur une fiche qui n'en a pas.
+    [Fact]
+    public async Task Import_OffersAVCardsPostalAddressToTheStore()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(0, 1, 0, 0, []));
+
+        await CreateController().Import(VCardFileOf(Card("FN:Ana", "EMAIL:ana@example.com",
+            "TEL;TYPE=CELL:+32470000000",
+            "ADR;TYPE=HOME:;;Rue X 1;Namur;;5000;Belgium")), CancellationToken.None);
+
+        var offered = Assert.Single(seen!).Write;
+        Assert.Equal("Rue X 1", Assert.Single(offered!.PostalAddresses!).Street);
+        Assert.Equal("+32470000000", Assert.Single(offered.Phones!).Number);
+    }
+
     // A file picker that names no media type, and the BOM a Windows editor leaves in front.
     [Fact]
     public async Task Import_RoutesOnTheContentWhenNoMediaTypeSaysSo()
