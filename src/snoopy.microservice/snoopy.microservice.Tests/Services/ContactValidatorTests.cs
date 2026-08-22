@@ -255,6 +255,7 @@ public sealed class ContactValidatorTests
         var result = ContactValidator.Validate(FromJson("""{"firstName":"Ana","phones":[{}]}"""));
 
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value.Phones);
         Assert.Empty(result.Value.Phones);
     }
 
@@ -264,6 +265,7 @@ public sealed class ContactValidatorTests
         var result = ContactValidator.Validate(FromJson("""{"firstName":"Ana","postalAddresses":[{}]}"""));
 
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value.PostalAddresses);
         Assert.Empty(result.Value.PostalAddresses);
     }
 

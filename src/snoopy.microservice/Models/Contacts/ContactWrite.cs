@@ -23,6 +23,24 @@ public sealed record ContactWriteAddress(
 /// child lines non-blank and in the order they must be stored. Only
 /// <see cref="Services.ContactValidator"/> produces one, so the store never re-checks the rules.
 /// </summary>
+/// <param name="FirstName">The contact's first name, if any.</param>
+/// <param name="LastName">The contact's last name, if any.</param>
+/// <param name="Nickname">The contact's nickname, if any.</param>
+/// <param name="DisplayName">The contact's display name, if any.</param>
+/// <param name="MiddleName">The contact's middle name, if any.</param>
+/// <param name="NamePrefix">The contact's name prefix, if any.</param>
+/// <param name="NameSuffix">The contact's name suffix, if any.</param>
+/// <param name="Organization">The contact's organization, if any.</param>
+/// <param name="Department">The contact's department, if any.</param>
+/// <param name="JobTitle">The contact's job title, if any.</param>
+/// <param name="Birthday">The contact's birthday, if any.</param>
+/// <param name="Website">The contact's website, if any.</param>
+/// <param name="Notes">The contact's notes, if any.</param>
+/// <param name="IsFavorite">Whether the contact is starred.</param>
+/// <param name="Addresses">Non-blank, in the order they must be stored.</param>
+/// <param name="Phones">Null = the request did not name them, so the card keeps its own; empty = cleared.</param>
+/// <param name="PostalAddresses">Null = the request did not name them, so the card keeps its own; empty = cleared.</param>
+/// <param name="Source">Where the card came from.</param>
 public sealed record ContactWrite(
     string? FirstName,
     string? LastName,
@@ -39,8 +57,6 @@ public sealed record ContactWrite(
     string? Notes,
     bool IsFavorite,
     IReadOnlyList<ContactWriteEmail> Addresses,
-    /// <summary>Null = the request did not name them, so the card keeps its own; empty = cleared.</summary>
     IReadOnlyList<ContactWritePhone>? Phones,
-    /// <inheritdoc cref="Phones"/>
     IReadOnlyList<ContactWriteAddress>? PostalAddresses,
     string Source);

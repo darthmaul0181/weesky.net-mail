@@ -240,7 +240,9 @@ public sealed class ContactsControllerTests
         var row = Assert.Single(seen!);
         Assert.Equal("Bruno", row.FirstName);
         Assert.Equal(2, row.Line);
-        var phone = Assert.Single(row.Write!.Phones);
+        var write = row.Write!;
+        Assert.NotNull(write.Phones);
+        var phone = Assert.Single(write.Phones);
         Assert.Equal("+32470000000", phone.Number);
         Assert.Equal("CELL", phone.Type);
     }
@@ -539,6 +541,8 @@ public sealed class ContactsControllerTests
             CancellationToken.None);
 
         var write = Assert.Single(seen!).Write!;
+        Assert.NotNull(write.Phones);
+        Assert.NotNull(write.PostalAddresses);
         Assert.Equal(
             [("+32470000000", "CELL"), ("+3281000000", "HOME,VOICE"), ("+3281000001", "WORK,FAX")],
             write.Phones.Select(p => (p.Number, p.Type)));
@@ -733,6 +737,8 @@ public sealed class ContactsControllerTests
 
         Assert.IsType<NoContentResult>(result);
         Assert.Equal("bruno@example.com", Assert.Single(seen!.Addresses).Address);
+        Assert.NotNull(seen.Phones);
+        Assert.NotNull(seen.PostalAddresses);
         Assert.Equal("+32470000000", Assert.Single(seen.Phones).Number);
         Assert.Equal("Rue X", Assert.Single(seen.PostalAddresses).Street);
     }
