@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../components/DropdownMenu'
 import CheckIcon from '../../icons/CheckIcon'
 import PencilIcon from '../../icons/PencilIcon.jsx'
+import CalendarIcon from '../../icons/CalendarIcon'
+import MailIcon from '../../icons/MailIcon'
+import MapPinIcon from '../../icons/MapPinIcon'
 import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
+import PhoneIcon from '../../icons/PhoneIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
 import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeOptions } from './contactLineTypes'
@@ -101,6 +105,15 @@ const emptyPostal = (): ContactDraftPostal => ({
   locality: null, region: null, postalCode: null, country: null,
 })
 
+/** The two letters the avatar falls back to while the card carries no picture. Read off what is
+    in the boxes rather than off the saved contact, so a name typed in a create shows at once. */
+function initialsOf(first: string, last: string, nickname: string): string {
+  const letters = [first.trim(), last.trim()].filter(Boolean).map(part => part[0])
+  if (letters.length > 0) return letters.join('').toUpperCase()
+  const fallback = nickname.trim()
+  return fallback === '' ? '' : fallback[0].toUpperCase()
+}
+
 /** The primary is the line the user designated, and the first one until they do. */
 function primaryIndexOf(lines: ContactDraftEmail[]): number {
   const chosen = lines.findIndex(line => line.pref === 1)
@@ -149,6 +162,7 @@ export default function ContactEditView({
         }))
       : [])
 
+  const initials = initialsOf(firstName, lastName, nickname)
   const revealedIn = (group: 'name' | 'other') =>
     OPTIONAL.filter(f => f.group === group && revealed.has(f.key))
 
@@ -284,13 +298,15 @@ export default function ContactEditView({
         {/* The face first, then the names beside it: what identifies the contact, before the ways
             of reaching them. The photo is shown, never replaced — no PHOTO write door exists. */}
         <div className="contact-editor-hero">
-          {photo
-            ? <img className="contact-editor-avatar" src={photo} alt="" data-testid="editor-photo" />
-            : (
-              <span className="contact-editor-avatar is-blank" data-testid="editor-avatar-blank">
-                <PersonPlusIcon />
-              </span>
-            )}
+          {photo && <img className="contact-editor-avatar" src={photo} alt="" data-testid="editor-photo" />}
+          {!photo && initials !== '' && (
+            <span className="contact-editor-avatar is-initials" data-testid="editor-initials">{initials}</span>
+          )}
+          {!photo && initials === '' && (
+            <span className="contact-editor-avatar is-blank" data-testid="editor-avatar-blank">
+              <PersonPlusIcon />
+            </span>
+          )}
           <div className="contact-editor-identity">
             <div className="field-v">
               <label htmlFor="contact-first-name">{t('editor.firstName')}</label>
@@ -330,7 +346,7 @@ export default function ContactEditView({
         <div className="contact-editor-col">
 
         <div className="field-v contact-editor-addresses">
-          <span className="field-v-label">{t('fields.addresses')}</span>
+          <span className="field-v-label"><MailIcon size={15} />{t('fields.addresses')}</span>
           <div className="contact-address-list">
             {addresses.map((line, index) => (
               <div key={index} className="contact-address-row" data-testid={`address-row-${index}`}>
@@ -371,7 +387,7 @@ export default function ContactEditView({
         </div>
 
         <div className="field-v contact-editor-addresses">
-          <span className="field-v-label">{t('fields.phones')}</span>
+          <span className="field-v-label"><PhoneIcon size={15} />{t('fields.phones')}</span>
           <div className="contact-address-list">
             {phones.map((line, index) => (
               <div key={index} className="contact-address-row" data-testid={`phone-row-${index}`}>
@@ -410,15 +426,42 @@ export default function ContactEditView({
         <div className="contact-editor-col is-aside">
 
         <div className="field-v contact-editor-addresses">
-          <span className="field-v-label">{t('fields.postal')}</span>
+          <span className="field-v-label"><MapPinIcon size={15} />{t('fields.postal')}</span>
           <div className="contact-address-list">
             {postalAddresses.map((line, index) => (
               <div key={index} className="contact-postal-item" data-testid={`postal-row-${index}`}>
-                <div className="contact-address-row">
+                {/* Three rows, the shape the mockup settled on: street with its type, then the
+                    city line, then region and country. PO box and extended only when the card
+                    carries them — décision 9 keeps all seven editable, it does not demand two
+                    empty boxes on every address. */}
+                {(line.poBox ?? '') !== '' || (line.extended ?? '') !== '' ? (
+                  <div className="contact-postal-row">
+                    <label className="visually-hidden" htmlFor={`contact-postal-pobox-${index}`}>
+                      {t('editor.postal.poBox')}
+                    </label>
+                    <input id={`contact-postal-pobox-${index}`} type="text" value={line.poBox ?? ''}
+                      placeholder={t('editor.postal.poBox')}
+                      onChange={event => changePostalPart(index, 'poBox', event.target.value)} />
+                    <label className="visually-hidden" htmlFor={`contact-postal-extended-${index}`}>
+                      {t('editor.postal.extended')}
+                    </label>
+                    <input id={`contact-postal-extended-${index}`} type="text" value={line.extended ?? ''}
+                      placeholder={t('editor.postal.extended')}
+                      onChange={event => changePostalPart(index, 'extended', event.target.value)} />
+                  </div>
+                ) : null}
+                <div className="contact-postal-row">
+                  <label className="visually-hidden" htmlFor={`contact-postal-street-${index}`}>
+                    {t('editor.postal.street')}
+                  </label>
+                  <input id={`contact-postal-street-${index}`} type="text" value={line.street ?? ''}
+                    placeholder={t('editor.postal.street')} className="contact-postal-full"
+                    onChange={event => changePostalPart(index, 'street', event.target.value)} />
                   <label className="visually-hidden" htmlFor={`contact-postal-type-${index}`}>
                     {t('editor.postalType', { index: index + 1 })}
                   </label>
                   <select id={`contact-postal-type-${index}`} value={line.type}
+                    className="contact-postal-type"
                     onChange={event => changePostalType(index, event.target.value)}>
                     {typeOptions(POSTAL_TYPES, line.type).map(option => (
                       <option key={option} value={option}>{typeLabel(option)}</option>
@@ -431,33 +474,11 @@ export default function ContactEditView({
                   </button>
                 </div>
                 <div className="contact-postal-row">
-                  <label className="visually-hidden" htmlFor={`contact-postal-pobox-${index}`}>
-                    {t('editor.postal.poBox')}
-                  </label>
-                  <input id={`contact-postal-pobox-${index}`} type="text" value={line.poBox ?? ''}
-                    placeholder={t('editor.postal.poBox')}
-                    onChange={event => changePostalPart(index, 'poBox', event.target.value)} />
-                  <label className="visually-hidden" htmlFor={`contact-postal-extended-${index}`}>
-                    {t('editor.postal.extended')}
-                  </label>
-                  <input id={`contact-postal-extended-${index}`} type="text" value={line.extended ?? ''}
-                    placeholder={t('editor.postal.extended')}
-                    onChange={event => changePostalPart(index, 'extended', event.target.value)} />
-                </div>
-                <div className="contact-postal-row">
-                  <label className="visually-hidden" htmlFor={`contact-postal-street-${index}`}>
-                    {t('editor.postal.street')}
-                  </label>
-                  <input id={`contact-postal-street-${index}`} type="text" value={line.street ?? ''}
-                    placeholder={t('editor.postal.street')} className="contact-postal-full"
-                    onChange={event => changePostalPart(index, 'street', event.target.value)} />
-                </div>
-                <div className="contact-postal-row">
                   <label className="visually-hidden" htmlFor={`contact-postal-postalcode-${index}`}>
                     {t('editor.postal.postalCode')}
                   </label>
                   <input id={`contact-postal-postalcode-${index}`} type="text" value={line.postalCode ?? ''}
-                    placeholder={t('editor.postal.postalCode')}
+                    placeholder={t('editor.postal.postalCode')} className="contact-postal-short"
                     onChange={event => changePostalPart(index, 'postalCode', event.target.value)} />
                   <label className="visually-hidden" htmlFor={`contact-postal-locality-${index}`}>
                     {t('editor.postal.locality')}
@@ -494,7 +515,7 @@ export default function ContactEditView({
         {/* A native date picker can only express a full date; the vCard admits three others
             (décision 7), so this stays text and the value travels exactly as typed. */}
         <div className="field-v">
-          <label htmlFor="contact-birthday">{t('fields.birthday')}</label>
+          <label htmlFor="contact-birthday"><CalendarIcon size={15} />{t('fields.birthday')}</label>
           <input id="contact-birthday" type="text" value={birthday} maxLength={BIRTHDAY_MAX}
             placeholder={t('editor.birthdayPlaceholder')}
             onChange={event => setBirthday(event.target.value)} />

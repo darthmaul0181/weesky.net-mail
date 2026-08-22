@@ -493,6 +493,14 @@ describe('ContactEditView', () => {
     expect(screen.queryByTestId('editor-avatar-blank')).not.toBeInTheDocument()
   })
 
+  // Sans photo, la fiche montre ses initiales — pas une pastille anonyme.
+  it('replie sur les initiales du contact quand la carte ne porte pas de photo', () => {
+    setup({ contact: bruno })
+
+    expect(screen.getByTestId('editor-initials')).toHaveTextContent('BM')
+    expect(screen.queryByTestId('editor-avatar-blank')).not.toBeInTheDocument()
+  })
+
   // Meme boite en creation, pour que la hauteur du bandeau ne saute pas entre les deux modes.
   it('tient la place de la photo par une pastille en creation', () => {
     setup({ contact: null })

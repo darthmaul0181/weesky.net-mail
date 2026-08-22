@@ -2447,7 +2447,7 @@ body {
 /* The scroller is the whole pane, so its bar rides the window's edge. No padding and no width cap
    of its own: the hero and the two columns carry their own insets, and a 524px cap in a 1167px
    pane is what made this form read as cramped. */
-.contact-editor-body { flex: 1; min-height: 0; overflow-y: auto; }
+.contact-editor-body { flex: 1; min-height: 0; overflow-y: auto; background: var(--bg); }
 .contact-editor-body > .alert { margin: 18px 28px 0; }
 
 /* What identifies the contact, before the ways of reaching them. */
@@ -2470,9 +2470,23 @@ body {
 
 /* Same box in create mode, so the hero's height does not jump between the two modes and the name
    fields stay where the eye left them. */
+/* Initials while the card carries no picture — the same disc, so the hero never changes height.
+   The icon is the last resort, for a create with nothing typed yet. */
+.contact-editor-avatar.is-initials,
 .contact-editor-avatar.is-blank {
   display: grid;
   place-items: center;
+}
+
+.contact-editor-avatar.is-initials {
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.contact-editor-avatar.is-blank {
   background: var(--surface-sunken);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -2492,8 +2506,11 @@ body {
   align-items: start;
 }
 
+/* Three tones, lightest at the top: the hero on --surface, this column on the app's own ground,
+   the aside sunk below it. Two of the three the same is what made the aside read as a lone slab. */
 .contact-editor-col {
   padding: 26px 28px 34px;
+  background: var(--bg);
   display: grid;
   gap: 26px;
   align-content: start;
@@ -2511,14 +2528,27 @@ body {
    the left and lets two fields share a line — the whole reason this form has room now. */
 .field-v { display: grid; gap: 6px; min-width: 0; }
 
+/* A section title carries its icon; a plain field label does not, so the gap costs nothing where
+   there is no icon to sit beside. */
 .field-v > label,
 .field-v > .field-v-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
+
+.field-v > label > svg,
+.field-v > .field-v-label > svg { flex: none; color: var(--action-primary); }
+
+/* Street takes the row and the type sizes to its own widest option, the way a select always
+   should; the postcode is the one box that must not grow. */
+.contact-postal-type { flex: none; }
+.contact-postal-short { flex: 0 0 108px; }
 .field-h textarea,
 .field-v textarea {
   flex: 1; min-height: 80px; resize: vertical; border: 1px solid var(--border);

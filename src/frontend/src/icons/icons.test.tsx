@@ -28,6 +28,8 @@ import DropletIcon from './DropletIcon'
 import AtSignIcon from './AtSignIcon'
 import FunnelIcon from './FunnelIcon'
 import PersonPlusIcon from './PersonPlusIcon'
+import PhoneIcon from './PhoneIcon'
+import MapPinIcon from './MapPinIcon'
 import ShieldIcon from './ShieldIcon'
 import CodeIcon from './CodeIcon'
 import UndoIcon from './UndoIcon'
@@ -81,6 +83,8 @@ const icons = [
   { name: 'AtSignIcon', Icon: AtSignIcon, defaultSize: '16' },
   { name: 'FunnelIcon', Icon: FunnelIcon, defaultSize: '16' },
   { name: 'PersonPlusIcon', Icon: PersonPlusIcon, defaultSize: '15' },
+  { name: 'PhoneIcon', Icon: PhoneIcon, defaultSize: '20' },
+  { name: 'MapPinIcon', Icon: MapPinIcon, defaultSize: '20' },
   { name: 'ShieldIcon', Icon: ShieldIcon, defaultSize: '15' },
   { name: 'CodeIcon', Icon: CodeIcon, defaultSize: '16' },
   { name: 'UndoIcon', Icon: UndoIcon, defaultSize: '16' },
