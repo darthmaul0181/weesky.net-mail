@@ -114,6 +114,45 @@ describe('ContactCard', () => {
     expect(await screen.findByText('Plombier')).toBeInTheDocument()
   })
 
+  const postalOf = (fields: Record<string, string | null>) => ({
+    position: 0, type: 'HOME', pref: 101, params: '', groupName: '', poBox: null, extended: null,
+    street: null, locality: null, region: null, postalCode: null, country: null, ...fields,
+  })
+
+  it('offers directions on the phone, where geo: has a handler', async () => {
+    api.getContact.mockResolvedValue(detail({
+      postalAddresses: [postalOf({ street: 'Rue Haute 1', locality: 'Bruxelles', country: 'Belgique' })],
+    }))
+    setup({ bottomActions: true })
+
+    const link = await screen.findByRole('link', { name: /directions/i })
+    expect(link).toHaveAttribute(
+      'href', 'geo:0,0?q=' + encodeURIComponent('Rue Haute 1, Bruxelles, Belgique'))
+  })
+
+  /* No desktop browser registers the scheme, so the link would be drawn, clicked, and do nothing
+     with no way to say why. The tier comes from the same prop the action bar rides. */
+  it('withholds directions off the phone', async () => {
+    api.getContact.mockResolvedValue(detail({
+      postalAddresses: [postalOf({ street: 'Rue Haute 1', locality: 'Bruxelles' })],
+    }))
+    setup()
+
+    expect(await screen.findByTestId('card-postal')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /directions/i })).not.toBeInTheDocument()
+  })
+
+  /* A card carrying only a country would open the map on a whole nation. */
+  it('withholds directions when the address names no street and no locality', async () => {
+    api.getContact.mockResolvedValue(detail({
+      postalAddresses: [postalOf({ country: 'Belgique' })],
+    }))
+    setup({ bottomActions: true })
+
+    expect(await screen.findByTestId('card-postal')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /directions/i })).not.toBeInTheDocument()
+  })
+
   it('shows the postal address on one line per component that exists', async () => {
     api.getContact.mockResolvedValue(detail({
       postalAddresses: [{
@@ -197,10 +236,10 @@ describe('ContactCard', () => {
     expect(screen.queryByRole('button', { name: /contact actions/i })).not.toBeInTheDocument()
   })
 
-  it('keeps the actions in the head when it is not asked for a band', () => {
+  it('keeps the actions in the banner when it is not asked for a band', () => {
     const { container } = setup()
 
-    expect(container.querySelector('.contact-card-head .contact-card-actions')).not.toBeNull()
+    expect(container.querySelector('.contact-card-banner .contact-card-actions')).not.toBeNull()
     expect(container.querySelector('.actionbar')).toBeNull()
   })
 

@@ -56,6 +56,9 @@
     "invite": "Sélectionnez un contact pour voir sa fiche",
     "back": "Retour à la liste",
     "actions": "Actions du contact",
+    "write": "Écrire",
+    "call": "Appeler",
+    "directions": "Itinéraire",
     "bar": {
       "favourite": "Favori"
     }

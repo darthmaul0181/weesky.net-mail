@@ -56,6 +56,9 @@
     "invite": "Select a contact to see its details",
     "back": "Back to the list",
     "actions": "Contact actions",
+    "write": "Write",
+    "call": "Call",
+    "directions": "Directions",
     "bar": {
       "favourite": "Favourite"
     }
