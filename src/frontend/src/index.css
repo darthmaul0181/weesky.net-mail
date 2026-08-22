@@ -2562,10 +2562,12 @@ body {
 
 .field-v-label > svg { flex: none; }
 
-/* Street takes the row and the type sizes to its own widest option, the way a select always
-   should; the postcode is the one box that must not grow. */
-.contact-postal-type { flex: none; }
-.contact-postal-short { flex: 0 0 108px; }
+/* Street takes what is left and the type sizes to its own widest option; the postcode is the one
+   box that must not grow, a code being shorter than the town beside it. Both selectors carry the
+   row's class on purpose: alone they are 0,1,0 and lose to `.field-v select` and to
+   `.contact-postal-row > input`, which is how all four boxes came out the same width. */
+.contact-postal-row .contact-postal-type { flex: none; }
+.contact-postal-row .contact-postal-short { flex: 0 0 110px; }
 .field-h textarea,
 .field-v textarea {
   flex: 1; min-height: 80px; resize: vertical; border: 1px solid var(--border);
