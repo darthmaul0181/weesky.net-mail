@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../components/DropdownMenu'
 import ArrowLeftIcon from '../../icons/ArrowLeftIcon'
@@ -9,7 +9,8 @@ import TrashIcon from '../../icons/TrashIcon.jsx'
 import { formatBirthday } from './contactBirthday'
 import { displayNameOf } from './contactName'
 import type { Contact, ContactDetailPostal } from './contactTypes'
-import { useContact, useContactPhoto } from './queries'
+import { useContact } from './queries'
+import { useContactPhotoUrl } from './useContactPhotoUrl'
 
 interface Props {
   contact: Contact | null
@@ -39,7 +40,7 @@ export default function ContactCard({
   // The list paints the card at once and the detail enriches it when it lands: a selection that
   // began with a blank would flicker on every click, for a request that costs one round trip.
   const { data: detail } = useContact(contact?.id ?? null)
-  const photo = usePhotoUrl(contact?.id ?? null, detail?.hasPhoto ?? false)
+  const photo = useContactPhotoUrl(contact?.id ?? null, detail?.hasPhoto ?? false)
 
   // Escape mirrors the ← button, MessageReader's arrangement, and like it exists only where the
   // card has replaced the list. The layout withholds onBack while its delete confirm is open, so
@@ -219,23 +220,3 @@ function postalLines(postal: ContactDetailPostal): string[] {
     .filter((part): part is string => !!part)
 }
 
-/**
- * The avatar's object URL, revoked with the blob that produced it: without the revocation every
- * contact opened would leave its picture in memory for the life of the tab.
- */
-function usePhotoUrl(contactId: string | null, hasPhoto: boolean): string | null {
-  const { data: blob } = useContactPhoto(contactId, hasPhoto)
-  const [url, setUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!blob) {
-      setUrl(null)
-      return
-    }
-    const objectUrl = URL.createObjectURL(blob)
-    setUrl(objectUrl)
-    return () => URL.revokeObjectURL(objectUrl)
-  }, [blob])
-
-  return url
-}

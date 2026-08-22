@@ -16,6 +16,9 @@ interface Props {
       second surface for the same form would be a second dialect of it. The whole card, not the
       list row: the row carries neither the line positions nor the display name. */
   contact: ContactDetail | null
+  /** The avatar's object URL, resolved by the layout: the form stays free of queries, which is
+      what lets its tests mount it without an auth or a query provider. */
+  photo?: string | null
   saving: boolean
   error: string | null
   onSave: (draft: ContactDraft) => void
@@ -38,7 +41,9 @@ const POSTAL_PARTS = [
   'poBox', 'extended', 'street', 'locality', 'region', 'postalCode', 'country',
 ] as const
 
-/** The nine a card may carry and most contacts do not. A field the card fills is always rendered
+/** The nine a card may carry and most contacts do not. `group` says which side of the form the
+    field belongs to once revealed — a name joins the hero beside the other names, everything else
+    the aside column. A field the card fills is always rendered
     and never offered here: the menu hides emptiness, never content. `as const` narrows `label` to
     the literal keys below, so the typed `t()` checks each one with no second union to keep in
     sync — the idiom `roleLabel.ts`'s `KEYS` and `apiErrorMessage.ts`'s `CODES` already use. `id`
@@ -46,15 +51,15 @@ const POSTAL_PARTS = [
     `displayName`'s 255 mirrors `contacts.display_name`'s column width, not a validator constant:
     unlike the other eight, `ContactValidator.Validate` never bounds it. */
 const OPTIONAL = [
-  { key: 'displayName', id: 'display-name', label: 'editor.displayName', maxLength: 255, long: false },
-  { key: 'middleName', id: 'middle-name', label: 'editor.middleName', maxLength: 100, long: false },
-  { key: 'namePrefix', id: 'name-prefix', label: 'editor.namePrefix', maxLength: 50, long: false },
-  { key: 'nameSuffix', id: 'name-suffix', label: 'editor.nameSuffix', maxLength: 50, long: false },
-  { key: 'organization', id: 'organization', label: 'fields.organization', maxLength: 255, long: false },
-  { key: 'department', id: 'department', label: 'fields.department', maxLength: 255, long: false },
-  { key: 'jobTitle', id: 'job-title', label: 'fields.jobTitle', maxLength: 255, long: false },
-  { key: 'website', id: 'website', label: 'fields.website', maxLength: 512, long: false },
-  { key: 'notes', id: 'notes', label: 'fields.notes', maxLength: 16000, long: true },
+  { key: 'displayName', id: 'display-name', label: 'editor.displayName', maxLength: 255, long: false, group: 'name' },
+  { key: 'middleName', id: 'middle-name', label: 'editor.middleName', maxLength: 100, long: false, group: 'name' },
+  { key: 'namePrefix', id: 'name-prefix', label: 'editor.namePrefix', maxLength: 50, long: false, group: 'name' },
+  { key: 'nameSuffix', id: 'name-suffix', label: 'editor.nameSuffix', maxLength: 50, long: false, group: 'name' },
+  { key: 'organization', id: 'organization', label: 'fields.organization', maxLength: 255, long: false, group: 'other' },
+  { key: 'department', id: 'department', label: 'fields.department', maxLength: 255, long: false, group: 'other' },
+  { key: 'jobTitle', id: 'job-title', label: 'fields.jobTitle', maxLength: 255, long: false, group: 'other' },
+  { key: 'website', id: 'website', label: 'fields.website', maxLength: 512, long: false, group: 'other' },
+  { key: 'notes', id: 'notes', label: 'fields.notes', maxLength: 16000, long: true, group: 'other' },
 ] as const
 
 type OptionalKey = (typeof OPTIONAL)[number]['key']
@@ -102,7 +107,9 @@ function primaryIndexOf(lines: ContactDraftEmail[]): number {
   return chosen >= 0 ? chosen : 0
 }
 
-export default function ContactEditView({ contact, saving, error, onSave, onCancel }: Props) {
+export default function ContactEditView({
+  contact, photo = null, saving, error, onSave, onCancel,
+}: Props) {
   const { t } = useTranslation('contacts')
   const [firstName, setFirstName] = useState(contact?.firstName ?? '')
   const [lastName, setLastName] = useState(contact?.lastName ?? '')
@@ -141,6 +148,9 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
           postalCode: line.postalCode, country: line.country,
         }))
       : [])
+
+  const revealedIn = (group: 'name' | 'other') =>
+    OPTIONAL.filter(f => f.group === group && revealed.has(f.key))
 
   const kept = addresses.filter(line => line.address.trim() !== '')
   // The same gate the backend enforces, so the user never spends a round trip to be told.
@@ -271,59 +281,56 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
       <div className="contact-editor-body">
         {error && <div className="alert alert-error" role="alert">{error}</div>}
 
-        {/* Full width is what lets these be .field-h rows at all: at the card's 380px, and worse
-            at its 240px floor, a 110px label column leaves nothing for the control. */}
-        <div className="field-h">
-          <label htmlFor="contact-first-name">{t('editor.firstName')}</label>
-          <input id="contact-first-name" type="text" value={firstName} maxLength={NAME_MAX}
-            onChange={event => setFirstName(event.target.value)} autoFocus />
-        </div>
-        <div className="field-h">
-          <label htmlFor="contact-last-name">{t('editor.lastName')}</label>
-          <input id="contact-last-name" type="text" value={lastName} maxLength={NAME_MAX}
-            onChange={event => setLastName(event.target.value)} />
-        </div>
-        <div className="field-h">
-          <label htmlFor="contact-nickname">{t('fields.nickname')}</label>
-          <input id="contact-nickname" type="text" value={nickname} maxLength={NAME_MAX}
-            onChange={event => setNickname(event.target.value)} />
-        </div>
-        {/* A native date picker can only express a full date; the vCard admits three others
-            (décision 7), so this stays text and the value travels exactly as typed. */}
-        <div className="field-h">
-          <label htmlFor="contact-birthday">{t('fields.birthday')}</label>
-          <input id="contact-birthday" type="text" value={birthday} maxLength={BIRTHDAY_MAX}
-            placeholder={t('editor.birthdayPlaceholder')}
-            onChange={event => setBirthday(event.target.value)} />
-        </div>
-
-        {OPTIONAL.filter(f => revealed.has(f.key)).map(f => (
-          <div key={f.key} className="field-h contact-editor-optional">
-            <label htmlFor={`contact-${f.id}`}>{t(f.label)}</label>
-            {f.long ? (
-              <textarea id={`contact-${f.id}`} value={scalars[f.key]} maxLength={f.maxLength}
-                onChange={event => changeScalar(f.key, event.target.value)} />
-            ) : (
-              <input id={`contact-${f.id}`} type="text" value={scalars[f.key]} maxLength={f.maxLength}
-                onChange={event => changeScalar(f.key, event.target.value)} />
+        {/* The face first, then the names beside it: what identifies the contact, before the ways
+            of reaching them. The photo is shown, never replaced — no PHOTO write door exists. */}
+        <div className="contact-editor-hero">
+          {photo
+            ? <img className="contact-editor-avatar" src={photo} alt="" data-testid="editor-photo" />
+            : (
+              <span className="contact-editor-avatar is-blank" data-testid="editor-avatar-blank">
+                <PersonPlusIcon />
+              </span>
             )}
+          <div className="contact-editor-identity">
+            <div className="field-v">
+              <label htmlFor="contact-first-name">{t('editor.firstName')}</label>
+              <input id="contact-first-name" type="text" value={firstName} maxLength={NAME_MAX}
+                onChange={event => setFirstName(event.target.value)} autoFocus />
+            </div>
+            <div className="field-v">
+              <label htmlFor="contact-last-name">{t('editor.lastName')}</label>
+              <input id="contact-last-name" type="text" value={lastName} maxLength={NAME_MAX}
+                onChange={event => setLastName(event.target.value)} />
+            </div>
+            <div className="field-v">
+              <label htmlFor="contact-nickname">{t('fields.nickname')}</label>
+              <input id="contact-nickname" type="text" value={nickname} maxLength={NAME_MAX}
+                onChange={event => setNickname(event.target.value)} />
+            </div>
+            {revealedIn('name').map(f => (
+              <div key={f.key} className="field-v">
+                <label htmlFor={`contact-${f.id}`}>{t(f.label)}</label>
+                <input id={`contact-${f.id}`} type="text" value={scalars[f.key]} maxLength={f.maxLength}
+                  onChange={event => changeScalar(f.key, event.target.value)} />
+              </div>
+            ))}
           </div>
-        ))}
-        {OPTIONAL.some(f => !revealed.has(f.key)) && (
-          // .field-h-label's reserved 110px lines the trigger up with the list column the other
-          // three "+ Add…" buttons sit in, rather than with the labels above and below it.
-          <div className="field-h contact-editor-addresses">
-            <span className="field-h-label" aria-hidden="true" />
-            <DropdownMenu ariaLabel={t('editor.addField')} className="contact-address-add"
-              trigger={t('editor.addField')}
-              items={OPTIONAL.filter(f => !revealed.has(f.key)).map(f => (
-                { label: t(f.label), onSelect: () => reveal(f.key) }
-              ))} />
-          </div>
-        )}
+          {/* The star describes the contact, not the form, so it rides the hero rather than
+              sitting as a labelled row among the fields. */}
+          <label className="visually-hidden" htmlFor="contact-favorite">{t('editor.favourite')}</label>
+          <button type="button" id="contact-favorite"
+            className={`contact-star${isFavorite ? ' is-on' : ''}`}
+            aria-pressed={isFavorite}
+            onClick={() => setIsFavorite(previous => !previous)}>
+            <StarIcon size={20} filled={isFavorite} />
+          </button>
+        </div>
 
-        <div className="field-h contact-editor-addresses">
-          <span className="field-h-label">{t('fields.addresses')}</span>
+        <div className="contact-editor-cols">
+        <div className="contact-editor-col">
+
+        <div className="field-v contact-editor-addresses">
+          <span className="field-v-label">{t('fields.addresses')}</span>
           <div className="contact-address-list">
             {addresses.map((line, index) => (
               <div key={index} className="contact-address-row" data-testid={`address-row-${index}`}>
@@ -363,8 +370,8 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
           </div>
         </div>
 
-        <div className="field-h contact-editor-addresses">
-          <span className="field-h-label">{t('fields.phones')}</span>
+        <div className="field-v contact-editor-addresses">
+          <span className="field-v-label">{t('fields.phones')}</span>
           <div className="contact-address-list">
             {phones.map((line, index) => (
               <div key={index} className="contact-address-row" data-testid={`phone-row-${index}`}>
@@ -399,8 +406,11 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
           </div>
         </div>
 
-        <div className="field-h contact-editor-addresses">
-          <span className="field-h-label">{t('fields.postal')}</span>
+        </div>
+        <div className="contact-editor-col is-aside">
+
+        <div className="field-v contact-editor-addresses">
+          <span className="field-v-label">{t('fields.postal')}</span>
           <div className="contact-address-list">
             {postalAddresses.map((line, index) => (
               <div key={index} className="contact-postal-item" data-testid={`postal-row-${index}`}>
@@ -481,14 +491,36 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
           </div>
         </div>
 
-        <div className="field-h">
-          <label htmlFor="contact-favorite">{t('editor.favourite')}</label>
-          <button type="button" id="contact-favorite"
-            className={`contact-star${isFavorite ? ' is-on' : ''}`}
-            aria-pressed={isFavorite}
-            onClick={() => setIsFavorite(previous => !previous)}>
-            <StarIcon size={16} filled={isFavorite} />
-          </button>
+        {/* A native date picker can only express a full date; the vCard admits three others
+            (décision 7), so this stays text and the value travels exactly as typed. */}
+        <div className="field-v">
+          <label htmlFor="contact-birthday">{t('fields.birthday')}</label>
+          <input id="contact-birthday" type="text" value={birthday} maxLength={BIRTHDAY_MAX}
+            placeholder={t('editor.birthdayPlaceholder')}
+            onChange={event => setBirthday(event.target.value)} />
+        </div>
+
+        {revealedIn('other').map(f => (
+          <div key={f.key} className="field-v">
+            <label htmlFor={`contact-${f.id}`}>{t(f.label)}</label>
+            {f.long ? (
+              <textarea id={`contact-${f.id}`} value={scalars[f.key]} maxLength={f.maxLength}
+                onChange={event => changeScalar(f.key, event.target.value)} />
+            ) : (
+              <input id={`contact-${f.id}`} type="text" value={scalars[f.key]} maxLength={f.maxLength}
+                onChange={event => changeScalar(f.key, event.target.value)} />
+            )}
+          </div>
+        ))}
+        {OPTIONAL.some(f => !revealed.has(f.key)) && (
+          <DropdownMenu ariaLabel={t('editor.addField')} className="contact-address-add"
+            trigger={t('editor.addField')}
+            items={OPTIONAL.filter(f => !revealed.has(f.key)).map(f => (
+              { label: t(f.label), onSelect: () => reveal(f.key) }
+            ))} />
+        )}
+
+        </div>
         </div>
       </div>
     </form>

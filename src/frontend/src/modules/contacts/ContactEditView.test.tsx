@@ -484,4 +484,31 @@ describe('ContactEditView', () => {
 
     expect(onSave.mock.calls[0][0].birthday).toBe('--10-27')
   })
+
+  // Le bandeau : la photo que la carte porte, jamais une porte pour la remplacer (décision 12).
+  it('montre la photo du contact quand la mise en page en résout une', () => {
+    setup({ contact: bruno, photo: 'blob:une-photo' })
+
+    expect(screen.getByTestId('editor-photo')).toHaveAttribute('src', 'blob:une-photo')
+    expect(screen.queryByTestId('editor-avatar-blank')).not.toBeInTheDocument()
+  })
+
+  // Meme boite en creation, pour que la hauteur du bandeau ne saute pas entre les deux modes.
+  it('tient la place de la photo par une pastille en creation', () => {
+    setup({ contact: null })
+
+    expect(screen.getByTestId('editor-avatar-blank')).toBeInTheDocument()
+    expect(screen.queryByTestId('editor-photo')).not.toBeInTheDocument()
+  })
+
+  // L'etoile decrit le contact, donc elle est dans le bandeau et non parmi les champs — mais elle
+  // garde le nom accessible que son ancienne ligne libellee lui donnait.
+  it("porte l'etoile dans le bandeau, a cote des noms", () => {
+    setup({ contact: bruno })
+
+    const star = screen.getByLabelText(/favourite/i)
+    expect(star).toHaveAttribute('aria-pressed', 'false')
+    expect(star.closest('.contact-editor-hero')).not.toBeNull()
+  })
+
 })

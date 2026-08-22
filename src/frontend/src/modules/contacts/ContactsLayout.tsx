@@ -13,6 +13,7 @@ import PaneSplitter from '../mail/split/PaneSplitter'
 import { usePaneSize } from '../mail/split/usePaneSize'
 import ContactCard from './ContactCard'
 import ContactEditView from './ContactEditView'
+import { useContactPhotoUrl } from './useContactPhotoUrl'
 import ContactList from './ContactList'
 import { displayNameOf } from './contactName'
 import ContactScopes, { type ContactScope } from './ContactScopes'
@@ -69,6 +70,10 @@ export default function ContactsLayout() {
     setErrorKey(editorKey)
     setSaveError(null)
   }
+
+  // Resolved here rather than in the form: the editor stays free of queries, so its tests mount
+  // it without an auth or a query provider.
+  const editorPhoto = useContactPhotoUrl(routeId ?? null, detail?.hasPhoto ?? false)
 
   const total = contacts?.length ?? 0
   const favorites = contacts?.filter(contact => contact.isFavorite).length ?? 0
@@ -206,7 +211,7 @@ export default function ContactsLayout() {
           {editorReady && (
             /* Keyed on the contact being edited so switching from one edit to another reseeds the
                form rather than carrying the previous contact's values into it. */
-            <ContactEditView key={editorKey} contact={detail ?? null} error={saveError}
+            <ContactEditView key={editorKey} contact={detail ?? null} photo={editorPhoto} error={saveError}
               saving={createContact.isPending || updateContact.isPending}
               onSave={save} onCancel={() => navigate('/contacts')} />
           )}

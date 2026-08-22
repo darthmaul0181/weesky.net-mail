@@ -1298,8 +1298,9 @@ body {
    number, then tel — each falling through to the browser's own box beside the host above it.
    The exclusions sit in :where() so this stays at .field-h input, under every deliberate
    override below (.quota-field's narrow number box wins on specificity, as it did before). */
-.field-h input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
-.field-h select {
+:is(.field-h, .field-v) input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+:is(.field-h, .field-v) select,
+.field-v textarea {
   flex: 1;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1312,8 +1313,9 @@ body {
   transition: border-color 0.15s;
 }
 
-.field-h input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
-.field-h select:focus {
+:is(.field-h, .field-v) input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
+:is(.field-h, .field-v) select:focus,
+.field-v textarea:focus {
   border-color: var(--action-primary);
 }
 
@@ -2442,27 +2444,90 @@ body {
 .contact-save-btn { width: auto; padding: 8px 14px; margin-left: 4px; }
 /* The form is bounded rather than full-bleed: four fields spread across a 900px column read as a
    page that failed to load, not as a form. */
-/* The scroller is the whole pane, so its bar rides the window's edge; the form keeps its width by
-   capping the rows instead. Capping the scroller itself put the bar in the middle of the screen. */
-.contact-editor-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
-.contact-editor-body > * { max-width: 524px; }
-.contact-editor-addresses { align-items: flex-start; }
-.contact-editor-addresses .field-h-label {
-  width: 110px; flex: none; color: var(--text-muted); font-size: 13px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: .04em; padding-top: 8px;
+/* The scroller is the whole pane, so its bar rides the window's edge. No padding and no width cap
+   of its own: the hero and the two columns carry their own insets, and a 524px cap in a 1167px
+   pane is what made this form read as cramped. */
+.contact-editor-body { flex: 1; min-height: 0; overflow-y: auto; }
+.contact-editor-body > .alert { margin: 18px 28px 0; }
+
+/* What identifies the contact, before the ways of reaching them. */
+.contact-editor-hero {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 24px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-/* Only `notes` renders a textarea, taller than its label — flex-start keeps that one label from
-   centering against a box the row's eight single-line siblings never grow. Scoped with :has() so
-   the other eight stay centred like every other single-line .field-h row (firstName, birthday…). */
-.contact-editor-optional:has(textarea) { align-items: flex-start; }
-.contact-editor-optional:has(textarea) > label { padding-top: 8px; }
-.field-h textarea {
+
+.contact-editor-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+/* Same box in create mode, so the hero's height does not jump between the two modes and the name
+   fields stay where the eye left them. */
+.contact-editor-avatar.is-blank {
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.contact-editor-identity {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+}
+
+.contact-editor-cols {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  align-items: start;
+}
+
+.contact-editor-col {
+  padding: 26px 28px 34px;
+  display: grid;
+  gap: 26px;
+  align-content: start;
+  min-width: 0;
+}
+
+/* Sunk rather than ruled: the tint separates the two halves without a second vertical line beside
+   the splitter the pane already carries. */
+.contact-editor-col.is-aside {
+  border-left: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+/* The label above its control, not beside it. That is what frees the 110px .field-h reserves on
+   the left and lets two fields share a line — the whole reason this form has room now. */
+.field-v { display: grid; gap: 6px; min-width: 0; }
+
+.field-v > label,
+.field-v > .field-v-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.field-h textarea,
+.field-v textarea {
   flex: 1; min-height: 80px; resize: vertical; border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 9px 12px; font-size: 14px; font-family: var(--font);
   color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s;
 }
-.field-h textarea:focus { border-color: var(--action-primary); }
-.contact-address-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.field-h textarea:focus,
+.field-v textarea:focus { border-color: var(--action-primary); }
+.contact-address-list { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .contact-address-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .contact-address-row input { flex: 1; min-width: 0; }
 .contact-address-primary {
