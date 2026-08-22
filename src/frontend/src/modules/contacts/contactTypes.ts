@@ -37,22 +37,24 @@ export interface ContactDetailPostal extends Omit<ContactDetailEmail, 'address'>
 
 /** The whole card, which `GET /api/Contacts` does not carry: the list holds what a tile needs,
     and dragging every contact's phones and notes through it would pay for the book to show a
-    column. Fetched per contact, by the card alone. */
+    column. Fetched per contact, by the card alone. The API serialises with `WhenWritingNull`, so
+    an absent value is omitted from the JSON rather than sent as `null` — every optional field is
+    therefore `?:`, never `| null`. */
 export interface ContactDetail {
   id: string
-  firstName: string | null
-  lastName: string | null
-  nickname: string | null
-  displayName: string | null
-  middleName: string | null
-  namePrefix: string | null
-  nameSuffix: string | null
-  organization: string | null
-  department: string | null
-  jobTitle: string | null
-  birthday: string | null
-  website: string | null
-  notes: string | null
+  firstName?: string
+  lastName?: string
+  nickname?: string
+  displayName?: string
+  middleName?: string
+  namePrefix?: string
+  nameSuffix?: string
+  organization?: string
+  department?: string
+  jobTitle?: string
+  birthday?: string
+  website?: string
+  notes?: string
   isFavorite: boolean
   /** Whether `GET /api/Contacts/{id}/Photo` answers a picture. */
   hasPhoto: boolean

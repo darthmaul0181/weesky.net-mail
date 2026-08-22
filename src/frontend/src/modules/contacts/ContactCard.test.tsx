@@ -24,8 +24,7 @@ function contact(fields: Partial<Contact> & { id: string }): Contact {
 function detail(fields: Partial<ContactDetail> = {}): ContactDetail {
   return {
     id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: 'bru', displayName: 'Bruno Mertens',
-    middleName: null, namePrefix: null, nameSuffix: null, organization: null, department: null,
-    jobTitle: null, birthday: null, website: null, notes: null, isFavorite: false, hasPhoto: false,
+    isFavorite: false, hasPhoto: false,
     addresses: [
       { position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 101, params: '', groupName: '' },
       { position: 1, address: 'b.mertens@wk.be', type: 'INTERNET', pref: 101, params: '', groupName: '' },

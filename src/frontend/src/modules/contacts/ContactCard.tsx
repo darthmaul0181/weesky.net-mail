@@ -174,7 +174,7 @@ export default function ContactCard({
             <span className="contact-card-label">{t('fields.postal')}</span>
             <span className="contact-card-values">
               {detail.postalAddresses.map(postal => (
-                <span key={postal.position} className="contact-card-value" data-testid="card-postal">
+                <span key={postal.position} className="contact-card-value is-postal" data-testid="card-postal">
                   {postalLines(postal).map(line => <span key={line}>{line}</span>)}
                 </span>
               ))}

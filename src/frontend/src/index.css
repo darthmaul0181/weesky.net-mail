@@ -2405,8 +2405,11 @@ body {
 }
 .contact-card-values { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .contact-card-value { font-size: 13px; color: var(--text); min-width: 0; overflow-wrap: break-word; }
-/* A postal address is several lines inside one value: an envelope, not a run of fields. */
-.contact-card-value > span { display: block; }
+/* A postal address is several lines inside one value: an envelope, not a run of fields. Scoped to
+   `.is-postal` rather than every `.contact-card-value > span` — the e-mail row's `<a>` plus
+   `.contact-card-primary` badge are the same shape, and an unscoped rule out-specifies
+   `.contact-card-primary` and forces the badge onto its own line. */
+.contact-card-value.is-postal > span { display: block; }
 .contact-card-value a { color: var(--action-primary); text-decoration: none; }
 .contact-card-value a:hover { text-decoration: underline; }
 .contact-card-primary {
