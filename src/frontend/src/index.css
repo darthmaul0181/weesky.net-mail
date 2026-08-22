@@ -2452,6 +2452,17 @@ body {
   width: 110px; flex: none; color: var(--text-muted); font-size: 13px; font-weight: 500;
   text-transform: uppercase; letter-spacing: .04em; padding-top: 8px;
 }
+/* Only `notes` renders a textarea, taller than its label — flex-start keeps that one label from
+   centering against a box the row's eight single-line siblings never grow. Scoped with :has() so
+   the other eight stay centred like every other single-line .field-h row (firstName, birthday…). */
+.contact-editor-optional:has(textarea) { align-items: flex-start; }
+.contact-editor-optional:has(textarea) > label { padding-top: 8px; }
+.field-h textarea {
+  flex: 1; min-height: 80px; resize: vertical; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 9px 12px; font-size: 14px; font-family: var(--font);
+  color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s;
+}
+.field-h textarea:focus { border-color: var(--action-primary); }
 .contact-address-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .contact-address-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .contact-address-row input { flex: 1; min-width: 0; }
@@ -2464,6 +2475,17 @@ body {
   color: var(--action-primary); font: inherit; font-size: 12px;
 }
 .contact-address-add:hover { text-decoration: underline; }
+.contact-address-row select { flex: none; }
+
+/* One postal address: the type row on the .contact-address-row pattern, then its RFC 6350
+   components on their own grid rows — gap, never per-element margins. */
+.contact-postal-item {
+  display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.contact-postal-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.contact-postal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.contact-postal-full { grid-column: 1 / -1; }
 
 /* The dropdown is anchored beneath the box, the shape website-design.md prescribes for a
    combobox. The tokens stay inline in the box rather than becoming chips above it: that is what

@@ -288,4 +288,34 @@ public sealed class ContactValidatorTests
         // called directly by later tasks on values they may not have trimmed themselves.
         Assert.False(ContactValidator.IsValidTypeToken("HOME\n"));
     }
+
+    // hors de 1..101 la préférence n'a pas de sens : ni un PREF vCard, ni notre effacement — sur les
+    // trois familles, et sur les deux bornes (0 en dessous, 102 au-dessus de l'effacement).
+    [Theory]
+    [InlineData("address", 0)]
+    [InlineData("address", 102)]
+    [InlineData("phone", 0)]
+    [InlineData("phone", 102)]
+    [InlineData("postal", 0)]
+    [InlineData("postal", 102)]
+    public void Validate_RefusesAPreferenceOutOfRange(string family, int pref)
+    {
+        var request = new ContactRequest { FirstName = "Ana" };
+        switch (family)
+        {
+            case "address":
+                request.Addresses = [new ContactEmailPayload { Address = "a@b.c", Pref = pref }];
+                break;
+            case "phone":
+                request.Phones = [new ContactPhonePayload { Number = "+32470000000", Pref = pref }];
+                break;
+            case "postal":
+                request.PostalAddresses = [new ContactAddressPayload { Type = "HOME", Pref = pref }];
+                break;
+        }
+
+        var result = ContactValidator.Validate(request);
+
+        Assert.True(result.IsFailure);
+    }
 }

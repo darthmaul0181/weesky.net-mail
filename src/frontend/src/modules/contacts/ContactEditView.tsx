@@ -1,15 +1,21 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import DropdownMenu from '../../components/DropdownMenu'
+import CheckIcon from '../../icons/CheckIcon'
 import PencilIcon from '../../icons/PencilIcon.jsx'
 import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
-import type { Contact, ContactDraft } from './contactTypes'
+import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeOptions } from './contactLineTypes'
+import type {
+  ContactDetail, ContactDraft, ContactDraftEmail, ContactDraftPhone, ContactDraftPostal,
+} from './contactTypes'
 
 interface Props {
   /** null in create mode. One component for both, because "Add" has no selected contact and a
-      second surface for the same form would be a second dialect of it. */
-  contact: Contact | null
+      second surface for the same form would be a second dialect of it. The whole card, not the
+      list row: the row carries neither the line positions nor the display name. */
+  contact: ContactDetail | null
   saving: boolean
   error: string | null
   onSave: (draft: ContactDraft) => void
@@ -21,11 +27,79 @@ interface Props {
 const NAME_MAX = 100
 const ADDRESS_MAX = 320
 
+/** `ContactValidator.MaxAddressesPerContact` / `MaxPhonesPerContact` /
+    `MaxPostalAddressesPerContact` (décision 8): the add button disappears at the cap rather than
+    letting the save fail on a banner. */
+const EMAIL_MAX = 50
+const PHONE_MAX = 10
+const POSTAL_MAX = 10
+
+const POSTAL_PARTS = [
+  'poBox', 'extended', 'street', 'locality', 'region', 'postalCode', 'country',
+] as const
+
+/** The nine a card may carry and most contacts do not. A field the card fills is always rendered
+    and never offered here: the menu hides emptiness, never content. `as const` narrows `label` to
+    the literal keys below, so the typed `t()` checks each one with no second union to keep in
+    sync — the idiom `roleLabel.ts`'s `KEYS` and `apiErrorMessage.ts`'s `CODES` already use. `id`
+    is kebab-case, like every other id in this file, where `key` is the camelCase wire name.
+    `displayName`'s 255 mirrors `contacts.display_name`'s column width, not a validator constant:
+    unlike the other eight, `ContactValidator.Validate` never bounds it. */
+const OPTIONAL = [
+  { key: 'displayName', id: 'display-name', label: 'editor.displayName', maxLength: 255, long: false },
+  { key: 'middleName', id: 'middle-name', label: 'editor.middleName', maxLength: 100, long: false },
+  { key: 'namePrefix', id: 'name-prefix', label: 'editor.namePrefix', maxLength: 50, long: false },
+  { key: 'nameSuffix', id: 'name-suffix', label: 'editor.nameSuffix', maxLength: 50, long: false },
+  { key: 'organization', id: 'organization', label: 'fields.organization', maxLength: 255, long: false },
+  { key: 'department', id: 'department', label: 'fields.department', maxLength: 255, long: false },
+  { key: 'jobTitle', id: 'job-title', label: 'fields.jobTitle', maxLength: 255, long: false },
+  { key: 'website', id: 'website', label: 'fields.website', maxLength: 512, long: false },
+  { key: 'notes', id: 'notes', label: 'fields.notes', maxLength: 16000, long: true },
+] as const
+
+type OptionalKey = (typeof OPTIONAL)[number]['key']
+
+/** `ContactValidator.MaxBirthdayLength`, enforced there exactly like the other length caps:
+    stopping the typing is what spares the user a round trip ending in a banner. */
+const BIRTHDAY_MAX = 64
+
 /** Blank rows are dropped on submit; the trailing empty row exists so a create has something to
     type into without clicking "add" first. */
-function blank(value: string): string | null {
-  const trimmed = value.trim()
+function blank(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? ''
   return trimmed === '' ? null : trimmed
+}
+
+/** On these fields the server reads `null` as "the request does not name this field, the card
+    keeps its own" and the empty string as the clear — the opposite of the names, where `null` is
+    the user emptying the box. So an untouched field sends `null`, which also spares a NOTE, ORG
+    or URL the projector truncated to its column from being rewritten by an unrelated edit. */
+function submitted(value: string, seeded: string): string | null {
+  const trimmed = value.trim()
+  return trimmed === seeded.trim() ? null : trimmed
+}
+
+function scalarsToDraft(
+  scalars: Record<OptionalKey, string>, seeded: Record<OptionalKey, string>,
+): Record<OptionalKey, string | null> {
+  return Object.fromEntries(OPTIONAL.map(f => [f.key,
+    // displayName is excluded: an empty string there strips the card's FN, which no valid vCard
+    // may lack, where null falls back to the display name the server computes.
+    f.key === 'displayName' ? blank(scalars[f.key]) : submitted(scalars[f.key], seeded[f.key]),
+  ])) as Record<OptionalKey, string | null>
+}
+
+const emptyRow = (): ContactDraftEmail => ({ position: null, address: '', type: '', pref: null })
+const emptyPhone = (): ContactDraftPhone => ({ position: null, number: '', type: '' })
+const emptyPostal = (): ContactDraftPostal => ({
+  position: null, type: '', poBox: null, extended: null, street: null,
+  locality: null, region: null, postalCode: null, country: null,
+})
+
+/** The primary is the line the user designated, and the first one until they do. */
+function primaryIndexOf(lines: ContactDraftEmail[]): number {
+  const chosen = lines.findIndex(line => line.pref === 1)
+  return chosen >= 0 ? chosen : 0
 }
 
 export default function ContactEditView({ contact, saving, error, onSave, onCancel }: Props) {
@@ -34,35 +108,114 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
   const [lastName, setLastName] = useState(contact?.lastName ?? '')
   const [nickname, setNickname] = useState(contact?.nickname ?? '')
   const [isFavorite, setIsFavorite] = useState(contact?.isFavorite ?? false)
-  const [addresses, setAddresses] = useState<string[]>(
-    contact && contact.addresses.length > 0 ? [...contact.addresses] : [''])
+  const [birthday, setBirthday] = useState(contact?.birthday ?? '')
+  const [scalars, setScalars] = useState<Record<OptionalKey, string>>(() =>
+    Object.fromEntries(OPTIONAL.map(f => [f.key, contact?.[f.key] ?? ''])) as Record<OptionalKey, string>)
+  // What the card seeded, held for the whole life of the form: `submitted` reads it to tell a
+  // field the user never touched from one they emptied on purpose.
+  const [seededScalars] = useState(scalars)
+  const [seededBirthday] = useState(birthday)
+  // Grows with the menu, never shrinks: a field emptied by the user stays on screen (décision 1).
+  const [revealed, setRevealed] = useState<Set<OptionalKey>>(() =>
+    new Set(OPTIONAL.filter(f => blank(contact?.[f.key]) != null).map(f => f.key)))
+  // The card's own rank per line, never the array index: a deleted address leaves a hole, and a
+  // line arriving without its position is rebuilt by the composer, group and X- parameters lost.
+  const [addresses, setAddresses] = useState<ContactDraftEmail[]>(() =>
+    contact && contact.addresses.length > 0
+      ? contact.addresses.map(line => ({
+          position: line.position, address: line.address, type: stripPref(line.type), pref: null,
+        }))
+      : [emptyRow()])
 
-  const filled = addresses.map(blank).filter((a): a is string => a != null)
+  // No seeded empty row here, unlike addresses: neither family is required, so an empty list is a
+  // valid, final answer rather than a state the user must first fill something into.
+  const [phones, setPhones] = useState<ContactDraftPhone[]>(() =>
+    contact
+      ? contact.phones.map(line => ({ position: line.position, number: line.number, type: stripPref(line.type) }))
+      : [])
+  const [postalAddresses, setPostalAddresses] = useState<ContactDraftPostal[]>(() =>
+    contact
+      ? contact.postalAddresses.map(line => ({
+          position: line.position, type: stripPref(line.type), poBox: line.poBox, extended: line.extended,
+          street: line.street, locality: line.locality, region: line.region,
+          postalCode: line.postalCode, country: line.country,
+        }))
+      : [])
+
+  const kept = addresses.filter(line => line.address.trim() !== '')
   // The same gate the backend enforces, so the user never spends a round trip to be told.
   const valid = blank(firstName) != null || blank(lastName) != null
-    || blank(nickname) != null || filled.length > 0
+    || blank(nickname) != null || kept.length > 0
+  // Ranked on the rows the submit designates from, never on the blank ones it drops: designating
+  // a row and then emptying its text would otherwise badge a line the save promotes past.
+  const ranked = kept.length > 0 ? kept : addresses
+  const primary = ranked[primaryIndexOf(ranked)]
 
   function change(index: number, value: string) {
-    setAddresses(previous => previous.map((address, i) => (i === index ? value : address)))
+    setAddresses(previous =>
+      previous.map((line, i) => (i === index ? { ...line, address: value } : line)))
   }
 
   function remove(index: number) {
     setAddresses(previous => {
       const next = previous.filter((_, i) => i !== index)
       // Never zero rows: an address list with no box to type in offers no way back.
-      return next.length > 0 ? next : ['']
+      return next.length > 0 ? next : [emptyRow()]
     })
   }
 
-  // Reordering is how the primary changes — position 0 is the primary by definition, so there is
-  // no flag that could fall out of step with the order.
-  function moveUp(index: number) {
-    setAddresses(previous => {
-      if (index === 0) return previous
-      const next = [...previous]
-      ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
-      return next
-    })
+  // The preference is a property of the line, not its rank: moving the line would change nothing
+  // now that the composer puts it back at its own position (decision 5).
+  function makePrimary(index: number) {
+    setAddresses(previous => previous.map((line, i) => ({ ...line, pref: i === index ? 1 : 101 })))
+  }
+
+  function changePhone(index: number, value: string) {
+    setPhones(previous => previous.map((line, i) => (i === index ? { ...line, number: value } : line)))
+  }
+
+  function changePhoneType(index: number, value: string) {
+    setPhones(previous => previous.map((line, i) => (i === index ? { ...line, type: value } : line)))
+  }
+
+  function removePhone(index: number) {
+    setPhones(previous => previous.filter((_, i) => i !== index))
+  }
+
+  function changePostalType(index: number, value: string) {
+    setPostalAddresses(previous => previous.map((line, i) => (i === index ? { ...line, type: value } : line)))
+  }
+
+  function changePostalPart(index: number, part: (typeof POSTAL_PARTS)[number], value: string) {
+    setPostalAddresses(previous =>
+      previous.map((line, i) => (i === index ? { ...line, [part]: value } : line)))
+  }
+
+  function removePostal(index: number) {
+    setPostalAddresses(previous => previous.filter((_, i) => i !== index))
+  }
+
+  function changeScalar(key: OptionalKey, value: string) {
+    setScalars(previous => ({ ...previous, [key]: value }))
+  }
+
+  function reveal(key: OptionalKey) {
+    setRevealed(previous => new Set(previous).add(key))
+  }
+
+  /** The design's fixed table (décision 4): a token the table does not name is shown raw. */
+  function typeLabel(token: string): string {
+    switch (token.trim().toUpperCase()) {
+      case 'CELL': return t('editor.types.cell')
+      case 'HOME,VOICE': return t('editor.types.home_voice')
+      case 'WORK,VOICE': return t('editor.types.work_voice')
+      case 'HOME,FAX': return t('editor.types.home_fax')
+      case 'WORK,FAX': return t('editor.types.work_fax')
+      case 'VOICE': return t('editor.types.voice')
+      case 'HOME': return t('editor.types.home')
+      case 'WORK': return t('editor.types.work')
+      default: return token
+    }
   }
 
   function submit(event: FormEvent) {
@@ -70,11 +223,33 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
     if (!valid || saving) return
 
     onSave({
+      ...scalarsToDraft(scalars, seededScalars),
+      birthday: submitted(birthday, seededBirthday),
       firstName: blank(firstName),
       lastName: blank(lastName),
       nickname: blank(nickname),
       isFavorite,
-      addresses: filled,
+      addresses: kept.map(line => ({
+        position: line.position,
+        address: line.address.trim(),
+        type: sanitizeTypeForSubmit(line.type),
+        // 101 is the erasure: without it, designating B primary would leave A claiming it too.
+        pref: line === primary ? 1 : 101,
+      })),
+      phones: phones
+        .filter(line => line.number.trim() !== '')
+        .map(line => ({
+          position: line.position, number: line.number.trim(), type: sanitizeTypeForSubmit(line.type),
+        })),
+      // An address whose seven components are all blank says nothing, whatever its type: the
+      // validator finds it meaningful on the type alone and would pose an empty ADR in the card.
+      postalAddresses: postalAddresses
+        .filter(line => POSTAL_PARTS.some(part => (line[part] ?? '').trim() !== ''))
+        .map(line => ({
+          ...line,
+          type: sanitizeTypeForSubmit(line.type),
+          ...Object.fromEntries(POSTAL_PARTS.map(part => [part, blank(line[part] ?? '')])),
+        })),
     })
   }
 
@@ -113,27 +288,63 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
           <input id="contact-nickname" type="text" value={nickname} maxLength={NAME_MAX}
             onChange={event => setNickname(event.target.value)} />
         </div>
+        {/* A native date picker can only express a full date; the vCard admits three others
+            (décision 7), so this stays text and the value travels exactly as typed. */}
+        <div className="field-h">
+          <label htmlFor="contact-birthday">{t('fields.birthday')}</label>
+          <input id="contact-birthday" type="text" value={birthday} maxLength={BIRTHDAY_MAX}
+            placeholder={t('editor.birthdayPlaceholder')}
+            onChange={event => setBirthday(event.target.value)} />
+        </div>
+
+        {OPTIONAL.filter(f => revealed.has(f.key)).map(f => (
+          <div key={f.key} className="field-h contact-editor-optional">
+            <label htmlFor={`contact-${f.id}`}>{t(f.label)}</label>
+            {f.long ? (
+              <textarea id={`contact-${f.id}`} value={scalars[f.key]} maxLength={f.maxLength}
+                onChange={event => changeScalar(f.key, event.target.value)} />
+            ) : (
+              <input id={`contact-${f.id}`} type="text" value={scalars[f.key]} maxLength={f.maxLength}
+                onChange={event => changeScalar(f.key, event.target.value)} />
+            )}
+          </div>
+        ))}
+        {OPTIONAL.some(f => !revealed.has(f.key)) && (
+          // .field-h-label's reserved 110px lines the trigger up with the list column the other
+          // three "+ Add…" buttons sit in, rather than with the labels above and below it.
+          <div className="field-h contact-editor-addresses">
+            <span className="field-h-label" aria-hidden="true" />
+            <DropdownMenu ariaLabel={t('editor.addField')} className="contact-address-add"
+              trigger={t('editor.addField')}
+              items={OPTIONAL.filter(f => !revealed.has(f.key)).map(f => (
+                { label: t(f.label), onSelect: () => reveal(f.key) }
+              ))} />
+          </div>
+        )}
 
         <div className="field-h contact-editor-addresses">
           <span className="field-h-label">{t('fields.addresses')}</span>
           <div className="contact-address-list">
-            {addresses.map((address, index) => (
+            {addresses.map((line, index) => (
               <div key={index} className="contact-address-row" data-testid={`address-row-${index}`}>
                 <label className="visually-hidden" htmlFor={`contact-address-${index}`}>
                   {t('editor.addressLabel', { index: index + 1 })}
                 </label>
-                <input id={`contact-address-${index}`} type="email" value={address}
+                <input id={`contact-address-${index}`} type="email" value={line.address}
                   placeholder={t('editor.addressPlaceholder')} maxLength={ADDRESS_MAX}
                   onChange={event => change(index, event.target.value)} />
-                {index === 0
+                {line === primary
                   ? <span className="contact-address-primary">{t('fields.primary')}</span>
                   : (
                     // Text content, not aria-label: an aria-label containing "address N" is also
                     // picked up by getByLabelText(/address N/i), which collides with the field.
+                    // The name says which row it acts on, the tooltip does not have to.
                     <button type="button" className="admin-icon-btn" title={t('editor.makePrimary')}
-                      onClick={() => moveUp(index)}>
-                      <span aria-hidden="true">↑</span>
-                      <span className="visually-hidden">{t('editor.moveUp', { index: index + 1 })}</span>
+                      onClick={() => makePrimary(index)}>
+                      <CheckIcon size={14} />
+                      <span className="visually-hidden">
+                        {t('editor.makePrimaryLine', { index: index + 1 })}
+                      </span>
                     </button>
                   )}
                 <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
@@ -143,10 +354,130 @@ export default function ContactEditView({ contact, saving, error, onSave, onCanc
                 </button>
               </div>
             ))}
-            <button type="button" className="contact-address-add"
-              onClick={() => setAddresses(previous => [...previous, ''])}>
-              {t('editor.addAddress')}
-            </button>
+            {addresses.length < EMAIL_MAX && (
+              <button type="button" className="contact-address-add"
+                onClick={() => setAddresses(previous => [...previous, emptyRow()])}>
+                {t('editor.addAddress')}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="field-h contact-editor-addresses">
+          <span className="field-h-label">{t('fields.phones')}</span>
+          <div className="contact-address-list">
+            {phones.map((line, index) => (
+              <div key={index} className="contact-address-row" data-testid={`phone-row-${index}`}>
+                <label className="visually-hidden" htmlFor={`contact-phone-${index}`}>
+                  {t('editor.phoneLabel', { index: index + 1 })}
+                </label>
+                <input id={`contact-phone-${index}`} type="tel" value={line.number}
+                  placeholder={t('editor.phonePlaceholder')}
+                  onChange={event => changePhone(index, event.target.value)} />
+                <label className="visually-hidden" htmlFor={`contact-phone-type-${index}`}>
+                  {t('editor.phoneType', { index: index + 1 })}
+                </label>
+                <select id={`contact-phone-type-${index}`} value={line.type}
+                  onChange={event => changePhoneType(index, event.target.value)}>
+                  {typeOptions(PHONE_TYPES, line.type).map(option => (
+                    <option key={option} value={option}>{typeLabel(option)}</option>
+                  ))}
+                </select>
+                <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
+                  onClick={() => removePhone(index)}>
+                  <TrashIcon size={14} />
+                  <span className="visually-hidden">{t('editor.removePhone', { index: index + 1 })}</span>
+                </button>
+              </div>
+            ))}
+            {phones.length < PHONE_MAX && (
+              <button type="button" className="contact-address-add"
+                onClick={() => setPhones(previous => [...previous, emptyPhone()])}>
+                {t('editor.addPhone')}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="field-h contact-editor-addresses">
+          <span className="field-h-label">{t('fields.postal')}</span>
+          <div className="contact-address-list">
+            {postalAddresses.map((line, index) => (
+              <div key={index} className="contact-postal-item" data-testid={`postal-row-${index}`}>
+                <div className="contact-address-row">
+                  <label className="visually-hidden" htmlFor={`contact-postal-type-${index}`}>
+                    {t('editor.postalType', { index: index + 1 })}
+                  </label>
+                  <select id={`contact-postal-type-${index}`} value={line.type}
+                    onChange={event => changePostalType(index, event.target.value)}>
+                    {typeOptions(POSTAL_TYPES, line.type).map(option => (
+                      <option key={option} value={option}>{typeLabel(option)}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
+                    onClick={() => removePostal(index)}>
+                    <TrashIcon size={14} />
+                    <span className="visually-hidden">{t('editor.removePostal', { index: index + 1 })}</span>
+                  </button>
+                </div>
+                <div className="contact-postal-row">
+                  <label className="visually-hidden" htmlFor={`contact-postal-pobox-${index}`}>
+                    {t('editor.postal.poBox')}
+                  </label>
+                  <input id={`contact-postal-pobox-${index}`} type="text" value={line.poBox ?? ''}
+                    placeholder={t('editor.postal.poBox')}
+                    onChange={event => changePostalPart(index, 'poBox', event.target.value)} />
+                  <label className="visually-hidden" htmlFor={`contact-postal-extended-${index}`}>
+                    {t('editor.postal.extended')}
+                  </label>
+                  <input id={`contact-postal-extended-${index}`} type="text" value={line.extended ?? ''}
+                    placeholder={t('editor.postal.extended')}
+                    onChange={event => changePostalPart(index, 'extended', event.target.value)} />
+                </div>
+                <div className="contact-postal-row">
+                  <label className="visually-hidden" htmlFor={`contact-postal-street-${index}`}>
+                    {t('editor.postal.street')}
+                  </label>
+                  <input id={`contact-postal-street-${index}`} type="text" value={line.street ?? ''}
+                    placeholder={t('editor.postal.street')} className="contact-postal-full"
+                    onChange={event => changePostalPart(index, 'street', event.target.value)} />
+                </div>
+                <div className="contact-postal-row">
+                  <label className="visually-hidden" htmlFor={`contact-postal-postalcode-${index}`}>
+                    {t('editor.postal.postalCode')}
+                  </label>
+                  <input id={`contact-postal-postalcode-${index}`} type="text" value={line.postalCode ?? ''}
+                    placeholder={t('editor.postal.postalCode')}
+                    onChange={event => changePostalPart(index, 'postalCode', event.target.value)} />
+                  <label className="visually-hidden" htmlFor={`contact-postal-locality-${index}`}>
+                    {t('editor.postal.locality')}
+                  </label>
+                  <input id={`contact-postal-locality-${index}`} type="text" value={line.locality ?? ''}
+                    placeholder={t('editor.postal.locality')}
+                    onChange={event => changePostalPart(index, 'locality', event.target.value)} />
+                </div>
+                <div className="contact-postal-row">
+                  <label className="visually-hidden" htmlFor={`contact-postal-region-${index}`}>
+                    {t('editor.postal.region')}
+                  </label>
+                  <input id={`contact-postal-region-${index}`} type="text" value={line.region ?? ''}
+                    placeholder={t('editor.postal.region')}
+                    onChange={event => changePostalPart(index, 'region', event.target.value)} />
+                  <label className="visually-hidden" htmlFor={`contact-postal-country-${index}`}>
+                    {t('editor.postal.country')}
+                  </label>
+                  <input id={`contact-postal-country-${index}`} type="text" value={line.country ?? ''}
+                    placeholder={t('editor.postal.country')}
+                    onChange={event => changePostalPart(index, 'country', event.target.value)} />
+                </div>
+              </div>
+            ))}
+            {postalAddresses.length < POSTAL_MAX && (
+              <button type="button" className="contact-address-add"
+                onClick={() => setPostalAddresses(previous => [...previous, emptyPostal()])}>
+                {t('editor.addPostal')}
+              </button>
+            )}
           </div>
         </div>
 

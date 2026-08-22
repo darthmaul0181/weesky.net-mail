@@ -3,7 +3,23 @@ import { api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import type { CaptureCandidate } from './captureModel'
 import { contactKeys } from './queries'
-import type { Contact } from './contactTypes'
+import type { Contact, ContactDraft } from './contactTypes'
+
+/** Annotated rather than inferred: `api.js` carries no types, so without this the compiler would
+    never see a change to `ContactDraft` reach the one other screen that writes a contact. */
+function draftFor(candidate: CaptureCandidate): ContactDraft {
+  return {
+    firstName: candidate.firstName, lastName: candidate.lastName, nickname: null,
+    displayName: null, middleName: null, namePrefix: null, nameSuffix: null,
+    organization: null, department: null, jobTitle: null, birthday: null,
+    website: null, notes: null,
+    isFavorite: false,
+    addresses: [{ position: null, address: candidate.address, type: '', pref: null }],
+    // Neither family is named: this only ever creates, and "absent = the card keeps its own"
+    // protects an existing card should that ever change.
+    source: 'captured',
+  }
+}
 
 /**
  * Creating and un-creating captured contacts. Deliberately not `useMutation`: both halves are
@@ -21,14 +37,7 @@ export function useCaptureContacts() {
       user's problem. */
   async function create(candidates: CaptureCandidate[]): Promise<Contact[]> {
     const results = await Promise.allSettled(candidates.map(candidate =>
-      api.createContact({
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        nickname: null,
-        isFavorite: false,
-        addresses: [candidate.address],
-        source: 'captured',
-      }) as Promise<Contact>))
+      api.createContact(draftFor(candidate)) as Promise<Contact>))
 
     const created = results.flatMap(r => r.status === 'fulfilled' ? [r.value] : [])
     if (created.length > 0) await invalidate()

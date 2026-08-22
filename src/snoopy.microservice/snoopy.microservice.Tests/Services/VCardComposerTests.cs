@@ -498,6 +498,21 @@ public sealed class VCardComposerTests
         Assert.DoesNotContain("0004", output); // la bibliothèque inventait l'année 4
     }
 
+    [Fact] // la convention d'écriture : sur ces champs c'est la chaîne vide qui efface, pas null
+    public void Compose_ClearsTheNoteOnAnEmptyString()
+    {
+        var output = VCardComposer.Compose(Card("NOTE:Client fidele"), Uid, WriteWith(notes: ""));
+        Assert.DoesNotContain("NOTE", output);
+    }
+
+    [Fact] // même effacement sur BDAY : Emit reçoit "" et ne doit pas ré-imposer la forme textuelle
+    public void Compose_ClearsTheBirthdayOnAnEmptyString()
+    {
+        var output = VCardComposer.Compose(Card("BDAY:--0315"), Uid, WriteWith(birthday: ""));
+        Assert.DoesNotContain("BDAY", output);
+        Assert.Null(VCardProjector.Project(output).Birthday);
+    }
+
     [Fact] // une ligne postale sans aucune composante n'écrit pas d'ADR vide dans la carte
     public void Compose_DropsAValuelessPostalLine()
     {
@@ -601,5 +616,72 @@ public sealed class VCardComposerTests
 
         Assert.Contains("N:Dupont;Jean;Pierre;;", output);
         Assert.Contains("FN:Jean Pierre Dupont", output);
+    }
+
+    [Fact] // pref posé par une écriture atteint la carte, et la projection le relit
+    public void Compose_PosesThePreferenceTheWriteNames()
+    {
+        var card = Card("EMAIL;TYPE=INTERNET:a@b.c");
+        var write = WriteWith(addresses: [new ContactWriteEmail(0, "a@b.c", "INTERNET", 1)]);
+
+        var output = VCardComposer.Compose(card, Uid, write);
+
+        Assert.Equal(1, VCardProjector.Project(output).Addresses.Single().Line.Pref);
+    }
+
+    [Fact] // 101 est l'effacement : la ligne cesse de revendiquer une place
+    public void Compose_ClearsThePreferenceOn101()
+    {
+        var card = Card("EMAIL;TYPE=INTERNET,PREF:a@b.c");
+        var write = WriteWith(addresses: [new ContactWriteEmail(0, "a@b.c", "INTERNET", 101)]);
+
+        var output = VCardComposer.Compose(card, Uid, write);
+
+        Assert.Equal(101, VCardProjector.Project(output).Addresses.Single().Line.Pref);
+    }
+
+    [Fact] // la même effacement sur une carte 4.0 — SourceCard.Read ne promeut que la 2.1, Emit garde la 4.0
+    public void Compose_ClearsThePreferenceOn101OnAV4Card()
+    {
+        const string card = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:X\r\nEMAIL;PREF=1:a@b.c\r\nEND:VCARD\r\n";
+        var write = WriteWith(addresses: [new ContactWriteEmail(0, "a@b.c", "INTERNET", 101)]);
+
+        var output = VCardComposer.Compose(card, Uid, write);
+
+        Assert.Equal(101, VCardProjector.Project(output).Addresses.Single().Line.Pref);
+    }
+
+    [Fact] // null laisse la carte tranquille — la règle de toutes les écritures qui ne nomment pas
+    public void Compose_LeavesThePreferenceAloneWhenTheWriteIsSilent()
+    {
+        var card = Card("EMAIL;TYPE=INTERNET,PREF:a@b.c");
+        var write = WriteWith(addresses: [new ContactWriteEmail(0, "a@b.c", "INTERNET")]);
+
+        var output = VCardComposer.Compose(card, Uid, write);
+
+        Assert.Equal(1, VCardProjector.Project(output).Addresses.Single().Line.Pref);
+    }
+
+    [Fact] // le jeton PREF dans le champ type reste ignoré : c'est Pref qui parle, pas TYPE
+    public void Compose_StillIgnoresAPrefTokenInTheTypeField()
+    {
+        var card = Card("EMAIL;TYPE=INTERNET:a@b.c");
+        var write = WriteWith(addresses: [new ContactWriteEmail(0, "a@b.c", "INTERNET,PREF")]);
+
+        var output = VCardComposer.Compose(card, Uid, write);
+
+        Assert.Equal(101, VCardProjector.Project(output).Addresses.Single().Line.Pref);
+    }
+
+    [Fact] // la même mécanique sur une adresse postale
+    public void Compose_PosesThePreferenceOnAPostalAddress()
+    {
+        var card = Card("ADR;TYPE=HOME:;;Rue X 1;Namur;;5000;BE");
+        var write = WriteWith(postalAddresses:
+            [new ContactWriteAddress(0, "HOME", null, null, "Rue X 1", "Namur", null, "5000", "BE", 1)]);
+
+        var output = VCardComposer.Compose(card, Uid, write);
+
+        Assert.Equal(1, VCardProjector.Project(output).PostalAddresses.Single().Line.Pref);
     }
 }

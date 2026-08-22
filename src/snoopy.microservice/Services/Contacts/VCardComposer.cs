@@ -27,6 +27,11 @@ internal static class VCardComposer
 
     private enum Family { Email, Phone, Postal }
 
+    // 101 is the erasure the projector reads back as no PREF at all (décision 5 bis of 4a). Measured
+    // against FolkerKinzel 8.2.0's 3.0 and 4.0 writers — the two versions Emit produces — setting
+    // Preference to 100 (its own default) makes both emit no PREF parameter or token at all.
+    private const int NoPreference = 100;
+
     internal static string ComposeNew(string uid, ContactWrite write) =>
         Apply(SourceCard.Fresh(), uid, write);
 
@@ -89,7 +94,7 @@ internal static class VCardComposer
         if (birthday != null) card.BirthDayViews = ReplaceFirstBday(card.BirthDayViews, birthday);
         if (phones != null)
             card.Phones = Paired(card.Phones, phones, l => l.Position,
-                (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone));
+                (ContactWritePhone l, TextProperty? old) => TextLine(l.Number, l.Type, old, Family.Phone, l.Pref));
         if (postalAddresses != null)
             card.Addresses = Paired(card.Addresses, postalAddresses, l => l.Position, PostalLine);
     }
@@ -97,9 +102,9 @@ internal static class VCardComposer
     private static string Apply(SourceCard source, string uid, ContactWrite write, string? rawBirthday = null)
     {
         var card = source.Card;
-        // The five fields an editor owns are replaced, null included: there, null is the user who
-        // emptied the box. Nothing writes the rest yet, so absent means untouched for them — without
-        // which a PUT that does not name them destroys them.
+        // The names, the display name and the addresses are replaced, null included: there, null is
+        // the user who emptied the box. On every other field null still means the request did not
+        // name it and the card keeps its own — the editor clears those with an empty string.
         SetName(card,
             Components(write.FirstName) ?? [], Components(write.LastName) ?? [],
             Components(write.MiddleName), Components(write.NamePrefix), Components(write.NameSuffix));
@@ -114,7 +119,7 @@ internal static class VCardComposer
         PoseOptional(card, write.Organization, write.Department, write.JobTitle, write.Notes,
             write.Website, write.Birthday, write.Phones, write.PostalAddresses);
         card.EMails = Paired(card.EMails, write.Addresses, l => l.Position,
-            (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email));
+            (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email, l.Pref));
         return Emit(source, uid, write.Birthday ?? rawBirthday);
     }
 
@@ -300,12 +305,21 @@ internal static class VCardComposer
         return result;
     }
 
-    private static TextProperty TextLine(string value, string type, TextProperty? old, Family family)
+    private static TextProperty TextLine(string value, string type, TextProperty? old, Family family, int? pref)
     {
         var replaced = new TextProperty(value, old?.Group);
         if (old != null) replaced.Parameters.Assign(old.Parameters);
         ApplyType(replaced.Parameters, family, type);
+        ApplyPreference(replaced.Parameters, pref);
         return replaced;
+    }
+
+    // The only place a write reaches PREF. ApplyType does not touch it — it strips the token from
+    // the TYPE block so Preference has a single door; NoPreference's own comment carries the measurement.
+    private static void ApplyPreference(ParameterSection parameters, int? pref)
+    {
+        if (pref == null) return;
+        parameters.Preference = pref.Value >= 101 ? NoPreference : Math.Clamp(pref.Value, 1, 100);
     }
 
     private static AddressProperty PostalLine(ContactWriteAddress line, AddressProperty? old)
@@ -337,6 +351,7 @@ internal static class VCardComposer
         var replaced = new AddressProperty(builder.Build(), old?.Group);
         if (old != null) replaced.Parameters.Assign(old.Parameters);
         ApplyType(replaced.Parameters, Family.Postal, line.Type);
+        ApplyPreference(replaced.Parameters, line.Pref);
         return replaced;
     }
 

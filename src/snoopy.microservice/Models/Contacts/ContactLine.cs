@@ -15,6 +15,8 @@ public sealed class ContactEmailPayload
 
     public string? Type { get; set; }
 
+    public int? Pref { get; set; }
+
     public static implicit operator ContactEmailPayload(string address) => new() { Address = address };
 }
 
@@ -26,6 +28,8 @@ public sealed class ContactPhonePayload
     public string? Number { get; set; }
 
     public string? Type { get; set; }
+
+    public int? Pref { get; set; }
 }
 
 /// <summary>One postal address line as bound from the wire.</summary>
@@ -34,6 +38,8 @@ public sealed class ContactAddressPayload
     public int? Position { get; set; }
 
     public string? Type { get; set; }
+
+    public int? Pref { get; set; }
 
     public string? PoBox { get; set; }
 

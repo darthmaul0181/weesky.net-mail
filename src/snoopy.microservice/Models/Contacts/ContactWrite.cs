@@ -1,10 +1,10 @@
 namespace weesky.Snoopy.Microservice.Models.Contacts;
 
 /// <summary>A validated write-side e-mail line. <c>Position</c> null = a new line (decision 4).</summary>
-public sealed record ContactWriteEmail(int? Position, string Address, string Type);
+public sealed record ContactWriteEmail(int? Position, string Address, string Type, int? Pref = null);
 
 /// <summary>A validated write-side phone line.</summary>
-public sealed record ContactWritePhone(int? Position, string Number, string Type);
+public sealed record ContactWritePhone(int? Position, string Number, string Type, int? Pref = null);
 
 /// <summary>A validated write-side postal address line.</summary>
 public sealed record ContactWriteAddress(
@@ -16,7 +16,8 @@ public sealed record ContactWriteAddress(
     string? Locality,
     string? Region,
     string? PostalCode,
-    string? Country);
+    string? Country,
+    int? Pref = null);
 
 /// <summary>
 /// A validated, normalised contact on its way to the store: names trimmed and nulled when blank,

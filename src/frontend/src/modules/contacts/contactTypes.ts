@@ -67,13 +67,57 @@ export interface ContactListResponse {
   contacts: Contact[]
 }
 
-/** What the editor submits. Same shape as `Contact` minus its id: the API assigns that. */
+/** One e-mail line on its way back to the card. Not a `ContactDetailEmail`: the draft carries
+    neither `params` nor `groupName`, which no screen shows and the server preserves on its own. */
+export interface ContactDraftEmail {
+  /** The card rank this line replaces; null for a line the user just added. */
+  position: number | null
+  address: string
+  type: string
+  /** 1 on the primary, 101 to clear it, null to leave the card's own alone. */
+  pref: number | null
+}
+
+export interface ContactDraftPhone {
+  position: number | null
+  number: string
+  type: string
+}
+
+export interface ContactDraftPostal {
+  position: number | null
+  type: string
+  poBox: string | null
+  extended: string | null
+  street: string | null
+  locality: string | null
+  region: string | null
+  postalCode: string | null
+  country: string | null
+}
+
+/** What the editor submits: the whole card, minus the id the API assigns. A scalar `null` clears
+    the field the editor owns and leaves the card's own on every other — the convention
+    `ContactWrite` documents on the server. */
 export interface ContactDraft {
   firstName: string | null
   lastName: string | null
   nickname: string | null
+  displayName: string | null
+  middleName: string | null
+  namePrefix: string | null
+  nameSuffix: string | null
+  organization: string | null
+  department: string | null
+  jobTitle: string | null
+  birthday: string | null
+  website: string | null
+  notes: string | null
   isFavorite: boolean
-  addresses: string[]
+  addresses: ContactDraftEmail[]
+  /** Omitted by every producer but the editor: absent means the card keeps its own. */
+  phones?: ContactDraftPhone[]
+  postalAddresses?: ContactDraftPostal[]
   /** Only the capture path sets this. The editor omits it and the API files the contact as
       "manual". */
   source?: 'captured'

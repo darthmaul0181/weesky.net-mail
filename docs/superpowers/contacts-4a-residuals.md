@@ -4,15 +4,20 @@ Ce document est le tri de fin de tranche : ce qui a été délibérément diffé
 appris de FolkerKinzel.VCards 8.2.0 et qui n'est écrit nulle part ailleurs. Il existe pour que 4b et 4c
 n'aient pas à redécouvrir à leurs frais ce qui a déjà coûté une sonde.
 
-## À traiter en 4b
+## Reporté de 4b vers 4c / backlog
 
-| Point | Où | Pourquoi maintenant |
+Cette section s'appelait « À traiter en 4b ». La tranche 4b n'en a fermé aucun point, et la revue
+de fin de tranche a refusé qu'ils disparaissent avec le titre : ils sont donc rebaptisés ici, avec
+ce que 4b change à l'atteignabilité de chacun — c'est elle qui a fait de l'éditeur le premier
+écrivain de ces familles.
+
+| Point | Où | Ce que 4b y change |
 |---|---|---|
-| `URL;TYPE=PREF` est perdu sur un aller-retour 3.0 | `VCardComposer.RestoreDroppedParameters` ne restaure que les paramètres non standard | C'est la dernière destruction de paramètre connue. Étroite (première `URL`, 3.0 seulement), mais c'est la classe que 4a existe pour fermer. Étendre la réparation ou coller la ligne intacte. |
-| `Fold` compte des unités UTF-16 et peut couper une paire de substitution | `VCardComposer.Fold` | Atteignable par une ligne réparée de plus de 75 caractères contenant un caractère hors BMP. Rare aujourd'hui, plus probable dès que l'éditeur écrit du texte libre. |
-| Une édition qui ramène une famille effondrée à une seule occurrence perd ses paramètres `X-` | `VCardComposer.SpliceFamily`, garde `model.Count < 2` | Forme d'éditeur : c'est 4b qui la rendra courante. |
-| Aucun test n'épingle la troncature des scalaires ni des composantes d'adresse | tests du projecteur | Assurance à bas coût avant que l'éditeur n'écrive ces colonnes. |
-| Une composante de `N` à plusieurs valeurs dont une seule est le remplissage laisse passer le `?` | `VCardProjector.NamePart` | `N:Smith,?;John;;;` projette `Smith,?`. Le filtre porte sur la composante entière, pas sur chaque valeur. Aucun client connu n'émet cette forme — le remplissage est toujours seul — mais le correctif tient en une ligne : filtrer les valeurs avant la jointure. |
+| **Une édition qui ramène une famille effondrée à une seule occurrence perd ses paramètres `X-`** | `VCardComposer.SpliceFamily`, garde `model.Count < 2` | **Celui qui compte.** La spec le donnait comme *rendu courant par 4b*, 4b étant le premier éditeur à écrire ces familles, et la tranche ne l'a pas traité : il part en 4c inchangé, mais désormais atteignable en routine et non plus en théorie. |
+| `URL;TYPE=PREF` est perdu sur un aller-retour 3.0 | `VCardComposer.RestoreDroppedParameters` ne restaure que les paramètres non standard | Préexistant, et **prouvé atteignable avant cette tranche** : sondé en revue de la tâche 2, `Compose` le perd que `Website` soit null ou inchangé, parce qu'`Emit` re-sérialise la carte entière et qu'`URL`, étant dans `OwnedNames`, n'est jamais recollée verbatim. Le correctif C1 réduit l'exposition — un site web intact part maintenant à `null` — sans fermer le point. |
+| `Fold` compte des unités UTF-16 et peut couper une paire de substitution | `VCardComposer.Fold` | Intact, territoire 4c. L'éditeur écrit désormais du texte libre — notes, société — ce que le résidu annonçait comme le facteur d'aggravation. |
+| Aucun test n'épingle la troncature des scalaires ni des composantes d'adresse, et l'aller-retour de troncature est vivant | tests du projecteur ; `VCardComposer.Apply` pour l'aller-retour | Le correctif C1 **ferme le cas courant** : un scalaire que l'utilisateur n'a pas touché part à `null`, donc une édition sans rapport ne réécrit plus dans la carte une `NOTE`, une `ORG` ou une `URL` que le projecteur avait raccourcie à la largeur de sa colonne. Restent l'utilisateur qui édite un champ déjà tronqué — inhérent aux largeurs de colonnes, rien côté client ne connaît l'original — et les tests d'assurance, toujours à écrire. |
+| Une composante de `N` à plusieurs valeurs dont une seule est le remplissage laisse passer le `?` | `VCardProjector.NamePart` | Intact, et inchangé en atteignabilité : `N:Smith,?;John;;;` projette `Smith,?`, le filtre portant sur la composante entière et non sur chaque valeur. Aucun client connu n'émet cette forme — le remplissage est toujours seul — et le correctif tient en une ligne : filtrer les valeurs avant la jointure. |
 
 ## À traiter en 4c
 

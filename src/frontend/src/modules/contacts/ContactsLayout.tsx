@@ -19,8 +19,8 @@ import ContactScopes, { type ContactScope } from './ContactScopes'
 import ContactsTransfer from './ContactsTransfer'
 import type { Contact, ContactDraft } from './contactTypes'
 import {
-  useContacts, useCreateContact, useDeleteContact, useDeleteContacts, useSetContactFavorite,
-  useSetContactsFavorite, useUpdateContact,
+  useContact, useContacts, useCreateContact, useDeleteContact, useDeleteContacts,
+  useSetContactFavorite, useSetContactsFavorite, useUpdateContact,
 } from './queries'
 import type { ContactDragPayload } from './dragContacts'
 
@@ -38,6 +38,7 @@ export default function ContactsLayout() {
   const navigate = useNavigate()
   const { toasts, addToast, removeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
+  const { data: detail, isLoading: detailLoading, isError: detailError } = useContact(routeId ?? null)
   const createContact = useCreateContact()
   const updateContact = useUpdateContact()
   const deleteContact = useDeleteContact()
@@ -79,9 +80,9 @@ export default function ContactsLayout() {
   // obsolete bookmark would otherwise let a save fabricate a second contact. Only once the book has
   // answered — an unresolved id is normal while the request is in flight.
   const missing = routeId != null && contacts != null && edited == null
-  // The form seeds from its contact once, at mount, so an edit route waits for the book rather
-  // than mounting an empty form the arriving data would no longer reseed.
-  const editorReady = (!routeId || contacts != null) && !missing
+  // The form seeds from its contact once, at mount, so an edit route waits for the book — and for
+  // the card, without which the positions would arrive after the seed.
+  const editorReady = (!routeId || (contacts != null && detail != null)) && !missing
 
   useEffect(() => {
     if (!missing) return
@@ -196,12 +197,16 @@ export default function ContactsLayout() {
 
       {inEditor ? (
         <div className="contacts-editor" data-testid="contact-editor">
-          {!editorReady && isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
-          {!editorReady && isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
+          {/* Two queries feed this pane, so the two lines have to exclude each other: a refused
+              card while the book is still in flight would otherwise paint both at once, and the
+              refusal is the one the user can act on. */}
+          {!editorReady && (isError || detailError
+            ? <p className="contacts-empty">{t('layout.loadFailed')}</p>
+            : (isLoading || detailLoading) && <p className="contacts-empty">{t('layout.loading')}</p>)}
           {editorReady && (
             /* Keyed on the contact being edited so switching from one edit to another reseeds the
                form rather than carrying the previous contact's values into it. */
-            <ContactEditView key={editorKey} contact={edited} error={saveError}
+            <ContactEditView key={editorKey} contact={detail ?? null} error={saveError}
               saving={createContact.isPending || updateContact.isPending}
               onSave={save} onCancel={() => navigate('/contacts')} />
           )}

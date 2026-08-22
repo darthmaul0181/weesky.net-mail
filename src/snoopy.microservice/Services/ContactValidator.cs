@@ -51,6 +51,8 @@ internal static class ContactValidator
     /// </summary>
     internal const int MaxNotesLength = 16000;
 
+    private const string PrefOutOfRangeMessage = "A preference must be between 1 and 101";
+
     private static readonly string[] KnownSources = ["manual", "captured", "imported"];
 
     // Since params no longer enters the API (decision: it never did, and never will), TYPE is the
@@ -82,7 +84,7 @@ internal static class ContactValidator
         var addresses = (request.Addresses ?? [])
             .Where(a => a != null)
             .Select(a => new ContactWriteEmail(
-                a.Position, (a.Address ?? string.Empty).Trim(), (a.Type ?? string.Empty).Trim()))
+                a.Position, (a.Address ?? string.Empty).Trim(), (a.Type ?? string.Empty).Trim(), a.Pref))
             .Where(IsMeaningful)
             .ToList();
 
@@ -91,7 +93,7 @@ internal static class ContactValidator
         var phones = request.Phones?
             .Where(p => p != null)
             .Select(p => new ContactWritePhone(
-                p.Position, (p.Number ?? string.Empty).Trim(), (p.Type ?? string.Empty).Trim()))
+                p.Position, (p.Number ?? string.Empty).Trim(), (p.Type ?? string.Empty).Trim(), p.Pref))
             .Where(IsMeaningful)
             .ToList();
 
@@ -100,7 +102,7 @@ internal static class ContactValidator
             .Select(a => new ContactWriteAddress(
                 a.Position, (a.Type ?? string.Empty).Trim(),
                 Blank(a.PoBox), Blank(a.Extended), Blank(a.Street),
-                Blank(a.Locality), Blank(a.Region), Blank(a.PostalCode), Blank(a.Country)))
+                Blank(a.Locality), Blank(a.Region), Blank(a.PostalCode), Blank(a.Country), a.Pref))
             .Where(IsMeaningful)
             .ToList();
 
@@ -140,6 +142,8 @@ internal static class ContactValidator
                 return Result.Failure<ContactWrite>($"'{address.Address}' is not a valid email address");
             if (!IsValidTypeToken(address.Type))
                 return Result.Failure<ContactWrite>($"'{address.Type}' is not a valid type");
+            if (!IsValidPref(address.Pref))
+                return Result.Failure<ContactWrite>(PrefOutOfRangeMessage);
         }
 
         foreach (var phone in phones ?? [])
@@ -148,12 +152,16 @@ internal static class ContactValidator
                 return Result.Failure<ContactWrite>($"A phone number must be at most {MaxPhoneNumberLength} characters");
             if (!IsValidTypeToken(phone.Type))
                 return Result.Failure<ContactWrite>($"'{phone.Type}' is not a valid type");
+            if (!IsValidPref(phone.Pref))
+                return Result.Failure<ContactWrite>(PrefOutOfRangeMessage);
         }
 
         foreach (var postal in postalAddresses ?? [])
         {
             if (!IsValidTypeToken(postal.Type))
                 return Result.Failure<ContactWrite>($"'{postal.Type}' is not a valid type");
+            if (!IsValidPref(postal.Pref))
+                return Result.Failure<ContactWrite>(PrefOutOfRangeMessage);
         }
 
         return Result.Success(new ContactWrite(
@@ -212,4 +220,7 @@ internal static class ContactValidator
     /// <see cref="MaxTypeLength"/> characters. Empty is accepted — no type at all.
     /// </summary>
     internal static bool IsValidTypeToken(string value) => TypeToken.IsMatch(value);
+
+    /// <summary>Null (the write does not name it) or 1–101 — 101 being the composer's erasure.</summary>
+    internal static bool IsValidPref(int? value) => value is null or (>= 1 and <= 101);
 }

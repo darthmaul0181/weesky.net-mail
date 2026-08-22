@@ -4,14 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import ContactsLayout from './ContactsLayout'
-import type { Contact } from './contactTypes'
+import type { Contact, ContactDetail } from './contactTypes'
 import { mockViewport, resetViewport, settle } from '../../test-utils'
 
 afterEach(resetViewport)
 
 vi.mock('../../api.js', () => ({
   api: {
-    getContacts: vi.fn(), createContact: vi.fn(), updateContact: vi.fn(),
+    getContacts: vi.fn(), getContact: vi.fn(), createContact: vi.fn(), updateContact: vi.fn(),
     deleteContact: vi.fn(), setContactFavorite: vi.fn(),
     deleteContacts: vi.fn(), setContactsFavorite: vi.fn(),
     importContacts: vi.fn(), exportContacts: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('../../api.js', () => ({
 vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
 const { api } = await import('../../api.js') as unknown as {
-  api: Record<'getContacts' | 'createContact' | 'updateContact' | 'deleteContact'
+  api: Record<'getContacts' | 'getContact' | 'createContact' | 'updateContact' | 'deleteContact'
     | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
     | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
 }
@@ -30,6 +30,31 @@ function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
     firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
   }
+}
+
+/** The editor reads the card, never the tile: the list row carries neither line positions nor
+    the nine scalars, which is what makes the detail a mount condition for it. */
+function detailOf(row: Contact): ContactDetail {
+  return {
+    id: row.id, isFavorite: row.isFavorite, hasPhoto: false,
+    // Spread, not `?? undefined`: the API serialises with WhenWritingNull, so a name it has no
+    // value for is absent from the JSON rather than null.
+    ...(row.firstName != null ? { firstName: row.firstName } : {}),
+    ...(row.lastName != null ? { lastName: row.lastName } : {}),
+    ...(row.nickname != null ? { nickname: row.nickname } : {}),
+    addresses: row.addresses.map((address, position) => (
+      { position, address, type: 'INTERNET', pref: position === 0 ? 1 : 101, params: '', groupName: '' })),
+    phones: [], postalAddresses: [],
+  }
+}
+
+/** One book behind both endpoints, so a tile and the card it opens cannot disagree. */
+function serveBook(rows: Contact[]) {
+  api.getContacts.mockResolvedValue({ contacts: rows })
+  api.getContact.mockImplementation((id: string) => {
+    const row = rows.find(one => one.id === id)
+    return row ? Promise.resolve(detailOf(row)) : Promise.reject(new Error('not found'))
+  })
 }
 
 function renderAt(path: string) {
@@ -82,13 +107,11 @@ describe('ContactsLayout', () => {
     vi.clearAllMocks()
     // Two favourites, and one of them is not the first sorted row: with a single favourite the
     // scope filter is indistinguishable from "keep the first row" — the sort files favourites first.
-    api.getContacts.mockResolvedValue({
-      contacts: [
-        contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
-        contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
-        contact({ id: 'c', firstName: 'Carla', isFavorite: true, addresses: ['carla@x.be'] }),
-      ],
-    })
+    serveBook([
+      contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+      contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+      contact({ id: 'c', firstName: 'Carla', isFavorite: true, addresses: ['carla@x.be'] }),
+    ])
   })
 
   it('counts the whole book and its favourites in the band', async () => {
@@ -205,9 +228,36 @@ describe('ContactsLayout', () => {
 
     await waitFor(() => expect(api.updateContact).toHaveBeenCalledWith('b', {
       firstName: 'Bruno', lastName: 'Weiss', nickname: null, isFavorite: false,
-      addresses: ['bruno@x.be'],
+      displayName: null, middleName: null, namePrefix: null, nameSuffix: null,
+      organization: null, department: null, jobTitle: null, birthday: null,
+      website: null, notes: null,
+      addresses: [{ position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 1 }],
+      phones: [], postalAddresses: [],
     }))
     expect(api.createContact).not.toHaveBeenCalled()
+  })
+
+  // The form seeds from its card once, at mount: mounted before the card lands, it would seed
+  // without the positions and never reseed, and every save would rebuild the EMAIL block.
+  it('does not seed the editor before the card has landed', async () => {
+    api.getContact.mockReturnValue(new Promise(() => {}))
+    renderAt('/contacts/b/edit')
+    // The book has answered — the band counts it — and the card is still in flight.
+    await waitFor(() => expect(scopeButton(/all contacts/i)).toHaveTextContent('3'))
+
+    expect(screen.queryByLabelText(/first name/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/loading contacts/i)).toBeInTheDocument()
+  })
+
+  // Two queries feed the editor pane now, so its two lines have to exclude each other: a refused
+  // card while the book is still in flight would otherwise stack the reason under a loading line.
+  it('shows the refusal alone when the card fails while the book is still in flight', async () => {
+    api.getContacts.mockReturnValue(new Promise(() => {}))
+    api.getContact.mockRejectedValue(new Error('boom'))
+    renderAt('/contacts/b/edit')
+
+    expect(await screen.findByText(/could not load contacts/i)).toBeInTheDocument()
+    expect(screen.queryByText(/loading contacts/i)).not.toBeInTheDocument()
   })
 
   // One edit route straight after another: the layout stays mounted, so only the editor's key can
@@ -412,12 +462,10 @@ const bookLoaded = () => screen.findAllByText(/^(Alice|Bruno)$/)
 describe('ContactsLayout on a phone', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    api.getContacts.mockResolvedValue({
-      contacts: [
-        contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
-        contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
-      ],
-    })
+    serveBook([
+      contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+      contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+    ])
   })
 
   it('puts the scope column in a drawer and renders no splitter', async () => {

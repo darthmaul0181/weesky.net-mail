@@ -1052,7 +1052,10 @@ describe('capturing new recipients', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.createContact).toHaveBeenCalledWith(
-      expect.objectContaining({ addresses: ['alice@x.be'], source: 'captured' })))
+      expect.objectContaining({
+        addresses: [{ position: null, address: 'alice@x.be', type: '', pref: null }],
+        source: 'captured',
+      })))
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
       'Alice Dupont added to contacts', 'success', expect.objectContaining({ label: 'Undo' })))
   })

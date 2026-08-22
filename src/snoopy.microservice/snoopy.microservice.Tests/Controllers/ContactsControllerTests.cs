@@ -721,16 +721,17 @@ public sealed class ContactsControllerTests
 
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-    // params/group_name/pref cannot bind onto ContactRequest or its line payloads at all — the
-    // decision is that they never enter, not that something filters them out. The behavioural
-    // assertions below (the write only ever carries the modelled fields) would pass identically
-    // whether or not that were true, so the structural check above them is the one that actually
-    // pins it: if a future edit ever added a Params/GroupName/Pref property to a payload type, only
-    // this reflection check — not the JSON deserialisation below — would catch it.
+    // params/group_name cannot bind onto ContactRequest or its line payloads at all — the decision
+    // is that they never enter, not that something filters them out. pref is the one exception,
+    // opened by 4b (spec décision 5): it binds and reaches the write. The behavioural assertions
+    // below (the write only ever carries the modelled fields) would pass identically whether or not
+    // that were true for Params/GroupName, so the structural check above them is the one that
+    // actually pins it: if a future edit ever added a Params/GroupName property to a payload type,
+    // only this reflection check — not the JSON deserialisation below — would catch it.
     [Fact]
-    public async Task Put_IgnoresOutputOnlyFields()
+    public async Task Put_IgnoresParamsAndGroupNameButBindsPref()
     {
-        string[] outputOnly = ["Params", "GroupName", "Pref"];
+        string[] outputOnly = ["Params", "GroupName"];
         foreach (var payload in new[]
                  { typeof(ContactEmailPayload), typeof(ContactPhonePayload), typeof(ContactAddressPayload) })
             Assert.Empty(payload.GetProperties().Select(p => p.Name).Intersect(outputOnly));
@@ -755,11 +756,17 @@ public sealed class ContactsControllerTests
         var result = await CreateController().Update(Guid.NewGuid(), request, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        Assert.Equal("bruno@example.com", Assert.Single(seen!.Addresses).Address);
+        var address = Assert.Single(seen!.Addresses);
+        Assert.Equal("bruno@example.com", address.Address);
+        Assert.Equal(1, address.Pref);
         Assert.NotNull(seen.Phones);
         Assert.NotNull(seen.PostalAddresses);
-        Assert.Equal("+32470000000", Assert.Single(seen.Phones).Number);
-        Assert.Equal("Rue X", Assert.Single(seen.PostalAddresses).Street);
+        var phone = Assert.Single(seen.Phones);
+        Assert.Equal("+32470000000", phone.Number);
+        Assert.Equal(1, phone.Pref);
+        var postal = Assert.Single(seen.PostalAddresses);
+        Assert.Equal("Rue X", postal.Street);
+        Assert.Equal(1, postal.Pref);
     }
 
     // The POST answer is rebuilt from the validated write, never re-read from the store — new
