@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace weesky.Snoopy.Microservice.Models;
 
 /// <summary>
@@ -19,10 +17,6 @@ public sealed class DavOptions
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(PublicUrl);
 
-    // An explicit ":443" is indistinguishable from no port at all once Uri has parsed it —
-    // IsDefaultPort and Authority both normalise it away — so the literal text is checked instead.
-    private static readonly Regex ExplicitPort = new(@"^https://(\[[^\]]+\]|[^:/]+):\d+$", RegexOptions.Compiled);
-
     /// <summary>Validated on start rather than on first use, where an operator is watching.</summary>
     internal static bool IsBareHttpsOrigin(string? value) =>
         string.IsNullOrWhiteSpace(value)
@@ -30,7 +24,8 @@ public sealed class DavOptions
             && Uri.TryCreate(value, UriKind.Absolute, out var uri)
             && uri.Scheme == Uri.UriSchemeHttps
             && uri.IsDefaultPort
-            && uri.PathAndQuery == "/"
-            && !value.EndsWith('/')
-            && !ExplicitPort.IsMatch(value));
+            // The screen publishes this verbatim, so it must *be* the origin it reads as:
+            // "https://api.mail.weesky.net@evil.com" parses to the authority evil.com. The same
+            // comparison settles ":443", a path, a query, a fragment and a trailing slash.
+            && value == $"{uri.Scheme}://{uri.Authority}");
 }
