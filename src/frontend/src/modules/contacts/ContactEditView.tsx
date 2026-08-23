@@ -522,8 +522,12 @@ export default function ContactEditView({
           </div>
         ))}
         {OPTIONAL.some(f => !revealed.has(f.key)) && (
+          /* `align` because `.dropdown-root` is a block spanning the whole column, so the
+             default right anchoring put the menu 223px to the right of a link 106px wide.
+             `direction` because the column ends here and the fold is right below: measured, the
+             menu ran 75px past it. */
           <DropdownMenu ariaLabel={t('editor.addField')} className="contact-address-add"
-            trigger={t('editor.addField')}
+            direction="auto" align="left" trigger={t('editor.addField')}
             items={OPTIONAL.filter(f => !revealed.has(f.key)).map(f => (
               { label: t(f.label), onSelect: () => reveal(f.key) }
             ))} />

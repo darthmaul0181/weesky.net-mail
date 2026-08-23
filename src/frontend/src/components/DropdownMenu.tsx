@@ -32,8 +32,17 @@ interface Props {
   trigger: ReactNode
   items: MenuEntry[]
   className?: string
-  /** Which way the menu opens relative to the trigger. Defaults to 'down'. */
-  direction?: 'down' | 'up'
+  /**
+   * Which way the menu opens relative to the trigger. Defaults to 'down'.
+   *
+   * 'auto' measures the open menu against the viewport and flips it up only when it would not
+   * fit below and fits better above. For a trigger that sits at the end of a column whose length
+   * the contact decides — the editor's "add a field" — neither fixed choice is right: measured on
+   * a 763px viewport the menu ran to 838, seventy-five pixels under the fold, and a contact with
+   * no postal address puts the same trigger high enough that opening upward would run off the top
+   * instead.
+   */
+  direction?: 'down' | 'up' | 'auto'
   /**
    * Which edge the menu shares with its trigger, i.e. the direction it grows in. Right by
    * default, which suits a trigger sitting against the right edge of its column — the reader
@@ -49,21 +58,41 @@ export default function DropdownMenu(
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [fixedStyle, setFixedStyle] = useState<CSSProperties | undefined>(undefined)
+  // What 'auto' resolved to, and what the class and the scroll guard below read. A fixed
+  // direction answers itself; 'auto' answers 'down' until the layout effect has measured, which
+  // is the same frame — the menu never paints in the wrong place.
+  const [placement, setPlacement] = useState<'down' | 'up'>(direction === 'up' ? 'up' : 'down')
 
   // 'up' menus escape any ancestor scroll clip (the reader's attachment band is one) by going
   // `position: fixed` off the trigger's own rect instead of the CSS `bottom: calc(100% + …)`,
   // which is relative to a containing block that can sit inside that clipped band.
   useLayoutEffect(() => {
-    if (!open || direction !== 'up' || !triggerRef.current) { setFixedStyle(undefined); return }
+    if (!open || direction === 'down' || !triggerRef.current) {
+      setFixedStyle(undefined)
+      setPlacement('down')
+      return
+    }
     const rect = triggerRef.current.getBoundingClientRect()
-    setFixedStyle({
-      position: 'fixed',
-      bottom: `${window.innerHeight - rect.top + 4}px`,
-      ...(align === 'left'
-        ? { left: `${rect.left}px` }
-        : { right: `${window.innerWidth - rect.right}px` }),
-    })
+    // Measured on the menu itself rather than counted off the items: a row's height is the
+    // language's, not the component's, and a wrapped label makes it two.
+    const height = menuRef.current?.offsetHeight ?? 0
+    const below = window.innerHeight - rect.bottom
+    // Flip only when the menu would spill below *and* fits whole above. A menu too tall for
+    // either side stays down, where the rows past the fold can still be scrolled to; flipped up
+    // it would be clipped at the viewport's block-start edge, which nothing can reveal.
+    const up = direction === 'up' || (below < height + 8 && rect.top >= height + 8)
+    setPlacement(up ? 'up' : 'down')
+    setFixedStyle(up
+      ? {
+          position: 'fixed',
+          bottom: `${window.innerHeight - rect.top + 4}px`,
+          ...(align === 'left'
+            ? { left: `${rect.left}px` }
+            : { right: `${window.innerWidth - rect.right}px` }),
+        }
+      : undefined)
   }, [open, direction, align])
 
   useEffect(() => {
@@ -86,7 +115,7 @@ export default function DropdownMenu(
   // does, so any scroll or resize while it is open just closes it rather than leaving it
   // stranded. Capture:true so a scroll inside an ancestor band (the attachment row) counts too.
   useEffect(() => {
-    if (!open || direction !== 'up') return
+    if (!open || placement !== 'up') return
     function onScrollOrResize() { setOpen(false) }
     window.addEventListener('scroll', onScrollOrResize, true)
     window.addEventListener('resize', onScrollOrResize, true)
@@ -94,11 +123,11 @@ export default function DropdownMenu(
       window.removeEventListener('scroll', onScrollOrResize, true)
       window.removeEventListener('resize', onScrollOrResize, true)
     }
-  }, [open, direction])
+  }, [open, placement])
 
   return (
     <div
-      className={`dropdown-root${direction === 'up' ? ' is-up' : ''}${align === 'left' ? ' is-left' : ''}`}
+      className={`dropdown-root${placement === 'up' ? ' is-up' : ''}${align === 'left' ? ' is-left' : ''}`}
       ref={rootRef}
     >
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
@@ -106,7 +135,7 @@ export default function DropdownMenu(
         {trigger}
       </button>
       {open && (
-        <div className="dropdown-menu" role="menu" style={fixedStyle}>
+        <div className="dropdown-menu" role="menu" ref={menuRef} style={fixedStyle}>
           {items.map((entry, index) =>
             entry === 'separator' ? (
               <hr key={index} className="dropdown-rule" />
