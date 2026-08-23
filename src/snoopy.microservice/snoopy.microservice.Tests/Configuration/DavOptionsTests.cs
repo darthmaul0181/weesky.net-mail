@@ -43,6 +43,10 @@ public sealed class DavOptionsTests
     [InlineData("https://xn--mil-6ka.example")]
     [InlineData("https://192.0.2.10")]
     [InlineData("https://[2001:db8::1]")]
+    // Scheme and host are case-insensitive by RFC 3986 and Uri lowers both, so case is a spelling
+    // an operator may write and not a form to refuse.
+    [InlineData("https://API.mail.weesky.net")]
+    [InlineData("HTTPS://API.MAIL.WEESKY.NET")]
     public void ABareHttpsOrigin_IsAccepted(string publicUrl)
     {
         var options = Build(publicUrl);
@@ -83,14 +87,14 @@ public sealed class DavOptionsTests
     // sync secret with a username and password nobody chose.
     [InlineData("https://user:pass@api.mail.weesky.net")]
     // The one this validator exists for: it reads to a human as our host, and it authenticates to
-    // evil.com. Uri resolves the authority past the "@"; the text alone does not.
+    // evil.com. Uri resolves the authority past the "@"; the text alone does not. In mixed case
+    // too — the comparison ignores case, which must cost it none of its reach.
     [InlineData("https://api.mail.weesky.net@evil.com")]
+    [InlineData("https://API.mail.weesky.net@Evil.com")]
     // A fragment is not part of an origin, and a client concatenating a path onto it builds a URL
     // whose path lands after the "#" — a request to the bare host.
     [InlineData("https://api.mail.weesky.net#frag")]
     [InlineData("https://api.mail.weesky.net?q=1")]
-    // Case drift: the published text must be the normalised origin, not merely parse to one.
-    [InlineData("HTTPS://api.mail.weesky.net")]
     public void AnythingElse_RefusesToStart(string publicUrl)
     {
         var exception = Assert.Throws<OptionsValidationException>(() => Start(publicUrl));

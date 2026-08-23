@@ -27,5 +27,6 @@ public sealed class DavOptions
             // The screen publishes this verbatim, so it must *be* the origin it reads as:
             // "https://api.mail.weesky.net@evil.com" parses to the authority evil.com. The same
             // comparison settles ":443", a path, a query, a fragment and a trailing slash.
-            && value == $"{uri.Scheme}://{uri.Authority}");
+            // Case-insensitive because RFC 3986 is: scheme and host case buys nothing to refuse.
+            && string.Equals(value, $"{uri.Scheme}://{uri.Authority}", StringComparison.OrdinalIgnoreCase));
 }
