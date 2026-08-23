@@ -433,6 +433,56 @@ describe('ContactEditView', () => {
     expect(onSave.mock.calls[0][0].postalAddresses).toEqual([expect.objectContaining({ type: '' })])
   })
 
+  /* Le surnom suit la même règle que les huit autres depuis qu'il a quitté le héros : une carte
+     sur cent en porte un, et sa boîte occupait une ligne pleine sur toutes les autres. */
+  it('cache le surnom d’une carte qui n’en porte pas, et le propose au menu', async () => {
+    setup({ contact: solo })
+
+    expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /add a field/i }))
+    expect(screen.getByRole('menuitem', { name: /nickname/i })).toBeInTheDocument()
+  })
+
+  it('n’affiche pas le surnom à la création', () => {
+    setup()
+
+    expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
+  })
+
+  it('affiche d’office le surnom d’une carte qui en porte un', () => {
+    setup({ contact: bruno })
+
+    expect(screen.getByLabelText(/nickname/i)).toHaveValue('bru')
+  })
+
+  it('un surnom ajouté depuis le menu part à l’enregistrement', async () => {
+    const { onSave } = setup({ contact: solo })
+    await userEvent.click(screen.getByRole('button', { name: /add a field/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /nickname/i }))
+    await userEvent.type(screen.getByLabelText(/nickname/i), 'bru')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave.mock.calls[0][0].nickname).toBe('bru')
+  })
+
+  /* Le surnom et le nom affiché ne sont pas des champs comme les huit autres : `Apply` remplace
+     un nom, null compris, donc null y est l'utilisateur qui vide la boîte — pas « la requête ne
+     nomme pas ce champ ». Une chaîne vide laisserait un NICKNAME vide sur la carte. */
+  it('envoie null pour un surnom que l’utilisateur vide', async () => {
+    const { onSave } = setup({ contact: bruno })
+    await userEvent.clear(screen.getByLabelText(/nickname/i))
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave.mock.calls[0][0].nickname).toBeNull()
+  })
+
+  it('un contact qui n’a que son surnom reste enregistrable', async () => {
+    const { onSave } = setup({ contact: { ...solo, addresses: [], nickname: 'bru' } })
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave.mock.calls[0][0].nickname).toBe('bru')
+  })
+
   it('affiche d’office un champ que la carte remplit, et ne le propose pas au menu', async () => {
     setup({ contact: { ...bruno, organization: 'Weesky' } })
 

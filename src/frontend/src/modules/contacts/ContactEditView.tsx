@@ -47,7 +47,7 @@ const POSTAL_PARTS = [
   'poBox', 'extended', 'street', 'locality', 'region', 'postalCode', 'country',
 ] as const
 
-/** The nine a card may carry and most contacts do not. `group` says which side of the form the
+/** The ten a card may carry and most contacts do not. `group` says which side of the form the
     field belongs to once revealed — a name joins the hero beside the other names, everything else
     the aside column. A field the card fills is always rendered
     and never offered here: the menu hides emptiness, never content. `as const` narrows `label` to
@@ -57,6 +57,7 @@ const POSTAL_PARTS = [
     `displayName`'s 255 mirrors `contacts.display_name`'s column width, not a validator constant:
     unlike the other eight, `ContactValidator.Validate` never bounds it. */
 const OPTIONAL = [
+  { key: 'nickname', id: 'nickname', label: 'fields.nickname', maxLength: NAME_MAX, long: false, group: 'name' },
   { key: 'displayName', id: 'display-name', label: 'editor.displayName', maxLength: 255, long: false, group: 'name' },
   { key: 'middleName', id: 'middle-name', label: 'editor.middleName', maxLength: 100, long: false, group: 'name' },
   { key: 'namePrefix', id: 'name-prefix', label: 'editor.namePrefix', maxLength: 50, long: false, group: 'name' },
@@ -90,16 +91,20 @@ function submitted(value: string, seeded: string): string | null {
   return trimmed === seeded.trim() ? null : trimmed
 }
 
+/** The two the server replaces rather than merges. */
+const NAMES = new Set<OptionalKey>(['nickname', 'displayName'])
+
 function scalarsToDraft(
   scalars: Record<OptionalKey, string>, seeded: Record<OptionalKey, string>,
 ): Record<OptionalKey, string | null> {
   return Object.fromEntries(OPTIONAL.map(f => [f.key,
-    // displayName is excluded: an empty string there strips the card's FN, which no valid vCard
-    // may lack, where null falls back to the display name the server computes — and null is now
-    // what an untouched box sends, since the server only stores an FN that diverges from the
-    // names. `submitted` would defeat that: it echoes the seeded value back, which is exactly how
-    // the FN used to freeze at the shape the name had on the day the card was created.
-    f.key === 'displayName' ? blank(scalars[f.key]) : submitted(scalars[f.key], seeded[f.key]),
+    // The two names are excluded, because `Apply` replaces a name null included — there, null is
+    // the user who emptied the box, where on the other eight it means the request did not name
+    // the field at all. For displayName that also matters when nothing was typed: an empty string
+    // strips the card's FN, which no valid vCard may lack, while null falls back to the one the
+    // server computes. `submitted` would defeat it by echoing the seeded value back, which is
+    // exactly how the FN used to freeze at the shape the name had on the day the card was made.
+    NAMES.has(f.key) ? blank(scalars[f.key]) : submitted(scalars[f.key], seeded[f.key]),
   ])) as Record<OptionalKey, string | null>
 }
 
@@ -122,7 +127,6 @@ export default function ContactEditView({
   const { t } = useTranslation('contacts')
   const [firstName, setFirstName] = useState(contact?.firstName ?? '')
   const [lastName, setLastName] = useState(contact?.lastName ?? '')
-  const [nickname, setNickname] = useState(contact?.nickname ?? '')
   const [isFavorite, setIsFavorite] = useState(contact?.isFavorite ?? false)
   const [birthday, setBirthday] = useState(birthdayToInput(contact?.birthday))
   const [scalars, setScalars] = useState<Record<OptionalKey, string>>(() =>
@@ -158,14 +162,14 @@ export default function ContactEditView({
         }))
       : [])
 
-  const initials = initialsOf(firstName, lastName, nickname)
+  const initials = initialsOf(firstName, lastName, scalars.nickname)
   const revealedIn = (group: 'name' | 'other') =>
     OPTIONAL.filter(f => f.group === group && revealed.has(f.key))
 
   const kept = addresses.filter(line => line.address.trim() !== '')
   // The same gate the backend enforces, so the user never spends a round trip to be told.
   const valid = blank(firstName) != null || blank(lastName) != null
-    || blank(nickname) != null || kept.length > 0
+    || blank(scalars.nickname) != null || kept.length > 0
   // Ranked on the rows the submit designates from, never on the blank ones it drops: designating
   // a row and then emptying its text would otherwise badge a line the save promotes past.
   const ranked = kept.length > 0 ? kept : addresses
@@ -235,7 +239,6 @@ export default function ContactEditView({
       birthday: submitted(birthday, seededBirthday) === null ? null : inputToBirthday(birthday),
       firstName: blank(firstName),
       lastName: blank(lastName),
-      nickname: blank(nickname),
       isFavorite,
       addresses: kept.map(line => ({
         position: line.position,
@@ -301,11 +304,6 @@ export default function ContactEditView({
               <label htmlFor="contact-last-name">{t('editor.lastName')}</label>
               <input id="contact-last-name" type="text" value={lastName} maxLength={NAME_MAX}
                 onChange={event => setLastName(event.target.value)} />
-            </div>
-            <div className="field-v">
-              <label htmlFor="contact-nickname">{t('fields.nickname')}</label>
-              <input id="contact-nickname" type="text" value={nickname} maxLength={NAME_MAX}
-                onChange={event => setNickname(event.target.value)} />
             </div>
             {revealedIn('name').map(f => (
               <div key={f.key} className="field-v">
