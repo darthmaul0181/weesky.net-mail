@@ -113,6 +113,10 @@ internal sealed class WebmailUserStore(
 
         context.Users.Remove(existing);
         await context.SaveChangesAsync(cancellationToken);
+
+        // The cascade takes the dav_credentials row, but not the burst entry: without this the
+        // deleted account's secret keeps opening the address book for the rest of the window.
+        davCache.Forget(canonical);
     }
 
     private static WebmailAccount Account(WebmailUser row) => new(row.Id, row.SecurityStamp);

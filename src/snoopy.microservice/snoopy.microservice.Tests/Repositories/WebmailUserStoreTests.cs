@@ -205,4 +205,19 @@ public sealed class WebmailUserStoreTests
 
         Assert.False(cache.TryGet("mick@weesky.be", "fingerprint", out _));
     }
+
+    [Fact]
+    public async Task DeleteByEmail_ForgetsTheCachedSynchronisationIdentity()
+    {
+        // The cascade takes the credential row; without this the burst entry would keep the
+        // deleted account's secret opening the address book for the rest of the window.
+        var db = nameof(DeleteByEmail_ForgetsTheCachedSynchronisationIdentity);
+        var cache = new DavAuthenticationCache(Clock);
+        var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true));
+
+        await CreateStore(db, cache).DeleteByEmailAsync("  Mick@WEESKY.be ", CancellationToken.None);
+
+        Assert.False(cache.TryGet("mick@weesky.be", "fingerprint", out _));
+    }
 }

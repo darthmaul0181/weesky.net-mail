@@ -28,6 +28,12 @@ public interface IDavAuthenticationCache
     /// Drops the cached authentication for an account, so a regenerated or revoked secret stops
     /// working on this instance at once — the touch throttle survives, since it holds no secret
     /// to invalidate. On the others the window is the ceiling — the same trade sessions make.
+    ///
+    /// <para>The synchronisation switch must call this too, on enable as much as on disable, and
+    /// account deletion with it. The entry carries <see cref="DavIdentity.CardDavEnabled"/> and the
+    /// cache never consults the database, so one that outlives a switch movement answers with the
+    /// state from before it for the rest of the window: a disabled account still served 200, and a
+    /// re-enabled one still refused 403 while the screen says "on".</para>
     /// </summary>
     void Forget(string identifier);
 

@@ -129,6 +129,23 @@ public sealed class DavAuthenticationCacheTests
     }
 
     [Fact]
+    public void ACachedSwitchStateOutlivesTheSwitch_UntilTheCallerForgetsIt()
+    {
+        // Stored while the account was enabled, and the cache never re-reads: for the rest of the
+        // window it keeps answering enabled whatever the switch did meanwhile. That staleness is
+        // why the controller driving the switch forgets on enable as much as on disable.
+        var (cache, _) = Create();
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+
+        Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-a", out var stale));
+        Assert.True(stale.CardDavEnabled);
+
+        cache.Forget("alice@weesky.be");
+
+        Assert.False(cache.TryGet("alice@weesky.be", "fingerprint-a", out _));
+    }
+
+    [Fact]
     public void ShouldTouch_IsTrueOnceThenFalseUntilTheHourHasPassed()
     {
         // Without this every PROPFIND is one write to a column the screen renders as "2 hours ago".
