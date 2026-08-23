@@ -40,6 +40,20 @@ Aucun `GRANT` à rejouer : les utilisateurs `snoopy_webmail`/`snoopy_webmail_dev
 `TIMESTAMP` la ferait traverser le fuseau de session — décalée, dans la même base, à côté d'une
 `DATETIME` posée par le même code.
 
+## L'adresse publiée — `Dav__PublicUrl`
+
+La table ne suffit pas : sans adresse publiée, l'onglet « Sync » n'existe pas. Elle se pose
+dans l'`EnvironmentFile` du service sous `Dav__PublicUrl` (`Dav:PublicUrl` dans `appsettings.json`,
+où elle est livrée vide) et vaut l'origine que le reverse proxy sert :
+`https://api.mail.weesky.net`. Origine nue, exactement : pas de chemin, pas de barre finale,
+pas de port, pas d'identifiants — les clients y concatènent `/.well-known/carddav`, et le service
+**refuse de démarrer** sur toute autre forme plutôt que de laisser la valeur atteindre l'écran.
+
+La laisser vide est un état légal et c'est le défaut : le déploiement ne sert aucun /dav,
+`GET /api/DavCredentials` répond `404` et l'onglet ne s'affiche pas. Rien ne le signale au
+démarrage — c'est la panne à connaître : une tranche entière qui se tait parce qu'une variable
+manque.
+
 ## Pourquoi le hachage n'est pas un KDF
 
 C'est l'inverse de la règle habituelle et la raison est écrite ici pour que personne ne
