@@ -227,7 +227,7 @@ public sealed class AuthAttemptThrottleTests
     }
 
     [Fact]
-    public void TheMemoryIsBounded_SoAnAttackerCannotGrowIt()
+    public void TheMemoryIsBoundedOnceAPendingEvictionSettles_SoAnAttackerCannotGrowIt()
     {
         // The keys are values the attacker chooses. Without a ceiling the counter is itself the
         // memory exhaustion an unauthenticated request must not be able to cause. A distinct
@@ -237,9 +237,28 @@ public sealed class AuthAttemptThrottleTests
         for (var i = 0; i < AuthAttemptThrottle.MaxTrackedKeys * 2; i++)
             throttle.RecordFailure($"user{i}@weesky.be", $"203.0.113.{i}");
 
-        // One more call lets a pending batch eviction settle the table back under the ceiling.
+        // The ceiling is soft by one: eviction runs at the start of RecordFailure and that call's
+        // two keys are added after it, so the table sits at MaxTrackedKeys + 1 until the next call
+        // evicts again. Hence this one, and hence a range rather than an equality.
         throttle.RecordFailure("settle@weesky.be", "198.51.100.99");
 
         Assert.InRange(throttle.TrackedKeys, 0, AuthAttemptThrottle.MaxTrackedKeys);
+    }
+
+    [Fact]
+    public void TheCounterDrivingEviction_MatchesTheTableItBounds()
+    {
+        // Eviction reads a counter rather than ConcurrentDictionary.Count, which locks every
+        // bucket on a hot path. Drift either way breaks the bound, so the two are pinned equal
+        // across every shape that adds or removes a key.
+        var (throttle, clock) = Create();
+
+        for (var i = 0; i < 50; i++) throttle.RecordFailure($"user{i}@weesky.be", $"203.0.113.{i}");
+        for (var i = 0; i < 20; i++) throttle.RecordSuccess($"user{i}@weesky.be");
+        throttle.RecordSuccess("never-seen@weesky.be");
+        clock.Now = clock.Now.Add(AuthAttemptThrottle.Window + TimeSpan.FromSeconds(1));
+        for (var i = 0; i < 50; i++) throttle.RecordFailure($"user{i}@weesky.be", $"203.0.113.{i}");
+
+        Assert.Equal(throttle.TrackedKeys, throttle.CountedKeys);
     }
 }

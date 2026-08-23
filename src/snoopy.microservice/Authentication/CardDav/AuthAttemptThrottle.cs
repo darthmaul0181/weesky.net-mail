@@ -12,7 +12,11 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
 {
     internal const int MaxFailures = 10;
 
-    /// <summary>The keys are values the attacker chooses, so their number is capped.</summary>
+    /// <summary>
+    /// The keys are values the attacker chooses, so their number is capped. A soft ceiling: the
+    /// eviction runs at the start of <see cref="RecordFailure"/> and the call's two keys are added
+    /// after it, so the table can settle at <c>MaxTrackedKeys + 1</c> — never assert equality.
+    /// </summary>
     internal const int MaxTrackedKeys = 10_000;
 
     /// <summary>Batch target once eviction runs, so the sort amortises over many insertions.</summary>
@@ -22,7 +26,13 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
 
     private readonly ConcurrentDictionary<string, Queue<DateTimeOffset>> failures = new(StringComparer.Ordinal);
 
+    // One increment per successful add, one decrement per successful removal: exactly what
+    // failures.Count answers, without the whole-table lock Count takes on every RecordFailure.
+    private int keyCount;
+
     internal int TrackedKeys => failures.Count;
+
+    internal int CountedKeys => Volatile.Read(ref keyCount);
 
     internal bool IsBlocked(string identifier, string? address, out TimeSpan retryAfter)
     {
@@ -71,10 +81,16 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     {
         while (true)
         {
-            var stamps = failures.GetOrAdd(key, _ => new Queue<DateTimeOffset>());
+            if (!failures.TryGetValue(key, out var stamps))
+            {
+                stamps = new Queue<DateTimeOffset>();
+                if (!failures.TryAdd(key, stamps)) continue;
+                Interlocked.Increment(ref keyCount);
+            }
+
             lock (stamps)
             {
-                // A concurrent RecordSuccess or eviction can remove this key between GetOrAdd and
+                // A concurrent RecordSuccess or eviction can remove this key between the read and
                 // the lock; retry against whatever is current instead of writing into an orphan.
                 if (!failures.TryGetValue(key, out var current) || !ReferenceEquals(current, stamps))
                     continue;
@@ -90,7 +106,7 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     /// Clears the identifier's count, and only it: the real phone retrying behind an attacker must
     /// get back in, while the address the attack came from is not absolved by a success elsewhere.
     /// </summary>
-    internal void RecordSuccess(string identifier) => failures.TryRemove(IdentifierKey(identifier), out _);
+    internal void RecordSuccess(string identifier) => Remove(IdentifierKey(identifier));
 
     private static IEnumerable<string> Keys(string identifier, string? address)
     {
@@ -128,11 +144,13 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     /// Drops the keys whose newest failure is oldest. Expired keys go first — they cost nothing to
     /// lose — and if that is not enough, evicts live keys in one batch down to
     /// <see cref="LowWaterMark"/> rather than one key per call, which under-counts one attacker
-    /// rather than growing without bound or re-sorting the whole table on every request.
+    /// rather than growing without bound or re-sorting the whole table on every request. The
+    /// common case is the first line and nothing else: <c>ConcurrentDictionary.Count</c> locks
+    /// every bucket, and this runs on the hot path of the very traffic the throttle is for.
     /// </summary>
     private void EvictIfFull(DateTimeOffset now)
     {
-        if (failures.Count < MaxTrackedKeys) return;
+        if (Volatile.Read(ref keyCount) < MaxTrackedKeys) return;
 
         foreach (var (key, stamps) in failures)
         {
@@ -142,17 +160,23 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
                 Prune(stamps, now);
                 empty = stamps.Count == 0;
             }
-            if (empty) failures.TryRemove(key, out _);
+            if (empty) Remove(key);
         }
 
-        if (failures.Count <= LowWaterMark) return;
+        var live = failures.Count;
+        if (live <= LowWaterMark) return;
 
         var oldest = failures
             .Select(pair => (pair.Key, Newest: Newest(pair.Value)))
             .OrderBy(pair => pair.Newest)
-            .Take(failures.Count - LowWaterMark)
+            .Take(live - LowWaterMark)
             .Select(pair => pair.Key);
-        foreach (var key in oldest) failures.TryRemove(key, out _);
+        foreach (var key in oldest) Remove(key);
+    }
+
+    private void Remove(string key)
+    {
+        if (failures.TryRemove(key, out _)) Interlocked.Decrement(ref keyCount);
     }
 
     /// <summary>Walks to the queue's tail — the newest stamp by construction — instead of computing a max.</summary>
