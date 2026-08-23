@@ -79,6 +79,17 @@ public class PreferencesDbContext : DbContext
             .HasForeignKey(t => t.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<DavCredential>().HasKey(c => c.UserId);
+        // Same mechanism as the five tables above: "dav_credentials" sorts before "users", so
+        // without a declared edge EF orders the INSERTs by table name and breaks the FK on any
+        // create. Declared without navigation, like its neighbours. The InMemory provider enforces
+        // no foreign key, so no test can catch this — only the declaration can.
+        modelBuilder.Entity<DavCredential>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<ExternalDomain>().HasKey(d => d.Id);
         modelBuilder.Entity<ExternalDomain>().HasIndex(d => d.Name).IsUnique();
         modelBuilder.Entity<ExternalDomain>()
@@ -113,6 +124,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<SendingIdentity> SendingIdentities { get; set; }
 
     public DbSet<TrustedSender> TrustedSenders { get; set; }
+
+    public DbSet<DavCredential> DavCredentials { get; set; }
 
     public DbSet<Contact> Contacts { get; set; }
 
