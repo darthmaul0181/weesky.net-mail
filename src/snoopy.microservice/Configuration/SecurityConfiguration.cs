@@ -36,6 +36,7 @@ internal static class SecurityConfiguration
         // Singleton is load-bearing: both memories live in this instance's dictionaries, and a
         // shorter lifetime would forget every burst at the end of the request that started it.
         services.AddSingleton<IDavAuthenticationCache, DavAuthenticationCache>();
+        services.AddSingleton<AuthAttemptThrottle>();
 
         services.AddScoped<IMailCredentialStore, MailCredentialStore>();
         services.AddScoped<IUserAuthenticator, UserAuthenticator>();
