@@ -7,7 +7,14 @@ namespace weesky.Snoopy.Microservice.Repositories;
 public readonly record struct DavCredentialState(bool Configured, bool CardDavEnabled, DateTime? LastUsedAt);
 
 /// <summary>What the authentication handler compares, read in one indexed lookup.</summary>
-public readonly record struct DavCredentialRecord(bool CardDavEnabled, string SecretHash, byte[] Salt);
+public readonly record struct DavCredentialRecord(bool CardDavEnabled, string SecretHash, byte[] Salt)
+{
+    /// <summary>
+    /// The synthesised one prints the digest, and the handler logging this record while debugging
+    /// is exactly how a secret — hashed is still a secret — reaches a log file.
+    /// </summary>
+    public override string ToString() => $"DavCredentialRecord {{ CardDavEnabled = {CardDavEnabled} }}";
+}
 
 public interface IDavCredentialStore
 {
@@ -35,7 +42,7 @@ public interface IDavCredentialStore
 
     /// <summary>
     /// Stamps the last use. Called from the authentication path, so it creates nothing — an absent
-    /// row is a zero-row write, never an error.
+    /// row is a zero-row write, never an error. <paramref name="usedAt"/> is UTC.
     /// </summary>
     Task TouchAsync(Guid userId, DateTime usedAt, CancellationToken cancellationToken);
 

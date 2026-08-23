@@ -9,22 +9,32 @@ public sealed class DavCredentialEntityTests
     [Fact]
     public async Task DavCredential_RoundTripsThroughTheContext()
     {
-        var context = new PreferencesTestDbContext(nameof(DavCredential_RoundTripsThroughTheContext));
+        var db = nameof(DavCredential_RoundTripsThroughTheContext);
         var user = Guid.NewGuid();
+        var digest = new string('a', 64);
+        var created = new DateTime(2026, 8, 23, 10, 0, 0, DateTimeKind.Utc);
 
-        context.DavCredentials.Add(new DavCredential
+        using (var writing = new PreferencesTestDbContext(db))
         {
-            UserId = user,
-            CardDavEnabled = true,
-            SecretHash = new string('a', 64),
-            Salt = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-            CreatedAt = DateTime.UtcNow
-        });
-        await context.SaveChangesAsync(CancellationToken.None);
+            writing.DavCredentials.Add(new DavCredential
+            {
+                UserId = user,
+                CardDavEnabled = true,
+                SecretHash = digest,
+                Salt = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                CreatedAt = created
+            });
+            await writing.SaveChangesAsync(CancellationToken.None);
+        }
 
-        var stored = Assert.Single(context.DavCredentials);
+        // Relu depuis un second contexte : celui qui a écrit rend l'instance suivie, et les
+        // assertions ne feraient que redire l'objet littéral sans traverser le modèle.
+        using var reading = new PreferencesTestDbContext(db);
+        var stored = Assert.Single(reading.DavCredentials);
         Assert.Equal(user, stored.UserId);
         Assert.True(stored.CardDavEnabled);
+        Assert.Equal(digest, stored.SecretHash);
+        Assert.Equal(created, stored.CreatedAt);
         Assert.Equal(16, stored.Salt.Length);
         // Jamais utilisé veut dire null, et se dit à l'écran — pas une case vide (décision 19).
         Assert.Null(stored.LastUsedAt);

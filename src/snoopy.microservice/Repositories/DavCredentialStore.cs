@@ -8,8 +8,12 @@ internal sealed class DavCredentialStore(PreferencesDbContext context) : IDavCre
 {
     public async Task<DavCredentialState> GetStateAsync(Guid userId, CancellationToken cancellationToken)
     {
+        // Projected in the query: the digest and the salt never leave MariaDB on the one path
+        // whose whole point is that the screen does not see them.
         var row = await context.DavCredentials.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+            .Where(c => c.UserId == userId)
+            .Select(c => new { c.CardDavEnabled, c.LastUsedAt })
+            .FirstOrDefaultAsync(cancellationToken);
 
         return row is null
             ? new DavCredentialState(false, false, null)

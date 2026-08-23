@@ -29,7 +29,6 @@ public sealed class DavCredentialStoreTests
         Assert.Equal(DavSecret.SaltLength, row.Salt.Length);
         // Stored as a digest and nothing else: the table is never a keyring to steal.
         Assert.True(DavSecret.Matches(row.Salt, row.SecretHash, secret));
-        Assert.DoesNotContain(secret, row.SecretHash, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -143,8 +142,45 @@ public sealed class DavCredentialStoreTests
         Assert.True(state.Configured);
         Assert.True(state.CardDavEnabled);
         Assert.Null(state.LastUsedAt);
-        // The assertion that keeps the "reveal" door shut: the shape has nowhere to put a secret.
+    }
+
+    [Fact]
+    public void DavCredentialState_HasNowhereToPutASecret()
+    {
+        // The assertion that keeps the "reveal it again" door shut: a fourth property would have
+        // to be added here first, deliberately, rather than slipped in beside a screen field.
         Assert.Equal(3, typeof(DavCredentialState).GetProperties().Length);
+    }
+
+    [Fact]
+    public void DavCredentialRecord_ToString_RendersNeitherTheDigestNorTheSalt()
+    {
+        // The handler is this record's only reader, and a LogDebug of it while debugging is
+        // exactly how a digest reaches a log file. The synthesised ToString prints all three.
+        var digest = string.Concat(Enumerable.Repeat("0123456789abcdef", 4));
+
+        var rendered = new DavCredentialRecord(true, digest, [9, 8, 7]).ToString();
+
+        Assert.DoesNotContain(digest, rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(digest[..8], rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(nameof(DavCredentialRecord.SecretHash), rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(nameof(DavCredentialRecord.Salt), rendered, StringComparison.Ordinal);
+        Assert.Contains(nameof(DavCredentialRecord.CardDavEnabled), rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetState_ReportsTheLastUseTheAuthenticationPathStamped()
+    {
+        // The only question the screen asks before "Regenerate": is anything still syncing? Every
+        // other GetState test reads that field as null, so the projection answered to nobody.
+        var db = nameof(GetState_ReportsTheLastUseTheAuthenticationPathStamped);
+        var used = new DateTime(2026, 8, 23, 10, 0, 0, DateTimeKind.Utc);
+        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db).TouchAsync(User, used, CancellationToken.None);
+
+        var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
+
+        Assert.Equal(used, state.LastUsedAt);
     }
 
     [Fact]

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using weesky.Snoopy.Microservice.Services;
 using Xunit;
 
@@ -20,23 +18,30 @@ public sealed class DavSecretTests
     [Fact]
     public void Generate_IsTwentyBase32Characters()
     {
-        var secret = DavSecret.Generate();
+        // Looped: an alphabet is a property of every draw, and one sample would let a stray
+        // character through on 199 out of 200 occasions.
+        for (var i = 0; i < 200; i++)
+        {
+            var secret = DavSecret.Generate();
 
-        Assert.Equal(DavSecret.Length, secret.Length);
-        // The base32 alphabet carries no whitespace, which is what makes the Trim below safe.
-        Assert.All(secret, c => Assert.Contains(c, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"));
+            Assert.Equal(DavSecret.Length, secret.Length);
+            // The base32 alphabet carries no whitespace, which is what makes the Trim below safe.
+            Assert.All(secret, c => Assert.Contains(c, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"));
+        }
     }
 
     [Fact]
     public void Hash_IsTheLowerCaseHexOfSaltThenSecret()
     {
+        // A golden vector, computed outside this codebase. Recomputing the expected value with the
+        // implementation's own expression would let the concatenation order or the hex case change
+        // while the test stayed green — and every digest already stored would become unverifiable,
+        // with no way back to the secrets.
         byte[] salt = [.. Enumerable.Range(0, DavSecret.SaltLength).Select(i => (byte)i)];
 
         var hash = DavSecret.Hash(salt, "ABCDEFGHIJKLMNOPQRST");
 
-        var expected = Convert.ToHexStringLower(
-            SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes("ABCDEFGHIJKLMNOPQRST")]));
-        Assert.Equal(expected, hash);
+        Assert.Equal("b4900c87f3c76ab6732dc9b0c79cffdf44b13cbca89975ffb9969facb8003f24", hash);
         Assert.Equal(64, hash.Length);
     }
 
@@ -93,6 +98,17 @@ public sealed class DavSecretTests
     }
 
     [Fact]
+    public void Matches_RefusesTheRightSecretUnderTheWrongSalt()
+    {
+        // The case that makes the salt load-bearing rather than decorative: a Hash ignoring its
+        // salt parameter passes every other test here, and this one alone catches it.
+        var secret = DavSecret.Generate();
+        var stored = DavSecret.Hash(DavSecret.NewSalt(), secret);
+
+        Assert.False(DavSecret.Matches(DavSecret.NewSalt(), stored, secret));
+    }
+
+    [Fact]
     public void Matches_RefusesAnEmptyOrMalformedStoredHash()
     {
         var salt = DavSecret.NewSalt();
@@ -108,6 +124,9 @@ public sealed class DavSecretTests
 
         Assert.Equal(DavSecret.Fingerprint(secret), DavSecret.Fingerprint(secret));
         Assert.NotEqual(DavSecret.Fingerprint(secret), DavSecret.Fingerprint(DavSecret.Generate()));
+        // It must trim exactly as Matches does, or the burst cache misses on every request from a
+        // client that appends a newline — the same secret, keyed twice.
+        Assert.Equal(DavSecret.Fingerprint(secret), DavSecret.Fingerprint($" {secret}\r\n"));
         // Never the stored digest: that one is salted, this one is only ever a cache key.
         Assert.NotEqual(DavSecret.Hash(DavSecret.NewSalt(), secret), DavSecret.Fingerprint(secret));
     }

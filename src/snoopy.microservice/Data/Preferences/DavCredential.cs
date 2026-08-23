@@ -29,10 +29,13 @@ public sealed class DavCredential
     [Column("salt")]
     public byte[] Salt { get; set; } = [];
 
+    /// <summary>UTC, written by the code at the insert and never by the schema.</summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>Null until a client authenticates. Written at most once an hour, per instance.</summary>
+    /// <summary>
+    /// UTC. Null until a client authenticates. Written at most once an hour, per instance.
+    /// </summary>
     [Column("last_used_at")]
     public DateTime? LastUsedAt { get; set; }
 }
