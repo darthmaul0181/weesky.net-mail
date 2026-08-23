@@ -109,14 +109,90 @@ public sealed class AuthAttemptThrottleTests
     }
 
     [Fact]
+    public void AWhitespaceAddress_NeverEntersAKey()
+    {
+        var (throttle, _) = Create();
+
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure($"user{i}@weesky.be", "   ");
+
+        Assert.False(throttle.IsBlocked("someone-else@weesky.be", "   ", out _));
+    }
+
+    [Fact]
+    public void RecordSuccess_OnAnIdentifierNeverSeen_DoesNothing()
+    {
+        var (throttle, _) = Create();
+
+        throttle.RecordSuccess("nobody@weesky.be");
+
+        Assert.False(throttle.IsBlocked("nobody@weesky.be", null, out _));
+    }
+
+    [Fact]
+    public void TwoAddressesInTheSameIPv6SlashSixtyFour_ShareACounter()
+    {
+        var (throttle, _) = Create();
+
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure($"user{i}@weesky.be", "2001:db8:1234:5678::1");
+
+        // Same /64, different host bits: an attacker sprays free addresses inside a prefix unless
+        // the key aggregates it. A household sharing a /64 shares the counter, the intended trade.
+        Assert.True(throttle.IsBlocked("someone-else@weesky.be", "2001:db8:1234:5678::dead:beef", out _));
+    }
+
+    [Fact]
+    public void TwoIPv4Addresses_DoNotShareACounter()
+    {
+        var (throttle, _) = Create();
+
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure($"user{i}@weesky.be", "203.0.113.7");
+
+        Assert.False(throttle.IsBlocked("someone-else@weesky.be", "203.0.113.8", out _));
+    }
+
+    [Fact]
+    public void ThePartialWindow_DropsOnlyTheStampsThatAged()
+    {
+        var (throttle, clock) = Create();
+
+        // First batch: five failures at t0.
+        for (var i = 0; i < 5; i++) throttle.RecordFailure("alice@weesky.be", "203.0.113.7");
+        clock.Now = clock.Now.Add(TimeSpan.FromMinutes(10));
+
+        // Second batch: five more at t0+10min, reaching the threshold (5+5).
+        for (var i = 0; i < 5; i++) throttle.RecordFailure("alice@weesky.be", "203.0.113.7");
+
+        clock.Now = clock.Now.Add(TimeSpan.FromMinutes(6));
+
+        // At t0+16min the first batch (16min old) has aged out of the 15min window; the second
+        // batch (6min old) survives but alone is under the threshold.
+        Assert.False(throttle.IsBlocked("alice@weesky.be", "203.0.113.7", out _));
+
+        // Third batch: five more, refilling to the threshold on top of the surviving second batch.
+        for (var i = 0; i < 5; i++) throttle.RecordFailure("alice@weesky.be", "203.0.113.7");
+
+        Assert.True(throttle.IsBlocked("alice@weesky.be", "203.0.113.7", out var retryAfter));
+        // Derived from the second batch's oldest surviving stamp (6min old), not restarted from
+        // the fresh third batch, which would otherwise report the full 15min window.
+        Assert.Equal(TimeSpan.FromMinutes(9), retryAfter);
+    }
+
+    [Fact]
     public void TheMemoryIsBounded_SoAnAttackerCannotGrowIt()
     {
         // The keys are values the attacker chooses. Without a ceiling the counter is itself the
-        // memory exhaustion an unauthenticated request must not be able to cause.
+        // memory exhaustion an unauthenticated request must not be able to cause. A distinct
+        // address per iteration exercises the two-key-per-call path task 7 will actually take.
         var (throttle, _) = Create();
 
         for (var i = 0; i < AuthAttemptThrottle.MaxTrackedKeys * 2; i++)
-            throttle.RecordFailure($"user{i}@weesky.be", null);
+            throttle.RecordFailure($"user{i}@weesky.be", $"203.0.113.{i}");
+
+        // One more call lets a pending batch eviction settle the table back under the ceiling.
+        throttle.RecordFailure("settle@weesky.be", "198.51.100.99");
 
         Assert.InRange(throttle.TrackedKeys, 0, AuthAttemptThrottle.MaxTrackedKeys);
     }
