@@ -1727,6 +1727,12 @@ compte qui existe et dont le DAV dort, `401` sur tout le reste, c'est-à-dire l'
 comptes. La lecture est la même dans les deux cas, `enabled` et `secret_hash` étant sur la ligne
 qu'on charge de toute façon.
 
+**Un `secret_hash` corrompu ne se distingue pas d'un mauvais secret** au point d'appel de
+`DavSecret.Matches`, qui ne peut rien journaliser par contrainte. Le handler, lui, le peut sans
+nommer aucun secret : `record.SecretHash.Length != 64` est une faute de stockage, et elle se
+journalise sur le seul GUID. Le contrôle 8 répond `401` dans les deux cas ; la ligne de journal,
+elle, dit laquelle des deux c'était.
+
 **Les contrôles 3 et 4 ne lisent rien**, et le test l'asserte sur le dépôt (`Verify(..., Times.Never)`),
 pas sur le code de retour : rien n'est comparé à un secret déjà compromis par son transport, et une
 requête au-delà du seuil ne doit rien coûter.
