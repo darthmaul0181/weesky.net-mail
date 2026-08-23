@@ -95,7 +95,10 @@ function scalarsToDraft(
 ): Record<OptionalKey, string | null> {
   return Object.fromEntries(OPTIONAL.map(f => [f.key,
     // displayName is excluded: an empty string there strips the card's FN, which no valid vCard
-    // may lack, where null falls back to the display name the server computes.
+    // may lack, where null falls back to the display name the server computes — and null is now
+    // what an untouched box sends, since the server only stores an FN that diverges from the
+    // names. `submitted` would defeat that: it echoes the seeded value back, which is exactly how
+    // the FN used to freeze at the shape the name had on the day the card was created.
     f.key === 'displayName' ? blank(scalars[f.key]) : submitted(scalars[f.key], seeded[f.key]),
   ])) as Record<OptionalKey, string | null>
 }

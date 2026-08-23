@@ -9,10 +9,15 @@ import type { Contact } from './contactTypes'
     import: an Outlook/Rainloop export writes the address into a name column for every nameless
     card, and such a contact used to out-name — 'd' sorts before 'M' — the one carrying the real
     name for the same address, so a recipient chip showed an address it called a name.
-    `splitFullName` applies the identical rule to a header display name at capture time. */
+    `splitFullName` applies the identical rule to a header display name at capture time.
+
+    The display name comes first because it only reaches here when it diverges from the
+    components — `Dr. Raphaël Le Châtelier Jr.` off an imported card, never the plain
+    `Raphaël Le Châtelier` the server would have computed. The guard below still applies to it:
+    the FN of a card carrying no name at all is that card's own address. */
 export function contactNameOf(contact: Contact): string | null {
   const full = [contact.firstName, contact.lastName].filter(Boolean).join(' ')
-  const name = full || contact.nickname
+  const name = contact.displayName || full || contact.nickname
   if (!name) return null
   const canonical = canonicalAddress(name)
   return contact.addresses.some(a => canonicalAddress(a) === canonical) ? null : name

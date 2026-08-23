@@ -5,6 +5,11 @@ export interface Contact {
   firstName: string | null
   lastName: string | null
   nickname: string | null
+  /** The card's FN, and only when it says something the components do not: `VCardProjector`
+      drops one it could have derived from them, so this is the name the user chose rather than
+      the one a writer computed. Optional like `ContactDetail`'s fields and for the same reason —
+      the API omits a null. */
+  displayName?: string
   isFavorite: boolean
   /** Ordered; `[0]` is the primary address. There is no separate flag to keep in step with it. */
   addresses: string[]

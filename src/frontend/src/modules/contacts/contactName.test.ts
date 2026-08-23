@@ -39,6 +39,19 @@ describe('displayNameOf', () => {
     expect(displayNameOf(contact({ firstName: 'Bruno', nickname: 'bru' }))).toBe('Bruno')
   })
 
+  /* The card's own FN outranks the components, which is the whole point of storing it: the server
+     only keeps one that diverges from them, so what arrives here is a name somebody typed. */
+  it('prefers the display name over the components', () => {
+    expect(displayNameOf(contact({
+      firstName: 'Raphaël', lastName: 'Le Châtelier', displayName: 'Dr. Raphaël Le Châtelier Jr.',
+    }))).toBe('Dr. Raphaël Le Châtelier Jr.')
+  })
+
+  it('falls back to first and last name when no display name was given', () => {
+    expect(displayNameOf(contact({ firstName: 'Raphaël', lastName: 'Le Châtelier' })))
+      .toBe('Raphaël Le Châtelier')
+  })
+
   it('returns an empty string when the contact carries nothing', () => {
     expect(displayNameOf(contact())).toBe('')
   })
@@ -48,6 +61,15 @@ describe('contactNameOf', () => {
   it('names a contact the same way displayNameOf does', () => {
     expect(contactNameOf(contact({ firstName: 'Bruno', lastName: 'Mertens' }))).toBe('Bruno Mertens')
     expect(contactNameOf(contact({ nickname: 'bru' }))).toBe('bru')
+    expect(contactNameOf(contact({ firstName: 'Bruno', displayName: 'Dr. B.' }))).toBe('Dr. B.')
+  })
+
+  /* The address guard covers the display name too: a legacy row can hold an FN that is the
+     card's own address, and a recipient chip must not call that a name. */
+  it('answers null for a display name that is one of the contact addresses', () => {
+    expect(contactNameOf(contact({
+      displayName: 'Bruno@Example.com', addresses: ['bruno@example.com'],
+    }))).toBeNull()
   })
 
   // The whole reason it exists: a caller showing one address must not be handed another one as a
