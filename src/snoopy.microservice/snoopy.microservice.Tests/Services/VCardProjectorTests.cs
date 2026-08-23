@@ -276,4 +276,58 @@ public sealed class VCardProjectorTests
     {
         Assert.Equal("1985-04-12", VCardProjector.Project(Card("BDAY:1985-04-12")).Birthday);
     }
+
+    // ---- display_name : ce que l'utilisateur a choisi, pas ce que l'écrivain a calculé --------
+
+    // Le FN est obligatoire en 3.0 comme en 4.0 et VCardComposer.FallbackDisplayName en fabrique
+    // un dès qu'une écriture n'en porte pas. Le projeter tel quel remplissait donc display_name
+    // sur tous les contacts, et l'éditeur le renvoyait ensuite à chaque enregistrement : le FN
+    // gelait à la forme qu'avait le nom le jour de la création, et un renommage ne l'atteignait
+    // plus jamais. Le relire à travers la règle qui l'a écrit sépare les deux.
+
+    [Fact]
+    public void Project_KeepsADisplayNameTheComponentsDoNotSay()
+    {
+        Assert.Equal("Dr. John Smith Jr.", VCardProjector.Project(Card30).DisplayName);
+    }
+
+    [Theory]
+    [InlineData("N:Smith;John;;;", "FN:John Smith")]                  // prénom + nom
+    [InlineData("N:Smith;John;Q.;;", "FN:John Q. Smith")]             // le 2e prénom en fait partie
+    [InlineData("N:Smith;;;;", "FN:Smith")]                           // le nom seul
+    public void Project_DropsADisplayNameItWouldHaveComputed(string name, string fn)
+    {
+        var card = $"BEGIN:VCARD\r\nVERSION:3.0\r\n{name}\r\n{fn}\r\nEND:VCARD\r\n";
+
+        Assert.Null(VCardProjector.Project(card).DisplayName);
+    }
+
+    [Fact] // sans N, le calcul retombe sur le surnom
+    public void Project_DropsADisplayNameEqualToTheNickname()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nNICKNAME:Marie-Rose\r\n" +
+            "FN:Marie-Rose\r\nEND:VCARD\r\n";
+
+        Assert.Null(VCardProjector.Project(card).DisplayName);
+    }
+
+    // Puis sur la première adresse — et la comparaison ignore la casse parce que Emails()
+    // canonicalise là où le FN garde ce que la carte porte.
+    [Fact]
+    public void Project_DropsADisplayNameEqualToTheFirstAddress()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Bruno@Example.COM\r\n" +
+            "EMAIL;TYPE=INTERNET:Bruno@Example.COM\r\nEND:VCARD\r\n";
+
+        Assert.Null(VCardProjector.Project(card).DisplayName);
+    }
+
+    [Fact] // une carte nommée dont le FN vaut son adresse : c'est un choix, il survit
+    public void Project_KeepsADisplayNameEqualToTheAddressWhenTheCardIsNamed()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Smith;John;;;\r\nFN:john@work.example\r\n" +
+            "EMAIL;TYPE=INTERNET:john@work.example\r\nEND:VCARD\r\n";
+
+        Assert.Equal("john@work.example", VCardProjector.Project(card).DisplayName);
+    }
 }

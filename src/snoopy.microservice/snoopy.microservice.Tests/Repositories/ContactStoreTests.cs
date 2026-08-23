@@ -55,7 +55,10 @@ public sealed class ContactStoreTests
         var row = new PreferencesTestDbContext(db).Contacts.Single(c => c.Id == created.Value);
         Assert.Null(row.LastName);
         Assert.Null(row.FirstName);
-        Assert.Equal("bruno@example.com", row.DisplayName);
+        // The FN of a nameless card is that card's own address, which is the writer computing a
+        // display name rather than the user choosing one: the card keeps it, the column does not.
+        Assert.Contains("FN:bruno@example.com", row.VCardRaw!);
+        Assert.Null(row.DisplayName);
         Assert.DoesNotContain('?', row.VCardRaw!);
     }
 
@@ -552,8 +555,11 @@ public sealed class ContactStoreTests
         var phone = Assert.Single(context.ContactPhones.Where(p => p.ContactId == id.Value));
         Assert.Equal("+321", phone.Number);
         Assert.Equal("CELL", phone.Type);
-        // FN as the card carries it, projected back — not copied across from the write.
-        Assert.Equal("Ana", row.DisplayName);
+        // FN as the card carries it, projected back — not copied across from the write. It is
+        // the first name alone here, so the projection has nothing to keep: `display_name` holds
+        // a display name the user chose, and this one the writer computed.
+        Assert.Contains("FN:Ana", row.VCardRaw!);
+        Assert.Null(row.DisplayName);
         Assert.Equal("Ana", row.FirstName);
         Assert.Equal("ana@example.com", Assert.Single(context.ContactEmails.Where(e => e.ContactId == id.Value)).Address);
     }

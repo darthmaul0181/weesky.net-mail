@@ -92,7 +92,9 @@ public sealed class ContactStoreBackfillTests
         Assert.Contains("FN:Jean Pierre Édité", after.VCardRaw!);
         Assert.Equal("Pierre", after.MiddleName);
         Assert.Equal("Dr.", after.NamePrefix);
-        Assert.Equal("Jean Pierre Édité", after.DisplayName);
+        // The card carries the honorific and the usage name (asserted above); the FN is the plain
+        // join of the three name columns, so the column has nothing to add to them and stays empty.
+        Assert.Null(after.DisplayName);
         Assert.Contains("neuve@n.be", after.VCardRaw!);
         Assert.DoesNotContain("old@n.be", after.VCardRaw!);
         Assert.Contains("TEL", after.VCardRaw!);          // seule la carte les portait
@@ -215,7 +217,8 @@ public sealed class ContactStoreBackfillTests
         var after = Reload(db, row.Id);
         Assert.Null(after.LastName);
         Assert.Null(after.FirstName);
-        Assert.Equal("Marie-Rose Molhan", after.DisplayName);
+        Assert.Contains("FN:Marie-Rose Molhan", after.VCardRaw!);
+        Assert.Null(after.DisplayName);      // le FN vaut le surnom : l'écrivain, pas l'utilisateur
         Assert.DoesNotContain('?', after.VCardRaw!);
     }
 

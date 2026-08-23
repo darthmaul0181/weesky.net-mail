@@ -53,13 +53,20 @@ internal static class VCardProjector
         var raw = new RawCard(vcardRaw);
         var name = First(card.NameViews)?.Value;
         var org = First(card.Organizations)?.Value;
+        var emails = Emails(card, raw);
+
+        var first = NamePart(name?.Given, ContactValidator.MaxNameLength);
+        var last = NamePart(name?.Surnames, ContactValidator.MaxNameLength);
+        var middle = NamePart(name?.Given2, ContactValidator.MaxMiddleNameLength);
+        var nickname = Joined(First(card.NickNames)?.Value, ContactValidator.MaxNameLength);
 
         return new ContactProjection(
-            NamePart(name?.Given, ContactValidator.MaxNameLength),
-            NamePart(name?.Surnames, ContactValidator.MaxNameLength),
-            Joined(First(card.NickNames)?.Value, ContactValidator.MaxNameLength),
-            Scalar(WithoutPlaceholder(First(card.DisplayNames)?.Value), MaxDisplayNameLength),
-            NamePart(name?.Given2, ContactValidator.MaxMiddleNameLength),
+            first,
+            last,
+            nickname,
+            Chosen(Scalar(WithoutPlaceholder(First(card.DisplayNames)?.Value), MaxDisplayNameLength),
+                first, middle, last, nickname, emails.FirstOrDefault()?.Address),
+            middle,
             NamePart(name?.Prefixes, ContactValidator.MaxNamePartLength),
             NamePart(name?.Suffixes, ContactValidator.MaxNamePartLength),
             Scalar(org?.Name, ContactValidator.MaxOrganizationLength),
@@ -69,7 +76,7 @@ internal static class VCardProjector
             Scalar(First(card.Urls)?.Value, ContactValidator.MaxWebsiteLength),
             Scalar(First(card.Notes)?.Value, ContactValidator.MaxNotesLength),
             Scalar(Uid(card), MaxUidLength),
-            Emails(card, raw),
+            emails,
             Phones(card, raw),
             PostalAddresses(card, raw),
             Photo(card));
@@ -280,6 +287,37 @@ internal static class VCardProjector
     private static string? NamePart(IReadOnlyList<string>? values, int width) =>
         values != null && values.Any(v => v.Length > 0 && v != Placeholder)
             ? Joined(values, width) : null;
+
+    /// <summary>
+    /// The FN the user chose, or null when the card only carries the one a writer computes.
+    ///
+    /// Every card has an FN — vCard 3.0 and 4.0 both make it mandatory, and
+    /// <see cref="VCardComposer.FallbackDisplayName"/> fills it whenever a write names none. So
+    /// projecting it verbatim made <c>display_name</c> non-null on every contact the store ever
+    /// created, and the editor then echoed that value back on the next save: the FN froze at the
+    /// shape the name had on the day the card was made, and a later rename never reached it.
+    ///
+    /// Reading it back through the rule that wrote it separates the two. What survives is a
+    /// display name that says something the components do not — <c>FN:Dr. John Smith Jr.</c> off
+    /// an import — and that is what the column was added to preserve. The card keeps its FN
+    /// either way; only the column goes empty, which is what makes the editor's box empty and
+    /// lets <c>Apply</c> recompute the FN from the names on every save.
+    ///
+    /// The address arm compares case-blind because <see cref="Emails"/> canonicalises and the FN
+    /// does not: a nameless card's FN <em>is</em> its first address, uppercase and all.
+    /// </summary>
+    private static string? Chosen(
+        string? displayName, string? first, string? middle, string? last,
+        string? nickname, string? firstAddress)
+    {
+        if (displayName == null) return null;
+        var named = VCardComposer.FallbackDisplayName(first, middle, last, nickname, null);
+        var derived = named.Length > 0
+            ? displayName == named
+            : firstAddress != null
+              && string.Equals(displayName, firstAddress, StringComparison.OrdinalIgnoreCase);
+        return derived ? null : displayName;
+    }
 
     private static string? WithoutPlaceholder(string? value) =>
         value == Placeholder ? null : value;

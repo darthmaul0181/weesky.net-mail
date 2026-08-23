@@ -39,7 +39,13 @@ public sealed class VCardCorpusTests
         {
             Assert.True(VCardSplitter.IsComplete(chunk));
             var p = VCardProjector.Project(chunk.Text);
-            Assert.NotNull(p.DisplayName); // FN is mandatory in all four
+            // FN is mandatory in all four, so every card carries one — and the projection keeps
+            // only those saying something the components do not. What reaches the column here is
+            // therefore never the plain join the writer would have produced on its own.
+            Assert.NotEqual(
+                string.Join(' ', new[] { p.FirstName, p.MiddleName, p.LastName }
+                    .Where(part => !string.IsNullOrEmpty(part))),
+                p.DisplayName);
             Assert.All(p.Addresses, a => Assert.True(ContactValidator.IsValidAddress(a.Address)));
             Assert.All(p.Addresses, a => Assert.InRange(a.Line.Pref, 1, 101));
             Assert.All(p.Phones, t => Assert.NotEqual(string.Empty, t.Number));

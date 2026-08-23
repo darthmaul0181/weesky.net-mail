@@ -216,7 +216,13 @@ internal static class VCardComposer
     private static string NamePart(params IEnumerable<string>?[] components) =>
         string.Join(' ', components.SelectMany(c => c ?? []).Where(v => !string.IsNullOrEmpty(v)));
 
-    private static string FallbackDisplayName(
+    /// <summary>
+    /// The FN a card gets when nobody typed one: its name components joined, then the nickname,
+    /// then its first address. Internal because <see cref="VCardProjector"/> runs it in reverse —
+    /// an FN this would have produced anyway is not a display name the user chose, and the column
+    /// exists to hold the ones they did.
+    /// </summary>
+    internal static string FallbackDisplayName(
         string? first, string? middle, string? last, string? nickname, string? firstAddress)
     {
         var name = string.Join(' ', new[] { first, middle, last }.Where(p => !string.IsNullOrEmpty(p)));
