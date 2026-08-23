@@ -70,11 +70,9 @@ internal sealed class WebmailUserStore(
 
         row.SecurityStamp = Guid.NewGuid();
 
-        // The three callers are all gestures of taking control back — sign out everywhere, change
-        // your password, an administrator's reset — and a synchronisation secret surviving any of
-        // them would leave the whole address book open to whoever holds it. Destroyed, not
-        // switched off: switching off is the gesture of comfort, this one is distrust. One
-        // SaveChanges, so it is one transaction with the rotation.
+        // Destroyed rather than switched off, and in the rotation's own SaveChanges so the two are
+        // one transaction. Not IDavCredentialStore.DeleteAsync: it carries a SaveChanges of its
+        // own, which would make two.
         var secret = await context.DavCredentials
             .FirstOrDefaultAsync(c => c.UserId == row.Id, cancellationToken);
         if (secret is not null) context.DavCredentials.Remove(secret);

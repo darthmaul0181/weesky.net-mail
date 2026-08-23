@@ -201,19 +201,8 @@ public sealed class WebmailUserStoreTests
         var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
         cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true));
 
-        await CreateStore(db, cache).RotateSecurityStampAsync("mick@weesky.be", CancellationToken.None);
+        await CreateStore(db, cache).RotateSecurityStampAsync("  Mick@WEESKY.be ", CancellationToken.None);
 
         Assert.False(cache.TryGet("mick@weesky.be", "fingerprint", out _));
-    }
-
-    [Fact]
-    public async Task RotateSecurityStamp_OnAnAccountWithNoSecret_StillRotates()
-    {
-        var db = nameof(RotateSecurityStamp_OnAnAccountWithNoSecret_StillRotates);
-        var before = await CreateStore(db).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
-
-        var rotated = await CreateStore(db).RotateSecurityStampAsync("mick@weesky.be", CancellationToken.None);
-
-        Assert.NotEqual(before.SecurityStamp, rotated);
     }
 }

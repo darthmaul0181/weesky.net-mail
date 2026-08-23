@@ -195,7 +195,8 @@ internal sealed class AdminRepository(
         {
             logger.LogError(ex,
                 "Password of {Email} was changed but its sessions could not be revoked: every token " +
-                "issued before this call stays valid until it expires", canonical);
+                "issued before this call stays valid until it expires, and its synchronisation " +
+                "secret still opens the whole address book", canonical);
         }
     }
 
