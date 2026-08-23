@@ -22,6 +22,12 @@ internal static class SecurityConfiguration
     {
         services.AddJwtBearerAuthentication(cookiesSupport: true);
 
+        // Basic over TLS, carrying the synchronisation secret. Registered as a scheme of its own
+        // so it is never the default: a secret opens /dav and nothing else.
+        services.AddAuthentication()
+            .AddScheme<CardDavAuthenticationOptions, CardDavAuthenticationHandler>(
+                CardDavAuthenticationDefaults.AuthenticationScheme, _ => { });
+
         // No handler is registered here: the platform brings one, and a deployment whose platform
         // has no admin directory leaves the policy unsatisfiable — the right answer for the two
         // core routes carrying it: PUT /api/AppSettings and POST /api/Contacts/Backfill (4a).
@@ -29,6 +35,14 @@ internal static class SecurityConfiguration
         {
             options.AddPolicy(AdminRequirement.PolicyName, policy =>
                 policy.RequireAuthenticatedUser().AddRequirements(new AdminRequirement()));
+
+            // Names this scheme alone, so the challenge is Basic and only Basic: a policy naming
+            // both would emit WWW-Authenticate: Bearer first, and the handler already delegates to
+            // the JWT when no Basic header is present. Declared here rather than in slice 4c-ii so
+            // the challenge shape is settled once, in the tranche that owns it.
+            options.AddPolicy(CardDavAuthenticationDefaults.PolicyName, policy => policy
+                .AddAuthenticationSchemes(CardDavAuthenticationDefaults.AuthenticationScheme)
+                .RequireAuthenticatedUser());
         });
 
         services.AddMemoryCache();
