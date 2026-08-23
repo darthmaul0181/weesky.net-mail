@@ -3567,7 +3567,7 @@ Dans `src/frontend/src/locales/en/settings.json`, ajouter `"sync": "Sync"` au bl
     "shownOnce": "Copy it now — it will not be shown again.",
     "regenerate": "Regenerate",
     "regenerateTitle": "Regenerate the sync password?",
-    "regenerateWarning": "Every device will stop syncing until you enter the new password.",
+    "regenerateWarning": "Every device will stop syncing until you enter the new password. Turn syncing off on your devices first, then enter the new one — repeated failures lock the account out for fifteen minutes.",
     "hidden": "Hidden — regenerate to get a new one",
     "loadFailed": "Could not load the sync settings",
     "saveFailed": "Could not save the change"
@@ -3591,7 +3591,7 @@ Dans `fr/settings.json`, les mêmes clés, avec l'insécable avant `?` et l'apos
     "shownOnce": "Copiez-le maintenant : il ne sera plus affiché.",
     "regenerate": "Régénérer",
     "regenerateTitle": "Régénérer le mot de passe de synchronisation ?",
-    "regenerateWarning": "Tous les appareils cesseront de se synchroniser jusqu’à la saisie du nouveau mot de passe.",
+    "regenerateWarning": "Tous les appareils cesseront de se synchroniser jusqu’à la saisie du nouveau mot de passe. Désactivez d’abord la synchronisation sur vos appareils, puis saisissez le nouveau : des échecs répétés bloquent le compte un quart d’heure.",
     "hidden": "Masqué — régénérez pour en obtenir un nouveau",
     "loadFailed": "Impossible de charger les réglages de synchronisation",
     "saveFailed": "Impossible d’enregistrer la modification"
@@ -3778,6 +3778,8 @@ Points de rendu à ne pas approximer :
 - **`Server URL` et `Username` sont toujours rendus**, allumé ou éteint.
 - Le mot de passe : si `secret` est non nul, `<code className="sync-secret">{secret}</code>` plus le bouton de copie et `<p className="sync-secret-note">{t('sync.shownOnce')}</p>` ; sinon, `state.configured ? t('sync.hidden') : null`. **Aucun bouton « révéler », dans aucune branche.**
 - `Regenerate` n'est rendu que si `state.configured`, et ouvre la boîte plutôt que d'appeler l'API.
+**Pourquoi l’avertissement dit l’ordre, et pas seulement la conséquence.** Une régénération met chaque appareil configuré en boucle d’échec, et `AuthAttemptThrottle` bloque à dix échecs par quart d’heure sur l’identifiant ; un cycle de synchronisation en vaut plusieurs, donc deux appareils suffisent à franchir le seuil. Or `IsBlocked` s’exécute **avant** la comparaison du condensat, et seul un succès efface la clé : une fois bloqué, saisir le bon secret répond `429`. L’utilisateur doit donc éteindre la synchronisation avant de régénérer, pas après.
+
 - La boîte de confirmation reprend `.modal-overlay` / `.modal` / `.modal-header` / `.modal-title` / `.modal-close`, son corps est `t('sync.regenerateWarning')` et son bouton d'action porte `aria-label={t('sync.regenerateTitle')}`.
 - `Last used` : `state.lastUsedAt ? relativeFromNow(state.lastUsedAt) : t('sync.neverUsed')`.
 - Copie : `navigator.clipboard.writeText(value)` puis `addToast(t('sync.copied'))`, l'échec restant silencieux — un presse-papiers refusé n'est pas une erreur à afficher.
@@ -3974,6 +3976,7 @@ MSG
   donc un attribut sans nom de politique répondrait `WWW-Authenticate: Bearer` à un client CardDAV,
   qui n'a pas de jeton et ne sait pas en demander. Toute route `/dav` porte
   `[Authorize(Policy = CardDavAuthenticationDefaults.PolicyName)]`, jamais autre chose.
+- **Le piège du limiteur après une régénération**, que 4c-i ne peut pas fermer : le contrôleur pourrait effacer la clé de l’identifiant en régénérant — l’appelant vient de prouver son identité par un JWT — mais `AuthAttemptThrottle` est `internal` et un contrôleur public ne peut pas le prendre en paramètre. Il faut une couture, et la clé d’adresse resterait de toute façon. 4c-ii la pose ou l’assume.
 - **Le résidu de soixante secondes sur la révocation** : `Forget` ne peut pas battre un `Store`
   concurrent — une requête qui a lu l'ancien secret avant la rotation peut le réinscrire après.
   Le fermer demande un compteur de génération dans `IDavAuthenticationCache` ; c'est le bon
