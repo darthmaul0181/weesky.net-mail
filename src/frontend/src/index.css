@@ -2463,8 +2463,12 @@ body {
 .contact-card-value { font-size: 13px; color: var(--text); min-width: 0; overflow-wrap: break-word; }
 /* The type the card stores and the editor lets you pick — Mobile, Domicile, Bureau — which this
    screen used to drop, leaving three numbers as three indistinguishable lines. */
+/* nowrap on both badges: `.contact-card-value` carries `overflow-wrap: break-word` for the long
+   unbroken addresses this book is full of, and an inline child inherits it — so on a 360px screen
+   PRINCIPALE broke after PRI and finished on the next line. The value still breaks; its badges
+   move whole to the next line instead. */
 .contact-card-type {
-  margin-left: 8px; padding: 1px 7px; border-radius: 10px;
+  margin-left: 8px; padding: 1px 7px; border-radius: 10px; white-space: nowrap;
   background: var(--surface-sunken); color: var(--text-muted);
   font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
 }
@@ -2484,7 +2488,7 @@ body {
 .contact-card-value a:hover { text-decoration: underline; }
 .contact-card-primary {
   margin-left: 8px; color: var(--text-muted); font-size: 10px; text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: .04em; white-space: nowrap;
 }
 
 /* In the head beside the name, not a band under the card. `margin-left: auto` rather than a
@@ -2790,14 +2794,21 @@ body {
   /* The card is the whole screen, so its ← is a primary control rather than the reader's inline
      26px arrow. */
   .contact-card-back { width: var(--touch); height: var(--touch); }
-  /* The card is the whole screen here, and the banner plus the disc plus the quick row came to
-     276px before a single datum. Everything shrinks by the same proportion so the disc keeps
-     straddling the band's edge: the negative margin is half the disc, in both tiers. */
-  .contact-card-banner { height: 72px; }
-  .contact-card-avatar { width: 64px; height: 64px; margin-top: -32px; }
+  /* The straddle is a desktop flourish and it cannot survive here, because the back arrow only
+     exists on this tier and the band's top-left is exactly where the disc's negative margin puts
+     it: measured on a 360px screen, the two shared x 22..58 and y 40..56, the arrow's whole hit
+     area under an opaque disc. Tuning the offset does not fix it — a 64px disc needs the margin
+     above -16 to clear a 44px arrow, and at -16 there is no straddle left to speak of. So on the
+     phone the band is the arrow's own row and the disc sits under it. The ring goes with the
+     overlap: it exists to cut the disc out of two grounds, and here there is only one. */
+  .contact-card-banner { height: auto; }
+  .contact-card-identity { padding: 0 18px; }
+  .contact-card-avatar {
+    width: 64px; height: 64px; margin-top: 14px; border-width: 0;
+  }
   .contact-card-avatar.is-initials { font-size: 22px; }
   .contact-card-name { margin-top: 10px; font-size: 20px; }
-  .contact-card-quick { padding-top: 14px; }
+  .contact-card-quick { padding: 14px 18px 0; }
   .contact-card-rows { padding: 18px; }
 
   /* 31px on its own 7px padding, and the only navigation the drawer holds. */
@@ -2858,6 +2869,29 @@ body {
      any width, which spends 189px on "Modifier le contact" and 163px on "Enregistrer le contact"
      — the ✕ takes a second line instead of the surface's own name being ellipsised. */
   .contact-editor-head { flex-wrap: wrap; }
+
+  /* The editor was rebuilt into a hero and two columns after this block was written, and nothing
+     here was told: a 360px screen was splitting into 1.05fr and 1fr, which left each field about
+     150px — the postal row's two boxes then read `Rég` and `Pay`, and the hero's second name
+     column ran off the right edge. One column at this tier, in both places, and the aside's rule
+     turns from vertical to horizontal since there is no longer anything beside it. */
+  .contact-editor-cols { grid-template-columns: 1fr; }
+  .contact-editor-col { padding: 18px 14px 22px; }
+  .contact-editor-col.is-aside { border-left: 0; border-top: 1px solid var(--border); }
+  .contact-editor-identity { grid-template-columns: 1fr; }
+  /* The hero stacks rather than staying a row: beside a 60px disc the name boxes measured 186px
+     of a 332px column, and they are the fields this tier exists to widen. A grid rather than
+     `flex-direction: column` because the disc and the favourite belong on one line — column would
+     have left the star alone on a row of its own. `1 / -1` on the identity is what takes the whole
+     width back. */
+  .contact-editor-hero {
+    display: grid; grid-template-columns: auto 1fr; align-items: center;
+    padding: 18px 14px; gap: 14px;
+  }
+  .contact-editor-hero > .contact-star { justify-self: end; }
+  .contact-editor-identity { grid-column: 1 / -1; }
+  .contact-editor-avatar { width: 60px; height: 60px; }
+  .contact-editor-avatar.is-initials { font-size: 21px; }
   /* Make-primary and remove-address: 28px squares, and the only way to reorder or drop an address.
      The input beside them carries min-width: 0, so the width they take comes out of it. */
   .contact-address-row .admin-icon-btn { min-width: var(--touch); min-height: var(--touch); }
