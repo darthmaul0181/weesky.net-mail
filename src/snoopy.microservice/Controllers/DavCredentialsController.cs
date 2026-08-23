@@ -24,9 +24,9 @@ public sealed class DavCredentialsController(
 {
     private const string NotServed = "Synchronisation is not available on this deployment";
 
-    /// <summary>The spelling the cache is keyed on; it compares byte for byte and compensates for
-    /// nothing, so a Forget under another casing revokes nothing.</summary>
-    private string CacheIdentifier => IdentityResolver.Canonical(AuthenticatedUser.Email);
+    /// <summary>The spelling the cache is keyed on, and the one the screen tells the user to type;
+    /// the cache compares byte for byte, so a Forget under another casing revokes nothing.</summary>
+    private string Identifier => IdentityResolver.Canonical(AuthenticatedUser.Email);
 
     /// <summary>
     /// Returns the synchronisation state
@@ -81,7 +81,7 @@ public sealed class DavCredentialsController(
 
         // The cached entry carries the switch state, so it answers with the old one for the rest
         // of the window — in both directions: a 200 after switching off, a 403 after switching on.
-        cache.Forget(CacheIdentifier);
+        cache.Forget(Identifier);
 
         logger.LogInformation("Audit: carddav_sync user={UserId} enabled={Enabled} created={Created}",
             AuthenticatedUser.WebmailUid, toggle.Enabled, secret is not null);
@@ -111,7 +111,7 @@ public sealed class DavCredentialsController(
         // Regenerating what was never enabled is not a create: the switch is the only door in.
         if (secret is null) return NotFoundEnveloppe("Synchronisation has never been enabled");
 
-        cache.Forget(CacheIdentifier);
+        cache.Forget(Identifier);
         logger.LogInformation("Audit: carddav_regenerate user={UserId}", AuthenticatedUser.WebmailUid);
 
         return Ok(await ViewAsync(secret, cancellationToken));
@@ -123,7 +123,7 @@ public sealed class DavCredentialsController(
 
         return new DavCredentialsView(
             davOptions.Value.PublicUrl!,
-            AuthenticatedUser.Email,
+            Identifier,
             state.Configured,
             state.CardDavEnabled,
             state.LastUsedAt,
