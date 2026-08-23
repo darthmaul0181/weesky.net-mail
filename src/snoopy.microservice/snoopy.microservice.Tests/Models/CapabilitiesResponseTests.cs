@@ -10,7 +10,7 @@ public sealed class CapabilitiesResponseTests
 
     private static CapabilitiesResponse Response() => new(
         "weesky", Admin: true, Aliases: true, PasswordChange: true, ProfileEditing: true,
-        StrictIdentities: true, Quota: true, Rules: true);
+        StrictIdentities: true, Quota: true, Rules: true, Dav: true);
 
     /// <summary>
     /// Pins the camelCase names the frontend gates on. A drift here — a rename, a reorder that
@@ -26,6 +26,7 @@ public sealed class CapabilitiesResponseTests
     [InlineData("strictIdentities")]
     [InlineData("quota")]
     [InlineData("rules")]
+    [InlineData("dav")]
     public void Serialize_NamesThePropertiesAsTheFrontendReadsThem(string property)
     {
         var json = JsonSerializer.Serialize(Response(), Web);

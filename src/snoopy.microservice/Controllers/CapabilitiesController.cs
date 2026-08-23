@@ -19,6 +19,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 public sealed class CapabilitiesController(
     IOptions<PlatformOptions> platformOptions,
     IOptions<SieveOptions> sieveOptions,
+    IOptions<DavOptions> davOptions,
     IAliasDirectory aliasDirectory,
     IAccountInfoProvider accountInfo,
     IAccountConnectionResolver connections,
@@ -59,7 +60,10 @@ public sealed class CapabilitiesController(
             ProfileEditing: isWeesky,
             StrictIdentities: aliasDirectory.EnforcesOwnership,
             Quota: session.Value.SupportsQuota,
-            Rules: rules));
+            Rules: rules,
+            // Configured means served: a deployment with no published address has no /dav, and the
+            // Sync tab must not be a dead row on its settings screen.
+            Dav: davOptions.Value.IsConfigured));
     }
 
     /// <summary>A failed account lookup means "not admin", not an error for the whole response —
