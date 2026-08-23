@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace weesky.Snoopy.Microservice.Models;
 
 /// <summary>
@@ -17,12 +19,18 @@ public sealed class DavOptions
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(PublicUrl);
 
+    // An explicit ":443" is indistinguishable from no port at all once Uri has parsed it —
+    // IsDefaultPort and Authority both normalise it away — so the literal text is checked instead.
+    private static readonly Regex ExplicitPort = new(@"^https://(\[[^\]]+\]|[^:/]+):\d+$", RegexOptions.Compiled);
+
     /// <summary>Validated on start rather than on first use, where an operator is watching.</summary>
     internal static bool IsBareHttpsOrigin(string? value) =>
         string.IsNullOrWhiteSpace(value)
-        || (Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        || (value == value.Trim()
+            && Uri.TryCreate(value, UriKind.Absolute, out var uri)
             && uri.Scheme == Uri.UriSchemeHttps
             && uri.IsDefaultPort
             && uri.PathAndQuery == "/"
-            && !value.EndsWith('/'));
+            && !value.EndsWith('/')
+            && !ExplicitPort.IsMatch(value));
 }

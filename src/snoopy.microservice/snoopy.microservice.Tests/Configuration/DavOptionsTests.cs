@@ -30,10 +30,15 @@ public sealed class DavOptionsTests
     }
 
     [Fact]
-    public void NoValueAtAll_IsLegalAndMeansTheFeatureIsOff()
+    public void NullValue_IsLegalAndMeansTheFeatureIsOff()
     {
         // A deployment that serves no /dav must not be forced to invent an address.
         Assert.False(Build(null).IsConfigured);
+    }
+
+    [Fact]
+    public void EmptyValue_IsLegalAndMeansTheFeatureIsOff()
+    {
         Assert.False(Build("").IsConfigured);
     }
 
@@ -43,9 +48,15 @@ public sealed class DavOptionsTests
     [InlineData("https://api.mail.weesky.net/")]
     // A port is ignored by some iOS versions, which try 443 then 80 whatever they were given.
     [InlineData("https://api.mail.weesky.net:8443")]
+    // An explicit default port is still a port an operator wrote — Uri normalises it away, but the
+    // client on the wire got told to include one.
+    [InlineData("https://api.mail.weesky.net:443")]
     // Basic carries the secret in clear; an http address published here invites exactly that.
     [InlineData("http://api.mail.weesky.net")]
     [InlineData("api.mail.weesky.net")]
+    // Whitespace makes the stored value differ from the one that was validated.
+    [InlineData(" https://api.mail.weesky.net")]
+    [InlineData("https://api.mail.weesky.net ")]
     public void AnythingElse_RefusesToStart(string publicUrl)
     {
         var exception = Assert.Throws<OptionsValidationException>(() => Build(publicUrl));
