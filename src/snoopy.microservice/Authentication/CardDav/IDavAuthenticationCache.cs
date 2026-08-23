@@ -8,6 +8,10 @@ public readonly record struct DavIdentity(Guid UserId, bool CardDavEnabled);
 /// the amortisation of <c>last_used_at</c>. Both live in memory, per instance, and both are
 /// assumed as such — shared, they would cost the read they exist to avoid; lost on redeploy, they
 /// cost one extra lookup and one extra write per user.
+///
+/// Every <c>identifier</c> below is the full address, already trimmed and lower-cased by the
+/// caller — the same canonicalisation <c>WebmailUserStore</c> applies. The cache compares it
+/// byte for byte and never compensates for a different casing.
 /// </summary>
 public interface IDavAuthenticationCache
 {
@@ -21,15 +25,17 @@ public interface IDavAuthenticationCache
     void Store(string identifier, string fingerprint, DavIdentity identity);
 
     /// <summary>
-    /// Drops what is known about an account, so a regenerated or revoked secret stops working on
-    /// this instance at once. On the others the window is the ceiling — the same trade sessions make.
+    /// Drops the cached authentication for an account, so a regenerated or revoked secret stops
+    /// working on this instance at once — the touch throttle survives, since it holds no secret
+    /// to invalidate. On the others the window is the ceiling — the same trade sessions make.
     /// </summary>
     void Forget(string identifier);
 
     /// <summary>
-    /// True at most once an hour per account. Called on every authenticated request, so answering
-    /// true every time would be one write per PROPFIND for a column the screen renders in the
-    /// relative past.
+    /// True roughly once an hour per account — the read-then-write below is not locked, so two
+    /// concurrent callers can each observe true once. Called on every authenticated request, so
+    /// answering true every time would be one write per PROPFIND for a column the screen renders
+    /// in the relative past.
     /// </summary>
     bool ShouldTouch(Guid userId);
 }

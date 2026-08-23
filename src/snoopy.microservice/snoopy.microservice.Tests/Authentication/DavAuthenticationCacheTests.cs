@@ -46,14 +46,39 @@ public sealed class DavAuthenticationCacheTests
     }
 
     [Fact]
+    public void TryGet_HitsJustInsideTheWindow()
+    {
+        var (cache, clock) = Create();
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+
+        clock.Now = clock.Now.Add(DavAuthenticationCache.Window - TimeSpan.FromSeconds(1));
+
+        Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-a", out _));
+    }
+
+    [Fact]
     public void TryGet_MissesOnceTheWindowHasPassed()
     {
         var (cache, clock) = Create();
         cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
 
-        clock.Now = clock.Now.Add(SessionGuardWindow + TimeSpan.FromSeconds(1));
+        clock.Now = clock.Now.Add(DavAuthenticationCache.Window + TimeSpan.FromSeconds(1));
 
         Assert.False(cache.TryGet("alice@weesky.be", "fingerprint-a", out _));
+    }
+
+    [Fact]
+    public void Store_UnderTheSameIdentifier_ReplacesTheOnlyEntry()
+    {
+        // One entry per identifier, not per (identifier, fingerprint) pair: a second Store for
+        // the same account retires the first fingerprint rather than keeping both alive.
+        var (cache, _) = Create();
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+
+        cache.Store("alice@weesky.be", "fingerprint-b", new DavIdentity(User, true));
+
+        Assert.False(cache.TryGet("alice@weesky.be", "fingerprint-a", out _));
+        Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-b", out _));
     }
 
     [Fact]
@@ -67,6 +92,29 @@ public sealed class DavAuthenticationCacheTests
         cache.Forget("alice@weesky.be");
 
         Assert.False(cache.TryGet("alice@weesky.be", "fingerprint-a", out _));
+    }
+
+    [Fact]
+    public void Forget_LeavesAnotherIdentifiersEntryIntact()
+    {
+        var (cache, _) = Create();
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("bob@weesky.be", "fingerprint-b", new DavIdentity(Guid.NewGuid(), true));
+
+        cache.Forget("alice@weesky.be");
+
+        Assert.True(cache.TryGet("bob@weesky.be", "fingerprint-b", out _));
+    }
+
+    [Fact]
+    public void TryGet_DoesNotCanonicaliseTheIdentifier_TheCallerMustHave()
+    {
+        // The contract (IDavAuthenticationCache) puts canonicalisation on the caller; this pins
+        // that the cache itself compares byte for byte rather than compensating for casing.
+        var (cache, _) = Create();
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+
+        Assert.False(cache.TryGet("Alice@weesky.be", "fingerprint-a", out _));
     }
 
     [Fact]
@@ -105,6 +153,4 @@ public sealed class DavAuthenticationCacheTests
         Assert.True(cache.ShouldTouch(User));
         Assert.True(cache.ShouldTouch(other));
     }
-
-    private static TimeSpan SessionGuardWindow => TimeSpan.FromSeconds(60);
 }
