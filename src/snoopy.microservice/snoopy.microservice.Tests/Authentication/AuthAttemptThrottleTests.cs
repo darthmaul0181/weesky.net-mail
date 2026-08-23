@@ -154,6 +154,31 @@ public sealed class AuthAttemptThrottleTests
     }
 
     [Fact]
+    public void TwoIPv4MappedAddresses_DoNotShareACounter()
+    {
+        // Kestrel reports an IPv4 peer on a dual-stack socket in this mapped form; unmasked, every
+        // such address would collapse to the same /64 and block every IPv4 client at once.
+        var (throttle, _) = Create();
+
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure($"user{i}@weesky.be", "::ffff:203.0.113.7");
+
+        Assert.False(throttle.IsBlocked("someone-else@weesky.be", "::ffff:198.51.100.9", out _));
+    }
+
+    [Fact]
+    public void AnIPv4MappedAddress_SharesACounterWithItsPlainForm()
+    {
+        // The two spellings name the same host, so they must key to the same counter.
+        var (throttle, _) = Create();
+
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure($"user{i}@weesky.be", "::ffff:203.0.113.7");
+
+        Assert.True(throttle.IsBlocked("someone-else@weesky.be", "203.0.113.7", out _));
+    }
+
+    [Fact]
     public void ThePartialWindow_DropsOnlyTheStampsThatAged()
     {
         var (throttle, clock) = Create();
@@ -178,6 +203,27 @@ public sealed class AuthAttemptThrottleTests
         // Derived from the second batch's oldest surviving stamp (6min old), not restarted from
         // the fresh third batch, which would otherwise report the full 15min window.
         Assert.Equal(TimeSpan.FromMinutes(9), retryAfter);
+    }
+
+    [Fact]
+    public void TheCapOnOneKey_LetsTheWindowExpireDespiteContinuedAttack()
+    {
+        var (throttle, clock) = Create();
+
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure("alice@weesky.be", "203.0.113.7");
+
+        clock.Now = clock.Now.Add(TimeSpan.FromMinutes(1));
+
+        // Past the cap these are refused, not appended. Uncapped, each would carry its own
+        // fifteen-minute expiry from t0+1min and keep the key blocked until t0+16min — past the
+        // point this test checks.
+        for (var i = 0; i < 100; i++)
+            throttle.RecordFailure("alice@weesky.be", "203.0.113.7");
+
+        clock.Now = clock.Now.Add(TimeSpan.FromMinutes(14) + TimeSpan.FromSeconds(1));
+
+        Assert.False(throttle.IsBlocked("alice@weesky.be", "203.0.113.7", out _));
     }
 
     [Fact]

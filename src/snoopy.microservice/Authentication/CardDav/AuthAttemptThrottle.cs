@@ -15,8 +15,7 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     /// <summary>The keys are values the attacker chooses, so their number is capped.</summary>
     internal const int MaxTrackedKeys = 10_000;
 
-    /// <summary>Batch target once eviction runs, so the O(n log n) sort amortises over many
-    /// insertions instead of running on every request while the table is full.</summary>
+    /// <summary>Batch target once eviction runs, so the sort amortises over many insertions.</summary>
     private const int LowWaterMark = (int)(MaxTrackedKeys * 0.9);
 
     internal static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
@@ -65,10 +64,8 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     }
 
     /// <summary>
-    /// Stops enqueuing once <see cref="MaxFailures"/> stamps survive pruning: past the threshold
-    /// the key is blocked either way, and retryAfter still derives from the oldest surviving
-    /// stamp, so the cap bounds one key's memory regardless of attack volume without changing any
-    /// decision.
+    /// Stops enqueuing past <see cref="MaxFailures"/> surviving stamps: the key is blocked either
+    /// way, so this bounds one key's memory without changing that decision.
     /// </summary>
     private void RecordFailureForKey(string key, DateTimeOffset now)
     {
@@ -105,23 +102,21 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     private static string IdentifierKey(string identifier) => $"id:{identifier.Trim().ToLowerInvariant()}";
 
     /// <summary>
-    /// IPv6 addresses collapse to their /64 — the routine allocation unit — so an attacker cannot
-    /// spray 2^64 addresses to spend the table or dodge the counter for free. IPv4 addresses, and
-    /// anything that fails to parse, keep their raw string; a household sharing a /64 shares one
-    /// counter, which ten failures in fifteen minutes is not a threshold ordinary use reaches.
+    /// IPv6 addresses collapse to their /64. An IPv4-mapped IPv6 address (Kestrel's shape for an
+    /// IPv4 peer on a dual-stack socket) unmaps first, so it keys with its plain IPv4 form instead
+    /// of masking away the address it carries. Anything unparsable keeps its raw string.
     /// </summary>
     private static string? AddressKey(string? address)
     {
         if (string.IsNullOrWhiteSpace(address)) return null;
+        if (!IPAddress.TryParse(address, out var parsed)) return $"ip:{address}";
 
-        if (IPAddress.TryParse(address, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetworkV6)
-        {
-            var bytes = parsed.GetAddressBytes();
-            for (var i = 8; i < bytes.Length; i++) bytes[i] = 0;
-            return $"ip:{new IPAddress(bytes)}/64";
-        }
+        if (parsed.IsIPv4MappedToIPv6) parsed = parsed.MapToIPv4();
+        if (parsed.AddressFamily != AddressFamily.InterNetworkV6) return $"ip:{parsed}";
 
-        return $"ip:{address}";
+        var bytes = parsed.GetAddressBytes();
+        for (var i = 8; i < bytes.Length; i++) bytes[i] = 0;
+        return $"ip6:{new IPAddress(bytes)}";
     }
 
     private static void Prune(Queue<DateTimeOffset> stamps, DateTimeOffset now)
@@ -160,7 +155,7 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
         foreach (var key in oldest) failures.TryRemove(key, out _);
     }
 
-    /// <summary>The newest stamp is the queue's tail by construction — no need to search for it.</summary>
+    /// <summary>Walks to the queue's tail — the newest stamp by construction — instead of computing a max.</summary>
     private static DateTimeOffset Newest(Queue<DateTimeOffset> stamps)
     {
         lock (stamps)
