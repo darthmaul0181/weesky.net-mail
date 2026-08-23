@@ -10,6 +10,7 @@ import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
 import PhoneIcon from '../../icons/PhoneIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
+import { birthdayToInput, inputToBirthday } from './contactBirthday'
 import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeLabel, typeOptions } from './contactLineTypes'
 import { initialsOf } from './contactName'
 import type {
@@ -120,7 +121,7 @@ export default function ContactEditView({
   const [lastName, setLastName] = useState(contact?.lastName ?? '')
   const [nickname, setNickname] = useState(contact?.nickname ?? '')
   const [isFavorite, setIsFavorite] = useState(contact?.isFavorite ?? false)
-  const [birthday, setBirthday] = useState(contact?.birthday ?? '')
+  const [birthday, setBirthday] = useState(birthdayToInput(contact?.birthday))
   const [scalars, setScalars] = useState<Record<OptionalKey, string>>(() =>
     Object.fromEntries(OPTIONAL.map(f => [f.key, contact?.[f.key] ?? ''])) as Record<OptionalKey, string>)
   // What the card seeded, held for the whole life of the form: `submitted` reads it to tell a
@@ -226,7 +227,9 @@ export default function ContactEditView({
 
     onSave({
       ...scalarsToDraft(scalars, seededScalars),
-      birthday: submitted(birthday, seededBirthday),
+      // Compared as typed and stored as vCard: an untouched field is null and the card keeps the
+      // spelling it arrived with, time component and all.
+      birthday: submitted(birthday, seededBirthday) === null ? null : inputToBirthday(birthday),
       firstName: blank(firstName),
       lastName: blank(lastName),
       nickname: blank(nickname),
@@ -491,7 +494,11 @@ export default function ContactEditView({
         </div>
 
         {/* A native date picker can only express a full date; the vCard admits three others
-            (décision 7), so this stays text and the value travels exactly as typed. */}
+            (décision 7), so this stays text. What travels is no longer what is typed: the field
+            reads and writes through contactBirthday, so a card exported by a phone shows as a date
+            instead of as `19930621T115900Z`, and the placeholder's own `27/10/1979` is stored as
+            the vCard spelling instead of verbatim. Text neither form recognises still passes
+            through untouched — that is the escape hatch décision 7 asked for. */}
         <span className="field-v-label"><CalendarIcon size={15} />{t('editor.misc')}</span>
 
         <div className="field-v">

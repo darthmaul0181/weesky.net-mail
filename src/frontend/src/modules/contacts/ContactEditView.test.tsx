@@ -477,6 +477,31 @@ describe('ContactEditView', () => {
     expect(screen.getByLabelText(/organisation/i)).toBeInTheDocument()
   })
 
+  it('l’anniversaire d’une carte de téléphone se lit comme une date', () => {
+    setup({ contact: { ...bruno, birthday: '19930621T115900Z' } })
+
+    expect(screen.getByLabelText(/birthday/i)).toHaveValue('21/06/1993')
+  })
+
+  /* Ce que le champ montre n’est plus ce que la carte porte, donc l’égalité qui décide de ne rien
+     envoyer se juge sur la forme tapée. Sans ça, éditer le nom réécrirait l’anniversaire et lui
+     ferait perdre son heure. */
+  it('un anniversaire non touché n’est pas réécrit par une modification voisine', async () => {
+    const { onSave } = setup({ contact: { ...bruno, birthday: '19930621T115900Z' } })
+    await userEvent.type(screen.getByLabelText(/first name/i), 'x')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave.mock.calls[0][0].birthday).toBeNull()
+  })
+
+  it('un anniversaire tapé part dans l’orthographe du vCard', async () => {
+    const { onSave } = setup({ contact: bruno })
+    await userEvent.type(screen.getByLabelText(/birthday/i), '27/10/1979')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave.mock.calls[0][0].birthday).toBe('1979-10-27')
+  })
+
   it('l’anniversaire accepte une forme que nul calendrier n’exprime', async () => {
     const { onSave } = setup({ contact: bruno })
     await userEvent.type(screen.getByLabelText(/birthday/i), '--10-27')
