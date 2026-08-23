@@ -45,7 +45,7 @@ Un seul spec, deux plans d'implémentation, dans cet ordre strict :
 - **4c-i — l'identifiant de synchronisation et son écran.** Table, engendrement, hachage, schéma
   d'authentification, API, et l'onglet « Sync » des paramètres — interrupteur, valeurs à copier,
   régénération (décisions 1, 2 et 19). Livrable et testable seul.
-- **4c-ii — le serveur DAV.** Découverte, `PROPFIND`, les trois `REPORT`, les verbes, les ETags,
+- **4c-ii — le serveur DAV.** Découverte, `PROPFIND`, les quatre `REPORT`, les verbes, les ETags,
   la séquence, les pierres tombales et l'historique des cartes remplacées.
 
 Couper là n'est pas cosmétique : sans 4c-i, 4c-ii n'a aucune authentification, et un plan couvrant
@@ -108,20 +108,45 @@ le compromis déjà retenu pour les sessions, et il vaut ici pour la même raiso
 **Un échec d'authentification coûte un délai aléatoire avant le `401`.** La recherche exhaustive est
 vaine, mais chaque tentative non authentifiée reste une lecture de table, et le temps de réponse nu
 révélerait l'existence du compte. Un
-délai aléatoire de quelques centaines de millisecondes après l'échec — le modèle de Radicale,
-explicitement contre les oracles de temps — efface les deux signaux pour un coût nul ; son absence
-sur le Basic DAV a valu un avis de sécurité à Nextcloud (GHSA-mr7q-xf62-fw54). Le délai ne retient
+délai aléatoire après l'échec — le modèle de Radicale : 500 à 1500 ms, tirés dans un code dont le
+commentaire dit littéralement « Random delay to avoid timing oracles and bruteforce attacks » —
+brouille les deux signaux pour un coût nul ; l'absence de toute protection sur le Basic DAV a valu
+un avis de sécurité à Nextcloud (CVE-2023-32319, publié chez nextcloud/security-advisories). Le délai ne retient
 aucune ressource : `await Task.Delay`, jamais `Thread.Sleep` — un délai bloquant ferait du
 ralentisseur un épuisement de pool, c'est-à-dire l'attaque qu'il devait rendre inutile. Pas de
 verrou, pas de connexion base ouverte pendant l'attente.
 
 **Mais un délai n'est pas une limitation de débit**, et il faut l'écrire pour que la décision ne se
-lise pas comme une protection complète : il efface l'oracle de temps, il ne borne rien pour qui
-ouvre mille connexions en parallèle. La recherche exhaustive sur 100 bits reste vaine, ce qui ne
-l'est pas est le coût que l'attaquant nous impose. Un compteur d'échecs glissant — par adresse IP
-**et** par identifiant, les deux, puisque l'un vise un compte depuis partout et l'autre tous les
-comptes depuis une machine — refuse au-delà d'un seuil sans rien lire en base. Nextcloud n'a pas
-ajouté qu'un délai après l'avis cité ; il a ajouté ce compteur, et pour cette raison exactement.
+lise pas comme une protection complète : un bruit additif se moyenne sur assez d'échantillons, et il
+ne borne rien pour qui ouvre mille connexions en parallèle. La recherche exhaustive sur 100 bits
+reste vaine, ce qui ne l'est pas est le coût que l'attaquant nous impose. Un compteur d'échecs
+glissant — par adresse IP **et** par identifiant, les deux, puisque l'un vise un compte depuis
+partout et l'autre tous les comptes depuis une machine — refuse au-delà d'un seuil sans rien lire en
+base ; c'est aussi lui qui rend le délai suffisant, en bornant le nombre d'échantillons qu'un
+attaquant peut moyenner. Le précédent Nextcloud, rapporté exactement : son limiteur existait des
+années avant l'avis cité — le correctif a bouché un chemin de code qui répondait **avant** de
+compter —, sa clé est le sous-réseau seul, l'identifiant n'y étant qu'une métadonnée, et son remède
+est un délai exponentiel plafonné à 25 s puis un refus `429`. La paire IP + identifiant retenue ici
+est plus fine que la sienne.
+
+Trois précisions font du compteur autre chose qu'une intention. **L'adresse est celle que
+`ForwardedHeaders` restitue** — le service est derrière le proxy : `RemoteIpAddress` nu serait
+l'adresse du proxy pour tout le monde, et le premier attaquant ferait franchir le seuil à tous les
+utilisateurs à la fois ; l'en-tête cru, sans liste de proxys de confiance, se forgerait à volonté.
+La configuration existante (`KnownProxies` + `XForwardedFor`) est déjà la bonne ; le compteur la
+consomme, il ne lit jamais l'en-tête lui-même. **Sa mémoire est bornée, avec éviction** — ses clés
+sont des identifiants et des adresses que l'attaquant choisit, et sans plafond le compteur serait
+lui-même l'épuisement de mémoire qu'une requête non authentifiée ne doit pas pouvoir causer. **La
+fenêtre glisse sur quinze minutes et un succès réinitialise le compte de son identifiant** — sans
+quoi le vrai téléphone, qui réessaie derrière l'attaquant, resterait dehors l'attaque finie.
+
+**Le seuil atteint répond `429` avec `Retry-After`, jamais `401`.** Un `401` dit « mot de passe
+faux » : les clients l'affichent, certains décrochent le compte — et pendant une attaque sur un
+identifiant, tous les appareils de sa victime diraient que son secret est devenu mauvais. Le `429`
+est ce que Nextcloud rend au même bord pour la même raison, et c'est le raisonnement déjà appliqué
+au `503` de l'attente de verrou : dire « reviens plus tard » avec le code qui le dit. Le revers est
+nommé : saturer le seuil d'un identifiant coupe sa synchronisation tant que l'attaque dure — un déni
+ciblé, borné par la fenêtre, préféré à l'alternative qui laisserait compter sans fin.
 Le compteur vit en mémoire, par instance : le seuil effectif se multiplie par le nombre
 d'instances, le même échange que l'amortissement et le cache ci-dessus, assumé pour la même raison.
 
@@ -176,8 +201,12 @@ fois.
 
 **Le défi doit être Basic, et Basic seul, sur `/dav`.** `AuthorizationExtension` pose JwtBearer en
 `DefaultChallengeScheme` ; un `[Authorize(AuthenticationSchemes = "Bearer,CardDav")]` ferait émettre
-`WWW-Authenticate: Bearer` **avant** `Basic`, et plusieurs clients DAV ne lisent que le premier
-défi — le symptôme serait un carnet qui refuse un mot de passe pourtant valide. Les routes `/dav`
+`WWW-Authenticate: Bearer` **avant** `Basic`. Aucun client n'est documenté qui ne lise que le
+premier défi — c'est une précaution qui ne coûte rien, pas un fait établi, et 4d ne pourra ni la
+confirmer ni l'infirmer ; le risque documenté chez les clients est ailleurs : un défi `Basic` sans
+`realm` fait ressaisir ses identifiants à Thunderbird à chaque lancement, et le realm est une clé de
+trousseau côté client — la chaîne `weesky CardDAV` ne doit jamais varier entre déploiements. Les
+routes `/dav`
 authentifient donc sur les deux schémas mais **défient** sur `CardDav` seul, ce qu'une politique
 d'autorisation nommée fixe une fois (`AuthenticationSchemes` pour la lecture, `CardDav` comme schéma
 de défi), et le test d'authentification épingle qu'un `401` de `/dav` ne porte qu'un `Basic`.
@@ -204,7 +233,9 @@ cette décision se lit exactement à l'envers ici. Éteindre est un geste de con
 sait ce qu'il fait ; une rotation de `security_stamp` est un geste de défiance, et ce qu'il faut
 détruire est le secret lui-même. Le coût est connu et acceptable : les clients DAV sont à
 reconfigurer, l'écran de la décision 19 le dit avant d'engendrer le premier secret, et le libellé du
-bouton de déconnexion globale comme l'écran de changement de mot de passe le rappellent.
+bouton de déconnexion globale comme l'écran de changement de mot de passe le rappellent. La rotation
+vide aussi le cache d'authentification de l'instance locale, comme la régénération le fait
+(décision 1) ; sur les autres instances, la fenêtre de 60 secondes reste le compromis assumé.
 
 ### 3. Un seul carnet, nommé `default`
 
@@ -321,7 +352,7 @@ qu'elle a l'air d'une valeur.
 
 **Une transaction, un rang.** Un lot écrit dans une transaction unique prend un seul numéro : la ligne
 d'état est verrouillée une fois et l'incrémenter davantage ne distinguerait rien, puisque tout devient
-visible au même `COMMIT`. Un rang porte donc de une à plusieurs centaines de lignes, ce qui est sans
+visible au même `COMMIT`. Un rang porte donc de une à cent lignes — la taille du lot ci-dessous —, ce qui est sans
 conséquence pour un client — il reçoit le lot entier ou rien — mais fixe une contrainte que la
 décision 7 doit respecter au moment de tronquer une réponse.
 
@@ -390,20 +421,27 @@ crée donc.
 
 ### 7. Le jeton et le ctag sortent du même compteur
 
-`getctag` vaut la séquence courante. `sync-token` vaut
+`getctag` vaut `{epoch}:{séquence}`. `sync-token` vaut
 `http://weesky.net/ns/sync/{epoch}/{séquence}`.
 
-**Le jeton porte une epoch, et le ctag non.** `contact_sync_state.epoch` est un GUID tiré à la
+**Le jeton et le ctag portent tous deux l'epoch.** `contact_sync_state.epoch` est un GUID tiré à la
 création de la ligne ; un jeton dont l'epoch n'est pas celle du carnet est refusé exactement comme un
-jeton périmé. Il n'a qu'un usage, et il est décisif : c'est ce qui fait d'une restauration de
+jeton périmé. Elle n'a qu'un usage, et il est décisif : c'est ce qui fait d'une restauration de
 sauvegarde un `UPDATE` atomique — une nouvelle epoch, tous les jetons du monde deviennent étrangers au
 carnet — plutôt qu'un raisonnement sur des bornes qu'un opérateur doit tenir juste au milieu d'un
-incident (§ « Prérequis d'infrastructure », note 3). Le ctag, lui, reste la séquence nue : il est
-opaque, jamais comparé qu'à lui-même d'un appel au suivant, et un client qui le voit changer
-resynchronise sans avoir rien à comprendre.
+incident (§ « Prérequis d'infrastructure », note 3). Le ctag la porte pour la même raison : il est
+opaque, jamais comparé qu'à lui-même d'un appel au suivant — un client n'y lit que « pareil ou
+différent », la forme lui est indifférente. Une séquence nue, elle, laisserait un trou par le chemin
+de repli : après restauration, un client dormant qui revient quand la séquence a recru jusqu'à sa
+valeur mémorisée verrait un ctag égal sur un carnet divergent, et sauterait la resynchronisation —
+le mode de défaillance silencieux de la décision 8, revenu par l'autre interrogation d'état. Plier
+l'epoch dans le ctag le ferme gratuitement. Le `0` d'un carnet sans ligne d'état reste un `0` nu
+(décision 6) : un carnet qui n'a jamais rien émis n'a rien à protéger, et le premier vrai ctag en
+différera toujours.
 
 `urn:snoopy:` a été écarté : `snoopy` n'est pas un NID enregistré, et un jeton est une URI. Une URI
-`http://` sous un domaine que nous possédons est ce que fait sabre (`http://sabredav.org/ns/sync/…`) ;
+`http://` sous un domaine que nous possédons est ce que fait sabre (`http://sabre.io/ns/sync/…`, sa
+constante `SYNCTOKEN_PREFIX`) ;
 elle n'est jamais déréférencée, seulement comparée octet à octet.
 
 Un `sync-collection` portant le jeton *n* rend :
@@ -415,11 +453,13 @@ Un `sync-collection` portant le jeton *n* rend :
 - toute pierre tombale de `sync_sequence > n`, en réponse `404` ;
 - le nouveau jeton, égal à la séquence courante.
 
-Jeton absent : synchro initiale — tout le carnet, aucune tombe. **Un `<DAV:sync-token/>` vide vaut
-un jeton absent** (RFC 6578 § 3.2, qui met les deux formes sur le même pied) : c'est ce que
-plusieurs clients envoient au premier appairage, et le laisser tomber dans « jeton syntaxiquement
-autre » ci-dessous rendrait `403` là où le RFC veut une synchronisation complète — un carnet qui
-refuse de s'appairer, sur la première requête que le client émet.
+**Un `<DAV:sync-token/>` vide est la forme canonique de la synchro initiale** — tout le carnet,
+aucune tombe. C'est la seule que le RFC définisse (§ 3.4 : l'élément vide impose de tout rendre, et
+la DTD du § 6.1 rend l'élément obligatoire), et c'est ce que DAVx⁵ écrit littéralement au premier
+appairage. **Un jeton absent est traité de même**, et c'est là notre tolérance, pas celle du RFC :
+une requête sans `sync-token` est invalide au sens strict, mais la refuser rendrait `403` sur le
+premier geste d'un client approximatif — un carnet qui refuse de s'appairer. Le laisser tomber dans
+« jeton syntaxiquement autre » ci-dessous serait la même erreur.
 
 Un `sync-collection` ne se lit **pas** sur son `Depth` : RFC 6578 § 3 le remplace par
 `DAV:sync-level`, et un en-tête `Depth` présent est ignoré plutôt que refusé — sauf pour servir de
@@ -439,8 +479,9 @@ nommée, pas une découverte.
 § 10.4 ne définit `address-data` que dans `addressbook-query` et `addressbook-multiget`, et le
 servir ici ferait porter au rapport de synchronisation le poids que la décision 15 lui épargne — un
 lot de cinq cents fiches à 1 Mo. Le coût est un aller-retour de plus pour les clients qui le
-tentent (iOS le fait) ; ils enchaînent alors le `multiget` qu'ils savent faire. Si 4d montre que
-l'un d'eux abandonne au lieu d'enchaîner, la décision se rouvrira avec un client nommé.
+tentent — Thunderbird le fait, et son code enchaîne bien le `multiget` quand la propriété manque du
+`propstat`. Si 4d montre qu'un client abandonne au lieu d'enchaîner, la décision se rouvrira avec un
+client nommé.
 
 **La séquence courante est lue avant les lignes, et c'est un ordre, pas une préférence.** Le rapport
 lit d'abord `seq`, puis les fiches et les tombes de `sync_sequence > n` **et `≤ seq`**, et rend `seq`
@@ -453,9 +494,10 @@ haute `≤ seq` est ce qui rend l'affirmation vraie même si la lecture des lign
 même transaction que celle du compteur.
 
 **La même règle vaut pour `PROPFIND Depth: 1` sur le carnet, et c'est le chemin qu'on oublie.** Le
-raisonnement ci-dessus semble propre au rapport de synchronisation ; il ne l'est pas. DAVx⁵ demande
-`getctag` **et** les membres dans un seul `PROPFIND`, et se sert du ctag rendu comme jeton d'état
-jusqu'à l'interrogation suivante — c'est même son chemin principal quand `sync-collection` échoue.
+raisonnement ci-dessus semble propre au rapport de synchronisation ; il ne l'est pas. Le chemin de
+repli sans `sync-collection` lit l'état (`getctag`) puis la liste des membres, et tient le ctag pour
+couvrant la liste jusqu'à l'interrogation suivante — DAVx⁵ le fait en deux `PROPFIND` distincts,
+état d'abord, et d'autres clients en un seul.
 Lire les membres puis le compteur y produit exactement la perte décrite plus haut : une écriture
 validée entre les deux est couverte par le ctag rendu sans figurer dans la liste, le client la croit
 vue et ne la redemande jamais. `PROPFIND Depth: 1` lit donc `seq` **d'abord**, borne ses membres à
@@ -479,8 +521,8 @@ que le RFC écrit lui-même : l'annexe A prévoit qu'un serveur prenne alors la 
 trois lignes et ferme une décision que 4d aurait dû rouvrir. La collection n'ayant pas de
 sous-collection, `1` et `infinite` y sont de toute façon indiscernables.
 
-**Le repli vaut pour tout `Depth`, `0` compris, et ce n'est pas une lecture large de l'annexe A —
-c'est la seule qui ne se contredise pas.** Le § 3 exige `Depth: 0` sur ce rapport ; l'annexe A propose
+**Le repli vaut pour tout `Depth`, `0` compris — une lecture volontairement plus large que
+l'annexe A, et la seule qui ne se contredise pas.** Le § 3 exige `Depth: 0` sur ce rapport ; l'annexe A propose
 de convertir un `Depth` en `sync-level`, où `0` ne vaut rien. Prise à la lettre, la paire refuse d'un
 `400` le client qui a posé l'en-tête **conforme** et oublié le seul élément que le RFC ait introduit
 pour le remplacer — c'est-à-dire qu'elle punit le plus proche de la norme, sur la première requête
@@ -493,7 +535,8 @@ peut le moins se le permettre — et `sync-level` absent sans aucun en-tête `De
 à convertir.
 
 **`DAV:limit`/`DAV:nresults` est honoré, et la troncature se coupe sur une frontière de séquence.**
-Dans l'espace `DAV:`, celui de RFC 6578 § 3.6 : `addressbook-query` porte une borne de même nom local
+Dans l'espace `DAV:` — l'élément vient de RFC 5323 § 5.17, que la DTD de RFC 6578 référence :
+`addressbook-query` porte une borne de même nom local
 dans un **autre** espace de noms, et la décision 11 s'en explique.
 Le carnet monte à 5000 fiches et un client qui borne sa réponse le fait parce qu'il ne sait pas en
 digérer plus. Les changements étant ordonnés par `sync_sequence`, une réponse tronquée est
@@ -567,8 +610,9 @@ sur ce qu'il détient : les fiches absentes de la réponse initiale sont celles 
 
 **Un rang par fiche plus une tombe, et non un journal de changements : la divergence avec sabre est
 délibérée.** sabre garde une ligne par changement dans `addressbookchanges` — `(uri, synctoken,
-operation)`, où `operation` distingue l'ajout, la modification et la suppression — et son élagage
-est celui de ce journal. Nous écrasons cette histoire : `contacts.sync_sequence` ne retient que le
+operation)`, où `operation` distingue l'ajout, la modification et la suppression — et ne l'élague
+jamais : aucune purge dans son backend, la table croît sans borne, douleur documentée chez
+Nextcloud qui partage ce schéma. Nous écrasons cette histoire : `contacts.sync_sequence` ne retient que le
 dernier rang d'une fiche, et la tombe ne retient que sa disparition. Le résultat servi est
 identique, parce qu'un client de `sync-collection` ne demande jamais le chemin parcouru, seulement
 l'état d'arrivée — et il coûte une colonne plutôt qu'une table à faire grandir, à indexer et à
@@ -583,7 +627,8 @@ L'ETag vaut `"{card_hash}"`, fort, et il est honnête : les octets servis sont e
 
 Un point se trompe facilement. 4a insère un `UID` dans une carte qui n'en déclare pas — l'invariant
 vaut pour toute carte stockée. Quand cela se produit sur un `PUT`, ce qui est stocké diffère de ce
-qui a été envoyé, et le RFC exige alors de **ne pas** renvoyer d'ETag dans la réponse, pour que le
+qui a été envoyé, et le RFC exige alors de **ne pas** renvoyer d'ETag dans la réponse (RFC 6352
+§ 6.3.2.3 ; RFC 7231 § 4.3.4 dit la même chose pour tout HTTP), pour que le
 client relise. Renvoyer l'ETag des octets stockés serait pire que de n'en renvoyer aucun : le client
 croirait détenir la carte qu'il a envoyée, et ne la relirait jamais.
 
@@ -627,7 +672,8 @@ pose aucune tombe.
 
 Les codes de succès sont écrits ici pour n'être pas choisis deux fois : `PUT` répond `201` quand il
 crée la ressource et `204` quand il la remplace, `DELETE` répond `204`, `GET` répond `200` avec
-`ETag` et `Content-Type: text/vcard; charset=utf-8`, et tout rapport comme tout `PROPFIND` répond
+`ETag`, `Last-Modified` (la même source que `getlastmodified`) et `Content-Type: text/vcard;
+charset=utf-8`, et tout rapport comme tout `PROPFIND` répond
 `207`. Un `GET` conditionnel dont l'`If-None-Match` couvre l'ETag courant répond `304` — c'est la
 sémantique complète que le résidu 4a réclame, celle que `ContactsController.GetPhoto` adopte du même
 geste : liste de valeurs, `*`, et ETags faibles comparés faiblement sur une lecture.
@@ -644,7 +690,8 @@ recalculé : tout le reste, puisque tout le reste est une projection.
 Un `UID` déjà porté par une **autre** ressource du carnet répond `403 no-uid-conflict` : l'index
 unique `(user_id, uid)` posé par 4a est exactement ce garde-fou, il suffit de traduire sa violation
 plutôt que de la laisser remonter en 500. Le corps `DAV:error` porte alors le `DAV:href` de la
-ressource en conflit, comme le RFC 6352 § 6.3.2 l'exige : sans lui le client sait qu'il a échoué mais
+ressource en conflit — un SHOULD du RFC 6352 § 6.3.2.1, que sa DTD rend obligatoire dès que
+l'élément est émis : sans lui le client sait qu'il a échoué mais
 pas ce qu'il doit relire, et la seule issue qui lui reste est de réessayer à l'identique.
 
 **Un `PUT` sur une ressource existante dont la carte porte un autre `UID` est refusé de la même
@@ -697,11 +744,14 @@ silencieux) ne rendent la condition nommée ; le RFC, si.
 1 Mo par carte et de 5000 fiches par utilisateur, et ses refus sont des `Result.Failure` porteurs
 d'un message destiné à l'UI. Traduits : le dépassement de taille répond `403 max-resource-size` — la
 valeur étant par ailleurs annoncée sur la collection (décision 13) —, le dépassement du nombre de
-fiches répond `507 Insufficient Storage`. Laisser remonter l'un ou l'autre en `500` ferait boucler
-le client indéfiniment sur la même carte, sans que rien ne lui dise que le carnet est plein.
-Le mégaoctet est un point de guet pour 4d : une photo iOS pleine résolution, une fois en base64,
-peut le dépasser — la carte ne monterait alors jamais du téléphone, et c'est le journal de la
-décision 18, `max-resource-size` nommé, qui le dira.
+fiches répond `507 Insufficient Storage`. Un client boucle sur ces refus quel qu'en soit le code —
+DAVx⁵ ne rattrape ni un `403` hors `need-privileges` ni un `507` — mais la condition nommée en fait
+une ligne de journal lisible (décision 18), là où un `500` est un accident indiscernable côté
+serveur.
+Le mégaoctet est un point de guet pour 4d — spéculatif, et présenté comme tel : Apple documente un
+plafond d'environ 224 Ko par photo de contact et 256 Ko par carte, donc le cas ne devrait pas se
+produire ; s'il se produit quand même, c'est le journal de la décision 18, `max-resource-size`
+nommé, qui le dira.
 
 ### 11. `addressbook-query` : le filtre est évalué, ou refusé — jamais ignoré
 
@@ -727,7 +777,7 @@ Ce que le rapport évalue est donc énuméré, et le reste est refusé (RFC 6352
 | Élément | Traitement |
 |---|---|
 | `CARDDAV:filter/@test` | `anyof` (défaut) et `allof` |
-| `CARDDAV:prop-filter/@name` | toute propriété de la carte, insensible à la casse comme le veut vCard |
+| `CARDDAV:prop-filter/@name` | toute propriété de la carte, insensible à la casse comme le veut vCard ; sans préfixe de groupe, il matche la propriété nue **et** groupée — `TEL` matche `item1.TEL`, un MUST du RFC 6352 § 10.5.1 que les cartes iOS exercent partout |
 | `CARDDAV:prop-filter/@test` | `anyof` (défaut) et `allof` |
 | `CARDDAV:is-not-defined` | évalué, dans `prop-filter` comme dans `param-filter` |
 | `CARDDAV:param-filter/@name` | évalué sur les paramètres de la propriété retenue |
@@ -757,11 +807,20 @@ règles se ressemblent et disent le contraire l'une de l'autre — `filter` pré
 
 La collation suit la même règle, avec sa condition à elle. `text-match` porte un attribut
 `collation` ; le carnet annonce celles qu'il sait via `CARDDAV:supported-collation-set` —
-`i;ascii-casemap` et `i;unicode-casemap`, les deux que le RFC 6352 § 8.3 rend obligatoires, toutes
-deux servies par la comparaison insensible à la casse des colonnes projetées — et une collation
-inconnue répond `403 supported-collation`, pas `supported-filter` : le client doit savoir si c'est
-son filtre ou sa collation qui est en cause. sabre répond un `400` sans condition et Radicale
-ignore l'attribut ; le MUST du RFC dit autre chose.
+`i;ascii-casemap` et `i;unicode-casemap`, les deux que le RFC 6352 § 8.3 rend obligatoires — et une
+collation inconnue répond `403 supported-collation`, pas `supported-filter` : le client doit savoir
+si c'est son filtre ou sa collation qui est en cause. sabre répond un `400` sans condition et
+Radicale ignore l'attribut ; le MUST du RFC dit autre chose.
+
+**Les deux collations sont deux comparaisons, pas une.** `i;ascii-casemap` ne replie que les lettres
+ASCII — « É » et « é » y sont différents (RFC 4790 § 9.2.1) — quand `i;unicode-casemap` replie et
+décompose tout Unicode (RFC 5051). Une unique comparaison insensible à la casse mentirait donc pour
+l'une des deux sur chaque lettre accentuée : chacune s'évalue sur la carte parsée, selon son texte.
+Le pré-filtre des colonnes projetées reste licite parce qu'il ne fait que **sur**-sélectionner — la
+comparaison SQL insensible retient au moins tout ce que l'une ou l'autre collation retiendrait, et
+l'évaluation exacte tranche. **L'attribut absent, ou l'identifiant littéral `default`, valent
+`i;unicode-casemap`** : le § 8.3 l'impose (MUST), et `default` tombé dans « collation inconnue »
+serait un refus à tort garanti sur un attribut conforme.
 
 La même règle s'applique à ce que le rapport rend, et non plus seulement à ce qu'il filtre.
 `CARDDAV:address-data` peut demander un **sous-ensemble** de propriétés (`<CARDDAV:prop
@@ -781,16 +840,23 @@ redemanderait à chaque cycle, ou la tiendrait pour changée indéfiniment. Le c
 exact, et il reste tel quel : là, c'est l'en-tête `ETag` de la réponse — l'empreinte de ce que le
 serveur vient de stocker — qui mentirait sur ce que le client a envoyé.
 
-**Un `address-data` qui demande une version est lu, et il ne déclenche aucune conversion.** L'attribut
+**Un `address-data` qui demande une version est honoré, par une conversion à la lecture.** L'attribut
 `version` porte `3.0` ou `4.0`, les deux que `supported-address-data` annonce (décision 13) ; une
 valeur hors de ces deux-là — ou un `content-type` qui n'est pas `text/vcard` — répond `403
-supported-address-data`, la précondition que le RFC 6352 § 8.6 nomme pour ce cas. Une version annoncée
-mais différente de celle de la carte stockée est en revanche **servie telle quelle** : convertir serait
-réécrire, ce que 4a interdit hors modification, et refuser rendrait illisible la moitié d'un carnet
-mixte chez un client qui a simplement nommé une préférence. C'est une divergence avec sabre, qui
-convertit ; elle est nommée ici et journalisée par la décision 18, de sorte que 4d saura si un client
-la demande vraiment. L'issue de secours est celle que la décision 13 décrit déjà, et elle ne coûte
-aucun invariant : convertir **à la lecture** ne touche pas ce qui est stocké.
+supported-address-data`, la précondition que le RFC 6352 § 8.6 nomme pour ce cas. Une version
+annoncée mais différente de celle de la carte stockée est **convertie dans la réponse** — jamais
+dans le stockage : convertir à la lecture ne touche aucun invariant de 4a, la carte stockée reste
+verbatim et son ETag reste le SHA-256 des octets qu'un `GET` sert. Ce n'est pas un confort : DAVx⁵
+demande `version="4.0"` dans ses `multiget` dès que l'annonce porte le 4.0 (vérifié dans son code),
+Thunderbird écrit du 4.0 sans même lire l'annonce, et iOS lit mal le 4.0 — sabre a retiré son
+annonce 4.0 en 2013 pour cette raison exacte et ne l'a rétablie qu'en livrant cette même conversion.
+Servir tel quel, c'était rejouer sa régression. La conversion s'appuie sur l'analyseur et le
+composeur de 4a ; ce qu'une version ne sait pas porter se transpose selon les règles publiques des
+deux formats (`TEL;TYPE=PREF` ↔ `PREF=1`, etc.), et le `getetag` de la réponse reste celui de la
+ressource — la carte convertie est une **représentation**, pas un nouvel état. Un `GET` avec
+en-tête `Accept` demandant l'autre version reste hors tranche (et la précondition
+`supported-address-data-conversion` du RFC 6352 § 5.1.1 avec lui) : aucun client connu ne s'en
+sert, et c'est nommé ici comme divergence pour 4d.
 
 **La borne de ce rapport est `CARDDAV:limit`/`CARDDAV:nresults`, et non `DAV:limit`.** Les deux
 existent, portent le même nom local et ne sont pas la même chose : RFC 6352 § 10.6 définit la sienne
@@ -822,12 +888,22 @@ clients écrivent `D:`, `d:`, `a:` ou rien, et lient `DAV:` comme ils veulent ; 
 `"D:prop"` fonctionne contre l'exemple du RFC et échoue contre le premier client réel. `XDocument`
 rend l'`XName` juste par construction — encore faut-il ne jamais redescendre au texte du nom.
 
-Les réponses sortent en `Content-Type: application/xml; charset=utf-8`, avec la déclaration XML.
-Le point est écrit ici parce que celui du `GET` l'est (décision 9) et que rien ne le poserait par
+Les réponses sortent en `Content-Type: application/xml; charset=utf-8`, avec la déclaration XML —
+**les corps `DAV:error` des `4xx` compris**, avec `error` en élément racine : DAVx⁵ n'extrait une
+précondition que d'un corps typé XML dont `error` est la racine, et un `403 valid-sync-token` servi
+en `text/plain` le ferait échouer à chaque cycle au lieu de repartir de zéro. Le point est écrit ici
+parce que celui du `GET` l'est (décision 9) et que rien ne le poserait par
 défaut sur un corps qu'on écrit soi-même dans `Response.Body`.
 
+**Trois littéralités de `multistatus`, parce qu'un client au moins les compare octet à octet.**
+Thunderbird lit le **premier** `status` descendant d'une `response` et le compare à la chaîne
+`HTTP/1.1 200 OK` : dans une `response` à deux `propstat`, celui à `200` s'écrit **avant** celui à
+`404` ; les lignes de statut sont littéralement `HTTP/1.1 200 OK` et `HTTP/1.1 404 Not Found` —
+sabre a déjà dû corriger un `Ok` pour iOS ; et le `status` d'une pierre tombale de `sync-collection`
+est un enfant **direct** de sa `response`, jamais logé dans un `propstat`.
+
 Aucune bibliothèque WebDAV .NET libre n'est maintenue ; la seule sérieuse est commerciale. Le volume
-à écrire reste modeste parce que la surface est fixe : cinq documents de réponse, trois de requête.
+à écrire reste modeste parce que la surface est fixe : six documents de réponse, quatre de requête.
 
 ### 13. Le jeu de propriétés est énuméré ici, `access-control` compris
 
@@ -838,21 +914,28 @@ plutôt que découverte tranche après tranche par des rapports de bogue :
 | Ressource | Propriétés servies |
 |---|---|
 | `/dav/` | `current-user-principal`, `principal-URL`, `resourcetype` (vide) |
-| principal | `resourcetype` (`DAV:principal`, RFC 3744 § 4), `current-user-principal`, `principal-URL`, `displayname` (l'adresse), `addressbook-home-set`, `principal-collection-set`, `supported-report-set` (vide), `alternate-URI-set` (vide), `group-membership` (vide) |
+| principal | `resourcetype` (`DAV:principal`, RFC 3744 § 4), `current-user-principal`, `principal-URL`, `displayname` (l'adresse), `addressbook-home-set`, `principal-collection-set`, `supported-report-set` (`DAV:expand-property`), `alternate-URI-set` (vide), `group-membership` (vide) |
 | home | `resourcetype` (collection), `displayname`, `current-user-principal` |
 | carnet | `resourcetype` (`collection` + `CARDDAV:addressbook`), `displayname`, `getctag`, `sync-token`, `supported-report-set`, `supported-address-data`, `supported-collation-set`, `max-resource-size`, `current-user-principal`, `current-user-privilege-set`, `owner` |
-| carte | `getetag`, `getcontenttype`, `getcontentlength`, `getlastmodified`, `resourcetype` (vide), `current-user-privilege-set` |
+| carte | `getetag`, `getcontenttype`, `getcontentlength`, `getlastmodified`, `resourcetype` (vide), `current-user-privilege-set`, `supported-report-set` (`multiget` + `query`) |
 
 Sept méritent leur ligne.
 
-**`supported-report-set` est énuméré, et il est servi sur le principal aussi.** Sur le carnet il porte
-les trois rapports de la tranche — `CARDDAV:addressbook-query`, `CARDDAV:addressbook-multiget`,
-`DAV:sync-collection` — et rien d'autre : `DAV:expand-property` n'est pas servi, et l'annoncer ferait
-tenter un client qui recevrait un `403 supported-report`. Sur le principal il est **vide**, et il y est
-quand même parce qu'iOS le demande là — en compagnie de `DAV:resource-id`, de
-`{calendarserver}email-address-set` et de `CARDDAV:directory-gateway`, que nous ne portons pas et qui
-ressortent en `propstat 404` selon la décision 14. Un jeu vide dit « aucun rapport sur cette
-ressource » ; une absence laisse un client conclure qu'il n'a pas su lire la réponse.
+**`supported-report-set` est énuméré, et servi sur le principal et sur les cartes aussi.** Sur le
+carnet il porte les quatre rapports de la tranche — `CARDDAV:addressbook-query`,
+`CARDDAV:addressbook-multiget`, `DAV:sync-collection`, `DAV:expand-property`. Ce dernier se sert
+plutôt que de se refuser : c'est un MUST double (RFC 6352 § 8.1, RFC 3744 § 9.1) qu'iOS exerce
+réellement à la découverte de principal, et son contenu est modeste — résoudre les propriétés-`href`
+que le corps nomme (`addressbook-home-set`, `principal-URL`…) en réponses imbriquées. Sur le
+principal, le jeu porte donc `DAV:expand-property` — et iOS y demande aussi `DAV:resource-id`,
+`{calendarserver}email-address-set` et `CARDDAV:directory-gateway`, que nous ne portons pas et qui
+ressortent en `propstat 404` selon la décision 14 ; DAVx⁵ demande de même
+`CARDDAV:addressbook-description` et ses propriétés WebDAV-Push, `404` inoffensifs nommés ici pour
+que 4d ne les prenne pas pour un défaut. **Et sur chaque carte**, le jeu porte `multiget` et
+`query` : le RFC 6352 § 8 l'exige sur les ressources d'adresse autant que sur les collections — le
+`multiget` y est défini (§ 8.7), et un `addressbook-query` en `Depth: 0` sur une carte est chez
+sabre le cas nominal de ce `Depth`. Les routes suivent (§ « La surface HTTP ») : `REPORT` répond
+sur une carte, pour ces deux rapports-là.
 
 **`getlastmodified` et `getcontentlength` ont une source et une unité, et les deux se trompent
 facilement.** La date vient de `contacts.updated_at`, que le schéma tient déjà à jour
@@ -862,6 +945,11 @@ déjà l'unité de `ContactStore.MaxCardBytes` et celle que `max-resource-size` 
 accentuée annoncerait sinon une longueur inférieure à son corps, et un client qui coupe à la longueur
 annoncée recevrait une carte tronquée — donc invalide, donc rejetée, sans que rien n'indique pourquoi.
 
+`updated_at` bouge aussi sur un basculement d'étoile — la ligne est modifiée, la carte non. C'est une
+entorse nommée à l'invisibilité de la décision 6, laissée telle quelle : aucun client ne se
+synchronise sur `getlastmodified` (tous suivent l'ETag et la séquence, qui ne bougent pas), et une
+colonne dédiée coûterait une écriture par édition pour fermer une divergence sans effet observable.
+
 **`getctag` est une extension, pas un RFC.** Son espace de noms est celui de CalendarServer
 (`http://calendarserver.org/ns/`), et il faut l'écrire ici parce qu'aucun RFC de la tranche ne le
 définit. Il reste servi parce que les clients s'en servent encore : DAVx⁵ le demande à chaque
@@ -870,31 +958,33 @@ interrogation d'état et s'y replie quand `sync-collection` manque.
 **`supported-address-data` annonce 3.0 et 4.0.** La décision 7 de 4a le prévoyait mot pour mot :
 sans cette propriété, un client est en droit de ne rien attendre ni n'envoyer d'autre que du 3.0. Or
 le carnet stocke verbatim les deux versions et sert ce qu'il détient — annoncer le seul 3.0 ferait
-mentir la moitié des réponses. Les deux versions annoncées, un client averti sait qu'une carte 4.0
-peut lui parvenir. Aucune conversion à la volée n'est offerte : nous ne réécrivons pas une carte
-qu'on ne modifie pas, et `supported-address-data-conversion` reste hors de la tranche.
+mentir la moitié des réponses. Le stock n'est jamais converti ; la **lecture** peut l'être, sur
+demande explicite (décision 11), et `supported-address-data-conversion` — la négociation par
+en-tête `Accept` d'un `GET` — reste hors de la tranche, divergence nommée.
 
-L'annonce a un effet de bord à nommer, parce qu'il ne se voit que sur une flotte mixte : DAVx⁵ lit
-`supported-address-data` et, si le 4.0 y figure, peut téléverser ses cartes en 4.0 — qu'un iPhone
-partageant le même carnet lit mal ou pas du tout. Annoncer n'est pas seulement décrire ce qu'on
-détient, c'est inviter à en écrire. La décision tient — annoncer le seul 3.0 ferait mentir les
-cartes 4.0 importées —, mais c'est un point de guet nommé pour 4d, avec l'issue de secours déjà
-connue si un foyer Android + iPhone se présente : honorer l'attribut `version` d'`address-data`, la
-conversion à la lecture que sabre sait faire.
+L'annonce a un effet de bord, et c'est lui qui a décidé de la conversion à la lecture : DAVx⁵ lit
+`supported-address-data` et, le 4.0 y figurant, téléverse ses cartes en 4.0 (vérifié dans son
+code) — qu'un iPhone partageant le même carnet lit mal ou pas du tout ; et Thunderbird écrit du 4.0
+sans même lire l'annonce, donc n'annoncer que le 3.0 n'aurait rien réglé. Annoncer n'est pas
+seulement décrire ce qu'on détient, c'est inviter à en écrire — et c'est pourquoi l'attribut
+`version` d'`address-data` est honoré dès cette tranche : sabre a retiré son annonce 4.0 de
+production pour ne l'y remettre qu'avec la conversion, et ce précédent suffit.
 
 **`max-resource-size` vaut le plafond de `ContactStore.MaxCardBytes`**, la même constante et non un
 littéral recopié. 4a l'exigeait déjà de cette tranche ; une valeur annoncée que le store violerait,
 ou l'inverse, se paierait en cartes refusées sans que le client comprenne pourquoi.
 
 **`current-user-privilege-set` existe parce que le RFC 6352 § 3 impose le contrôle d'accès**
-(RFC 3744) à tout serveur CardDAV, et parce que DAVx⁵ et iOS le lisent pour décider si le carnet est
-en lecture seule — sans réponse, certains basculent en lecture seule par prudence et les
-modifications du téléphone ne remontent jamais. Le carnet n'a qu'un propriétaire et pas de partage :
+(RFC 3744) à tout serveur CardDAV, et parce que les clients qui le lisent l'**honorent** : DAVx⁵ ne
+le demande qu'en CalDAV et Thunderbird écrit par défaut quand la propriété manque — mais un jeu
+**présent et incomplet** met Thunderbird en lecture seule, donc la propriété, une fois servie, doit
+toujours porter `write` et `write-content`. Le carnet n'a qu'un propriétaire et pas de partage :
 la propriété rend donc un jeu constant — `read`, `write`, `write-content`, `write-properties`,
 `bind`, `unbind`, `read-current-user-privilege-set` — et l'en-tête `DAV:` annonce `access-control`.
 Ce n'est pas un modèle d'ACL : c'est la déclaration honnête qu'un utilisateur peut tout faire sur son
-propre carnet, et rien sur celui d'un autre, ce que la décision 4 fait déjà répondre `404`. Aucun
-`ACL` ni `acl-principal-prop-set` n'est servi ; ils répondent `405`.
+propre carnet, et rien sur celui d'un autre, ce que la décision 4 fait déjà répondre `404`. La
+méthode `ACL` répond `405` ; le rapport `acl-principal-prop-set`, comme tout rapport qu'un corps de
+`REPORT` nomme sans qu'on le serve, répond `403 supported-report` (décision 16).
 
 **Annoncer `access-control` engage les propriétés de principal du RFC 3744, et deux d'entre elles
 sont vides.** Le § 4 rend `DAV:alternate-URI-set`, `DAV:principal-URL` et `DAV:group-membership`
@@ -902,27 +992,44 @@ obligatoires sur tout principal. La deuxième était déjà servie ; les deux au
 vides — aucune identité de rechange, aucune appartenance de groupe — et les écrire coûte deux lignes
 là où les omettre laisse un client conclure que le principal n'en est pas un. En revanche
 `DAV:supported-privilege-set` et `DAV:acl` ne sont **pas** servis, et c'est dit ici plutôt que
-constaté en 4d : ils décrivent une politique négociable, le carnet n'en a pas, et les rendre
-reviendrait à publier un arbre de privilèges figé que rien ne peut modifier. Un client qui les
+constaté en 4d : ils décrivent une politique négociable, le carnet n'en a pas. Un client qui les
 demande reçoit le `404` de `propstat` de la décision 14 — la réponse qui dit « je ne porte pas cette
 propriété », et non celle qui laisse attendre.
+
+**La divergence RFC 3744 restante est nommée ici, pour que 4d la lise comme un choix.** Annoncer
+`access-control` engage à la lettre (§ 7.2) toutes les fonctions REQUIRED du RFC — dont ses quatre
+rapports de principal (`acl-principal-prop-set`, `principal-match`, `principal-property-search`,
+`principal-search-property-set`) et les propriétés de son § 5 que le jeu ci-dessus ne porte pas
+(`group`, `acl-restrictions`, `inherited-acl-set`, `supported-privilege-set`, `acl`). Ils ne sont
+pas servis : aucun client CardDAV connu ne les exerce, et un carnet à un seul propriétaire n'a ni
+principal à chercher ni politique à publier. `ccs-caldavtester` a un fichier dédié
+(`CardDAV/aclreports.xml`) qui les exercera en 4d — ce sera une divergence nommée, exactement comme
+le `Depth` des rapports (décisions 7 et 14). Retirer `access-control` de l'en-tête n'y changerait
+rien : le RFC 6352 § 3 impose l'adhésion au RFC 3744 indépendamment de l'annonce, et les clients
+lisent l'annonce.
 
 ### 14. `allprop`, `propname`, un corps vide, et la propriété qui manque
 
 Un `PROPFIND` **sans corps** vaut `allprop` (RFC 4918 § 9.1), et plusieurs clients en envoient un à
 la découverte. Un corps `allprop` rend le jeu de la décision 13 pour la ressource visée, hors
-`sync-token` et `current-user-privilege-set` — deux propriétés que le RFC autorise à ne pas verser
-dans `allprop` parce qu'elles coûtent, et qu'un client qui les veut nomme explicitement. `propname`
-rend les noms du même jeu, sans valeurs.
+`sync-token` et `current-user-privilege-set`, qui coûtent et qu'un client qui les veut nomme
+explicitement. À la lettre, les RFC vont plus loin : presque tout le jeu de la décision 13 —
+`supported-report-set`, `supported-address-data`, `max-resource-size`, les propriétés de
+principal — est marqué « SHOULD NOT dans `allprop` » par son RFC d'origine, et c'est **nous** qui
+choisissons de les verser quand même, parce qu'un jeu stable rend les clients approximatifs
+prévisibles ; les deux exclusions ci-dessus sont les seules où le coût l'emporte. Divergence SHOULD,
+assumée. `propname` rend les noms du même jeu, sans valeurs.
 
 Une propriété demandée que la ressource ne porte pas **n'est pas omise** : elle ressort dans un
 second `propstat` à `404 Not Found`, comme le RFC l'exige. L'omission pure est ce qui fait qu'un
 client attend indéfiniment une valeur qu'il croit en route.
 
-**Un `PROPFIND` sans en-tête `Depth` vaut `Depth: infinity`** (RFC 4918 § 10.2), donc répond `403
+**Un `PROPFIND` sans en-tête `Depth` vaut `Depth: infinity`** (RFC 4918 § 9.1 — un SHOULD, pas un
+MUST), donc répond `403
 propfind-finite-depth` comme lui. sabre y devine `1`, Radicale `0` — deux réponses différentes au
-même silence, ce qui est exactement pourquoi on ne devine pas. Et ici il n'y a rien à deviner : le
-RFC pose lui-même la valeur du silence, et cette valeur est celle que la collection refuse. C'est ce
+même silence, ce qui est exactement pourquoi on ne devine pas. Et ici il n'y a presque rien à
+deviner : le
+RFC recommande lui-même la valeur du silence, et cette valeur est celle que la collection refuse. C'est ce
 qui distingue le cas du `sync-level` absent de la décision 7, où le repli existe parce que le RFC
 l'écrit et parce qu'un autre en-tête porte la réponse. Les clients réels envoient toujours l'en-tête ;
 si 4d en trouve un qui l'omet, la décision se rouvrira avec un client nommé.
@@ -933,8 +1040,9 @@ carnet vide — et un carnet vide, il l'applique en effaçant ses copies locales
 confond avec rien ; une réponse correcte au mauvais `Depth`, si.
 
 **Cette règle est celle du `PROPFIND`, et d'aucun autre verbe.** Le `REPORT` a sa propre sémantique
-de profondeur, et l'y étendre casserait les trois rapports : `addressbook-query` s'applique en
-`Depth: 1` sur la collection (RFC 6352 § 8.6), `addressbook-multiget` en `Depth: 0`, ses cibles
+de profondeur, et l'y étendre casserait les trois rapports : la portée d'`addressbook-query` est
+celle de son en-tête `Depth` (RFC 6352 § 8.6 — `1` étant ce que les clients envoient sur une
+collection), `addressbook-multiget` va en `Depth: 0`, ses cibles
 venant du corps (§ 8.7), et `sync-collection` n'en porte pas du tout, `DAV:sync-level` l'ayant
 remplacé (RFC 6578 § 3). Un `Depth` absent sur un `REPORT` prend donc la valeur que ce rapport-là
 implique, et un `Depth` présent mais inattendu est ignoré plutôt que refusé — il n'y a rien à
@@ -977,20 +1085,28 @@ collection — `GET`, `PUT` et `DELETE` : la réponse est `405 Method Not Allowe
 `Allow` conforme à celui d'`OPTIONS`. `LOCK` et `UNLOCK` sont dans la liste bien que l'en-tête
 `DAV: 1, 3` annonce déjà l'absence de verrous : l'annonce dit ce qu'on sait faire, le `405` dit ce
 qu'on répond quand un client ne l'a pas lue, et sans lui le routage rendrait un `404` — donc « cette
-carte n'existe pas » sur une carte qui existe. Thunderbird tente un `GET` de collection ; un `500`
+carte n'existe pas » sur une carte qui existe. Le Thunderbird natif n'émet aucun `GET`, mais des
+clients WebDAV génériques tentent celui de la collection ; un `500`
 dessus fait abandonner le carnet entier, là où un `405` est une réponse que tout client sait ranger.
 
-**`PROPPATCH` est la seule exception, et elle répond `207`.** Le ranger avec les autres serait le geste
-naturel — rien n'est mutable ici, le nom du carnet est fixe — et ce serait faux à deux titres. D'abord
-l'en-tête `DAV: 1` engage : RFC 4918 § 18.1 fait de la classe 1 la satisfaction de **tous** les MUST du
-document, `PROPPATCH` compris, et annoncer `1` en rendant `405` est une contradiction qu'un test de
-conformité relève au premier passage. Ensuite les clients d'Apple ne s'en servent pas pour ce qu'on
-croit : Contacts.app `PROPPATCH` la propriété `{http://calendarserver.org/ns/}me-card` sur le carnet
-pour y désigner la fiche de son propriétaire, et sabre documente que l'absence de prise en charge peut
-le faire **planter** — pas abandonner le carnet, planter. La réponse est donc celle que le RFC 4918
-§ 9.2.1 prévoit pour une propriété qu'on ne laisse pas écrire : un `207` dont chaque `propstat` porte
-`403 Forbidden` pour la propriété demandée. Le client apprend que rien n'a été écrit, ce qui est vrai,
-par un chemin qu'il sait lire. Le coût est celui du `405` ; la différence est qu'il est conforme.
+**`PROPPATCH` est la seule exception, et elle répond `207` — partout.** Le ranger avec les autres
+serait le geste naturel — rien n'est mutable ici, le nom du carnet est fixe — et ce serait faux à
+deux titres. D'abord l'en-tête `DAV: 1` engage : RFC 4918 § 18.1 fait de la classe 1 la satisfaction
+de **tous** les MUST du document, et le § 9.2 exige `PROPPATCH` de **toute** ressource conforme —
+annoncer `1` en rendant `405` est une contradiction qu'un test de conformité relève au premier
+passage, sur une carte autant que sur le carnet. Ensuite les clients d'Apple ne s'en servent pas
+pour ce qu'on croit : Contacts.app `PROPPATCH` la propriété
+`{http://calendarserver.org/ns/}me-card` **sur le home d'adresses** — `/dav/addressbooks/{userId}/`,
+pas le carnet : la trace que sabre publie le montre, le `href` porté par la propriété pointant, lui,
+vers une carte du carnet — pour y désigner la fiche de son propriétaire, et sabre documente que
+l'absence de prise en charge peut le faire **planter** — pas abandonner le carnet, planter.
+`PROPPATCH` est donc servi sur le home, sur le carnet **et** sur les cartes, et la réponse est
+partout celle que le RFC 4918 § 9.2.1 prévoit pour une propriété qu'on ne laisse pas écrire : un
+`207` dont chaque `propstat` porte `403 Forbidden` pour la propriété demandée. Le client apprend que
+rien n'a été écrit, ce qui est vrai, par un chemin qu'il sait lire. Le refus systématique renonce au
+« SHOULD support … arbitrary dead properties » du § 9.2 — divergence SHOULD nommée, cohérente avec
+« pas de propriété mutable », que `ccs-caldavtester` relèvera (son `proppatch.xml` attend des
+succès).
 
 Rien n'est stocké au passage, et ce n'est pas un oubli : accepter `me-card` demanderait une propriété
 morte de plus en base, pour un usage qu'aucun écran du produit ne rend. Si 4d montre qu'un client
@@ -1000,23 +1116,25 @@ mortes ouvert par anticipation.
 `PUT` et `DELETE` de collection méritent leur phrase parce que les routes ne les lient que sur
 `{nom}`, un segment que l'URL du carnet — terminée par une barre — ne présente pas : le routage y
 rendrait donc un `404` accidentel. Le RFC 4918
-§ 9.7.2 interdit le `PUT` de collection, et un `DELETE` de collection effacerait le carnet entier —
+§ 9.7.2 laisse le `PUT` de collection indéfini et bénit le `405` (« MAY be treated as an error »),
+et un `DELETE` de collection effacerait le carnet entier —
 un geste que le produit ne propose nulle part et qu'aucune route ne doit offrir par accident ; les
 serveurs de référence le servent, mais leur carnet n'est pas lié au compte comme le nôtre. La même
 logique vaut dans le corps plutôt que le verbe : un `REPORT` dont le corps nomme un rapport inconnu
 répond `403 supported-report` (RFC 3253), jamais `400` ni `500`.
 
 **`Allow` est énuméré ici, parce qu'un en-tête « conforme à `OPTIONS` » ne se vérifie pas.** Deux
-valeurs, une par forme de ressource :
+valeurs, une par forme de ressource — principal, home et carnet partagent la première :
 
 ```
-collection   OPTIONS, PROPFIND, PROPPATCH, REPORT
-carte        OPTIONS, HEAD, GET, PUT, DELETE, PROPFIND
+collection (principal, home, carnet)   OPTIONS, PROPFIND, PROPPATCH, REPORT
+carte                                  OPTIONS, HEAD, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT
 ```
 
-`PROPPATCH` figure dans l'`Allow` de la collection parce qu'il y est **servi** — d'un `207` qui refuse
-chaque propriété, mais servi (ci-dessus). L'omettre ferait dire à l'en-tête le contraire de ce que la
-méthode répond.
+`PROPPATCH` figure dans les deux `Allow` parce qu'il est **servi** partout — d'un `207` qui refuse
+chaque propriété, mais servi (ci-dessus) ; `REPORT` figure dans celui de la carte parce que
+`multiget` et `query` y répondent (décision 13). L'omettre ferait dire à l'en-tête le contraire de
+ce que la méthode répond.
 
 `HEAD` y figure parce que HTTP l'exige dès que `GET` existe. ASP.NET Core le sert d'office sur une
 route `GET` — mêmes en-têtes, `ETag` compris, corps vide —, ce qui suffit ; ce qui ne se fait pas
@@ -1025,8 +1143,10 @@ l'essaie pas.
 
 **Une URL de collection sans barre oblique finale est redirigée, pas refusée.**
 `…/addressbooks/{userId}/default` — sans la barre — désigne la même collection pour un humain et
-rien du tout pour le routage, qui rendrait un `404`. Le service répond `301` vers la forme avec
-barre, comme le font sabre et Radicale. C'est le pendant de la règle des `href` du § « La surface
+rien du tout pour le routage, qui rendrait un `404`. Le service répond `308` vers la forme avec
+barre — et non le `301` de sabre et Radicale : un `301` autorise le client à rejouer en `GET`, ce
+qu'OkHttp nu fait pour tout verbe sauf `PROPFIND` — un `REPORT` redirigé y perdrait méthode et
+corps. Le `308` préserve les deux pour tous. C'est le pendant de la règle des `href` du § « La surface
 HTTP » : nous écrivons toujours la barre, donc nous n'en dépendons pas — mais l'adresse saisie à la
 main dans un client, elle, ne passe pas par nos `href`.
 
@@ -1069,6 +1189,10 @@ donnée souveraine, et une révision qui aurait besoin d'être rejouée pour êt
 sauvegarde. Chaque ligne porte la cause (`put`, `webmail`, `import`, `delete`, `rejected`), sans quoi
 on ne sait pas si l'on regarde un écrasement à rattraper ou une modification voulue.
 
+Le pendant de la règle des tombes vaut ici : une fiche dont `vcard_raw` est `NULL` — le rattrapage 4a
+ne l'a pas atteinte — se supprime **sans** révision. Pas de carte, pas de révision ; le chemin de
+suppression le tolère, comme il tolère l'absence de `dav_name` (décision 6).
+
 L'élagage est celui des tombes, à 30 jours plutôt que 180 : une révision sert à réparer un accident
 qu'on remarque dans la semaine, pas à archiver. Le volume est borné par les plafonds existants et
 reste, en pratique, de l'ordre de quelques mégaoctets par utilisateur actif.
@@ -1086,19 +1210,31 @@ regrettée deviennent récupérables.
 La première rédaction disait que la version refusée « n'a jamais atteint le carnet, elle ne vit que sur
 l'appareil, et aucun serveur ne peut archiver des octets qu'il n'a pas reçus ». Le carnet ne les a pas,
 c'est vrai ; le serveur, lui, **les a** — ils sont dans le corps de la requête, déjà lu, déjà borné à
-1 Mo par la décision 15, déjà décodé et validé par la décision 9. Les jeter est une décision, pas une
+1 Mo par la décision 15. Les jeter est une décision, pas une
 fatalité. Or c'est exactement le cas qu'on redoute : une adresse saisie dans un train, un webmail qui a
 bougé entre-temps, un `412`, et DAVx⁵ qui applique « le serveur gagne » sans consulter personne — son
 manuel le dit en ces termes, et précise qu'il n'implique jamais l'utilisateur dans la résolution d'un
 conflit. Le refus est juste ; l'effacement qui le suit ne l'est pas.
 
 **Un `PUT` refusé pour cause d'`If-Match` archive donc son corps**, sous la cause `rejected`, avant que
-le `412` ne parte. C'est une écriture sur un chemin déjà transactionnel, et c'est le seul endroit de
+le `412` ne parte. **L'ordre est écrit, parce que deux lectures du RFC en donnent deux différents** :
+la condition `If-Match` s'évalue **d'abord** — RFC 7232 place les préconditions avant le traitement
+du corps —, et le corps refusé n'est archivé **que s'il se décode en UTF-8 strict**. Le stockage est
+du texte (décision 9) : archiver des octets qu'un `MEDIUMTEXT` trahirait violerait la promesse de
+restitution, donc un corps refusé qui ne se décode pas répond `412` sans révision, et la ligne de
+journal de la décision 18 en garde la trace. S'il se décode mais ne parse pas, il est archivé quand
+même — c'est une archive, pas une carte — avec `uid` extrait quand la carte se lit, `NULL` sinon ;
+`contact_revisions.uid` est nullable pour cela (§ « Le schéma »). L'archivage n'avance pas la
+séquence et ne prend pas le verrou d'état : rien de visible du protocole n'a changé (décision 6), et
+le chemin du `412` ne doit réveiller aucun client. C'est une écriture sur un chemin déjà
+transactionnel, et c'est le seul endroit de
 cette tranche où l'on fait strictement mieux que les deux serveurs de référence : le crochet git de
 Radicale ne voit que les écritures **acceptées**, et sabre ne voit rien du tout. Deux garde-fous, parce
-qu'un client en désaccord ne l'est pas une fois mais à chaque cycle : rien n'est archivé si le triplet
-`(user_id, card_hash, cause)` a déjà été écrit dans les vingt-quatre heures — un téléphone qui rejoue
-la même carte tous les quarts d'heure écrit une révision, pas quatre-vingt-seize — et un `DELETE`
+qu'un client en désaccord ne l'est pas une fois mais à chaque cycle : rien n'est archivé si le
+quadruplet `(user_id, dav_name, card_hash, cause)` a déjà été écrit dans les vingt-quatre heures — un
+téléphone qui rejoue la même carte tous les quarts d'heure écrit une révision, pas quatre-vingt-seize,
+tandis que le même corps refusé sur **deux noms** différents en écrit bien deux ; le nom vient de
+l'URL du `PUT`, donc il existe toujours ici — et un `DELETE`
 refusé n'archive rien, puisqu'il n'apporte aucun octet : il laisse la ligne de journal de la
 décision 18, et c'est tout.
 
@@ -1186,7 +1322,10 @@ colonne, tandis que le coût de l'omission est un renommage sous des clients dé
 
 **Allumer engendre, et c'est un seul geste.** Basculer l'interrupteur pour la première fois crée la
 ligne, engendre le secret et le rend dans la **réponse de cette même requête** ; l'écran l'affiche
-aussitôt. Demander à l'utilisateur d'activer puis de cliquer « créer un mot de passe » lui ferait
+aussitôt. La création est un upsert : deux premiers allumages simultanés — double clic, deux
+onglets — ne font pas mourir le second sur la clé primaire ; le premier secret écrit gagne, l'autre
+requête rend l'état sans secret, comme un rallumage. Demander à l'utilisateur d'activer puis de
+cliquer « créer un mot de passe » lui ferait
 faire deux fois ce qu'il croyait faire une, et l'écran vide entre les deux n'aurait rien à dire.
 Éteindre pose `carddav_enabled = 0` sans rien détruire (décision 2) et le rallumage ne réaffiche
 aucun secret : il n'y a rien de nouveau à montrer.
@@ -1238,15 +1377,19 @@ PROPFIND /                                       current-user-principal (l'hôte
 OPTIONS  /dav/…                                  DAV: 1, 3, access-control, addressbook · Allow
 PROPFIND /dav/                                   current-user-principal
 PROPFIND /dav/principals/{userId}/               addressbook-home-set, principal-URL
+REPORT   /dav/principals/{userId}/               expand-property (décision 13)
 PROPFIND /dav/addressbooks/{userId}/             depth 0 et 1 → la collection « default »
 PROPFIND /dav/addressbooks/{userId}/default/     depth 0 → les propriétés de collection (décision 13)
                                                  depth 1 → la collection, puis une ressource par fiche
-PROPPATCH …/default/                             207, chaque propriété refusée en 403 (décision 16)
-REPORT   …/default/                              addressbook-multiget · addressbook-query · sync-collection
+PROPPATCH /dav/addressbooks/{userId}/ · …/default/ · …/default/{nom}
+                                                 207, chaque propriété refusée en 403 (décision 16 —
+                                                 le home est la cible du me-card d'Apple)
+REPORT   …/default/                              addressbook-multiget · addressbook-query · sync-collection · expand-property
+REPORT   …/default/{nom}                         addressbook-multiget · addressbook-query (décision 13)
 GET/HEAD …/default/{nom}                         200, la carte verbatim, ETag, text/vcard; charset=utf-8
 PUT      …/default/{nom}                         201 / 204 · If-Match / If-None-Match
 DELETE   …/default/{nom}                         204 · If-Match · pose une pierre tombale
-*        …/default  (sans barre finale)          301 → …/default/
+*        …/default  (sans barre finale)          308 → …/default/
 autres verbes                                    405 + Allow (décision 16)
 ```
 
@@ -1261,7 +1404,9 @@ l'onglet « Sync » l'affiche, prête à copier (décision 19).
 **Le well-known répond à toute méthode, et sans authentification.** Un `[HttpGet]` ne suffit pas :
 DAVx⁵ et Thunderbird y envoient un `PROPFIND`, pas un `GET`, et une redirection réservée au `GET`
 leur rend un `405` au premier geste de la découverte. La route accepte donc tous les verbes et rend
-`301` (RFC 6764 § 6) ; elle est anonyme, parce qu'un `401` sur une redirection publique est un
+`301` (RFC 6764 § 5), avec un `Cache-Control` borné — le même § le recommande, et un `301` nu se met
+en cache indéfiniment : changer un jour le chemin `/dav` deviendrait impossible sur les appareils
+déjà appairés. Elle est anonyme, parce qu'un `401` sur une redirection publique est un
 obstacle gratuit avant même que le client sache où s'authentifier.
 
 **`PROPFIND /` sert `current-user-principal`.** Le client à qui l'on donne l'hôte nu essaie la racine
@@ -1273,7 +1418,8 @@ c'est le symptôme que la décision 2 chasse.
 
 `OPTIONS` répond sur toute URL `/dav`, authentifié ou non : un client demande les capacités avant
 d'avoir des identifiants. L'en-tête `DAV:` porte `access-control` (décision 13) en plus de `1, 3,
-addressbook`.
+addressbook` — et il est posé aussi sur les réponses `PROPFIND` : sabre le fait exprès, des clients
+d'Apple en dépendent hors `OPTIONS`.
 
 Les `href` des réponses sont des chemins absolus (`/dav/addressbooks/…`), jamais des URL complètes :
 le service est derrière un proxy inverse, et une URL absolue reconstruite depuis l'hôte vu par
@@ -1311,13 +1457,13 @@ contact_tombstones  user_id       CHAR(36)     NOT NULL
 contact_revisions   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT  PK
                     user_id       CHAR(36)     NOT NULL
                     contact_id    CHAR(36)     NULL                la fiche, quand elle en a une
-                    uid           VARCHAR(255) NOT NULL            l'UID de la carte archivée
+                    uid           VARCHAR(255) NULL                l'UID de la carte archivée, quand elle en a un
                     dav_name      VARCHAR(255) NULL   utf8mb4_bin
                     card_hash     CHAR(64)     NOT NULL
                     vcard_raw     MEDIUMTEXT   NOT NULL            les octets remplacés ou refusés
                     cause         ENUM('put','webmail','import','delete','rejected') NOT NULL
                     replaced_at   TIMESTAMP    NOT NULL
-                    INDEX (user_id, replaced_at) · INDEX (user_id, uid) · INDEX (user_id, dav_name)
+                    INDEX (user_id, replaced_at) · INDEX (replaced_at) · INDEX (user_id, uid) · INDEX (user_id, dav_name)
                     FK user_id → users(id) ON DELETE CASCADE
 contacts          + dav_name      VARCHAR(255) NULL  utf8mb4_bin  UNIQUE (user_id, dav_name)
                   + sync_sequence BIGINT UNSIGNED NOT NULL DEFAULT 0  INDEX (user_id, sync_sequence)
@@ -1347,10 +1493,17 @@ et sa carte mérite d'être archivée quand même.
 `contact_id` sont là.** Une table dont le rôle est de ne rien perdre serait mal conçue si la ligne
 qu'elle vient d'écrire ne se retrouvait par aucune clé : `dav_name` étant nullable, une révision de
 fiche non rattrapée ne s'indexerait que sur `(user_id, replaced_at)`, c'est-à-dire qu'on la chercherait
-à l'heure. `uid` est `NOT NULL` parce que la décision 5 en fait l'arbitre de l'identité d'une carte —
-le nom n'est qu'une URL, et 4a garantit qu'aucune carte stockée n'est sans `UID`. `contact_id` reste
+à l'heure. `uid` porte l'arbitre d'identité de la décision 5 — 4a garantit qu'aucune carte
+**stockée** n'est sans `UID`, donc toute révision d'une carte remplacée ou effacée en a un. Il est
+nullable quand même, et c'est la cause `rejected` qui l'impose : un corps refusé en `412` n'est
+jamais passé par la projection qui insère l'`UID` manquant, et une carte valide sans `UID` doit
+s'archiver plutôt que de mourir sur une contrainte — sur la table dont le rôle est précisément de ne
+rien perdre. Quand le corps rejeté se parse, son `UID` est extrait ; sinon la ligne se retrouve par
+`(user_id, dav_name)`, le nom venant de l'URL du `PUT`. `contact_id` reste
 nullable : il désigne la fiche quand elle existe encore, et une révision de cause `delete` survit à la
-sienne.
+sienne. L'index `(replaced_at)` nu sert l'élagage, qui balaye toutes les lignes de plus de trente
+jours sans connaître d'utilisateur — sans lui, ce serait un parcours complet d'une table à
+`MEDIUMTEXT`.
 
 **`contact_revisions.vcard_raw` est un `MEDIUMTEXT`, comme celui de `contacts`, et ce n'est pas
 neutre** — c'est ce type qui impose le refus des corps non-UTF-8 de la décision 9. Les deux colonnes
@@ -1398,7 +1551,7 @@ remet aucun compteur en arrière.
 | Pas d'identifiants, secret inconnu ou remplacé, synchronisation jamais activée, compte inutilisable | `401` + `WWW-Authenticate: Basic realm="weesky CardDAV"` (et rien d'autre) |
 | Secret **valide**, mais `carddav_enabled = 0` | `403` — jamais avant la comparaison du condensat |
 | Requête `/dav` dont l'origine n'est pas `https` (hors développement) | `403`, sans lecture de la table |
-| Seuil d'échecs d'authentification atteint (par IP ou par identifiant) | `401`, sans lecture de la table |
+| Seuil d'échecs d'authentification atteint (par IP ou par identifiant) | `429` + `Retry-After`, sans lecture de la table |
 | `{userId}` n'est pas l'utilisateur authentifié | `404` |
 | `Depth: infinity` — ou absent — sur `PROPFIND` | `403 propfind-finite-depth` |
 | `UID` déjà porté par une autre ressource, ou changé par le `PUT` d'une ressource existante | `403 no-uid-conflict` + le `DAV:href` du conflit |
@@ -1412,22 +1565,24 @@ remet aucun compteur en arrière.
 | `REPORT` dont le corps nomme un rapport inconnu | `403 supported-report` |
 | Jeton de synchronisation périmé, inconnu, mal formé, d'une autre epoch, ou postérieur à la séquence courante | `403 valid-sync-token` |
 | `DAV:sync-level` de valeur inconnue, ou absent **et** sans aucun en-tête `Depth` (annexe A) | `400` |
-| Borne atteinte dans un rapport — `DAV:limit` pour `sync-collection`, `CARDDAV:limit` pour `addressbook-query` | `507 number-of-matches-within-limits` (jeton du dernier rang complet pour `sync-collection`) |
+| Borne atteinte dans un rapport — `DAV:limit` pour `sync-collection`, `CARDDAV:limit` pour `addressbook-query` | `207` portant une `DAV:response` en `507` avec `number-of-matches-within-limits` (et le jeton du dernier rang complet pour `sync-collection`) |
 | Plus de 5000 `DAV:href` dans un `multiget` | `207` portant `507 number-of-matches-within-limits` sur la Request-URI |
 | Corps de rapport au-delà de 1 Mo | `413` (`RequestSizeLimit`) |
 | `href` inconnu ou hors collection dans un `multiget` | `404` **dans** le `multistatus` |
 | Propriété demandée que la ressource ne porte pas | `404` dans un second `propstat` |
-| `If-Match` en désaccord ou sur ressource absente, `If-None-Match: *` sur ressource existante | `412` — et le corps d'un `PUT` ainsi refusé est archivé en `rejected` (décision 17) |
+| `If-Match` en désaccord ou sur ressource absente, `If-None-Match: *` sur ressource existante | `412` — et le corps d'un `PUT` ainsi refusé est archivé en `rejected` s'il se décode en UTF-8 (décision 17) |
 | Violation d'unicité de `dav_name` entre deux `PUT` créateurs simultanés | rejoué en remplacement ; `412` si la requête portait `If-None-Match: *` |
 | Entité externe ou DTD dans un corps XML, ou imbrication au-delà de cinquante niveaux | `400` |
-| `PROPPATCH` sur le carnet | `207`, chaque propriété demandée en `403 Forbidden` |
+| `PROPPATCH` — sur le home, le carnet ou une carte | `207`, chaque propriété demandée en `403 Forbidden` |
 | Méthode non servie (`MKCOL`, `MKCALENDAR`, `COPY`, `MOVE`, `ACL`, `LOCK`, `UNLOCK`, `GET`/`PUT`/`DELETE` de collection) | `405` + `Allow` |
-| URL de collection sans barre oblique finale | `301` vers la forme avec barre |
+| URL de collection sans barre oblique finale | `308` vers la forme avec barre |
 | Attente de verrou dépassée, ou interblocage arbitré par InnoDB | `503` + `Retry-After` |
 | Ressource inconnue | `404` |
 
-Chaque `403` porte le corps `DAV:error` nommant sa condition — c'est ce que le client lit pour
-choisir son repli, un `403` nu ne lui laissant que l'abandon.
+Chaque `403` du protocole porte le corps `DAV:error` nommant sa condition — c'est ce que le client
+lit pour choisir son repli, un `403` nu ne lui laissant que l'abandon. Les deux `403` d'accès —
+origine non-`https`, `carddav_enabled = 0` — n'ont pas de condition à nommer et sortent nus : ils
+précèdent le protocole.
 
 Aucune de ces réponses n'est un `500`. Le point vaut d'être écrit : les refus du store
 (`CapReached`, `CardTooLarge`, violation de l'index `(user_id, uid)`) sont des `Result.Failure` ou
@@ -1488,15 +1643,16 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
   identifiant = adresse, contrôle de `X-Forwarded-Proto`, condensat comparé **avant** la lecture de
   `carddav_enabled`, `IAccountInfoProvider.IsUsableAsync`, cache de 60 s, défi Basic seul, délai
   aléatoire asynchrone après échec
-- `Authentication/CardDav/AuthAttemptThrottle.cs` — compteur d'échecs glissant, par IP et par
-  identifiant, en mémoire
+- `Authentication/CardDav/AuthAttemptThrottle.cs` — compteur d'échecs glissant, par IP (celle que
+  `ForwardedHeaders` restitue) et par identifiant, borné en mémoire avec éviction, fenêtre de quinze
+  minutes, `429` + `Retry-After` au seuil, réinitialisé au succès
 - `Controllers/DavCredentialsController.cs` — l'état de l'écran (adresse, identifiant,
   `carddav_enabled`, `last_used_at`), l'activation qui engendre et rend le secret une fois, la
   bascule, la régénération
 - `Configuration` — l'adresse publique du serveur DAV, rendue au front, jamais composée par lui
 - `Authentication/Extensions/AuthorizationExtension.cs` — `capabilities.dav`
 - `Repositories/WebmailUserStore.RotateSecurityStampAsync` — supprime la ligne de l'utilisateur
-  dans la même transaction que la rotation
+  dans la même transaction que la rotation, et vide le cache d'authentification local
 
 **4c-i, frontend**
 
@@ -1519,7 +1675,8 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
 - `Repositories/ContactStore.cs` — transactions explicites via l'`IExecutionStrategy`, verrou de la
   ligne d'état pris en premier, lots bornés à cent fiches par transaction ; avance la séquence sur
   toute écriture de carte et pose `dav_name`
-  s'il manque, **archive** ce qu'elle remplace ou efface, **pose une tombe** dans `DeleteAsync` et
+  s'il manque, **archive** ce qu'elle remplace ou efface (aucune révision si `vcard_raw` est
+  `NULL`), **pose une tombe** dans `DeleteAsync` et
   `DeleteManyAsync` (aucune si `dav_name` est `NULL`) ; `UpdateAsync` refuse sur `card_hash`
   périmé ; traduit ses plafonds et ses attentes de verrou pour le bord DAV
 - `Services/CardDav/SyncStateConsistencyCheck.cs` — le contrôle de démarrage de la note 3 des
@@ -1538,6 +1695,9 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
 - `Services/CardDav/AddressBookFilter.cs` — pré-filtre sur les colonnes indexées, évaluation exacte
   sur la carte parsée, ou refus
 - `Services/CardDav/AddressDataFilter.cs` — restriction de la carte servie aux propriétés demandées
+- `Services/CardDav/VCardVersionConverter.cs` — la conversion 3.0 ↔ 4.0 à la lecture de la
+  décision 11, sur l'analyseur et le composeur de 4a
+- `Services/CardDav/ExpandPropertyReport.cs` — le rapport `DAV:expand-property` de la décision 13
 - `Services/CardDav/DavRequestLog.cs` — la ligne structurée de la décision 18
 - `Controllers/CardDavController.cs`, `WellKnownController.cs`
 - `Services/ContactTombstoneSweeper.cs` — tombes à 180 jours, révisions à 30
@@ -1547,7 +1707,8 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
 - **Le secret** : engendrement distinct à chaque appel, condensat non réversible, comparaison en
   temps constant, `last_used_at` amorti ; une régénération remplace la ligne sans en créer une
   seconde, et vide le cache ; un secret présenté avec un blanc de bord est accepté.
-- **L'écran** : allumer engendre et rend le secret **dans la même réponse** ; le rallumer n'en rend
+- **L'écran** : allumer engendre et rend le secret **dans la même réponse** — et deux allumages
+  simultanés n'en font pas un `500`, le second rendant l'état sans secret ; le rallumer n'en rend
   aucun ; l'état lu ne porte jamais de secret, sous aucune forme — c'est l'assertion qui garde
   fermée la porte qu'un « révéler » ouvrirait ; éteindre conserve `secret_hash` ; une rotation de
   `security_stamp` supprime la ligne, donc l'écran repasse à éteint ; l'adresse rendue est celle de
@@ -1560,18 +1721,24 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
   elle qui atteste l'ordre de la décision 2 et referme l'oracle d'énumération ; JWT accepté ; secret
   refusé sur `/api` ;
   un échec retardé d'un délai aléatoire avant le `401` ; une requête dont `X-Forwarded-Proto` n'est
-  pas `https` refusée **sans lecture de la table** ; le seuil d'échecs refusant sans lecture non
-  plus — les deux s'assertent sur le dépôt, pas sur le code de retour, qui est le même.
+  pas `https` refusée **sans lecture de la table** ; le seuil d'échecs refusant en `429` avec
+  `Retry-After`, sans lecture non plus, et un succès le réinitialisant — l'absence de lecture
+  s'asserte sur le dépôt, pas sur le code de retour.
 - **Les documents XML** : assertions sur les corps de réponse, adossées aux exemples **littéraux**
   des RFC 6352 et 6578 plutôt qu'à des corps inventés — un corps inventé prouve que le code fait ce
-  que le code fait.
+  que le code fait. Dans toute `response` à deux `propstat`, le `200` s'écrit avant le `404` ; les
+  lignes de statut sont littéralement `HTTP/1.1 200 OK` et `HTTP/1.1 404 Not Found` ; le `status`
+  d'une tombe est enfant direct de sa `response` — trois assertions littérales, parce que Thunderbird
+  compare ces octets-là (décision 12).
 - **L'invariant de séquence** : une édition qui change la carte l'avance ; un basculement d'étoile
   ne l'avance pas.
 - **Les suppressions** : une suppression depuis le webmail pose une tombe et avance la séquence ;
   une suppression en lot en pose une par fiche sous un seul rang ; le `sync-collection` suivant les
   rend toutes. C'est le test qui garde le trou fermé, et il vaut par la porte webmail autant que par
-  la porte DAV. Une fiche sans `dav_name` se supprime sans tombe et sans erreur ; une écriture sur
-  une fiche sans nom le pose.
+  la porte DAV. Une fiche sans `dav_name` se supprime sans tombe et sans erreur — et une fiche sans
+  `vcard_raw` sans révision, de même ; une écriture sur
+  une fiche sans nom le pose. Suppression, recréation par `PUT`, re-suppression du même nom :
+  l'upsert de tombe (décision 8), jamais une violation de clé.
 - **La concurrence** : deux écritures simultanées ne rendent jamais deux fiches au même rang, et une
   synchro qui s'intercale entre les deux ne perd ni l'une ni l'autre — la seconde est rendue au tour
   suivant. Un import et un `PUT` DAV lancés ensemble aboutissent tous les deux, sans interblocage —
@@ -1588,16 +1755,19 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
   par chemin, sur une fixture portant les trois, parce que c'est un invariant et non quatre règles —
   mais la fixture porte les trois, sans quoi le test ne couvre que la condition qu'on avait en tête.
 - **La synchro** : initiale sans jeton ; incrémentale rendant créations, modifications et tombes ;
-  jeton périmé, mal formé ou postérieur à la séquence répondant `403 valid-sync-token` ;
+  jeton périmé, mal formé ou postérieur à la séquence répondant `403 valid-sync-token` — le corps
+  `DAV:error` sortant typé XML, `error` en racine, celui que DAVx⁵ sait lire ;
   `sync-level` de valeur inconnue répondant `400` ; `sync-level` absent mais `Depth: 1` présent
   servi comme un `sync-level` de `1` (annexe A), et absent sans `Depth` répondant `400` — le
-  triplet, parce que c'est lui qui atteste le repli ; réponse tronquée par `DAV:limit` rendant `507` et un jeton
+  triplet, parce que c'est lui qui atteste le repli ; réponse tronquée par `DAV:limit` rendant `507`,
+  portant **toujours** son `sync-token` — DAVx⁵ jette sans lui — et un jeton
   qui, rejoué, rend exactement le reste — un lot partagé par plusieurs fiches n'étant jamais coupé
   en deux ; les propriétés demandées dans le `DAV:prop` — `resourcetype` compris — rendues, pas un
   `getetag` figé ; un `<DAV:sync-token/>` **vide** traité comme un jeton absent, pas comme un jeton
   malformé ; un jeton dont l'**epoch** n'est pas celle du carnet refusé `403 valid-sync-token`, et un
-  `UPDATE … SET epoch = UUID()` rendant d'un coup invalide un jeton qui l'instant d'avant était servi
-  — c'est le test de la parade de restauration, et le seul qui atteste qu'elle marche ;
+  `UPDATE … SET epoch = UUID()` rendant d'un coup invalide un jeton qui l'instant d'avant était servi,
+  **et** changeant le `getctag` rendu — c'est le test de la parade de restauration, ses deux moitiés,
+  et le seul qui atteste qu'elle marche ;
   `Depth: 0` **sans** `sync-level` servi comme un `sync-level` de `1`, parce que c'est le client
   conforme sur l'en-tête et oublieux de l'élément, et qu'il ne doit pas être celui qu'on refuse.
 - **Le ctag et sa liste** : un `PROPFIND Depth: 1` demandant `getctag` **et** les membres ne rend
@@ -1625,7 +1795,10 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
   du train, et il faut l'asserter sur le contenu archivé, pas sur le nombre de lignes ; le même `PUT`
   rejoué dans l'heure n'en archive pas une seconde ; rejoué après vingt-quatre heures, si ; un
   `DELETE` en `412` n'archive rien et ne pose aucune tombe ; une révision `rejected` porte l'`uid` de
-  la carte refusée, y compris quand la fiche visée n'a pas de `dav_name`.
+  la carte refusée quand elle s'en déclare un, et `NULL` — jamais une erreur — quand le corps n'en
+  porte pas ; un corps refusé qui n'est pas de l'UTF-8 répond `412` **sans** révision ; le même corps
+  refusé sur deux noms différents écrit deux révisions ; et l'archivage d'un `412` n'avance pas la
+  séquence — aucun client n'est réveillé.
 - **Les chemins** : `dav_name` validé (255, vide, `/`, `\`, `.`, `..`, caractères de contrôle,
   espaces de bord), un `%2F` refusé après décodage et non avant, un nom à espace ou à `#` produisant
   un `href` que la même analyse relit, un nom **sans** suffixe `.vcf` servi comme les autres.
@@ -1633,26 +1806,43 @@ client connu. Ils sont nommés ici pour qu'aucune revue de 4c n'ait à les redé
   niveaux, `is-not-defined`, `param-filter`, les quatre `match-type`, `negate-condition` — dont au
   moins une propriété **hors** des colonnes projetées (`TITLE`), qui atteste que l'évaluation porte
   sur la carte ; le reste refusé, jamais silencieusement ignoré ; collation inconnue répondant `403
-  supported-collation` ; `address-data` partiel rendant les seules propriétés demandées **et son
+  supported-collation` — sur la collation, jamais `supported-filter` ; `address-data` partiel rendant les seules propriétés demandées **et son
   `getetag`** — l'assertion sur la présence de l'ETag, parce que c'est celle qui garde fermée la
   régression que la première rédaction avait écrite ; un `<filter/>` **vide** rendant tout le carnet
   et un corps **sans** `filter` répondant `400` — la paire, parce que la ressemblance des deux cas est
   tout le piège ; une borne `CARDDAV:limit` honorée là où un `DAV:limit` de même nom local est
   ignoré ; un `address-data` demandant `version="2.1"` refusé en `403 supported-address-data`, et un
-  `version="4.0"` sur une carte 3.0 servi tel quel.
+  `version="4.0"` sur une carte 3.0 rendant la carte **convertie** — l'original restant intact en
+  base et sous `GET` ; un `prop-filter` `name="TEL"` matchant une carte à `item1.TEL` ; « É » et
+  « é » égaux sous `i;unicode-casemap` et différents sous `i;ascii-casemap` ; une collation absente,
+  ou `default`, évaluée comme `i;unicode-casemap`.
 - **La découverte** : `PROPFIND` sur `/.well-known/carddav` redirigé comme un `GET` et sans
   authentification ; `PROPFIND /` défiant `Basic` seul, comme `/dav` ; `PROPFIND` sans `Depth`
   répondant `403 propfind-finite-depth` **et un `REPORT` sans `Depth` répondant normalement** — la
   paire, sans quoi la première règle déborde sur la seconde ; en-tête `DAV:` portant
-  `access-control` ; les propriétés de principal du RFC 3744 servies, `alternate-URI-set` et
-  `group-membership` vides compris ; `supported-report-set` servi sur le carnet avec ses trois
-  rapports **et** sur le principal, vide ; une URL de collection sans barre finale redirigée en
-  `301` ;
+  `access-control`, sur `OPTIONS` **et** sur un `207` de `PROPFIND` ; les propriétés de principal du
+  RFC 3744 servies, `alternate-URI-set` et
+  `group-membership` vides compris ; `supported-report-set` servi sur le carnet avec ses quatre
+  rapports, sur le principal avec `expand-property`, et sur une carte avec `multiget` et `query` ;
+  un `expand-property` sur le principal résolvant `addressbook-home-set` en réponse imbriquée ;
+  un `REPORT` `multiget` adressé à une carte servi comme depuis la collection ; une URL de
+  collection sans barre finale redirigée en `308`, méthode et corps préservés ; le `301` du
+  well-known portant son `Cache-Control` ; `{userId}` qui n'est pas l'utilisateur authentifié
+  répondant `404` sur chaque forme de route — principal, home, carnet, carte ; `OPTIONS` servi sans
+  identifiants ;
   `HEAD` servi ; `Allow` littéral, sur une carte comme sur la collection, et cohérent avec les
-  `405` — donc portant `PROPPATCH` sur la collection.
-- **`PROPPATCH`** : répond `207` et non `405`, chaque propriété demandée ressortant en `403
+  `405` — donc portant `PROPPATCH` partout et `REPORT` sur la carte.
+- **`PROPPATCH`** : répond `207` et non `405` — **sur le home**, la cible réelle du `me-card`
+  d'Apple, comme sur le carnet et sur une carte —, chaque propriété demandée ressortant en `403
   Forbidden`, `{calendarserver}me-card` compris ; rien n'est écrit en base. C'est le test qui garde le
   `DAV: 1` honnête.
+- **Les propriétés et le multiget** : `allprop` — et un corps vide — rendant le jeu de la
+  décision 13 hors `sync-token` et `current-user-privilege-set`, `propname` les noms seuls ; un
+  `GET` conditionnel sur `/dav` dont l'`If-None-Match` couvre l'ETag courant répondant `304` ; un
+  corps de rapport au-delà de 1 Mo répondant `413` ; `getcontentlength` en octets UTF-8 sur une
+  carte accentuée ; `max-resource-size` égal à la constante du store, pas à un littéral ; dans un
+  `multiget`, un `href` inconnu et un `href` hors de la collection ressortant chacun en `404`
+  **dans** le `multistatus`, et 5001 `href` répondant le `207` portant `507` sur la Request-URI.
 - **XXE et profondeur** : un corps de `REPORT` déclarant une entité externe est refusé ; un corps
   imbriqué au-delà de la borne est refusé par un `400`, et non par une exception qui traverse.
 
@@ -1684,8 +1874,13 @@ Trois notes, sur le modèle de `reverse-proxy-prerequisite.md` :
    séquence courante (décision 7) n'attrape que les clients les plus en avance : un jeton resté
    sous la séquence restaurée passe, et couvre des rangs dont le contenu a changé — divergence
    silencieuse et permanente. Le remède tient en une ligne : `UPDATE contact_sync_state SET
-   epoch = UUID()` — tous les jetons émis par la base d'avant deviennent étrangers au carnet, tous
-   les clients repartent d'une synchro complète. **Elle est livrée comme un fichier `.sql`
+   epoch = UUID()` — tous les jetons émis par la base d'avant deviennent étrangers au carnet, et le
+   ctag change avec eux (décision 7). **La reprise n'est pas uniforme, et le fichier doit le dire** :
+   DAVx⁵ lit le `403 valid-sync-token` et repart de zéro tout seul ; Thunderbird, lui, ne retombe en
+   synchro complète que sur un `400` — son code rejoue un jeton refusé en `403` à chaque cycle,
+   indéfiniment. Après une rotation d'epoch, un carnet Thunderbird est à ré-appairer à la main
+   (supprimer et recréer le carnet), et la note l'écrit à côté de la commande. **Elle est livrée
+   comme un fichier `.sql`
    versionné**, à côté
    du DDL et du rattrapage, et non comme une phrase dans un paragraphe : une consigne qu'il faut
    retrouver dans un document de conception au moment d'une restauration est une consigne qui ne
@@ -1698,14 +1893,17 @@ Trois notes, sur le modèle de `reverse-proxy-prerequisite.md` :
    n'est plus celui qui a émis vos jetons. C'est un `UPDATE` d'une colonne, sans borne à calculer, et
    qui reste juste s'il est joué deux fois.
 
-   **Et un contrôle qui ne demande à personne de se souvenir.** Une restauration n'annonce pas qu'elle
-   a eu lieu ; la parade ci-dessus suppose qu'un humain sache la jouer au bon moment. Le démarrage du
-   service compare donc, par utilisateur, `MAX(contacts.sync_sequence)` à `contact_sync_state.seq` : le
-   premier ne peut pas dépasser le second sans qu'une base ait été rembobinée sous le service. La
-   divergence est journalisée en erreur, nommément, avec la ligne `.sql` à jouer. C'est le seul endroit
+   **Et un contrôle au démarrage — qui n'attrape que la restauration incohérente, et le dit.** Le
+   service compare, par utilisateur, `MAX(contacts.sync_sequence)` à `contact_sync_state.seq` : le
+   premier ne peut dépasser le second que si les deux tables ne viennent pas du même instantané. La
+   divergence est journalisée en erreur, nommément, avec la ligne `.sql` à jouer. Ce que ce contrôle
+   **ne voit pas**, et il faut l'écrire pour que personne ne s'y fie : une restauration *cohérente* —
+   les deux tables rembobinées ensemble — le laisse muet, l'inégalité restant vraie. Pour le cas
+   nominal d'une restauration, le geste humain du `.sql` reste le seul remède, et c'est pour cela
+   qu'il est versionné à côté du DDL plutôt qu'écrit dans un paragraphe. C'est le seul endroit
    de cette tranche où un incident n'a aucun symptôme côté client — les téléphones continuent de
-   synchroniser, sur un carnet qui a changé sous eux — et c'est pour cela qu'il faut le détecter au
-   démarrage plutôt que l'attendre en support.
+   synchroniser, sur un carnet qui a changé sous eux — et le contrôle au démarrage en attrape la
+   moitié détectable.
 
    Le compromis mérite d'être nommé, parce qu'il est le seul endroit où ce serveur demande un geste
    humain là où Radicale n'en demande aucun. Le ctag de Radicale est dérivé du contenu de la
@@ -1726,7 +1924,9 @@ Trois notes, sur le modèle de `reverse-proxy-prerequisite.md` :
   principal — jamais un second secret à recopier.
 - **Pas de gestion par appareil.** Un secret par utilisateur, régénérable ; perdre un téléphone
   oblige à reconfigurer les autres. C'est l'échange assumé de la décision 1, et il se rouvrira le
-  jour où quelqu'un comptera ses appareils sur ses deux mains.
+  jour où quelqu'un comptera ses appareils sur ses deux mains — ou celui où le compte web gagnera
+  une 2FA : Basic ne transporte aucun second facteur, et le secret par appareil (le « mot de passe
+  d'application » de Nextcloud) sera alors la seule voie qui ne casse pas la synchronisation.
 - **Pas de plusieurs carnets, pas de partage, pas de `MKCOL`.** Le carnet est créé avec
   l'utilisateur ; `MKCOL` répond `405`.
 - **Pas de traitement des groupes de contacts.** iOS les écrit comme des cartes à part
@@ -1737,16 +1937,21 @@ Trois notes, sur le modèle de `reverse-proxy-prerequisite.md` :
   fiches-là pour un bug ; ce qu'on en fait à l'écran — les filtrer, les rendre, les ignorer — se
   décidera devant un client réel.
 - **Pas de propriété mutable.** Rien de tel ne se présente : le nom du carnet est fixe. `PROPPATCH`
-  est néanmoins **servi**, d'un `207` refusant chaque propriété en `403` — parce que l'en-tête
-  `DAV: 1` l'engage et parce que les clients d'Apple y écrivent leur `me-card` (décision 16). Servi
+  est néanmoins **servi** — sur le home, le carnet et les cartes —, d'un `207` refusant chaque
+  propriété en `403` : l'en-tête `DAV: 1` l'engage, et les clients d'Apple écrivent leur `me-card`
+  sur le home (décision 16). Servi
   ne veut pas dire stocké : rien n'entre en base.
 - **Pas de modèle d'ACL.** `current-user-privilege-set` rend un jeu constant et `access-control` est
   annoncé parce que le RFC 6352 l'exige et que les clients le lisent (décision 13) ; la méthode `ACL`
-  et `acl-principal-prop-set` répondent `405`. Un carnet à un seul propriétaire n'a pas de politique
+  répond `405`, et les rapports de principal du RFC 3744 sont une divergence nommée (décision 13).
+  Un carnet à un seul propriétaire n'a pas de politique
   à exprimer.
-- **Pas de conversion de version vCard.** `supported-address-data` annonce 3.0 et 4.0 parce que le
-  carnet contient les deux ; un client qui demande une version qu'une carte n'a pas reçoit la carte
-  telle qu'elle est stockée. Convertir, ce serait réécrire — ce que 4a interdit hors modification.
+- **Pas de conversion du stock — mais une conversion à la lecture.** `supported-address-data`
+  annonce 3.0 et 4.0 parce que le carnet contient les deux ; une carte n'est **jamais** réécrite en
+  base — 4a l'interdit hors modification — mais un `address-data` qui nomme une version reçoit une
+  représentation convertie (décision 11), parce que la flotte mixte n'est pas hypothétique :
+  Thunderbird écrit du 4.0 sans lire l'annonce, iOS lit mal le 4.0. Le `GET`, lui, sert toujours le
+  verbatim, `Accept` ou pas.
 - **Pas d'écran de restauration d'une révision.** La donnée est écrite (décision 17) parce qu'elle
   ne se retrouve pas après coup ; l'interface, elle, s'ajoute quand on le veut. Un premier cas réel
   dira si le geste est « rendre cette version » ou « comparer les deux », et construire avant de le
@@ -1756,4 +1961,9 @@ Trois notes, sur le modèle de `reverse-proxy-prerequisite.md` :
   détecte, il archive, il rend la main.
 - **Pas de découverte par SRV DNS ni depuis `mail.weesky.net`.** L'adresse à saisir est celle de
   l'API ; les deux autres chemins demandent de la configuration hors dépôt et pourront s'ajouter en
-  4d si un client les réclame.
+  4d si un client les réclame. Thunderbird interroge le SRV du domaine **avant** le well-known : un
+  utilisateur qui saisit son domaine nu ne s'auto-configurera pas — l'écran de la décision 19 donne
+  l'adresse complète à copier, et c'est le chemin documenté.
+- **Pas de `Prefer: return=minimal` ni de `Brief: t`** (RFC 8144). sabre les honore ; aucun client
+  CardDAV connu ne les émet — DAVx⁵ et Thunderbird vérifiés dans le code. Les `propstat` à `404` de
+  la décision 14 restent donc toujours écrits.
