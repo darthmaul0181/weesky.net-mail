@@ -1,0 +1,71 @@
+# Prérequis base de données — tables CardDAV
+
+À rejouer **avant** le déploiement du backend, sur `snoopy_webmail` **et** `snoopy_webmail_dev`.
+Création manuelle : ce projet n'utilise pas les migrations EF.
+
+Les FK exigent que `users` existe déjà (voir `webmail-users-table.md`).
+
+L'ordre n'est pas une commodité d'exploitation : le backend refuse de lire une table absente, et
+un déploiement qui précède son DDL rend `500` sur l'onglet « Sync ».
+
+## Tranche 4c-i — `dav_credentials`
+
+Une ligne par utilisateur, et c'est la forme qui dit qu'il n'y a qu'un secret par personne
+(décision 1). Une clé technique et un index sur `user_id` laisseraient la table accepter une
+deuxième ligne que rien dans le code ne crée — jusqu'au jour où une reprise l'y mettrait.
+
+```sql
+CREATE TABLE `dav_credentials` (
+  `user_id`         CHAR(36)      NOT NULL,
+  `carddav_enabled` TINYINT(1)    NOT NULL DEFAULT 1
+    COMMENT 'Interrupteur par protocole ; CalDAV aura sa propre colonne, pas une migration',
+  `secret_hash`     CHAR(64)      NOT NULL
+    COMMENT 'SHA-256 hexadécimal minuscule de (salt || secret UTF-8)',
+  `salt`            VARBINARY(16) NOT NULL,
+  `created_at`      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_used_at`    TIMESTAMP     NULL DEFAULT NULL
+    COMMENT 'Amorti à l''heure côté service ; l''écran le rend en relatif',
+  PRIMARY KEY (`user_id`),
+  CONSTRAINT `fk_dav_credentials_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+```
+
+## Pourquoi le hachage n'est pas un KDF
+
+C'est l'inverse de la règle habituelle et la raison est écrite ici pour que personne ne
+« corrige » le hachage plus tard. Un KDF lent existe pour rendre coûteuse l'attaque par
+dictionnaire d'un secret que l'humain a choisi. Ici l'entropie vient de nous : 20 caractères
+base32, ≈100 bits, hors de portée d'une recherche exhaustive quelle que soit la vitesse du
+hachage. Et un client DAV se ré-authentifie à **chaque** requête — un PBKDF2 à 100 000 itérations
+y serait un déni de service que nous nous infligerions nous-mêmes, déclenchable à volonté par des
+requêtes non authentifiées.
+
+Le sel reste par ligne : il empêche qu'une même chaîne engendrée deux fois se reconnaisse dans la
+table, et il ne coûte rien — la ligne se retrouve par sa clé, jamais par l'empreinte.
+
+## Deux états distincts, et ils ne se confondent pas
+
+- **Aucune ligne** = jamais activé. L'utilisateur n'a pas de secret, et le `401` est la seule
+  réponse du bord.
+- **`carddav_enabled = 0`** = éteint mais configuré. Le secret survit, rallumer ne reconfigure
+  aucun appareil, et le bord répond `403` — mais seulement après une comparaison **réussie** du
+  condensat (décision 2), sans quoi la réponse serait un oracle d'énumération de comptes.
+
+Le défaut à `1` décrit l'état dans lequel la ligne naît — elle n'existe que si l'utilisateur a
+allumé l'interrupteur —, pas une politique appliquée à qui n'a rien demandé.
+
+## Ce que la tranche 4c-ii ajoutera
+
+`contact_sync_state`, `contact_tombstones`, `contact_revisions`, deux colonnes sur `contacts`
+(`dav_name`, `sync_sequence`) et leur rattrapage. Elles ne sont **pas** dans ce fichier tant que
+4c-ii n'est pas écrite : un DDL rejoué en avance créerait des tables que rien ne lit et un
+rattrapage que rien ne vérifie.
+
+## Vérifier
+
+```sql
+SELECT COUNT(*) FROM information_schema.TABLES
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dav_credentials';
+-- attendu : 1
+```
