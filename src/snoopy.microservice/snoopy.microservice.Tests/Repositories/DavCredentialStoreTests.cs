@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
@@ -49,16 +50,21 @@ public sealed class DavCredentialStoreTests
     }
 
     [Fact]
-    public async Task TwoFirstEnablesAtOnce_LeaveOneRowAndOneSecret()
+    public async Task Enable_WhenAConcurrentFirstEnableWinsTheRace_AnswersNoSecondSecret()
     {
-        // Double click, two tabs. The InMemory provider does enforce the primary key on
-        // SaveChanges, so this exercises the real DbUpdateException path rather than a mock of it.
-        var db = nameof(TwoFirstEnablesAtOnce_LeaveOneRowAndOneSecret);
-        var first = CreateStore(db);
-        var second = CreateStore(db);
+        // Double click, two tabs. The rival enable really runs, between this call's read and its
+        // write; only the duplicate-key rejection is injected, because the InMemory provider does
+        // not raise the DbUpdateException a relational store raises there. Nothing else is faked:
+        // this drives the store's own recovery — detach, re-read the winner, answer null — and
+        // would fail with the exception in hand if that recovery were missing.
+        var db = nameof(Enable_WhenAConcurrentFirstEnableWinsTheRace_AnswersNoSecondSecret);
+        string? winner = null;
+        var context = new DuplicateKeyOnFirstSaveDbContext(db, async () =>
+        {
+            winner = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        });
 
-        var winner = await first.EnableAsync(User, CancellationToken.None);
-        var loser = await second.EnableAsync(User, CancellationToken.None);
+        var loser = await new DavCredentialStore(context).EnableAsync(User, CancellationToken.None);
 
         Assert.NotNull(winner);
         // The loser answers as a re-enable does: the state, and no second secret.
@@ -153,6 +159,21 @@ public sealed class DavCredentialStoreTests
     }
 
     [Fact]
+    public async Task GetState_OnASwitchedOffRow_StaysConfigured()
+    {
+        var db = nameof(GetState_OnASwitchedOffRow_StaysConfigured);
+        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+
+        var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
+
+        // Off but configured is not "never configured": the screen offers to switch back on rather
+        // than to set up, and the edge answers 403 rather than 401.
+        Assert.True(state.Configured);
+        Assert.False(state.CardDavEnabled);
+    }
+
+    [Fact]
     public async Task Find_AnswersTheRowTheHandlerCompares()
     {
         var db = nameof(Find_AnswersTheRowTheHandlerCompares);
@@ -171,6 +192,22 @@ public sealed class DavCredentialStoreTests
         var db = nameof(Find_OnAnAccountThatNeverEnabled_IsNull);
 
         Assert.Null(await CreateStore(db).FindAsync(User, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Find_OnASwitchedOffRow_AnswersItWithTheFlagOff()
+    {
+        var db = nameof(Find_OnASwitchedOffRow_AnswersItWithTheFlagOff);
+        var secret = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+
+        var record = await CreateStore(db).FindAsync(User, CancellationToken.None);
+
+        // The row still answers, digest and all: the edge refuses only after a successful
+        // comparison, without which the refusal would enumerate accounts.
+        Assert.NotNull(record);
+        Assert.False(record!.Value.CardDavEnabled);
+        Assert.True(DavSecret.Matches(record.Value.Salt, record.Value.SecretHash, secret!));
     }
 
     [Fact]
@@ -200,5 +237,34 @@ public sealed class DavCredentialStoreTests
 
         using var ctx = new PreferencesTestDbContext(db);
         Assert.Empty(ctx.DavCredentials);
+    }
+
+    /// <summary>
+    /// Runs a rival write between this context's read and its own — the one instant at which a
+    /// duplicate key can reach SaveChanges — then rejects that first save the way MariaDB does,
+    /// with a <see cref="DbUpdateException"/>. The rejection is injected because the InMemory
+    /// provider models no unique constraint: it lets a raw <c>ArgumentException</c> escape from
+    /// the dictionary backing its tables, which is the fake's shortcoming and not the contract.
+    /// Deterministic by construction, where two genuinely parallel calls would leave the winner
+    /// to chance. Test-only: the store under test is untouched.
+    /// </summary>
+    private sealed class DuplicateKeyOnFirstSaveDbContext(string databaseName, Func<Task> rival)
+        : PreferencesDbContext(new DbContextOptionsBuilder<PreferencesDbContext>()
+            .UseInMemoryDatabase(databaseName).Options)
+    {
+        private bool _rejected;
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_rejected)
+            {
+                _rejected = true;
+                await rival();
+                // Rejected means written nowhere, exactly as the real insert would be.
+                throw new DbUpdateException("Duplicate entry for key 'PRIMARY'");
+            }
+
+            return await base.SaveChangesAsync(cancellationToken);
+        }
     }
 }
