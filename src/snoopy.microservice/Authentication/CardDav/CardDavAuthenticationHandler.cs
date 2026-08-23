@@ -30,16 +30,12 @@ internal sealed class CardDavAuthenticationHandler(
     IDavAuthenticationCache cache,
     AuthAttemptThrottle throttle,
     TimeProvider clock,
-    IHostEnvironment environment,
-    ILogger<CardDavAuthenticationHandler> log)
+    IHostEnvironment environment)
     : AuthenticationHandler<CardDavAuthenticationOptions>(options, loggerFactory, encoder)
 {
     private const string OutcomeKey = "carddav-auth-outcome";
     private const string RetryAfterKey = "carddav-auth-retry-after";
     private const string BasicPrefix = "Basic ";
-
-    /// <summary>A SHA-256 digest in lowercase hex, as <see cref="DavSecret.Hash"/> writes it.</summary>
-    private const int SecretHashLength = 64;
 
     private enum Outcome { Unauthorized, Forbidden, TooManyRequests }
 
@@ -62,7 +58,7 @@ internal sealed class CardDavAuthenticationHandler(
         if (!Request.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
             && !environment.IsDevelopment())
         {
-            log.LogWarning("CardDAV authentication refused: request origin is not https");
+            Logger.LogWarning("CardDAV authentication refused: request origin is not https");
             return Refuse(Outcome.Forbidden);
         }
 
@@ -99,8 +95,8 @@ internal sealed class CardDavAuthenticationHandler(
             // A stored digest of the wrong width is a storage fault, indistinguishable from a wrong
             // secret at Matches, which cannot log by constraint. The answer is 401 either way; this
             // line says which it was, on the GUID alone — never the address, never the secret.
-            if (row.Value.SecretHash.Length != SecretHashLength)
-                log.LogError("CardDAV credential row of {UserId} holds a malformed secret hash", account.Value.Id);
+            if (row.Value.SecretHash.Length != DavSecret.HashLength)
+                Logger.LogError("CardDAV credential row of {UserId} holds a malformed secret hash", account.Value.Id);
 
             return await RefuseWithDelayAsync(canonical, address);
         }
@@ -181,12 +177,25 @@ internal sealed class CardDavAuthenticationHandler(
     /// The random delay Radicale applies, for the two signals a bare response time gives away: the
     /// existence of the account, and the cost of guessing. Task.Delay and never Thread.Sleep — a
     /// blocking wait would turn the speed bump into the pool exhaustion it exists to prevent — and
-    /// no lock, no open connection is held across it.
+    /// no lock, no open connection is held across it. Routed through the injected clock, so a test
+    /// observes the wait it asks for instead of chronometering one.
     /// </summary>
     private async Task<AuthenticateResult> RefuseWithDelayAsync(string identifier, string? address)
     {
         throttle.RecordFailure(identifier, address);
-        await Task.Delay(RandomNumberGenerator.GetInt32(500, 1501), Context.RequestAborted);
+        try
+        {
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(RandomNumberGenerator.GetInt32(500, 1501)),
+                clock, Context.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            // A client hanging up mid-delay is still a refusal: HandleAuthenticateOnceAsync does
+            // not swallow, so an escaping cancellation would surface as a pipeline error instead
+            // of the 401 this path was already heading for. The failure is recorded above.
+        }
+
         return Refuse(Outcome.Unauthorized);
     }
 

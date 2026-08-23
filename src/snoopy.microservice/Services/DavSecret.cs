@@ -20,6 +20,9 @@ internal static class DavSecret
 
     internal const int SaltLength = 16;
 
+    /// <summary>The width <see cref="Hash"/> writes: a SHA-256 digest in lowercase hex.</summary>
+    internal const int HashLength = SHA256.HashSizeInBytes * 2;
+
     /// <summary>RFC 4648 base32, minus nothing: no whitespace, which is what makes the Trim safe.</summary>
     private const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 

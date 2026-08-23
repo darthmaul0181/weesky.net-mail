@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using System.Diagnostics;
@@ -36,6 +35,7 @@ public sealed class CardDavAuthenticationHandlerTests
     private readonly Mock<IAccountInfoProvider> accounts = new();
     private readonly Mock<IAuthenticationService> jwt = new();
     private readonly Mock<ILogger<CardDavAuthenticationHandler>> log = new();
+    private readonly Mock<ILoggerFactory> loggerFactory = new();
     private readonly MutableTimeProvider clock = new();
     private readonly AuthAttemptThrottle throttle;
     private readonly DavAuthenticationCache cache;
@@ -44,6 +44,9 @@ public sealed class CardDavAuthenticationHandlerTests
     {
         throttle = new AuthAttemptThrottle(clock);
         cache = new DavAuthenticationCache(clock);
+        // The handler logs through the one ILogger its base class builds, so the test's logger has
+        // to arrive through the factory rather than as a second injected logger for the same type.
+        loggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>())).Returns(log.Object);
         users.Setup(s => s.FindByEmailAsync(Email, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WebmailAccount(UserId, Guid.NewGuid()));
         accounts.Setup(s => s.IsUsableAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(true);
@@ -60,7 +63,8 @@ public sealed class CardDavAuthenticationHandlerTests
 
     private async Task<(AuthenticateResult Result, DefaultHttpContext Context)> AuthenticateAsync(
         string? authorization, string scheme = "https", string? environment = null,
-        string? remoteIp = "203.0.113.7")
+        string? remoteIp = "203.0.113.7", TimeProvider? handlerClock = null,
+        CancellationToken aborted = default)
     {
         var services = new ServiceCollection();
         services.AddSingleton(jwt.Object);
@@ -69,15 +73,16 @@ public sealed class CardDavAuthenticationHandlerTests
         if (authorization is not null) context.Request.Headers.Authorization = authorization;
         if (remoteIp is not null) context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(remoteIp);
         context.Response.Body = new MemoryStream();
+        context.RequestAborted = aborted;
 
         var env = new Mock<IHostEnvironment>();
         // Environments.Production is static readonly, not const, so it cannot be a default value.
         env.SetupGet(e => e.EnvironmentName).Returns(environment ?? Environments.Production);
 
         var handler = new CardDavAuthenticationHandler(
-            new OptionsMonitorStub(), NullLoggerFactory.Instance, UrlEncoder.Default,
-            credentials.Object, users.Object, accounts.Object, cache, throttle, clock, env.Object,
-            log.Object);
+            new OptionsMonitorStub(), loggerFactory.Object, UrlEncoder.Default,
+            credentials.Object, users.Object, accounts.Object, cache, throttle,
+            handlerClock ?? clock, env.Object);
 
         await handler.InitializeAsync(
             new AuthenticationScheme(CardDavAuthenticationDefaults.AuthenticationScheme, null,
@@ -240,7 +245,6 @@ public sealed class CardDavAuthenticationHandlerTests
         // One short of the threshold, so a throttle write by the handler would tip it over.
         for (var i = 0; i < AuthAttemptThrottle.MaxFailures - 1; i++)
             throttle.RecordFailure(Email, "203.0.113.7");
-        var elapsed = Stopwatch.StartNew();
 
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret), scheme: "http");
 
@@ -249,7 +253,7 @@ public sealed class CardDavAuthenticationHandlerTests
         // transport already gave away.
         credentials.Verify(s => s.FindAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.False(throttle.IsBlocked(Email, "203.0.113.7", out _));
-        AssertUndelayed(elapsed);
+        AssertNoDelayWasRequested();
     }
 
     [Fact]
@@ -267,7 +271,6 @@ public sealed class CardDavAuthenticationHandlerTests
         for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
             throttle.RecordFailure(Email, "203.0.113.7");
         credentials.Invocations.Clear();
-        var elapsed = Stopwatch.StartNew();
 
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret));
 
@@ -279,7 +282,7 @@ public sealed class CardDavAuthenticationHandlerTests
         Assert.Equal(0, context.Response.Headers.WWWAuthenticate.Count);
         credentials.Verify(s => s.FindAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         // A request past the threshold must cost nothing at all, the slowdown included.
-        AssertUndelayed(elapsed);
+        AssertNoDelayWasRequested();
     }
 
     [Fact]
@@ -298,13 +301,56 @@ public sealed class CardDavAuthenticationHandlerTests
     [Fact]
     public async Task AFailureIsDelayedWithinTheSpecifiedWindow()
     {
-        var elapsed = Stopwatch.StartNew();
+        // Observed rather than chronometered: the wait is taken on the injected clock, so the
+        // refusal is provably still pending while the clock stands still, and the amount asked for
+        // is read back instead of inferred from a wall clock a loaded runner also writes to.
+        clock.HoldTimers = true;
 
-        await AuthenticateAsync(Basic(Email, "WRONGWRONGWRONGWRONG"));
+        var pending = AuthenticateAsync(Basic(Email, "WRONGWRONGWRONGWRONG"));
+        await clock.WaitForPendingTimerAsync();
 
-        // Both ends of [500 ms, 1500 ms]. The ceiling is loose enough for a busy runner but still
-        // catches a delay that ran away — an unbounded one is a denial of service of our own making.
-        Assert.InRange(elapsed.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(5));
+        Assert.False(pending.IsCompleted);
+        var asked = Assert.Single(clock.RequestedDelays);
+        Assert.InRange(asked, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(1500));
+
+        clock.Now = clock.Now.Add(TimeSpan.FromMilliseconds(1500));
+        var (result, context) = await pending;
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AClientHangingUpDuringTheDelay_IsARefusalAndNotAnEscapingException()
+    {
+        // The base AuthenticateAsync runs HandleAuthenticateOnceAsync, which does not swallow: an
+        // uncaught cancellation would leave the pipeline instead of the 401 this path was heading
+        // for. The attempt still counts, since the throttle is written before the wait begins.
+        clock.HoldTimers = true;
+        using var aborted = new CancellationTokenSource();
+
+        var pending = AuthenticateAsync(Basic(Email, "WRONGWRONGWRONGWRONG"), aborted: aborted.Token);
+        await clock.WaitForPendingTimerAsync();
+        await aborted.CancelAsync();
+
+        var (result, context) = await pending;
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal(2, throttle.TrackedKeys);
+    }
+
+    [Fact]
+    public async Task ARequestWithoutARemoteAddress_IsRefusedAndCountsOnTheIdentifierAlone()
+    {
+        // Kestrel reports no peer for some connections, and the throttle then drops the address
+        // key entirely rather than keying every such caller onto one shared empty string.
+        var (result, context) = await AuthenticateAsync(
+            Basic(Email, "WRONGWRONGWRONGWRONG"), remoteIp: null);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal(1, throttle.TrackedKeys);
     }
 
     [Fact]
@@ -316,8 +362,12 @@ public sealed class CardDavAuthenticationHandlerTests
         const int Callers = 20;
         var elapsed = Stopwatch.StartNew();
 
+        // The real clock on purpose: this is the one test whose subject is real concurrency, so a
+        // wait the test itself completes would prove nothing about threads.
         await Task.WhenAll(Enumerable.Range(0, Callers)
-            .Select(i => AuthenticateAsync(Basic($"ghost{i}@weesky.be", Secret), remoteIp: $"203.0.113.{i}"))
+            .Select(i => AuthenticateAsync(
+                Basic($"ghost{i}@weesky.be", Secret), remoteIp: $"203.0.113.{i}",
+                handlerClock: TimeProvider.System))
             .ToArray());
 
         Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(5),
@@ -463,10 +513,8 @@ public sealed class CardDavAuthenticationHandlerTests
         Assert.Equal(JwtBearerDefaults.AuthenticationScheme, options.DefaultChallengeScheme);
     }
 
-    /// <summary>The slowdown's floor is 500 ms, so anything well under it is a refusal that paid none.</summary>
-    private static void AssertUndelayed(Stopwatch elapsed) =>
-        Assert.True(elapsed.Elapsed < TimeSpan.FromMilliseconds(400),
-            $"the refusal took {elapsed.Elapsed}, which is a delay it should not have paid.");
+    /// <summary>Nothing was ever asked of the clock, so the refusal took a path that pays no delay.</summary>
+    private void AssertNoDelayWasRequested() => Assert.Empty(clock.RequestedDelays);
 
     private void VerifyLogged(LogLevel level, Func<string, bool> matches) =>
         log.Verify(
