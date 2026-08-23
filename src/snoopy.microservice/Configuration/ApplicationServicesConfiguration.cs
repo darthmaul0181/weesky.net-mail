@@ -112,6 +112,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IContactStore, ContactStore>();
         services.AddScoped<IExternalDomainStore, ExternalDomainStore>();
         services.AddScoped<IConnectedAccountStore, ConnectedAccountStore>();
+        services.AddScoped<IDavCredentialStore, DavCredentialStore>();
 
         return services;
     }
