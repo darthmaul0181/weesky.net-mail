@@ -3205,10 +3205,11 @@ public sealed class DavCredentialsController(
         else
         {
             await store.DisableAsync(AuthenticatedUser.WebmailUid, cancellationToken);
-            // Switched off is authenticated-but-closed at the edge, which is read off the row on
-            // the next request — but this instance's cache would answer for it for a minute.
-            cache.Forget(AuthenticatedUser.Email);
         }
+
+        // The cached entry carries the switch state, so it answers with the old one for the rest
+        // of the window — in both directions: a 200 after switching off, a 403 after switching on.
+        cache.Forget(AuthenticatedUser.Email);
 
         logger.LogInformation("Audit: carddav_sync user={UserId} enabled={Enabled} created={Created}",
             AuthenticatedUser.WebmailUid, toggle.Enabled, secret is not null);
@@ -3877,6 +3878,14 @@ a donc rien à annoter de ce côté ; **c'est un résidu à consigner**, pas un 
 
 - [ ] **Step 1 : Ajouter les clés**
 
+**Ce que cette phrase doit dire, et l'ordre compte.** Un client déjà configuré repart en boucle
+d'échec dès le changement de mot de passe, et le compteur d'échecs bloque à dix par quart d'heure
+sur l'identifiant comme sur le /64 : un utilisateur à trois appareils peut donc se verrouiller
+lui-même hors de `/dav` au moment précis où il vient reconfigurer, et seul un succès efface la clé
+de son identifiant — or il ne peut pas en produire un tant qu'il est bloqué. La phrase dit donc
+d'éteindre les clients d'abord, puis de les reconfigurer avec le nouveau secret ; jamais
+« reconfigurez maintenant », qui invite à saturer le seuil.
+
 `en` → bloc `account` : `"passwordResetsSync": "Changing your password also resets your sync password. Every device syncing your contacts will need the new one."`
 
 `fr` → bloc `account` : `"passwordResetsSync": "Changer votre mot de passe réinitialise aussi votre mot de passe de synchronisation. Tous les appareils qui synchronisent vos contacts devront saisir le nouveau."`
@@ -3960,4 +3969,13 @@ MSG
   l'`IExecutionStrategy`, ordre de prise de verrou, lots de cent) est celle de 4c-ii. La seule
   écriture multi-instruction de cette tranche — la rotation qui détruit le secret — tient dans un
   `SaveChangesAsync`, ce qu'EF enveloppe déjà.
+- **Un `[Authorize]` nu sur une route `/dav` serait un bogue**, et c'est le seul piège que cette
+  tranche lègue sans qu'un test puisse l'attraper : le schéma de défi par défaut reste JwtBearer,
+  donc un attribut sans nom de politique répondrait `WWW-Authenticate: Bearer` à un client CardDAV,
+  qui n'a pas de jeton et ne sait pas en demander. Toute route `/dav` porte
+  `[Authorize(Policy = CardDavAuthenticationDefaults.PolicyName)]`, jamais autre chose.
+- **Le résidu de soixante secondes sur la révocation** : `Forget` ne peut pas battre un `Store`
+  concurrent — une requête qui a lu l'ancien secret avant la rotation peut le réinscrire après.
+  Le fermer demande un compteur de génération dans `IDavAuthenticationCache` ; c'est le bon
+  correctif et 4c-ii le bon endroit.
 - Aucune conformité client prouvée : c'est 4d.
