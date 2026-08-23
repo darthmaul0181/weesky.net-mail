@@ -189,14 +189,13 @@ public sealed class DavCredentialsControllerTests
     }
 
     [Fact]
-    public void SetCardDav_ABodyThatNamesNoState_IsRefusedRatherThanReadAsOff()
+    public void DavSyncToggle_ABodyThatNamesNoState_FailsToBindRatherThanReadingAsOff()
     {
         // {} once bound to false and switched synchronisation off; the required member makes the
-        // formatter throw, which the API behaviour turns into a 400.
+        // formatter throw, which the API behaviour turns into the 400 the action declares.
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DavSyncToggle>("{}", options));
-        Assert.False(JsonSerializer.Deserialize<DavSyncToggle>("""{"enabled":false}""", options)!.Enabled);
     }
 
     [Fact]

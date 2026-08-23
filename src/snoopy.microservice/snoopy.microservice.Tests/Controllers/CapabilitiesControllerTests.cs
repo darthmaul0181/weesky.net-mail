@@ -66,10 +66,8 @@ public sealed class CapabilitiesControllerTests
     [Fact]
     public async Task GetCapabilities_OnWeeskyAsAdmin_ReturnsEveryFlagTrue()
     {
-        var result = await CreateController(davPublicUrl: "https://api.mail.weesky.net").GetCapabilities(CancellationToken.None);
+        var capabilities = await GetCapabilitiesAsync(davPublicUrl: "https://api.mail.weesky.net");
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var capabilities = Assert.IsType<CapabilitiesResponse>(ok.Value);
         Assert.Equal(new CapabilitiesResponse(
             Platform: "weesky", Admin: true, Aliases: true, PasswordChange: true, ProfileEditing: true,
             StrictIdentities: true, Quota: true, Rules: true, Dav: true), capabilities);

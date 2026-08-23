@@ -58,10 +58,12 @@ public sealed class DavCredentialsController(
     /// <param name="toggle">the wanted state of the CardDAV switch</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">The new state, carrying the secret only when this call drew one</response>
+    /// <response code="400">A body that names no state — it is refused, never read as a switch-off</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">This deployment publishes no synchronisation address</response>
     [HttpPut("CardDav")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DavCredentialsView>> SetCardDav(
@@ -83,7 +85,8 @@ public sealed class DavCredentialsController(
         // of the window — in both directions: a 200 after switching off, a 403 after switching on.
         cache.Forget(Identifier);
 
-        logger.LogInformation("Audit: carddav_sync user={UserId} enabled={Enabled} created={Created}",
+        logger.LogInformation(
+            "Audit: carddav_sync user={UserId} enabled={Enabled} created={Created} outcome=success",
             AuthenticatedUser.WebmailUid, toggle.Enabled, secret is not null);
 
         return Ok(await ViewAsync(secret, cancellationToken));
@@ -112,7 +115,8 @@ public sealed class DavCredentialsController(
         if (secret is null) return NotFoundEnveloppe("Synchronisation has never been enabled");
 
         cache.Forget(Identifier);
-        logger.LogInformation("Audit: carddav_regenerate user={UserId}", AuthenticatedUser.WebmailUid);
+        logger.LogInformation("Audit: carddav_regenerate user={UserId} outcome=success",
+            AuthenticatedUser.WebmailUid);
 
         return Ok(await ViewAsync(secret, cancellationToken));
     }

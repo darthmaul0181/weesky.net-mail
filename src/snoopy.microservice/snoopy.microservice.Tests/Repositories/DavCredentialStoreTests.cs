@@ -184,6 +184,23 @@ public sealed class DavCredentialStoreTests
     }
 
     [Fact]
+    public async Task GetState_StampsTheLastUseAsUtcWhateverKindTheProviderReadBack()
+    {
+        // Pomelo reads a MariaDB DATETIME back as Unspecified, and a serialised Unspecified has no
+        // "Z" — the browser then reads it as local time. InMemory keeps the Kind it was handed, so
+        // the row is written Unspecified here to stand in for what the real provider returns.
+        var db = nameof(GetState_StampsTheLastUseAsUtcWhateverKindTheProviderReadBack);
+        var used = new DateTime(2026, 8, 23, 8, 0, 0, DateTimeKind.Unspecified);
+        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db).TouchAsync(User, used, CancellationToken.None);
+
+        var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
+
+        Assert.Equal(DateTimeKind.Utc, state.LastUsedAt!.Value.Kind);
+        Assert.Equal(used, state.LastUsedAt.Value);
+    }
+
+    [Fact]
     public async Task GetState_OnAnAccountThatNeverEnabled_IsNotConfigured()
     {
         var db = nameof(GetState_OnAnAccountThatNeverEnabled_IsNotConfigured);

@@ -15,9 +15,12 @@ internal sealed class DavCredentialStore(PreferencesDbContext context) : IDavCre
             .Select(c => new { c.CardDavEnabled, c.LastUsedAt })
             .FirstOrDefaultAsync(cancellationToken);
 
+        // MariaDB DATETIME carries no zone, so Pomelo reads back Unspecified and the serialiser
+        // then emits no "Z" — which a browser reads as local time, shifting a relative "last used"
+        // by the viewer's offset. The column is written in UTC; this says so on the way out.
         return row is null
             ? new DavCredentialState(false, false, null)
-            : new DavCredentialState(true, row.CardDavEnabled, row.LastUsedAt);
+            : new DavCredentialState(true, row.CardDavEnabled, AsUtc(row.LastUsedAt));
     }
 
     public async Task<DavCredentialRecord?> FindAsync(Guid userId, CancellationToken cancellationToken)
@@ -110,6 +113,9 @@ internal sealed class DavCredentialStore(PreferencesDbContext context) : IDavCre
         context.DavCredentials.Remove(row);
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    private static DateTime? AsUtc(DateTime? value) =>
+        value is null ? null : DateTime.SpecifyKind(value.Value, DateTimeKind.Utc);
 
     private Task<DavCredential?> Track(Guid userId, CancellationToken cancellationToken) =>
         context.DavCredentials.FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
