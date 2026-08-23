@@ -22,14 +22,23 @@ CREATE TABLE `dav_credentials` (
   `secret_hash`     CHAR(64)      NOT NULL
     COMMENT 'SHA-256 hexadécimal minuscule de (salt || secret UTF-8)',
   `salt`            VARBINARY(16) NOT NULL,
-  `created_at`      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `last_used_at`    TIMESTAMP     NULL DEFAULT NULL
-    COMMENT 'Amorti à l''heure côté service ; l''écran le rend en relatif',
+  `created_at`      DATETIME      NOT NULL
+    COMMENT 'UTC ; posée par le code, jamais par le schéma',
+  `last_used_at`    DATETIME      NULL DEFAULT NULL
+    COMMENT 'UTC ; posée par le code — amortie à l''heure côté service, rendue en relatif',
   PRIMARY KEY (`user_id`),
   CONSTRAINT `fk_dav_credentials_user`
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 ```
+
+Aucun `GRANT` à rejouer : les utilisateurs `snoopy_webmail`/`snoopy_webmail_dev` ont déjà
+`SELECT, INSERT, UPDATE, DELETE` sur toute la base.
+
+**Ni `DEFAULT CURRENT_TIMESTAMP` ni `TIMESTAMP` sur les deux dates**, pour la même raison que
+`users.creation_date` n'en a pas : la valeur appartient au code, qui l'écrit en UTC, et un
+`TIMESTAMP` la ferait traverser le fuseau de session — décalée, dans la même base, à côté d'une
+`DATETIME` posée par le même code.
 
 ## Pourquoi le hachage n'est pas un KDF
 
@@ -62,10 +71,26 @@ allumé l'interrupteur —, pas une politique appliquée à qui n'a rien demand�
 4c-ii n'est pas écrite : un DDL rejoué en avance créerait des tables que rien ne lit et un
 rattrapage que rien ne vérifie.
 
-## Vérifier
+## Vérification
+
+La collation est ce qui échoue réellement ici : la FK exige que `dav_credentials.user_id` et
+`users.id` s'accordent, donc elle se lit, elle ne se suppose pas. Le schéma est nommé plutôt que
+laissé à `DATABASE()`, qui vaut NULL sur un client sans base sélectionnée et rend alors 0 ligne
+sans rien signaler.
 
 ```sql
-SELECT COUNT(*) FROM information_schema.TABLES
- WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dav_credentials';
--- attendu : 1
+SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES
+ WHERE TABLE_SCHEMA = 'snoopy_webmail' AND TABLE_NAME = 'dav_credentials';
+-- attendu : dav_credentials | utf8mb4_bin
 ```
+
+## Désinstallation
+
+```sql
+DROP TABLE IF EXISTS `snoopy_webmail`.`dav_credentials`;
+DROP TABLE IF EXISTS `snoopy_webmail_dev`.`dav_credentials`;
+```
+
+La perdre coupe chaque appareil déjà configuré : les secrets partent avec la table, et rallumer la
+synchronisation en engendre de nouveaux, à ressaisir sur chaque appareil. Aucun contact n'est
+concerné.

@@ -1440,8 +1440,8 @@ dav_credentials     user_id         CHAR(36)      NOT NULL  PK
                     carddav_enabled TINYINT(1)    NOT NULL DEFAULT 1
                     secret_hash     CHAR(64)      NOT NULL        SHA-256 hex de (sel ‖ secret)
                     salt            VARBINARY(16) NOT NULL
-                    created_at      TIMESTAMP     NOT NULL
-                    last_used_at    TIMESTAMP     NULL
+                    created_at      DATETIME      NOT NULL        UTC ; posée par le code
+                    last_used_at    DATETIME      NULL            UTC ; posée par le code
                     FK user_id → users(id) ON DELETE CASCADE
 contact_sync_state  user_id      CHAR(36) NOT NULL  PK
                     epoch        CHAR(36) NOT NULL            GUID ; change à la restauration
