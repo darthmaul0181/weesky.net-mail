@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
+using weesky.Snoopy.Microservice.Authentication.CardDav;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Services;
@@ -31,6 +32,11 @@ internal static class SecurityConfiguration
         });
 
         services.AddMemoryCache();
+
+        // Singleton is load-bearing: both memories live in this instance's dictionaries, and a
+        // shorter lifetime would forget every burst at the end of the request that started it.
+        services.AddSingleton<IDavAuthenticationCache, DavAuthenticationCache>();
+
         services.AddScoped<IMailCredentialStore, MailCredentialStore>();
         services.AddScoped<IUserAuthenticator, UserAuthenticator>();
         services.AddScoped<ITokenManager, TokenManager>();
