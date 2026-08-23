@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text;
@@ -234,14 +235,21 @@ public sealed class CardDavAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task PlainHttp_Is403AndNeverReadsTheTable()
+    public async Task PlainHttp_Is403_ReadsNothingAndCostsNothing()
     {
+        // One short of the threshold, so a throttle write by the handler would tip it over.
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures - 1; i++)
+            throttle.RecordFailure(Email, "203.0.113.7");
+        var elapsed = Stopwatch.StartNew();
+
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret), scheme: "http");
 
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
         // Asserted on the store, not on the status: nothing is ever compared to a secret its own
         // transport already gave away.
         credentials.Verify(s => s.FindAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.False(throttle.IsBlocked(Email, "203.0.113.7", out _));
+        AssertUndelayed(elapsed);
     }
 
     [Fact]
@@ -254,11 +262,12 @@ public sealed class CardDavAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task PastTheThreshold_Is429WithRetryAfterAndNeverReadsTheTable()
+    public async Task PastTheThreshold_Is429_ReadsNothingAndCostsNothing()
     {
         for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
             throttle.RecordFailure(Email, "203.0.113.7");
         credentials.Invocations.Clear();
+        var elapsed = Stopwatch.StartNew();
 
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret));
 
@@ -269,6 +278,8 @@ public sealed class CardDavAuthenticationHandlerTests
         // its secret went bad.
         Assert.Equal(0, context.Response.Headers.WWWAuthenticate.Count);
         credentials.Verify(s => s.FindAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        // A request past the threshold must cost nothing at all, the slowdown included.
+        AssertUndelayed(elapsed);
     }
 
     [Fact]
@@ -285,16 +296,32 @@ public sealed class CardDavAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task AFailureIsDelayed()
+    public async Task AFailureIsDelayedWithinTheSpecifiedWindow()
     {
-        var started = DateTime.UtcNow;
+        var elapsed = Stopwatch.StartNew();
 
         await AuthenticateAsync(Basic(Email, "WRONGWRONGWRONGWRONG"));
 
-        // The floor of the random window; the ceiling is not asserted, a loaded runner may exceed
-        // it. That the wait is awaited rather than slept is structural — see RefuseWithDelayAsync —
-        // and no assertion here can tell the two apart.
-        Assert.True(DateTime.UtcNow - started >= TimeSpan.FromMilliseconds(450));
+        // Both ends of [500 ms, 1500 ms]. The ceiling is loose enough for a busy runner but still
+        // catches a delay that ran away — an unbounded one is a denial of service of our own making.
+        Assert.InRange(elapsed.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task ConcurrentFailuresWaitTogether_SoTheDelayNeverBlocksAThread()
+    {
+        // Twenty failures started one after another from this thread. Awaited, the waits overlap
+        // and the batch costs one window; slept, each would block the starter before the next one
+        // began and the batch would cost twenty.
+        const int Callers = 20;
+        var elapsed = Stopwatch.StartNew();
+
+        await Task.WhenAll(Enumerable.Range(0, Callers)
+            .Select(i => AuthenticateAsync(Basic($"ghost{i}@weesky.be", Secret), remoteIp: $"203.0.113.{i}"))
+            .ToArray());
+
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(5),
+            $"{Callers} concurrent failures took {elapsed.Elapsed}; serialised they would take ~{Callers}s.");
     }
 
     [Fact]
@@ -322,6 +349,26 @@ public sealed class CardDavAuthenticationHandlerTests
         var (result, _) = await AuthenticateAsync(authorization: null);
 
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task AValidJwtInABearerHeader_DelegatesAndIsAccepted()
+    {
+        // Only the browser sends its token in a cookie. Swagger's Authorize button, curl and every
+        // other API consumer send this header, and refusing it would remove the JWT fallback that
+        // delegation exists for.
+        jwt.Setup(s => s.AuthenticateAsync(It.IsAny<HttpContext>(), JwtBearerDefaults.AuthenticationScheme))
+            .ReturnsAsync(AuthenticateResult.Success(new AuthenticationTicket(
+                new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.Upn, "alice"), new Claim(ClaimTypes.Dns, "weesky.be")], "Bearer")),
+                "Bearer")));
+
+        var (result, context) = await AuthenticateAsync("Bearer eyJhbGciOiJIUzI1NiJ9.e30.s");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0, context.Response.Headers.WWWAuthenticate.Count);
+        jwt.Verify(s => s.AuthenticateAsync(It.IsAny<HttpContext>(),
+            JwtBearerDefaults.AuthenticationScheme), Times.Once);
     }
 
     [Fact]
@@ -415,6 +462,11 @@ public sealed class CardDavAuthenticationHandlerTests
         Assert.Equal(JwtBearerDefaults.AuthenticationScheme, options.DefaultAuthenticateScheme);
         Assert.Equal(JwtBearerDefaults.AuthenticationScheme, options.DefaultChallengeScheme);
     }
+
+    /// <summary>The slowdown's floor is 500 ms, so anything well under it is a refusal that paid none.</summary>
+    private static void AssertUndelayed(Stopwatch elapsed) =>
+        Assert.True(elapsed.Elapsed < TimeSpan.FromMilliseconds(400),
+            $"the refusal took {elapsed.Elapsed}, which is a delay it should not have paid.");
 
     private void VerifyLogged(LogLevel level, Func<string, bool> matches) =>
         log.Verify(

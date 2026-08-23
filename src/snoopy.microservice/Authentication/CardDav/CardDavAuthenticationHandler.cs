@@ -36,6 +36,7 @@ internal sealed class CardDavAuthenticationHandler(
 {
     private const string OutcomeKey = "carddav-auth-outcome";
     private const string RetryAfterKey = "carddav-auth-retry-after";
+    private const string BasicPrefix = "Basic ";
 
     /// <summary>A SHA-256 digest in lowercase hex, as <see cref="DavSecret.Hash"/> writes it.</summary>
     private const int SecretHashLength = 64;
@@ -46,10 +47,10 @@ internal sealed class CardDavAuthenticationHandler(
     {
         if (!TryReadBasic(out var identifier, out var secret))
         {
-            // No Basic header at all: the JWT is a first-class scheme on this surface, which is
-            // what keeps /dav testable from an ordinary webmail session. A malformed one is not
-            // delegated — it is an attempt, and it answers as one.
-            return HasAuthorizationHeader()
+            // No Basic header — absent, or another scheme, Bearer above all: the JWT is a
+            // first-class scheme here, which is what keeps /dav reachable from Swagger, curl and an
+            // ordinary webmail session. A malformed *Basic* header is an attempt, and answers as one.
+            return HasBasicHeader()
                 ? Refuse(Outcome.Unauthorized)
                 : await Context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
         }
@@ -145,7 +146,8 @@ internal sealed class CardDavAuthenticationHandler(
         return Task.CompletedTask;
     }
 
-    private bool HasAuthorizationHeader() => !string.IsNullOrEmpty(Request.Headers.Authorization);
+    private bool HasBasicHeader() =>
+        Request.Headers.Authorization.ToString().StartsWith(BasicPrefix, StringComparison.OrdinalIgnoreCase);
 
     private bool TryReadBasic(out string identifier, out string secret)
     {
@@ -153,10 +155,12 @@ internal sealed class CardDavAuthenticationHandler(
         secret = string.Empty;
 
         var header = Request.Headers.Authorization.ToString();
-        if (!header.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!header.StartsWith(BasicPrefix, StringComparison.OrdinalIgnoreCase)) return false;
 
-        Span<byte> decoded = new byte[header.Length];
-        if (!Convert.TryFromBase64String(header["Basic ".Length..].Trim(), decoded, out var written)) return false;
+        // Four base64 characters carry three bytes, and internal whitespace only shortens that.
+        var payload = header[BasicPrefix.Length..].Trim();
+        var decoded = new byte[payload.Length / 4 * 3];
+        if (!Convert.TryFromBase64String(payload, decoded, out var written)) return false;
 
         var pair = Encoding.UTF8.GetString(decoded[..written]);
         var separator = pair.IndexOf(':');
