@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Moq;
+using weesky.Snoopy.Microservice.Authentication.CardDav;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
@@ -57,7 +58,7 @@ public sealed class ConnectedAccountsOAuthTests
         _accounts = new ConnectedAccountStore(db);
         _domains = new ExternalDomainStore(db);
         _identities = new SendingIdentityStore(db);
-        _users = new WebmailUserStore(db);
+        _users = new WebmailUserStore(db, new DavAuthenticationCache(TimeProvider.System));
         _arrangedAccounts = new ConnectedAccountStore(arranged);
     }
 

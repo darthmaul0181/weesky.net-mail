@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using weesky.Snoopy.Microservice.Authentication.CardDav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailUserStore
+internal sealed class WebmailUserStore(
+    PreferencesDbContext context, IDavAuthenticationCache davCache) : IWebmailUserStore
 {
     public async Task<WebmailAccount> RegisterLoginAsync(string email, CancellationToken cancellationToken)
     {
@@ -67,7 +69,21 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
         if (row is null) return Guid.NewGuid();
 
         row.SecurityStamp = Guid.NewGuid();
+
+        // The three callers are all gestures of taking control back — sign out everywhere, change
+        // your password, an administrator's reset — and a synchronisation secret surviving any of
+        // them would leave the whole address book open to whoever holds it. Destroyed, not
+        // switched off: switching off is the gesture of comfort, this one is distrust. One
+        // SaveChanges, so it is one transaction with the rotation.
+        var secret = await context.DavCredentials
+            .FirstOrDefaultAsync(c => c.UserId == row.Id, cancellationToken);
+        if (secret is not null) context.DavCredentials.Remove(secret);
+
         await context.SaveChangesAsync(cancellationToken);
+
+        // After the commit, never before: from here no request can still read the deleted row, so
+        // the eviction races only against reads already in flight.
+        davCache.Forget(canonical);
 
         return row.SecurityStamp;
     }

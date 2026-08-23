@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using weesky.Snoopy.Microservice.Authentication.CardDav;
 using weesky.Snoopy.Microservice.Authentication.Models;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
@@ -44,7 +45,7 @@ public sealed class AccountConnectionResolverTests
     public AccountConnectionResolverTests()
     {
         _db = new PreferencesTestDbContext(_databaseName);
-        _users = new WebmailUserStore(_db);
+        _users = new WebmailUserStore(_db, new DavAuthenticationCache(TimeProvider.System));
         _accounts = new ConnectedAccountStore(_db);
         _domains = new ExternalDomainStore(_db);
         _arrangedAccounts = new ConnectedAccountStore(new PreferencesTestDbContext(_databaseName));

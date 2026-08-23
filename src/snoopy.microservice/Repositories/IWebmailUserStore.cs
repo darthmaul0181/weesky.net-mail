@@ -16,8 +16,11 @@ public interface IWebmailUserStore
     Task<WebmailAccount?> FindByEmailAsync(string email, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Draws a new security stamp, which invalidates every token already issued for this account.
-    /// Returns it so the caller can re-issue its own session rather than sign itself out.
+    /// Draws a new security stamp, which invalidates every token already issued for this account,
+    /// and destroys its synchronisation secret in the same transaction — every caller of this is a
+    /// gesture of taking control back, and a secret surviving one of them would leave the whole
+    /// address book open. The DAV clients are to be reconfigured; the screens that trigger it say so.
+    /// Returns the new stamp so the caller can re-issue its own session rather than sign itself out.
     /// </summary>
     Task<Guid> RotateSecurityStampAsync(string email, CancellationToken cancellationToken);
 
