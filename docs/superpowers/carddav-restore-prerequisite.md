@@ -4,7 +4,7 @@
 service aux clients. Sans cela, un incident de sauvegarde/restauration ne se manifeste par aucune
 erreur visible pendant que la synchronisation d'un ou plusieurs téléphones diverge en silence.
 
-Ce fichier n'est pas versionné dans une spec : le geste est livré comme un script,
+Ce fichier n'est pas versionné dans une spec : le geste est livré comme un script,
 `assets/contacts-sync-epoch-rotate.sql`, précisément parce qu'une consigne qu'il faut retrouver
 dans un document de conception au moment d'une restauration est une consigne qui ne sera pas
 jouée.

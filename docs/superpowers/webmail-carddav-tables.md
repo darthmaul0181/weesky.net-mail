@@ -136,7 +136,7 @@ ALTER TABLE `contacts`
   ADD INDEX `ix_contacts_sync_sequence` (`user_id`, `sync_sequence`);
 ```
 
-Et les quatre paragraphes qu'un relecteur redemanderait :
+Et les quatre paragraphes qu'un relecteur redemanderait :
 
 - **`seq` et non `sequence`** : `SEQUENCE` est un mot-clé MariaDB depuis 10.3, et une colonne
   qui n'existe qu'entre back-quotes est une erreur de production en attente, dans un projet où le
