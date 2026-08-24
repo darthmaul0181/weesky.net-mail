@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
   getPreferences: vi.fn(),
   getConnectedAccounts: vi.fn(),
+  getDavCredentials: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -38,6 +39,7 @@ vi.mock('../../api.js', () => ({
     getMailFolders: mocks.getMailFolders,
     getPreferences: mocks.getPreferences,
     getConnectedAccounts: mocks.getConnectedAccounts,
+    getDavCredentials: mocks.getDavCredentials,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -81,6 +83,10 @@ describe('settings section', () => {
     mocks.adminGetUsers.mockResolvedValue([])
     mocks.adminGetDomains.mockResolvedValue([])
     mocks.getConnectedAccounts.mockResolvedValue([])
+    mocks.getDavCredentials.mockResolvedValue({
+      serverUrl: 'https://api.mail.weesky.net', username: 'mick@weesky.be',
+      configured: false, cardDavEnabled: false,
+    })
     // The shell now watches the inbox app-wide, so every route mounts these two.
     mocks.getMailFolders.mockResolvedValue([])
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
@@ -109,6 +115,7 @@ describe('settings section', () => {
     expect(nav.getByText('Folders')).toBeInTheDocument()
     expect(nav.getByText('Aliases')).toBeInTheDocument()
     expect(nav.getByText('Identities')).toBeInTheDocument()
+    expect(nav.getByText('Sync')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
     await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(false))
     expect(nav.queryByText('Administration')).not.toBeInTheDocument()
@@ -125,6 +132,7 @@ describe('settings section', () => {
     ['/settings/folders', 'Folders'],
     ['/settings/aliases', 'Aliases'],
     ['/settings/identities', 'Identities'],
+    ['/settings/sync', 'Sync'],
     ['/settings/rules', 'Rules'],
     ['/settings/admin', 'Administration'],
   ])('%s pairs an icon with its <h1> title', async (path, title) => {
@@ -180,6 +188,15 @@ describe('settings section', () => {
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
     expect(nav.queryByText('Rules')).not.toBeInTheDocument()
+  })
+
+  it('hides Sync on a non-primary account', async () => {
+    localStorage.setItem('mail.activeAccount', 'g1')
+    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+    mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
+    renderAt('/settings/general')
+    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    await waitFor(() => expect(nav.queryByText('Sync')).not.toBeInTheDocument())
   })
 
   // The loading pin: activeAccount is null until the connected-accounts query resolves, and the
@@ -240,6 +257,25 @@ describe('settings section', () => {
       const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
       expect(nav.getByText('Account')).toBeInTheDocument()
       await waitFor(() => expect(nav.queryByText('Rules')).not.toBeInTheDocument())
+    })
+
+    it('hides Sync when the deployment publishes no address', async () => {
+      mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+      mocks.getCapabilities.mockResolvedValue({ dav: false })
+      renderAt('/settings/account')
+      const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+      expect(nav.getByText('Account')).toBeInTheDocument()
+      await waitFor(() => expect(nav.queryByText('Sync')).not.toBeInTheDocument())
+    })
+
+    // The `!== false` rule: capabilities are null until the query answers, and a backend that
+    // predates the flag never sends it — both must leave the row up rather than hide it.
+    it('shows Sync when capabilities are still loading', async () => {
+      mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
+      mocks.getCapabilities.mockReturnValue(new Promise(() => {}))
+      renderAt('/settings/account')
+      const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+      expect(nav.getByText('Sync')).toBeInTheDocument()
     })
 
     // The connected account's Rules gate is sieveSupported, not the platform's capabilities — the

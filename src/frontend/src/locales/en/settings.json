@@ -8,6 +8,7 @@
     "folders": "Folders",
     "aliases": "Aliases",
     "identities": "Identities",
+    "sync": "Sync",
     "rules": "Rules",
     "admin": "Administration"
   },
@@ -406,5 +407,24 @@
       "markFlaggedDesc": "Add the starred/flagged flag to the message.",
       "stopAfterDesc": "If this rule matches, no further rules in the list are evaluated. Without this, all matching rules apply in order."
     }
+  },
+  "sync": {
+    "carddav": "Contacts (CardDAV)",
+    "carddavHint": "Sync your address book with your phone or Thunderbird. Turning this off stops every device; your password is kept.",
+    "connection": "Connection",
+    "serverUrl": "Server URL",
+    "username": "Username",
+    "password": "Password",
+    "lastUsed": "Last used",
+    "neverUsed": "Never used",
+    "copy": "Copy",
+    "copied": "Copied",
+    "shownOnce": "Copy it now — it will not be shown again.",
+    "regenerate": "Regenerate",
+    "regenerateTitle": "Regenerate the sync password?",
+    "regenerateWarning": "Every device will stop syncing until you enter the new password. Turn syncing off on your devices first, then enter the new one — repeated failures lock the account out for fifteen minutes.",
+    "hidden": "Hidden — regenerate to get a new one",
+    "loadFailed": "Could not load the sync settings",
+    "saveFailed": "Could not save the change"
   }
 }

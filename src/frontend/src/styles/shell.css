@@ -430,6 +430,15 @@ a.dropdown-item { text-decoration: none; }
   margin-bottom: 8px;
 }
 
+/* The secret is read once and typed into a client by hand: monospace, and wide enough not to wrap. */
+.sync-secret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px; letter-spacing: 0.06em; user-select: all;
+}
+.sync-secret-note { margin: 6px 0 0; font-size: 12px; color: var(--text-muted); }
+.sync-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sync-value > span { overflow-wrap: anywhere; }
+
 /* Read-only names under their heading, not an outline: the disc is a marker nothing else on
    the page uses, and the indent it needs pushed the values out of line with every other row. */
 .account-domains { list-style: none; margin: 0; padding: 0; }

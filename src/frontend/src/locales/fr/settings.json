@@ -8,6 +8,7 @@
     "folders": "Dossiers",
     "aliases": "Alias",
     "identities": "Identités",
+    "sync": "Synchronisation",
     "rules": "Règles",
     "admin": "Administration"
   },
@@ -406,5 +407,24 @@
       "markFlaggedDesc": "Ajoute l’étoile au message.",
       "stopAfterDesc": "Si cette règle correspond, aucune règle suivante n’est évaluée. Sans cela, toutes les règles correspondantes s’appliquent dans l’ordre."
     }
+  },
+  "sync": {
+    "carddav": "Contacts (CardDAV)",
+    "carddavHint": "Synchronisez votre carnet d’adresses avec votre téléphone ou Thunderbird. Désactiver arrête tous les appareils ; votre mot de passe est conservé.",
+    "connection": "Connexion",
+    "serverUrl": "Adresse du serveur",
+    "username": "Identifiant",
+    "password": "Mot de passe",
+    "lastUsed": "Dernière utilisation",
+    "neverUsed": "Jamais utilisé",
+    "copy": "Copier",
+    "copied": "Copié",
+    "shownOnce": "Copiez-le maintenant : il ne sera plus affiché.",
+    "regenerate": "Régénérer",
+    "regenerateTitle": "Régénérer le mot de passe de synchronisation ?",
+    "regenerateWarning": "Tous les appareils cesseront de se synchroniser jusqu’à la saisie du nouveau mot de passe. Désactivez d’abord la synchronisation sur vos appareils, puis saisissez le nouveau : des échecs répétés bloquent le compte un quart d’heure.",
+    "hidden": "Masqué — régénérez pour en obtenir un nouveau",
+    "loadFailed": "Impossible de charger les réglages de synchronisation",
+    "saveFailed": "Impossible d’enregistrer la modification"
   }
 }
