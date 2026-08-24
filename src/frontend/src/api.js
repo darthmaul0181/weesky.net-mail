@@ -211,6 +211,19 @@ export const api = {
 
   exportContacts: () => requestBlob('/api/Contacts/Export'),
 
+  // The address comes from the backend's configuration, never composed here: the URL this app
+  // calls is not necessarily the one the proxy publishes.
+  getDavCredentials: () =>
+    request('GET', '/api/DavCredentials'),
+
+  // Turning it on for the first time answers the secret in this very response — the only moment
+  // it exists in clear.
+  setDavCardDav: (enabled) =>
+    request('PUT', '/api/DavCredentials/CardDav', { enabled }),
+
+  regenerateDavSecret: () =>
+    request('POST', '/api/DavCredentials/Regenerate'),
+
   getTrustedSenders: () =>
     request('GET', '/api/TrustedSenders'),
 

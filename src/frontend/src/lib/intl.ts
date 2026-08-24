@@ -42,3 +42,29 @@ export function collator(
   }
   return instance
 }
+
+const relativeFormats = new Map<string, Intl.RelativeTimeFormat>()
+
+function relativeFormat(locale: string = activeLocale()): Intl.RelativeTimeFormat {
+  let formatter = relativeFormats.get(locale)
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+    relativeFormats.set(locale, formatter)
+  }
+  return formatter
+}
+
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 365 * 24 * 3600], ['month', 30 * 24 * 3600], ['day', 24 * 3600],
+  ['hour', 3600], ['minute', 60], ['second', 1],
+]
+
+/** A past instant, in the largest unit that still says something. The server stamps the date and
+    the browser reads it, so a clock a few seconds ahead prints "now" rather than a future. */
+export function relativeFromNow(iso: string, now: Date = new Date()): string {
+  const seconds = Math.round((new Date(iso).getTime() - now.getTime()) / 1000)
+  if (seconds > -5) return relativeFormat().format(0, 'second')
+
+  const [unit, size] = RELATIVE_UNITS.find(([, s]) => Math.abs(seconds) >= s) ?? RELATIVE_UNITS[5]
+  return relativeFormat().format(Math.round(seconds / size), unit)
+}
