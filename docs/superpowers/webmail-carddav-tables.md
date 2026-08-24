@@ -177,6 +177,53 @@ SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES
 --   dav_credentials     | utf8mb4_bin
 ```
 
+### Prérequis avant d'ouvrir toute route `/dav` — l'atomicité du compteur, vérifiée à la main
+
+C'est la seule propriété de correction de toute la tranche 4c-ii qui n'a pas de test : `ContactSyncStore.NextSequenceAsync` avance le compteur par un `INSERT ... ON DUPLICATE KEY
+UPDATE seq = seq + 1` que ni le fournisseur InMemory ni SQLite ne savent exécuter à l'identique.
+Elle se vérifie donc à la main, une fois, contre `snoopy_webmail_dev`, avec deux sessions `mysql`
+côte à côte :
+
+```sql
+-- Session A                              -- Session B
+START TRANSACTION;
+INSERT INTO contact_sync_state
+  (user_id, epoch, seq, pruned_below)
+VALUES ('<un user réel>', UUID(), 1, 0)
+ON DUPLICATE KEY UPDATE seq = seq + 1;
+                                          START TRANSACTION;
+                                          INSERT INTO contact_sync_state
+                                            (user_id, epoch, seq, pruned_below)
+                                          VALUES ('<le même>', UUID(), 1, 0)
+                                          ON DUPLICATE KEY UPDATE seq = seq + 1;
+                                          -- ↑ DOIT BLOQUER ici, et non rendre la main
+SELECT seq FROM contact_sync_state
+ WHERE user_id = '<le même>';             -- (toujours bloquée)
+COMMIT;
+                                          -- ↑ se débloque maintenant
+                                          SELECT seq FROM contact_sync_state
+                                           WHERE user_id = '<le même>';
+                                          COMMIT;
+```
+
+Ce qu'il faut observer, et consigner dans le rapport de tâche :
+
+| Observation | Attendu |
+|---|---|
+| La session B au moment de son `INSERT` | **bloque**, elle ne rend pas la main |
+| B se débloque | au `COMMIT` de A, pas avant |
+| Le `seq` lu par A puis par B | deux valeurs **distinctes** et consécutives |
+| Après les deux `COMMIT` | `seq` a avancé de exactement 2 |
+| L'`epoch` | **inchangé** entre les deux, malgré le `UUID()` dans chaque `VALUES` |
+| Le `SELECT` sur `user_id = '<le même>'` | trouve **exactement une ligne** — un paramètre `Guid` lié dans un format que la colonne `CHAR(36)` ne reconnaît pas créerait une seconde ligne d'état au lieu de mettre à jour la première |
+
+Si B ne bloque pas, l'incrément n'est pas sous verrou et rien de la synchronisation n'est sûr :
+arrêter et le signaler, ne pas continuer le plan.
+
+**Non exécutée à ce jour** : aucune instance MariaDB n'est joignable depuis l'environnement où
+la tâche 3 a été implémentée. Tant qu'un opérateur ne l'aura pas rejouée, l'atomicité du compteur
+est affirmée plutôt que vérifiée.
+
 ## Désinstallation
 
 ```sql
