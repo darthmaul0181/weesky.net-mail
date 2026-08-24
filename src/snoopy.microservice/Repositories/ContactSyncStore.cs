@@ -60,4 +60,105 @@ internal sealed class ContactSyncStore(PreferencesDbContext context) : IContactS
 
         return new SyncState(created.Epoch, 0, 0);
     }
+
+    public async Task PlaceTombstoneAsync(
+        Guid userId, string davName, ulong sequence, CancellationToken cancellationToken)
+    {
+        // Upsert and not insert: the key is (user_id, dav_name), so a name deleted, recreated and
+        // deleted again lands on an existing row. A bare INSERT would fail that second deletion on
+        // a duplicate key — in production, on data the user believes gone.
+        var held = await context.ContactTombstones
+            .SingleOrDefaultAsync(t => t.UserId == userId && t.DavName == davName, cancellationToken);
+
+        if (held is null)
+        {
+            context.ContactTombstones.Add(new ContactTombstone
+            {
+                UserId = userId, DavName = davName, SyncSequence = sequence, DeletedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            held.SyncSequence = sequence;
+            held.DeletedAt = DateTime.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task LiftTombstoneAsync(Guid userId, string davName, CancellationToken cancellationToken)
+    {
+        var held = await context.ContactTombstones
+            .SingleOrDefaultAsync(t => t.UserId == userId && t.DavName == davName, cancellationToken);
+        if (held is null) return;
+
+        context.ContactTombstones.Remove(held);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> ArchiveAsync(ContactRevision revision, CancellationToken cancellationToken)
+    {
+        // The window guards one shape only: a client looping on a refusal. Two accepted writes that
+        // land on the same hash are two facts, and dropping the second would lose an overwrite on
+        // the table whose whole job is to lose nothing.
+        if (revision.Cause == RevisionCause.Rejected)
+        {
+            var since = revision.ReplacedAt.AddHours(-24);
+            var alreadyKept = await context.ContactRevisions.AnyAsync(
+                r => r.UserId == revision.UserId
+                     && r.DavName == revision.DavName
+                     && r.CardHash == revision.CardHash
+                     && r.Cause == revision.Cause
+                     && r.ReplacedAt > since,
+                cancellationToken);
+            if (alreadyKept) return false;
+        }
+
+        context.ContactRevisions.Add(revision);
+        await context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<PruneOutcome> PruneAsync(
+        DateTime tombstonesBefore, DateTime revisionsBefore, CancellationToken cancellationToken)
+    {
+        var doomed = await context.ContactTombstones
+            .Where(t => t.DeletedAt < tombstonesBefore)
+            .ToListAsync(cancellationToken);
+
+        // Source order here is not execution order: SaveChangesAsync batches and orders its own
+        // commands, so writing the watermark update before the RemoveRange below does not, by
+        // itself, make it commit first. What actually matters is that both go out under this one
+        // SaveChangesAsync, hence one transaction — they commit together or not at all. That
+        // atomicity is what makes an EF-chosen order inside the transaction safe. Split this into
+        // two SaveChangesAsync calls and a process killed between them can leave the tombstones
+        // gone and pruned_below behind: a stale token is then ACCEPTED, the response omits the
+        // deletion with nothing to signal it, and the client keeps the card for ever.
+        var highest = doomed
+            .GroupBy(t => t.UserId)
+            .ToDictionary(g => g.Key, g => g.Max(t => t.SyncSequence));
+
+        foreach (var (userId, sequence) in highest)
+        {
+            var state = await context.ContactSyncStates
+                .SingleOrDefaultAsync(s => s.UserId == userId, cancellationToken);
+            if (state is null) continue;
+
+            // Never downwards. It is also what makes the sweep safe on several instances at once:
+            // the write is commutative, and a DELETE that no longer finds its rows removes zero.
+            state.PrunedBelow = Math.Max(state.PrunedBelow, sequence);
+        }
+
+        context.ContactTombstones.RemoveRange(doomed);
+
+        var staleRevisions = await context.ContactRevisions
+            .Where(r => r.ReplacedAt < revisionsBefore)
+            .ToListAsync(cancellationToken);
+        context.ContactRevisions.RemoveRange(staleRevisions);
+
+        // One SaveChanges, so the watermark and the removal commit together or not at all.
+        await context.SaveChangesAsync(cancellationToken);
+
+        return new PruneOutcome(doomed.Count, staleRevisions.Count);
+    }
 }
