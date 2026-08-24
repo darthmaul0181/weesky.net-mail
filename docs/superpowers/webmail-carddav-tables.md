@@ -98,7 +98,8 @@ CREATE TABLE `contact_tombstones` (
   `user_id`       CHAR(36)        NOT NULL,
   `dav_name`      VARCHAR(255)    NOT NULL COLLATE utf8mb4_bin,
   `sync_sequence` BIGINT UNSIGNED NOT NULL,
-  `deleted_at`  DATETIME  NOT NULL COMMENT 'UTC ; posée par le code, jamais par le schéma',
+  `deleted_at`    DATETIME        NOT NULL
+    COMMENT 'UTC ; posée par le code, jamais par le schéma',
   PRIMARY KEY (`user_id`, `dav_name`),
   INDEX `ix_contact_tombstones_seq` (`user_id`, `sync_sequence`),
   CONSTRAINT `fk_contact_tombstones_user`
@@ -117,7 +118,8 @@ CREATE TABLE `contact_revisions` (
   `vcard_raw`   MEDIUMTEXT      NOT NULL
     COMMENT 'Les octets remplacés ou refusés — même type que contacts.vcard_raw',
   `cause`       ENUM('put','webmail','import','delete','rejected') NOT NULL,
-  `replaced_at`  DATETIME  NOT NULL COMMENT 'UTC ; posée par le code, jamais par le schéma',
+  `replaced_at` DATETIME        NOT NULL
+    COMMENT 'UTC ; posée par le code, jamais par le schéma',
   PRIMARY KEY (`id`),
   INDEX `ix_contact_revisions_user_time` (`user_id`, `replaced_at`),
   INDEX `ix_contact_revisions_time` (`replaced_at`),
