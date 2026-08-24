@@ -31,7 +31,7 @@
     "newPasswordTooShort": "New password must be at least 10 characters.",
     "passwordsDoNotMatch": "Passwords do not match.",
     "currentPasswordIncorrect": "Current password is incorrect.",
-    "passwordResetsSync": "Changing your password also resets your sync password. Every device syncing your contacts will need the new one."
+    "passwordResetsSync": "Changing your password turns contact sync off: the sync password is deleted, not replaced. Turn syncing off on your devices first, then switch it back on in the Sync tab to get a new one — devices left retrying lock the account out for fifteen minutes."
   },
   "appearance": {
     "language": {
@@ -425,7 +425,9 @@
     "regenerateTitle": "Regenerate the sync password?",
     "regenerateWarning": "Every device will stop syncing until you enter the new password. Turn syncing off on your devices first, then enter the new one — repeated failures lock the account out for fifteen minutes.",
     "hidden": "Hidden — regenerate to get a new one",
+    "notConfigured": "Turn Contacts (CardDAV) on to get a password",
     "loadFailed": "Could not load the sync settings",
+    "unavailable": "This server does not offer synchronisation.",
     "saveFailed": "Could not save the change"
   }
 }

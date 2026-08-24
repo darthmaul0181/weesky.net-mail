@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import i18next from 'i18next'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../../contexts/AuthContext'
 import AccountPage from './AccountPage'
@@ -143,12 +144,34 @@ describe('AccountPage', () => {
     expect(confirmInput).toHaveValue('long-enough-pw')
   })
 
-  it('warns that changing the password also resets the sync one', async () => {
+  it('warns on the change-password form that the gesture turns contact sync off, and in what order', async () => {
     // The gesture destroys the sync secret without the Sync tab being open, so the warning has to
-    // live where the gesture is.
+    // live where the gesture is — scoped to the form, or it would pass from anywhere on the page.
     renderPage()
+    const form = (await screen.findByRole('button', { name: /change password/i })).closest('form')
+    const onForm = within(form as HTMLElement)
 
-    expect(await screen.findByText(/also resets your sync password/i)).toBeInTheDocument()
+    // RotateSecurityStampAsync deletes the dav_credentials row rather than re-keying it, so there
+    // is no new password to enter; and devices left retrying take 401s that AuthAttemptThrottle
+    // counts, with IsBlocked running before the digest comparison. Hence the order.
+    expect(onForm.getByText(/turns contact sync off/i)).toBeInTheDocument()
+    expect(onForm.getByText(/Turn syncing off on your devices first/i)).toBeInTheDocument()
+  })
+
+  // Parity checks keys and typography, never prose, so the order clause could be dropped in French
+  // alone with every other assertion green — the same pin the regenerate warning carries.
+  it('states the order in French too, not only that sync goes off', async () => {
+    await i18next.changeLanguage('fr')
+    try {
+      renderPage()
+      const form = (await screen.findByRole('button', { name: /modifier le mot de passe/i })).closest('form')
+
+      expect(within(form as HTMLElement)
+        .getByText(/Désactivez d’abord la synchronisation sur vos appareils/)).toBeInTheDocument()
+    } finally {
+      cleanup()
+      await i18next.changeLanguage('en')
+    }
   })
 
   it('blocks submission when the current password is empty', async () => {

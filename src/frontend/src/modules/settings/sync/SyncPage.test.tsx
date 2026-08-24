@@ -2,9 +2,12 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import SyncPage from './SyncPage'
-import { api } from '../../../api.js'
+import { api, ApiError } from '../../../api.js'
 
-vi.mock('../../../api.js', () => ({
+// The rest of the module comes through untouched: the 404 branch is an `instanceof ApiError`
+// check, so a hand-rolled stand-in would not match the class the component imports.
+vi.mock('../../../api.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../../../api.js')>(),
   api: {
     getDavCredentials: vi.fn(),
     setDavCardDav: vi.fn(),
@@ -30,6 +33,29 @@ describe('SyncPage', () => {
 
     expect(await screen.findByText('https://api.mail.weesky.net')).toBeInTheDocument()
     expect(screen.getByText('alice@weesky.be')).toBeInTheDocument()
+  })
+
+  // The very first visit, which every other case here skips by starting from the ON fixture: both
+  // branches used to be gated on `configured`, so the row rendered its label beside nothing at all.
+  it('tells a first-time visitor how to get a password rather than leaving the row empty', async () => {
+    render(<SyncPage />)
+
+    expect(await screen.findByText('Turn Contacts (CardDAV) on to get a password')).toBeInTheDocument()
+  })
+
+  it('says a deployment with no sync address does not offer it, rather than blaming the load', async () => {
+    vi.mocked(api.getDavCredentials).mockRejectedValue(new ApiError('Not served', 404))
+    render(<SyncPage />)
+
+    expect(await screen.findByText('This server does not offer synchronisation.')).toBeInTheDocument()
+    expect(screen.queryByText('Could not load the sync settings')).not.toBeInTheDocument()
+  })
+
+  it('still blames the load on a failure that is not a 404', async () => {
+    vi.mocked(api.getDavCredentials).mockRejectedValue(new ApiError('Boom', 500))
+    render(<SyncPage />)
+
+    expect(await screen.findByText('Could not load the sync settings')).toBeInTheDocument()
   })
 
   it('turning the switch on generates and shows the secret in one gesture', async () => {

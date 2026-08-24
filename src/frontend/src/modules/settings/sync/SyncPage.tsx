@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../../../api.js'
+import { api, ApiError } from '../../../api.js'
 import type { DavCredentials } from '../../../types/dav'
 import ToggleRow from '../../../components/ToggleRow'
 import LoadingBlock from '../../../components/LoadingBlock'
@@ -44,7 +44,7 @@ function CopyableRow(
 export default function SyncPage() {
   const { t } = useTranslation('settings')
   const [state, setState] = useState<DavCredentials | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<'load' | 'unavailable' | null>(null)
   const [busy, setBusy] = useState(false)
   // The value the switch shows while the round trip is in flight, so it moves at the click and
   // returns on its own if the write is refused.
@@ -56,7 +56,10 @@ export default function SyncPage() {
   const { toasts, addToast, removeToast } = useToasts()
 
   useEffect(() => {
-    api.getDavCredentials().then(setState).catch(() => setFailed(true))
+    // 404 is the deployment saying it publishes no address at all — a permanent condition, which
+    // the nav hides but a bookmark still reaches. "Could not load" would misreport it as transient.
+    api.getDavCredentials().then(setState).catch((error: unknown) =>
+      setFailed(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'load'))
   }, [])
 
   async function write(call: () => Promise<DavCredentials>, optimistic: boolean | null = null) {
@@ -89,7 +92,7 @@ export default function SyncPage() {
         <h1 className="settings-page-title"><RefreshIcon size={17} />{t('nav.sync')}</h1>
       </div>
 
-      {failed && <p>{t('sync.loadFailed')}</p>}
+      {failed && <p>{t(failed === 'unavailable' ? 'sync.unavailable' : 'sync.loadFailed')}</p>}
       {!failed && !state && <LoadingBlock />}
 
       {!failed && state && (
@@ -118,7 +121,7 @@ export default function SyncPage() {
                       <CopyButton label={t('sync.password')} value={secret} onCopy={copy} />
                     </>
                   )
-                  : state.configured && <span>{t('sync.hidden')}</span>}
+                  : <span>{t(state.configured ? 'sync.hidden' : 'sync.notConfigured')}</span>}
                 {state.configured && (
                   <button type="button" className="btn" disabled={busy}
                     onClick={() => setConfirming(true)}>{t('sync.regenerate')}</button>
