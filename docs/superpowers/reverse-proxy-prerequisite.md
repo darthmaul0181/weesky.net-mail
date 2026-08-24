@@ -90,3 +90,20 @@ five attempts per minute from each address it controls. Adding a per-account cou
 considered and left out on purpose: it lets anyone lock a mailbox they do not own out of its own
 webmail, which is a denial of service against a named person rather than against a botnet. If it
 is ever wanted, it belongs behind a delay that grows rather than a hard refusal.
+
+## CardDAV
+
+Before plan c opens the `/dav` routes, verify the reverse proxy in front of them:
+
+- It passes through `PROPFIND`, `PROPPATCH`, `REPORT`, `OPTIONS`, `HEAD`, `PUT` and `DELETE` —
+  many configurations default to allowing only `GET`/`POST`/`HEAD`.
+- It does not strip `Depth`, `If-Match`, `If-None-Match`, or `Authorization` — some configurations
+  swallow the `Authorization` header on routes they believe are public.
+- It does not impose a body-size ceiling lower than ours (1 MB).
+- **It does not answer `/.well-known/` itself.** This is the most common failure mode of a CDN or
+  a web application firewall in front of a DAV server: the path is intercepted at the edge, the
+  `301` never reaches the client, and pairing fails on a `404` before the first authenticated
+  request. The check is a single `curl -X PROPFIND` from outside.
+
+The symptom is what makes this expensive: `limit_except` or a WAF rejects silently, and **what the
+client sees is an empty address book, with no error.**
