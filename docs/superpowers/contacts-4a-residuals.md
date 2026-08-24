@@ -38,6 +38,10 @@ ce que 4b change à l'atteignabilité de chacun — c'est elle qui a fait de l'�
 - **`Truncate` peut couper une paire de substitution** aux onze endroits où il est appelé : le connecteur substitue U+FFFD, pas d'exception ni de débordement d'octets.
 - **`PUT /api/AppSettings` portait déjà la politique Admin** avant cette tranche : sur `generic`, dont le fournisseur n'a pas de gestionnaire, le drapeau d'installation est donc inatteignable. Question produit préexistante, désormais documentée.
 - **Une fiche dont la carte dépasse 1 Mo reste dans la file du rattrapage** : `docs/superpowers/contacts-4a-backfill.md` § 4 dit comment la localiser et pourquoi la laisser ne casse aucun écran.
+- **Aucun bouton « se déconnecter partout » dans l'interface.** `DELETE /api/Login/All` est servi
+  et révoque désormais aussi le secret de synchronisation (4c-i, décision 2), mais aucun écran ne
+  l'appelle et `api.js` n'en porte pas d'entrée : l'avertissement que la décision réclame sur ce
+  bouton n'a rien à annoter. À poser le jour où le bouton apparaît.
 
 ## Ce que les sondes ont appris de FolkerKinzel.VCards 8.2.0
 

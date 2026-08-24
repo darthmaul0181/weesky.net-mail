@@ -143,6 +143,14 @@ describe('AccountPage', () => {
     expect(confirmInput).toHaveValue('long-enough-pw')
   })
 
+  it('warns that changing the password also resets the sync one', async () => {
+    // The gesture destroys the sync secret without the Sync tab being open, so the warning has to
+    // live where the gesture is.
+    renderPage()
+
+    expect(await screen.findByText(/also resets your sync password/i)).toBeInTheDocument()
+  })
+
   it('blocks submission when the current password is empty', async () => {
     renderPage()
     fireEvent.change(await screen.findByLabelText(/^new password/i), { target: { value: 'long-enough-pw' } })

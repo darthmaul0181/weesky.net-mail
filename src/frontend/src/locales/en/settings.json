@@ -30,7 +30,8 @@
     "currentPasswordRequired": "Current password is required.",
     "newPasswordTooShort": "New password must be at least 10 characters.",
     "passwordsDoNotMatch": "Passwords do not match.",
-    "currentPasswordIncorrect": "Current password is incorrect."
+    "currentPasswordIncorrect": "Current password is incorrect.",
+    "passwordResetsSync": "Changing your password also resets your sync password. Every device syncing your contacts will need the new one."
   },
   "appearance": {
     "language": {
