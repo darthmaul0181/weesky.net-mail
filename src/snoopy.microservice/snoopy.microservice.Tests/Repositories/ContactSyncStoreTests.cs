@@ -56,6 +56,9 @@ public sealed class ContactSyncStoreTests
         Assert.NotEqual(Guid.Empty, state.Epoch);
         Assert.Equal(0ul, state.Seq);
         Assert.Equal(0ul, state.PrunedBelow);
+        // The returned record alone does not pin that anything was written — a pure "new
+        // SyncState(Guid.NewGuid(), 0, 0)" with no store call would satisfy the three asserts above.
+        Assert.Single(new PreferencesTestDbContext(db).ContactSyncStates);
     }
 
     [Fact]
@@ -71,6 +74,21 @@ public sealed class ContactSyncStoreTests
         // silently invalidate every client's token on every poll.
         Assert.Equal(first.Epoch, second.Epoch);
         Assert.Single(new PreferencesTestDbContext(db).ContactSyncStates);
+    }
+
+    [Fact]
+    public async Task NextSequence_WithoutATransaction_ThrowsRatherThanRaceSilently()
+    {
+        var db = nameof(NextSequence_WithoutATransaction_ThrowsRatherThanRaceSilently);
+        var store = CreateStore(db);
+
+        // The InMemory provider never opens a transaction, so CurrentTransaction is null here
+        // exactly as it would be for a caller in tasks 5-9 who forgot to open one. Outside a
+        // transaction the row's lock drops the instant the raw SQL below completes, and the
+        // re-read can land on a different pooled connection — two callers then read the same rank
+        // with no error anywhere. This guard is the only thing that can catch that mistake.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => store.NextSequenceAsync(Guid.NewGuid(), CancellationToken.None));
     }
 
     [Fact]

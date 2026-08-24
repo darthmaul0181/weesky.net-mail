@@ -44,9 +44,9 @@ public sealed class ContactSyncStoreTombstoneTests
         await store.LiftTombstoneAsync(userId, "a.vcf", CancellationToken.None);
         await store.PlaceTombstoneAsync(userId, "a.vcf", 9, CancellationToken.None);
 
-        // Deleted, recreated, deleted again lands on the same key. A bare INSERT would fail the
-        // second deletion on a duplicate key — in production, on data the user believes gone.
-        var stone = Assert.Single(context.ContactTombstones);
+        // The lift removes the row, so this path alone would not catch a bare INSERT — what this
+        // pins is that the rank refreshes to the newer burial after a full lift-then-place cycle.
+        var stone = Assert.Single(new PreferencesTestDbContext(db).ContactTombstones);
         Assert.Equal(9ul, stone.SyncSequence);
     }
 
@@ -61,9 +61,10 @@ public sealed class ContactSyncStoreTombstoneTests
         await store.PlaceTombstoneAsync(userId, "a.vcf", 5, CancellationToken.None);
         await store.PlaceTombstoneAsync(userId, "a.vcf", 9, CancellationToken.None);
 
-        // The same path without the lift: recreation through a door that forgot to lift must not
-        // turn the second burial into a crash either.
-        var stone = Assert.Single(context.ContactTombstones);
+        // No lift between the two places: the row from the first burial is still there, so this is
+        // the case a bare INSERT would fail on a duplicate key — in production, on data the user
+        // believes gone.
+        var stone = Assert.Single(new PreferencesTestDbContext(db).ContactTombstones);
         Assert.Equal(9ul, stone.SyncSequence);
     }
 
@@ -183,9 +184,9 @@ public sealed class ContactSyncStoreTombstoneTests
     }
 
     [Fact]
-    public async Task Pruning_RaisesTheWatermarkBeforeItRemovesAnything()
+    public async Task Pruning_SetsTheWatermarkToTheHighestPrunedRank()
     {
-        var db = nameof(Pruning_RaisesTheWatermarkBeforeItRemovesAnything);
+        var db = nameof(Pruning_SetsTheWatermarkToTheHighestPrunedRank);
         var userId = Guid.NewGuid();
         var now = DateTime.UtcNow;
         var context = new PreferencesTestDbContext(db);
@@ -234,10 +235,50 @@ public sealed class ContactSyncStoreTombstoneTests
 
         await store.PruneAsync(now.AddDays(-180), now.AddDays(-30), CancellationToken.None);
 
-        // GREATEST, and it is what makes the sweep safe on several instances at once: the write is
-        // commutative, and a DELETE that no longer finds its rows is a DELETE of zero rows.
+        // GREATEST, never the plain assignment. Two concurrent sweeps would collide loudly instead
+        // of silently — RemoveRange throws when the second one to commit finds its rows already
+        // gone — so this is not exercising that path; it only pins that a single sweep never lowers
+        // an existing watermark on its own.
         var state = await store.ReadStateAsync(userId, CancellationToken.None);
         Assert.Equal(30ul, state!.PrunedBelow);
+    }
+
+    [Fact]
+    public async Task Pruning_GivesEachUserTheirOwnMaxAndNotAnotherUsersMax()
+    {
+        var db = nameof(Pruning_GivesEachUserTheirOwnMaxAndNotAnotherUsersMax);
+        var userA = Guid.NewGuid();
+        var userB = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var context = new PreferencesTestDbContext(db);
+        context.ContactSyncStates.Add(new ContactSyncState
+        {
+            UserId = userA, Epoch = Guid.NewGuid(), Seq = 20, PrunedBelow = 0
+        });
+        context.ContactSyncStates.Add(new ContactSyncState
+        {
+            UserId = userB, Epoch = Guid.NewGuid(), Seq = 50, PrunedBelow = 0
+        });
+        context.ContactTombstones.Add(new ContactTombstone
+        {
+            UserId = userA, DavName = "a.vcf", SyncSequence = 4, DeletedAt = now.AddDays(-200)
+        });
+        context.ContactTombstones.Add(new ContactTombstone
+        {
+            UserId = userB, DavName = "b.vcf", SyncSequence = 45, DeletedAt = now.AddDays(-200)
+        });
+        await context.SaveChangesAsync(CancellationToken.None);
+        var store = new ContactSyncStore(context);
+
+        await store.PruneAsync(now.AddDays(-180), now.AddDays(-30), CancellationToken.None);
+
+        // A single global max stamped onto every row would pass every other prune test here, since
+        // they all use one user. Two users, two different ranks, is the only way to pin the
+        // per-user grouping rather than a max taken across the whole doomed set.
+        var stateA = await store.ReadStateAsync(userA, CancellationToken.None);
+        var stateB = await store.ReadStateAsync(userB, CancellationToken.None);
+        Assert.Equal(4ul, stateA!.PrunedBelow);
+        Assert.Equal(45ul, stateB!.PrunedBelow);
     }
 
     [Fact]

@@ -179,8 +179,10 @@ SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES
 
 ### Prérequis avant d'ouvrir toute route `/dav` — l'atomicité du compteur, vérifiée à la main
 
-C'est la seule propriété de correction de toute la tranche 4c-ii qui n'a pas de test : `ContactSyncStore.NextSequenceAsync` avance le compteur par un `INSERT ... ON DUPLICATE KEY
-UPDATE seq = seq + 1` que ni le fournisseur InMemory ni SQLite ne savent exécuter à l'identique.
+C'est la seule propriété de correction de toute la tranche 4c-ii qui n'a pas de test :
+`ContactSyncStore.NextSequenceAsync` avance le compteur par un
+`INSERT ... ON DUPLICATE KEY UPDATE seq = seq + 1` que ni le fournisseur InMemory ni SQLite
+ne savent exécuter à l'identique.
 Elle se vérifie donc à la main, une fois, contre `snoopy_webmail_dev`, avec deux sessions `mysql`
 côte à côte :
 
@@ -206,7 +208,7 @@ COMMIT;
                                           COMMIT;
 ```
 
-Ce qu'il faut observer, et consigner dans le rapport de tâche :
+Ce qu'il faut observer :
 
 | Observation | Attendu |
 |---|---|
