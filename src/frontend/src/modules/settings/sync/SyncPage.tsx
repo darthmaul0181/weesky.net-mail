@@ -10,18 +10,26 @@ import { relativeFromNow } from '../../../lib/intl'
 import CopyIcon from '../../../icons/CopyIcon'
 import RefreshIcon from '../../../icons/RefreshIcon'
 
+/** The copy button is icon-only, so its aria-label has to name the value: three buttons all
+    called "Copy" in one region give a screen reader no way to tell them apart. */
+function CopyButton({ label, value, onCopy }: { label: string; value: string; onCopy: (v: string) => void }) {
+  const { t } = useTranslation('settings')
+  return (
+    <button type="button" className="admin-icon-btn" aria-label={t('sync.copyValue', { label })}
+      onClick={() => onCopy(value)}><CopyIcon size={15} /></button>
+  )
+}
+
 /** A value the user comes back for, with the button that puts it on the clipboard. */
 function CopyableRow(
   { label, value, onCopy }: { label: string; value: string; onCopy: (value: string) => void },
 ) {
-  const { t } = useTranslation('settings')
   return (
     <div className="field-h is-setting">
       <span className="setting-label">{label}</span>
       <span className="sync-value">
         <span>{value}</span>
-        <button type="button" className="admin-icon-btn" aria-label={t('sync.copy')}
-          onClick={() => onCopy(value)}><CopyIcon size={15} /></button>
+        <CopyButton label={label} value={value} onCopy={onCopy} />
       </span>
     </div>
   )
@@ -38,6 +46,9 @@ export default function SyncPage() {
   const [state, setState] = useState<DavCredentials | null>(null)
   const [failed, setFailed] = useState(false)
   const [busy, setBusy] = useState(false)
+  // The value the switch shows while the round trip is in flight, so it moves at the click and
+  // returns on its own if the write is refused.
+  const [pending, setPending] = useState<boolean | null>(null)
   const [confirming, setConfirming] = useState(false)
   // Held here and nowhere else, so it dies with the page: it exists in clear in exactly one
   // response, and there is no second way to obtain it.
@@ -48,16 +59,20 @@ export default function SyncPage() {
     api.getDavCredentials().then(setState).catch(() => setFailed(true))
   }, [])
 
-  async function write(call: () => Promise<DavCredentials>) {
+  async function write(call: () => Promise<DavCredentials>, optimistic: boolean | null = null) {
     setBusy(true)
+    setPending(optimistic)
     try {
       const next = await call()
-      setState(next)
+      // The clear secret is dropped from the server copy on the way in: `secret` below is then
+      // the only place it lives, structurally rather than by convention.
+      setState({ ...next, password: undefined })
       setSecret(next.password ?? null)
     } catch {
       addToast(t('sync.saveFailed'), 'error')
     } finally {
       setBusy(false)
+      setPending(null)
     }
   }
 
@@ -68,56 +83,59 @@ export default function SyncPage() {
       .catch(() => {})
   }
 
-  if (failed) return <p>{t('sync.loadFailed')}</p>
-  if (!state) return <LoadingBlock />
-
   return (
-    <>
+    <div className="settings-page">
       <div className="settings-page-header">
         <h1 className="settings-page-title"><RefreshIcon size={17} />{t('nav.sync')}</h1>
       </div>
 
-      <ToggleRow
-        id="sync-carddav"
-        label={t('sync.carddav')}
-        hint={t('sync.carddavHint')}
-        checked={state.cardDavEnabled}
-        disabled={busy}
-        onChange={on => write(() => api.setDavCardDav(on))}
-      />
+      {failed && <p>{t('sync.loadFailed')}</p>}
+      {!failed && !state && <LoadingBlock />}
 
-      <div className="account-section">
-        <h2>{t('sync.connection')}</h2>
-        <CopyableRow label={t('sync.serverUrl')} value={state.serverUrl} onCopy={copy} />
-        <CopyableRow label={t('sync.username')} value={state.username} onCopy={copy} />
+      {!failed && state && (
+        <>
+          <ToggleRow
+            id="sync-carddav"
+            label={t('sync.carddav')}
+            hint={t('sync.carddavHint')}
+            checked={pending ?? state.cardDavEnabled}
+            disabled={busy}
+            onChange={on => write(() => api.setDavCardDav(on), on)}
+          />
 
-        <div className="field-h is-setting">
-          <span className="setting-label">{t('sync.password')}</span>
-          <span className="sync-value">
-            {secret
-              ? (
-                <>
-                  <code className="sync-secret">{secret}</code>
-                  <button type="button" className="admin-icon-btn" aria-label={t('sync.copy')}
-                    onClick={() => copy(secret)}><CopyIcon size={15} /></button>
-                </>
-              )
-              : state.configured && <span>{t('sync.hidden')}</span>}
-            {state.configured && (
-              <button type="button" className="btn" disabled={busy}
-                onClick={() => setConfirming(true)}>{t('sync.regenerate')}</button>
-            )}
-          </span>
-        </div>
-        {secret && <p className="sync-secret-note">{t('sync.shownOnce')}</p>}
+          <div className="account-section">
+            <h2>{t('sync.connection')}</h2>
+            <CopyableRow label={t('sync.serverUrl')} value={state.serverUrl} onCopy={copy} />
+            <CopyableRow label={t('sync.username')} value={state.username} onCopy={copy} />
 
-        <div className="field-h is-setting">
-          <span className="setting-label">{t('sync.lastUsed')}</span>
-          <span className="sync-value">
-            <span>{state.lastUsedAt ? relativeFromNow(state.lastUsedAt) : t('sync.neverUsed')}</span>
-          </span>
-        </div>
-      </div>
+            <div className="field-h is-setting">
+              <span className="setting-label">{t('sync.password')}</span>
+              <span className="sync-value">
+                {secret
+                  ? (
+                    <>
+                      <code className="sync-secret">{secret}</code>
+                      <CopyButton label={t('sync.password')} value={secret} onCopy={copy} />
+                    </>
+                  )
+                  : state.configured && <span>{t('sync.hidden')}</span>}
+                {state.configured && (
+                  <button type="button" className="btn" disabled={busy}
+                    onClick={() => setConfirming(true)}>{t('sync.regenerate')}</button>
+                )}
+              </span>
+            </div>
+            {secret && <p className="sync-secret-note">{t('sync.shownOnce')}</p>}
+
+            <div className="field-h is-setting">
+              <span className="setting-label">{t('sync.lastUsed')}</span>
+              <span className="sync-value">
+                <span>{state.lastUsedAt ? relativeFromNow(state.lastUsedAt) : t('sync.neverUsed')}</span>
+              </span>
+            </div>
+          </div>
+        </>
+      )}
 
       {confirming && (
         <div className="modal-overlay" onClick={() => setConfirming(false)}>
@@ -138,6 +156,6 @@ export default function SyncPage() {
       )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />
-    </>
+    </div>
   )
 }

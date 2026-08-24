@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
 import SyncPage from './SyncPage'
 import { api } from '../../../api.js'
 
@@ -108,5 +109,38 @@ describe('SyncPage', () => {
     render(<SyncPage />)
 
     expect(await screen.findByText('2 hours ago')).toBeInTheDocument()
+  })
+
+  it('moves the switch at the click and puts it back when the write is refused', async () => {
+    let refuse: (error: Error) => void = () => {}
+    vi.mocked(api.setDavCardDav).mockReturnValue(new Promise((_, reject) => { refuse = reject }))
+    render(<SyncPage />)
+
+    const box = await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' })
+    await userEvent.click(box)
+    // Pure server state would leave it off for the whole round trip, with nothing acknowledging
+    // the click; a refusal is what has to put it back.
+    expect(box).toBeChecked()
+
+    refuse(new Error('refused'))
+    await waitFor(() => expect(box).not.toBeChecked())
+  })
+
+  // Parity checks keys and typography, never prose: the order clause is the most consequential
+  // sentence on the screen and could be shortened in French alone with every other test green.
+  it('states the order in French too, not only the consequence', async () => {
+    vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
+    await i18next.changeLanguage('fr')
+    try {
+      render(<SyncPage />)
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Régénérer' }))
+
+      expect(screen.getByText(/Désactivez d’abord la synchronisation sur vos appareils/))
+        .toBeInTheDocument()
+    } finally {
+      cleanup()
+      await i18next.changeLanguage('en')
+    }
   })
 })

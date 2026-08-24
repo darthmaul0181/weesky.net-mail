@@ -417,7 +417,7 @@
     "password": "Mot de passe",
     "lastUsed": "Dernière utilisation",
     "neverUsed": "Jamais utilisé",
-    "copy": "Copier",
+    "copyValue": "Copier {{label}}",
     "copied": "Copié",
     "shownOnce": "Copiez-le maintenant : il ne sera plus affiché.",
     "regenerate": "Régénérer",
