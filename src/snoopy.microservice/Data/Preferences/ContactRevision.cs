@@ -21,9 +21,8 @@ public sealed class ContactRevision
     public Guid? ContactId { get; set; }
 
     /// <summary>
-    /// The archived card's UID, the identity arbiter. Null only when a refused body does not parse:
-    /// a valid card without a UID must archive rather than die on a constraint, on the table whose
-    /// whole job is to lose nothing.
+    /// The archived card's UID, the identity arbiter. Null only when a refused body does not parse
+    /// into a card at all, on the table whose whole job is to lose nothing.
     /// </summary>
     [Column("uid")]
     public string? Uid { get; set; }

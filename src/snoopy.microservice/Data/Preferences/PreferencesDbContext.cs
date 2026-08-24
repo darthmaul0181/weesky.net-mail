@@ -117,6 +117,7 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<ContactSyncState>().HasKey(s => s.UserId);
         modelBuilder.Entity<ContactTombstone>().HasKey(t => new { t.UserId, t.DavName });
         modelBuilder.Entity<ContactRevision>().HasKey(r => r.Id);
+        modelBuilder.Entity<ContactRevision>().Property(r => r.Id).ValueGeneratedOnAdd();
         modelBuilder.Entity<ContactRevision>()
             .Property(r => r.Cause)
             .HasConversion(v => v.ToString().ToLowerInvariant(), v => Enum.Parse<RevisionCause>(v, true))
