@@ -36,4 +36,12 @@ describe('relativeFromNow', () => {
     // The server stamps the date, the browser reads it: a small skew must not print "in 3 seconds".
     expect(relativeFromNow('2026-08-23T12:00:03Z', now)).toBe('now')
   })
+
+  it('echoes an unparseable value instead of throwing', () => {
+    expect(relativeFromNow('not-a-date', now)).toBe('not-a-date')
+  })
+
+  it('reads a future instant well past clock skew as "now" too: this field is never legitimately future', () => {
+    expect(relativeFromNow('2026-08-23T13:00:00Z', now)).toBe('now')
+  })
 })

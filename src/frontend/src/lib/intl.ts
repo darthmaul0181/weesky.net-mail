@@ -59,10 +59,14 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['hour', 3600], ['minute', 60], ['second', 1],
 ]
 
-/** A past instant, in the largest unit that still says something. The server stamps the date and
-    the browser reads it, so a clock a few seconds ahead prints "now" rather than a future. */
+/** Formats an instant expected to be in the past, in the largest unit that still says something.
+    An unparseable value comes back unchanged rather than throwing. Any future delta reads "now":
+    on the one field this renders, "last used", the future can only mean a clock fault. */
 export function relativeFromNow(iso: string, now: Date = new Date()): string {
-  const seconds = Math.round((new Date(iso).getTime() - now.getTime()) / 1000)
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return iso
+
+  const seconds = Math.round((then - now.getTime()) / 1000)
   if (seconds > -5) return relativeFormat().format(0, 'second')
 
   const [unit, size] = RELATIVE_UNITS.find(([, s]) => Math.abs(seconds) >= s) ?? RELATIVE_UNITS[5]
