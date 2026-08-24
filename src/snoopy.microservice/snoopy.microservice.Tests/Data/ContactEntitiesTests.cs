@@ -92,16 +92,21 @@ public sealed class ContactEntitiesTests
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
-    // The five sibling tables (contacts, folder_role_overrides, user_preferences,
-    // sending_identities, trusted_senders) all carry the identical fk_..._user ON DELETE CASCADE
-    // shape to users(id), so one parameterised test stands in for five near-duplicates of
-    // ContactEmail_DeclaresForeignKeyToContact above rather than repeating its body five times.
+    // The nine sibling tables (contacts, folder_role_overrides, user_preferences,
+    // sending_identities, trusted_senders, dav_credentials, contact_sync_state,
+    // contact_tombstones, contact_revisions) all carry the identical fk_..._user ON DELETE CASCADE
+    // shape to users(id), so one parameterised test stands in for nine near-duplicates of
+    // ContactEmail_DeclaresForeignKeyToContact above rather than repeating its body nine times.
     [Theory]
     [InlineData(typeof(Contact), nameof(Contact.UserId))]
     [InlineData(typeof(FolderRoleOverride), nameof(FolderRoleOverride.UserId))]
     [InlineData(typeof(UserPreference), nameof(UserPreference.UserId))]
     [InlineData(typeof(SendingIdentity), nameof(SendingIdentity.UserId))]
     [InlineData(typeof(TrustedSender), nameof(TrustedSender.UserId))]
+    [InlineData(typeof(ContactSyncState), nameof(ContactSyncState.UserId))]
+    [InlineData(typeof(ContactTombstone), nameof(ContactTombstone.UserId))]
+    [InlineData(typeof(ContactRevision), nameof(ContactRevision.UserId))]
+    [InlineData(typeof(DavCredential), nameof(DavCredential.UserId))]
     public void Entity_DeclaresForeignKeyToWebmailUser(Type entityType, string foreignKeyPropertyName)
     {
         var context = new PreferencesTestDbContext(

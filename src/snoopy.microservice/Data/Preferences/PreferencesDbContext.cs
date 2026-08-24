@@ -113,6 +113,30 @@ public class PreferencesDbContext : DbContext
             .WithMany()
             .HasForeignKey(a => a.DomainId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ContactSyncState>().HasKey(s => s.UserId);
+        modelBuilder.Entity<ContactTombstone>().HasKey(t => new { t.UserId, t.DavName });
+        modelBuilder.Entity<ContactRevision>().HasKey(r => r.Id);
+        modelBuilder.Entity<ContactRevision>()
+            .Property(r => r.Cause)
+            .HasConversion(v => v.ToString().ToLowerInvariant(), v => Enum.Parse<RevisionCause>(v, true))
+            .HasMaxLength(8);
+
+        // Same mechanism as every table above: all three sort before "users", so without a declared
+        // edge EF orders the INSERTs by table name and breaks the FK on any create. Declared without
+        // navigation, like their neighbours. The InMemory provider enforces no foreign key, so no
+        // test can catch this — only the declaration can.
+        modelBuilder.Entity<ContactSyncState>()
+            .HasOne<WebmailUser>().WithMany()
+            .HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactTombstone>()
+            .HasOne<WebmailUser>().WithMany()
+            .HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactRevision>()
+            .HasOne<WebmailUser>().WithMany()
+            .HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.DavName }).IsUnique();
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
@@ -142,4 +166,10 @@ public class PreferencesDbContext : DbContext
     public DbSet<ExternalDomain> ExternalDomains { get; set; }
 
     public DbSet<ConnectedAccount> ConnectedAccounts { get; set; }
+
+    public DbSet<ContactSyncState> ContactSyncStates { get; set; }
+
+    public DbSet<ContactTombstone> ContactTombstones { get; set; }
+
+    public DbSet<ContactRevision> ContactRevisions { get; set; }
 }

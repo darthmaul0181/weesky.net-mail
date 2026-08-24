@@ -95,4 +95,20 @@ public sealed class Contact
 
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// The resource name a CardDAV client chose, or <c>{id}.vcf</c> for a card born here. Nullable
+    /// because MySQL uniqueness ignores NULL: a row the backfill has not reached can stay empty
+    /// without the first client PUT tripping on a duplicate of nothing.
+    /// </summary>
+    [Column("dav_name")]
+    public string? DavName { get; set; }
+
+    /// <summary>
+    /// The rank of the last write that changed this card. Zero means never backfilled, and zero is
+    /// the value a sync token never asks for — such a row is invisible to the protocol rather than
+    /// served under a name it does not have.
+    /// </summary>
+    [Column("sync_sequence")]
+    public ulong SyncSequence { get; set; }
 }
