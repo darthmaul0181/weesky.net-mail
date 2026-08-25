@@ -303,7 +303,10 @@ public sealed class DavCredentialStoreTests
     /// </summary>
     private sealed class DuplicateKeyOnFirstSaveDbContext(string databaseName, Func<Task> rival)
         : PreferencesDbContext(new DbContextOptionsBuilder<PreferencesDbContext>()
-            .UseInMemoryDatabase(databaseName).Options)
+            // The shared root PreferencesTestDbContext uses: without it, this context's own
+            // options make the InMemory provider open a second store under the same name, and the
+            // rival's insert below becomes invisible to it.
+            .UseInMemoryDatabase(databaseName, PreferencesTestDbContext.Root).Options)
     {
         private bool _rejected;
 

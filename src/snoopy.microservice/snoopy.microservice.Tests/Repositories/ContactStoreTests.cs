@@ -3,6 +3,7 @@ using System.Text;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -11,7 +12,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 public sealed class ContactStoreTests
 {
     private static ContactStore CreateStore(string dbName) =>
-        new(new PreferencesTestDbContext(dbName));
+        new(new PreferencesTestDbContext(dbName), ContactStoreTestFactory.NewSync().Object);
 
     private static ContactWrite Write(
         string? first = "Bruno", string? last = "Mertens", string? nick = null,
@@ -118,7 +119,8 @@ public sealed class ContactStoreTests
         var user = Guid.NewGuid();
         var context = new PreferencesTestDbContext(db);
 
-        var created = await new ContactStore(context).CreateAsync(user, Write(), CancellationToken.None);
+        var created = await new ContactStore(context, ContactStoreTestFactory.NewSync().Object)
+            .CreateAsync(user, Write(), CancellationToken.None);
 
         var row = Assert.Single(new PreferencesTestDbContext(db).Contacts);
         Assert.Equal(created.Value.ToString(), row.Uid);
@@ -223,7 +225,7 @@ public sealed class ContactStoreTests
         }
         await context.SaveChangesAsync(CancellationToken.None);
 
-        var result = await new ContactStore(new PreferencesTestDbContext(db))
+        var result = await new ContactStore(new PreferencesTestDbContext(db), ContactStoreTestFactory.NewSync().Object)
             .CreateAsync(user, Write(), CancellationToken.None);
 
         Assert.True(result.IsFailure);

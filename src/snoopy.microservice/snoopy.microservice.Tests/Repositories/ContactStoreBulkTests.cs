@@ -1,6 +1,7 @@
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -9,7 +10,7 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 public sealed class ContactStoreBulkTests
 {
     private static ContactStore CreateStore(string dbName) =>
-        new(new PreferencesTestDbContext(dbName));
+        new(new PreferencesTestDbContext(dbName), ContactStoreTestFactory.NewSync().Object);
 
     private static ContactWrite Write(string first, string address, bool favorite = false) =>
         new(first, null, null, null, null, null, null, null, null, null, null, null, null,

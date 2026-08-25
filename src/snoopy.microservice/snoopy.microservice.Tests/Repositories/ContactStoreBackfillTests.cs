@@ -1,6 +1,7 @@
 using System.Text;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -24,7 +25,7 @@ public sealed class ContactStoreBackfillTests
         "BDAY:1985-04-12\r\nEND:VCARD\r\n";
 
     private static ContactStore CreateStore(string dbName) =>
-        new(new PreferencesTestDbContext(dbName));
+        new(new PreferencesTestDbContext(dbName), ContactStoreTestFactory.NewSync().Object);
 
     private static Contact SeedLegacy(
         string db, Guid user, string? vcard = null, string? firstName = "Jean",

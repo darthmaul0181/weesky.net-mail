@@ -6,6 +6,7 @@ using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.Contacts;
 using weesky.Snoopy.Microservice.Services.Csv;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -13,6 +14,9 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 
 public sealed class ContactCsvExporterTests
 {
+    private static ContactStore CreateStore(string dbName) =>
+        new(new PreferencesTestDbContext(dbName), ContactStoreTestFactory.NewSync().Object);
+
     private static ContactDetail Detail(
         Guid? id = null, string? first = null, string? last = null, string? nick = null,
         bool favorite = false, string? displayName = null,
@@ -309,7 +313,7 @@ public sealed class ContactCsvExporterTests
     {
         var db = nameof(Write_RoundTripsThroughTheImport);
         var user = Guid.NewGuid();
-        var store = new ContactStore(new PreferencesTestDbContext(db));
+        var store = CreateStore(db);
         await store.CreateAsync(user, Write("Bruno", "Mertens", "bruno", true, "manual",
             "bruno@example.com", "second@example.com"), CancellationToken.None);
         await store.CreateAsync(user, Write("Solo", "Sansmail", null, false, "manual"),
@@ -317,11 +321,11 @@ public sealed class ContactCsvExporterTests
         await store.CreateAsync(user, Write(null, null, "zorro", false, "manual"),
             CancellationToken.None);
 
-        var book = await new ContactStore(new PreferencesTestDbContext(db)).ExportAsync(user, CancellationToken.None);
+        var book = await CreateStore(db).ExportAsync(user, CancellationToken.None);
         var mapped = ContactCsvMapper.Map(CsvReader.Read(ContactCsvExporter.Write(book)));
         Assert.True(mapped.IsSuccess);
 
-        var outcome = await new ContactStore(new PreferencesTestDbContext(db)).ImportAsync(
+        var outcome = await CreateStore(db).ImportAsync(
             user,
             [.. mapped.Value.Select(r => new ContactImportRow(
                 r.Line, r.FirstName, r.LastName, r.Nickname, r.IsFavorite, r.Addresses, null, null))],
@@ -329,7 +333,7 @@ public sealed class ContactCsvExporterTests
 
         Assert.Equal(0, outcome.Created);
         Assert.Equal(3, outcome.Merged);
-        var after = await new ContactStore(new PreferencesTestDbContext(db)).ListAsync(user, CancellationToken.None);
+        var after = await CreateStore(db).ListAsync(user, CancellationToken.None);
         Assert.Equal(3, after.Count);
         var bruno = after.Single(c => c.FirstName == "Bruno");
         Assert.Equal("bruno", bruno.Nickname);
@@ -377,13 +381,13 @@ public sealed class ContactCsvExporterTests
     {
         var db = nameof(Write_RoundTripsPhonesAndPostalAddressesThroughImportOfAFreshBook);
         var owner = Guid.NewGuid();
-        var writer = new ContactsController(new ContactStore(new PreferencesTestDbContext(db)));
+        var writer = new ContactsController(CreateStore(db));
         writer.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("owner", "example.com", owner);
         await writer.Create(RequestWithPhonesAndPostal(), CancellationToken.None);
         var file = await ExportToFile(writer);
 
         var newOwner = Guid.NewGuid();
-        var reader = new ContactsController(new ContactStore(new PreferencesTestDbContext(db)));
+        var reader = new ContactsController(CreateStore(db));
         reader.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("reader", "example.com", newOwner);
         var imported = await reader.Import(file, CancellationToken.None);
 
@@ -392,7 +396,7 @@ public sealed class ContactCsvExporterTests
         Assert.Equal(0, report.Merged);
         Assert.Empty(report.Errors);
 
-        var store = new ContactStore(new PreferencesTestDbContext(db));
+        var store = CreateStore(db);
         var createdId = Assert.Single(await store.ListAsync(newOwner, CancellationToken.None)).Id;
         var detail = await store.GetAsync(newOwner, createdId, CancellationToken.None);
         Assert.Equal(2, detail!.Phones.Count);
@@ -412,7 +416,7 @@ public sealed class ContactCsvExporterTests
     {
         var db = nameof(Write_ReplayingTheSameExportMergesWithoutFailing);
         var user = Guid.NewGuid();
-        var controller = new ContactsController(new ContactStore(new PreferencesTestDbContext(db)));
+        var controller = new ContactsController(CreateStore(db));
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com", user);
         await controller.Create(RequestWithPhonesAndPostal(), CancellationToken.None);
         var file = await ExportToFile(controller);
@@ -423,7 +427,7 @@ public sealed class ContactCsvExporterTests
         Assert.Equal(0, report.Created);
         Assert.Equal(1, report.Merged);
         Assert.Empty(report.Errors);
-        Assert.Single(await new ContactStore(new PreferencesTestDbContext(db)).ListAsync(user, CancellationToken.None));
+        Assert.Single(await CreateStore(db).ListAsync(user, CancellationToken.None));
     }
 
     // A name a spreadsheet would evaluate goes out behind an apostrophe, and comes back as itself.

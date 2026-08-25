@@ -9,7 +9,7 @@ using weesky.Snoopy.Microservice.Services.Contacts;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
+internal sealed class ContactStore(PreferencesDbContext context, IContactSyncStore sync) : IContactStore
 {
     /// <summary>
     /// What bounds the table, and what bounds the payload: the whole book is fetched into the
@@ -17,6 +17,14 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
     /// guards against a runaway import, not against a user.
     /// </summary>
     internal const int MaxPerUser = 5000;
+
+    /// <summary>
+    /// One transaction, one rank — but not one import, one rank. Every write archives what it
+    /// replaces since decision 17, so a whole-book deletion in a single transaction would write up
+    /// to five gigabytes of MEDIUMTEXT: a redo log that overflows, and the state row's lock held
+    /// long enough for every phone to come back in 503.
+    /// </summary>
+    internal const int BatchSize = 100;
 
     /// <summary>
     /// What one stored card may weigh. Measured at every <c>vcard_raw</c> write, not only on
@@ -157,32 +165,48 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
         if (stored >= MaxPerUser) return Result.Failure<Guid>(CapReached);
 
         var id = Guid.NewGuid();
-        var row = new Contact
-        {
-            Id = id,
-            UserId = userId,
-            // A contact born here has no foreign UID, so its own id serves. The column stays
-            // distinct from the key because an imported card brings a UID we must not overwrite.
-            Uid = id.ToString(),
-            IsFavorite = contact.IsFavorite,
-            Source = contact.Source,
-            UpdatedAt = DateTime.UtcNow
-        };
-        context.Contacts.Add(row);
+        var davName = $"{id}.vcf";
 
-        // The names and every other modelled column are posed by the projection, not copied from
-        // the write: the card is what they describe (décision 1).
-        var written = await WriteCardAsync(row, VCardComposer.ComposeNew(row.Uid, contact), cancellationToken);
-        if (written.IsFailure)
+        return await InTransactionAsync(async () =>
         {
-            // Nothing is saved here, but a tracked row would ride along on the next SaveChanges
-            // any other store of this scoped context makes.
-            context.Entry(row).State = EntityState.Detached;
-            return Result.Failure<Guid>(written.Error);
-        }
+            // The state row's lock FIRST, always, and before any contact row is touched. Two paths
+            // locking in the opposite order deadlock, and both already exist: an import of five
+            // hundred and a concurrent webmail edit.
+            var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
-        await context.SaveChangesAsync(cancellationToken);
-        return Result.Success(id);
+            var row = new Contact
+            {
+                Id = id,
+                UserId = userId,
+                // A contact born here has no foreign UID, so its own id serves. The column stays
+                // distinct from the key because an imported card brings a UID we must not overwrite.
+                Uid = id.ToString(),
+                IsFavorite = contact.IsFavorite,
+                Source = contact.Source,
+                UpdatedAt = DateTime.UtcNow,
+                DavName = davName,
+                SyncSequence = rank
+            };
+            context.Contacts.Add(row);
+
+            // The names and every other modelled column are posed by the projection, not copied from
+            // the write: the card is what they describe (décision 1).
+            var written = await WriteCardAsync(row, VCardComposer.ComposeNew(row.Uid, contact), cancellationToken);
+            if (written.IsFailure)
+            {
+                // Nothing is saved here, but a tracked row would ride along on the next SaveChanges
+                // any other store of this scoped context makes.
+                context.Entry(row).State = EntityState.Detached;
+                return Result.Failure<Guid>(written.Error);
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+
+            // A name that comes back must stop being reported as deleted: a client that syncs after
+            // both events would otherwise see a creation and a burial at the same rank.
+            await sync.LiftTombstoneAsync(userId, davName, cancellationToken);
+            return Result.Success(id);
+        }, cancellationToken);
     }
 
     public async Task<Result> UpdateAsync(
@@ -198,17 +222,60 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
         var card = row.VCardRaw == null
             ? VCardComposer.ComposeNew(row.Uid, contact)
             : VCardComposer.Compose(row.VCardRaw, row.Uid, contact);
-        var written = await WriteCardAsync(row, card, cancellationToken);
-        if (written.IsFailure) return written;
 
-        row.IsFavorite = contact.IsFavorite;
-        row.UpdatedAt = DateTime.UtcNow;
+        var prepared = PrepareCard(row, card);
+        if (prepared.IsFailure) return Result.Failure(prepared.Error);
 
-        // A single SaveChanges: the change tracker merges a Deleted+Added pair on the same key
-        // into one Modified command, and splitting it would leave the contact with no child rows
-        // at all between the two commits if the second one failed.
-        await context.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        // The star and the timestamp are not the card, so they never justify a rank.
+        if (!prepared.Value.Changed)
+        {
+            row.IsFavorite = contact.IsFavorite;
+            row.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+
+        var before = new CardBefore(row.VCardRaw, row.CardHash, row.Uid, row.DavName);
+
+        return await InTransactionAsync(async () =>
+        {
+            var rank = await sync.NextSequenceAsync(userId, cancellationToken);
+
+            // Archive before overwriting, in the same transaction as the write — so under the same
+            // rank, and so never without it. A card whose vcard_raw is NULL — the 4a backfill never
+            // reached it — is replaced without a revision: no card, no revision.
+            if (before.VCardRaw is not null)
+            {
+                await sync.ArchiveAsync(new ContactRevision
+                {
+                    UserId = userId,
+                    ContactId = contactId,
+                    Uid = before.Uid,
+                    DavName = before.DavName,
+                    CardHash = before.CardHash,
+                    VCardRaw = before.VCardRaw,
+                    Cause = RevisionCause.Webmail,
+                    ReplacedAt = DateTime.UtcNow
+                }, cancellationToken);
+            }
+
+            var written = await WriteCardAsync(row, card, cancellationToken);
+            if (written.IsFailure) return written;
+
+            row.IsFavorite = contact.IsFavorite;
+            row.UpdatedAt = DateTime.UtcNow;
+            row.SyncSequence = rank;
+            // A write that advances the rank of a nameless row gives it its name in the same
+            // transaction: without this, a webmail edit during the backfill window would create a
+            // row with a rank above zero and no name, which no report knows how to serve.
+            row.DavName ??= $"{contactId}.vcf";
+
+            // A single SaveChanges: the change tracker merges a Deleted+Added pair on the same key
+            // into one Modified command, and splitting it would leave the contact with no child rows
+            // at all between the two commits if the second one failed.
+            await context.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }, cancellationToken);
     }
 
     public async Task<Result> DeleteAsync(Guid userId, Guid contactId, CancellationToken cancellationToken)
@@ -772,6 +839,52 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
                 new ContactDetailAddress(a.Position, a.Type, a.Pref, a.Params, a.GroupName,
                     a.PoBox, a.Extended, a.Street, a.Locality, a.Region, a.PostalCode, a.Country))]);
 
+    /// <summary>The card as it stood, snapshotted before anything is written over it.</summary>
+    private readonly record struct CardBefore(string? VCardRaw, string CardHash, string? Uid, string? DavName);
+
+    /// <summary>
+    /// One transaction, opened THROUGH the context's execution strategy. No retry strategy is
+    /// configured today, so going through it is presently a no-op — it is done anyway because EF
+    /// refuses a manual transaction the day one appears, and bypassing it instead of traversing it
+    /// would then make the retry silently wrong.
+    /// </summary>
+    private Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
+    {
+        // Typed explicitly rather than inline, and taking the CancellationToken as its own
+        // parameter: that is the shape the token-taking ExecuteAsync overload requires, and an
+        // async lambda passed straight to it leaves its generic result unresolved until overload
+        // resolution runs otherwise.
+        Func<CancellationToken, Task<T>> operation = async token =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(token);
+            var outcome = await body();
+            // A failed Result leaves the transaction uncommitted: the dispose below rolls it back, so a
+            // write that could not be stored never leaves a revision or a consumed rank behind.
+            if (outcome is CSharpFunctionalExtensions.IResult { IsFailure: true }) return outcome;
+
+            await transaction.CommitAsync(token);
+            return outcome;
+        };
+        return context.Database.CreateExecutionStrategy().ExecuteAsync(operation, cancellationToken);
+    }
+
+    /// <summary>
+    /// The card as it will be stored, and whether storing it would change anything — decided
+    /// before any lock is taken, so a write that changes nothing opens no transaction, takes no
+    /// rank and wakes no client. The composer refreshes REV on every output, so a card that
+    /// changed nothing is never byte-equal to the stored one; compared without that line it is.
+    /// </summary>
+    private static Result<(string Card, bool Changed)> PrepareCard(Contact row, string card)
+    {
+        card = WithUid(card, row.Uid);
+        if (Encoding.UTF8.GetByteCount(card) > MaxCardBytes)
+            return Result.Failure<(string, bool)>(CardTooLarge);
+
+        var unchanged = row.CardHash.Length > 0 && row.VCardRaw != null
+            && SameIgnoringRev(row.VCardRaw, card);
+        return Result.Success((card, !unchanged));
+    }
+
     /// <summary>
     /// The one place <c>vcard_raw</c> is written: composing is the caller's, stamping the UID,
     /// hashing and projecting are here. A hash computed by callers is a hash a caller will forget.
@@ -779,19 +892,13 @@ internal sealed class ContactStore(PreferencesDbContext context) : IContactStore
     private async Task<Result> WriteCardAsync(
         Contact row, string card, CancellationToken cancellationToken, ProjectionCache? loaded = null)
     {
-        // First of all, because the insertion adds bytes: the ceiling, the comparison and the hash
-        // all describe the card as it will be stored, or card_hash stops describing it.
-        card = WithUid(card, row.Uid);
-        if (Encoding.UTF8.GetByteCount(card) > MaxCardBytes) return Result.Failure(CardTooLarge);
-        // The composer refreshes REV on every output, so a card that changed nothing is never
-        // byte-equal to the stored one. Compared without that line it is, and décision 9 asks
-        // that a write changing nothing change neither the card nor the ETag resting on it.
-        if (row.CardHash.Length > 0 && row.VCardRaw != null && SameIgnoringRev(row.VCardRaw, card))
-            return Result.Success();
+        var prepared = PrepareCard(row, card);
+        if (prepared.IsFailure) return Result.Failure(prepared.Error);
+        if (!prepared.Value.Changed) return Result.Success();
 
-        row.VCardRaw = card;
-        row.CardHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(card)));
-        await ReplaceProjectionAsync(row, VCardProjector.Project(card), loaded, cancellationToken);
+        row.VCardRaw = prepared.Value.Card;
+        row.CardHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prepared.Value.Card)));
+        await ReplaceProjectionAsync(row, VCardProjector.Project(prepared.Value.Card), loaded, cancellationToken);
         return Result.Success();
     }
 

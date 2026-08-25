@@ -4,6 +4,7 @@ using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -11,7 +12,8 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 
 public sealed class ContactStoreImportTests
 {
-    private static ContactStore CreateStore(string dbName) => new(new PreferencesTestDbContext(dbName));
+    private static ContactStore CreateStore(string dbName) =>
+        new(new PreferencesTestDbContext(dbName), ContactStoreTestFactory.NewSync().Object);
 
     private static ContactImportRow Row(
         int line = 2, string? first = null, string? last = null, string? nick = null,
@@ -70,7 +72,7 @@ public sealed class ContactStoreImportTests
         var user = Guid.NewGuid();
         var context = new PreferencesTestDbContext(db);
 
-        await new ContactStore(context).ImportAsync(
+        await new ContactStore(context, ContactStoreTestFactory.NewSync().Object).ImportAsync(
             user, [Row(first: "Bruno", addresses: "bruno@example.com")], CancellationToken.None);
 
         Assert.Equal("imported", Assert.Single(new PreferencesTestDbContext(db).Contacts).Source);
@@ -569,8 +571,9 @@ public sealed class ContactStoreImportTests
         FillTheBook(context, user);
         await context.SaveChangesAsync();
 
-        var outcome = await new ContactStore(new PreferencesTestDbContext(db)).ImportAsync(
-            user, [Row(line: 2, first: "Over", addresses: "over@example.com")], CancellationToken.None);
+        var outcome = await new ContactStore(new PreferencesTestDbContext(db), ContactStoreTestFactory.NewSync().Object)
+            .ImportAsync(
+                user, [Row(line: 2, first: "Over", addresses: "over@example.com")], CancellationToken.None);
 
         Assert.Equal(0, outcome.Created);
         Assert.Equal(1, outcome.Skipped);
@@ -588,8 +591,9 @@ public sealed class ContactStoreImportTests
         context.ContactEmails.Add(new ContactEmail { ContactId = first, Address = "full@example.com" });
         await context.SaveChangesAsync();
 
-        var outcome = await new ContactStore(new PreferencesTestDbContext(db)).ImportAsync(
-            user, [Row(last: "Mertens", addresses: "full@example.com")], CancellationToken.None);
+        var outcome = await new ContactStore(new PreferencesTestDbContext(db), ContactStoreTestFactory.NewSync().Object)
+            .ImportAsync(
+                user, [Row(last: "Mertens", addresses: "full@example.com")], CancellationToken.None);
 
         Assert.Equal(1, outcome.Merged);
         Assert.Equal(0, outcome.Skipped);
