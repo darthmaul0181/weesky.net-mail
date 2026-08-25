@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ApiError } from '../../api.js'
 import { newMessageSeed } from '../mail/compose/composeSeed'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
@@ -47,7 +48,9 @@ export default function ContactsLayout() {
   })
   const { toasts, addToast, removeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
-  const { data: detail, isLoading: detailLoading, isError: detailError } = useContact(routeId ?? null)
+  const {
+    data: detail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail,
+  } = useContact(routeId ?? null)
   const createContact = useCreateContact()
   const updateContact = useUpdateContact()
   const deleteContact = useDeleteContact()
@@ -69,14 +72,19 @@ export default function ContactsLayout() {
   const [listWidth, setListWidth] = usePaneSize('contacts.split.right', 380, 240)
   const [pendingDelete, setPendingDelete] = useState<Contact | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [conflict, setConflict] = useState(false)
 
   // A refusal belongs to the form it happened in: opening another contact's editor, or coming
-  // back to a fresh one, must not inherit it (render-time reset, the MailLayout pattern).
-  const editorKey = inEditor ? routeId ?? 'new' : null
+  // back to a fresh one, must not inherit it (render-time reset, the MailLayout pattern). The
+  // reload counter rides the key so recharging reseeds the form, which nothing else can do — the
+  // editor takes its values from its contact once, at mount.
+  const [reloads, setReloads] = useState(0)
+  const editorKey = inEditor ? `${routeId ?? 'new'}#${reloads}` : null
   const [errorKey, setErrorKey] = useState(editorKey)
   if (editorKey !== errorKey) {
     setErrorKey(editorKey)
     setSaveError(null)
+    setConflict(false)
   }
 
   // Resolved here rather than in the form: the editor stays free of queries, so its tests mount
@@ -96,6 +104,17 @@ export default function ContactsLayout() {
   // The form seeds from its contact once, at mount, so an edit route waits for the book — and for
   // the card, without which the positions would arrive after the seed.
   const editorReady = (!routeId || (contacts != null && detail != null)) && !missing
+
+  // The hash of the card the open form was seeded from, captured at the render the editor mounts
+  // and held until it is reseeded. Never read live at save time: the invalidation every write
+  // fires reaches the card too, so a refused save would hand the retry the very version that
+  // refused it — a claim to have read what the user never saw.
+  const [seededHash, setSeededHash] = useState<string | undefined>(undefined)
+  const [hashKey, setHashKey] = useState<string | null>(null)
+  if (editorReady && editorKey !== hashKey) {
+    setHashKey(editorKey)
+    setSeededHash(detail?.cardHash)
+  }
 
   useEffect(() => {
     if (!missing) return
@@ -128,15 +147,30 @@ export default function ContactsLayout() {
   async function save(draft: ContactDraft) {
     setSaveError(null)
     try {
-      if (edited) await updateContact.mutateAsync({ id: edited.id, contact: draft })
-      else await createContact.mutateAsync(draft)
+      // Spread rather than `cardHash: seededHash`: a card the backfill never reached has none, and
+      // the key present at undefined is a version claim the API cannot match.
+      if (edited) {
+        await updateContact.mutateAsync({
+          id: edited.id, contact: seededHash ? { ...draft, cardHash: seededHash } : draft,
+        })
+      } else await createContact.mutateAsync(draft)
       navigate('/contacts')
       addToast(t('layout.saved'), 'success')
     } catch (error) {
       // Stay in the form carrying the reason: bouncing back to a list that kept nothing is how a
-      // user loses what they typed without being told why.
-      setSaveError(apiErrorMessage(error, t('layout.saveFailed')))
+      // user loses what they typed without being told why. A stale write gets the box instead of
+      // the banner — it has a way out to offer, and two messages read as two failures.
+      if (error instanceof ApiError && error.status === 409) setConflict(true)
+      else setSaveError(apiErrorMessage(error, t('layout.saveFailed')))
     }
+  }
+
+  // Recharging is the user's choice and never a consequence of the refusal: the form stands
+  // untouched behind the box until this runs. A refetch that failed has nothing to seed, so the
+  // box stays open rather than closing over the same stale form.
+  async function reloadEdited() {
+    const { isError: failed } = await refetchDetail()
+    if (!failed) setReloads(previous => previous + 1)
   }
 
   async function confirmDelete() {
@@ -259,6 +293,23 @@ export default function ContactsLayout() {
                 onWrite={writeTo} />
             </div>
           )}
+        </div>
+      )}
+
+      {conflict && (
+        <div className="modal-overlay" onClick={() => setConflict(false)}>
+          <div className="modal" onClick={event => event.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">{t('layout.conflictTitle')}</span>
+              <button className="modal-close" onClick={() => setConflict(false)}>✕</button>
+            </div>
+            <p>{t('layout.conflictBody')}</p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-primary" onClick={reloadEdited}>
+                {t('layout.conflictReload')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

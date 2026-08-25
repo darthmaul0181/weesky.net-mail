@@ -16,7 +16,17 @@ vi.mock('../../api.js', () => ({
     deleteContacts: vi.fn(), setContactsFavorite: vi.fn(),
     importContacts: vi.fn(), exportContacts: vi.fn(),
   },
-  ApiError: class extends Error {},
+  // The very class the layout imports from the mocked module, so its `instanceof ApiError` holds
+  // against what these tests throw: a locally-declared twin fails that check and routes a 409 to
+  // the generic branch, where the box would never open.
+  ApiError: class ApiError extends Error {
+    status: number
+    constructor(message: string, status: number) {
+      super(message)
+      this.name = 'ApiError'
+      this.status = status
+    }
+  },
 }))
 vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
@@ -24,6 +34,9 @@ const { api } = await import('../../api.js') as unknown as {
   api: Record<'getContacts' | 'getContact' | 'createContact' | 'updateContact' | 'deleteContact'
     | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
     | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
+}
+const { ApiError } = await import('../../api.js') as unknown as {
+  ApiError: new (message: string, status: number) => Error
 }
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
@@ -356,6 +369,122 @@ describe('ContactsLayout', () => {
 
     expect(screen.queryByRole('heading', { name: 'Bruno' })).not.toBeInTheDocument()
     expect(screen.getByText(/select a contact/i)).toBeInTheDocument()
+  })
+
+  /* The write proves which version it read, and the editor is the only door that needs it: a tab
+     left open for ten minutes must not silently overwrite the card the phone just changed. */
+  describe('a card that moved under the open editor', () => {
+    /** Bruno's card as the book's own row already projects it, plus what the case needs on top —
+        so the tile and the card it opens cannot disagree about anything else. */
+    function serveCard(fields: Partial<ContactDetail>) {
+      api.getContact.mockResolvedValue({
+        ...detailOf(contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] })), ...fields,
+      })
+    }
+
+    function openEditor() {
+      renderAt('/contacts/b/edit')
+      return waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
+    }
+
+    const save = () => userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    const conflictBox = () => screen.findByText('This contact changed elsewhere')
+
+    it('sends back the hash the card was read at', async () => {
+      api.updateContact.mockResolvedValue(undefined)
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+
+      await save()
+
+      await waitFor(() => expect(api.updateContact).toHaveBeenCalledWith(
+        'b', expect.objectContaining({ cardHash: 'abc123' })))
+    })
+
+    // A card the 4a backfill never reached answers no hash at all. The key has to be absent from
+    // the payload rather than present and undefined, which serialises as a version claim of null.
+    it('omits the key entirely when the card carries no hash', async () => {
+      api.updateContact.mockResolvedValue(undefined)
+      serveCard({})
+      await openEditor()
+
+      await save()
+
+      await waitFor(() => expect(api.updateContact).toHaveBeenCalled())
+      expect(api.updateContact.mock.calls[0][1]).not.toHaveProperty('cardHash')
+    })
+
+    it('offers to reload when the write is refused as stale', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+
+      await save()
+
+      expect(await conflictBox()).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+      // A refusal naming a conflict is not the generic banner: two messages about one failure read
+      // as two failures.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    // The refusal is not a reason to throw away what the user typed: reloading is their choice, and
+    // a box offering it over an emptied form leaves nothing to choose between.
+    it('leaves the typed form standing behind the box', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+      await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
+
+      await save()
+      await conflictBox()
+
+      expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno')
+      expect(screen.getByLabelText(/last name/i)).toHaveValue('Weiss')
+    })
+
+    it('reloading fetches the card again and reseeds the form from it', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+      await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
+      await save()
+      await conflictBox()
+      // The refused write invalidated the book, whose key the card sits under: let that refetch
+      // land on the old card before the endpoint starts answering the new one.
+      await settle()
+
+      serveCard({ cardHash: 'def456', firstName: 'Bruna', lastName: 'Mertens' })
+      await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+
+      await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruna'))
+      expect(screen.getByLabelText(/last name/i)).toHaveValue('Mertens')
+      expect(screen.queryByText('This contact changed elsewhere')).not.toBeInTheDocument()
+    })
+
+    // The invalidation every write fires reaches the card too, so a hash read at save time would be
+    // the one the server holds *now*: the second attempt would claim to have read a version the
+    // user never saw and would go through, which is the overwrite this whole guard exists to stop.
+    it('keeps sending the hash it was seeded with until the form is reloaded', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+      // The form is seeded; from here the endpoint answers the version that refuses the write. The
+      // refused save invalidates the book, whose key the card sits under, so the card refreshes on
+      // its own and `detail` holds def456 well before the second attempt.
+      serveCard({ cardHash: 'def456' })
+
+      await save()
+      await conflictBox()
+      await settle()
+
+      await userEvent.click(screen.getByRole('button', { name: '✕' }))
+      await save()
+
+      await waitFor(() => expect(api.updateContact).toHaveBeenCalledTimes(2))
+      expect(api.updateContact.mock.calls[0][1]).toMatchObject({ cardHash: 'abc123' })
+      expect(api.updateContact.mock.calls[1][1]).toMatchObject({ cardHash: 'abc123' })
+    })
   })
 })
 

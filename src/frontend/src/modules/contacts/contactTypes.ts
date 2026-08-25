@@ -66,6 +66,10 @@ export interface ContactDetail {
   addresses: ContactDetailEmail[]
   phones: ContactDetailPhone[]
   postalAddresses: ContactDetailPostal[]
+  /** The card's hash as it was read. Sent back on save so a stale write is refused rather than
+      silently overwriting what another device stored meanwhile. Absent on a card the backfill
+      never reached. */
+  cardHash?: string
 }
 
 export interface ContactListResponse {
@@ -126,6 +130,9 @@ export interface ContactDraft {
   /** Only the capture path sets this. The editor omits it and the API files the contact as
       "manual". */
   source?: 'captured'
+  /** The `ContactDetail.cardHash` the open form was seeded with. Omitted — never set to
+      `undefined` — when the card carried none, which the API reads as "no version claimed". */
+  cardHash?: string
 }
 
 export interface ContactImportError {
