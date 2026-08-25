@@ -289,11 +289,42 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         var row = await FindAsync(userId, contactId, cancellationToken);
         if (row == null) return Result.Failure(NotFound);
 
-        await ClearProjectionAsync([contactId], cancellationToken);
-        context.Contacts.Remove(row);
+        var before = new CardBefore(row.VCardRaw, row.CardHash, row.Uid, row.DavName);
 
-        await context.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        return await InTransactionAsync<Result>(async () =>
+        {
+            var rank = await sync.NextSequenceAsync(userId, cancellationToken);
+
+            if (before.VCardRaw is not null)
+            {
+                // ContactId is left NULL: a delete revision outlives the row it describes, and the
+                // FK would refuse a value pointing at a contact that is about to disappear.
+                await sync.ArchiveAsync(new ContactRevision
+                {
+                    UserId = userId,
+                    ContactId = null,
+                    Uid = before.Uid,
+                    DavName = before.DavName,
+                    CardHash = before.CardHash,
+                    VCardRaw = before.VCardRaw,
+                    Cause = RevisionCause.Delete,
+                    ReplacedAt = DateTime.UtcNow
+                }, cancellationToken);
+            }
+
+            await ClearProjectionAsync([contactId], cancellationToken);
+            context.Contacts.Remove(row);
+            await context.SaveChangesAsync(cancellationToken);
+
+            // The archive, the removal and the tombstone below are three separate saves inside one
+            // transaction: nothing here orders them relative to each other, only the COMMIT that
+            // follows makes them land together or not at all. No name, no tombstone: the row was
+            // never visible to the protocol, and the tombstone key refuses NULL.
+            if (before.DavName is not null)
+                await sync.PlaceTombstoneAsync(userId, before.DavName, rank, cancellationToken);
+
+            return Result.Success();
+        }, cancellationToken);
     }
 
     public async Task<Result> SetFavoriteAsync(
@@ -312,15 +343,66 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     public async Task<int> DeleteManyAsync(
         Guid userId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
     {
-        var rows = await context.Contacts
-            .Where(c => c.UserId == userId && ids.Contains(c.Id))
-            .ToListAsync(cancellationToken);
-        if (rows.Count == 0) return 0;
+        var removed = 0;
 
-        await ClearProjectionAsync([.. rows.Select(r => r.Id)], cancellationToken);
-        context.Contacts.RemoveRange(rows);
-        await context.SaveChangesAsync(cancellationToken);
-        return rows.Count;
+        // Batched at a hundred, and it is not an optimisation: since decision 17 each of these
+        // deletions ARCHIVES what it erases, so a whole-book deletion in one transaction would
+        // write up to five gigabytes of MEDIUMTEXT — a redo log that overflows, and the state row's
+        // lock held long enough for every phone to come back in 503.
+        foreach (var chunk in ids.Chunk(BatchSize))
+        {
+            // A List, not the chunk array itself: EF's InMemory query translator cannot funclet an
+            // array's span-based Contains, which C#'s extension-method resolution now prefers.
+            var batch = chunk.ToList();
+            var rows = await context.Contacts
+                .Where(c => c.UserId == userId && batch.Contains(c.Id))
+                .ToListAsync(cancellationToken);
+            if (rows.Count == 0) continue;
+
+            var snapshots = rows
+                .Select(r => (r.Id, Before: new CardBefore(r.VCardRaw, r.CardHash, r.Uid, r.DavName)))
+                .ToList();
+
+            removed += await InTransactionAsync(async () =>
+            {
+                var rank = await sync.NextSequenceAsync(userId, cancellationToken);
+
+                foreach (var (id, before) in snapshots)
+                {
+                    if (before.VCardRaw is null) continue;
+                    await sync.ArchiveAsync(new ContactRevision
+                    {
+                        UserId = userId,
+                        ContactId = null,
+                        Uid = before.Uid,
+                        DavName = before.DavName,
+                        CardHash = before.CardHash,
+                        VCardRaw = before.VCardRaw,
+                        Cause = RevisionCause.Delete,
+                        ReplacedAt = DateTime.UtcNow
+                    }, cancellationToken);
+                }
+
+                await ClearProjectionAsync([.. rows.Select(r => r.Id)], cancellationToken);
+                context.Contacts.RemoveRange(rows);
+                await context.SaveChangesAsync(cancellationToken);
+
+                // One tombstone PER card actually removed. As in DeleteAsync, the archive, the
+                // removal and the tombstones below are separate saves that commit together only
+                // because InTransactionAsync's COMMIT follows all of them — not because of the
+                // order they are written in here. This body reports its outcome as a count, never
+                // as a failed Result, so InTransactionAsync always commits it.
+                foreach (var (_, before) in snapshots)
+                {
+                    if (before.DavName is null) continue;
+                    await sync.PlaceTombstoneAsync(userId, before.DavName, rank, cancellationToken);
+                }
+
+                return rows.Count;
+            }, cancellationToken);
+        }
+
+        return removed;
     }
 
     public async Task<int> SetFavoriteManyAsync(
