@@ -87,4 +87,37 @@ public sealed class ContactStoreImportSyncTests
         sync.Verify(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    [Fact]
+    public async Task AMergeOntoAContactWhoseColumnsDriftedFromItsCard_TakesNoRankEither()
+    {
+        using var context = ContactStoreTestFactory.NewContext();
+        var sync = ContactStoreTestFactory.NewSyncCounting();
+        var store = new ContactStore(context, sync.Object);
+        var userId = Guid.NewGuid();
+        await store.CreateAsync(
+            userId, ContactStoreTestFactory.Write("Ada", "Lovelace", "Analytical Engine"),
+            CancellationToken.None);
+
+        // The column emptied under the card, which keeps its ORG: not a state this store can
+        // produce, but one operator SQL leaves behind — assets/contacts-dav-backfill.sql writes
+        // columns of its own, on its own pass. The merge reads the COLUMN to decide what a row
+        // fills, so it believes this one fills the organisation in; the card already says it, so
+        // storing the result changes nothing but REV. This is the only input that reaches the
+        // "changed nothing" guard: a plain replay is stopped one step earlier, by an empty fill.
+        var drifted = await context.Contacts.SingleAsync(CancellationToken.None);
+        drifted.Organization = null;
+        await context.SaveChangesAsync(CancellationToken.None);
+        var rankBefore = drifted.SyncSequence;
+        sync.Invocations.Clear();
+
+        await store.ImportAsync(
+            userId, ContactStoreTestFactory.MergeRowFor("Ada", "Lovelace"), CancellationToken.None);
+
+        // A card that comes back byte for byte is not a new version: no rank spent, nothing to keep.
+        var row = await context.Contacts.SingleAsync(CancellationToken.None);
+        Assert.Equal(rankBefore, row.SyncSequence);
+        sync.Verify(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

@@ -373,6 +373,9 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                     await sync.ArchiveAsync(new ContactRevision
                     {
                         UserId = userId,
+                        // NULL for DeleteAsync's reason: a delete revision outlives the row it
+                        // describes, and the FK would refuse a value pointing at a contact this
+                        // very transaction is about to remove.
                         ContactId = null,
                         Uid = before.Uid,
                         DavName = before.DavName,
@@ -469,6 +472,12 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // long enough for every phone to come back in 503. A half-stored import is recoverable
         // where a redo-log overflow is not: the merge path is idempotent per row, so re-importing
         // the same file finishes it and changes nothing it already stored.
+        // One consequence worth knowing before it surprises someone: the indexes below are kept
+        // current across batches, so where the boundary falls is observable. The same person on
+        // rows 5 and 150 is created by one batch and merged by the next — one Import revision, two
+        // ranks; on rows 5 and 50 the second row folds into the first before anything is written —
+        // no revision, one rank. Both are right: in the first case the card really was published
+        // under its own rank, and a client really could have fetched it.
         foreach (var chunk in rows.Chunk(BatchSize))
         {
             // ContactImportOutcome is no Result, so InTransactionAsync always commits this body —
@@ -502,10 +511,16 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         Guid userId, IReadOnlyList<ContactImportRow> rows, ImportIndexes index,
         CancellationToken cancellationToken)
     {
-        // The state row's lock FIRST, before any contact row is touched — CreateAsync's rule and
-        // for its reason: two paths locking in the opposite order deadlock. One rank for the whole
-        // batch, and taken before the batch knows whether any row of it changes anything: a rank
-        // withheld until then would be a rank taken after the contact rows, which is that order.
+        // The state row's lock FIRST, as CreateAsync and DeleteManyAsync take it, so that every
+        // door of this store locks in one order and none of them can deadlock against another.
+        // Unconditional, before the batch knows whether a single row of it changes anything:
+        // deciding that means running the whole merge machinery and mutating tracked entities
+        // first, and a rank taken after that is this path locking in the opposite order to every
+        // other. (Those reads take no row lock of their own under REPEATABLE READ — the contact
+        // rows are X-locked only inside SaveChangesAsync — so the hazard is the ORDER OF THE TWO
+        // LOCKS, not the reads.) What it costs: a re-import that changes nothing still advances
+        // the counter, so the collection ctag moves and every phone spends one sync-collection
+        // REPORT to be told nothing changed. One empty round trip, against a deadlock.
         var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
         // Recounted per batch, not once for the file: five hundred rows landing in a book that
@@ -649,9 +664,13 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 continue;
             }
 
-            // A merge that filled nothing leaves the contact byte for byte as it was: no archive,
-            // no rank, no client woken. Re-importing a file to check the first pass worked is the
-            // commonest gesture of a doubtful user, and it must cost the book nothing.
+            // The merge believed it filled something in and the card says otherwise: it is read off
+            // the COLUMNS, so a contact whose columns drifted below its card — operator SQL, a
+            // backfill that wrote one and not the other — offers a value the card already carries,
+            // and comes back byte for byte but for its REV. No archive, no rank, no client woken
+            // for a version that is not one. (A plain replay never gets this far: ApplyMergesAsync
+            // hands nothing to pending when the fill is empty. This is the second line, not the
+            // first, and ContactStoreImportSyncTests reaches it through that drift.)
             if (!prepared.Value.Changed) continue;
 
             // Archived before being overwritten, in the batch's own transaction — so under its

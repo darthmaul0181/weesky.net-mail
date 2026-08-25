@@ -51,12 +51,15 @@ internal static class ContactStoreTestFactory
         return sync;
     }
 
-    /// <summary>A minimal, valid write: a name and nothing else.</summary>
-    internal static ContactWrite Write(string first, string last) =>
+    /// <summary>
+    /// A minimal, valid write: a name, and an organisation only when a test needs a field it can
+    /// then take back out of the column to stage a drift between the columns and the card.
+    /// </summary>
+    internal static ContactWrite Write(string first, string last, string? organization = null) =>
         new(FirstName: first, LastName: last, Nickname: null, DisplayName: null, MiddleName: null,
-            NamePrefix: null, NameSuffix: null, Organization: null, Department: null, JobTitle: null,
-            Birthday: null, Website: null, Notes: null, IsFavorite: false, Addresses: [], Phones: [],
-            PostalAddresses: [], Source: "manual");
+            NamePrefix: null, NameSuffix: null, Organization: organization, Department: null,
+            JobTitle: null, Birthday: null, Website: null, Notes: null, IsFavorite: false,
+            Addresses: [], Phones: [], PostalAddresses: [], Source: "manual");
 
     /// <summary>
     /// <paramref name="count"/> rows that can only ever create: a distinct name and a distinct

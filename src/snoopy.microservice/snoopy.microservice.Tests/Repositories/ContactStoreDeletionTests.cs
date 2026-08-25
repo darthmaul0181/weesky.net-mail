@@ -162,4 +162,74 @@ public sealed class ContactStoreDeletionTests
         // during it can serve, rank by rank, rather than waiting for the end.
         sync.Verify(s => s.NextSequenceAsync(userId, It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
+
+    [Fact]
+    public async Task DeletingANamedContactThatHasNoCard_BuriesItWithoutArchiving()
+    {
+        using var context = ContactStoreTestFactory.NewContext();
+        var sync = ContactStoreTestFactory.NewSync(rank: 7);
+        var userId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        // Named but card-less, and this is not a contrivance: assets/contacts-dav-backfill.sql sets
+        // dav_name on EVERY contact whatever its vcard_raw, and the 4a card backfill is a separate
+        // pass. Between the two, this is what a row looks like. The store itself never writes one,
+        // which is exactly why nothing tested it.
+        context.Contacts.Add(new Contact
+        {
+            Id = id, UserId = userId, Uid = id.ToString(), DavName = $"{id}.vcf"
+        });
+        await context.SaveChangesAsync(CancellationToken.None);
+        var store = new ContactStore(context, sync.Object);
+
+        var outcome = await store.DeleteAsync(userId, id, CancellationToken.None);
+
+        // The two tolerances are independent, and this row is the proof: the name WAS published, so
+        // it must be buried or the client keeps the card for ever; there is no card, so there is
+        // nothing to keep. Skipping the tombstone with the archive would lose the deletion.
+        Assert.True(outcome.IsSuccess);
+        sync.Verify(s => s.PlaceTombstoneAsync(userId, $"{id}.vcf", 7, It.IsAny<CancellationToken>()),
+            Times.Once);
+        sync.Verify(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        Assert.Empty(context.Contacts);
+    }
+
+    [Fact]
+    public async Task DeletingABatch_ToleratesAMissingNameAndAMissingCardRowByRow()
+    {
+        using var context = ContactStoreTestFactory.NewContext();
+        var sync = ContactStoreTestFactory.NewSync();
+        var store = new ContactStore(context, sync.Object);
+        var userId = Guid.NewGuid();
+        var whole = await store.CreateAsync(
+            userId, ContactStoreTestFactory.Write("Ada", "Lovelace"), CancellationToken.None);
+
+        // Carded but nameless: the deployment window the backfill script's own header describes,
+        // where 4a has written the card and the dav_name pass has not yet run.
+        var nameless = await store.CreateAsync(
+            userId, ContactStoreTestFactory.Write("Grace", "Hopper"), CancellationToken.None);
+        (await context.Contacts.SingleAsync(c => c.Id == nameless.Value, CancellationToken.None))
+            .DavName = null;
+
+        // Named but card-less: the same window on the other foot.
+        var cardless = Guid.NewGuid();
+        context.Contacts.Add(new Contact
+        {
+            Id = cardless, UserId = userId, Uid = cardless.ToString(), DavName = $"{cardless}.vcf"
+        });
+        await context.SaveChangesAsync(CancellationToken.None);
+        sync.Invocations.Clear();
+
+        var removed = await store.DeleteManyAsync(
+            userId, [whole.Value, nameless.Value, cardless], CancellationToken.None);
+
+        // Neither tolerance belongs to the batch: both are decided per row, and a row missing one
+        // of the two must cost the other rows neither. Three removed, but only two of each.
+        Assert.Equal(3, removed);
+        sync.Verify(s => s.PlaceTombstoneAsync(userId, It.IsAny<string>(), It.IsAny<ulong>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
+        sync.Verify(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        Assert.Empty(context.Contacts);
+    }
 }
