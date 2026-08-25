@@ -7,6 +7,7 @@ using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.CardDav;
 
 namespace weesky.Snoopy.Microservice.Configuration;
 
@@ -84,6 +85,8 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
         services.AddHostedService<StagedAttachmentSweeper>();
         services.AddHostedService<TrustedSenderSweeper>();
+        services.AddHostedService<ContactTombstoneSweeper>();
+        services.AddHostedService<SyncStateConsistencyCheckHostedService>();
 
         services.AddHttpClient<IOAuthTokenService, OAuthTokenService>(client =>
             {
