@@ -438,6 +438,9 @@ describe('ContactsLayout', () => {
 
       await save()
       await conflictBox()
+      // Past the refetch the refusal triggered, not just the instant of refusal: what a user meets
+      // is the form a second later, and that is when a remount would have eaten their typing.
+      await settle()
 
       expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno')
       expect(screen.getByLabelText(/last name/i)).toHaveValue('Weiss')
