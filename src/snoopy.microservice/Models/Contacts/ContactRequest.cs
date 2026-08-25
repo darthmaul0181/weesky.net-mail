@@ -52,4 +52,10 @@ public sealed class ContactRequest
 
     /// <summary>Where the card came from. Absent or unknown is filed as "manual".</summary>
     public string? Source { get; set; }
+
+    /// <summary>
+    /// The <see cref="ContactDetail.CardHash"/> the editor read before this write. Absent writes as
+    /// before this field existed; present and no longer the stored hash refuses the write with 409.
+    /// </summary>
+    public string? CardHash { get; set; }
 }

@@ -24,7 +24,9 @@ public sealed record ContactDetailAddress(
 /// <summary>
 /// The full contact card, as answered by GET /api/Contacts/{id}. Every child line carries its
 /// <c>Position</c> — the handle a PUT must return — plus <c>Type</c>, <c>Pref</c>, <c>Params</c>
-/// and <c>GroupName</c> for display; the last two never travel back on a write.
+/// and <c>GroupName</c> for display; the last two never travel back on a write. <c>CardHash</c> is
+/// what a PUT must send back on <see cref="ContactRequest.CardHash"/> to prove it read this very
+/// version — the same check as CardDAV's <c>If-Match</c>, in the webmail's own language.
 /// </summary>
 public sealed record ContactDetail(
     Guid Id,
@@ -45,4 +47,5 @@ public sealed record ContactDetail(
     bool HasPhoto,
     IReadOnlyList<ContactDetailEmail> Addresses,
     IReadOnlyList<ContactDetailPhone> Phones,
-    IReadOnlyList<ContactDetailAddress> PostalAddresses);
+    IReadOnlyList<ContactDetailAddress> PostalAddresses,
+    string CardHash);

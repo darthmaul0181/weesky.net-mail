@@ -167,7 +167,8 @@ internal static class ContactValidator
         return Result.Success(new ContactWrite(
             first, last, nick, displayName, middleName, namePrefix, nameSuffix,
             organization, department, jobTitle, birthday, website, notes,
-            request.IsFavorite, addresses, phones, postalAddresses, Source(request.Source)));
+            request.IsFavorite, addresses, phones, postalAddresses, Source(request.Source),
+            request.CardHash));
     }
 
     /// <summary>

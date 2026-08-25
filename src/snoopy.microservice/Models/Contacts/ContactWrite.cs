@@ -48,6 +48,11 @@ public sealed record ContactWriteAddress(
 /// <param name="Phones">Null = the request did not name them, so the card keeps its own; empty = cleared.</param>
 /// <param name="PostalAddresses">Null = the request did not name them, so the card keeps its own; empty = cleared.</param>
 /// <param name="Source">Where the card came from.</param>
+/// <param name="CardHash">
+/// The hash the caller read the card at, if any. Null writes as every caller did before this
+/// field existed — the import, scripts, and any caller that never read the card first. Non-null
+/// and different from the stored hash refuses the write with <see cref="Repositories.ContactStore.CardMoved"/>.
+/// </param>
 public sealed record ContactWrite(
     string? FirstName,
     string? LastName,
@@ -66,4 +71,5 @@ public sealed record ContactWrite(
     IReadOnlyList<ContactWriteEmail> Addresses,
     IReadOnlyList<ContactWritePhone>? Phones,
     IReadOnlyList<ContactWriteAddress>? PostalAddresses,
-    string Source);
+    string Source,
+    string? CardHash = null);

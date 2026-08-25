@@ -29,7 +29,7 @@ public sealed class ContactCsvExporterTests
         new(id ?? Guid.NewGuid(), first, last, nick, displayName, middleName, namePrefix, null,
             organization, department, jobTitle, birthday, website, notes, favorite, false,
             [.. addresses.Select((a, i) => new ContactDetailEmail(i, a, string.Empty, 101, string.Empty, string.Empty))],
-            phones ?? [], postal ?? []);
+            phones ?? [], postal ?? [], string.Empty);
 
     private static ContactWrite Write(
         string? first, string? last, string? nick, bool favorite, string source, params string[] addresses) =>

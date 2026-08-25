@@ -88,4 +88,13 @@ internal static class ContactStoreTestFactory
                 Organization: "Analytical Engine", Department: null, JobTitle: null, Birthday: null,
                 Website: null, Notes: null, IsFavorite: false, Addresses: [], Phones: [],
                 PostalAddresses: [], Source: "imported"))];
+
+    /// <summary>
+    /// A minimal detail carrying the given <paramref name="cardHash"/> and nothing else meaningful
+    /// — what a controller test needs to assert that GET hands the hash back out, without caring
+    /// about any other field.
+    /// </summary>
+    internal static ContactDetail DetailWithHash(string cardHash) =>
+        new(Guid.NewGuid(), "Ada", "Lovelace", null, null, null, null, null, null, null, null,
+            null, null, null, false, false, [], [], [], cardHash);
 }

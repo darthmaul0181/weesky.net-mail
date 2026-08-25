@@ -32,8 +32,11 @@ public interface IContactStore
     Task<Result<Guid>> CreateAsync(Guid userId, ContactWrite contact, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Rewrites the contact's card from the write and re-projects it whole. Fails when not found
-    /// or over the 1 MB ceiling; a write that changes nothing leaves the card and its hash alone.
+    /// Rewrites the contact's card from the write and re-projects it whole. Fails when not found,
+    /// over the 1 MB ceiling, or when <see cref="ContactWrite.CardHash"/> is set and no longer
+    /// matches the stored card (<see cref="ContactStore.CardMoved"/>) — opt-in, so a write that
+    /// names no hash behaves exactly as before. A write that changes nothing leaves the card and
+    /// its hash alone.
     /// </summary>
     Task<Result> UpdateAsync(Guid userId, Guid contactId, ContactWrite contact, CancellationToken cancellationToken);
 

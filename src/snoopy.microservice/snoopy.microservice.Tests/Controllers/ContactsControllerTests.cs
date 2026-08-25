@@ -662,7 +662,7 @@ public sealed class ContactsControllerTests
         new(id ?? Guid.NewGuid(), first, last, null, null, null, null, null, null, null, null,
             null, null, null, false, false,
             [.. (addresses ?? []).Select((a, i) => new ContactDetailEmail(i, a, string.Empty, 101, string.Empty, string.Empty))],
-            [], []);
+            [], [], string.Empty);
 
     // A foreign id is not distinguishable from an unknown one: the store answers null either way,
     // and 403 would confirm the id exists.

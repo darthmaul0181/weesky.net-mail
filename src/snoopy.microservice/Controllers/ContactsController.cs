@@ -108,7 +108,11 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
             write.DisplayName, false));
     }
 
-    /// <summary>Replaces the contact whole — names, favourite flag, and the entire address list.</summary>
+    /// <summary>
+    /// Replaces the contact whole — names, favourite flag, and the entire address list. Sending
+    /// back the <c>cardHash</c> GET answered is optional but recommended: it lets the store refuse
+    /// the write when the card moved since it was read, rather than silently overwriting it.
+    /// </summary>
     /// <param name="id">the contact's identifier</param>
     /// <param name="request">the full replacement contact</param>
     /// <param name="cancellationToken">cancellation token</param>
@@ -116,11 +120,13 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     /// <response code="400">Neither name nor address, or an unparsable address</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such contact for this user</response>
+    /// <response code="409">The card moved since <c>cardHash</c> was read; reload and retry</response>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Update(
         Guid id, ContactRequest request, CancellationToken cancellationToken)
     {
@@ -129,7 +135,12 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
 
         var saved = await store.UpdateAsync(
             AuthenticatedUser.WebmailUid, id, validated.Value, cancellationToken);
-        return saved.IsSuccess ? NoContent() : NotFoundEnveloppe(saved.Error);
+        if (saved.IsSuccess) return NoContent();
+
+        // 409 and not 404: the contact is very much there, it simply moved under the editor.
+        return saved.Error == ContactStore.CardMoved
+            ? ConflictEnveloppe(saved.Error)
+            : NotFoundEnveloppe(saved.Error);
     }
 
     /// <summary>Deletes the contact and its addresses.</summary>

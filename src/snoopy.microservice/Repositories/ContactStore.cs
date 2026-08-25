@@ -38,6 +38,13 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
     internal const string NotFound = "Contact not found";
 
+    /// <summary>
+    /// The editor sent back a hash that is no longer the card's. Its own message because 409 and
+    /// 404 are two different stories for the screen: one reloads, the other closes.
+    /// </summary>
+    internal static readonly string CardMoved =
+        "The contact changed since it was read. Reload it and try again.";
+
     internal static readonly string CardTooLarge =
         $"The contact's vCard exceeds {MaxCardBytes / 1024 / 1024} MB";
 
@@ -217,6 +224,12 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     {
         var row = await FindAsync(userId, contactId, cancellationToken);
         if (row == null) return Result.Failure(NotFound);
+
+        // Opt-in, and refused before anything else: a client that says what it read is refused when
+        // that is no longer true, and the refusal opens no transaction, takes no rank and wakes no
+        // client. A caller that says nothing writes as before.
+        if (contact.CardHash is not null && contact.CardHash != row.CardHash)
+            return Result.Failure(CardMoved);
 
         // Uid and Source are deliberately untouched: the first is the identity a CardDAV client
         // syncs on, the second records an origin that editing does not change. VCardRaw was of
@@ -1015,13 +1028,13 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         Guid Id, string? FirstName, string? LastName, string? Nickname, string? DisplayName,
         string? MiddleName, string? NamePrefix, string? NameSuffix, string? Organization,
         string? Department, string? JobTitle, string? Birthday, string? Website, string? Notes,
-        bool IsFavorite);
+        bool IsFavorite, string CardHash);
 
     private static IQueryable<ContactScalars> Scalars(IQueryable<Contact> contacts) =>
         contacts.Select(c => new ContactScalars(
             c.Id, c.FirstName, c.LastName, c.Nickname, c.DisplayName, c.MiddleName, c.NamePrefix,
             c.NameSuffix, c.Organization, c.Department, c.JobTitle, c.Birthday, c.Website, c.Notes,
-            c.IsFavorite));
+            c.IsFavorite, c.CardHash));
 
     /// <summary>
     /// The one read shape the card and the export share. Every family is ordered on
@@ -1039,7 +1052,8 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 new ContactDetailPhone(p.Position, p.Number, p.Type, p.Pref, p.Params, p.GroupName))],
             [.. postal.OrderBy(a => a.Pref).ThenBy(a => a.Position).Select(a =>
                 new ContactDetailAddress(a.Position, a.Type, a.Pref, a.Params, a.GroupName,
-                    a.PoBox, a.Extended, a.Street, a.Locality, a.Region, a.PostalCode, a.Country))]);
+                    a.PoBox, a.Extended, a.Street, a.Locality, a.Region, a.PostalCode, a.Country))],
+            row.CardHash);
 
     /// <summary>The card as it stood, snapshotted before anything is written over it.</summary>
     private readonly record struct CardBefore(string? VCardRaw, string CardHash, string? Uid, string? DavName);
