@@ -73,10 +73,15 @@ public sealed class ContactStoreConflictTests
             userId, ContactStoreTestFactory.Write("Ada", "Lovelace"), CancellationToken.None);
         sync.Invocations.Clear();
 
-        await store.UpdateAsync(
+        var saved = await store.UpdateAsync(
             userId, created.Value,
             ContactStoreTestFactory.Write("Ada", "Byron") with { CardHash = "stale" },
             CancellationToken.None);
+
+        // The refusal itself, pinned here too — without it this test would still pass for a bug
+        // that skipped composition for some unrelated reason and yet reported success.
+        Assert.True(saved.IsFailure);
+        Assert.Equal(ContactStore.CardMoved, saved.Error);
 
         // A refusal must open no transaction, take no lock and wake no client: the refused path is
         // the one a conflicted tab retries on every save.

@@ -117,7 +117,7 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     /// <param name="request">the full replacement contact</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Saved</response>
-    /// <response code="400">Neither name nor address, or an unparsable address</response>
+    /// <response code="400">Neither name nor address, an unparsable address, or the card over the 1 MB ceiling</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such contact for this user</response>
     /// <response code="409">The card moved since <c>cardHash</c> was read; reload and retry</response>
@@ -137,10 +137,14 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
             AuthenticatedUser.WebmailUid, id, validated.Value, cancellationToken);
         if (saved.IsSuccess) return NoContent();
 
-        // 409 and not 404: the contact is very much there, it simply moved under the editor.
-        return saved.Error == ContactStore.CardMoved
-            ? ConflictEnveloppe(saved.Error)
-            : NotFoundEnveloppe(saved.Error);
+        // Exhaustive, not "CardMoved or 404": UpdateAsync can also fail with CardTooLarge (from
+        // PrepareCard), and a contact refused for its size is not a missing one. NotFound is the
+        // only reason that means "no such row"; CardMoved is the one reason that means "reload and
+        // retry"; everything else — today only CardTooLarge — is a rejected body, exactly what
+        // Create above already answers with BadRequestEnveloppe for its own failure reasons.
+        if (saved.Error == ContactStore.NotFound) return NotFoundEnveloppe(saved.Error);
+        if (saved.Error == ContactStore.CardMoved) return ConflictEnveloppe(saved.Error);
+        return BadRequestEnveloppe(saved.Error);
     }
 
     /// <summary>Deletes the contact and its addresses.</summary>

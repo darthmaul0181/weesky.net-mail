@@ -53,6 +53,23 @@ public sealed class ContactsControllerConflictTests
         Assert.IsType<NotFoundObjectResult>(answer);
     }
 
+    // The size ceiling is neither CardMoved nor NotFound: the contact is right there, it is the
+    // rewritten card that is refused. Lumping every non-CardMoved failure into 404 would answer
+    // "not found" for a contact that plainly is.
+    [Fact]
+    public async Task ACardOverTheSizeCeiling_Answers400AndNotAnyOtherStatus()
+    {
+        var store = new Mock<IContactStore>();
+        store.Setup(s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ContactWrite>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(ContactStore.CardTooLarge));
+        var controller = NewController(store.Object);
+
+        var answer = await controller.Update(Guid.NewGuid(), ValidRequest(), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(answer);
+    }
+
     [Fact]
     public async Task TheDetail_CarriesTheHashTheEditorMustSendBack()
     {
