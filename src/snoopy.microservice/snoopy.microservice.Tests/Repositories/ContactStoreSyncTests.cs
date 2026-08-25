@@ -37,8 +37,10 @@ public sealed class ContactStoreSyncTests
         var created = await store.CreateAsync(
             userId, ContactStoreTestFactory.Write("Ada", "Lovelace"), CancellationToken.None);
 
-        // A name that comes back must stop being reported as deleted, or a client that syncs after
-        // both events sees a creation and a burial at the same rank and picks whichever it likes.
+        // This only proves the call is made on every create — davName here is a fresh GUID, so the
+        // doubled store's real counterpart could never actually find a tombstone under it. The call
+        // exists for a client-chosen resource name (plan c), which is the only door a name can come
+        // back through; this test cannot exercise that door, only that the store always knocks.
         sync.Verify(s => s.LiftTombstoneAsync(userId, $"{created.Value}.vcf", It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -59,7 +61,7 @@ public sealed class ContactStoreSyncTests
     }
 
     [Fact]
-    public async Task Updating_ArchivesTheBytesItReplaces_BeforeTakingItsRank()
+    public async Task Updating_ArchivesTheReplacedBytesUnderTheWebmailCause()
     {
         using var context = ContactStoreTestFactory.NewContext();
         var sync = ContactStoreTestFactory.NewSync(rank: 9);
@@ -79,22 +81,36 @@ public sealed class ContactStoreSyncTests
                 && r.VCardRaw == before
                 && r.ContactId == created.Value),
             It.IsAny<CancellationToken>()), Times.Once);
+
+        // The rank is taken FIRST, always — the invariant CreateAsync and UpdateAsync both keep so
+        // the state row's lock is never taken after a contact row's. NextSequenceAsync must appear
+        // before ArchiveAsync in the recorded call order, or this would pass even with the two
+        // reversed.
+        var order = sync.Invocations.Select((invocation, index) => (invocation.Method.Name, index)).ToList();
+        var nextSequenceCall = order.First(i => i.Name == nameof(IContactSyncStore.NextSequenceAsync)).index;
+        var archiveCall = order.First(i => i.Name == nameof(IContactSyncStore.ArchiveAsync)).index;
+        Assert.True(nextSequenceCall < archiveCall);
     }
 
     [Fact]
     public async Task Updating_TakesTheNewRank()
     {
         using var context = ContactStoreTestFactory.NewContext();
-        var sync = ContactStoreTestFactory.NewSync(rank: 9);
+        // Counting, not constant: the create below consumes the first rank, and this test must be
+        // able to tell the update's rank from it — a constant NewSync would pass even if UpdateAsync
+        // never assigned row.SyncSequence at all, since CreateAsync would already have set it.
+        var sync = ContactStoreTestFactory.NewSyncCounting(first: 8);
         var store = new ContactStore(context, sync.Object);
         var userId = Guid.NewGuid();
         var created = await store.CreateAsync(
             userId, ContactStoreTestFactory.Write("Ada", "Lovelace"), CancellationToken.None);
+        var rankAfterCreate = (await context.Contacts.SingleAsync(CancellationToken.None)).SyncSequence;
 
         await store.UpdateAsync(
             userId, created.Value, ContactStoreTestFactory.Write("Ada", "Byron"), CancellationToken.None);
 
         var row = await context.Contacts.SingleAsync(CancellationToken.None);
+        Assert.NotEqual(rankAfterCreate, row.SyncSequence);
         Assert.Equal(9ul, row.SyncSequence);
     }
 

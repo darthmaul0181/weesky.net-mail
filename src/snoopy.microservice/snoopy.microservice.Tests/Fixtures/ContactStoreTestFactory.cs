@@ -19,13 +19,33 @@ internal static class ContactStoreTestFactory
     /// <summary>
     /// A doubled <see cref="IContactSyncStore"/> that hands out <paramref name="rank"/> on every
     /// call and archives successfully. What a test wants to assert about the calls made to it is
-    /// its own affair — this only sets up the defaults every test starts from.
+    /// its own affair — this only sets up the defaults every test starts from. Use this one when a
+    /// test does not need to tell one write's rank from another's — tasks 6 and 7 are specified
+    /// against a constant rank (a create followed by an assert on a fixed sequence number), and
+    /// changing this member's behaviour under them would break tests not yet written.
     /// </summary>
     internal static Mock<IContactSyncStore> NewSync(ulong rank = 1)
     {
         var sync = new Mock<IContactSyncStore>();
         sync.Setup(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(rank);
+        sync.Setup(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        return sync;
+    }
+
+    /// <summary>
+    /// A doubled <see cref="IContactSyncStore"/> that hands out <paramref name="first"/>, then
+    /// <paramref name="first"/> + 1, and so on, one higher on every call. Use this one when a test
+    /// needs two writes to land on genuinely different ranks — e.g. asserting an update's rank
+    /// differs from the create that preceded it, which a constant rank cannot demonstrate.
+    /// </summary>
+    internal static Mock<IContactSyncStore> NewSyncCounting(ulong first = 1)
+    {
+        var sync = new Mock<IContactSyncStore>();
+        var next = first;
+        sync.Setup(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromResult(next++));
         sync.Setup(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         return sync;

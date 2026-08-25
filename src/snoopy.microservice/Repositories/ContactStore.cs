@@ -203,7 +203,10 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             await context.SaveChangesAsync(cancellationToken);
 
             // A name that comes back must stop being reported as deleted: a client that syncs after
-            // both events would otherwise see a creation and a burial at the same rank.
+            // both events would otherwise see a creation and a burial at the same rank. davName here
+            // is always a fresh GUID, so this call is a guaranteed miss today — no tombstone can
+            // already bear it. It stays: the door it exists for is a client choosing its own
+            // resource name on PUT (plan c), and that is where a name really can come back.
             await sync.LiftTombstoneAsync(userId, davName, cancellationToken);
             return Result.Success(id);
         }, cancellationToken);
@@ -259,8 +262,11 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 }, cancellationToken);
             }
 
-            var written = await WriteCardAsync(row, card, cancellationToken);
-            if (written.IsFailure) return written;
+            // prepared was already validated as Success and Changed before the transaction opened
+            // (that is the very check that decided to open one) — so the card is applied directly
+            // rather than re-run through WriteCardAsync's own PrepareCard call, which would parse,
+            // size-check and hash it again for nothing.
+            await ApplyCardAsync(row, prepared.Value.Card, null, cancellationToken);
 
             row.IsFavorite = contact.IsFavorite;
             row.UpdatedAt = DateTime.UtcNow;
@@ -847,6 +853,14 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// configured today, so going through it is presently a no-op — it is done anyway because EF
     /// refuses a manual transaction the day one appears, and bypassing it instead of traversing it
     /// would then make the retry silently wrong.
+    /// <para>
+    /// The no-commit-on-failure guard below only ever matches a body returning <c>Result</c> or
+    /// <c>Result&lt;T&gt;</c> — <c>T is IResult</c> compiles for every <typeparamref name="T"/> but
+    /// only those two implement it. A body returning anything else (<c>int</c> from
+    /// <c>DeleteManyAsync</c>, <c>ContactImportOutcome</c> from <c>ImportAsync</c>) always commits,
+    /// deliberately: both report a partial failure inside their own return value rather than
+    /// aborting, because a batch that partially failed must still commit what succeeded.
+    /// </para>
     /// </summary>
     private Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
     {
@@ -896,10 +910,23 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         if (prepared.IsFailure) return Result.Failure(prepared.Error);
         if (!prepared.Value.Changed) return Result.Success();
 
-        row.VCardRaw = prepared.Value.Card;
-        row.CardHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prepared.Value.Card)));
-        await ReplaceProjectionAsync(row, VCardProjector.Project(prepared.Value.Card), loaded, cancellationToken);
+        await ApplyCardAsync(row, prepared.Value.Card, loaded, cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// The unconditional half of <see cref="WriteCardAsync"/>: stores a card already decided to be
+    /// both valid and changed. Split out so a caller that already ran <see cref="PrepareCard"/> —
+    /// <see cref="UpdateAsync"/>, to decide whether to open a transaction at all — can hand the
+    /// result straight through instead of paying for <c>WithUid</c>, the size check and the hash
+    /// comparison a second time on the busiest write path.
+    /// </summary>
+    private async Task ApplyCardAsync(
+        Contact row, string card, ProjectionCache? loaded, CancellationToken cancellationToken)
+    {
+        row.VCardRaw = card;
+        row.CardHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(card)));
+        await ReplaceProjectionAsync(row, VCardProjector.Project(card), loaded, cancellationToken);
     }
 
     /// <summary>
