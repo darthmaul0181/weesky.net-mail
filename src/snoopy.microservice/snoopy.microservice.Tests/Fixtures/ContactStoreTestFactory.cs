@@ -9,7 +9,7 @@ namespace weesky.Snoopy.Microservice.Tests.Fixtures;
 /// <summary>
 /// The three building blocks every <see cref="ContactStore"/> test needs, shared so tasks 6 to 8
 /// build on the same shapes rather than redeclaring their own. Grows with those tasks:
-/// <c>ImportRows</c>, <c>MergeRowFor</c> and <c>DetailWithHash</c> join it there.
+/// <c>ImportRows</c> and <c>MergeRowFor</c> arrived with task 7, <c>DetailWithHash</c> with task 8.
 /// </summary>
 internal static class ContactStoreTestFactory
 {
@@ -57,4 +57,32 @@ internal static class ContactStoreTestFactory
             NamePrefix: null, NameSuffix: null, Organization: null, Department: null, JobTitle: null,
             Birthday: null, Website: null, Notes: null, IsFavorite: false, Addresses: [], Phones: [],
             PostalAddresses: [], Source: "manual");
+
+    /// <summary>
+    /// <paramref name="count"/> rows that can only ever create: a distinct name and a distinct
+    /// address each, so no two of them resolve onto the same contact and the count of rows is the
+    /// count of contacts.
+    /// </summary>
+    internal static IReadOnlyList<ContactImportRow> ImportRows(int count) =>
+        [.. Enumerable.Range(0, count).Select(i => new ContactImportRow(
+            Line: i + 2, FirstName: $"Row{i}", LastName: "Imported", Nickname: null,
+            IsFavorite: false, Addresses: [$"row{i}@example.com"], VCard: null, Uid: null))];
+
+    /// <summary>
+    /// One row aimed at an address-less contact of that name — the name triple is the only index a
+    /// row carrying no address consults — offering an organisation beside it. On a contact created
+    /// from <see cref="Write"/> the organisation is one field more and the merge moves the card;
+    /// replayed onto a contact this very row created, every field it offers is already held and it
+    /// fills nothing at all.
+    /// </summary>
+    internal static IReadOnlyList<ContactImportRow> MergeRowFor(string first, string last) =>
+        [new ContactImportRow(
+            Line: 2, FirstName: first, LastName: last, Nickname: null, IsFavorite: false,
+            Addresses: [], VCard: null, Uid: null,
+            Write: new ContactWrite(
+                FirstName: first, LastName: last, Nickname: null, DisplayName: null,
+                MiddleName: null, NamePrefix: null, NameSuffix: null,
+                Organization: "Analytical Engine", Department: null, JobTitle: null, Birthday: null,
+                Website: null, Notes: null, IsFavorite: false, Addresses: [], Phones: [],
+                PostalAddresses: [], Source: "imported"))];
 }

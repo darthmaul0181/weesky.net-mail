@@ -427,7 +427,6 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     public async Task<ContactImportOutcome> ImportAsync(
         Guid userId, IReadOnlyList<ContactImportRow> rows, CancellationToken cancellationToken)
     {
-        var stored = await context.Contacts.CountAsync(c => c.UserId == userId, cancellationToken);
         // The same correlated subquery ListAsync uses: MariaDB cannot parametrise a collection, so
         // an IN list of up to MaxPerUser ids would be inlined and defeat the plan cache.
         var addressRows = await context.ContactEmails.AsNoTracking()
@@ -458,6 +457,63 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         var named = new Dictionary<string, HashSet<Guid>>();
         foreach (var c in addressless) Index(named, NameKey(c.FirstName, c.LastName, c.Nickname), c.Id);
 
+        var index = new ImportIndexes(uidOwners, owners, held, named);
+        var errors = new List<ContactImportError>();
+        int created = 0, merged = 0, skipped = 0, failed = 0;
+
+        // A hundred rows per transaction, and the whole-file write this replaces is a real loss:
+        // a failure on the eight-hundredth row now leaves the first seven hundred stored, where it
+        // used to leave nothing. The trade is deliberate. Every row here ARCHIVES the card it
+        // merges over since decision 17, so one transaction for a five-thousand-row file would
+        // write gigabytes of MEDIUMTEXT — a redo log that overflows, and the state row's lock held
+        // long enough for every phone to come back in 503. A half-stored import is recoverable
+        // where a redo-log overflow is not: the merge path is idempotent per row, so re-importing
+        // the same file finishes it and changes nothing it already stored.
+        foreach (var chunk in rows.Chunk(BatchSize))
+        {
+            // ContactImportOutcome is no Result, so InTransactionAsync always commits this body —
+            // deliberately: the import reports its row failures in that outcome instead of
+            // aborting, and a batch that partially failed must still store what succeeded.
+            var batch = await InTransactionAsync(
+                () => ImportBatchAsync(userId, chunk, index, cancellationToken), cancellationToken);
+
+            created += batch.Created;
+            merged += batch.Merged;
+            skipped += batch.Skipped;
+            failed += batch.Failed;
+            errors.AddRange(batch.Errors);
+        }
+
+        return new ContactImportOutcome(created, merged, skipped, failed, errors);
+    }
+
+    /// <summary>
+    /// The four indexes one file's rows are resolved against, built once and kept current as the
+    /// batches go by rather than re-read per batch: a rebuild would cost four queries per hundred
+    /// rows to learn what this pass already knows, having written it itself.
+    /// </summary>
+    private sealed record ImportIndexes(
+        Dictionary<string, Guid> UidOwners,
+        Dictionary<string, HashSet<Guid>> Owners,
+        Dictionary<Guid, HashSet<string>> Held,
+        Dictionary<string, HashSet<Guid>> Named);
+
+    private async Task<ContactImportOutcome> ImportBatchAsync(
+        Guid userId, IReadOnlyList<ContactImportRow> rows, ImportIndexes index,
+        CancellationToken cancellationToken)
+    {
+        // The state row's lock FIRST, before any contact row is touched — CreateAsync's rule and
+        // for its reason: two paths locking in the opposite order deadlock. One rank for the whole
+        // batch, and taken before the batch knows whether any row of it changes anything: a rank
+        // withheld until then would be a rank taken after the contact rows, which is that order.
+        var rank = await sync.NextSequenceAsync(userId, cancellationToken);
+
+        // Recounted per batch, not once for the file: five hundred rows landing in a book that
+        // already holds 4 800 must stop at 5 000 rather than spend a total an initial count
+        // believed free — and a book another session grew meanwhile is counted as it now is.
+        var stored = await context.Contacts.CountAsync(c => c.UserId == userId, cancellationToken);
+
+        var (uidOwners, owners, held, named) = index;
         var born = new Dictionary<Guid, Contact>();
         var pending = new Dictionary<Guid, PendingCard>();
         var merges = new List<(Guid Target, ContactImportRow Row, List<string> Addresses)>();
@@ -566,28 +622,67 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             created++;
         }
 
-        // Four queries for the whole file, whatever the number of merges: what the targets already
+        // Four queries for the whole batch, whatever the number of merges: what the targets already
         // hold is what re-projecting them has to clear.
         var cache = await LoadProjectionAsync(
             [.. merges.Select(m => m.Target).Where(id => !born.ContainsKey(id)).Distinct()],
             cancellationToken);
         await ApplyMergesAsync(userId, merges, born, pending, cache, uidOwners, cancellationToken);
 
+        // WriteCardAsync's two halves, spelled out: what it decides internally — whether the card
+        // is valid, and whether storing it changes anything — is exactly what an archive and a rank
+        // hang on here, and it answers Success either way.
         foreach (var (id, item) in pending)
         {
-            var written = await WriteCardAsync(item.Contact, item.Card, cancellationToken, cache);
-            if (written.IsSuccess) continue;
+            var before = new CardBefore(
+                item.Contact.VCardRaw, item.Contact.CardHash, item.Contact.Uid, item.Contact.DavName);
 
-            errors.Add(new ContactImportError(item.Line, written.Error));
-            if (!born.ContainsKey(id)) continue;
-            // Nothing of a contact whose card cannot be stored: décision 1 admits no card-less row.
-            context.Entry(item.Contact).State = EntityState.Detached;
-            created--;
-            failed++;
+            var prepared = PrepareCard(item.Contact, item.Card);
+            if (prepared.IsFailure)
+            {
+                errors.Add(new ContactImportError(item.Line, prepared.Error));
+                if (!born.ContainsKey(id)) continue;
+                // Nothing of a contact whose card cannot be stored: décision 1 admits no card-less row.
+                context.Entry(item.Contact).State = EntityState.Detached;
+                created--;
+                failed++;
+                continue;
+            }
+
+            // A merge that filled nothing leaves the contact byte for byte as it was: no archive,
+            // no rank, no client woken. Re-importing a file to check the first pass worked is the
+            // commonest gesture of a doubtful user, and it must cost the book nothing.
+            if (!prepared.Value.Changed) continue;
+
+            // Archived before being overwritten, in the batch's own transaction — so under its
+            // rank, and so never without one. A card the 4a backfill never reached is NULL and
+            // leaves no revision: no card, nothing to keep.
+            if (before.VCardRaw is not null)
+            {
+                await sync.ArchiveAsync(new ContactRevision
+                {
+                    UserId = userId,
+                    ContactId = id,
+                    Uid = before.Uid,
+                    DavName = before.DavName,
+                    CardHash = before.CardHash,
+                    VCardRaw = before.VCardRaw,
+                    Cause = RevisionCause.Import,
+                    ReplacedAt = DateTime.UtcNow
+                }, cancellationToken);
+            }
+
+            await ApplyCardAsync(item.Contact, prepared.Value.Card, cache, cancellationToken);
+            item.Contact.SyncSequence = rank;
+            // A contact born here carries none, and one the backfill window left nameless takes its
+            // name in the very batch that advances its rank: a rank above zero on a nameless row is
+            // a row no report can serve.
+            item.Contact.DavName ??= $"{id}.vcf";
         }
 
-        // One write for the whole file: a failure on the eight-hundredth row must not leave a book
-        // half imported that no screen can describe.
+        // One write for the batch, and what that buys is atomicity, not order: EF orders its own
+        // commands inside SaveChangesAsync, and the archives above are the sync store's own saves.
+        // What holds is that the batch's COMMIT lands all of it or none of it.
         await context.SaveChangesAsync(cancellationToken);
 
         return new ContactImportOutcome(created, merged, skipped, failed, errors);
