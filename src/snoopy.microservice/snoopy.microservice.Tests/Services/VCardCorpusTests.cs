@@ -123,7 +123,10 @@ public sealed class VCardCorpusTests
         var card = Card(file, 0);
         var p = VCardProjector.Project(card);
         var write = WriteFrom(p) with { Notes = "edited" }; // one field moves, nothing else
-        var output = VCardComposer.Compose(card, p.Uid ?? Uid, write);
+        // The UID as production holds it: VCardImportMapper.UidOf, a textual scan that keeps the
+        // urn:uuid: prefix the projector strips. Composing with the projector's Uid modelled a path
+        // production never takes.
+        var output = VCardComposer.Compose(card, VCardImportMapper.UidOf(card) ?? Uid, write);
         var reparsed = VCardProjector.Project(output);
 
         Assert.Equal("edited", reparsed.Notes);

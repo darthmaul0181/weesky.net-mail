@@ -350,8 +350,10 @@ internal static class VCardProjector
         internal const int Tel = 1;
         internal const int Adr = 2;
         private const int Bday = 3;
+        private const int Begin = 4;
+        private const int End = 5;
 
-        private static readonly string[] Families = ["EMAIL", "TEL", "ADR", "BDAY"];
+        private static readonly string[] Families = ["EMAIL", "TEL", "ADR", "BDAY", "BEGIN", "END"];
 
         private readonly List<string>[] parameters = [[], [], []];
 
@@ -361,11 +363,26 @@ internal static class VCardProjector
         {
             var unfolded = vcardRaw.Replace("\r\n", "\n").Replace("\n ", "").Replace("\n\t", "");
             var text = unfolded.AsSpan();
+            var depth = 0;
             foreach (var range in text.Split('\n'))
             {
                 var line = text[range];
                 var family = FamilyOf(line, out var afterName);
                 if (family < 0) continue;
+                // The library reads the first card only, so nothing past it may reach these ranks.
+                // Depth, not the first END:VCARD: a 2.1 AGENT embeds a whole card, whose lines are
+                // the outer card's own text and are what the alignment guard exists to notice.
+                if (family == Begin)
+                {
+                    depth++;
+                    continue;
+                }
+
+                if (family == End)
+                {
+                    if (--depth <= 0) break;
+                    continue;
+                }
 
                 var semi = -1;
                 var colon = -1;

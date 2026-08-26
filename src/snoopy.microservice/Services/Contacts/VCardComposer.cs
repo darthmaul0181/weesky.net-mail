@@ -132,9 +132,9 @@ internal static class VCardComposer
     /// </summary>
     private sealed record SourceCard(
         VCard Card, VCdVersion Version, List<string> InputChunks,
-        Dictionary<VCardProperty, string> RawLineOf)
+        Dictionary<VCardProperty, string> RawLineOf, string? RawUidLine)
     {
-        internal static SourceCard Fresh() => new(new VCard(), VCdVersion.V3_0, [], []);
+        internal static SourceCard Fresh() => new(new VCard(), VCdVersion.V3_0, [], [], null);
 
         internal static SourceCard Read(string existingCard)
         {
@@ -145,8 +145,10 @@ internal static class VCardComposer
             // Décision 7: the card's version, 2.1 promoted; an unreadable card starts over in 3.0.
             var version = parsed == null || parsed.Version == VCdVersion.V2_1
                 ? VCdVersion.V3_0 : parsed.Version;
+            // Read whatever the version: the UID repair is the one the 4.0 writer needs.
+            var uidLine = RawUid(existingCard);
             if (parsed == null || parsed.Version != VCdVersion.V3_0)
-                return new SourceCard(parsed ?? new VCard(), version, [], []);
+                return new SourceCard(parsed ?? new VCard(), version, [], [], uidLine);
 
             // A lone \r is a line break to the parser too — left in place it would splice a card
             // boundary back in. And only the first card's lines may feed the splices.
@@ -161,7 +163,7 @@ internal static class VCardComposer
             MapFamily(rawOf, chunks, "TITLE", parsed.Titles);
             MapFamily(rawOf, chunks, "NOTE", parsed.Notes);
             MapFamily(rawOf, chunks, "URL", parsed.Urls);
-            return new SourceCard(parsed, version, chunks, rawOf);
+            return new SourceCard(parsed, version, chunks, rawOf, uidLine);
         }
 
         // Raw lines pair with parsed properties by rank, only when the two counts agree.
@@ -418,7 +420,24 @@ internal static class VCardComposer
 
         StripNamePlaceholders(lines, card);
         EnforceBirthday(lines, card, birthday);
+        RestoreUid(lines, source, uid);
         return string.Join("\r\n", lines) + "\r\n";
+    }
+
+    /// <summary>
+    /// The column's UID is a textual scan of the card (<see cref="VCardImportMapper.UidOf"/>) and
+    /// never a value the composer transforms, so a card whose UID it did not touch keeps the line
+    /// it arrived with: the 4.0 writer otherwise labels <c>VALUE=TEXT</c> anything it cannot read
+    /// back as a URI, including the <c>urn:uuid:</c> form that is one.
+    /// </summary>
+    private static void RestoreUid(List<string> lines, SourceCard source, string uid)
+    {
+        if (source.RawUidLine is not { } raw) return;
+        var colon = IndexOutsideQuotes(raw, ':');
+        if (colon < 0 || raw[(colon + 1)..] != uid) return;
+        var index = lines.FindIndex(c =>
+            NameOf(Unfold(c)).Equals("UID", StringComparison.OrdinalIgnoreCase));
+        if (index >= 0) lines[index] = Fold(raw);
     }
 
     private static string Serialize(VCard card, VCdVersion version) =>
@@ -459,7 +478,11 @@ internal static class VCardComposer
             lines[indices[i]] = RestoreParams(lines[indices[i]], predicted[i]);
     }
 
-    private static string RestoreParams(string chunk, VCardProperty property)
+    private static string RestoreParams(string chunk, VCardProperty property) =>
+        AppendMissing(chunk, (property.Parameters.NonStandard ?? []).Select(p => $"{p.Key}={p.Value}"));
+
+    // The candidates the line does not already carry, appended verbatim before its value.
+    private static string AppendMissing(string chunk, IEnumerable<string> parameters)
     {
         var unfolded = Unfold(chunk);
         var colon = IndexOutsideQuotes(unfolded, ':');
@@ -467,9 +490,9 @@ internal static class VCardComposer
         var head = unfolded[..colon];
         var semi = IndexOutsideQuotes(head, ';');
         var block = semi < 0 ? string.Empty : head[(semi + 1)..];
-        var missing = (property.Parameters.NonStandard ?? [])
-            .Where(p => !HasParameter(block, p.Key))
-            .Select(p => $";{p.Key}={p.Value}")
+        var missing = parameters
+            .Where(p => p.Length > 0 && !HasParameter(block, KeyOf(p)))
+            .Select(p => ";" + p)
             .ToList();
         return missing.Count == 0 ? chunk
             : Fold(head + string.Concat(missing) + unfolded[colon..]);
@@ -501,9 +524,19 @@ internal static class VCardComposer
     {
         var model = (properties ?? []).Where(p => p is { IsEmpty: false })
             .Cast<VCardProperty>().ToList();
-        if (model.Count < 2) return;
         var indices = FamilyIndices(lines, name);
-        if (indices.Count >= model.Count || indices.Count > 1) return;
+        // A family the edit brings down to one occurrence collapses to nothing at all for the
+        // writer, which re-renders it alone and drops what its builders never re-emit — the 3.0 URL
+        // builder writes no parameter whatsoever. The stored line of that rank still carries them:
+        // the parameters come from it, the value from the model.
+        if (model.Count == 1)
+        {
+            if (indices.Count == 1 && StoredLineOf(source, name, model[0]) is { } stored)
+                lines[indices[0]] = AppendMissing(lines[indices[0]], ParameterBlock(stored));
+            return;
+        }
+
+        if (model.Count == 0 || indices.Count >= model.Count || indices.Count > 1) return;
 
         // Only rank 0 — the one occurrence the entry points ever edit — may lack a raw line. It is
         // re-rendered alone through the library, never taken from the writer's collapsed line:
@@ -521,6 +554,27 @@ internal static class VCardComposer
         if (indices.Count == 1) lines.RemoveAt(indices[0]);
         lines.InsertRange(at, block);
     }
+
+    /// <summary>
+    /// The input line an occurrence stands on: its own when it survived the edit untouched, else —
+    /// rank 0 being the only occurrence an entry point ever edits — the family's first input line.
+    /// </summary>
+    private static string? StoredLineOf(SourceCard source, string name, VCardProperty property) =>
+        source.RawLineOf.TryGetValue(property, out var raw) ? raw
+            : source.InputChunks.FirstOrDefault(c =>
+                NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    private static List<string> ParameterBlock(string line)
+    {
+        var unfolded = Unfold(line);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        if (colon < 0) return [];
+        var semi = IndexOutsideQuotes(unfolded[..colon], ';');
+        return semi < 0 ? [] : SplitOutsideQuotes(unfolded[(semi + 1)..colon]);
+    }
+
+    private static string KeyOf(string parameter) =>
+        (parameter.IndexOf('=') is var eq && eq < 0 ? parameter : parameter[..eq]).Trim();
 
     // The library's own rendering of a single property: a solo card cannot collapse anything, and
     // the parameter repair still applies (the 3.0 URL builder writes no parameters at all).
@@ -583,11 +637,7 @@ internal static class VCardComposer
     }
 
     private static bool HasParameter(string block, string key) =>
-        SplitOutsideQuotes(block).Any(p =>
-        {
-            var eq = p.IndexOf('=');
-            return (eq < 0 ? p : p[..eq]).Trim().Equals(key, StringComparison.OrdinalIgnoreCase);
-        });
+        SplitOutsideQuotes(block).Any(p => KeyOf(p).Equals(key, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// FolkerKinzel 8.2.0 fills a nameless card's mandatory N (vCard 3.0 only) and FN (both
@@ -680,11 +730,23 @@ internal static class VCardComposer
     private static string Fold(string line)
     {
         if (line.Length <= 75) return line;
-        var builder = new StringBuilder().Append(line, 0, 75);
-        for (var i = 75; i < line.Length; i += 74)
-            builder.Append("\r\n ").Append(line, i, Math.Min(74, line.Length - i));
+        var cut = CutAt(line, 75);
+        var builder = new StringBuilder().Append(line, 0, cut);
+        while (cut < line.Length)
+        {
+            var next = CutAt(line, Math.Min(cut + 74, line.Length));
+            builder.Append("\r\n ").Append(line, cut, next - cut);
+            cut = next;
+        }
+
         return builder.ToString();
     }
+
+    // Fold counts UTF-16 units where RFC 6350 counts octets, a divergence the residuals record and
+    // this does not close. Cutting between the halves of a surrogate pair is the part that must
+    // close: an over-long line is tolerated everywhere, invalid UTF-8 nowhere.
+    private static int CutAt(string line, int index) =>
+        index < line.Length && char.IsHighSurrogate(line[index - 1]) ? index - 1 : index;
 
     // The property name of an unfolded line, its group prefix stripped — "" when not a property.
     internal static string NameOf(string line)
@@ -732,21 +794,28 @@ internal static class VCardComposer
         return parts;
     }
 
-    // The first BDAY's raw value in the stored card — what Reconcile and MergeFill, which carry no
-    // birthday of their own, must keep the card spelling through re-serialization (décision 11).
-    private static string? RawBirthday(string vcardRaw)
+    // The first occurrence of one property in the stored card, unfolded and never past END:VCARD.
+    private static string? FirstRawLine(string vcardRaw, string name)
     {
         var unfolded = vcardRaw.Replace("\r\n", "\n").Replace("\n ", "").Replace("\n\t", "");
         foreach (var line in unfolded.Split('\n'))
         {
             if (NameOf(line).Equals("END", StringComparison.OrdinalIgnoreCase)) break;
-            if (!NameOf(line).Equals("BDAY", StringComparison.OrdinalIgnoreCase)) continue;
-            var colon = IndexOutsideQuotes(line, ':');
-            if (colon >= 0) return line[(colon + 1)..];
+            if (NameOf(line).Equals(name, StringComparison.OrdinalIgnoreCase)
+                && IndexOutsideQuotes(line, ':') >= 0)
+                return line;
         }
 
         return null;
     }
+
+    // The first BDAY's raw value in the stored card — what Reconcile and MergeFill, which carry no
+    // birthday of their own, must keep the card spelling through re-serialization (décision 11).
+    private static string? RawBirthday(string vcardRaw) =>
+        FirstRawLine(vcardRaw, "BDAY") is { } line
+            ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
+
+    private static string? RawUid(string vcardRaw) => FirstRawLine(vcardRaw, "UID");
 
     private static string EscapeLineBreaks(string value) =>
         value.Replace("\r\n", "\\n").Replace("\r", "\\n").Replace("\n", "\\n");
