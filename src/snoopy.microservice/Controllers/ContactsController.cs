@@ -5,6 +5,7 @@ using System.Text;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Services.Contacts;
 using weesky.Snoopy.Microservice.Services.Csv;
 
@@ -73,7 +74,8 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
         var etag = $"\"{photo.Value.CardHash}\"";
         Response.Headers.ETag = etag;
         Response.Headers.XContentTypeOptions = "nosniff";
-        if (Request.Headers.IfNoneMatch.Contains(etag)) return StatusCode(StatusCodes.Status304NotModified);
+        if (EntityTagMatcher.NoneMatch(Request.Headers.IfNoneMatch.ToString(), etag))
+            return StatusCode(StatusCodes.Status304NotModified);
 
         return File(photo.Value.Bytes, photo.Value.MediaType, "photo");
     }
