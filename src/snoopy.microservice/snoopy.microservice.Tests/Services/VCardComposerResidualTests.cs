@@ -19,8 +19,9 @@ public sealed class VCardComposerResidualTests
         + string.Concat(lines.Select(l => l + "\r\n")) + "END:VCARD\r\n";
 
     private static ContactWrite Write(
-        string? website = null, IReadOnlyList<ContactWriteEmail>? addresses = null) =>
-        new(null, null, null, "X", null, null, null, null, null, null, null, website, null, false,
+        string? website = null, string? notes = null,
+        IReadOnlyList<ContactWriteEmail>? addresses = null) =>
+        new(null, null, null, "X", null, null, null, null, null, null, null, website, notes, false,
             addresses ?? [], [], [], "manual");
 
     private static string Unfold(string card) =>
@@ -39,6 +40,22 @@ public sealed class VCardComposerResidualTests
         // Parameters from the stored line, value from the model.
         Assert.Contains(
             "item4.URL;X-ABLabel=Perso;type=pref:https://exemple.example/b", Unfold(composed));
+    }
+
+    [Fact]
+    public void AReplacedValue_DoesNotInheritTheStoredLinesEncodingParameters()
+    {
+        // The splice takes the parameters from the stored line and the value from the model, so a
+        // parameter describing the *bytes of a value* cannot ride along: the value it described is
+        // gone. Quoted-printable is a field habit of "3.0" exports, and a card declaring an
+        // encoding its value does not use is mangled on read by whatever phone this slice serves.
+        var stored = Card("3.0", "NOTE;ENCODING=QUOTED-PRINTABLE;CHARSET=UTF-8:caf=C3=A9");
+
+        var composed = VCardComposer.Compose(stored, Uid, Write(notes: "edited"));
+
+        Assert.Contains("NOTE:edited", Unfold(composed));
+        Assert.DoesNotContain("ENCODING", composed);
+        Assert.DoesNotContain("CHARSET", composed);
     }
 
     [Fact]

@@ -532,7 +532,8 @@ internal static class VCardComposer
         if (model.Count == 1)
         {
             if (indices.Count == 1 && StoredLineOf(source, name, model[0]) is { } stored)
-                lines[indices[0]] = AppendMissing(lines[indices[0]], ParameterBlock(stored));
+                lines[indices[0]] = AppendMissing(lines[indices[0]],
+                    ParameterBlock(stored).Where(p => !DescribesTheValue(KeyOf(p))));
             return;
         }
 
@@ -563,6 +564,14 @@ internal static class VCardComposer
         source.RawLineOf.TryGetValue(property, out var raw) ? raw
             : source.InputChunks.FirstOrDefault(c =>
                 NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    // These three describe a value's own bytes or type, and on this path the value is the model's:
+    // the one they described is gone. VALUE included — AppendMissing only reattaches what the
+    // writer left out, so keeping it would re-label a value the composer did transform.
+    private static bool DescribesTheValue(string key) =>
+        key.Equals("ENCODING", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("CHARSET", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("VALUE", StringComparison.OrdinalIgnoreCase);
 
     private static List<string> ParameterBlock(string line)
     {

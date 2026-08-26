@@ -174,6 +174,28 @@ public sealed class VCardCorpusTests
         Assert.Equal(GroupsOf(card, "X-ABLabel"), GroupsOf(output, "X-ABLabel"));
     }
 
+    [Fact] // 4c-ii-a: the family falls to one occurrence and the 3.0 URL builder writes no
+    public void Iphone_KeepsTheUrlPreferenceMarkAcrossAnEdit() // parameter at all, so the stored
+    {                                                          // line is what puts type=pref back
+        var card = Card("iphone.vcf", 0);
+        var p = VCardProjector.Project(card);
+        var output = VCardComposer.Compose(card, VCardImportMapper.UidOf(card) ?? Uid,
+            WriteFrom(p) with { Notes = "edited" });
+
+        Assert.Equal("item4.URL;type=pref:https://exemple.example/prenom", Line(output, "URL"));
+    }
+
+    [Fact] // 4c-ii-a: the 4.0 writer labels VALUE=TEXT every UID it cannot re-read as a URI, the
+    public void Davx5_KeepsTheUrnUuidUidAcrossAnEdit() // urn:uuid: form that is one included
+    {
+        var card = Card("davx5.vcf", 0);
+        var p = VCardProjector.Project(card);
+        var output = VCardComposer.Compose(card, VCardImportMapper.UidOf(card) ?? Uid,
+            WriteFrom(p) with { Notes = "edited" });
+
+        Assert.Equal("UID:urn:uuid:6f4b2c1a-8d3e-4f5a-b1c2-d3e4f5a6b7c8", Line(output, "UID"));
+    }
+
     [Fact] // the N components of a 4.0 card, middle name included, survive the same edit
     public void Davx5_KeepsTheNameComponentsAcrossAnEdit()
     {
