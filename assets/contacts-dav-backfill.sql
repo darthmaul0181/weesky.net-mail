@@ -6,6 +6,16 @@
 -- copies en les croyant supprimées côté serveur. Aucune route /dav n'existe avant la tranche
 -- 4c-ii-c ; ce fichier est écrit maintenant parce que le DDL qu'il complète l'est aussi.
 --
+-- ET APRÈS LE RATTRAPAGE DE CARTES DE LA TRANCHE 4a, ACHEVÉ — POST /api/Contacts/Backfill rejoué
+-- jusqu'à remaining = 0, voir docs/superpowers/contacts-4a-backfill.md. Cet ordre-là est
+-- OBLIGATOIRE et l'enfreindre ne se rattrape pas : ce script pose sync_sequence = 1 sur TOUTES les
+-- fiches, y compris celles qui n'ont pas encore de carte. Le rattrapage 4a leur en donnerait une
+-- ensuite sans prendre de rang — c'est un balayage d'exploitation, pas une porte d'écriture — et
+-- elles se mettraient à satisfaire la clause de visibilité à un rang DÉJÀ PUBLIÉ. Tout client
+-- détenant un jeton >= 1 ne les recevrait alors jamais, sans erreur nulle part, et ce script ne
+-- pourrait plus les réparer : sa clause WHERE sync_sequence = 0 ne les trouve plus. Voir le
+-- contrôle sans_carte en fin de fichier.
+--
 -- IDEMPOTENT : chaque instruction ne touche que les lignes encore à NULL ou à 0. Un opérateur qui
 -- le rejoue ne réattribue aucun nom et ne remet aucun compteur en arrière.
 --
@@ -42,9 +52,16 @@ SELECT COUNT(*) AS `restantes`
 FROM `contacts`
 WHERE `dav_name` IS NULL OR `sync_sequence` = 0;
 
--- CONTRÔLE — doit rendre 0. Une fiche que le rattrapage de 4a n'a pas atteinte n'a ni carte ni
--- condensat : elle est invisible du protocole par la clause de visibilité, ce qui est correct,
--- mais l'opérateur doit savoir qu'elles existent avant d'ouvrir le carnet.
+-- CONTRÔLE — doit rendre 0, et un chiffre non nul ici n'est pas un avertissement : c'est un dégât
+-- déjà fait. Une fiche que le rattrapage de 4a n'a pas atteinte n'a ni carte ni condensat, donc
+-- elle est invisible du protocole par la clause de visibilité — correct tant qu'elle le reste. Mais
+-- elle vient de recevoir le rang 1, et le jour où le rattrapage 4a lui donne sa carte elle devient
+-- visible à un rang déjà publié, sans prendre de rang neuf : tout client détenant un jeton >= 1 ne
+-- la recevra JAMAIS, sans erreur nulle part, ni côté serveur ni côté téléphone. Ce script ne peut
+-- plus la réparer, sa clause WHERE sync_sequence = 0 ne la trouvant plus. Le seul remède est une
+-- rotation d'epoch — assets/contacts-sync-epoch-rotate.sql, forme mono-utilisateur si le dégât
+-- tient à quelques comptes, forme base entière sinon — qui force une resynchronisation complète de
+-- chaque appareil concerné. D'où l'ordre imposé en tête de fichier : 4a d'abord, achevé.
 SELECT COUNT(*) AS `sans_carte`
 FROM `contacts`
 WHERE `vcard_raw` IS NULL OR `card_hash` = '';

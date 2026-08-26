@@ -11,7 +11,10 @@ namespace weesky.Snoopy.Microservice.Services.CardDav;
 /// This catches only half of what a bad restore can do: a *consistent* restore, both tables
 /// rewound together, leaves the inequality true and this check silent, while every client's token
 /// now covers ranks whose content actually changed underneath it. The remedy either way is the
-/// same file, <c>assets/contacts-sync-epoch-rotate.sql</c> — see
+/// same file, <c>assets/contacts-sync-epoch-rotate.sql</c> — but not the same statement in it:
+/// what this check finds is one user's book, so it takes the single-user form, while a restore is
+/// the whole database's and takes the whole-database one, which costs every Thunderbird address
+/// book in the deployment a manual re-pairing. See
 /// <c>docs/superpowers/carddav-restore-prerequisite.md</c>.
 /// </summary>
 internal sealed class SyncStateConsistencyCheck(
@@ -40,7 +43,11 @@ internal sealed class SyncStateConsistencyCheck(
                     "Sync state inconsistency for user {UserId}: contacts.sync_sequence reaches " +
                     "{HighestContactRank} but contact_sync_state.seq is only {Seq}. A contact cannot " +
                     "outrank its own counter unless the two tables came from different snapshots — run " +
-                    "assets/contacts-sync-epoch-rotate.sql for this user. This check cannot see a " +
+                    "the single-user form of assets/contacts-sync-epoch-rotate.sql, the commented " +
+                    "UPDATE ... WHERE user_id = ... at its foot, on this user_id alone. Not the " +
+                    "whole-database statement above it: that one is the remedy for a full restore, and " +
+                    "it forces every Thunderbird address book in the deployment to be deleted and " +
+                    "re-created by hand. This check cannot see a " +
                     "consistent restore: both tables rewound together leave MAX(sync_sequence) <= seq " +
                     "true, so it stays silent while every client's token now covers ranks whose content " +
                     "changed.",

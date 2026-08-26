@@ -16,6 +16,16 @@ internal interface IContactSyncStore
     /// <summary>
     /// The state as it stands, creating nothing. Null when the user has never had one — a getctag
     /// on an empty book answers 0 without writing.
+    ///
+    /// A caller that goes on to read the tombstones or the contact rows MUST hold one transaction
+    /// of its own across this call and those reads — one InnoDB snapshot. A prune landing between
+    /// them raises pruned_below and deletes what it covers, so the response would serve deletions
+    /// under a watermark already stale: the client keeps a card for ever, with nothing to signal
+    /// it. That is the hole pruned_below exists to close, reopened by a race.
+    ///
+    /// No runtime guard enforces it, unlike <see cref="NextSequenceAsync"/>: a getctag reads
+    /// nothing but this counter, and that single-statement call is legitimate — a guard would
+    /// forbid a correct use. The precondition is on the composition, not on the call.
     /// </summary>
     Task<SyncState?> ReadStateAsync(Guid userId, CancellationToken cancellationToken);
 
@@ -25,6 +35,11 @@ internal interface IContactSyncStore
     /// racing the first create for the same user are both answered correctly: the loser's insert
     /// fails on the row the winner just committed, and it re-reads and returns that row instead of
     /// throwing.
+    ///
+    /// The same-snapshot precondition as <see cref="ReadStateAsync"/>, and here it binds in
+    /// practice on every call: this overload exists for the caller that forms a token, and forming
+    /// one means going on to read what the token covers. Its own create is atomic by itself, so
+    /// the transaction is owed to that composition, not to the write.
     /// </summary>
     Task<SyncState> ReadOrCreateStateAsync(Guid userId, CancellationToken cancellationToken);
 

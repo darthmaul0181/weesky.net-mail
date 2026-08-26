@@ -8,6 +8,17 @@ Les FK exigent que `users` existe déjà (voir `webmail-users-table.md`).
 L'ordre n'est pas une commodité d'exploitation : le backend refuse de lire une table absente, et
 un déploiement qui précède son DDL rend `500` sur l'onglet « Sync ».
 
+Une fois le backend déployé, deux rattrapages se suivent, et cet ordre-là est **obligatoire** :
+d'abord celui de la tranche 4a — `POST /api/Contacts/Backfill` rejoué jusqu'à `remaining = 0`, voir
+`contacts-4a-backfill.md` —, **achevé**, et seulement ensuite `assets/contacts-dav-backfill.sql`.
+Dans l'autre sens le dégât ne se rattrape pas : le script DAV pose `sync_sequence = 1` sur toutes
+les fiches, celles sans carte comprises, et le rattrapage 4a leur donne ensuite leur carte sans
+prendre de rang — c'est un balayage d'exploitation, pas une porte d'écriture. Elles se mettent alors
+à satisfaire la clause de visibilité à un rang **déjà publié**, donc aucun client détenant un jeton
+`>= 1` ne les recevra jamais, sans erreur nulle part ; et le script DAV ne peut plus les réparer, sa
+clause `WHERE sync_sequence = 0` ne les trouvant plus. Le seul remède est alors une rotation
+d'epoch, qui force une resynchronisation complète.
+
 ## Tranche 4c-i — `dav_credentials`
 
 Une ligne par utilisateur, et c'est la forme qui dit qu'il n'y a qu'un secret par personne
@@ -102,6 +113,7 @@ CREATE TABLE `contact_tombstones` (
     COMMENT 'UTC ; posée par le code, jamais par le schéma',
   PRIMARY KEY (`user_id`, `dav_name`),
   INDEX `ix_contact_tombstones_seq` (`user_id`, `sync_sequence`),
+  INDEX `ix_contact_tombstones_time` (`deleted_at`),
   CONSTRAINT `fk_contact_tombstones_user`
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

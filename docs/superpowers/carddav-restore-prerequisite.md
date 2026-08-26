@@ -33,6 +33,11 @@ mariadb -u <user> -p snoopy_webmail < assets/contacts-sync-epoch-rotate.sql
 
 Répéter pour `snoopy_webmail_dev` si la restauration l'a aussi touchée.
 
+Le fichier porte aussi, en commentaire, une forme mono-utilisateur (`WHERE user_id = …`) qui n'est
+**pas** le geste d'une restauration — elle sert les incidents qui nomment un seul `user_id`, comme
+le contrôle de démarrage ci-dessous. Après une restauration, c'est la forme « base entière »
+ci-dessus qu'il faut jouer, et le `<` la joue déjà.
+
 ## La reprise n'est pas uniforme côté client
 
 Il faut le savoir avant de prévenir les utilisateurs :

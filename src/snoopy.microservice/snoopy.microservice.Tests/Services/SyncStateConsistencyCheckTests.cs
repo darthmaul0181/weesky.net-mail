@@ -64,6 +64,11 @@ public sealed class SyncStateConsistencyCheckTests
         // snapshots. Named, with the .sql line to run beside it — an operator reading this line at
         // three in the morning must not have to find the remedy in a design document.
         logger.VerifyErrorLoggedContaining("contacts-sync-epoch-rotate.sql");
+
+        // And it must name the single-user form: this check fires on one user's book, while the
+        // whole-database statement in the same file re-pairs every Thunderbird address book in the
+        // deployment by hand. Pointing at the wrong one turns one incident into everyone's.
+        logger.VerifyErrorLoggedContaining("single-user form");
     }
 
     [Fact]
