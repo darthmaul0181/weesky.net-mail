@@ -1,4 +1,3 @@
-using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -7,14 +6,28 @@ namespace weesky.Snoopy.Microservice.Services.CardDav;
 /// <summary>
 /// Parses a REPORT/PROPFIND/PROPPATCH body — untrusted input, refused defensively. DTD
 /// prohibition and a null resolver close entity expansion, the classic hole where a local file is
-/// read and echoed back inside a multistatus. The depth ceiling closes something neither of those
-/// touches: the megabyte a request is allowed already leaves room for a great many nested tags,
-/// tree construction descends into them, and a .NET stack overflow cannot be caught — it takes
-/// down the process serving every user, not just the one request. No legitimate request of this
-/// protocol nests past about ten levels.
+/// read and echoed back inside a multistatus.
 /// </summary>
+/// <remarks>
+/// The depth ceiling does <c>not</c> protect this method. <see cref="XmlReader.Read"/> advances an
+/// iterative state machine — its element stack lives on the heap, not on the call stack — and
+/// <see cref="XDocument.Load(XmlReader)"/>'s own tree construction is iterative too
+/// (<c>XContainer.ReadContentFrom</c> walks with <c>c = e</c> / <c>c = c.parent</c>, never
+/// recursion): a document 200000 levels deep loads here without incident. <b>Do not remove this
+/// ceiling on the reasoning that <see cref="XDocument"/> does not recurse</b> — that reasoning is
+/// correct about this file and wrong about what this file feeds. The document <see cref="Parse"/>
+/// returns is serialised back out downstream through <c>XNode.WriteTo</c>/<c>ToString</c>
+/// (<c>MultiStatusWriter</c> and the report/error writers of the routes to come), and <em>that</em>
+/// recurses one call-stack frame per level, uncatchably, on the process serving every other user's
+/// request at the same time. Refusing past <see cref="MaxDepth"/> here — before any writer ever
+/// sees the document — is the one place all of those write paths funnel through.
+/// </remarks>
 internal static class DavXmlReader
 {
+    /// <summary>
+    /// No legitimate request of this protocol nests past about ten levels. A document of exactly
+    /// this many nested elements is accepted; one more is refused.
+    /// </summary>
     internal const int MaxDepth = 50;
 
     private static readonly XmlReaderSettings Settings = new()
@@ -26,47 +39,61 @@ internal static class DavXmlReader
         IgnoreProcessingInstructions = true,
     };
 
+    private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
+    private static readonly byte[] Utf16LeBom = [0xFF, 0xFE];
+    private static readonly byte[] Utf16BeBom = [0xFE, 0xFF];
+
     /// <summary>
     /// Answers null on an empty body — several clients send one on PROPFIND at discovery, and it
     /// means allprop (RFC 4918 §9.1). Throws <see cref="DavBadRequestException"/> on a DTD, an
     /// entity, malformed XML, excess depth, or a body stream that fails while being read.
     /// </summary>
-    internal static XDocument? Parse(Stream body)
+    /// <param name="body">The request body, read exactly once, in full.</param>
+    /// <param name="logger">
+    /// Optional: a genuine I/O failure reading the body (as opposed to the body simply being
+    /// malformed) is still answered as a 400 to the caller — ruling 2 forbids a 500 here too — but
+    /// it is a server-side symptom worth a trace, which converting it silently would erase.
+    /// </param>
+    internal static XDocument? Parse(Stream body, ILogger? logger = null)
     {
         using var buffer = new MemoryStream();
         try
         {
             body.CopyTo(buffer);
         }
-        catch (IOException ex)
+        catch (BadHttpRequestException)
         {
+            // Thrown by [RequestSizeLimit] once the routes carry one: the body is too large, not
+            // malformed. Reporting that as DavBadRequestException would trade a 413 the client can
+            // act on for a 400 that hides the real reason.
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // What an aborted Kestrel request body gives once the connection behind it has been
+            // torn down — a client fact, not a document fact, but still one worth a trace since it
+            // may equally be this process's own buffered-body storage failing to spill to disk.
+            logger?.LogWarning(ex, "The CardDAV request body stream failed while being read");
             throw new DavBadRequestException("The request body could not be read.", ex);
         }
 
-        if (buffer.Length == 0) return null;
-
-        buffer.Position = 0;
-        using (var textReader = new StreamReader(buffer, Encoding.UTF8, detectEncodingFromByteOrderMarks: true,
-                   bufferSize: 1024, leaveOpen: true))
-        {
-            // Whitespace-only is empty too: several clients pad a PROPFIND with a trailing
-            // newline, and none of these three shapes may throw.
-            if (string.IsNullOrWhiteSpace(textReader.ReadToEnd())) return null;
-        }
+        if (buffer.Length == 0 || IsWhitespaceOnly(buffer.GetBuffer(), (int)buffer.Length)) return null;
 
         try
         {
             buffer.Position = 0;
-            // Depth is counted on a flat read first: XmlReader.Depth is a counter over an
-            // iterative state machine, not a recursive descent, so walking it never risks the
-            // stack this ceiling exists to protect. Checking it only after XDocument.Load had
-            // built the tree would mean checking after the very descent being guarded against —
-            // no ceiling at all.
+            // Depth is still checked here, on the flat non-recursive reader, even though reading
+            // itself was never the risk (see the remarks above): refusing here is what keeps an
+            // oversized document from ever reaching the recursive writers downstream.
             using (var probe = XmlReader.Create(buffer, Settings))
             {
                 while (probe.Read())
                 {
-                    if (probe.Depth > MaxDepth)
+                    // Depth is 0-based (a document's root sits at Depth 0), so a document of
+                    // exactly MaxDepth nested elements reaches Depth MaxDepth-1 and must be
+                    // accepted; >= is what makes the constant mean what it reads as, rather than
+                    // silently admitting one level more than its name promises.
+                    if (probe.Depth >= MaxDepth)
                         throw new DavBadRequestException(
                             $"The document nests past the {MaxDepth}-level ceiling.");
                 }
@@ -80,5 +107,33 @@ internal static class DavXmlReader
         {
             throw new DavBadRequestException("The request body is not well-formed XML.", ex);
         }
+    }
+
+    /// <summary>
+    /// A byte-level check, not a decode: materialising the body as a second, UTF-16 copy just to
+    /// answer "is it blank" doubles the memory a request holds for a question about its first few
+    /// bytes. Scanning the raw bytes for anything outside the ASCII whitespace set is exact for
+    /// UTF-8 and ASCII, and correctly conservative for every other encoding — it may call a
+    /// whitespace-only UTF-16 body "not blank" (each unit's zero high byte reads as non-whitespace)
+    /// and fall through to the real parse, which still answers correctly via <see cref="XmlException"/>;
+    /// it never calls actual content blank, since markup characters always fall outside this set.
+    /// </summary>
+    private static bool IsWhitespaceOnly(byte[] bytes, int length)
+    {
+        var start = SkipBom(bytes, length);
+        for (var i = start; i < length; i++)
+        {
+            if (bytes[i] is not (0x09 or 0x0A or 0x0D or 0x20)) return false;
+        }
+
+        return true;
+    }
+
+    private static int SkipBom(byte[] bytes, int length)
+    {
+        if (length >= 3 && bytes.AsSpan(0, 3).SequenceEqual(Utf8Bom)) return 3;
+        if (length >= 2 && bytes.AsSpan(0, 2).SequenceEqual(Utf16LeBom)) return 2;
+        if (length >= 2 && bytes.AsSpan(0, 2).SequenceEqual(Utf16BeBom)) return 2;
+        return 0;
     }
 }

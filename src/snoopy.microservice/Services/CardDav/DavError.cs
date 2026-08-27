@@ -18,13 +18,27 @@ internal static class DavError
     /// namespace, not only DAV:, and <paramref name="detail"/> is written inside it verbatim
     /// (e.g. the href of a conflicting resource for no-uid-conflict).
     /// </summary>
+    /// <remarks>
+    /// A response that has already started is a silent no-op here, not a thrown
+    /// <see cref="InvalidOperationException"/> — deliberately the opposite of
+    /// <c>MultiStatusWriter.BeginAsync</c>'s guard. <c>BeginAsync</c> only ever runs at the top of
+    /// a fresh response, so a started body there is always a caller bug, worth surfacing loudly.
+    /// This method exists specifically to be reachable from a <em>failed</em> write already in
+    /// progress — tasks 6 to 11 call it from inside a <c>multistatus</c> stream that may have
+    /// begun. Throwing there would turn one already-imperfect response (a document truncated
+    /// mid-write) into an unhandled exception on top of it — exactly the 500 this whole type
+    /// exists to avoid. A client holding a truncated document is not helped by a second failure;
+    /// it is helped by nothing more being attempted on a response that can no longer carry it.
+    /// </remarks>
     internal static async Task WriteAsync(HttpResponse response, int statusCode, XName condition,
         XElement? detail = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (response.HasStarted) return;
+
         response.StatusCode = statusCode;
-        response.ContentType = "application/xml; charset=utf-8";
+        response.ContentType = DavHeaders.XmlContentType;
 
         var settings = new XmlWriterSettings
         {

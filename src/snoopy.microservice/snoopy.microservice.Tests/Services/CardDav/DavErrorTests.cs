@@ -1,5 +1,7 @@
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Moq;
 using weesky.Snoopy.Microservice.Services.CardDav;
 using Xunit;
 
@@ -62,6 +64,26 @@ public sealed class DavErrorTests
         await DavError.WriteAsync(context.Response, statusCode, DavXml.Dav + "lock-token-matches-request-uri");
 
         Assert.Equal(statusCode, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AResponseThatHasAlreadyStarted_IsAQuietNoOpRatherThanAThrow()
+    {
+        // DefaultHttpContext's own HasStarted never flips true from a bare MemoryStream body — it
+        // is Kestrel's writer that sets it in practice — so the started state is faked at the
+        // feature level, which is the only thing HttpResponse.HasStarted actually reads.
+        var responseFeature = new Mock<IHttpResponseFeature>();
+        responseFeature.SetupGet(f => f.HasStarted).Returns(true);
+        var features = new FeatureCollection();
+        features.Set(responseFeature.Object);
+        var context = new DefaultHttpContext(features);
+
+        // A caller here is a writer already mid-multistatus, not a bug: turning a truncated
+        // document into an unhandled exception on top of it would be the very 500 this type
+        // exists to avoid. Nothing else may be attempted on a response that can no longer carry it.
+        await DavError.WriteAsync(context.Response, 403, DavXml.Dav + "error");
+
+        responseFeature.VerifySet(f => f.StatusCode = It.IsAny<int>(), Times.Never);
     }
 
     [Fact]
