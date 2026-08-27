@@ -112,6 +112,53 @@ public sealed class DavContactReaderTests
     }
 
     [Fact]
+    public async Task FindAsync_AnswersEveryFieldOfTheProjection()
+    {
+        // Every one of the seven values is distinct from every other: a swap anywhere in the
+        // projection (Uid <-> CardHash caught the mutation this pins) must fail this test.
+        var contact = Visible("full.vcf");
+        contact.Uid = "the-uid";
+        contact.CardHash = "the-hash";
+        contact.UpdatedAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        contact.SyncSequence = 42;
+        using var context = NewContextWith(contact);
+        var reader = new DavContactReader(context);
+
+        var card = await reader.FindAsync(UserId, "full.vcf", CancellationToken.None);
+
+        Assert.NotNull(card);
+        Assert.Equal(contact.Id, card.ContactId);
+        Assert.Equal("full.vcf", card.DavName);
+        Assert.Equal("the-uid", card.Uid);
+        Assert.Equal(contact.VCardRaw, card.VCardRaw);
+        Assert.Equal("the-hash", card.CardHash);
+        Assert.Equal(contact.UpdatedAt, card.UpdatedAt);
+        Assert.Equal(42ul, card.SyncSequence);
+    }
+
+    [Fact]
+    public async Task FindAsync_AnswersNullForACardThatExistsAndIsOwnedButIsInvisible()
+    {
+        // The mutation this pins bypassed Visible in FindAsync directly: owner and name still
+        // matched, only the empty-hash condition was dropped.
+        using var context = NewContextWith(WithEmptyHash("a.vcf"));
+        var reader = new DavContactReader(context);
+
+        Assert.Null(await reader.FindAsync(UserId, "a.vcf", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindingMany_SkipsACardThatIsInvisible()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), WithEmptyHash("b.vcf"));
+        var reader = new DavContactReader(context);
+
+        var found = await reader.FindManyAsync(UserId, ["a.vcf", "b.vcf"], CancellationToken.None);
+
+        Assert.Equal(["a.vcf"], found.Select(c => c.DavName));
+    }
+
+    [Fact]
     public async Task FindingByName_IsCaseSensitive()
     {
         using var context = NewContextWith(Visible("Carte.vcf"));

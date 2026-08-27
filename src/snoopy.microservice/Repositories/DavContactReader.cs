@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
@@ -11,8 +12,15 @@ internal sealed class DavContactReader(PreferencesDbContext context) : IDavConta
     private static readonly Expression<Func<Contact, DavCard>> ToCard = c =>
         new DavCard(c.Id, c.DavName!, c.Uid, c.VCardRaw!, c.CardHash, c.UpdatedAt, c.SyncSequence);
 
-    public IAsyncEnumerable<DavCard> StreamAsync(Guid userId, CancellationToken cancellationToken) =>
-        Visible(userId).Select(ToCard).AsAsyncEnumerable();
+    public async IAsyncEnumerable<DavCard> StreamAsync(
+        Guid userId, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var cards = Visible(userId).Select(ToCard).AsAsyncEnumerable();
+        await foreach (var card in cards.WithCancellation(cancellationToken))
+        {
+            yield return card;
+        }
+    }
 
     public async Task<DavCard?> FindAsync(Guid userId, string davName, CancellationToken cancellationToken) =>
         await Visible(userId)
