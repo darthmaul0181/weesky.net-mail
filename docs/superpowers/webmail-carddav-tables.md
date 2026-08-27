@@ -234,9 +234,9 @@ Ce qu'il faut observer :
 Si B ne bloque pas, l'incrément n'est pas sous verrou et rien de la synchronisation n'est sûr :
 arrêter et le signaler, ne pas continuer le plan.
 
-**Non exécutée à ce jour** : aucune instance MariaDB n'est joignable depuis l'environnement où
-la tâche 3 a été implémentée. Tant qu'un opérateur ne l'aura pas rejouée, l'atomicité du compteur
-est affirmée plutôt que vérifiée.
+**Exécutée le 27 août 2026** sur `snoopy_webmail_dev`, conforme sur les six observations :
+l'atomicité du compteur est désormais observée, et non plus seulement argumentée. À rejouer
+après toute restauration et après toute reprise du schéma.
 
 ## Désinstallation
 
