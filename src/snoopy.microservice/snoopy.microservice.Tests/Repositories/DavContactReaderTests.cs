@@ -208,4 +208,20 @@ public sealed class DavContactReaderTests
 
         Assert.Equal(1, await reader.CountAsync(UserId, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Streaming_StopsWhenTheCallerCancels()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), Visible("b.vcf"));
+        var reader = new DavContactReader(context);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        // Without the token reaching MoveNextAsync, a client that walks away from a gigabyte book
+        // leaves the read running to its end. The attribute alone does not carry it.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var _ in reader.StreamAsync(UserId, cancelled.Token)) { }
+        });
+    }
 }
