@@ -1,7 +1,7 @@
 using weesky.Snoopy.Microservice.Services.CardDav;
 using Xunit;
 
-namespace weesky.Snoopy.Microservice.Tests.Services;
+namespace weesky.Snoopy.Microservice.Tests.Services.CardDav;
 
 public sealed class EntityTagMatcherTests
 {

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Services.Contacts;
 
 namespace weesky.Snoopy.Microservice.Repositories;
@@ -172,7 +173,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         if (stored >= MaxPerUser) return Result.Failure<Guid>(CapReached);
 
         var id = Guid.NewGuid();
-        var davName = $"{id}.vcf";
+        var davName = DavName.ForContact(id);
 
         return await InTransactionAsync(async () =>
         {
@@ -287,7 +288,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             // A write that advances the rank of a nameless row gives it its name in the same
             // transaction: without this, a webmail edit during the backfill window would create a
             // row with a rank above zero and no name, which no report knows how to serve.
-            row.DavName ??= $"{contactId}.vcf";
+            row.DavName ??= DavName.ForContact(contactId);
 
             // A single SaveChanges: the change tracker merges a Deleted+Added pair on the same key
             // into one Modified command, and splitting it would leave the contact with no child rows
@@ -709,7 +710,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             // A contact born here carries none, and one the backfill window left nameless takes its
             // name in the very batch that advances its rank: a rank above zero on a nameless row is
             // a row no report can serve.
-            item.Contact.DavName ??= $"{id}.vcf";
+            item.Contact.DavName ??= DavName.ForContact(id);
         }
 
         // One write for the batch, and what that buys is atomicity, not order: EF orders its own
