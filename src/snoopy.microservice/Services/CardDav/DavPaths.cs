@@ -15,10 +15,14 @@ internal static class DavPaths
     private const string BooksSegment = "addressbooks";
 
     /// <summary>
-    /// Longer than any href of ours — a 255-character name escapes to at most six characters per
-    /// character — so a body offering more is refused before anything decodes it.
+    /// The round number just above the longest href we can build. 63 characters of prefix
+    /// ("/dav/addressbooks/" + a 36-character GUID + "/default/") and an escaped name of at most
+    /// 255 characters, at up to <em>nine</em> characters each: three UTF-8 bytes written "%XX",
+    /// which is every BMP character above Latin-1 — most of Asia. (Six is the surrogate-pair
+    /// figure, four bytes spread over two characters, and it is not the worst case.)
+    /// 63 + 255 * 9 = 2358. Anything longer is refused before a single character is decoded.
     /// </summary>
-    private const int MaxPathLength = 2048;
+    private const int MaxPathLength = 2560;
 
     /// <summary>"/dav/principals/{userId}/" — always with its trailing slash.</summary>
     internal static string Principal(Guid userId) => $"{Root}/{PrincipalsSegment}/{userId}/";
@@ -47,15 +51,26 @@ internal static class DavPaths
     /// handed a route value: ASP.NET Core has already decoded those, so a second pass would turn
     /// "%252F" back into "/" and hand the caller a traversal that neither this nor the store would
     /// see. Conversely the decode happens <em>before</em> anything judges the name, because it is
-    /// the decode that turns "%2F" into the '/' <see cref="DavName.IsValid"/> refuses.
+    /// the decode that turns "%2F" into the '/' <see cref="DavName.IsValid"/> refuses. A request
+    /// target may be handed over whole: the query and the fragment are cut here, not left as a
+    /// duty on every caller.
     /// </remarks>
     internal static DavResource? Parse(string? absolutePath)
     {
-        if (string.IsNullOrEmpty(absolutePath) || absolutePath.Length > MaxPathLength) return null;
+        if (string.IsNullOrEmpty(absolutePath)) return null;
+
+        // A '?' or a '#' inside a segment must be written "%3F" or "%23" to be legal, so a raw one
+        // is always the delimiter and cutting it can never lose a name. Kestrel's RawTarget — the
+        // only property carrying the encoded path — carries the query too, and without this cut
+        // "/dav/addressbooks/{u}/default/?x=1" would read as a card named "?x=1": a PROPFIND on the
+        // collection silently answered as a card fetch.
+        var delimiter = absolutePath.IndexOfAny(['?', '#']);
+        var path = delimiter < 0 ? absolutePath : absolutePath[..delimiter];
+        if (path.Length is 0 or > MaxPathLength) return null;
 
         // A leading empty segment is what makes this an absolute path of ours: "//host/dav/…" and
         // "https://host/dav/…" both fail here rather than resolving against someone else's origin.
-        var segments = absolutePath.Split('/');
+        var segments = path.Split('/');
         if (segments.Length < 3 || segments[0].Length != 0 || segments[1] != RootSegment) return null;
 
         // Every segment but the name is compared literally, so "de%66ault" is not our book and

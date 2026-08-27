@@ -251,6 +251,65 @@ public sealed class DavPathsTests
     }
 
     [Fact]
+    public void ANameOfTwoHundredAndFiftyFiveCjkCharacters_SurvivesTheRoundTrip()
+    {
+        var userId = Guid.NewGuid();
+        var name = new string((char)0x6F22, 255); // U+6F22, three UTF-8 bytes: nine escaped chars
+
+        var href = DavPaths.Card(userId, name);
+
+        // The ceiling was once sized at six characters per character — the surrogate-pair figure,
+        // not the worst case — and this href, 2358 characters long, parsed to null: a client
+        // PUTting a long Japanese name got a 404 where it had earned a 201.
+        Assert.True(DavName.IsValid(name));
+        Assert.Equal(2358, href.Length);
+        Assert.Equal(name, DavPaths.Parse(href)!.DavName);
+    }
+
+    [Fact]
+    public void AQuery_IsCutRatherThanReadAsANameOrASegment()
+    {
+        var userId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        // RawTarget carries the query, so a caller handing it over whole must not turn a PROPFIND
+        // on the collection into a fetch of a card named "?x=1".
+        Assert.Equal(DavResourceKind.ServiceRoot, DavPaths.Parse("/dav/?x=1")!.Kind);
+        Assert.Equal(DavResourceKind.Principal, DavPaths.Parse($"/dav/principals/{userId}/?x=1")!.Kind);
+        Assert.Equal(DavResourceKind.Home, DavPaths.Parse($"/dav/addressbooks/{userId}/?x=1")!.Kind);
+        Assert.Equal(DavResourceKind.Collection,
+            DavPaths.Parse($"/dav/addressbooks/{userId}/default/?x=1")!.Kind);
+
+        var card = DavPaths.Parse($"/dav/addressbooks/{userId}/default/a.vcf?x=1");
+        Assert.Equal(DavResourceKind.Card, card!.Kind);
+        Assert.Equal("a.vcf", card.DavName);
+    }
+
+    [Fact]
+    public void AFragment_IsCutTheSameWay()
+    {
+        var userId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        Assert.Equal(DavResourceKind.Collection,
+            DavPaths.Parse($"/dav/addressbooks/{userId}/default/#frag")!.Kind);
+        Assert.Equal("a.vcf",
+            DavPaths.Parse($"/dav/addressbooks/{userId}/default/a.vcf#frag")!.DavName);
+        // Whichever comes first ends the path: a '?' inside a fragment is part of the fragment.
+        Assert.Equal("a.vcf",
+            DavPaths.Parse($"/dav/addressbooks/{userId}/default/a.vcf#frag?x=1")!.DavName);
+    }
+
+    [Fact]
+    public void AQuestionMarkOrAHashInsideAName_IsCarriedBecauseItIsEscaped()
+    {
+        var userId = Guid.NewGuid();
+
+        // Cutting at the delimiter loses nothing: a name carrying either character round-trips,
+        // because Card writes it as %3F or %23 and only a raw one ever ends the path.
+        foreach (var name in new[] { "a?b.vcf", "a#b.vcf", "a?b#c.vcf" })
+            Assert.Equal(name, DavPaths.Parse(DavPaths.Card(userId, name))!.DavName);
+    }
+
+    [Fact]
     public void EachBuilderNestsInsideTheOneAbove()
     {
         Assert.StartsWith(DavPaths.Root + "/", DavPaths.Principal(User));
