@@ -1,0 +1,164 @@
+using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Tests.Infrastructure;
+using Xunit;
+
+namespace weesky.Snoopy.Microservice.Tests.Repositories;
+
+public sealed class DavContactReaderTests
+{
+    private static readonly Guid UserId = Guid.NewGuid();
+
+    private static PreferencesTestDbContext NewContextWith(params Contact[] contacts)
+    {
+        var context = new PreferencesTestDbContext(Guid.NewGuid().ToString());
+        context.Contacts.AddRange(contacts);
+        context.SaveChanges();
+
+        return context;
+    }
+
+    private static Contact Visible(string davName) => new()
+    {
+        Id = Guid.NewGuid(),
+        UserId = UserId,
+        Uid = Guid.NewGuid().ToString(),
+        DavName = davName,
+        VCardRaw = "BEGIN:VCARD\r\nVERSION:3.0\r\nEND:VCARD\r\n",
+        CardHash = $"hash-{davName}",
+        UpdatedAt = DateTime.UtcNow,
+        SyncSequence = 1,
+    };
+
+    private static Contact WithoutName()
+    {
+        var contact = Visible(Guid.NewGuid().ToString());
+        contact.DavName = null;
+        return contact;
+    }
+
+    private static Contact WithoutCard(string davName)
+    {
+        var contact = Visible(davName);
+        contact.VCardRaw = null;
+        return contact;
+    }
+
+    private static Contact WithEmptyHash(string davName)
+    {
+        var contact = Visible(davName);
+        contact.CardHash = "";
+        return contact;
+    }
+
+    [Fact]
+    public async Task ItStreamsTheVisibleCards()
+    {
+        using var context = NewContextWith(
+            Visible("a.vcf"), Visible("b.vcf"));
+        var reader = new DavContactReader(context);
+
+        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+
+        Assert.Equal(["a.vcf", "b.vcf"], cards.Select(c => c.DavName).Order());
+    }
+
+    [Fact]
+    public async Task ACardWithNoName_IsInvisible()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), WithoutName());
+        var reader = new DavContactReader(context);
+
+        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+
+        // The backfill has not reached it. Serving it would build an href from a name that does not
+        // exist, and a book that serves a dead href is one a client flags in error every cycle.
+        Assert.Single(cards);
+    }
+
+    [Fact]
+    public async Task ACardWithNoBody_IsInvisible()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), WithoutCard("b.vcf"));
+        var reader = new DavContactReader(context);
+
+        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+
+        // The second of the three conditions: the 4a backfill missed this one, so it would go out
+        // with an empty body.
+        Assert.Single(cards);
+    }
+
+    [Fact]
+    public async Task ACardWithAnEmptyHash_IsInvisible()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), WithEmptyHash("b.vcf"));
+        var reader = new DavContactReader(context);
+
+        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+
+        // The third, and the one no assertion normally looks at: an ETag of "" is syntactically
+        // valid and semantically false, and a client files it like any other value, for ever.
+        Assert.Single(cards);
+    }
+
+    [Fact]
+    public async Task AnotherUsersCard_IsNotFound()
+    {
+        using var context = NewContextWith(Visible("a.vcf"));
+        var reader = new DavContactReader(context);
+
+        Assert.Null(await reader.FindAsync(Guid.NewGuid(), "a.vcf", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindingByName_IsCaseSensitive()
+    {
+        using var context = NewContextWith(Visible("Carte.vcf"));
+        var reader = new DavContactReader(context);
+
+        // The column collates utf8mb4_bin: two names differing only by case are two different URLs
+        // for every HTTP client, and a case-insensitive collation would make them a uniqueness
+        // conflict where the protocol sees two resources.
+        Assert.NotNull(await reader.FindAsync(UserId, "Carte.vcf", CancellationToken.None));
+        Assert.Null(await reader.FindAsync(UserId, "carte.vcf", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindingMany_SkipsWhatTheUserDoesNotOwn()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), Visible("b.vcf"));
+        var reader = new DavContactReader(context);
+
+        var found = await reader.FindManyAsync(
+            UserId, ["a.vcf", "missing.vcf", "b.vcf"], CancellationToken.None);
+
+        // A stale name in a client's list is a common case, not a fault: the caller answers 404
+        // inside the multistatus for each one that did not come back.
+        Assert.Equal(2, found.Count);
+    }
+
+    [Fact]
+    public async Task FindingMany_AnswersOnceForANameAskedTwice()
+    {
+        // The shape is `Where(c => names.Contains(c.DavName))`, one query. A loop over the names —
+        // five thousand round trips on a report whose whole point is to be a batch read — would
+        // answer three cards here instead of two, which is what this pins.
+        using var context = NewContextWith(Visible("a.vcf"), Visible("b.vcf"));
+        var reader = new DavContactReader(context);
+
+        var found = await reader.FindManyAsync(
+            UserId, ["a.vcf", "a.vcf", "b.vcf"], CancellationToken.None);
+
+        Assert.Equal(2, found.Count);
+    }
+
+    [Fact]
+    public async Task Counting_CountsOnlyWhatIsVisible()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), WithoutName(), WithEmptyHash("c.vcf"));
+        var reader = new DavContactReader(context);
+
+        Assert.Equal(1, await reader.CountAsync(UserId, CancellationToken.None));
+    }
+}
