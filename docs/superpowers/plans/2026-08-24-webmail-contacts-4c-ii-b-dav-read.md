@@ -110,10 +110,17 @@ d'un caractère ouvre une traversée de répertoire.
 - Le chemin de la requête est décodé **une fois**, par `Uri.UnescapeDataString` sur le segment
   brut, **avant** validation — c'est le décodage qui fait de `%2F` un `/`, et valider avant lui
   laisserait passer une traversée que le stockage refuse ensuite.
-- « Une fois » se mesure depuis le chemin **encodé** de la requête (`HttpRequest.Path` tel que
-  Kestrel le porte via `Features.Get<IHttpRequestFeature>()?.RawTarget`, ou
-  `Request.Path.Value` selon ce que le pipeline expose — **le vérifier, pas le supposer**),
-  **jamais depuis une valeur de route** : ASP.NET Core décode déjà les siennes, et les repasser
+- « Une fois » se mesure depuis `Features.Get<IHttpRequestFeature>()?.RawTarget`, **tronqué au
+  premier `?`**, et depuis rien d'autre. **Mesuré sur Kestrel réel en tâche 1, contre une prise
+  brute** : `RawTarget` porte la cible de la ligne de requête telle quelle, chaîne de requête
+  comprise. `Request.Path.Value` **n'est pas** le chemin encodé — ce plan l'avait d'abord offert
+  comme équivalent et il ne l'est pas : Kestrel en décode déjà une partie (`%20`, `%23`) tout en
+  laissant `%2F` et `%5C` encodés, de sorte que `a%2Fb.vcf` et `a%252Fb.vcf` y arrivent **tous les
+  deux** comme `a%2Fb.vcf` — indiscernables, et `Uri.UnescapeDataString` rend `a/b.vcf` pour les
+  deux. C'est la traversée, atteignable depuis `Request.Path.Value` exactement comme depuis une
+  valeur de route. `Request.Path` est en outre normalisé de ses segments points
+  (`…/default/../../../etc/passwd` devient `/dav/etc/passwd`).
+- **Jamais depuis une valeur de route** : ASP.NET Core décode déjà les siennes, et les repasser
   dans `Uri.UnescapeDataString` ferait de `%252F` un `/` — la traversée revenue par un double
   décodage.
 
