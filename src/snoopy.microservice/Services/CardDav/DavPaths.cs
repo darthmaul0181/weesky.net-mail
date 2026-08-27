@@ -24,8 +24,14 @@ internal static class DavPaths
     /// </summary>
     private const int MaxPathLength = 2560;
 
+    /// <summary>
+    /// "/dav/principals/" — the collection that CONTAINS principals, which is what RFC 3744 § 5.8
+    /// asks <c>principal-collection-set</c> for; a principal's own URL is a different answer.
+    /// </summary>
+    internal const string PrincipalCollection = Root + "/" + PrincipalsSegment + "/";
+
     /// <summary>"/dav/principals/{userId}/" — always with its trailing slash.</summary>
-    internal static string Principal(Guid userId) => $"{Root}/{PrincipalsSegment}/{userId}/";
+    internal static string Principal(Guid userId) => $"{PrincipalCollection}{userId}/";
 
     /// <summary>"/dav/addressbooks/{userId}/" — the address-book home.</summary>
     internal static string Home(Guid userId) => $"{Root}/{BooksSegment}/{userId}/";

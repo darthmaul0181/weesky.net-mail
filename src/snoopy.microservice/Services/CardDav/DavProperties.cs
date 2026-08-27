@@ -59,11 +59,9 @@ internal static class DavProperties
             (DavXml.Dav + "displayname", r => new XElement(DavXml.Dav + "displayname", r.PrincipalAddress)),
             (DavXml.CardDav + "addressbook-home-set",
                 r => Href(DavXml.CardDav + "addressbook-home-set", DavPaths.Home(r.UserId))),
-            // The collection principals may be found in. We publish one principal per user and no
-            // listing above it, so it is the principal's own URL: a client searching there finds the
-            // only principal that exists.
+            // RFC 3744 § 5.8: the collections that CONTAIN principals, not the principal itself.
             (DavXml.Dav + "principal-collection-set",
-                r => Href(DavXml.Dav + "principal-collection-set", DavPaths.Principal(r.UserId))),
+                _ => Href(DavXml.Dav + "principal-collection-set", DavPaths.PrincipalCollection)),
             // Trap 7. supported-report-set is served on the principal AND on the cards, not only on
             // the book: RFC 6352 § 8 asks for it on address resources as much as on collections.
             (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),

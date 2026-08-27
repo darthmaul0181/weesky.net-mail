@@ -19,6 +19,99 @@ public sealed class DavPropertiesTests
     private const string PrincipalAddress = "ada@weesky.be";
     private static readonly SyncState State = new(Epoch, 42, 7);
 
+    /// <summary>
+    /// The closed set, restated here rather than read back from the tables. A theory that
+    /// enumerated the production tables would go green the moment a row was deleted from one — the
+    /// row would simply stop being a case. Written out, it is the contract: no row of any of the
+    /// five tables can be deleted, renamed or renamespaced without a case going red.
+    /// </summary>
+    private static readonly (DavResourceKind Kind, XName Name)[] ClosedSet =
+    [
+        (DavResourceKind.ServiceRoot, DavXml.Dav + "current-user-principal"),
+        (DavResourceKind.ServiceRoot, DavXml.Dav + "principal-URL"),
+        (DavResourceKind.ServiceRoot, DavXml.Dav + "resourcetype"),
+
+        (DavResourceKind.Principal, DavXml.Dav + "resourcetype"),
+        (DavResourceKind.Principal, DavXml.Dav + "current-user-principal"),
+        (DavResourceKind.Principal, DavXml.Dav + "principal-URL"),
+        (DavResourceKind.Principal, DavXml.Dav + "displayname"),
+        (DavResourceKind.Principal, DavXml.CardDav + "addressbook-home-set"),
+        (DavResourceKind.Principal, DavXml.Dav + "principal-collection-set"),
+        (DavResourceKind.Principal, DavXml.Dav + "supported-report-set"),
+        (DavResourceKind.Principal, DavXml.Dav + "alternate-URI-set"),
+        (DavResourceKind.Principal, DavXml.Dav + "group-membership"),
+
+        (DavResourceKind.Home, DavXml.Dav + "resourcetype"),
+        (DavResourceKind.Home, DavXml.Dav + "displayname"),
+        (DavResourceKind.Home, DavXml.Dav + "current-user-principal"),
+
+        (DavResourceKind.Collection, DavXml.Dav + "resourcetype"),
+        (DavResourceKind.Collection, DavXml.Dav + "displayname"),
+        (DavResourceKind.Collection, DavXml.CalendarServer + "getctag"),
+        (DavResourceKind.Collection, DavXml.Dav + "sync-token"),
+        (DavResourceKind.Collection, DavXml.Dav + "supported-report-set"),
+        (DavResourceKind.Collection, DavXml.CardDav + "supported-address-data"),
+        (DavResourceKind.Collection, DavXml.CardDav + "supported-collation-set"),
+        (DavResourceKind.Collection, DavXml.CardDav + "max-resource-size"),
+        (DavResourceKind.Collection, DavXml.Dav + "current-user-principal"),
+        (DavResourceKind.Collection, DavXml.Dav + "current-user-privilege-set"),
+        (DavResourceKind.Collection, DavXml.Dav + "owner"),
+
+        (DavResourceKind.Card, DavXml.Dav + "getetag"),
+        (DavResourceKind.Card, DavXml.Dav + "getcontenttype"),
+        (DavResourceKind.Card, DavXml.Dav + "getcontentlength"),
+        (DavResourceKind.Card, DavXml.Dav + "getlastmodified"),
+        (DavResourceKind.Card, DavXml.Dav + "resourcetype"),
+        (DavResourceKind.Card, DavXml.Dav + "current-user-privilege-set"),
+        (DavResourceKind.Card, DavXml.Dav + "supported-report-set"),
+    ];
+
+    // The kind travels as its name, not as itself: DavResourceKind is internal, and a public xUnit
+    // test method may not take an internal parameter.
+    public static TheoryData<string, string, string> EveryDeclaredProperty()
+    {
+        var data = new TheoryData<string, string, string>();
+        foreach (var (kind, name) in ClosedSet)
+            data.Add(kind.ToString(), name.NamespaceName, name.LocalName);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryDeclaredProperty))]
+    public void EveryPropertyOfTheClosedSet_IsServedOnItsOwnKind(
+        string kind, string ns, string localName)
+    {
+        var name = XNamespace.Get(ns) + localName;
+
+        var resolved = DavProperties.Resolve(Named(name), ContextFor(Kind(kind)));
+
+        // A row silently dropped from a table answers 404 to a client that reads it — and a root
+        // principal-URL dropped that way breaks discovery for every client that reads it rather
+        // than current-user-principal.
+        Assert.Empty(resolved.Missing);
+        Assert.Equal(name, Assert.Single(resolved.Found).Name);
+    }
+
+    [Theory]
+    [InlineData(nameof(DavResourceKind.ServiceRoot))]
+    [InlineData(nameof(DavResourceKind.Principal))]
+    [InlineData(nameof(DavResourceKind.Home))]
+    [InlineData(nameof(DavResourceKind.Collection))]
+    [InlineData(nameof(DavResourceKind.Card))]
+    public void EachTable_DeclaresTheClosedSetAndNothingElse(string kind)
+    {
+        var resourceKind = Kind(kind);
+
+        // propname answers the whole table, so this is the other half of the pincer: the theory
+        // above catches a row removed, this one catches a row added without a decision.
+        var declared = DavProperties
+            .Resolve(new DavPropertyRequest(DavPropertyMode.PropName, []), ContextFor(resourceKind))
+            .Found.Select(e => e.Name);
+
+        Assert.Equal(
+            Sorted(ClosedSet.Where(p => p.Kind == resourceKind).Select(p => p.Name)), Sorted(declared));
+    }
+
     [Fact]
     public void TheContentLength_CountsBytesAndNotCharacters()
     {
@@ -109,10 +202,12 @@ public sealed class DavPropertiesTests
         var element = ResolveCollectionElement(DavXml.Dav + "current-user-privilege-set");
 
         // A set that is PRESENT and INCOMPLETE puts Thunderbird in read-only mode — worse than not
-        // serving it at all, which makes it write by default.
-        var privileges = element.Descendants().Select(e => e.Name.LocalName).ToList();
-        Assert.Contains("write", privileges);
-        Assert.Contains("write-content", privileges);
+        // serving it at all, which makes it write by default. Full XNames: the same local names
+        // under another namespace read as no privilege at all.
+        Assert.All(element.Elements(), e => Assert.Equal(DavXml.Dav + "privilege", e.Name));
+        var privileges = element.Elements().Select(e => Assert.Single(e.Elements()).Name).ToList();
+        Assert.Contains(DavXml.Dav + "write", privileges);
+        Assert.Contains(DavXml.Dav + "write-content", privileges);
     }
 
     [Fact]
@@ -186,7 +281,13 @@ public sealed class DavPropertiesTests
         var element = ResolveCollectionElement(DavXml.CardDav + "supported-address-data");
 
         // The book stores both verbatim and serves what it holds: announcing 3.0 alone would make
-        // half the answers a lie.
+        // half the answers a lie. The children's own name, namespace and content-type are pinned
+        // too — a child spelled under DAV: carries the same version attribute and reads as nothing.
+        Assert.All(element.Elements(), e =>
+        {
+            Assert.Equal(DavXml.CardDav + "address-data-type", e.Name);
+            Assert.Equal("text/vcard", e.Attribute("content-type")!.Value);
+        });
         var versions = element.Elements().Select(e => e.Attribute("version")!.Value).ToList();
         Assert.Equal(["3.0", "4.0"], versions.Order());
     }
@@ -196,6 +297,10 @@ public sealed class DavPropertiesTests
     {
         var element = ResolveCollectionElement(DavXml.CardDav + "supported-collation-set");
 
+        // Reading only the values would let the children be served under DAV:, where a client
+        // parsing CARDDAV:supported-collation sees an empty collation set.
+        Assert.All(element.Elements(),
+            e => Assert.Equal(DavXml.CardDav + "supported-collation", e.Name));
         Assert.Equal(["i;ascii-casemap", "i;unicode-casemap"],
             element.Elements().Select(e => e.Value).Order());
     }
@@ -216,12 +321,13 @@ public sealed class DavPropertiesTests
     [Fact]
     public void ACardCarriesSupportedReportSet_WithMultigetAndQuery()
     {
-        var element = ResolveCardElement(DavXml.Dav + "supported-report-set");
+        var reports = ReportsOf(ResolveCardElement(DavXml.Dav + "supported-report-set"));
 
-        // RFC 6352 § 8 requires it on address resources as much as on collections.
-        var reports = element.Descendants().Select(e => e.Name.LocalName).ToList();
-        Assert.Contains("addressbook-multiget", reports);
-        Assert.Contains("addressbook-query", reports);
+        // RFC 6352 § 8 requires it on address resources as much as on collections. Full XNames: the
+        // same two local names under DAV: let a client conclude a card supports no CardDAV report.
+        Assert.Equal(
+            [DavXml.CardDav + "addressbook-multiget", DavXml.CardDav + "addressbook-query"],
+            reports.OrderBy(name => name.LocalName, StringComparer.Ordinal));
     }
 
     [Theory]
@@ -313,6 +419,25 @@ public sealed class DavPropertiesTests
             HrefIn(ResolvePrincipalElement(DavXml.CardDav + "addressbook-home-set")));
         Assert.Equal(DavPaths.Principal(UserId),
             HrefIn(ResolvePrincipalElement(DavXml.Dav + "principal-URL")));
+        Assert.Equal(DavPaths.PrincipalCollection,
+            HrefIn(ResolvePrincipalElement(DavXml.Dav + "principal-collection-set")));
+
+        foreach (var kind in (DavResourceKind[])[DavResourceKind.ServiceRoot, DavResourceKind.Principal,
+            DavResourceKind.Home, DavResourceKind.Collection])
+        {
+            Assert.Equal(DavPaths.Principal(UserId), HrefIn(Single(DavProperties.Resolve(
+                Named(DavXml.Dav + "current-user-principal"), ContextFor(kind)))));
+        }
+    }
+
+    [Fact]
+    public void ThePrincipalCollectionSet_NamesTheCollectionThatContainsPrincipals()
+    {
+        // RFC 3744 § 5.8 asks for the collections principals are FOUND IN, not for the principal
+        // itself; a client walking the answer to look for principals would land on a resource that
+        // contains none.
+        Assert.Equal("/dav/principals/",
+            HrefIn(ResolvePrincipalElement(DavXml.Dav + "principal-collection-set")));
     }
 
     [Fact]
@@ -497,6 +622,14 @@ public sealed class DavPropertiesTests
 
     private static DavResourceContext PrincipalContext() =>
         new(DavResourceKind.Principal, UserId, PrincipalAddress, null, null);
+
+    private static DavResourceContext ContextFor(DavResourceKind kind) => new(
+        kind, UserId, PrincipalAddress, kind is DavResourceKind.Card ? DefaultCard() : null, State);
+
+    private static DavResourceKind Kind(string name) => Enum.Parse<DavResourceKind>(name);
+
+    private static List<XName> Sorted(IEnumerable<XName> names) =>
+        [.. names.OrderBy(name => name.ToString(), StringComparer.Ordinal)];
 
     private static XElement Single((List<XElement> Found, List<XName> Missing) resolved)
     {
