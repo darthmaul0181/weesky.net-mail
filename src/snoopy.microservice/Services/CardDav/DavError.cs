@@ -30,12 +30,29 @@ internal static class DavError
     /// exists to avoid. A client holding a truncated document is not helped by a second failure;
     /// it is helped by nothing more being attempted on a response that can no longer carry it.
     /// </remarks>
+    /// <param name="response">the response to write the error document into</param>
+    /// <param name="statusCode">the HTTP status to set before writing</param>
+    /// <param name="condition">the precondition or postcondition element name</param>
+    /// <param name="detail">written inside the condition element verbatim, when there is one</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <param name="logger">
+    /// Traces the quiet return. The no-op is deliberate mid-multistatus, but a caller reaching here
+    /// on a response started for any other reason has a bug, and without this line it leaves no
+    /// trace at all — the same silent-conversion gap <see cref="DavXmlReader.Parse"/> closes.
+    /// </param>
     internal static async Task WriteAsync(HttpResponse response, int statusCode, XName condition,
-        XElement? detail = null, CancellationToken cancellationToken = default)
+        XElement? detail = null, CancellationToken cancellationToken = default,
+        ILogger? logger = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (response.HasStarted) return;
+        if (response.HasStarted)
+        {
+            logger?.LogWarning(
+                "A CardDAV error document was dropped: the response had already started with {Status}",
+                response.StatusCode);
+            return;
+        }
 
         response.StatusCode = statusCode;
         response.ContentType = DavHeaders.XmlContentType;
