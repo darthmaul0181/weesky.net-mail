@@ -114,12 +114,13 @@ d'un caractère ouvre une traversée de répertoire.
   premier `?`**, et depuis rien d'autre. **Mesuré sur Kestrel réel en tâche 1, contre une prise
   brute** : `RawTarget` porte la cible de la ligne de requête telle quelle, chaîne de requête
   comprise. `Request.Path.Value` **n'est pas** le chemin encodé — ce plan l'avait d'abord offert
-  comme équivalent et il ne l'est pas : Kestrel en décode déjà une partie (`%20`, `%23`) tout en
-  laissant `%2F` et `%5C` encodés, de sorte que `a%2Fb.vcf` et `a%252Fb.vcf` y arrivent **tous les
-  deux** comme `a%2Fb.vcf` — indiscernables, et `Uri.UnescapeDataString` rend `a/b.vcf` pour les
-  deux. C'est la traversée, atteignable depuis `Request.Path.Value` exactement comme depuis une
-  valeur de route. `Request.Path` est en outre normalisé de ses segments points
-  (`…/default/../../../etc/passwd` devient `/dav/etc/passwd`).
+  comme équivalent et il ne l'est pas : Kestrel en décode déjà une partie — `%20`, `%23`, `%3F`,
+  `%2E`, `%5C`, les séquences UTF-8 — et **ne préserve que `%2F`**, de sorte que `a%2Fb.vcf` et
+  `a%252Fb.vcf` y arrivent **tous les deux** comme `a%2Fb.vcf` — indiscernables, et
+  `Uri.UnescapeDataString` rend `a/b.vcf` pour les deux. C'est la traversée, atteignable depuis
+  `Request.Path.Value` exactement comme depuis une valeur de route. Pire : `Request.Path` est
+  normalisé de ses segments points **après** ce décodage partiel, donc un `..` **encodé**
+  (`…/default/%2E%2E`) s'y effondre et sort de la collection, là où `RawTarget` le conserve.
 - **Jamais depuis une valeur de route** : ASP.NET Core décode déjà les siennes, et les repasser
   dans `Uri.UnescapeDataString` ferait de `%252F` un `/` — la traversée revenue par un double
   décodage.
