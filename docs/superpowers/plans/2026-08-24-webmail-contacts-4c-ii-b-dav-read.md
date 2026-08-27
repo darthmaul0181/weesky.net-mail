@@ -406,9 +406,16 @@ ferment pas la même chose :
 
 - `DtdProcessing = Prohibit` et `XmlResolver = null` ferment l'expansion d'entités.
 - **La profondeur d'imbrication ferme la pile**, que la première ne touche pas : le mégaoctet
-  autorisé laisse la place à beaucoup de balises imbriquées, la construction de l'arbre y descend,
-  et **un débordement de pile en .NET ne se rattrape pas** — il emporte le processus qui sert tous
-  les utilisateurs. Aucune requête légitime de ce protocole ne dépasse la dizaine de niveaux.
+  autorisé laisse la place à beaucoup de balises imbriquées, et **un débordement de pile en .NET ne
+  se rattrape pas** — il emporte le processus qui sert tous les utilisateurs. Aucune requête
+  légitime de ce protocole ne dépasse la dizaine de niveaux.
+  **Correction mesurée en tâche 2, et elle change la raison sans changer la règle** : ce plan
+  affirmait d'abord que « la construction de l'arbre y descend ». C'est faux — `XDocument.Parse`
+  survit à 200 000 niveaux, la construction de LINQ-to-XML étant itérative en .NET 10, et
+  `XmlReader.Read()` garde sa pile d'éléments sur le tas. Ce qui récurse, c'est
+  **`XNode.WriteTo` / `ToString`, un niveau par appel** — et les tâches 6 à 11 sérialisent
+  précisément ces arbres dans un `multistatus`. Le plafond reste donc obligatoire ; il protège
+  l'écriture et non la lecture. **Ne pas le retirer au motif que `XDocument` ne récurse pas.**
 
 **Files :**
 - Create : `src/snoopy.microservice/Services/CardDav/DavXml.cs`
