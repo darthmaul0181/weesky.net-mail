@@ -114,7 +114,7 @@ internal static class DavProperties
             (DavXml.Dav + "owner", r => Href(DavXml.Dav + "owner", DavPaths.Principal(r.UserId)))),
 
         [DavResourceKind.Card] = Set(
-            (DavXml.Dav + "getetag", r => FromCard(r, DavXml.Dav + "getetag", c => $"\"{c.CardHash}\"")),
+            (DavXml.Dav + "getetag", r => FromCard(r, DavXml.Dav + "getetag", EntityTag)),
             (DavXml.Dav + "getcontenttype",
                 r => FromCard(r, DavXml.Dav + "getcontenttype", _ => CardContentType)),
             // Trap 1. A count of UTF-8 BYTES, never of characters — the unit ContactStore.MaxCardBytes
@@ -198,10 +198,17 @@ internal static class DavProperties
         resource.Card is { } card ? new XElement(name, value(card)) : null;
 
     /// <summary>
-    /// "R" appends "GMT" whatever the kind carries, so the conversion has to happen first; an
-    /// unspecified stamp is read as UTC, which is what the store writes.
+    /// The quoted entity tag, shared with the <c>ETag</c> header a GET answers: written twice, a
+    /// conditional request would file a value no property ever advertised.
     /// </summary>
-    private static string HttpDate(DateTime value) => (value.Kind switch
+    internal static string EntityTag(DavCard card) => $"\"{card.CardHash}\"";
+
+    /// <summary>
+    /// "R" appends "GMT" whatever the kind carries, so the conversion has to happen first; an
+    /// unspecified stamp is read as UTC, which is what the store writes. Internal because the
+    /// <c>Last-Modified</c> header of a GET must come from the same source as getlastmodified.
+    /// </summary>
+    internal static string HttpDate(DateTime value) => (value.Kind switch
     {
         DateTimeKind.Utc => value,
         DateTimeKind.Local => value.ToUniversalTime(),

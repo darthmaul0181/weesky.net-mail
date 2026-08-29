@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Authentication.CardDav;
@@ -58,6 +59,76 @@ public sealed class CardDavController(
     [RequestSizeLimit(MaxBodyBytes)]
     public Task PropfindCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
         PropfindAsync(DavResourceKind.Card, userId, davName, null, cancellationToken);
+
+    /// <summary>
+    /// The card, verbatim. HEAD is bound to the same action, so it answers the same headers by
+    /// construction — Content-Length included, which is what makes it worth issuing.
+    /// </summary>
+    [HttpGet("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    [HttpHead("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    public async Task GetCardAsync(Guid userId, string? davName, CancellationToken cancellationToken)
+    {
+        var user = AuthenticatedUser;
+        if (userId != user.WebmailUid)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        // Ruling AM: routing has already decoded any %2F into the '/' IsValid refuses, and an
+        // invalid name designates nothing — the same 404 an unknown name gets, never a 400.
+        var card = DavName.IsValid(davName)
+            ? await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken)
+            : null;
+        if (card is null)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var entityTag = DavProperties.EntityTag(card);
+        Response.Headers.ETag = entityTag;
+        Response.Headers.LastModified = DavProperties.HttpDate(card.UpdatedAt);
+        DavHeaders.ApplyDav(Response);
+
+        if (EntityTagMatcher.NoneMatch(Request.Headers.IfNoneMatch, entityTag))
+        {
+            Response.StatusCode = StatusCodes.Status304NotModified;
+            return;
+        }
+
+        // Never through a formatter: a re-encode — a BOM, a line ending, a charset — would leave the
+        // ETag describing something other than what goes out. GetBytes emits no preamble.
+        var bytes = Encoding.UTF8.GetBytes(card.VCardRaw);
+        Response.StatusCode = StatusCodes.Status200OK;
+        Response.ContentType = DavHeaders.VCardContentType;
+        Response.ContentLength = bytes.Length;
+
+        // Explicit rather than left to the host: Kestrel drops a HEAD body, TestServer does not.
+        if (HttpMethods.IsHead(Request.Method)) return;
+
+        await Response.Body.WriteAsync(bytes, cancellationToken);
+    }
+
+    /// <summary>
+    /// Generic WebDAV clients GET the collection. Without this the card route's <c>{*davName}</c>
+    /// would answer a routing 404 on a URL that does not present that segment; a 405 naming the
+    /// verbs is an answer every client knows how to file.
+    /// </summary>
+    [HttpGet("addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [HttpHead("addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    public void GetCollection(Guid userId)
+    {
+        if (userId != AuthenticatedUser.WebmailUid)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        Response.Headers.Allow = DavHeaders.CollectionAllow;
+        DavHeaders.ApplyDav(Response);
+        Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+    }
 
     private async Task PropfindAsync(DavResourceKind kind, Guid? userId, string? davName,
         string? rootHref, CancellationToken cancellationToken)
