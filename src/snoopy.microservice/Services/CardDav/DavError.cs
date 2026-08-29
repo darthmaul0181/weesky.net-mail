@@ -38,7 +38,7 @@ internal static class DavError
     /// <param name="logger">
     /// Traces the quiet return. The no-op is deliberate mid-multistatus, but a caller reaching here
     /// on a response started for any other reason has a bug, and without this line it leaves no
-    /// trace at all — the same silent-conversion gap <see cref="DavXmlReader.Parse"/> closes.
+    /// trace at all — the same silent-conversion gap <see cref="DavXmlReader.ParseAsync"/> closes.
     /// </param>
     internal static async Task WriteAsync(HttpResponse response, int statusCode, XName condition,
         XElement? detail = null, CancellationToken cancellationToken = default,

@@ -46,26 +46,31 @@ internal static class DavXmlReader
     /// <summary>
     /// Answers null on an empty body — several clients send one on PROPFIND at discovery, and it
     /// means allprop (RFC 4918 §9.1). Throws <see cref="DavBadRequestException"/> on a DTD, an
-    /// entity, malformed XML, excess depth, or a body stream that fails while being read.
+    /// entity, malformed XML, excess depth, or a body stream that fails while being read. The read
+    /// is asynchronous ON PURPOSE and this is the only entry point: Kestrel forbids synchronous
+    /// reads on a request body, so a synchronous sibling taking the raw body would be a 500 on the
+    /// first real request — buffering here, once, is what keeps that duty off every caller.
     /// </summary>
     /// <param name="body">The request body, read exactly once, in full.</param>
+    /// <param name="cancellationToken">cancellation token</param>
     /// <param name="logger">
     /// Optional: a genuine I/O failure reading the body (as opposed to the body simply being
     /// malformed) is still answered as a 400 to the caller — ruling 2 forbids a 500 here too — but
     /// it is a server-side symptom worth a trace, which converting it silently would erase.
     /// </param>
-    internal static XDocument? Parse(Stream body, ILogger? logger = null)
+    internal static async Task<XDocument?> ParseAsync(
+        Stream body, CancellationToken cancellationToken, ILogger? logger = null)
     {
         using var buffer = new MemoryStream();
         try
         {
-            body.CopyTo(buffer);
+            await body.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
         }
         catch (BadHttpRequestException)
         {
-            // Thrown by [RequestSizeLimit] once the routes carry one: the body is too large, not
-            // malformed. Reporting that as DavBadRequestException would trade a 413 the client can
-            // act on for a 400 that hides the real reason.
+            // Thrown by [RequestSizeLimit]: the body is too large, not malformed. Reporting that
+            // as DavBadRequestException would trade a 413 the client can act on for a 400 that
+            // hides the real reason.
             throw;
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
@@ -77,6 +82,12 @@ internal static class DavXmlReader
             throw new DavBadRequestException("The request body could not be read.", ex);
         }
 
+        return Parse(buffer);
+    }
+
+    /// <summary>The synchronous core, safe because it only ever runs on the buffer above.</summary>
+    private static XDocument? Parse(MemoryStream buffer)
+    {
         if (buffer.Length == 0 || IsWhitespaceOnly(buffer.GetBuffer(), (int)buffer.Length)) return null;
 
         try

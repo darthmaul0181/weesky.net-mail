@@ -141,33 +141,19 @@ public sealed class CardDavController(
     }
 
     /// <summary>
-    /// Buffers the body asynchronously before handing it to the (synchronous) reader: Kestrel
-    /// forbids synchronous reads on the request body, so feeding it to
-    /// <see cref="DavXmlReader.Parse"/> directly would be a 500 on the first request.
+    /// Null means the 400 is already on the response. A BadHttpRequestException — the
+    /// [RequestSizeLimit] tripping — flies through untouched: Kestrel's 413, not our 400.
     /// </summary>
     private async Task<DavPropertyRequest?> ReadRequestAsync(CancellationToken cancellationToken)
     {
-        using var buffer = new MemoryStream();
         try
         {
-            await Request.Body.CopyToAsync(buffer, cancellationToken);
-            buffer.Position = 0;
-            return DavPropertyRequest.Parse(DavXmlReader.Parse(buffer, logger));
-        }
-        catch (BadHttpRequestException)
-        {
-            // [RequestSizeLimit] tripping: too large, not malformed — Kestrel's 413, not our 400.
-            throw;
+            return DavPropertyRequest.Parse(
+                await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
         }
         catch (DavBadRequestException ex)
         {
             logger.LogInformation("PROPFIND body refused: {Reason}", ex.Message);
-            Response.StatusCode = StatusCodes.Status400BadRequest;
-            return null;
-        }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
-        {
-            logger.LogWarning(ex, "The CardDAV request body stream failed while being read");
             Response.StatusCode = StatusCodes.Status400BadRequest;
             return null;
         }

@@ -6,16 +6,21 @@ namespace weesky.Snoopy.Microservice.Tests.Infrastructure;
 /// </summary>
 internal sealed class DavTestResponse
 {
-    private DavTestResponse(int statusCode, string body, IReadOnlyDictionary<string, string> headers)
+    private DavTestResponse(
+        int statusCode, string body, byte[] bodyBytes, IReadOnlyDictionary<string, string> headers)
     {
         StatusCode = statusCode;
         Body = body;
+        BodyBytes = bodyBytes;
         Headers = headers;
     }
 
     internal int StatusCode { get; }
 
     internal string Body { get; }
+
+    /// <summary>The served bytes verbatim — what a task asserting line endings compares.</summary>
+    internal byte[] BodyBytes { get; }
 
     internal IReadOnlyDictionary<string, string> Headers { get; }
 
@@ -27,10 +32,11 @@ internal sealed class DavTestResponse
 
     internal static async Task<DavTestResponse> ReadAsync(HttpResponseMessage message)
     {
+        var bytes = await message.Content.ReadAsByteArrayAsync();
         var body = await message.Content.ReadAsStringAsync();
         var headers = message.Headers.Concat(message.Content.Headers).ToDictionary(
             pair => pair.Key, pair => string.Join(", ", pair.Value), StringComparer.OrdinalIgnoreCase);
 
-        return new DavTestResponse((int)message.StatusCode, body, headers);
+        return new DavTestResponse((int)message.StatusCode, body, bytes, headers);
     }
 }

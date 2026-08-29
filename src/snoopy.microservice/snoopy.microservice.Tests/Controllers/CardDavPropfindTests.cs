@@ -52,11 +52,12 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
 
         var response = await Propfind(DavPaths.Collection(UserId), depth: "1", body: PropBody("getetag"));
 
-        var hrefs = HrefsOf(response);
-        Assert.Equal(3, hrefs.Count);
-        // The collection comes first and carries its trailing slash; the cards never do.
-        Assert.Equal(DavPaths.Collection(UserId), hrefs[0]);
-        Assert.DoesNotContain(hrefs.Skip(1), h => h.EndsWith('/'));
+        // The collection comes first with its trailing slash, then every member under the EXACT
+        // href a client will GET after discovery — a member href built any other way 404s on every
+        // cycle, so the construction itself is pinned, not merely the count and the shape.
+        Assert.Equal(
+            [DavPaths.Collection(UserId), DavPaths.Card(UserId, "a.vcf"), DavPaths.Card(UserId, "b.vcf")],
+            HrefsOf(response));
     }
 
     [Fact]
@@ -133,9 +134,12 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     {
         var response = await Propfind(DavPaths.Collection(UserId), depth: "0", body: null);
 
-        // RFC 4918 § 9.1, and several clients send one at discovery.
+        // RFC 4918 § 9.1, and several clients send one at discovery. The VALUE is asserted, not
+        // the element's presence: propname also emits an (empty) displayname element.
         Assert.Equal(207, response.StatusCode);
-        Assert.NotEmpty(XDocument.Parse(await response.ReadAsync()).Descendants(DavXml.Dav + "displayname"));
+        var displayName = XDocument.Parse(await response.ReadAsync())
+            .Descendants(DavXml.Dav + "displayname").Single();
+        Assert.Equal("Contacts", displayName.Value);
     }
 
     [Fact]
