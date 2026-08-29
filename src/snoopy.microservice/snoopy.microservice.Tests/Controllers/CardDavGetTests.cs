@@ -12,6 +12,10 @@ public sealed class CardDavGetTests : IAsyncLifetime
     /// cannot be satisfied by a value the card happens to carry anyway.</summary>
     private const string DefaultHash = "9f1c2d";
 
+    /// <summary>32 characters, 33 UTF-8 bytes: the accent is what makes a Content-Length counted
+    /// in characters differ from one counted in bytes.</summary>
+    private const string Accented = "BEGIN:VCARD\r\nFN:Ad\u00e1\r\nEND:VCARD\r\n";
+
     private DavTestServer server = null!;
     private ulong sequence;
 
@@ -41,7 +45,7 @@ public sealed class CardDavGetTests : IAsyncLifetime
     [Fact]
     public async Task ItAnswersTheThreeHeadersAClientReads()
     {
-        GivenCard("a.vcf", "BEGIN:VCARD\r\nEND:VCARD\r\n", hash: "abc123",
+        GivenCard("a.vcf", Accented, hash: "abc123",
             updatedAt: new DateTime(2026, 8, 24, 13, 5, 0, DateTimeKind.Utc));
 
         var response = await Get(DavPaths.Card(UserId, "a.vcf"));
@@ -51,6 +55,10 @@ public sealed class CardDavGetTests : IAsyncLifetime
         Assert.Equal("text/vcard; charset=utf-8", response.Header("Content-Type"));
         // The same source as getlastmodified, so the two never disagree.
         Assert.Equal("Mon, 24 Aug 2026 13:05:00 GMT", response.Header("Last-Modified"));
+        // DavProperties' trap 1, on the header this time: UTF-8 BYTES, never characters. Kestrel
+        // aborts the write on a short Content-Length and leaves the client waiting on a long one.
+        Assert.NotEqual(Accented.Length, Encoding.UTF8.GetByteCount(Accented));
+        Assert.Equal("33", response.Header("Content-Length"));
     }
 
     [Theory]
@@ -77,7 +85,9 @@ public sealed class CardDavGetTests : IAsyncLifetime
         var response = await Get(DavPaths.Card(UserId, "a.vcf"), ifNoneMatch: "\"abc123\"");
 
         Assert.Equal("\"abc123\"", response.Header("ETag"));
-        Assert.Empty(await response.ReadAsync());
+        // BodyBytes, not the string: ReadAsStringAsync strips a UTF-8 preamble, so a body of
+        // nothing but a BOM would read as empty here.
+        Assert.Empty(response.BodyBytes);
     }
 
     [Fact]
@@ -157,15 +167,30 @@ public sealed class CardDavGetTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnotherUsersCollection_Answers404RatherThan405()
+    {
+        // Ownership first, as PROPFIND does: a {userId} the caller does not hold designates
+        // nothing, and there is no method to refuse on a book that is not theirs.
+        var foreign = DavPaths.Collection(Guid.NewGuid());
+
+        Assert.Equal(404, (await Get(foreign)).StatusCode);
+        Assert.Equal(404, (await Head(foreign)).StatusCode);
+    }
+
+    [Fact]
     public async Task AHead_CarriesTheSameHeadersAndNoBody()
     {
-        GivenCard("a.vcf", "BEGIN:VCARD\r\nEND:VCARD\r\n", hash: "abc123");
+        GivenCard("a.vcf", Accented, hash: "abc123");
 
         var response = await Head(DavPaths.Card(UserId, "a.vcf"));
 
         Assert.Equal(200, response.StatusCode);
         Assert.Equal("\"abc123\"", response.Header("ETag"));
-        Assert.Empty(await response.ReadAsync());
+        // On a HEAD the length IS the whole payload, and it is still counted in UTF-8 bytes.
+        Assert.Equal("33", response.Header("Content-Length"));
+        // BodyBytes, not the string: ReadAsStringAsync strips a UTF-8 preamble, so a body of
+        // nothing but a BOM would read as empty here.
+        Assert.Empty(response.BodyBytes);
     }
 
     [Fact]
