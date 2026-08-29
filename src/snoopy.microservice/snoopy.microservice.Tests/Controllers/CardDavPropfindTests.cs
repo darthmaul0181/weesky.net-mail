@@ -48,7 +48,9 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     [Fact]
     public async Task DepthOneOnTheCollection_AnswersTheCollectionThenOneResponsePerCard()
     {
-        GivenCards("a.vcf", "b.vcf");
+        // The second name needs escaping: two escape-invariant names would let a concatenated href
+        // coincide with DavPaths.Card and leave the construction unpinned.
+        GivenCards("a.vcf", "plan #9.vcf");
 
         var response = await Propfind(DavPaths.Collection(UserId), depth: "1", body: PropBody("getetag"));
 
@@ -56,7 +58,7 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
         // href a client will GET after discovery — a member href built any other way 404s on every
         // cycle, so the construction itself is pinned, not merely the count and the shape.
         Assert.Equal(
-            [DavPaths.Collection(UserId), DavPaths.Card(UserId, "a.vcf"), DavPaths.Card(UserId, "b.vcf")],
+            [DavPaths.Collection(UserId), DavPaths.Card(UserId, "a.vcf"), DavPaths.Card(UserId, "plan #9.vcf")],
             HrefsOf(response));
     }
 
