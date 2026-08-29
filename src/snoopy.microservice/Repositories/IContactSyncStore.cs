@@ -3,7 +3,7 @@ using weesky.Snoopy.Microservice.Models.Contacts;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal interface IContactSyncStore
+public interface IContactSyncStore
 {
     /// <summary>
     /// Advances the counter under the state row's own exclusive lock and answers the new rank.

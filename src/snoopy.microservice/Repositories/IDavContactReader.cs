@@ -2,7 +2,7 @@ using weesky.Snoopy.Microservice.Models.Contacts;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal interface IDavContactReader
+public interface IDavContactReader
 {
     /// Every visible card of the book, streamed rather than listed: a full book with address-data
     /// runs to gigabytes, and the writer emits one response at a time.
