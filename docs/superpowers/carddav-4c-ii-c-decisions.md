@@ -214,3 +214,67 @@ de croire une batterie.** Un témoin qui rend ROUGE prouve que le détecteur est
 **C# 14 compile un argument optionnel omis dans un expression tree.** Ce qui était `CS0854` devient
 un matcher Moq sur `null` constant — vert à la compilation, faux à l'exécution. Ajouter un paramètre
 optionnel à une interface mockée ne casse plus la build : il faut relire tous les `Setup` à la main.
+
+## Ce que la revue de branche a corrigé, après coup
+
+Sept constats, relevés en relisant `master..cardav` d'un bloc plutôt que tranche par tranche. Aucun
+n'était une régression : ce sont des choses qu'une revue par paquet ne pouvait pas voir, parce
+qu'elles ne sont visibles qu'en comparant deux fichiers qu'aucune tâche ne touchait ensemble.
+
+**Un rapport n'est servi que là où une propriété l'annonce, et l'inverse aussi.** L'invariant existait
+dans un sens seul. `addressbook-query` et `sync-collection` étaient gardés par leur forme ; `multiget`
+ne l'était pas, et répondait sur le principal et sur le home, où `supported-report-set` ne le nomme
+pas. Symétriquement, la racine de service et le home servaient `expand-property` sans porter la
+propriété du tout : leur `Allow` nommait REPORT et la réponse rendait un propstat 404 — le même
+désaccord en-tête/réponse qui avait fait boucler DAVx⁵. Les deux sens sont refermés : les cinq
+formes annoncent exactement ce qu'elles servent, `expand-property` compris, qui n'est plus servi sur
+une carte puisqu'aucune propriété d'une carte ne porte d'href.
+
+**Le snapshot de `sync-collection` s'arrête aux tombes.** Il couvrait aussi la lecture des cartes,
+donc l'écriture de la réponse, donc le rythme auquel le client vide la socket : un lecteur lent
+tenait une vue de lecture InnoDB ouverte aussi longtemps qu'il lui plaisait. Ce que le snapshot
+protège est le couple compteur/tombes — un élagage entre les deux efface des suppressions que la
+réponse doit encore, sous un filigrane qu'elle a lu plus bas. Les cartes n'en ont pas besoin :
+l'élagage ne touche jamais `contacts`. Les lectures sont donc faites et la transaction fermée avant
+que le premier octet ne soit composé.
+
+**Le PROPFIND `Depth: 1`, lui, ne peut pas.** Son snapshot protège le compteur contre la requête des
+membres elle-même — la lecture qui ruisselle. Il garde donc sa transaction, et c'est pourquoi sa
+boucle est la seule à ne **pas** appeler `FlushIfDueAsync` : y pousser rendrait le client maître de
+la durée du snapshot. La sortie propre serait une projection de membre portant un nombre d'octets au
+lieu de `vcard_raw` — les propriétés servies là veulent la longueur, jamais la carte — et c'est une
+modification de `DavCard`, de `IDavContactReader` et des tables de propriétés, pas de la méthode.
+**C'est le seul des sept constats laissé ouvert, et il est laissé ouvert exprès.**
+
+**`MultiStatusWriter.FlushAsync` n'avait aucun appelant.** Le type dit exister pour ne pas tenir un
+carnet entier en mémoire, et rien ne poussait avant la disposition finale. `FlushIfDueAsync` porte
+désormais la cadence (une poussée tous les 64 `response`), et les deux rapports lourds — `query` et
+`multiget`, les seuls à porter `address-data` — l'appellent.
+
+**`PruneAsync` matérialisait des révisions entières pour les supprimer.** Une révision porte la carte
+qu'elle archive, jusqu'à 1 Mio, et le balayage couvre tout le déploiement : trente jours de cartes
+écrasées de tous les utilisateurs sur le tas, pour un DELETE qui n'a jamais eu besoin que de la clé.
+Les clés seules, donc, et les deux passes sont bornées à 50 000 lignes — non pas une politique de
+conservation, la passe suivante prend le reste, mais un plafond qui rend l'empreinte d'une passe
+indépendante de la taille du retard accumulé. Un `Capped` le dit, et le balayeur l'avertit à voix
+haute : lu sur les seuls compteurs, un balayage borné ressemble trait pour trait à un balayage
+complet.
+
+**Le contrôle de cohérence ne retient plus le démarrage.** `IHostedService.StartAsync` est attendu
+avant que l'hôte n'écoute, et ce diagnostic fait un `GROUP BY` sur toute la table `contacts`.
+Personne n'attend sa réponse : il écrit une ligne de journal qu'un opérateur lit après coup.
+
+**Le découpage sur `@` de l'authentification est gardé.** Les claims Upn/Dns sont recomposées en
+`{Upn}@{Dns}` par `GetUser`, qui rend `null` si une moitié est vide — le `throw` derrière
+`AuthenticatedUser`, donc un **500 sur le seul chemin dont toute la conception est de répondre 401**.
+Les deux autres découpages sur `@` du dépôt vérifiaient déjà leur indice.
+
+**L'href de `no-uid-conflict` nommait la ressource écrite.** § 6.2.2 veut celle qui **détient déjà**
+l'UID en cause. Envoyée l'URI de sa propre requête, un client relit la carte qu'il vient d'essayer de
+remplacer et n'apprend rien. Le vrai détenteur est cherché ; quand il n'y en a pas, le refus ne porte
+plus d'href du tout plutôt qu'un href inventé.
+
+Les trois tests qui ont rougi au premier correctif — le jeu clos des propriétés, deux fois, et l'href
+du conflit d'UID — sont la preuve que ces comportements étaient épinglés et non accidentels. Neuf
+tests ont été ajoutés, et chacun a été vérifié par mutation : reposer la garde retirée les fait
+rougir.
