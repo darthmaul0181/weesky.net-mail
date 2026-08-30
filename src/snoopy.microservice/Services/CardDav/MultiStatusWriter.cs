@@ -34,8 +34,15 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 
     private readonly XmlWriter writer;
     private bool closed;
+    private int responseCount;
 
     private MultiStatusWriter(XmlWriter writer) => this.writer = writer;
+
+    /// <summary>
+    /// How many <c>response</c> elements this document carries. "The book is empty on the client"
+    /// is a claim about this number, and it is the one field an HTTP access log cannot hold.
+    /// </summary>
+    internal int ResponseCount => responseCount;
 
     /// <summary>
     /// Sets 207, the XML content type and the <c>DAV:</c> header (via <see cref="DavHeaders.ApplyDav"/>
@@ -98,6 +105,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
                 .ConfigureAwait(false);
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
+        responseCount++;
     }
 
     /// <summary>
@@ -114,6 +122,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         await writer.WriteElementStringAsync(null, "status", DavXml.Dav.NamespaceName, StatusLine(statusCode))
             .ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
+        responseCount++;
     }
 
     /// <summary>
@@ -138,6 +147,30 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         await writer.WriteEndElementAsync().ConfigureAwait(false); // error
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
+        responseCount++;
+    }
+
+    /// <summary>
+    /// One <c>response</c> whose single <c>propstat</c> refuses every named property with 403 —
+    /// RFC 4918 § 9.2.1's answer for a property a server does not let a client write. The names
+    /// carry no value: a <c>propstat</c>'s <c>prop</c> names properties, it never restates them.
+    /// An empty list writes the href alone, because nothing was refused when nothing was asked.
+    /// </summary>
+    internal async Task WriteRefusalAsync(string href, IReadOnlyList<XName> names,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
+        await WriteHrefAsync(href).ConfigureAwait(false);
+        if (names.Count > 0)
+        {
+            await WritePropstatAsync(403, names.Select(name => new XElement(name)), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await writer.WriteEndElementAsync().ConfigureAwait(false); // response
+        responseCount++;
     }
 
     /// <summary>

@@ -39,6 +39,7 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
 
     [Theory]
     [InlineData("PROPFIND")]
+    [InlineData("PROPPATCH")]
     [InlineData("REPORT")]
     [InlineData("GET")]
     [InlineData("MKCOL")]

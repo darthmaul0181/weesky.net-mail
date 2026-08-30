@@ -21,7 +21,8 @@ internal static class MultigetReport
     /// </summary>
     internal const int MaxHrefs = 5000;
 
-    internal static async Task WriteAsync(HttpResponse response, XDocument body, string requestHref,
+    /// <returns>how many <c>response</c> elements the document carries, for the request log</returns>
+    internal static async Task<int> WriteAsync(HttpResponse response, XDocument body, string requestHref,
         Guid userId, string principalAddress, IDavContactReader contacts,
         CancellationToken cancellationToken)
     {
@@ -33,7 +34,7 @@ internal static class MultigetReport
         {
             await using var truncated = await MultiStatusWriter.BeginAsync(response, cancellationToken);
             await truncated.WriteTruncatedAsync(requestHref, null, cancellationToken);
-            return;
+            return truncated.ResponseCount;
         }
 
         // One query for every name that belongs to THIS user's collection; anything else — a
@@ -63,6 +64,8 @@ internal static class MultigetReport
                 await writer.WriteStatusAsync(href, StatusCodes.Status404NotFound, cancellationToken);
             }
         }
+
+        return writer.ResponseCount;
     }
 
     private static bool IsOurs(DavResource? resource, Guid userId) =>

@@ -11,7 +11,8 @@ namespace weesky.Snoopy.Microservice.Services.CardDav;
 /// </summary>
 internal static class ExpandPropertyReport
 {
-    internal static async Task WriteAsync(HttpResponse response, XDocument body,
+    /// <returns>how many <c>response</c> elements the document carries, for the request log</returns>
+    internal static async Task<int> WriteAsync(HttpResponse response, XDocument body,
         DavResourceContext target, string targetHref,
         Func<DavResource, DavResourceContext?> nestedContext, CancellationToken cancellationToken)
     {
@@ -21,6 +22,7 @@ internal static class ExpandPropertyReport
 
         await using var writer = await MultiStatusWriter.BeginAsync(response, cancellationToken);
         await writer.WriteResourceAsync(targetHref, found, missing, cancellationToken);
+        return writer.ResponseCount;
     }
 
     private static void ResolveAll(IReadOnlyList<Property> properties, DavResourceContext resource,
