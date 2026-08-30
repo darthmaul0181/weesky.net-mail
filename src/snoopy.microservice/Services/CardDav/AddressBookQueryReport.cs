@@ -72,6 +72,12 @@ internal static class AddressBookQueryReport
             await writer.WriteResourceAsync(DavPaths.Card(userId, candidate.DavName), found, missing,
                 cancellationToken);
             written++;
+
+            // The heaviest answer of this surface — the whole book, address-data included — and
+            // the only one measured in gigabytes. Without this the streaming writer buffers it all
+            // the way to disposal, which is the one thing its whole design refuses. No transaction
+            // is open here, so nothing but the socket paces the read.
+            await writer.FlushIfDueAsync(cancellationToken);
         }
 
         // § 8.6.2's shape, the one clients already read: a 507 response on the Request-URI carrying

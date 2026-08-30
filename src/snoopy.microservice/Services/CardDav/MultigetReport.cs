@@ -64,6 +64,10 @@ internal static class MultigetReport
             {
                 await writer.WriteStatusAsync(href, StatusCodes.Status404NotFound, cancellationToken);
             }
+
+            // Up to MaxHrefs cards, address-data included: the second heaviest answer here, and no
+            // transaction is open, so the socket alone paces it.
+            await writer.FlushIfDueAsync(cancellationToken);
         }
 
         return writer.ResponseCount;

@@ -137,6 +137,51 @@ public sealed class MultiStatusWriterTests
     }
 
     [Fact]
+    public async Task FlushIfDue_PushesOnceEveryFlushEveryResponses_AndNotBefore()
+    {
+        var context = NewContext();
+
+        await using var writer = await MultiStatusWriter.BeginAsync(context.Response, CancellationToken.None);
+        for (var i = 0; i < MultiStatusWriter.FlushEvery - 1; i++)
+        {
+            await writer.WriteStatusAsync($"/dav/x/default/{i}.vcf", 404, CancellationToken.None);
+            await writer.FlushIfDueAsync(CancellationToken.None);
+        }
+
+        // One short of the batch: nothing of this document may have started, because a flush is
+        // what makes HasStarted true and takes the whole response away from a refusal.
+        Assert.DoesNotContain("0.vcf", ReadBody(context.Response));
+
+        await writer.WriteStatusAsync("/dav/x/default/last.vcf", 404, CancellationToken.None);
+        await writer.FlushIfDueAsync(CancellationToken.None);
+
+        // The batch closed: without this the streaming writer holds everything to disposal, which
+        // is the one thing its design refuses — and the promise no caller kept before.
+        Assert.Contains("0.vcf", ReadBody(context.Response));
+        Assert.Contains("last.vcf", ReadBody(context.Response));
+    }
+
+    [Fact]
+    public async Task FlushIfDue_CountsFromTheLastPush_NotFromTheStart()
+    {
+        var context = NewContext();
+
+        await using var writer = await MultiStatusWriter.BeginAsync(context.Response, CancellationToken.None);
+        for (var i = 0; i < MultiStatusWriter.FlushEvery; i++)
+            await writer.WriteStatusAsync($"/dav/x/default/{i}.vcf", 404, CancellationToken.None);
+        await writer.FlushIfDueAsync(CancellationToken.None);
+
+        var afterFirstBatch = ReadBody(context.Response).Length;
+        await writer.WriteStatusAsync("/dav/x/default/next.vcf", 404, CancellationToken.None);
+        await writer.FlushIfDueAsync(CancellationToken.None);
+
+        // Counted against the count at the last push, so a long answer pushes every batch rather
+        // than every response once the first threshold is passed — the difference between a flush
+        // per 64 rows and a syscall per row on a 5000-card book.
+        Assert.Equal(afterFirstBatch, ReadBody(context.Response).Length);
+    }
+
+    [Fact]
     public async Task TheTruncationShape_IsTheOneRfc6352Names()
     {
         var context = NewContext();

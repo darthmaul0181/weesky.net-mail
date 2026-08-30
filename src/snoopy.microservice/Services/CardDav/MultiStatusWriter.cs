@@ -32,9 +32,17 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 {
     private static readonly XName NumberOfMatchesWithinLimits = DavXml.Dav + "number-of-matches-within-limits";
 
+    /// <summary>
+    /// How many <c>response</c> elements a streaming caller writes between pushes to the wire.
+    /// Not tuned to a byte count: it exists so a long answer starts arriving early rather than in
+    /// one block at the end, and a client's read timeout is counted in responses it has not seen.
+    /// </summary>
+    internal const int FlushEvery = 64;
+
     private readonly XmlWriter writer;
     private bool closed;
     private int responseCount;
+    private int flushedAt;
 
     private MultiStatusWriter(XmlWriter writer) => this.writer = writer;
 
@@ -191,8 +199,26 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     internal async Task FlushAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        flushedAt = responseCount;
         await writer.FlushAsync().ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Pushes once <see cref="FlushEvery"/> further responses have been written — what a streaming
+    /// loop calls each turn so the policy lives here rather than in an arithmetic every caller
+    /// could spell differently.
+    /// </summary>
+    /// <remarks>
+    /// A flush is what makes <see cref="HttpResponse.HasStarted"/> true, and from that moment a
+    /// refusal can no longer replace this document: <see cref="DavError.WriteAsync"/> drops it with
+    /// a warning rather than write into a started body. Every refusal of these reports is pronounced
+    /// before <see cref="BeginAsync"/>, so there is nothing left to replace by the time a loop turns.
+    /// <b>A loop reading inside a transaction must NOT call this.</b> Flushing hands the pace of the
+    /// read to whoever is draining the socket, and a caller that holds an InnoDB snapshot open would
+    /// be making a slow client the reason it stays open — the opposite of what this buys elsewhere.
+    /// </remarks>
+    internal Task FlushIfDueAsync(CancellationToken cancellationToken) =>
+        responseCount - flushedAt >= FlushEvery ? FlushAsync(cancellationToken) : Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {
