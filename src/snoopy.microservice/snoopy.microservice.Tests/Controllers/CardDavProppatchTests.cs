@@ -47,6 +47,17 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Proppatch_OnTheBareRootOutsideDav_IsAnsweredToo()
+    {
+        var response = await Proppatch("/", SetBody(DavXml.Dav + "displayname", "X"));
+
+        // A client given the bare host tries "/" as much as the well-known, and this is the one
+        // route of the six whose URL the theory above cannot spell.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal("/", XDocument.Parse(response.Body).Descendants(DavXml.Href).Single().Value);
+    }
+
+    [Fact]
     public async Task Proppatch_RefusesEachPropertyIn403()
     {
         var response = await Proppatch(DavPaths.Collection(UserId),

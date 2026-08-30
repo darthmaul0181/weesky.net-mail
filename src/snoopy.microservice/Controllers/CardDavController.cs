@@ -110,6 +110,7 @@ public sealed class CardDavController(
         string? rootHref, CancellationToken cancellationToken)
     {
         var responses = 0;
+        int? status = null;
         try
         {
             var user = AuthenticatedUser;
@@ -154,9 +155,14 @@ public sealed class CardDavController(
                 HrefOf(kind, user.WebmailUid, card?.DavName, rootHref), names, cancellationToken);
             responses = writer.ResponseCount;
         }
+        catch (Exception exception)
+        {
+            status = StatusWrittenAfter(exception);
+            throw;
+        }
         finally
         {
-            LogRequest(responses: responses);
+            LogRequest(responses: responses, status: status);
         }
     }
 
@@ -169,6 +175,7 @@ public sealed class CardDavController(
     public async Task GetCardAsync(Guid userId, string? davName, CancellationToken cancellationToken)
     {
         var served = 0;
+        int? status = null;
         try
         {
             var user = AuthenticatedUser;
@@ -213,9 +220,14 @@ public sealed class CardDavController(
 
             await Response.Body.WriteAsync(bytes, cancellationToken);
         }
+        catch (Exception exception)
+        {
+            status = StatusWrittenAfter(exception);
+            throw;
+        }
         finally
         {
-            LogRequest(responses: served);
+            LogRequest(responses: served, status: status);
         }
     }
 
@@ -265,6 +277,7 @@ public sealed class CardDavController(
         string? report = null;
         string? condition = null;
         var responses = 0;
+        int? status = null;
         try
         {
             var user = AuthenticatedUser;
@@ -336,9 +349,14 @@ public sealed class CardDavController(
                     ex.Detail, cancellationToken, logger);
             }
         }
+        catch (Exception exception)
+        {
+            status = StatusWrittenAfter(exception);
+            throw;
+        }
         finally
         {
-            LogRequest(report, responses, condition);
+            LogRequest(report, responses, condition, status);
         }
     }
 
@@ -383,6 +401,7 @@ public sealed class CardDavController(
     {
         var responses = 0;
         string? condition = null;
+        int? status = null;
         try
         {
             var user = AuthenticatedUser;
@@ -465,9 +484,14 @@ public sealed class CardDavController(
                 responses = writer.ResponseCount;
             }
         }
+        catch (Exception exception)
+        {
+            status = StatusWrittenAfter(exception);
+            throw;
+        }
         finally
         {
-            LogRequest(responses: responses, condition: condition);
+            LogRequest(responses: responses, condition: condition, status: status);
         }
     }
 
@@ -531,14 +555,40 @@ public sealed class CardDavController(
     /// The one line this request leaves, written from every action and on every path out of it —
     /// the error paths above all, since a failure of this protocol reaches the user as a book that
     /// is simply empty, with nothing on the server saying which of its five causes it was. Called
-    /// from a <c>finally</c> so a throw still leaves the trace, and read off
-    /// <see cref="HttpResponse.StatusCode"/> rather than told, so it can never claim a status the
-    /// response does not carry. The path, never the query: the query is where a token travels.
+    /// from a <c>finally</c> so a throw still leaves the trace. The path, never the query: the
+    /// query is where a token travels.
     /// </summary>
-    private void LogRequest(string? report = null, int responses = 0, string? condition = null) =>
+    /// <param name="report">the report a REPORT body named, as the client spelled it</param>
+    /// <param name="responses">how many response elements the answer carried</param>
+    /// <param name="condition">the precondition element that refused the request, when one did</param>
+    /// <param name="status">
+    /// The status the host will write once this action has returned, when an exception is on its
+    /// way out and that status is therefore not on the response yet. Null everywhere else, where
+    /// <see cref="HttpResponse.StatusCode"/> is already the answer and reading it is what keeps the
+    /// line from claiming a status the response does not carry.
+    /// </param>
+    private void LogRequest(string? report = null, int responses = 0, string? condition = null,
+        int? status = null) =>
         DavRequestLog.Write(logger, new DavRequestTrace(
             Request.Method, Request.Path.Value ?? string.Empty, DepthHeader(), report,
-            TokenIn: null, TokenOut: null, responses, Response.StatusCode, condition));
+            TokenIn: null, TokenOut: null, responses, status ?? Response.StatusCode, condition));
+
+    /// <summary>
+    /// The status the host writes for an exception leaving an action, or null when it writes none.
+    /// This has to be read in a <c>catch</c> and cannot be read in the <c>finally</c>: Kestrel sets
+    /// the 413 of a body past <c>[RequestSizeLimit]</c> AFTER the action returns, so a line reading
+    /// <see cref="HttpResponse.StatusCode"/> there reports the untouched 200 the response has not
+    /// yet stopped carrying — an operator diagnosing an empty book would read a success.
+    /// A cancellation is the one case that answers null: the client is gone, nothing further is
+    /// written, and whatever the response already carries (a 207 whose stream died halfway, with
+    /// <c>responses</c> saying how far it got) is the truthful line.
+    /// </summary>
+    private static int? StatusWrittenAfter(Exception exception) => exception switch
+    {
+        OperationCanceledException => null,
+        BadHttpRequestException refused => refused.StatusCode,
+        _ => StatusCodes.Status500InternalServerError,
+    };
 
     private static async Task WriteResourceAsync(MultiStatusWriter writer, string href,
         DavPropertyRequest request, DavResourceContext resource, CancellationToken cancellationToken)

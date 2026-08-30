@@ -70,6 +70,24 @@ public sealed class CardDavRequestLogTests : IAsyncLifetime
         logger.VerifyInformationLoggedWithAll("GET", "status=404");
     }
 
+    [Theory]
+    [InlineData("PROPFIND")]
+    [InlineData("PROPPATCH")]
+    [InlineData("REPORT")]
+    public async Task ABodyPastTheLimit_LeavesALineCarryingIts413(string method)
+    {
+        // Depth 0 on purpose: a PROPFIND with no Depth header is infinity, refused with a 403
+        // before the body is ever read, and the size limit would never be the thing that answered.
+        var response = await server.SendAsync(method, DavPaths.Collection(UserId), OversizedBody(),
+            depth: "0");
+
+        // Kestrel writes this 413 AFTER the action has returned, so a line reading
+        // Response.StatusCode in its finally reports the untouched 200 — and an operator
+        // diagnosing "the book is empty" for a client sending oversized bodies reads a success.
+        Assert.Equal(413, response.StatusCode);
+        logger.VerifyInformationLoggedWithAll(method, "status=413");
+    }
+
     [Fact]
     public async Task TheLine_NamesTheReportTheClientAsked()
     {
@@ -119,6 +137,10 @@ public sealed class CardDavRequestLogTests : IAsyncLifetime
         "PROPPATCH" => ProppatchBody(),
         _ => null,
     };
+
+    /// <summary>Just past the 1 MB the routes announce; well-formed, so only the size refuses it.</summary>
+    private static string OversizedBody() =>
+        "<oversized>" + new string('a', 1024 * 1024) + "</oversized>";
 
     private static string MultigetBody() =>
         new XDocument(new XElement(DavXml.CardDav + "addressbook-multiget",
