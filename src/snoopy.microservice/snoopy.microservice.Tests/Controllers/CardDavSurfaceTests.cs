@@ -1,4 +1,4 @@
-using weesky.Snoopy.Microservice.Services.CardDav;
+﻿using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -113,6 +113,10 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         // slash - does not present: routing would give an accidental 404. And a DELETE of the
         // collection would erase the whole book, a gesture the product offers nowhere.
         Assert.Equal(405, response.StatusCode);
+
+        // The Allow, not the status: routing answers 405 here on its own, so a test asserting the
+        // status alone stays green with both catch-alls deleted.
+        Assert.Equal(DavHeaders.CollectionAllow, response.Header("Allow"));
     }
 
     [Theory]
@@ -127,6 +131,30 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         // which tells a client the request failed but never which verb would have worked.
         Assert.Equal(405, response.StatusCode);
         Assert.Equal(DavHeaders.CollectionAllow, response.Header("Allow"));
+    }
+
+    [Fact]
+    public async Task Options_OnTheBareRoot_AnswersTheCapabilitiesToo()
+    {
+        // A client given the bare host tries "/" as much as the well-known, and nothing there makes
+        // it give up before it ever reaches the well-known.
+        var response = await server.SendAsync("OPTIONS", "/");
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(DavHeaders.ComplianceClasses, response.Header("DAV"));
+        Assert.Equal(DavHeaders.CollectionAllow, response.Header("Allow"));
+    }
+
+    [Fact]
+    public async Task TheBareRoot_CarriesNoCatchAll()
+    {
+        var response = await server.SendAsync("POST", "/");
+
+        // Deliberately absent: bound to no verb, a catch-all at "/" would swallow every unrouted
+        // method of the WHOLE API, not merely the DAV surface. What answers is routing's own 405,
+        // whose Allow is the union of the two verbs bound at "/" - never ours.
+        Assert.Equal(405, response.StatusCode);
+        Assert.NotEqual(DavHeaders.CollectionAllow, response.Header("Allow"));
     }
 
     [Fact]

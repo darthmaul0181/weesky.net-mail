@@ -411,8 +411,9 @@ public sealed class CardDavController(
     /// <summary>
     /// Last on purpose, and bound to no verb: carrying no method metadata, these score below every
     /// real route above, so action selection reaches them only when nothing else answers the verb.
-    /// They carry <c>Allow</c> and nothing else — routing's own 405 carries none, and a client
-    /// reading a refusal without the verb list learns nothing it can act on.
+    /// They carry <c>Allow</c> and nothing else. Routing supplies an Allow of its own, but it is
+    /// the union of the verbs bound on the template: it names GET and HEAD, which answer 405 here,
+    /// and omits PROPPATCH, which the collection announces — a client that reads it loops.
     /// </summary>
     [Route("")]
     [Route("principals/{userId:guid}")]
