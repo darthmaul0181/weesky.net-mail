@@ -151,7 +151,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         await writer.WriteStartElementAsync(null, NumberOfMatchesWithinLimits.LocalName,
             NumberOfMatchesWithinLimits.NamespaceName).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // number-of-matches-within-limits
-        if (extra is not null) await WriteElementAsync(extra).ConfigureAwait(false);
+        if (extra is not null) await writer.WriteElementAsync(extra).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // error
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
@@ -243,31 +243,13 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         foreach (var property in properties)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await WriteElementAsync(property).ConfigureAwait(false);
+            await writer.WriteElementAsync(property).ConfigureAwait(false);
         }
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // prop
         await writer.WriteElementStringAsync(null, "status", DavXml.Dav.NamespaceName, StatusLine(statusCode))
             .ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // propstat
-    }
-
-    private async Task WriteElementAsync(XElement element)
-    {
-        await writer.WriteStartElementAsync(null, element.Name.LocalName, element.Name.NamespaceName)
-            .ConfigureAwait(false);
-
-        foreach (var attribute in element.Attributes())
-            await writer.WriteAttributeStringAsync(null, attribute.Name.LocalName, attribute.Name.NamespaceName,
-                attribute.Value).ConfigureAwait(false);
-
-        if (element.HasElements)
-            foreach (var child in element.Elements())
-                await WriteElementAsync(child).ConfigureAwait(false);
-        else if (!string.IsNullOrEmpty(element.Value))
-            await writer.WriteStringAsync(element.Value).ConfigureAwait(false);
-
-        await writer.WriteEndElementAsync().ConfigureAwait(false);
     }
 
     /// <summary>

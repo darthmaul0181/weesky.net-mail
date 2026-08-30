@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -90,7 +89,7 @@ internal static class SyncCollectionReport
         var (state, token, tombstones) = window;
 
         EnsureSyncLevel(root, depthHeader);
-        var limit = LimitOf(root);
+        var limit = DavLimit.Read(root, DavXml.Dav);
         var request = DavPropertyRequest.Parse(body);
 
         var cards = contacts.ChangedAsync(userId, token.Sequence, state.Seq, cancellationToken);
@@ -222,22 +221,6 @@ internal static class SyncCollectionReport
             throw new DavBadRequestException(
                 "The sync-level admits 1 or infinite; anything else would be a guess.");
         }
-    }
-
-    /// <summary>
-    /// <c>DAV:limit</c>, never <c>CARDDAV:limit</c>: two namespaces share the local name, RFC 6578
-    /// § 3.6 defines this report's in <c>DAV:</c> and RFC 6352 § 10.6 addressbook-query's in the
-    /// other — a client's stray <c>CARDDAV:limit</c> here bounds nothing.
-    /// </summary>
-    private static int? LimitOf(XElement root)
-    {
-        var nresults = root.Element(DavXml.Dav + "limit")?.Element(DavXml.Dav + "nresults");
-        if (nresults is null) return null;
-
-        return int.TryParse(nresults.Value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture,
-            out var bound) && bound > 0
-            ? bound
-            : throw new DavBadRequestException("The DAV:limit carries no readable DAV:nresults.");
     }
 
     /// <summary>One row of the window: a card to serve, or a tombstone when <see cref="Card"/> is

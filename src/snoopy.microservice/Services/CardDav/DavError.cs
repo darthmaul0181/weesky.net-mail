@@ -71,30 +71,12 @@ internal static class DavError
 
             await writer.WriteStartElementAsync(null, condition.LocalName, condition.NamespaceName)
                 .ConfigureAwait(false);
-            if (detail is not null) await WriteElementAsync(writer, detail).ConfigureAwait(false);
+            if (detail is not null) await writer.WriteElementAsync(detail).ConfigureAwait(false);
             await writer.WriteEndElementAsync().ConfigureAwait(false);
 
             await writer.WriteEndElementAsync().ConfigureAwait(false);
             await writer.WriteEndDocumentAsync().ConfigureAwait(false);
             await writer.FlushAsync().ConfigureAwait(false);
         }
-    }
-
-    private static async Task WriteElementAsync(XmlWriter writer, XElement element)
-    {
-        await writer.WriteStartElementAsync(null, element.Name.LocalName, element.Name.NamespaceName)
-            .ConfigureAwait(false);
-
-        foreach (var attribute in element.Attributes())
-            await writer.WriteAttributeStringAsync(null, attribute.Name.LocalName,
-                attribute.Name.NamespaceName, attribute.Value).ConfigureAwait(false);
-
-        if (element.HasElements)
-            foreach (var child in element.Elements())
-                await WriteElementAsync(writer, child).ConfigureAwait(false);
-        else if (!string.IsNullOrEmpty(element.Value))
-            await writer.WriteStringAsync(element.Value).ConfigureAwait(false);
-
-        await writer.WriteEndElementAsync().ConfigureAwait(false);
     }
 }

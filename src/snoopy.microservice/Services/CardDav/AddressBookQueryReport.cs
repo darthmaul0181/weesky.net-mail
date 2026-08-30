@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
@@ -35,7 +34,7 @@ internal static class AddressBookQueryReport
         // Every refusal is pronounced here, before the first byte: the filter's own
         // (supported-filter, supported-collation), the bound's 400, and address-data's.
         var spec = AddressBookFilter.Parse(filter);
-        var limit = LimitOf(root);
+        var limit = DavLimit.Read(root, DavXml.CardDav);
         var request = AddressDataFilter.PropertiesAsked(body);
         var addressData = AddressDataFilter.Asked(body);
 
@@ -85,25 +84,6 @@ internal static class AddressBookQueryReport
         if (truncated) await writer.WriteTruncatedAsync(requestHref, null, cancellationToken);
 
         return writer.ResponseCount;
-    }
-
-    /// <summary>
-    /// <c>CARDDAV:limit</c>, never <c>DAV:limit</c>: the two share a local name and nothing else,
-    /// RFC 6352 § 10.6 defines this report's bound in the CardDAV namespace and RFC 6578 § 3.6
-    /// defines sync-collection's in <c>DAV:</c>. A reader listening to the wrong one would serve a
-    /// client the five thousand cards it had just said it could not digest.
-    /// </summary>
-    private static int? LimitOf(XElement root)
-    {
-        var nresults = root.Element(DavXml.CardDav + "limit")
-            ?.Element(DavXml.CardDav + "nresults");
-        if (nresults is null) return null;
-
-        return int.TryParse(nresults.Value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture,
-            out var bound) && bound > 0
-            ? bound
-            : throw new DavBadRequestException(
-                "The CARDDAV:limit carries no readable CARDDAV:nresults.");
     }
 
     private static async IAsyncEnumerable<DavCard> Only(DavCard card)
