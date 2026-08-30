@@ -41,8 +41,9 @@ internal static class DavCollation
                 folded[i] = source[i] is >= 'A' and <= 'Z' ? (char)(source[i] + 32) : source[i];
         });
 
-    // FormC, not FormD: composed first so the fold never scatters an ASCII base letter out of an
-    // accented one, which is what keeps a needle's ASCII spelling comparable to a card's.
+    // What sabre (mb_strtoupper) and Radicale (lower) do too. RFC 5051's own fold is titlecase
+    // plus recursive decomposition (≈ NFKD), under which "jose" would match "josé" in contains
+    // and starts-with; this fold does not, and that is where it diverges from the letter.
     private static string UnicodeFolded(string value) =>
         value.Normalize(NormalizationForm.FormC).ToLowerInvariant();
 }
