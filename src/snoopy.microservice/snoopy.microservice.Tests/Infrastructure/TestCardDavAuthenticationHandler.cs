@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
@@ -19,8 +19,15 @@ internal sealed class TestCardDavAuthenticationHandler(
     UrlEncoder encoder,
     DavTestUser user) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
+    /// <summary>What a request with no credentials carries here, since this handler holds no
+    /// wire format of its own to omit.</summary>
+    internal const string NoCredentialsHeader = "X-Test-No-Credentials";
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.ContainsKey(NoCredentialsHeader))
+            return Task.FromResult(AuthenticateResult.NoResult());
+
         var separator = user.Email.LastIndexOf('@');
         List<Claim> claims =
         [

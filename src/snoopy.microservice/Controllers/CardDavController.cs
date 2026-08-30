@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -158,6 +158,8 @@ public sealed class CardDavController(
             return;
         }
 
+        if (RedirectedToCanonical(kind, userId)) return;
+
         if (kind is DavResourceKind.Card && !DavName.IsValid(davName))
         {
             Response.StatusCode = StatusCodes.Status404NotFound;
@@ -262,6 +264,8 @@ public sealed class CardDavController(
             return;
         }
 
+        if (userId is { } owner && RedirectedToCanonical(kind, owner)) return;
+
         var depth = DavDepth.Parse(DepthHeader());
         if (depth is null)
         {
@@ -349,6 +353,28 @@ public sealed class CardDavController(
         }
     }
 
+    /// <summary>
+    /// A collection URL keeps its trailing slash — without it <see cref="DavPaths.Parse"/>
+    /// designates nothing — and the answer is a 308, never the 301 sabre and Radicale use: a 301
+    /// lets the client replay as GET, which bare OkHttp does for every verb but PROPFIND, and a
+    /// redirected REPORT would lose both its method and its body.
+    /// </summary>
+    private bool RedirectedToCanonical(DavResourceKind kind, Guid userId)
+    {
+        var canonical = kind switch
+        {
+            DavResourceKind.Principal => DavPaths.Principal(userId),
+            DavResourceKind.Home => DavPaths.Home(userId),
+            DavResourceKind.Collection => DavPaths.Collection(userId),
+            _ => null,
+        };
+        if (canonical is null || Request.Path.Value?.EndsWith('/') is not false) return false;
+
+        Response.Headers.Location = canonical;
+        Response.StatusCode = StatusCodes.Status308PermanentRedirect;
+        return true;
+    }
+
     private string? DepthHeader() =>
         Request.Headers.TryGetValue("Depth", out var values) ? values.ToString() : null;
 
@@ -364,4 +390,49 @@ public sealed class CardDavController(
     private static bool NeedsState(DavResourceKind kind, DavDepthValue depth) =>
         kind is DavResourceKind.Collection
         || (kind is DavResourceKind.Home && depth is DavDepthValue.One);
+
+    /// <summary>
+    /// Capabilities, answered off the URL shape alone: <c>[AllowAnonymous]</c> on this method and
+    /// on no other, because a client asks what the server can do before it holds any credentials —
+    /// which is also why it consults no store and reveals nothing a URL did not already carry.
+    /// </summary>
+    [AcceptVerbs("OPTIONS", Route = "")]
+    [AcceptVerbs("OPTIONS", Route = "/")]
+    [AcceptVerbs("OPTIONS", Route = "principals/{userId:guid}")]
+    [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}")]
+    [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [AllowAnonymous]
+    public void OptionsCollection() => Capabilities(DavHeaders.CollectionAllow);
+
+    [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    [AllowAnonymous]
+    public void OptionsCard() => Capabilities(DavHeaders.CardAllow);
+
+    /// <summary>
+    /// Last on purpose, and bound to no verb: carrying no method metadata, these score below every
+    /// real route above, so action selection reaches them only when nothing else answers the verb.
+    /// They carry <c>Allow</c> and nothing else — routing's own 405 carries none, and a client
+    /// reading a refusal without the verb list learns nothing it can act on.
+    /// </summary>
+    [Route("")]
+    [Route("principals/{userId:guid}")]
+    [Route("addressbooks/{userId:guid}")]
+    [Route("addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    public void MethodNotAllowedOnCollection() => MethodNotAllowed(DavHeaders.CollectionAllow);
+
+    [Route("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    public void MethodNotAllowedOnCard() => MethodNotAllowed(DavHeaders.CardAllow);
+
+    private void Capabilities(string allow)
+    {
+        Response.Headers.Allow = allow;
+        DavHeaders.ApplyDav(Response);
+        Response.StatusCode = StatusCodes.Status200OK;
+    }
+
+    private void MethodNotAllowed(string allow)
+    {
+        Response.Headers.Allow = allow;
+        Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+    }
 }

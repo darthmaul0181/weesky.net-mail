@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -102,6 +102,16 @@ internal sealed class DavTestServer : IAsyncDisposable
         return await DavTestResponse.ReadAsync(response);
     }
 
+    /// <summary>
+    /// The same request with no credentials at all: the test handler stands down, so the named
+    /// policy runs against an anonymous caller exactly as it does over the wire.
+    /// </summary>
+    internal Task<DavTestResponse> SendUnauthenticated(string method, string path, string? body = null) =>
+        SendAsync(method, path, body, headers: new Dictionary<string, string>
+        {
+            [TestCardDavAuthenticationHandler.NoCredentialsHeader] = "1",
+        });
+
     public async ValueTask DisposeAsync()
     {
         Client.Dispose();
@@ -123,7 +133,8 @@ internal sealed class DavTestServer : IAsyncDisposable
                     manager.FeatureProviders.RemoveAt(i);
             }
 
-            manager.FeatureProviders.Add(new SingleControllerFeatureProvider(typeof(CardDavController)));
+            manager.FeatureProviders.Add(new SelectedControllerFeatureProvider(
+                typeof(CardDavController), typeof(WellKnownController)));
         });
 
         services.AddAuthentication(CardDavAuthenticationDefaults.AuthenticationScheme)
@@ -163,11 +174,14 @@ internal sealed class DavTestServer : IAsyncDisposable
         }
     }
 
-    /// <summary>Admits exactly one controller: the default provider would publish every controller
-    /// of the assembly, whose dependencies this host deliberately does not resolve.</summary>
-    private sealed class SingleControllerFeatureProvider(Type controller) : ControllerFeatureProvider
+    /// <summary>Admits the named controllers only: the default provider would publish every
+    /// controller of the assembly, whose dependencies this host deliberately does not resolve.
+    /// </summary>
+    private sealed class SelectedControllerFeatureProvider(params Type[] controllers)
+        : ControllerFeatureProvider
     {
-        protected override bool IsController(TypeInfo typeInfo) => typeInfo.AsType() == controller;
+        protected override bool IsController(TypeInfo typeInfo) =>
+            controllers.Contains(typeInfo.AsType());
     }
 
     private sealed class BodySizeLimitFeature(HttpContext context) : IHttpMaxRequestBodySizeFeature
