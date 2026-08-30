@@ -1,4 +1,5 @@
 using System.Text;
+using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Authentication.CardDav;
@@ -128,6 +129,124 @@ public sealed class CardDavController(
         Response.Headers.Allow = DavHeaders.CollectionAllow;
         DavHeaders.ApplyDav(Response);
         Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+    }
+
+    [AcceptVerbs("REPORT", Route = "principals/{userId:guid}")]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task ReportPrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
+        ReportAsync(DavResourceKind.Principal, userId, null, cancellationToken);
+
+    [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task ReportCollectionAsync(Guid userId, CancellationToken cancellationToken) =>
+        ReportAsync(DavResourceKind.Collection, userId, null, cancellationToken);
+
+    /// <summary>RFC 6352 § 8.7 defines multiget on address resources too, and
+    /// supported-report-set says so on every card — without this route the header lies.</summary>
+    [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task ReportCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
+        ReportAsync(DavResourceKind.Card, userId, davName, cancellationToken);
+
+    private async Task ReportAsync(DavResourceKind kind, Guid userId, string? davName,
+        CancellationToken cancellationToken)
+    {
+        var user = AuthenticatedUser;
+        if (userId != user.WebmailUid)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        if (kind is DavResourceKind.Card && !DavName.IsValid(davName))
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        XDocument? document;
+        try
+        {
+            document = await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger);
+        }
+        catch (DavBadRequestException ex)
+        {
+            logger.LogInformation("REPORT body refused: {Reason}", ex.Message);
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        // The Depth header is deliberately ignored, never refused: PROPFIND's rule is PROPFIND's
+        // alone — a report already says what it applies to, so there is nothing to guess.
+        var requestHref = kind switch
+        {
+            DavResourceKind.Principal => DavPaths.Principal(user.WebmailUid),
+            DavResourceKind.Collection => DavPaths.Collection(user.WebmailUid),
+            _ => DavPaths.Card(user.WebmailUid, davName!),
+        };
+
+        try
+        {
+            switch (document is null ? DavReportKind.Unknown : ReportRequest.KindOf(document))
+            {
+                case DavReportKind.Multiget:
+                    await MultigetReport.WriteAsync(Response, document!, requestHref,
+                        user.WebmailUid, user.Email, contacts, cancellationToken);
+                    return;
+                case DavReportKind.ExpandProperty:
+                    await ExpandAsync(kind, davName, document!, requestHref, cancellationToken);
+                    return;
+                default:
+                    // Query, SyncCollection and Unknown alike, through this one branch: plan c
+                    // implements the first two by removing their cases, and a report we do not
+                    // serve is a considered 403 — a 500 makes a client loop on it forever.
+                    await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden,
+                        DavXml.Dav + "supported-report", cancellationToken: cancellationToken,
+                        logger: logger);
+                    return;
+            }
+        }
+        catch (DavPreconditionException ex)
+        {
+            await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, ex.Condition,
+                ex.Detail, cancellationToken, logger);
+        }
+    }
+
+    private async Task ExpandAsync(DavResourceKind kind, string? davName, XDocument document,
+        string requestHref, CancellationToken cancellationToken)
+    {
+        var user = AuthenticatedUser;
+        DavCard? card = null;
+        if (kind is DavResourceKind.Card)
+        {
+            card = await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken);
+            if (card is null)
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+        }
+
+        var state = kind is DavResourceKind.Collection
+            ? await syncStore.ReadStateAsync(user.WebmailUid, cancellationToken)
+            : null;
+        var target = new DavResourceContext(kind, user.WebmailUid, user.Email, card, state);
+        await ExpandPropertyReport.WriteAsync(Response, document, target, requestHref,
+            resource => NestedContext(resource, user.WebmailUid, user.Email), cancellationToken);
+    }
+
+    /// <summary>
+    /// The context a nested expand-property target resolves against, or null for anything that is
+    /// not this user's — the nested 404. No href property of ours points at a card or needs the
+    /// sync state, so neither is fetched here.
+    /// </summary>
+    private static DavResourceContext? NestedContext(DavResource resource, Guid userId, string email)
+    {
+        if (resource.Kind is DavResourceKind.ServiceRoot)
+            return new DavResourceContext(DavResourceKind.ServiceRoot, userId, email, null, null);
+        if (resource.Kind is DavResourceKind.Card || resource.UserId != userId) return null;
+        return new DavResourceContext(resource.Kind, userId, email, null, null);
     }
 
     private async Task PropfindAsync(DavResourceKind kind, Guid? userId, string? davName,

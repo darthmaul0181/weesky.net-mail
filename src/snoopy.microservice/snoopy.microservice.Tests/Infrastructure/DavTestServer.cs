@@ -3,6 +3,8 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.TestHost;
@@ -49,8 +51,13 @@ internal sealed class DavTestServer : IAsyncDisposable
 
     internal string Email { get; }
 
+    /// <param name="email">the authenticated user's address</param>
+    /// <param name="userId">the authenticated user's GUID, minted when absent</param>
+    /// <param name="overrides">applied last, so a test may replace a registration — a counting or
+    /// throwing repository being the use case</param>
     internal static async Task<DavTestServer> StartAsync(
-        string email = "someone@weesky.be", Guid? userId = null)
+        string email = "someone@weesky.be", Guid? userId = null,
+        Action<IServiceCollection>? overrides = null)
     {
         var user = new DavTestUser(email, userId ?? Guid.NewGuid());
         var databaseName = Guid.NewGuid().ToString("N");
@@ -58,9 +65,14 @@ internal sealed class DavTestServer : IAsyncDisposable
         var host = await new HostBuilder()
             .ConfigureWebHost(web => web
                 .UseTestServer()
-                .ConfigureServices(services => ConfigureServices(services, user, databaseName))
+                .ConfigureServices(services =>
+                {
+                    ConfigureServices(services, user, databaseName);
+                    overrides?.Invoke(services);
+                })
                 .Configure(app =>
                 {
+                    app.Use(EnforceRequestSizeLimits);
                     app.UseRouting();
                     app.UseAuthentication();
                     app.UseAuthorization();
@@ -131,10 +143,97 @@ internal sealed class DavTestServer : IAsyncDisposable
         services.AddScoped<IContactSyncStore, ContactSyncStore>();
     }
 
+    /// <summary>
+    /// TestServer implements no <see cref="IHttpMaxRequestBodySizeFeature"/>, so a
+    /// <c>[RequestSizeLimit]</c> would silently not apply and every 413 assertion here would be
+    /// vacuous. This reproduces Kestrel's enforcement: the attribute's filter sets the feature's
+    /// limit, a read past it throws the 413 <see cref="BadHttpRequestException"/> Kestrel throws,
+    /// and the middleware turns it into the status, exactly as Kestrel would.
+    /// </summary>
+    private static async Task EnforceRequestSizeLimits(HttpContext context, Func<Task> next)
+    {
+        context.Features.Set<IHttpMaxRequestBodySizeFeature>(new BodySizeLimitFeature(context));
+        try
+        {
+            await next();
+        }
+        catch (BadHttpRequestException ex) when (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = ex.StatusCode;
+        }
+    }
+
     /// <summary>Admits exactly one controller: the default provider would publish every controller
     /// of the assembly, whose dependencies this host deliberately does not resolve.</summary>
     private sealed class SingleControllerFeatureProvider(Type controller) : ControllerFeatureProvider
     {
         protected override bool IsController(TypeInfo typeInfo) => typeInfo.AsType() == controller;
+    }
+
+    private sealed class BodySizeLimitFeature(HttpContext context) : IHttpMaxRequestBodySizeFeature
+    {
+        private long? maxRequestBodySize;
+
+        public bool IsReadOnly => false;
+
+        public long? MaxRequestBodySize
+        {
+            get => maxRequestBodySize;
+            set
+            {
+                maxRequestBodySize = value;
+                if (value is { } limit) context.Request.Body = new LimitedBody(context.Request.Body, limit);
+            }
+        }
+    }
+
+    private sealed class LimitedBody(Stream inner, long limit) : Stream
+    {
+        private long read;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => inner.Length;
+
+        public override long Position
+        {
+            get => inner.Position;
+            set => throw new NotSupportedException();
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            Counted(await inner.ReadAsync(buffer, cancellationToken));
+
+        public override Task<int> ReadAsync(
+            byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            Counted(inner.Read(buffer, offset, count));
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        private int Counted(int count)
+        {
+            read += count;
+            return read > limit
+                ? throw new BadHttpRequestException(
+                    "Request body too large.", StatusCodes.Status413PayloadTooLarge)
+                : count;
+        }
     }
 }

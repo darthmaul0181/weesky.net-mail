@@ -203,9 +203,10 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     /// <summary>
     /// Code to status-line table, literal — deliberately not <c>ReasonPhrases.GetReasonPhrase</c>:
     /// that framework table has already changed case between versions, and these strings are
-    /// compared byte for byte by at least one client (sabre has had to correct an "Ok" for iOS).
+    /// compared byte for byte by at least one client (sabre has had to correct an "Ok" for iOS). Internal
+    /// so the nested responses of expand-property spell the very same lines.
     /// </summary>
-    private static string StatusLine(int statusCode) => statusCode switch
+    internal static string StatusLine(int statusCode) => statusCode switch
     {
         200 => "HTTP/1.1 200 OK",
         201 => "HTTP/1.1 201 Created",
