@@ -29,6 +29,7 @@ public sealed class DavPropertiesTests
     [
         (DavResourceKind.ServiceRoot, DavXml.Dav + "current-user-principal"),
         (DavResourceKind.ServiceRoot, DavXml.Dav + "principal-URL"),
+        (DavResourceKind.ServiceRoot, DavXml.Dav + "supported-report-set"),
         (DavResourceKind.ServiceRoot, DavXml.Dav + "resourcetype"),
 
         (DavResourceKind.Principal, DavXml.Dav + "resourcetype"),
@@ -43,6 +44,7 @@ public sealed class DavPropertiesTests
 
         (DavResourceKind.Home, DavXml.Dav + "resourcetype"),
         (DavResourceKind.Home, DavXml.Dav + "displayname"),
+        (DavResourceKind.Home, DavXml.Dav + "supported-report-set"),
         (DavResourceKind.Home, DavXml.Dav + "current-user-principal"),
 
         (DavResourceKind.Collection, DavXml.Dav + "resourcetype"),
@@ -263,6 +265,22 @@ public sealed class DavPropertiesTests
 
         // RFC 6352 § 8 asks for it on the principal too, not only on the collection.
         Assert.Equal([DavXml.Dav + "expand-property"], reports);
+    }
+
+    [Theory]
+    [InlineData(nameof(DavResourceKind.ServiceRoot))]
+    [InlineData(nameof(DavResourceKind.Home))]
+    public void TheTwoShapesWhoseAllowNamesReport_AnnounceTheReportTheyAnswer(string kind)
+    {
+        var resolved = DavProperties.Resolve(
+            Named(DavXml.Dav + "supported-report-set"), ContextFor(Kind(kind)));
+
+        // RFC 3253 § 3.1.5 makes this a live property of any resource serving REPORT, and both of
+        // these serve expand-property under an Allow that names the verb. Left out, it came back
+        // in the 404 propstat: the Allow said one thing and the answer another, which is the shape
+        // of the announcement that made DAVx5 loop.
+        Assert.Empty(resolved.Missing);
+        Assert.Equal([DavXml.Dav + "expand-property"], ReportsOf(Assert.Single(resolved.Found)));
     }
 
     [Fact]

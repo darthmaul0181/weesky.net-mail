@@ -605,13 +605,21 @@ public sealed class CardDavController(
             {
                 switch (document is null ? DavReportKind.Unknown : ReportRequest.KindOf(document))
                 {
-                    case DavReportKind.Multiget:
+                    case DavReportKind.Multiget
+                        when kind is DavResourceKind.Collection or DavResourceKind.Card:
+                        // RFC 6352 § 8.7 defines multiget on the book and on an address resource,
+                        // which is exactly where supported-report-set announces it. Served off
+                        // those two shapes it would answer a report the resource never claimed —
+                        // the mirror of the announcement that made the client loop, and the reason
+                        // all four reports are now gated by the shape that announces them.
                         responses = await MultigetReport.WriteAsync(Response, document!, requestHref,
                             user.WebmailUid, user.Email, contacts, cancellationToken);
                         return;
-                    case DavReportKind.ExpandProperty:
-                        responses = await ExpandAsync(kind, davName, document!, requestHref,
-                            cancellationToken);
+                    case DavReportKind.ExpandProperty when kind is not DavResourceKind.Card:
+                        // Announced on the service root, the principal, the home and the book, and
+                        // on none of the cards: no property of a card is href-valued, so there is
+                        // nothing there to expand and nothing to promise.
+                        responses = await ExpandAsync(kind, document!, requestHref, cancellationToken);
                         return;
                     case DavReportKind.Query
                         when kind is DavResourceKind.Collection or DavResourceKind.Card:
@@ -695,39 +703,38 @@ public sealed class CardDavController(
             user.WebmailUid, user.Email, card, contacts, cancellationToken);
     }
 
-    private async Task<int> ExpandAsync(DavResourceKind kind, string? davName, XDocument document,
+    /// <summary>The card kind never reaches here: the switch above gates it out, because no
+    /// property of a card is href-valued and none of the cards announces this report.</summary>
+    private async Task<int> ExpandAsync(DavResourceKind kind, XDocument document,
         string requestHref, CancellationToken cancellationToken)
     {
         var user = AuthenticatedUser;
-        DavCard? card = null;
-        if (kind is DavResourceKind.Card)
-        {
-            card = await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken);
-            if (card is null)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return 0;
-            }
-        }
-
         var state = kind is DavResourceKind.Collection
             ? await syncStore.ReadStateAsync(user.WebmailUid, cancellationToken)
             : null;
-        var target = new DavResourceContext(kind, user.WebmailUid, user.Email, card, state);
+        var target = new DavResourceContext(kind, user.WebmailUid, user.Email, null, state);
         return await ExpandPropertyReport.WriteAsync(Response, document, target, requestHref,
             resource => NestedContext(resource, user.WebmailUid, user.Email), cancellationToken);
     }
 
     /// <summary>
     /// The context a nested expand-property target resolves against, or null for anything that is
-    /// not this user's — the nested 404. No href property of ours points at a card or needs the
-    /// sync state, so neither is fetched here.
+    /// not this user's — the nested 404. The resolution is synchronous, so no context built here
+    /// can carry a card or a sync state; the two kinds that would need one are refused rather than
+    /// answered without it. No href property of ours designates either today, so the refusal is
+    /// unreachable — and the day one does, a nested 404 sends the client back to a PROPFIND,
+    /// where a ctag of "0" and a token on the empty epoch would have been believed instead.
     /// </summary>
     private static DavResourceContext? NestedContext(DavResource resource, Guid userId, string email)
     {
         if (resource.Kind is DavResourceKind.ServiceRoot)
             return new DavResourceContext(DavResourceKind.ServiceRoot, userId, email, null, null);
-        if (resource.Kind is DavResourceKind.Card || resource.UserId != userId) return null;
+        if (resource.Kind is DavResourceKind.Card or DavResourceKind.Collection
+            || resource.UserId != userId)
+        {
+            return null;
+        }
+
         return new DavResourceContext(resource.Kind, userId, email, null, null);
     }
 
@@ -980,6 +987,19 @@ public sealed class CardDavController(
     /// Opened through the execution strategy the way SyncCollectionReport.WriteAsync is; the
     /// snapshot stays open while the members stream, which a PROPFIND never fills with
     /// address-data and the book caps at 5000 rows.
+    /// <para>
+    /// Unlike sync-collection, this one CANNOT lift its read out of the transaction: what that
+    /// report's snapshot protects is a pair of reads over tombstones, while this one's protects the
+    /// counter against the member query itself — the very read that streams. So the member loop
+    /// deliberately does NOT call <c>MultiStatusWriter.FlushIfDueAsync</c>, where the two streaming
+    /// reports do: flushing hands the pace of the read to whoever drains the socket, and here that
+    /// would make a slow client the reason an InnoDB read view stays open. Left unflushed, the
+    /// document reaches the wire only as the XML writer's own buffer fills, so the response is
+    /// paced by this process and not by the client. Taking the cards out of the snapshot would
+    /// need a member projection carrying a byte count instead of vcard_raw — the properties this
+    /// answer serves need the length, never the card — which is a change to DavCard,
+    /// IDavContactReader and the property tables, not to this method.
+    /// </para>
     /// </remarks>
     private Task InOneSnapshotAsync(DavResourceKind kind, DavDepthValue depth,
         Func<CancellationToken, Task> write, CancellationToken cancellationToken)

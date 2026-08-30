@@ -359,6 +359,38 @@ public sealed class CardDavReportTests : IAsyncLifetime
         Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
     }
 
+    [Theory]
+    [InlineData("/dav/")]
+    [InlineData("principal")]
+    [InlineData("home")]
+    public async Task AMultigetOffTheBookAndTheCard_IsARefusal(string shape)
+    {
+        GivenCards("a.vcf");
+
+        var response = await Report(PathOf(shape), MultigetBody(DavPaths.Card(UserId, "a.vcf")));
+
+        // § 8.7 defines multiget on the book and on an address resource, and supported-report-set
+        // announces it exactly there. Served off those two shapes it would answer a report the
+        // resource never claimed — the mirror of the announcement that made DAVx5 loop, and the
+        // direction no test held before.
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
+    }
+
+    [Fact]
+    public async Task AnExpandPropertyOnACard_IsARefusal()
+    {
+        GivenCards("a.vcf");
+
+        // No property of a card is href-valued, so there is nothing there to expand — which is why
+        // no card announces the report, and why answering it would promise what it cannot do.
+        var response = await Report(DavPaths.Card(UserId, "a.vcf"), ExpandPropertyBody(
+            DavXml.Dav + "current-user-principal", DavXml.Dav + "displayname"));
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
+    }
+
     [Fact]
     public async Task AnUnknownReport_Answers403SupportedReportToo()
     {
@@ -410,6 +442,13 @@ public sealed class CardDavReportTests : IAsyncLifetime
 
     private Task<DavTestResponse> Report(string path, string? body, string? depth = null) =>
         server.SendAsync("REPORT", path, body, depth);
+
+    private string PathOf(string shape) => shape switch
+    {
+        "principal" => DavPaths.Principal(UserId),
+        "home" => DavPaths.Home(UserId),
+        _ => shape,
+    };
 
     private void GivenCards(params string[] names)
     {

@@ -50,6 +50,11 @@ internal static class DavProperties
         [DavResourceKind.ServiceRoot] = Set(
             (DavXml.Dav + "current-user-principal", CurrentUserPrincipal),
             (DavXml.Dav + "principal-URL", PrincipalUrl),
+            // RFC 3253 § 3.1.5 makes this a live property of every resource serving REPORT, and
+            // this one does: its Allow names the verb and expand-property genuinely resolves here.
+            // Absent, a client asking for it reads a 404 propstat on the shape it opens discovery
+            // on — the same Allow-says-one-thing, answer-says-another that made DAVx5 loop.
+            (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype"))),
 
         [DavResourceKind.Principal] = Set(
@@ -76,6 +81,9 @@ internal static class DavProperties
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
                 new XElement(DavXml.Dav + "collection"))),
             (DavXml.Dav + "displayname", _ => new XElement(DavXml.Dav + "displayname", HomeDisplayName)),
+            // Same rule as the service root's: the home's Allow names REPORT and expand-property is
+            // what it serves, so the property has to say so rather than come back in a 404 propstat.
+            (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),
             (DavXml.Dav + "current-user-principal", CurrentUserPrincipal)),
 
         [DavResourceKind.Collection] = Set(
