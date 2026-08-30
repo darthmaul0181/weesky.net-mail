@@ -290,6 +290,20 @@ public sealed class CardDavReportTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AReservedNamespaceOnAnExpandPropertyName_Answers400AndNot207()
+    {
+        // A valid NCName in the xmlns namespace — a binding the parser would refuse, smuggled past
+        // it by the namespace attribute. It survives XName and faults the writer AFTER the 207 is
+        // committed, so the client reads a truncated multistatus rather than an error.
+        var body = "<D:expand-property xmlns:D=\"DAV:\">" +
+            "<D:property name=\"foo\" namespace=\"http://www.w3.org/2000/xmlns/\"/></D:expand-property>";
+
+        var response = await Report(DavPaths.Principal(UserId), body);
+
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
     public async Task AMalformedNestedExpandPropertyName_Answers400Too()
     {
         var body = "<D:expand-property xmlns:D=\"DAV:\">" +

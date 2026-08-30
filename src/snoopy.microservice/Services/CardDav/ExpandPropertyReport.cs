@@ -97,13 +97,19 @@ internal static class ExpandPropertyReport
         var ns = element.Attribute("namespace")?.Value ?? DavXml.Dav.NamespaceName;
         try
         {
-            return new Property(XNamespace.Get(ns) + name, PropertiesOf(element));
+            var qualified = XNamespace.Get(ns) + name;
+            // The two client strings of this surface reaching XName construction without the
+            // parser's own validation. A name no XML element can carry cannot be echoed in any
+            // propstat either, so the body is malformed — the same 400 non-well-formed XML gets.
+            // The reserved xmlns namespace survives XName and faults the writer mid-stream, after
+            // the 207 is committed: refused here, where refusing still costs nothing.
+            if (qualified.Namespace == XNamespace.Xmlns)
+                throw new DavBadRequestException("An expand-property namespace is reserved.");
+
+            return new Property(qualified, PropertiesOf(element));
         }
         catch (XmlException exception)
         {
-            // The one client string of this surface reaching XName construction without the
-            // parser's own validation. A name no XML element can carry cannot be echoed in any
-            // propstat either, so the body is malformed — the same 400 non-well-formed XML gets.
             throw new DavBadRequestException(
                 "An expand-property name is not a valid XML name.", exception);
         }
