@@ -135,6 +135,60 @@ public sealed class VCardVersionConverterTests
         Assert.Contains("VERSION:3.0", VCardVersionConverter.To(card, "3.0"));
     }
 
+    // Legacy Outlook and Apple exports carry one, and the import path stores a .vcf verbatim, so
+    // these sit in real books.
+    private const string EmbeddedAgentCard =
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\nN:Lovelace;Ada;;;\r\n" +
+        "AGENT:BEGIN:VCARD\\nVERSION:3.0\\nFN:Sec Retary\\nTEL:+3211\\nEND:VCARD\\n\r\n" +
+        "END:VCARD\r\n";
+
+    [Fact]
+    public void ConvertingAnEmbeddedAgent_ServesExactlyOneCard()
+    {
+        var converted = VCardVersionConverter.To(EmbeddedAgentCard, "4.0");
+
+        // 4.0 embeds no card, so the writer dereferences the agent into a second BEGIN:VCARD keyed
+        // by a UUID minted on the spot. One address-data carries one card, or clients mis-parse it.
+        Assert.Equal(1, Occurrences(converted, "BEGIN:VCARD"));
+        Assert.Equal(1, Occurrences(converted, "END:VCARD"));
+        Assert.DoesNotContain("urn:uuid:", converted);
+    }
+
+    [Fact]
+    public void ConvertingAnEmbeddedAgent_IsIdenticalTwiceInARow()
+    {
+        // The minted UUID is time-based. A body that changes on every read while the getetag stays
+        // put makes the client re-sync for ever, and nothing anywhere reports an error.
+        Assert.Equal(
+            VCardVersionConverter.To(EmbeddedAgentCard, "4.0"),
+            VCardVersionConverter.To(EmbeddedAgentCard, "4.0"));
+    }
+
+    [Fact]
+    public void ConvertingATwoOneEmbeddedAgentToThree_ServesExactlyOneCard()
+    {
+        // The 3.0 writer spells a 2.1 embedded agent out unescaped, and its END:VCARD then closes
+        // the outer card: the same defect on the other path, and structurally corrupt besides.
+        const string card = "BEGIN:VCARD\r\nVERSION:2.1\r\nUID:u1\r\nFN:Ada\r\n" +
+                            "AGENT:BEGIN:VCARD\\nVERSION:2.1\\nFN:Sec\\nEND:VCARD\\n\r\nEND:VCARD\r\n";
+
+        var converted = VCardVersionConverter.To(card, "3.0");
+
+        Assert.Equal(1, Occurrences(converted, "BEGIN:VCARD"));
+        Assert.Equal(1, Occurrences(converted, "END:VCARD"));
+    }
+
+    [Fact]
+    public void ConvertingKeepsARelationThatOnlyReferencesACard()
+    {
+        // Only the embedded card is dropped. A relation naming another card by id costs nothing to
+        // convert and is the client's own data: dropping it too would be gratuitous loss.
+        const string card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\n" +
+                            "AGENT;VALUE=URI:urn:uuid:bbbb\r\nEND:VCARD\r\n";
+
+        Assert.Contains("urn:uuid:bbbb", VCardVersionConverter.To(card, "4.0"));
+    }
+
     [Fact]
     public void AnUnreadableCard_IsServedAsStored()
     {
@@ -143,5 +197,13 @@ public sealed class VCardVersionConverterTests
         const string card = "this is not a vCard at all";
 
         Assert.Equal(card, VCardVersionConverter.To(card, "4.0"));
+    }
+
+    private static int Occurrences(string text, string needle)
+    {
+        var count = 0;
+        for (var at = text.IndexOf(needle, StringComparison.Ordinal); at >= 0;
+             at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal)) count++;
+        return count;
     }
 }
