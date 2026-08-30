@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -35,177 +35,80 @@ public sealed class CardDavController(
     /// <c>403 max-resource-size</c> rather than a transport 413 the announcement never named.</summary>
     private const int PutBodyBytes = 2 * ContactStore.MaxCardBytes;
 
+    private const string CardRoute = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}";
+    private const string CollectionRoute = "addressbooks/{userId:guid}/" + DavPaths.BookName;
+
     private static readonly XName FiniteDepth = DavXml.Dav + "propfind-finite-depth";
     private static readonly XName SupportedReport = DavXml.Dav + "supported-report";
     private static readonly XName ValidAddressData = DavXml.CardDav + "valid-address-data";
 
-    [AcceptVerbs("PROPFIND", Route = "")]
+    /// <summary>
+    /// The three reading verbs, one action per shape. PROPPATCH is the one non-mutating method
+    /// here that is NOT a 405, on every shape the <c>Allow</c> header announces it on: RFC 4918
+    /// § 9.2 requires it of every conforming resource, and Apple's Contacts.app PROPPATCHes
+    /// <c>{calendarserver}me-card</c> on the address HOME — sabre documents that refusing it can
+    /// make that client crash. The answer is § 9.2.1's for a property one does not let write, a 207
+    /// whose every propstat carries 403, and nothing is stored on the way through. REPORT is bound
+    /// on the home and the service root too, where a 405 under our own <c>Allow</c> would make an
+    /// RFC 9110 client retry the verb for ever; the default branch's <c>403 supported-report</c>
+    /// is the considered answer there, and expand-property genuinely serves the root's principal.
+    /// </summary>
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = "")]
     [RequestSizeLimit(MaxBodyBytes)]
-    public Task PropfindServiceRootAsync(CancellationToken cancellationToken) =>
-        PropfindAsync(DavResourceKind.ServiceRoot, null, null, DavPaths.Root + "/", cancellationToken);
+    public Task ServiceRootAsync(CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.ServiceRoot, null, null, DavPaths.Root + "/", cancellationToken);
 
     /// <summary>
     /// The bare root, OUTSIDE /dav but under the same policy: a client given the bare host tries
     /// "/" as much as the well-known, and a Bearer challenge there is the symptom the named policy
-    /// exists to prevent.
+    /// exists to prevent. REPORT stays unbound on purpose: no catch-all of ours answers there, so
+    /// its 405 carries routing's own Allow, which honestly omits the verb.
     /// </summary>
-    [AcceptVerbs("PROPFIND", Route = "/")]
+    [AcceptVerbs("PROPFIND", "PROPPATCH", Route = "/")]
     [RequestSizeLimit(MaxBodyBytes)]
-    public Task PropfindBareRootAsync(CancellationToken cancellationToken) =>
-        PropfindAsync(DavResourceKind.ServiceRoot, null, null, "/", cancellationToken);
+    public Task BareRootAsync(CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.ServiceRoot, null, null, "/", cancellationToken);
 
-    [AcceptVerbs("PROPFIND", Route = "principals/{userId:guid}")]
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = "principals/{userId:guid}")]
     [RequestSizeLimit(MaxBodyBytes)]
-    public Task PropfindPrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
-        PropfindAsync(DavResourceKind.Principal, userId, null, null, cancellationToken);
+    public Task PrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.Principal, userId, null, null, cancellationToken);
 
-    [AcceptVerbs("PROPFIND", Route = "addressbooks/{userId:guid}")]
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = "addressbooks/{userId:guid}")]
     [RequestSizeLimit(MaxBodyBytes)]
-    public Task PropfindHomeAsync(Guid userId, CancellationToken cancellationToken) =>
-        PropfindAsync(DavResourceKind.Home, userId, null, null, cancellationToken);
+    public Task HomeAsync(Guid userId, CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.Home, userId, null, null, cancellationToken);
 
-    [AcceptVerbs("PROPFIND", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = CollectionRoute)]
     [RequestSizeLimit(MaxBodyBytes)]
-    public Task PropfindCollectionAsync(Guid userId, CancellationToken cancellationToken) =>
-        PropfindAsync(DavResourceKind.Collection, userId, null, null, cancellationToken);
+    public Task CollectionAsync(Guid userId, CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.Collection, userId, null, null, cancellationToken);
 
-    [AcceptVerbs("PROPFIND", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    /// <summary>RFC 6352 § 8.6 and § 8.7 define query and multiget on address resources too, and
+    /// supported-report-set says so on every card — without REPORT here the header lies.</summary>
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = CardRoute)]
     [RequestSizeLimit(MaxBodyBytes)]
-    public Task PropfindCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
-        PropfindAsync(DavResourceKind.Card, userId, davName, null, cancellationToken);
+    public Task CardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.Card, userId, davName, null, cancellationToken);
 
-    /// <summary>
-    /// PROPPATCH — the one non-mutating method here that is NOT a 405, on every resource shape the
-    /// <c>Allow</c> header announces it on. Two reasons, and either alone would be enough.
-    /// <c>DAV: 1</c> engages: RFC 4918 § 18.1 makes class 1 the satisfaction of every MUST of the
-    /// document, and § 9.2 requires PROPPATCH of every conforming resource — a 405 where our own
-    /// <c>Allow</c> names the verb is a header that lies, and a client reading it loops. And Apple's
-    /// Contacts.app PROPPATCHes <c>{calendarserver}me-card</c> on the address HOME, not on the book;
-    /// sabre documents that not supporting it can make that client CRASH, not merely abandon the
-    /// book. The answer is § 9.2.1's for a property one does not let write — a 207 whose every
-    /// propstat carries <c>403 Forbidden</c> — and nothing is stored on the way through: serving a
-    /// dead property would want a row per client whim, for a use no screen of the product renders.
-    /// </summary>
-    [AcceptVerbs("PROPPATCH", Route = "")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ProppatchServiceRootAsync(CancellationToken cancellationToken) =>
-        ProppatchAsync(DavResourceKind.ServiceRoot, null, null, DavPaths.Root + "/", cancellationToken);
-
-    [AcceptVerbs("PROPPATCH", Route = "/")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ProppatchBareRootAsync(CancellationToken cancellationToken) =>
-        ProppatchAsync(DavResourceKind.ServiceRoot, null, null, "/", cancellationToken);
-
-    [AcceptVerbs("PROPPATCH", Route = "principals/{userId:guid}")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ProppatchPrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
-        ProppatchAsync(DavResourceKind.Principal, userId, null, null, cancellationToken);
-
-    [AcceptVerbs("PROPPATCH", Route = "addressbooks/{userId:guid}")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ProppatchHomeAsync(Guid userId, CancellationToken cancellationToken) =>
-        ProppatchAsync(DavResourceKind.Home, userId, null, null, cancellationToken);
-
-    [AcceptVerbs("PROPPATCH", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ProppatchCollectionAsync(Guid userId, CancellationToken cancellationToken) =>
-        ProppatchAsync(DavResourceKind.Collection, userId, null, null, cancellationToken);
-
-    [AcceptVerbs("PROPPATCH", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ProppatchCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
-        ProppatchAsync(DavResourceKind.Card, userId, davName, null, cancellationToken);
-
-    private async Task ProppatchAsync(DavResourceKind kind, Guid? userId, string? davName,
-        string? rootHref, CancellationToken cancellationToken)
+    private Task DispatchAsync(DavResourceKind kind, Guid? userId, string? davName, string? rootHref,
+        CancellationToken cancellationToken) => Request.Method switch
     {
-        var responses = 0;
-        int? status = null;
-        try
-        {
-            var user = AuthenticatedUser;
-            if (userId is { } target && target != user.WebmailUid)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            if (userId is { } owner && RedirectedToCanonical(kind, owner)) return;
-
-            IReadOnlyList<XName> names;
-            try
-            {
-                names = DavPropertyUpdate.NamesIn(
-                    await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
-            }
-            catch (DavBadRequestException ex)
-            {
-                logger.LogInformation("PROPPATCH body refused: {Reason}", ex.Message);
-                Response.StatusCode = StatusCodes.Status400BadRequest;
-                return;
-            }
-
-            DavCard? card = null;
-            if (kind is DavResourceKind.Card)
-            {
-                // Answering 207 on a name that designates nothing would tell the client the card
-                // exists — the same lie PROPFIND and GET refuse to tell here.
-                card = DavName.IsValid(davName)
-                    ? await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken)
-                    : null;
-                if (card is null)
-                {
-                    Response.StatusCode = StatusCodes.Status404NotFound;
-                    return;
-                }
-            }
-
-            await using var writer = await MultiStatusWriter.BeginAsync(Response, cancellationToken);
-            await writer.WriteRefusalAsync(
-                HrefOf(kind, user.WebmailUid, card?.DavName, rootHref), names, cancellationToken);
-            responses = writer.ResponseCount;
-        }
-        catch (Exception exception)
-        {
-            status = StatusWrittenAfter(exception);
-            throw;
-        }
-        finally
-        {
-            LogRequest(responses: responses, status: status);
-        }
-    }
+        "PROPFIND" => PropfindAsync(kind, userId, davName, rootHref, cancellationToken),
+        "PROPPATCH" => ProppatchAsync(kind, userId, davName, rootHref, cancellationToken),
+        _ => ReportAsync(kind, userId, davName, rootHref, cancellationToken),
+    };
 
     /// <summary>
     /// The card, verbatim. HEAD is bound to the same action, so it answers the same headers by
     /// construction — Content-Length included, which is what makes it worth issuing.
     /// </summary>
-    [HttpGet("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
-    [HttpHead("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
-    public async Task GetCardAsync(Guid userId, string? davName, CancellationToken cancellationToken)
-    {
-        var served = 0;
-        int? status = null;
-        try
+    [HttpGet(CardRoute)]
+    [HttpHead(CardRoute)]
+    public Task GetCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
+        TracedAsync(userId, DavResourceKind.Card, async trace =>
         {
-            var user = AuthenticatedUser;
-            if (userId != user.WebmailUid)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            // Ruling AM, corrected by task 7: a catch-all keeps %2F ENCODED, so the '/' IsValid
-            // refuses only ever arrives literally (a multi-segment path) or as '\'. An invalid
-            // name designates nothing — the same 404 an unknown name gets, never a 400.
-            var card = DavName.IsValid(davName)
-                ? await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken)
-                : null;
-            if (card is null)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
+            if (await FindCardOr404Async(davName, cancellationToken) is not { } card) return;
 
             var entityTag = DavProperties.EntityTag(card);
             Response.Headers.ETag = entityTag;
@@ -224,31 +127,21 @@ public sealed class CardDavController(
             Response.StatusCode = StatusCodes.Status200OK;
             Response.ContentType = DavHeaders.VCardContentType;
             Response.ContentLength = bytes.Length;
-            served = 1;
+            trace.Responses = 1;
 
             // Explicit rather than left to the host: Kestrel drops a HEAD body, TestServer does not.
             if (HttpMethods.IsHead(Request.Method)) return;
 
             await Response.Body.WriteAsync(bytes, cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            status = StatusWrittenAfter(exception);
-            throw;
-        }
-        finally
-        {
-            LogRequest(responses: served, status: status);
-        }
-    }
+        });
 
     /// <summary>
     /// Generic WebDAV clients GET the collection. Without this the card route's <c>{*davName}</c>
     /// would answer a routing 404 on a URL that does not present that segment; a 405 naming the
     /// verbs is an answer every client knows how to file.
     /// </summary>
-    [HttpGet("addressbooks/{userId:guid}/" + DavPaths.BookName)]
-    [HttpHead("addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [HttpGet(CollectionRoute)]
+    [HttpHead(CollectionRoute)]
     public void GetCollection(Guid userId)
     {
         if (userId != AuthenticatedUser.WebmailUid)
@@ -274,28 +167,17 @@ public sealed class CardDavController(
     /// decodes as strict UTF-8 is archived: the storage is text, and what it cannot give back
     /// verbatim it must not pretend to keep.
     /// </summary>
-    [HttpPut("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    [HttpPut(CardRoute)]
     [RequestSizeLimit(PutBodyBytes)]
-    public async Task PutCardAsync(Guid userId, string? davName, CancellationToken cancellationToken)
-    {
-        string? condition = null;
-        int? status = null;
-        try
+    public Task PutCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
+        TracedAsync(userId, DavResourceKind.Card, async trace =>
         {
-            var user = AuthenticatedUser;
-            if (userId != user.WebmailUid)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
             if (string.IsNullOrEmpty(davName))
             {
                 // UNREACHABLE, and kept: the verbless MethodNotAllowedOnCollection is bound on the
-                // literal collection template, which outranks this catch-all one, so it answers
-                // the collection URL first — mutating this branch kills no test. It stays because
-                // it is what proves davName non-null below; deleting it would need a `!`, turning
-                // dead-but-safe code into an NRE — a 500 — the day route precedence changes.
+                // literal collection template, which outranks this catch-all one. It stays because
+                // it is what proves davName non-null below; a `!` instead would be an NRE — a
+                // 500 — the day route precedence changes.
                 Response.Headers.Allow = DavHeaders.CollectionAllow;
                 Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
                 return;
@@ -308,12 +190,11 @@ public sealed class CardDavController(
                 // contain that". What the guard buys: a literal '/' (a multi-segment path — a
                 // percent-encoded %2F stays ENCODED in a catch-all value and never becomes one),
                 // a backslash, control characters, edge spaces under PAD SPACE, and length.
-                condition = ValidAddressData.LocalName;
-                await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, ValidAddressData,
-                    cancellationToken: cancellationToken, logger: logger);
+                await RefuseAsync(trace, ValidAddressData, null, cancellationToken);
                 return;
             }
 
+            var user = AuthenticatedUser;
             var body = await ReadCardBodyAsync(cancellationToken);
 
             var card = await contacts.FindAsync(user.WebmailUid, davName, cancellationToken);
@@ -328,15 +209,12 @@ public sealed class CardDavController(
 
             if (body is null)
             {
-                condition = ValidAddressData.LocalName;
-                await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, ValidAddressData,
-                    cancellationToken: cancellationToken, logger: logger);
+                await RefuseAsync(trace, ValidAddressData, null, cancellationToken);
                 return;
             }
 
             // The header rides along: the pre-check above ran before any lock, so the decisive
-            // If-Match comparison is the gate's, under the state lock — ruling BO's seam, closed
-            // for the replacement case as it was for creation.
+            // If-Match comparison is the gate's, under the state lock.
             var outcome = await writer.PutAsync(user.WebmailUid, davName, body, cancellationToken,
                 createOnly: DemandsCreation(), ifMatch: HeaderOrNull(Request.Headers.IfMatch));
             // A race's loser, refused INSIDE the gate: nothing was written, so the body genuinely
@@ -344,18 +222,8 @@ public sealed class CardDavController(
             if (outcome.Status is DavWriteStatus.AlreadyExists or DavWriteStatus.PreconditionFailed)
                 await ArchiveRefusedBodyAsync(user.WebmailUid, davName, body, cancellationToken);
 
-            condition = await AnswerPutOutcomeAsync(outcome, DemandsCreation(), cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            status = StatusWrittenAfter(exception);
-            throw;
-        }
-        finally
-        {
-            LogRequest(condition: condition, status: status);
-        }
-    }
+            trace.Condition = await AnswerPutOutcomeAsync(outcome, DemandsCreation(), cancellationToken);
+        });
 
     /// <summary>
     /// DELETE — remove one card. The order is ownership, then the read, then the preconditions,
@@ -363,29 +231,15 @@ public sealed class CardDavController(
     /// tombstone is what tells every other device the card is gone, and <c>sync-collection</c>
     /// serves it faithfully — so one laid beside a 412 erases everywhere a card the server has just
     /// said it was keeping, and the rank it consumed wakes every client for a change that never
-    /// happened. No <c>[RequestSizeLimit]</c>: a DELETE carries no body, this action reads none,
-    /// and the attribute's limit only ever trips on a read.
+    /// happened. No <c>[RequestSizeLimit]</c>: a DELETE carries no body and this action reads none.
     /// </summary>
-    [HttpDelete("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
-    public async Task DeleteCardAsync(Guid userId, string? davName, CancellationToken cancellationToken)
-    {
-        string? condition = null;
-        int? status = null;
-        try
+    [HttpDelete(CardRoute)]
+    public Task DeleteCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
+        TracedAsync(userId, DavResourceKind.Card, async trace =>
         {
-            var user = AuthenticatedUser;
-            if (userId != user.WebmailUid)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
             if (string.IsNullOrEmpty(davName))
             {
-                // UNREACHABLE for the same reason as PUT's, and kept for the same one: routing's
-                // verbless catch-all answers the collection URL, and this branch is what proves
-                // davName non-null below. Deleting the whole book is a gesture the product offers
-                // nowhere, so the answer it would give stays the catch-all's 405.
+                // UNREACHABLE for the same reason as PUT's, and kept for the same one.
                 Response.Headers.Allow = DavHeaders.CollectionAllow;
                 Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
                 return;
@@ -395,14 +249,7 @@ public sealed class CardDavController(
             // name gets — never PUT's 403, which answers "that name will not do" about a card this
             // request is not bringing. The reader's visibility clause makes a pre-backfill row that
             // same absence: what the protocol never served, it cannot be asked to delete.
-            var card = DavName.IsValid(davName)
-                ? await contacts.FindAsync(user.WebmailUid, davName, cancellationToken)
-                : null;
-            if (card is null)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
+            if (await FindCardOr404Async(davName, cancellationToken) is not { } card) return;
 
             if (RefusedByPreconditions(DavProperties.EntityTag(card)))
             {
@@ -411,11 +258,288 @@ public sealed class CardDavController(
             }
 
             // The header rides along, as on PUT: the check above is the fast path, the gate's
-            // re-comparison under the state lock is the decision.
-            condition = await AnswerDeleteOutcomeAsync(
-                await writer.DeleteAsync(user.WebmailUid, davName, cancellationToken,
+            // re-comparison under the state lock is the decision. Deleted is 204, the row that
+            // vanished between the read and the write the same 404 an absent name answers, and a
+            // lost lock race the 503 that dates its own retry.
+            trace.Condition = await AnswerOutcomeAsync(
+                await writer.DeleteAsync(AuthenticatedUser.WebmailUid, davName, cancellationToken,
                     HeaderOrNull(Request.Headers.IfMatch)),
                 cancellationToken);
+        });
+
+    private Task ProppatchAsync(DavResourceKind kind, Guid? userId, string? davName,
+        string? rootHref, CancellationToken cancellationToken) =>
+        TracedAsync(userId, kind, async trace =>
+        {
+            IReadOnlyList<XName> names;
+            try
+            {
+                names = DavPropertyUpdate.NamesIn(
+                    await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
+            }
+            catch (DavBadRequestException ex)
+            {
+                BodyRefused(ex);
+                return;
+            }
+
+            // Answering 207 on a name that designates nothing would tell the client the card
+            // exists — the same lie PROPFIND and GET refuse to tell here.
+            DavCard? card = null;
+            if (kind is DavResourceKind.Card && (card = await FindCardOr404Async(davName, cancellationToken)) is null)
+                return;
+
+            await using var writer = await MultiStatusWriter.BeginAsync(Response, cancellationToken);
+            await writer.WriteRefusalAsync(
+                HrefOf(kind, AuthenticatedUser.WebmailUid, card?.DavName, rootHref), names, cancellationToken);
+            trace.Responses = writer.ResponseCount;
+        });
+
+    private Task ReportAsync(DavResourceKind kind, Guid? userId, string? davName,
+        string? rootHref, CancellationToken cancellationToken) =>
+        TracedAsync(userId, kind, async trace =>
+        {
+            if (kind is DavResourceKind.Card && !DavName.IsValid(davName))
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            XDocument? document;
+            try
+            {
+                document = await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger);
+            }
+            catch (DavBadRequestException ex)
+            {
+                BodyRefused(ex);
+                return;
+            }
+
+            // The name the client wrote, not the kind we recognised: a report we do not serve is
+            // exactly the case the line has to name, and "Unknown" would erase which one it was.
+            trace.Report = document?.Root?.Name.LocalName;
+
+            // The Depth header is deliberately ignored, never refused: PROPFIND's rule is PROPFIND's
+            // alone — a report already says what it applies to, so there is nothing to guess.
+            var user = AuthenticatedUser;
+            var requestHref = HrefOf(kind, user.WebmailUid, davName, rootHref);
+
+            try
+            {
+                // Each report is gated by the shapes whose supported-report-set announces it —
+                // RFC 6352 § 8.6 and § 8.7 for the book and an address resource, RFC 3253 § 3.8 for
+                // everything but a card (no property of a card is href-valued), RFC 6578 § 3.1 for
+                // the collection alone. Served off those shapes, a report would answer where the
+                // resource never claimed it — the mirror of the announcement that made DAVx5 loop.
+                switch (document is null ? DavReportKind.Unknown : ReportRequest.KindOf(document))
+                {
+                    case DavReportKind.Multiget
+                        when kind is DavResourceKind.Collection or DavResourceKind.Card:
+                        trace.Responses = await MultigetReport.WriteAsync(Response, document!, requestHref,
+                            user.WebmailUid, user.Email, contacts, cancellationToken);
+                        return;
+                    case DavReportKind.ExpandProperty when kind is not DavResourceKind.Card:
+                        trace.Responses = await ExpandAsync(kind, document!, requestHref, cancellationToken);
+                        return;
+                    case DavReportKind.Query
+                        when kind is DavResourceKind.Collection or DavResourceKind.Card:
+                        trace.Responses = await QueryAsync(kind, davName, document!, requestHref,
+                            cancellationToken);
+                        return;
+                    case DavReportKind.SyncCollection when kind is DavResourceKind.Collection:
+                        // tokenIn BEFORE the call: the refusal path is the one the field exists
+                        // for — "a token refused in a loop" is separable from the four other
+                        // empty-book causes only by reading WHICH token looped.
+                        trace.TokenIn = DavSyncToken.ForLog(
+                            document!.Root!.Element(DavXml.Dav + "sync-token")?.Value);
+                        var sync = await SyncCollectionReport.WriteAsync(Response, document,
+                            requestHref, user.WebmailUid, user.Email, DepthHeader(), contacts,
+                            syncStore, preferences, cancellationToken);
+                        trace.Responses = sync.Responses;
+                        trace.TokenOut = DavSyncToken.ForLog(sync.TokenOut);
+                        return;
+                    default:
+                        // Unknown, or asked off the shape that defines it: a report we do not
+                        // serve is a considered 403 — a 500 makes a client loop on it forever.
+                        await RefuseAsync(trace, SupportedReport, null, cancellationToken);
+                        return;
+                }
+            }
+            catch (DavPreconditionException ex)
+            {
+                await RefuseAsync(trace, ex.Condition, ex.Detail, cancellationToken);
+            }
+            catch (DavBadRequestException ex)
+            {
+                // Thrown by a report reader on a body the XML parser could not judge — an
+                // expand-property name no element can carry. Always before the multistatus opens.
+                BodyRefused(ex);
+            }
+        });
+
+    /// <summary>
+    /// A query on a card is scoped to that card alone, and a name the book no longer holds is a
+    /// 404 on the resource itself — not an empty multistatus, which would say the card exists and
+    /// matches nothing.
+    /// </summary>
+    private async Task<int> QueryAsync(DavResourceKind kind, string? davName, XDocument document,
+        string requestHref, CancellationToken cancellationToken)
+    {
+        DavCard? card = null;
+        if (kind is DavResourceKind.Card && (card = await FindCardOr404Async(davName, cancellationToken)) is null)
+            return 0;
+
+        var user = AuthenticatedUser;
+        return await AddressBookQueryReport.WriteAsync(Response, document, requestHref,
+            user.WebmailUid, user.Email, card, contacts, cancellationToken);
+    }
+
+    /// <summary>The card kind never reaches here: the switch above gates it out, because no
+    /// property of a card is href-valued and none of the cards announces this report.</summary>
+    private async Task<int> ExpandAsync(DavResourceKind kind, XDocument document,
+        string requestHref, CancellationToken cancellationToken)
+    {
+        var user = AuthenticatedUser;
+        var state = kind is DavResourceKind.Collection
+            ? await syncStore.ReadStateAsync(user.WebmailUid, cancellationToken)
+            : null;
+        var target = new DavResourceContext(kind, user.WebmailUid, user.Email, null, state);
+        return await ExpandPropertyReport.WriteAsync(Response, document, target, requestHref,
+            resource => NestedContext(resource, user.WebmailUid, user.Email), cancellationToken);
+    }
+
+    /// <summary>
+    /// The context a nested expand-property target resolves against, or null for anything that is
+    /// not this user's — the nested 404. The resolution is synchronous, so no context built here
+    /// can carry a card or a sync state; the two kinds that would need one are refused rather than
+    /// answered without it. No href property of ours designates either today, so the refusal is
+    /// unreachable — and the day one does, a nested 404 sends the client back to a PROPFIND,
+    /// where a ctag of "0" and a token on the empty epoch would have been believed instead.
+    /// </summary>
+    private static DavResourceContext? NestedContext(DavResource resource, Guid userId, string email)
+    {
+        if (resource.Kind is DavResourceKind.ServiceRoot)
+            return new DavResourceContext(DavResourceKind.ServiceRoot, userId, email, null, null);
+        if (resource.Kind is DavResourceKind.Card or DavResourceKind.Collection
+            || resource.UserId != userId)
+        {
+            return null;
+        }
+
+        return new DavResourceContext(resource.Kind, userId, email, null, null);
+    }
+
+    private Task PropfindAsync(DavResourceKind kind, Guid? userId, string? davName,
+        string? rootHref, CancellationToken cancellationToken) =>
+        TracedAsync(userId, kind, async trace =>
+        {
+            var depth = DavDepth.Parse(DepthHeader());
+            if (depth is null)
+            {
+                Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
+            if (depth is DavDepthValue.Infinity)
+            {
+                // RFC 4918 § 9.1 reserves the refusal to collections; on anything else infinity
+                // IS depth 0, and refusing it fails a PROPFIND on a card for a header it never needed.
+                if (kind is DavResourceKind.Home or DavResourceKind.Collection)
+                {
+                    await RefuseAsync(trace, FiniteDepth, null, cancellationToken);
+                    return;
+                }
+
+                depth = DavDepthValue.Zero;
+            }
+
+            DavPropertyRequest request;
+            try
+            {
+                request = DavPropertyRequest.Parse(
+                    await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
+            }
+            catch (DavBadRequestException ex)
+            {
+                BodyRefused(ex);
+                return;
+            }
+
+            DavCard? card = null;
+            if (kind is DavResourceKind.Card && (card = await FindCardOr404Async(davName, cancellationToken)) is null)
+                return;
+
+            var user = AuthenticatedUser;
+
+            async Task WriteAsync(CancellationToken token)
+            {
+                // The counter BEFORE the members, and this is an order, not a preference: the
+                // fallback path without sync-collection holds the ctag it reads as covering the
+                // member list it reads next. Read the other way round, a write committing in
+                // between is covered by the returned ctag without appearing in the list — the
+                // client believes it seen and never asks again.
+                var state = NeedsState(kind, depth.Value)
+                    ? await syncStore.ReadStateAsync(user.WebmailUid, token)
+                    : null;
+
+                var resource = new DavResourceContext(kind, user.WebmailUid, user.Email, card, state);
+                var href = HrefOf(kind, user.WebmailUid, card?.DavName, rootHref);
+
+                await using var writer = await MultiStatusWriter.BeginAsync(Response, token);
+                try
+                {
+                    await WriteResourceAsync(writer, href, request, resource, token);
+
+                    if (depth is DavDepthValue.One && kind is DavResourceKind.Home)
+                    {
+                        await WriteResourceAsync(writer, DavPaths.Collection(user.WebmailUid), request,
+                            resource with { Kind = DavResourceKind.Collection }, token);
+                    }
+
+                    if (depth is DavDepthValue.One && kind is DavResourceKind.Collection)
+                    {
+                        await foreach (var member in
+                            contacts.StreamAsync(user.WebmailUid, MemberBound(state), token))
+                        {
+                            await WriteResourceAsync(writer, DavPaths.Card(user.WebmailUid, member.DavName),
+                                request, resource with { Kind = DavResourceKind.Card, Card = member },
+                                token);
+                        }
+                    }
+                }
+                finally
+                {
+                    // Read off the writer: a book that streamed halfway before the connection died
+                    // still says how far it got, which is the whole point of the line.
+                    trace.Responses = writer.ResponseCount;
+                }
+            }
+
+            await InOneSnapshotAsync(kind, depth.Value, WriteAsync, cancellationToken);
+        });
+
+    /// <summary>
+    /// The frame every action runs in. Ownership first — a foreign <c>{userId}</c> answers 404,
+    /// never 403, which would confirm the principal exists — then the canonical slash, then the
+    /// action; and whichever way it leaves, the one log line of decision 18, with the status the
+    /// host will write when an exception is on its way out.
+    /// </summary>
+    private async Task TracedAsync(Guid? userId, DavResourceKind kind, Func<Trace, Task> action)
+    {
+        var trace = new Trace();
+        int? status = null;
+        try
+        {
+            if (userId is { } target && target != AuthenticatedUser.WebmailUid)
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            if (userId is { } owner && RedirectedToCanonical(kind, owner)) return;
+
+            await action(trace);
         }
         catch (Exception exception)
         {
@@ -424,26 +548,45 @@ public sealed class CardDavController(
         }
         finally
         {
-            LogRequest(condition: condition, status: status);
+            LogRequest(trace, status);
         }
     }
 
     /// <summary>
-    /// Deleted is 204, the row that vanished between the read and the write is the same 404 an
-    /// absent name answers, and a lost lock race is the 503 that dates its own retry. No card is
-    /// read here so no card refusal can come back — and the ones that cannot still get their own
-    /// named answer rather than the 500 a throw would hand a client that then retries for ever.
+    /// The card, or the 404 an unknown name gets — an invalid name too: a literal '/' or '\', a
+    /// control character, an edge space designate nothing (a percent-encoded %2F stays ENCODED in
+    /// a catch-all value and never becomes one). Never a 400: 404 is what a client files.
     /// </summary>
-    private Task<string?> AnswerDeleteOutcomeAsync(
-        DavWriteOutcome outcome, CancellationToken cancellationToken) =>
-        AnswerOutcomeAsync(outcome, cancellationToken);
+    private async Task<DavCard?> FindCardOr404Async(string? davName, CancellationToken cancellationToken)
+    {
+        var card = DavName.IsValid(davName)
+            ? await contacts.FindAsync(AuthenticatedUser.WebmailUid, davName!, cancellationToken)
+            : null;
+        if (card is null) Response.StatusCode = StatusCodes.Status404NotFound;
+        return card;
+    }
+
+    /// <summary>A considered 403 carrying its precondition, and the log line's condition with it.</summary>
+    private Task RefuseAsync(Trace trace, XName condition, XElement? detail, CancellationToken cancellationToken)
+    {
+        trace.Condition = condition.LocalName;
+        return DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, condition, detail,
+            cancellationToken, logger);
+    }
+
+    /// <summary>The 400 of a body the reader could not judge — never a 500, which a client retries
+    /// for ever. A <see cref="BadHttpRequestException"/> never lands here: Kestrel's 413, not our 400.</summary>
+    private void BodyRefused(DavBadRequestException ex)
+    {
+        logger.LogInformation("{Method} body refused: {Reason}", Request.Method, ex.Message);
+        if (!Response.HasStarted) Response.StatusCode = StatusCodes.Status400BadRequest;
+    }
 
     /// <summary>
     /// Null means the body is not strict UTF-8 — <see cref="DavBody.TryDecode"/> refuses rather
     /// than replaces, or the ETag would describe bytes other than the sent ones. The read is
     /// bounded by <c>[RequestSizeLimit]</c>, whose 413 flies through as a
-    /// <see cref="BadHttpRequestException"/>: Kestrel's answer, not ours, and bytes the server
-    /// refuses to hold cannot be archived either.
+    /// <see cref="BadHttpRequestException"/>: bytes the server refuses to hold cannot be archived either.
     /// </summary>
     private async Task<string?> ReadCardBodyAsync(CancellationToken cancellationToken)
     {
@@ -526,361 +669,6 @@ public sealed class CardDavController(
         return DavOutcomeTranslator.ConditionOf(outcome.Status)?.LocalName;
     }
 
-    /// <summary>REPORT is bound on every shape whose <c>Allow</c> names it — the home and the
-    /// service root included, where a 405 under our own header would make an RFC 9110 client
-    /// retry the verb for ever. The default branch's <c>403 supported-report</c> is the
-    /// considered answer there, and expand-property genuinely serves the root's principal.
-    /// The bare root stays unbound on purpose: no catch-all of ours answers there, so its 405
-    /// carries routing's own Allow, which honestly omits REPORT — no header lies.</summary>
-    [AcceptVerbs("REPORT", Route = "")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ReportServiceRootAsync(CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.ServiceRoot, null, null, DavPaths.Root + "/", cancellationToken);
-
-    [AcceptVerbs("REPORT", Route = "principals/{userId:guid}")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ReportPrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Principal, userId, null, null, cancellationToken);
-
-    [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ReportHomeAsync(Guid userId, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Home, userId, null, null, cancellationToken);
-
-    [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ReportCollectionAsync(Guid userId, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Collection, userId, null, null, cancellationToken);
-
-    /// <summary>RFC 6352 § 8.7 defines multiget on address resources too, and
-    /// supported-report-set says so on every card — without this route the header lies.</summary>
-    [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
-    [RequestSizeLimit(MaxBodyBytes)]
-    public Task ReportCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Card, userId, davName, null, cancellationToken);
-
-    private async Task ReportAsync(DavResourceKind kind, Guid? userId, string? davName,
-        string? rootHref, CancellationToken cancellationToken)
-    {
-        string? report = null;
-        string? condition = null;
-        string? tokenIn = null;
-        string? tokenOut = null;
-        var responses = 0;
-        int? status = null;
-        try
-        {
-            var user = AuthenticatedUser;
-            if (userId is { } target && target != user.WebmailUid)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            if (userId is { } owner && RedirectedToCanonical(kind, owner)) return;
-
-            if (kind is DavResourceKind.Card && !DavName.IsValid(davName))
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            XDocument? document;
-            try
-            {
-                document = await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger);
-            }
-            catch (DavBadRequestException ex)
-            {
-                logger.LogInformation("REPORT body refused: {Reason}", ex.Message);
-                Response.StatusCode = StatusCodes.Status400BadRequest;
-                return;
-            }
-
-            // The name the client wrote, not the kind we recognised: a report we do not serve is
-            // exactly the case the line has to name, and "Unknown" would erase which one it was.
-            report = document?.Root?.Name.LocalName;
-
-            // The Depth header is deliberately ignored, never refused: PROPFIND's rule is PROPFIND's
-            // alone — a report already says what it applies to, so there is nothing to guess.
-            var requestHref = HrefOf(kind, user.WebmailUid, davName, rootHref);
-
-            try
-            {
-                switch (document is null ? DavReportKind.Unknown : ReportRequest.KindOf(document))
-                {
-                    case DavReportKind.Multiget
-                        when kind is DavResourceKind.Collection or DavResourceKind.Card:
-                        // RFC 6352 § 8.7 defines multiget on the book and on an address resource,
-                        // which is exactly where supported-report-set announces it. Served off
-                        // those two shapes it would answer a report the resource never claimed —
-                        // the mirror of the announcement that made the client loop, and the reason
-                        // all four reports are now gated by the shape that announces them.
-                        responses = await MultigetReport.WriteAsync(Response, document!, requestHref,
-                            user.WebmailUid, user.Email, contacts, cancellationToken);
-                        return;
-                    case DavReportKind.ExpandProperty when kind is not DavResourceKind.Card:
-                        // Announced on the service root, the principal, the home and the book, and
-                        // on none of the cards: no property of a card is href-valued, so there is
-                        // nothing there to expand and nothing to promise.
-                        responses = await ExpandAsync(kind, document!, requestHref, cancellationToken);
-                        return;
-                    case DavReportKind.Query
-                        when kind is DavResourceKind.Collection or DavResourceKind.Card:
-                        // RFC 6352 § 8.6 defines the query on the book and on an address resource,
-                        // which is exactly where supported-report-set announces it; anywhere else
-                        // the guard falls through to the considered refusal below.
-                        responses = await QueryAsync(kind, davName, document!, requestHref,
-                            cancellationToken);
-                        return;
-                    case DavReportKind.SyncCollection when kind is DavResourceKind.Collection:
-                        // RFC 6578 § 3.1 defines the report on the collection alone; anywhere
-                        // else the guard falls through to the considered refusal below.
-                        // tokenIn BEFORE the call: the refusal path is the one the field exists
-                        // for — "a token refused in a loop" is separable from the four other
-                        // empty-book causes only by reading WHICH token looped.
-                        tokenIn = DavSyncToken.ForLog(
-                            document!.Root!.Element(DavXml.Dav + "sync-token")?.Value);
-                        var sync = await SyncCollectionReport.WriteAsync(Response, document,
-                            requestHref, user.WebmailUid, user.Email, DepthHeader(), contacts,
-                            syncStore, preferences, cancellationToken);
-                        responses = sync.Responses;
-                        tokenOut = DavSyncToken.ForLog(sync.TokenOut);
-                        return;
-                    default:
-                        // Unknown, and the two reports asked off the shape that defines them,
-                        // through this one branch: a report we do not serve is a considered 403 —
-                        // a 500 makes a client loop on it forever.
-                        condition = SupportedReport.LocalName;
-                        await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden,
-                            SupportedReport, cancellationToken: cancellationToken, logger: logger);
-                        return;
-                }
-            }
-            catch (DavPreconditionException ex)
-            {
-                condition = ex.Condition.LocalName;
-                await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, ex.Condition,
-                    ex.Detail, cancellationToken, logger);
-            }
-            catch (DavBadRequestException ex)
-            {
-                // Thrown by a report reader on a body the XML parser could not judge — an
-                // expand-property name no element can carry. Always before the multistatus opens;
-                // the guard only keeps a future mid-write throw from turning into the 500 above.
-                logger.LogInformation("REPORT body refused: {Reason}", ex.Message);
-                if (!Response.HasStarted) Response.StatusCode = StatusCodes.Status400BadRequest;
-            }
-        }
-        catch (Exception exception)
-        {
-            status = StatusWrittenAfter(exception);
-            throw;
-        }
-        finally
-        {
-            LogRequest(report, responses, condition, status, tokenIn, tokenOut);
-        }
-    }
-
-    /// <summary>
-    /// A query on a card is scoped to that card alone, and a name the book no longer holds is a
-    /// 404 on the resource itself — not an empty multistatus, which would say the card exists and
-    /// matches nothing.
-    /// </summary>
-    private async Task<int> QueryAsync(DavResourceKind kind, string? davName, XDocument document,
-        string requestHref, CancellationToken cancellationToken)
-    {
-        var user = AuthenticatedUser;
-        DavCard? card = null;
-        if (kind is DavResourceKind.Card)
-        {
-            card = await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken);
-            if (card is null)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return 0;
-            }
-        }
-
-        return await AddressBookQueryReport.WriteAsync(Response, document, requestHref,
-            user.WebmailUid, user.Email, card, contacts, cancellationToken);
-    }
-
-    /// <summary>The card kind never reaches here: the switch above gates it out, because no
-    /// property of a card is href-valued and none of the cards announces this report.</summary>
-    private async Task<int> ExpandAsync(DavResourceKind kind, XDocument document,
-        string requestHref, CancellationToken cancellationToken)
-    {
-        var user = AuthenticatedUser;
-        var state = kind is DavResourceKind.Collection
-            ? await syncStore.ReadStateAsync(user.WebmailUid, cancellationToken)
-            : null;
-        var target = new DavResourceContext(kind, user.WebmailUid, user.Email, null, state);
-        return await ExpandPropertyReport.WriteAsync(Response, document, target, requestHref,
-            resource => NestedContext(resource, user.WebmailUid, user.Email), cancellationToken);
-    }
-
-    /// <summary>
-    /// The context a nested expand-property target resolves against, or null for anything that is
-    /// not this user's — the nested 404. The resolution is synchronous, so no context built here
-    /// can carry a card or a sync state; the two kinds that would need one are refused rather than
-    /// answered without it. No href property of ours designates either today, so the refusal is
-    /// unreachable — and the day one does, a nested 404 sends the client back to a PROPFIND,
-    /// where a ctag of "0" and a token on the empty epoch would have been believed instead.
-    /// </summary>
-    private static DavResourceContext? NestedContext(DavResource resource, Guid userId, string email)
-    {
-        if (resource.Kind is DavResourceKind.ServiceRoot)
-            return new DavResourceContext(DavResourceKind.ServiceRoot, userId, email, null, null);
-        if (resource.Kind is DavResourceKind.Card or DavResourceKind.Collection
-            || resource.UserId != userId)
-        {
-            return null;
-        }
-
-        return new DavResourceContext(resource.Kind, userId, email, null, null);
-    }
-
-    private async Task PropfindAsync(DavResourceKind kind, Guid? userId, string? davName,
-        string? rootHref, CancellationToken cancellationToken)
-    {
-        var responses = 0;
-        string? condition = null;
-        int? status = null;
-        try
-        {
-            var user = AuthenticatedUser;
-
-            // Ownership first: a foreign {userId} answers 404, never 403 — a 403 would confirm the
-            // existence of the principal aimed at.
-            if (userId is { } target && target != user.WebmailUid)
-            {
-                Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            if (userId is { } owner && RedirectedToCanonical(kind, owner)) return;
-
-            var depth = DavDepth.Parse(DepthHeader());
-            if (depth is null)
-            {
-                Response.StatusCode = StatusCodes.Status400BadRequest;
-                return;
-            }
-
-            if (depth is DavDepthValue.Infinity)
-            {
-                // RFC 4918 § 9.1 reserves the refusal to collections; on anything else infinity
-                // IS depth 0, and refusing it fails a PROPFIND on a card for a header it never needed.
-                if (kind is DavResourceKind.Home or DavResourceKind.Collection)
-                {
-                    condition = FiniteDepth.LocalName;
-                    await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, FiniteDepth,
-                        cancellationToken: cancellationToken, logger: logger);
-                    return;
-                }
-
-                depth = DavDepthValue.Zero;
-            }
-
-            var request = await ReadRequestAsync(cancellationToken);
-            if (request is null) return; // the 400 is already on the response
-
-            DavCard? card = null;
-            if (kind is DavResourceKind.Card)
-            {
-                // An invalid name — a literal '/' or '\', a control character, an edge space; a
-                // percent-encoded %2F stays encoded in a catch-all and never becomes one —
-                // designates nothing, the same 404 an unknown name gets.
-                card = DavName.IsValid(davName)
-                    ? await contacts.FindAsync(user.WebmailUid, davName!, cancellationToken)
-                    : null;
-                if (card is null)
-                {
-                    Response.StatusCode = StatusCodes.Status404NotFound;
-                    return;
-                }
-            }
-
-            async Task WriteAsync(CancellationToken token)
-            {
-                // The counter BEFORE the members, and this is an order, not a preference: the
-                // fallback path without sync-collection holds the ctag it reads as covering the
-                // member list it reads next. Read the other way round, a write committing in
-                // between is covered by the returned ctag without appearing in the list — the
-                // client believes it seen and never asks again. One read serves both halves of the
-                // answer; a second would contradict it.
-                var state = NeedsState(kind, depth.Value)
-                    ? await syncStore.ReadStateAsync(user.WebmailUid, token)
-                    : null;
-
-                var resource = new DavResourceContext(kind, user.WebmailUid, user.Email, card, state);
-                var href = HrefOf(kind, user.WebmailUid, card?.DavName, rootHref);
-
-                await using var writer = await MultiStatusWriter.BeginAsync(Response, token);
-                try
-                {
-                    await WriteResourceAsync(writer, href, request, resource, token);
-
-                    if (depth is DavDepthValue.One && kind is DavResourceKind.Home)
-                    {
-                        await WriteResourceAsync(writer, DavPaths.Collection(user.WebmailUid), request,
-                            resource with { Kind = DavResourceKind.Collection }, token);
-                    }
-
-                    if (depth is DavDepthValue.One && kind is DavResourceKind.Collection)
-                    {
-                        await foreach (var member in
-                            contacts.StreamAsync(user.WebmailUid, MemberBound(state), token))
-                        {
-                            await WriteResourceAsync(writer, DavPaths.Card(user.WebmailUid, member.DavName),
-                                request, resource with { Kind = DavResourceKind.Card, Card = member },
-                                token);
-                        }
-                    }
-                }
-                finally
-                {
-                    // Read off the writer, not counted here: a book that streamed halfway before
-                    // the connection died still says how far it got, which is the whole point of
-                    // the line.
-                    responses = writer.ResponseCount;
-                }
-            }
-
-            await InOneSnapshotAsync(kind, depth.Value, WriteAsync, cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            status = StatusWrittenAfter(exception);
-            throw;
-        }
-        finally
-        {
-            LogRequest(responses: responses, condition: condition, status: status);
-        }
-    }
-
-    /// <summary>
-    /// Null means the 400 is already on the response. A BadHttpRequestException — the
-    /// [RequestSizeLimit] tripping — flies through untouched: Kestrel's 413, not our 400.
-    /// </summary>
-    private async Task<DavPropertyRequest?> ReadRequestAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            return DavPropertyRequest.Parse(
-                await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
-        }
-        catch (DavBadRequestException ex)
-        {
-            logger.LogInformation("PROPFIND body refused: {Reason}", ex.Message);
-            Response.StatusCode = StatusCodes.Status400BadRequest;
-            return null;
-        }
-    }
-
     /// <summary>
     /// A collection URL keeps its trailing slash — without it <see cref="DavPaths.Parse"/>
     /// designates nothing — and the answer is a 308, never the 301 sabre and Radicale use: a 301
@@ -919,40 +707,30 @@ public sealed class CardDavController(
         };
 
     /// <summary>
-    /// The one line this request leaves, written from every action and on every path out of it —
-    /// the error paths above all, since a failure of this protocol reaches the user as a book that
-    /// is simply empty, with nothing on the server saying which of its five causes it was. Called
-    /// from a <c>finally</c> so a throw still leaves the trace. The path, never the query: the
-    /// query is where a token travels.
+    /// The one line this request leaves, on every path out of an action — the error paths above
+    /// all, since a failure of this protocol reaches the user as a book that is simply empty, with
+    /// nothing on the server saying which of its five causes it was. The path, never the query:
+    /// the query is where a token travels.
     /// </summary>
-    /// <param name="report">the report a REPORT body named, as the client spelled it</param>
-    /// <param name="responses">how many response elements the answer carried</param>
-    /// <param name="tokenIn">the sync token the client presented, through
-    /// <see cref="DavSyncToken.ForLog"/> — on the refusal path above all</param>
-    /// <param name="tokenOut">the sync token the answer minted; a truncated answer mints the cut,
-    /// not the counter, and telling the two apart is the diagnosis the field buys</param>
-    /// <param name="condition">the precondition element that refused the request, when one did</param>
+    /// <param name="trace">what the action accumulated; null on the verbless answers</param>
     /// <param name="status">
     /// The status the host will write once this action has returned, when an exception is on its
     /// way out and that status is therefore not on the response yet. Null everywhere else, where
-    /// <see cref="HttpResponse.StatusCode"/> is already the answer and reading it is what keeps the
-    /// line from claiming a status the response does not carry.
+    /// <see cref="HttpResponse.StatusCode"/> is already the answer.
     /// </param>
-    private void LogRequest(string? report = null, int responses = 0, string? condition = null,
-        int? status = null, string? tokenIn = null, string? tokenOut = null) =>
+    private void LogRequest(Trace? trace = null, int? status = null) =>
         DavRequestLog.Write(logger, new DavRequestTrace(
-            Request.Method, Request.Path.Value ?? string.Empty, DepthHeader(), report,
-            tokenIn, tokenOut, responses, status ?? Response.StatusCode, condition));
+            Request.Method, Request.Path.Value ?? string.Empty, DepthHeader(), trace?.Report,
+            trace?.TokenIn, trace?.TokenOut, trace?.Responses ?? 0, status ?? Response.StatusCode,
+            trace?.Condition));
 
     /// <summary>
     /// The status the host writes for an exception leaving an action, or null when it writes none.
     /// This has to be read in a <c>catch</c> and cannot be read in the <c>finally</c>: Kestrel sets
     /// the 413 of a body past <c>[RequestSizeLimit]</c> AFTER the action returns, so a line reading
     /// <see cref="HttpResponse.StatusCode"/> there reports the untouched 200 the response has not
-    /// yet stopped carrying — an operator diagnosing an empty book would read a success.
-    /// A cancellation is the one case that answers null: the client is gone, nothing further is
-    /// written, and whatever the response already carries (a 207 whose stream died halfway, with
-    /// <c>responses</c> saying how far it got) is the truthful line.
+    /// yet stopped carrying. A cancellation is the one case that answers null: the client is gone,
+    /// and whatever the response already carries is the truthful line.
     /// </summary>
     private static int? StatusWrittenAfter(Exception exception) => exception switch
     {
@@ -1040,11 +818,11 @@ public sealed class CardDavController(
     [AcceptVerbs("OPTIONS", Route = "/")]
     [AcceptVerbs("OPTIONS", Route = "principals/{userId:guid}")]
     [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}")]
-    [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [AcceptVerbs("OPTIONS", Route = CollectionRoute)]
     [AllowAnonymous]
     public void OptionsCollection() => Capabilities(DavHeaders.CollectionAllow);
 
-    [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    [AcceptVerbs("OPTIONS", Route = CardRoute)]
     [AllowAnonymous]
     public void OptionsCard() => Capabilities(DavHeaders.CardAllow);
 
@@ -1059,10 +837,10 @@ public sealed class CardDavController(
     [Route("")]
     [Route("principals/{userId:guid}")]
     [Route("addressbooks/{userId:guid}")]
-    [Route("addressbooks/{userId:guid}/" + DavPaths.BookName)]
+    [Route(CollectionRoute)]
     public void MethodNotAllowedOnCollection() => MethodNotAllowed(DavHeaders.CollectionAllow);
 
-    [Route("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
+    [Route(CardRoute)]
     public void MethodNotAllowedOnCard() => MethodNotAllowed(DavHeaders.CardAllow);
 
     private void Capabilities(string allow)
@@ -1078,5 +856,15 @@ public sealed class CardDavController(
         Response.Headers.Allow = allow;
         Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
         LogRequest();
+    }
+
+    /// <summary>What one request's log line accumulates on its way through an action.</summary>
+    private sealed class Trace
+    {
+        public string? Report { get; set; }
+        public int Responses { get; set; }
+        public string? Condition { get; set; }
+        public string? TokenIn { get; set; }
+        public string? TokenOut { get; set; }
     }
 }
