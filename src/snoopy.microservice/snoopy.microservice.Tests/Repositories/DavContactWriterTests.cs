@@ -128,8 +128,28 @@ public sealed class DavContactWriterTests : IDisposable
         // changes under the same name is another card. Radicale refuses; sabre accepts, and that
         // laxity is an open bug with its own maintainers — not a precedent.
         Assert.Equal(DavWriteStatus.UidConflict, outcome.Status);
-        Assert.Equal(DavPaths.Card(UserId, "a.vcf"), outcome.ConflictHref);
+        // No href, because nothing holds u2. § 6.2.2's DAV:href names the resource that ALREADY
+        // holds the offending UID; sent the request URI, a client re-reads the very card it just
+        // tried to replace, finds the UID it was told conflicts, and has nowhere left to go.
+        Assert.Null(outcome.ConflictHref);
         Assert.Contains("UID:u1", (await RowOf("a.vcf")).VCardRaw);
+    }
+
+    [Fact]
+    public async Task AUidChangedToOneAnotherResourceHolds_NamesThatResource()
+    {
+        await Writer.PutAsync(UserId, "a.vcf", ValidCard("u1"), CancellationToken.None);
+        await Writer.PutAsync(UserId, "b.vcf", ValidCard("u2"), CancellationToken.None);
+
+        var outcome = await Writer.PutAsync(UserId, "a.vcf", ValidCard("u2"), CancellationToken.None);
+
+        // The same refusal as above, but here a resource genuinely holds u2 — and it is b.vcf the
+        // client must go and read, never the a.vcf it was writing. The two cases share a status and
+        // differ only in this href, which is the whole of what the client can act on.
+        Assert.Equal(DavWriteStatus.UidConflict, outcome.Status);
+        Assert.Equal(DavPaths.Card(UserId, "b.vcf"), outcome.ConflictHref);
+        Assert.Contains("UID:u1", (await RowOf("a.vcf")).VCardRaw);
+        Assert.Contains("UID:u2", (await RowOf("b.vcf")).VCardRaw);
     }
 
     [Fact]

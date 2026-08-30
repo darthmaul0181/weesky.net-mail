@@ -187,7 +187,16 @@ internal sealed class DavContactWriter(
         // RFC 6352 § 6.3.2.1: the UID arbitrates the card's identity, and a UID that changes under
         // the same name is another card. Refused before any lock: no transaction, no rank taken.
         if (row is not null && uid is not null && !string.Equals(uid, row.Uid, StringComparison.Ordinal))
-            return Conflict(userId, davName);
+        {
+            // § 6.2.2's DAV:href names the resource that ALREADY holds the offending UID — never
+            // the one being written, which holds a different one. Sent the request URI, a client
+            // re-reads the very card it just tried to replace and learns nothing. When no resource
+            // holds the UID at all, the refusal carries no href rather than an invented one.
+            var incumbent = await HolderOfAsync(userId, uid, davName, cancellationToken);
+            return incumbent is null
+                ? Refused(DavWriteStatus.UidConflict)
+                : Conflict(userId, incumbent.DavName);
+        }
 
         if (row is null)
         {
