@@ -118,21 +118,63 @@ public sealed class DavContactWriterTests : IDisposable
     }
 
     [Fact]
-    public async Task AUidChangedUnderTheSameName_IsRefusedToo()
+    public async Task AUidChangedUnderTheSameName_IsAcceptedAndTheOldIdentityArchived()
     {
         await Writer.PutAsync(UserId, "a.vcf", ValidCard("u1"), CancellationToken.None);
 
         var outcome = await Writer.PutAsync(UserId, "a.vcf", ValidCard("u2"), CancellationToken.None);
 
-        // § 6.3.2.1 covers it explicitly: the UID arbitrates the card's identity, and a UID that
-        // changes under the same name is another card. Radicale refuses; sabre accepts, and that
-        // laxity is an open bug with its own maintainers — not a precedent.
-        Assert.Equal(DavWriteStatus.UidConflict, outcome.Status);
-        // No href, because nothing holds u2. § 6.2.2's DAV:href names the resource that ALREADY
-        // holds the offending UID; sent the request URI, a client re-reads the very card it just
-        // tried to replace, finds the UID it was told conflicts, and has nowhere left to go.
-        Assert.Null(outcome.ConflictHref);
-        Assert.Contains("UID:u1", (await RowOf("a.vcf")).VCardRaw);
+        // RFC 6352 § 6.3.2.1 defines no-uid-conflict for a UID ANOTHER resource holds, not for one
+        // that changes under its own name; sabre accepts it. Refused, a client that regenerated a
+        // UID would loop on the 403 for ever — DAVx5 never abandons one — on a card nothing holds.
+        Assert.Equal(DavWriteStatus.Replaced, outcome.Status);
+        var row = await RowOf("a.vcf");
+        Assert.Equal("u2", row.Uid);
+        Assert.Contains("UID:u2", row.VCardRaw);
+        SyncStore.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.Uid == "u1" && r.VCardRaw.Contains("UID:u1")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AnUnconditionalPut_LandingAfterAnotherWrite_ArchivesThatWriteNotItsOwnRead()
+    {
+        // No If-Match, so nothing refuses the second writer — but the revision it archives must be
+        // the version stored when it took the lock, not the one it read before: otherwise the
+        // winner's card never enters contact_revisions, the table whose whole job is to lose nothing.
+        var database = Guid.NewGuid().ToString();
+        using var context = new PreferencesTestDbContext(database);
+        await NewWriter(context, ContactStoreTestFactory.NewSyncCounting())
+            .PutAsync(UserId, "a.vcf", ValidCard("u1", fn: "First"), CancellationToken.None);
+        var racing = RacingSync(() => Replace(database, "a.vcf", ValidCard("u1", fn: "Winner")));
+
+        var outcome = await NewWriter(context, racing)
+            .PutAsync(UserId, "a.vcf", ValidCard("u1", fn: "Loser"), CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Replaced, outcome.Status);
+        racing.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.VCardRaw.Contains("FN:Winner")), It.IsAny<CancellationToken>()),
+            Times.Once);
+        using var check = new PreferencesTestDbContext(database);
+        Assert.Contains("FN:Loser", check.Contacts.Single(
+            c => c.UserId == UserId && c.DavName == "a.vcf").VCardRaw);
+    }
+
+    [Fact]
+    public async Task AnUnconditionalDelete_LandingAfterAReplacement_ArchivesTheReplacement()
+    {
+        var database = Guid.NewGuid().ToString();
+        using var context = new PreferencesTestDbContext(database);
+        await NewWriter(context, ContactStoreTestFactory.NewSyncCounting())
+            .PutAsync(UserId, "a.vcf", ValidCard("u1", fn: "First"), CancellationToken.None);
+        var racing = RacingSync(() => Replace(database, "a.vcf", ValidCard("u1", fn: "Winner")));
+
+        var outcome = await NewWriter(context, racing).DeleteAsync(UserId, "a.vcf", CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        racing.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.VCardRaw.Contains("FN:Winner")), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

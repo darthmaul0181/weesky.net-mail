@@ -78,15 +78,12 @@ internal sealed class DavContactWriter(
             {
                 var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
-                // The decisive If-Match comparison, exactly as PUT's: a replacement committed
-                // between the edge's pre-check and this lock is the very version the header was
-                // protecting, and deleting it anyway is the erasure the 412 exists to refuse.
-                // The rank rolls back with the refusal; no tombstone, no archive, no client woken.
-                if (ifMatch is not null
-                    && await VisibleHashAsync(userId, davName, cancellationToken) != row.CardHash)
-                {
+                // Re-read under the state lock: the archive keeps what is stored NOW, and the
+                // decisive If-Match compares against it — a replacement committed since the read
+                // above is the very version the header protects. A refusal rolls the rank back.
+                if (!await ReloadAsync(row, cancellationToken)) return Refused(DavWriteStatus.NotFound);
+                if (ifMatch is not null && !Holds(ifMatch, row))
                     return Refused(DavWriteStatus.PreconditionFailed);
-                }
 
                 // ContactId left NULL: a delete revision outlives the row it describes.
                 await sync.ArchiveAsync(new ContactRevision
@@ -184,19 +181,12 @@ internal sealed class DavContactWriter(
         if (createOnly && row is { VCardRaw: not null } && row.CardHash.Length > 0)
             return Refused(DavWriteStatus.AlreadyExists);
 
-        // RFC 6352 § 6.3.2.1: the UID arbitrates the card's identity, and a UID that changes under
-        // the same name is another card. Refused before any lock: no transaction, no rank taken.
-        if (row is not null && uid is not null && !string.Equals(uid, row.Uid, StringComparison.Ordinal))
-        {
-            // § 6.2.2's DAV:href names the resource that ALREADY holds the offending UID — never
-            // the one being written, which holds a different one. Sent the request URI, a client
-            // re-reads the very card it just tried to replace and learns nothing. When no resource
-            // holds the UID at all, the refusal carries no href rather than an invented one.
-            var incumbent = await HolderOfAsync(userId, uid, davName, cancellationToken);
-            return incumbent is null
-                ? Refused(DavWriteStatus.UidConflict)
-                : Conflict(userId, incumbent.DavName);
-        }
+        // RFC 6352 § 6.3.2.1: the UID must not be one ANOTHER resource already holds, and § 6.2.2's
+        // DAV:href names that holder — never the request URI, which a client would re-read and
+        // learn nothing from. A UID that merely changes under its own name is accepted: nothing
+        // holds the new one, and the archive keeps the old identity. Refused before any lock.
+        if (uid is not null && await HolderOfAsync(userId, uid, davName, cancellationToken) is { } incumbent)
+            return Conflict(userId, incumbent.DavName);
 
         if (row is null)
         {
@@ -217,24 +207,26 @@ internal sealed class DavContactWriter(
             return new DavWriteOutcome(
                 DavWriteStatus.Replaced, EtagOf(row.CardHash, stamped, card), null, row.SyncSequence);
 
-        var replacing = row is not null && row.VCardRaw is not null && row.CardHash.Length > 0;
-
         return await store.InTransactionAsync(async () =>
         {
             // The state row's lock FIRST, always, and before any contact row is touched — the same
             // order as the two existing gates, or they deadlock against each other.
             var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
-            // The decisive If-Match comparison — the only one a conditional write may trust. Every
-            // writer of this book takes the state lock first, so a fresh read here is authoritative:
-            // a hash that moved since this gate's own read is a commit that landed in between, and
-            // proceeding on it is the lost update If-Match exists to refuse. The rank rolls back
+            // Re-read under the lock: everything judged above was judged on a row a concurrent
+            // writer may have replaced or removed since, and the archive below must keep what is
+            // stored NOW — or that version never enters contact_revisions.
+            if (row is not null && !await ReloadAsync(row, cancellationToken)) row = null;
+            if (uid is null && row is not null && row.Uid != identity)
+                stamped = ContactStore.WithUid(card, identity = row.Uid);
+            var replacing = row is { VCardRaw: not null } && row.CardHash.Length > 0;
+
+            // The decisive If-Match comparison — the only one a conditional write may trust: every
+            // writer takes the state lock first, so this row is authoritative, and a tag that no
+            // longer holds is the lost update the header exists to refuse. The rank rolls back
             // with the refusal (the commit predicate below), so no client is woken.
-            if (ifMatch is not null
-                && await VisibleHashAsync(userId, davName, cancellationToken) != row!.CardHash)
-            {
+            if (ifMatch is not null && !Holds(ifMatch, row))
                 return Refused(DavWriteStatus.PreconditionFailed);
-            }
 
             if (uid is not null)
             {
@@ -278,6 +270,7 @@ internal sealed class DavContactWriter(
                     }, cancellationToken);
                 }
 
+                row.Uid = identity;
                 row.UpdatedAt = DateTime.UtcNow;
                 row.SyncSequence = rank;
             }
@@ -356,17 +349,13 @@ internal sealed class DavContactWriter(
         row is { VCardRaw: not null } && row.CardHash.Length > 0
         && EntityTagMatcher.Match(ifMatch, DavProperties.EntityTag(row.CardHash));
 
-    /// <summary>
-    /// The stored hash as it stands NOW — <c>AsNoTracking</c>, because the whole point is a read
-    /// the tracked row cannot answer — or null when no visible row holds the name any more.
-    /// </summary>
-    private Task<string?> VisibleHashAsync(
-        Guid userId, string davName, CancellationToken cancellationToken) =>
-        context.Contacts.AsNoTracking()
-            .Where(c => c.UserId == userId && c.DavName == davName
-                && c.VCardRaw != null && c.CardHash != "")
-            .Select(c => (string?)c.CardHash)
-            .SingleOrDefaultAsync(cancellationToken);
+    /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
+    private async Task<bool> ReloadAsync(Contact row, CancellationToken cancellationToken)
+    {
+        var entry = context.Entry(row);
+        await entry.ReloadAsync(cancellationToken);
+        return entry.State is not EntityState.Detached;
+    }
 
     // The null arm is spelled out: in SQL a NULL dav_name fails `!=` and the nameless holder —
     // a row the backfill has not named — would silently escape the conflict it causes.

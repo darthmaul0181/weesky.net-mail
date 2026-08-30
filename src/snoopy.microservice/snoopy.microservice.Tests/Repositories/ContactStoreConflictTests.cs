@@ -3,6 +3,7 @@ using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
+using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Repositories;
@@ -87,5 +88,41 @@ public sealed class ContactStoreConflictTests
         // the one a conflicted tab retries on every save.
         sync.Verify(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         sync.Verify(s => s.ArchiveAsync(It.IsAny<ContactRevision>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AnEditWithoutAHash_LandingAfterAnotherWrite_ArchivesThatWriteAndBuildsOnIt()
+    {
+        // The row was read before the state lock; a phone's PUT commits in between. The edit must
+        // archive the phone's card — not the one it read — and compose on it, or the phone's
+        // unmodelled properties are overwritten from a stale card with no revision to restore.
+        var database = Guid.NewGuid().ToString();
+        using var context = new PreferencesTestDbContext(database);
+        var userId = Guid.NewGuid();
+        var created = await new ContactStore(context, ContactStoreTestFactory.NewSync().Object)
+            .CreateAsync(userId, ContactStoreTestFactory.Write("Ada", "Lovelace"), CancellationToken.None);
+        var sync = ContactStoreTestFactory.NewSyncCounting();
+        sync.Setup(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                using var phone = new PreferencesTestDbContext(database);
+                var row = phone.Contacts.Single(c => c.Id == created.Value);
+                row.VCardRaw = row.VCardRaw!.Replace("END:VCARD", "X-PHONE:kept\r\nEND:VCARD");
+                row.CardHash = ContactStore.CardHashOf(row.VCardRaw);
+                phone.SaveChanges();
+                return Task.FromResult(7ul);
+            });
+
+        var saved = await new ContactStore(context, sync.Object).UpdateAsync(
+            userId, created.Value, ContactStoreTestFactory.Write("Ada", "Byron"), CancellationToken.None);
+
+        Assert.True(saved.IsSuccess);
+        sync.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.VCardRaw.Contains("X-PHONE:kept")), It.IsAny<CancellationToken>()),
+            Times.Once);
+        using var check = new PreferencesTestDbContext(database);
+        var stored = check.Contacts.Single(c => c.Id == created.Value);
+        Assert.Contains("X-PHONE:kept", stored.VCardRaw);
+        Assert.Equal("Byron", stored.LastName);
     }
 }

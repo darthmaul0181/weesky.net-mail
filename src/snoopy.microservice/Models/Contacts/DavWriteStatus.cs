@@ -18,7 +18,7 @@ public enum DavWriteStatus
     /// <summary>A VERSION outside 3.0/4.0 — <c>supported-address-data</c>. Readable, yet refusable.</summary>
     UnsupportedVersion,
 
-    /// <summary>The UID is held by another resource, or changed under the same name — <c>no-uid-conflict</c>.</summary>
+    /// <summary>The UID is held by another resource — <c>no-uid-conflict</c>, with that resource's href.</summary>
     UidConflict,
 
     /// <summary>Beyond <c>ContactStore.MaxCardBytes</c> — <c>max-resource-size</c>.</summary>

@@ -258,6 +258,20 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         {
             var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
+            // Re-read under the state lock: a write committed since FindAsync is what the archive
+            // must keep and what the composition must build on — or its version leaves no revision
+            // and its unmodelled properties are overwritten from a stale card.
+            if (!await ReloadAsync(row, cancellationToken)) return Result.Failure(NotFound);
+            if (row.CardHash != before.CardHash)
+            {
+                if (contact.CardHash is not null) return Result.Failure(CardMoved);
+                before = new CardBefore(row.VCardRaw, row.CardHash, row.Uid, row.DavName);
+                prepared = PrepareCard(row, row.VCardRaw == null
+                    ? VCardComposer.ComposeNew(row.Uid, contact)
+                    : VCardComposer.Compose(row.VCardRaw, row.Uid, contact));
+                if (prepared.IsFailure) return Result.Failure(prepared.Error);
+            }
+
             // Archive before overwriting, in the same transaction as the write — so under the same
             // rank, and so never without it. A card whose vcard_raw is NULL — the 4a backfill never
             // reached it — is replaced without a revision: no card, no revision.
@@ -303,11 +317,13 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         var row = await FindAsync(userId, contactId, cancellationToken);
         if (row == null) return Result.Failure(NotFound);
 
-        var before = new CardBefore(row.VCardRaw, row.CardHash, row.Uid, row.DavName);
-
         return await InTransactionAsync<Result>(async () =>
         {
             var rank = await sync.NextSequenceAsync(userId, cancellationToken);
+
+            // Under the lock, so the archive keeps the version stored now, not the one read above.
+            if (!await ReloadAsync(row, cancellationToken)) return Result.Failure(NotFound);
+            var before = new CardBefore(row.VCardRaw, row.CardHash, row.Uid, row.DavName);
 
             if (before.VCardRaw is not null)
             {
@@ -368,18 +384,20 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             // A List, not the chunk array itself: EF's InMemory query translator cannot funclet an
             // array's span-based Contains, which C#'s extension-method resolution now prefers.
             var batch = chunk.ToList();
-            var rows = await context.Contacts
-                .Where(c => c.UserId == userId && batch.Contains(c.Id))
-                .ToListAsync(cancellationToken);
-            if (rows.Count == 0) continue;
-
-            var snapshots = rows
-                .Select(r => (r.Id, Before: new CardBefore(r.VCardRaw, r.CardHash, r.Uid, r.DavName)))
-                .ToList();
 
             removed += await InTransactionAsync(async () =>
             {
                 var rank = await sync.NextSequenceAsync(userId, cancellationToken);
+
+                // Read under the lock, so what is archived is what is being removed.
+                var rows = await context.Contacts
+                    .Where(c => c.UserId == userId && batch.Contains(c.Id))
+                    .ToListAsync(cancellationToken);
+                if (rows.Count == 0) return 0;
+
+                var snapshots = rows
+                    .Select(r => (r.Id, Before: new CardBefore(r.VCardRaw, r.CardHash, r.Uid, r.DavName)))
+                    .ToList();
 
                 foreach (var (id, before) in snapshots)
                 {
@@ -1058,6 +1076,14 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
     /// <summary>The card as it stood, snapshotted before anything is written over it.</summary>
     private readonly record struct CardBefore(string? VCardRaw, string CardHash, string? Uid, string? DavName);
+
+    /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
+    private async Task<bool> ReloadAsync(Contact row, CancellationToken cancellationToken)
+    {
+        var entry = context.Entry(row);
+        await entry.ReloadAsync(cancellationToken);
+        return entry.State is not EntityState.Detached;
+    }
 
     /// <summary>
     /// The transaction with this store's own commit rule. The no-commit-on-failure predicate only
