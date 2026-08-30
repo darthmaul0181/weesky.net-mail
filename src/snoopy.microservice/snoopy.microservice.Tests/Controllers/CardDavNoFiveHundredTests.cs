@@ -109,9 +109,10 @@ public sealed class CardDavNoFiveHundredTests : IAsyncLifetime
         { ValidCard("u1") + ValidCard("u2"), 403, "valid-address-data" },
         { "not a card at all", 403, "valid-address-data" },
         { CardOfVersion("2.1"), 403, "supported-address-data" },
-        // Exactly the request limit, so [RequestSizeLimit] lets it pass: the transport 413 refuses
-        // what cannot be READ, this 403 what cannot be STORED once the UID it declares is stamped in.
+        // Exactly the card ceiling, and one byte past it: the request limit sits above both, so the
+        // announced 403 answers — never the transport 413 the announcement never named.
         { CardWithNoUidOfExactly(1024 * 1024), 403, "max-resource-size" },
+        { CardWithNoUidOfExactly(1024 * 1024 + 1), 403, "max-resource-size" },
     };
 
     [Fact]

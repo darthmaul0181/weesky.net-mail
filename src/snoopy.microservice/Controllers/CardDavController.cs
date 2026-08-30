@@ -31,6 +31,10 @@ public sealed class CardDavController(
 {
     private const int MaxBodyBytes = 1024 * 1024;
 
+    /// <summary>Above the card ceiling, so a body over it is read and refused as the announced
+    /// <c>403 max-resource-size</c> rather than a transport 413 the announcement never named.</summary>
+    private const int PutBodyBytes = 2 * ContactStore.MaxCardBytes;
+
     private static readonly XName FiniteDepth = DavXml.Dav + "propfind-finite-depth";
     private static readonly XName SupportedReport = DavXml.Dav + "supported-report";
     private static readonly XName ValidAddressData = DavXml.CardDav + "valid-address-data";
@@ -271,7 +275,7 @@ public sealed class CardDavController(
     /// verbatim it must not pretend to keep.
     /// </summary>
     [HttpPut("addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
-    [RequestSizeLimit(MaxBodyBytes)]
+    [RequestSizeLimit(PutBodyBytes)]
     public async Task PutCardAsync(Guid userId, string? davName, CancellationToken cancellationToken)
     {
         string? condition = null;
@@ -767,10 +771,17 @@ public sealed class CardDavController(
 
             if (depth is DavDepthValue.Infinity)
             {
-                condition = FiniteDepth.LocalName;
-                await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, FiniteDepth,
-                    cancellationToken: cancellationToken, logger: logger);
-                return;
+                // RFC 4918 § 9.1 reserves the refusal to collections; on anything else infinity
+                // IS depth 0, and refusing it fails a PROPFIND on a card for a header it never needed.
+                if (kind is DavResourceKind.Home or DavResourceKind.Collection)
+                {
+                    condition = FiniteDepth.LocalName;
+                    await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, FiniteDepth,
+                        cancellationToken: cancellationToken, logger: logger);
+                    return;
+                }
+
+                depth = DavDepthValue.Zero;
             }
 
             var request = await ReadRequestAsync(cancellationToken);

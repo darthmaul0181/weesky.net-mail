@@ -248,9 +248,7 @@ public sealed class CardDavPutTests : IAsyncLifetime
     [Fact]
     public async Task ACardOverTheStorageCeiling_Answers403MaxResourceSize()
     {
-        // Exactly the request limit, so [RequestSizeLimit] lets it pass — the two ceilings compose
-        // without overlap: the transport 413 refuses what cannot be READ, this 403 what cannot be
-        // STORED once the UID the card declares none of is stamped in.
+        // Exactly the card ceiling: the UID the card declares none of is what pushes it over.
         var response = await Put(DavPaths.Card(UserId, "a.vcf"), CardWithNoUidOfExactly(1024 * 1024));
 
         Assert.Equal(403, response.StatusCode);
@@ -263,7 +261,7 @@ public sealed class CardDavPutTests : IAsyncLifetime
         await GivenACardAndItsEtag("a.vcf");
 
         var response = await PutBytes(DavPaths.Card(UserId, "a.vcf"),
-            new byte[1024 * 1024 + 1], ifMatch: "\"stale\"");
+            new byte[2 * 1024 * 1024 + 1], ifMatch: "\"stale\"");
 
         // The read is bounded before anything is judged: bytes the server refuses to hold cannot
         // be archived either, so the 413 wins over the 412 and nothing is kept.

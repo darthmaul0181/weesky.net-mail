@@ -43,6 +43,22 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnAbsentDepth_OffACollection_IsDepthZero()
+    {
+        // RFC 4918 § 9.1 reserves propfind-finite-depth to collections: on a card, the principal
+        // and the service root, infinity IS depth 0, and sabre and Radicale both answer it.
+        GivenCards("a.vcf");
+
+        foreach (var path in new[] { DavPaths.Card(UserId, "a.vcf"), DavPaths.Principal(UserId), DavPaths.Root + "/" })
+        {
+            var response = await Propfind(path, depth: null, body: PropBody("resourcetype"));
+
+            Assert.Equal(207, response.StatusCode);
+            Assert.Single(ResponsesOf(response));
+        }
+    }
+
+    [Fact]
     public async Task DepthZeroOnTheCollection_AnswersTheCollectionAlone()
     {
         // The card is what makes the assertion say anything: on an empty book a collection leaking
