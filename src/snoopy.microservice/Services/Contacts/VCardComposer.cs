@@ -787,7 +787,7 @@ internal static class VCardComposer
         return -1;
     }
 
-    internal static List<string> SplitOutsideQuotes(string parameters)
+    internal static List<string> SplitOutsideQuotes(string parameters, char separator = ';')
     {
         var parts = new List<string>();
         var start = 0;
@@ -795,7 +795,7 @@ internal static class VCardComposer
         for (var i = 0; i < parameters.Length; i++)
         {
             if (parameters[i] == '"') inQuotes = !inQuotes;
-            else if (parameters[i] == ';' && !inQuotes)
+            else if (parameters[i] == separator && !inQuotes)
             {
                 parts.Add(parameters[start..i]);
                 start = i + 1;
@@ -809,17 +809,21 @@ internal static class VCardComposer
     // The first occurrence of one property in the stored card, unfolded and never past END:VCARD.
     private static string? FirstRawLine(string vcardRaw, string name)
     {
-        var unfolded = vcardRaw.Replace("\r\n", "\n").Replace("\n ", "").Replace("\n\t", "");
-        foreach (var line in unfolded.Split('\n'))
+        foreach (var logical in LogicalLines(CanonicalLineBreaks(vcardRaw)))
         {
-            if (NameOf(line).Equals("END", StringComparison.OrdinalIgnoreCase)) break;
-            if (NameOf(line).Equals(name, StringComparison.OrdinalIgnoreCase)
-                && IndexOutsideQuotes(line, ':') >= 0)
+            var line = Unfold(logical);
+            var found = NameOf(line);
+            if (found.Equals("END", StringComparison.OrdinalIgnoreCase)) break;
+            if (found.Equals(name, StringComparison.OrdinalIgnoreCase) && IndexOutsideQuotes(line, ':') >= 0)
                 return line;
         }
 
         return null;
     }
+
+    /// <summary>The first raw value of one property, as the card writes it — never decoded.</summary>
+    internal static string? FirstRawValue(string vcardRaw, string name) =>
+        FirstRawLine(vcardRaw, name) is { } line ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
 
     // The first BDAY's raw value in the stored card — what Reconcile and MergeFill, which carry no
     // birthday of their own, must keep the card spelling through re-serialization (décision 11).

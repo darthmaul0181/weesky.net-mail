@@ -45,23 +45,7 @@ internal static class VCardImportMapper
     /// </summary>
     internal static string? UidOf(string card) => RawValueOf(card, "UID");
 
-    /// <summary>The first raw value of one property, as the card writes it — never decoded.</summary>
-    internal static string? RawValueOf(string card, string property)
-    {
-        foreach (var line in Unfolded(card))
-        {
-            var colon = line.IndexOf(':');
-            if (colon < 0) continue;
-            var name = line[..colon].Split(';')[0];
-            var dot = name.LastIndexOf('.');
-            if (!name[(dot + 1)..].Trim().Equals(property, StringComparison.OrdinalIgnoreCase)) continue;
-            return line[(colon + 1)..] is { Length: > 0 } value ? value : null;
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<string> Unfolded(string card) =>
-        card.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n ", string.Empty)
-            .Replace("\n\t", string.Empty).Split('\n');
+    /// <summary>The first raw value of one property, as the card writes it; null when absent or empty.</summary>
+    internal static string? RawValueOf(string card, string property) =>
+        VCardComposer.FirstRawValue(card, property) is { Length: > 0 } value ? value : null;
 }

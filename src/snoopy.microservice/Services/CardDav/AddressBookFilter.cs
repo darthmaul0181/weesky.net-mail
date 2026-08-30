@@ -119,18 +119,8 @@ internal static class AddressBookFilter
     }
 
     // TYPE=CELL,VOICE names two values; a quoted value keeps its commas and loses only its quotes.
-    private static IEnumerable<string> SplitValues(string values)
-    {
-        var start = 0;
-        var inQuotes = false;
-        for (var i = 0; i <= values.Length; i++)
-        {
-            if (i < values.Length && values[i] == '"') { inQuotes = !inQuotes; continue; }
-            if (i < values.Length && (values[i] != ',' || inQuotes)) continue;
-            yield return values[start..i].Trim().Trim('"');
-            start = i + 1;
-        }
-    }
+    private static IEnumerable<string> SplitValues(string values) =>
+        VCardComposer.SplitOutsideQuotes(values, ',').Select(value => value.Trim().Trim('"'));
 
     // The wire escapes spelled plainly again: the client matches on the text, not on its encoding.
     private static string Unescaped(string value)
