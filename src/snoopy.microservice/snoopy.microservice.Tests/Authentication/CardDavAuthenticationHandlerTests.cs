@@ -149,6 +149,26 @@ public sealed class CardDavAuthenticationHandlerTests
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("operator")]
+    [InlineData("@weesky.be")]
+    [InlineData("alice@")]
+    public async Task AnAccountWhoseAddressIsNotLocalAtDomain_Is401AndNotA500(string identifier)
+    {
+        // The claims this handler mints are an Upn/Dns PAIR that GetUser recombines into one
+        // address; either half blank makes it answer null, which is the throw behind
+        // AuthenticatedUser — a 500 on the one path whose whole design is to answer 401. The split
+        // was unguarded, where both other splits on '@' in this repository check their index.
+        users.Setup(s => s.FindByEmailAsync(identifier, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WebmailAccount(UserId, Guid.NewGuid()));
+        accounts.Setup(s => s.IsUsableAsync(identifier, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var (result, context) = await AuthenticateAsync(Basic(identifier, Secret));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
     [Fact]
     public async Task AnotherAccountsSecret_Is401()
     {

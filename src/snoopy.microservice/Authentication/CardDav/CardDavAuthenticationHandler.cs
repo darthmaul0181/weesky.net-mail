@@ -207,6 +207,19 @@ internal sealed class CardDavAuthenticationHandler(
     private async Task<AuthenticateResult> FinishAsync(
         string identifier, string fingerprint, DavIdentity identity, long? generation)
     {
+        // Before anything is cached or counted: the Upn/Dns pair below is recombined by
+        // ControllerBaseExtensions.GetUser into "{Upn}@{Dns}", which answers null when either half
+        // is blank — and null there is the throw behind AuthenticatedUser, a 500 on the one path
+        // whose whole design is to answer 401. An identifier that cannot make that pair is refused
+        // as unauthenticated rather than minted into a principal no action can read.
+        var separator = identifier.LastIndexOf('@');
+        if (separator <= 0 || separator == identifier.Length - 1)
+        {
+            Logger.LogError("A CardDAV credential resolved to {UserId}, whose stored address is " +
+                "not of the form local@domain", identity.UserId);
+            return Refuse(Outcome.Unauthorized);
+        }
+
         if (generation is { } taken) cache.Store(identifier, fingerprint, identity, taken);
         throttle.RecordSuccess(identifier);
 
@@ -217,7 +230,6 @@ internal sealed class CardDavAuthenticationHandler(
         if (cache.ShouldTouch(identity.UserId))
             await credentials.TouchAsync(identity.UserId, clock.GetUtcNow().UtcDateTime, Context.RequestAborted);
 
-        var separator = identifier.LastIndexOf('@');
         var claims = new List<Claim>
         {
             new(ClaimTypes.Upn, identifier[..separator]),
