@@ -276,6 +276,65 @@ public sealed class CardDavReportTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("a b")]
+    [InlineData("a:b")]
+    [InlineData("1bad")]
+    public async Task AMalformedExpandPropertyName_Answers400AndNever500(string name)
+    {
+        // The one client string of this surface reaching XName construction without the parser's
+        // own validation: escaping as a 500 makes a probe loop on the report iOS opens with.
+        var response = await Report(DavPaths.Principal(UserId),
+            $"<D:expand-property xmlns:D=\"DAV:\"><D:property name=\"{name}\"/></D:expand-property>");
+
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AMalformedNestedExpandPropertyName_Answers400Too()
+    {
+        var body = "<D:expand-property xmlns:D=\"DAV:\">" +
+            "<D:property name=\"addressbook-home-set\" namespace=\"urn:ietf:params:xml:ns:carddav\">" +
+            "<D:property name=\"not valid\"/></D:property></D:expand-property>";
+
+        var response = await Report(DavPaths.Principal(UserId), body);
+
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AReportOnTheHome_IsAConsideredRefusalNotA405()
+    {
+        // The home's Allow names REPORT: a 405 there is a header that lies, and an RFC 9110
+        // client retries the verb for ever. The default branch answers instead.
+        var response = await Report(DavPaths.Home(UserId), ReportBody("sync-collection"));
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
+    }
+
+    [Fact]
+    public async Task AReportOnTheServiceRoot_IsAConsideredRefusalNotA405()
+    {
+        var response = await Report("/dav/", ReportBody("sync-collection"));
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
+    }
+
+    [Fact]
+    public async Task ExpandPropertyOnTheServiceRoot_ResolvesCurrentUserPrincipal()
+    {
+        var response = await Report("/dav/", ExpandPropertyBody(
+            DavXml.Dav + "current-user-principal", DavXml.Dav + "displayname"));
+
+        Assert.Equal(207, response.StatusCode);
+        var nested = XDocument.Parse(await response.ReadAsync())
+            .Descendants(DavXml.Dav + "current-user-principal")
+            .Descendants(DavXml.Dav + "response").Single();
+        Assert.Equal(DavPaths.Principal(UserId), nested.Element(DavXml.Dav + "href")!.Value);
+    }
+
+    [Theory]
     [InlineData("addressbook-query")]
     [InlineData("sync-collection")]
     public async Task AReportThisPlanDoesNotYetServe_Answers403SupportedReport(string localName)

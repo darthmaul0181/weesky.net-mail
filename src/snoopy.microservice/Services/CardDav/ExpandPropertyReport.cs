@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 
 namespace weesky.Snoopy.Microservice.Services.CardDav;
@@ -94,7 +95,18 @@ internal static class ExpandPropertyReport
         if (string.IsNullOrEmpty(name)) return null;
 
         var ns = element.Attribute("namespace")?.Value ?? DavXml.Dav.NamespaceName;
-        return new Property(XNamespace.Get(ns) + name, PropertiesOf(element));
+        try
+        {
+            return new Property(XNamespace.Get(ns) + name, PropertiesOf(element));
+        }
+        catch (XmlException exception)
+        {
+            // The one client string of this surface reaching XName construction without the
+            // parser's own validation. A name no XML element can carry cannot be echoed in any
+            // propstat either, so the body is malformed — the same 400 non-well-formed XML gets.
+            throw new DavBadRequestException(
+                "An expand-property name is not a valid XML name.", exception);
+        }
     }
 
     private sealed record Property(XName Name, IReadOnlyList<Property> Children);

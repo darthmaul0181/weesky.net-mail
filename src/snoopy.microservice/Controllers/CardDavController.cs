@@ -254,25 +254,41 @@ public sealed class CardDavController(
         LogRequest();
     }
 
+    /// <summary>REPORT is bound on every shape whose <c>Allow</c> names it — the home and the
+    /// service root included, where a 405 under our own header would make an RFC 9110 client
+    /// retry the verb for ever. The default branch's <c>403 supported-report</c> is the
+    /// considered answer there, and expand-property genuinely serves the root's principal.
+    /// The bare root stays unbound on purpose: no catch-all of ours answers there, so its 405
+    /// carries routing's own Allow, which honestly omits REPORT — no header lies.</summary>
+    [AcceptVerbs("REPORT", Route = "")]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task ReportServiceRootAsync(CancellationToken cancellationToken) =>
+        ReportAsync(DavResourceKind.ServiceRoot, null, null, DavPaths.Root + "/", cancellationToken);
+
     [AcceptVerbs("REPORT", Route = "principals/{userId:guid}")]
     [RequestSizeLimit(MaxBodyBytes)]
     public Task ReportPrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Principal, userId, null, cancellationToken);
+        ReportAsync(DavResourceKind.Principal, userId, null, null, cancellationToken);
+
+    [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}")]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task ReportHomeAsync(Guid userId, CancellationToken cancellationToken) =>
+        ReportAsync(DavResourceKind.Home, userId, null, null, cancellationToken);
 
     [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName)]
     [RequestSizeLimit(MaxBodyBytes)]
     public Task ReportCollectionAsync(Guid userId, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Collection, userId, null, cancellationToken);
+        ReportAsync(DavResourceKind.Collection, userId, null, null, cancellationToken);
 
     /// <summary>RFC 6352 § 8.7 defines multiget on address resources too, and
     /// supported-report-set says so on every card — without this route the header lies.</summary>
     [AcceptVerbs("REPORT", Route = "addressbooks/{userId:guid}/" + DavPaths.BookName + "/{*davName}")]
     [RequestSizeLimit(MaxBodyBytes)]
     public Task ReportCardAsync(Guid userId, string? davName, CancellationToken cancellationToken) =>
-        ReportAsync(DavResourceKind.Card, userId, davName, cancellationToken);
+        ReportAsync(DavResourceKind.Card, userId, davName, null, cancellationToken);
 
-    private async Task ReportAsync(DavResourceKind kind, Guid userId, string? davName,
-        CancellationToken cancellationToken)
+    private async Task ReportAsync(DavResourceKind kind, Guid? userId, string? davName,
+        string? rootHref, CancellationToken cancellationToken)
     {
         string? report = null;
         string? condition = null;
@@ -281,13 +297,13 @@ public sealed class CardDavController(
         try
         {
             var user = AuthenticatedUser;
-            if (userId != user.WebmailUid)
+            if (userId is { } target && target != user.WebmailUid)
             {
                 Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
             }
 
-            if (RedirectedToCanonical(kind, userId)) return;
+            if (userId is { } owner && RedirectedToCanonical(kind, owner)) return;
 
             if (kind is DavResourceKind.Card && !DavName.IsValid(davName))
             {
@@ -313,12 +329,7 @@ public sealed class CardDavController(
 
             // The Depth header is deliberately ignored, never refused: PROPFIND's rule is PROPFIND's
             // alone — a report already says what it applies to, so there is nothing to guess.
-            var requestHref = kind switch
-            {
-                DavResourceKind.Principal => DavPaths.Principal(user.WebmailUid),
-                DavResourceKind.Collection => DavPaths.Collection(user.WebmailUid),
-                _ => DavPaths.Card(user.WebmailUid, davName!),
-            };
+            var requestHref = HrefOf(kind, user.WebmailUid, davName, rootHref);
 
             try
             {
@@ -347,6 +358,14 @@ public sealed class CardDavController(
                 condition = ex.Condition.LocalName;
                 await DavError.WriteAsync(Response, StatusCodes.Status403Forbidden, ex.Condition,
                     ex.Detail, cancellationToken, logger);
+            }
+            catch (DavBadRequestException ex)
+            {
+                // Thrown by a report reader on a body the XML parser could not judge — an
+                // expand-property name no element can carry. Always before the multistatus opens;
+                // the guard only keeps a future mid-write throw from turning into the 500 above.
+                logger.LogInformation("REPORT body refused: {Reason}", ex.Message);
+                if (!Response.HasStarted) Response.StatusCode = StatusCodes.Status400BadRequest;
             }
         }
         catch (Exception exception)
