@@ -306,28 +306,28 @@ public sealed class DavPropertiesTests
     }
 
     [Fact]
-    public void TheCollection_AnnouncesTheFourReportsOfTheSlice()
+    public void TheCollection_AnnouncesOnlyTheReportsItAnswers()
     {
         var reports = ReportsOf(ResolveCollectionElement(DavXml.Dav + "supported-report-set"));
 
+        // Announcing a report REPORT refuses made DAVx5 loop: ctag poll, sync-collection, 403,
+        // start over, never falling back to the Depth: 1 listing. Plan c announces the other two
+        // by implementing them.
         Assert.Equal(
-            [
-                DavXml.CardDav + "addressbook-multiget", DavXml.CardDav + "addressbook-query",
-                DavXml.Dav + "expand-property", DavXml.Dav + "sync-collection"
-            ],
+            [DavXml.CardDav + "addressbook-multiget", DavXml.Dav + "expand-property"],
             reports.OrderBy(name => name.LocalName, StringComparer.Ordinal));
+        Assert.DoesNotContain(DavXml.Dav + "sync-collection", reports);
+        Assert.DoesNotContain(DavXml.CardDav + "addressbook-query", reports);
     }
 
     [Fact]
-    public void ACardCarriesSupportedReportSet_WithMultigetAndQuery()
+    public void ACardCarriesSupportedReportSet_WithTheMultigetItAnswers()
     {
         var reports = ReportsOf(ResolveCardElement(DavXml.Dav + "supported-report-set"));
 
-        // RFC 6352 § 8 requires it on address resources as much as on collections. Full XNames: the
-        // same two local names under DAV: let a client conclude a card supports no CardDAV report.
-        Assert.Equal(
-            [DavXml.CardDav + "addressbook-multiget", DavXml.CardDav + "addressbook-query"],
-            reports.OrderBy(name => name.LocalName, StringComparer.Ordinal));
+        // RFC 6352 § 8 requires it on address resources as much as on collections. The full XName:
+        // the same local name under DAV: lets a client conclude a card supports no CardDAV report.
+        Assert.Equal([DavXml.CardDav + "addressbook-multiget"], reports);
     }
 
     [Theory]

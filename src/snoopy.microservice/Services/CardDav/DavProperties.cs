@@ -89,12 +89,13 @@ internal static class DavProperties
                 DavSyncToken.Ctag(r.State))),
             (DavXml.Dav + "sync-token",
                 r => new XElement(DavXml.Dav + "sync-token", DavSyncToken.Token(r.State))),
-            // The slice's four. Two of them are answered 403 supported-report until plan c replaces
-            // the refusal with the implementation, and no /dav route is open in production before
-            // then: the set is the slice's set, not today's build's.
+            // What this build ANSWERS, not what the slice will. Announcing addressbook-query and
+            // sync-collection while REPORT refuses them made DAVx5 loop: ctag poll,
+            // sync-collection, 403, start over — observed on Android, never falling back to the
+            // Depth: 1 listing, so the book never filled. Plan c announces them by implementing
+            // them.
             (DavXml.Dav + "supported-report-set", _ => ReportSet(
-                DavXml.CardDav + "addressbook-query", DavXml.CardDav + "addressbook-multiget",
-                DavXml.Dav + "sync-collection", DavXml.Dav + "expand-property")),
+                DavXml.CardDav + "addressbook-multiget", DavXml.Dav + "expand-property")),
             // The book stores both versions verbatim and serves what it holds; announcing 3.0 alone
             // would make half the answers a lie.
             (DavXml.CardDav + "supported-address-data", _ => new XElement(
@@ -131,8 +132,10 @@ internal static class DavProperties
                 r => FromCard(r, DavXml.Dav + "getlastmodified", c => HttpDate(c.UpdatedAt))),
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype")),
             (DavXml.Dav + "current-user-privilege-set", _ => PrivilegeSet()),
+            // multiget alone: REPORT answers it on a card, and addressbook-query is refused there
+            // as everywhere else until plan c.
             (DavXml.Dav + "supported-report-set", _ => ReportSet(
-                DavXml.CardDav + "addressbook-multiget", DavXml.CardDav + "addressbook-query"))),
+                DavXml.CardDav + "addressbook-multiget"))),
     };
 
     /// <summary>
