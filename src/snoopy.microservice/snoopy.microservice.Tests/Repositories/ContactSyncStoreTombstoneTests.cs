@@ -321,5 +321,31 @@ public sealed class ContactSyncStoreTombstoneTests
         // what a HUMAN might still want back.
         Assert.Equal(1, outcome.Revisions);
         Assert.Single(context.ContactRevisions);
+        // A pass that removed everything past its cutoff says so: read off the counts alone, a
+        // bounded sweep that stopped early is indistinguishable from a complete one.
+        Assert.False(outcome.Capped);
+    }
+
+    [Fact]
+    public async Task Pruning_DeletesARevisionThisContextAlreadyTracks()
+    {
+        var db = nameof(Pruning_DeletesARevisionThisContextAlreadyTracks);
+        var userId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var context = new PreferencesTestDbContext(db);
+        var store = new ContactSyncStore(context);
+
+        // Archived through this very store, so the row is in the context's identity map — the shape
+        // a caller that archives and then prunes in one scope produces.
+        await store.ArchiveAsync(
+            Revision(userId, "a.vcf", "h1", RevisionCause.Put, now.AddDays(-40)), CancellationToken.None);
+
+        var outcome = await store.PruneAsync(now.AddDays(-180), now.AddDays(-30), CancellationToken.None);
+
+        // The delete goes by key rather than by materialising the row — a revision carries a whole
+        // card — and a stub attached under a key already tracked throws on the identity map. The
+        // tracked instance is reused instead, which is invisible from the outcome and fatal without.
+        Assert.Equal(1, outcome.Revisions);
+        Assert.Empty(context.ContactRevisions);
     }
 }

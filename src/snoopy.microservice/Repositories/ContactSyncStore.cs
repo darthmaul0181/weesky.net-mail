@@ -7,6 +7,14 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// <inheritdoc cref="IContactSyncStore"/>
 internal sealed class ContactSyncStore(PreferencesDbContext context) : IContactSyncStore
 {
+    /// <summary>
+    /// What one <see cref="PruneAsync"/> pass may remove from each of its two tables. The sweep is
+    /// unfiltered across the deployment and runs daily, so this is not a policy about what to keep
+    /// — everything past the cap is taken by the next pass — but the bound that keeps one pass's
+    /// footprint independent of how large a backlog grew while the sweeper was not running.
+    /// </summary>
+    internal const int MaxRowsPerSweep = 50_000;
+
     public async Task<ulong> NextSequenceAsync(Guid userId, CancellationToken cancellationToken)
     {
         // The one precondition prose alone cannot enforce: outside a transaction ExecuteSql* runs
@@ -160,8 +168,16 @@ internal sealed class ContactSyncStore(PreferencesDbContext context) : IContactS
     public async Task<PruneOutcome> PruneAsync(
         DateTime tombstonesBefore, DateTime revisionsBefore, CancellationToken cancellationToken)
     {
+        // Oldest first, and capped: the sweep is unfiltered across the whole deployment, so an
+        // uncapped pass is one query whose result set is however many rows a backlog has grown to.
+        // Ordering by DeletedAt is what makes the cap safe for the watermark below — rank and
+        // deletion time move together per user (PlaceTombstoneAsync takes a fresh rank and a fresh
+        // stamp on every deletion, re-deletions included), so a cut by time takes a PREFIX of each
+        // user's tombstones and the max it raises the watermark to is the max actually deleted.
         var doomed = await context.ContactTombstones
             .Where(t => t.DeletedAt < tombstonesBefore)
+            .OrderBy(t => t.DeletedAt)
+            .Take(MaxRowsPerSweep)
             .ToListAsync(cancellationToken);
 
         // Source order here is not execution order: SaveChangesAsync batches and orders its own
@@ -205,14 +221,30 @@ internal sealed class ContactSyncStore(PreferencesDbContext context) : IContactS
 
         context.ContactTombstones.RemoveRange(doomed);
 
+        // Keys alone, then stubs to delete by. A revision carries the whole card it archived — up
+        // to ContactStore.MaxCardBytes — and this sweep spans every user, so materialising the
+        // entities to delete them puts thirty days of the deployment's overwritten cards on the
+        // heap at once, for a DELETE that only ever needed the primary key.
         var staleRevisions = await context.ContactRevisions
             .Where(r => r.ReplacedAt < revisionsBefore)
+            .OrderBy(r => r.ReplacedAt)
+            .Select(r => r.Id)
+            .Take(MaxRowsPerSweep)
             .ToListAsync(cancellationToken);
-        context.ContactRevisions.RemoveRange(staleRevisions);
+        // A stub only where nothing is tracked under that key: this context may already hold the
+        // very revision an ArchiveAsync put there earlier in the same scope, and attaching a second
+        // instance of it throws on the identity map. The sweeper opens its own scope, so the map is
+        // empty there and this costs a lookup against nothing.
+        var alreadyTracked = context.ContactRevisions.Local.ToDictionary(r => r.Id);
+        context.ContactRevisions.RemoveRange(staleRevisions.Select(
+            id => alreadyTracked.TryGetValue(id, out var held) ? held : new ContactRevision { Id = id }));
 
         // One SaveChanges, so the watermark and the removal commit together or not at all.
         await context.SaveChangesAsync(cancellationToken);
 
-        return new PruneOutcome(doomed.Count, staleRevisions.Count);
+        // Either count AT the cap means more was waiting: the next daily pass takes it, and the
+        // sweeper says so rather than reporting a number that reads as "everything old is gone".
+        return new PruneOutcome(doomed.Count, staleRevisions.Count,
+            doomed.Count == MaxRowsPerSweep || staleRevisions.Count == MaxRowsPerSweep);
     }
 }

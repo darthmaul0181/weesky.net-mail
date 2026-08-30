@@ -50,7 +50,18 @@ internal sealed class ContactTombstoneSweeper(
 
         // Every tick logs, zero included: the line is also the sweeper's heartbeat.
         logger.LogInformation(
-            "Contact tombstone sweep: {TombstoneCount} tombstone(s), {RevisionCount} revision(s) removed",
-            outcome.Tombstones, outcome.Revisions);
+            "Contact tombstone sweep: {TombstoneCount} tombstone(s), {RevisionCount} revision(s) " +
+            "removed, capped={Capped}",
+            outcome.Tombstones, outcome.Revisions, outcome.Capped);
+
+        // Said out loud and separately, because the line above reads as "everything old is gone"
+        // when it is not: a capped pass leaves a backlog the next daily tick takes, and several
+        // capped ticks in a row is a deployment whose sweeper has not been running.
+        if (outcome.Capped)
+        {
+            logger.LogWarning(
+                "The contact tombstone sweep reached its {Cap}-row ceiling; older rows remain for " +
+                "the next pass", ContactSyncStore.MaxRowsPerSweep);
+        }
     }
 }

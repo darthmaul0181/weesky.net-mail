@@ -25,6 +25,12 @@ internal static class LoggerAssertions
     internal static void VerifyInformationLogged<T>(this Mock<ILogger<T>> logger) =>
         logger.Verify(Logged<T>(LogLevel.Information), Times.AtLeastOnce);
 
+    internal static void VerifyWarningLoggedContaining<T>(this Mock<ILogger<T>> logger, string text) =>
+        logger.Verify(Logged<T>(LogLevel.Warning, text), Times.AtLeastOnce);
+
+    internal static void VerifyNoWarningLogged<T>(this Mock<ILogger<T>> logger) =>
+        logger.Verify(Logged<T>(LogLevel.Warning), Times.Never);
+
     /// <summary>
     /// One Information entry carrying every one of <paramref name="texts"/> — not one entry per
     /// text. A line is read as a whole, and an assertion satisfied by fragments scattered over

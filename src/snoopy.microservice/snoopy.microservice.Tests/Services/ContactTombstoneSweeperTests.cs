@@ -78,5 +78,24 @@ public sealed class ContactTombstoneSweeperTests
         // Zero included, so the line doubles as the sweeper's heartbeat — the convention the two
         // existing sweepers already follow.
         logger.VerifyInformationLogged();
+        // And nothing alarming on an ordinary pass, or the warning below stops meaning anything.
+        logger.VerifyNoWarningLogged();
+    }
+
+    [Fact]
+    public async Task OnePass_ThatHitItsCeiling_SaysSoOutLoud()
+    {
+        var sync = new Mock<IContactSyncStore>();
+        sync.Setup(s => s.PruneAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PruneOutcome(ContactSyncStore.MaxRowsPerSweep, 0, Capped: true));
+        var logger = new Mock<ILogger<ContactTombstoneSweeper>>();
+        var sweeper = NewSweeper(sync.Object, logger.Object);
+
+        await sweeper.SweepOnceAsync(CancellationToken.None);
+
+        // The heartbeat line reads as "everything old is gone" whatever the numbers on it, so a
+        // bounded pass needs a line of its own: several of these in a row is a sweeper that has not
+        // been running, which is exactly what nobody notices from a count.
+        logger.VerifyWarningLoggedContaining("ceiling");
     }
 }
