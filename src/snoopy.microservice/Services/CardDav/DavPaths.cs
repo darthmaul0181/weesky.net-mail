@@ -65,6 +65,15 @@ internal static class DavPaths
     {
         if (string.IsNullOrEmpty(absolutePath)) return null;
 
+        // An absolute-URI is a legal href (RFC 4918 § 8.3): its path designates the resource, as
+        // sabre and Radicale read it; the authority is not judged, any more than they judge it.
+        if (!absolutePath.StartsWith('/') && absolutePath.IndexOf("://", StringComparison.Ordinal) is > 0 and var scheme)
+        {
+            var slash = absolutePath.IndexOf('/', scheme + 3);
+            if (slash < 0) return null;
+            absolutePath = absolutePath[slash..];
+        }
+
         // A '?' or a '#' inside a segment must be written "%3F" or "%23" to be legal, so a raw one
         // is always the delimiter and cutting it can never lose a name. Kestrel's RawTarget — the
         // only property carrying the encoded path — carries the query too, and without this cut
@@ -74,8 +83,8 @@ internal static class DavPaths
         var path = delimiter < 0 ? absolutePath : absolutePath[..delimiter];
         if (path.Length is 0 or > MaxPathLength) return null;
 
-        // A leading empty segment is what makes this an absolute path of ours: "//host/dav/…" and
-        // "https://host/dav/…" both fail here rather than resolving against someone else's origin.
+        // A leading empty segment is what makes this an absolute path of ours: a scheme-relative
+        // "//host/dav/…" fails here rather than resolving against someone else's origin.
         var segments = path.Split('/');
         if (segments.Length < 3 || segments[0].Length != 0 || segments[1] != RootSegment) return null;
 

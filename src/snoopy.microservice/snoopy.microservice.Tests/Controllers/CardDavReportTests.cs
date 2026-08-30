@@ -440,6 +440,21 @@ public sealed class CardDavReportTests : IAsyncLifetime
         Assert.Equal(413, response.StatusCode);
     }
 
+    [Fact]
+    public async Task AMultiget_ReadsAnAbsoluteUriHrefByItsPath()
+    {
+        GivenCards("a.vcf");
+
+        var response = await Report(DavPaths.Collection(UserId),
+            MultigetBody("https://mail.example.test" + DavPaths.Card(UserId, "a.vcf")));
+
+        // The href is echoed as the client spelled it, and the card is found behind it: an all-404
+        // answer to a legal spelling is what a client applies by erasing its copies.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal(["https://mail.example.test" + DavPaths.Card(UserId, "a.vcf")], HrefsOf(response));
+        Assert.Single(XDocument.Parse(await response.ReadAsync()).Descendants(DavXml.Dav + "getetag"));
+    }
+
     private Task<DavTestResponse> Report(string path, string? body, string? depth = null) =>
         server.SendAsync("REPORT", path, body, depth);
 

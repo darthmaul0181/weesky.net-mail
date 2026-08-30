@@ -137,7 +137,6 @@ public sealed class DavPathsTests
     [InlineData("/dav")]                                     // a collection is spelled with its slash
     [InlineData("//dav/")]                                   // scheme-relative: the authority is not ours
     [InlineData("//example.test/dav/addressbooks/11111111-1111-1111-1111-111111111111/default/")]
-    [InlineData("https://example.test/dav/addressbooks/11111111-1111-1111-1111-111111111111/default/")]
     [InlineData("dav/addressbooks/11111111-1111-1111-1111-111111111111/default/")]
     [InlineData("/DAV/addressbooks/11111111-1111-1111-1111-111111111111/default/")]
     [InlineData("/dav/addressbooks/")]
@@ -154,6 +153,18 @@ public sealed class DavPathsTests
 
     [Fact]
     public void ANullHref_ResolvesToNothing() => Assert.Null(DavPaths.Parse(null));
+
+    [Fact]
+    public void AnAbsoluteUri_DesignatesByItsPathAlone()
+    {
+        // RFC 4918 § 8.3 admits an absolute-URI in an href, and sabre and Radicale both read its
+        // path: refused, every card of such a multiget answers 404 and the client erases its copies.
+        var resource = DavPaths.Parse($"https://example.test/dav/addressbooks/{User}/default/a.vcf");
+
+        Assert.Equal(DavResourceKind.Card, resource!.Kind);
+        Assert.Equal("a.vcf", resource.DavName);
+        Assert.Null(DavPaths.Parse("https://example.test"));
+    }
 
     [Fact]
     public void ATraversalSpelledInFull_NeverEscapesTheCollection()
