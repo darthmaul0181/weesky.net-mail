@@ -99,7 +99,7 @@ CREATE TABLE `contact_sync_state` (
   `seq`          BIGINT UNSIGNED NOT NULL DEFAULT 0
     COMMENT 'Compteur ; nommé seq car SEQUENCE est un mot-clé MariaDB depuis 10.3',
   `pruned_below` BIGINT UNSIGNED NOT NULL DEFAULT 0
-    COMMENT 'Filigrane : un jeton <= cette valeur est irrécupérable (403 valid-sync-token)',
+    COMMENT 'Filigrane : un jeton strictement < cette valeur est irrécupérable (403 valid-sync-token) ; à cette valeur exacte il est encore lu',
   PRIMARY KEY (`user_id`),
   CONSTRAINT `fk_contact_sync_state_user`
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE

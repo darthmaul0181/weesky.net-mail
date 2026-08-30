@@ -26,6 +26,13 @@ internal sealed class DavAuthenticationCache(TimeProvider clock) : IDavAuthentic
     // the account count — not swept, because nothing here lets a caller grow it unboundedly.
     private readonly ConcurrentDictionary<Guid, DateTimeOffset> touched = new();
 
+    // Outside the entries on purpose: an expiring entry would take its generation with it, and the
+    // next Store would then be accepted under a stale one. Only Forget adds a key, and Forget is
+    // reachable only for an account that exists, so this is bounded by the account count too.
+    private readonly ConcurrentDictionary<string, long> generations = new(StringComparer.Ordinal);
+
+    internal int TrackedGenerations => generations.Count;
+
     public bool TryGet(string identifier, string fingerprint, out DavIdentity identity)
     {
         identity = default;
@@ -45,10 +52,32 @@ internal sealed class DavAuthenticationCache(TimeProvider clock) : IDavAuthentic
         return true;
     }
 
-    public void Store(string identifier, string fingerprint, DavIdentity identity) =>
-        entries[identifier] = new Entry(fingerprint, identity, clock.GetUtcNow().Add(Window));
+    public long Generation(string identifier) => generations.TryGetValue(identifier, out var value) ? value : 0;
 
-    public void Forget(string identifier) => entries.TryRemove(identifier, out _);
+    public void Store(string identifier, string fingerprint, DavIdentity identity, long generation)
+    {
+        if (Generation(identifier) != generation) return;
+
+        var entry = new Entry(fingerprint, identity, clock.GetUtcNow().Add(Window));
+        entries[identifier] = entry;
+
+        // A Forget landing between the check and the write above would otherwise leave standing
+        // the very entry it came to remove. Forget moves the generation first and removes second,
+        // so either this second read sees the move, or that removal follows this write: whichever
+        // order the two interleave in, the revoked entry is gone.
+        if (Generation(identifier) != generation)
+            entries.TryRemove(new KeyValuePair<string, Entry>(identifier, entry));
+    }
+
+    public void Forget(string identifier)
+    {
+        // These two lines are ordered, and no test can catch a swap: the generation moves FIRST so
+        // that a Store racing this Forget either reads the new generation and withdraws its entry,
+        // or writes after the removal below and is withdrawn by its own second check. Removing
+        // first would leave a window where Store publishes a revoked secret for the cache's minute.
+        generations.AddOrUpdate(identifier, 1, (_, previous) => previous + 1);
+        entries.TryRemove(identifier, out _);
+    }
 
     public bool ShouldTouch(Guid userId)
     {

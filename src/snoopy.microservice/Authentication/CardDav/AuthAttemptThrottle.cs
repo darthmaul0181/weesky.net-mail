@@ -8,7 +8,7 @@ namespace weesky.Snoopy.Microservice.Authentication.CardDav;
 /// In memory, per instance: the effective threshold multiplies by the number of instances, the
 /// same trade <see cref="DavAuthenticationCache"/> makes and assumed for the same reason.
 /// </summary>
-internal sealed class AuthAttemptThrottle(TimeProvider clock)
+internal sealed class AuthAttemptThrottle(TimeProvider clock) : IAuthAttemptThrottle
 {
     internal const int MaxFailures = 10;
 
@@ -34,7 +34,7 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
 
     internal int CountedKeys => Volatile.Read(ref keyCount);
 
-    internal bool IsBlocked(string identifier, string? address, out TimeSpan retryAfter)
+    public bool IsBlocked(string identifier, string? address, out TimeSpan retryAfter)
     {
         retryAfter = TimeSpan.Zero;
         var blocked = false;
@@ -65,7 +65,7 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
         return blocked;
     }
 
-    internal void RecordFailure(string identifier, string? address)
+    public void RecordFailure(string identifier, string? address)
     {
         var now = clock.GetUtcNow();
         EvictIfFull(now);
@@ -106,7 +106,14 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock)
     /// Clears the identifier's count, and only it: the real phone retrying behind an attacker must
     /// get back in, while the address the attack came from is not absolved by a success elsewhere.
     /// </summary>
-    internal void RecordSuccess(string identifier) => Remove(IdentifierKey(identifier));
+    public void RecordSuccess(string identifier) => Remove(IdentifierKey(identifier));
+
+    /// <summary>
+    /// The regeneration seam. Same effect as <see cref="RecordSuccess"/> and a different reason:
+    /// no secret was compared, a JWT was — see <see cref="IAuthAttemptThrottle.ForgetIdentifier"/>
+    /// for why the address key is left standing.
+    /// </summary>
+    public void ForgetIdentifier(string identifier) => Remove(IdentifierKey(identifier));
 
     private static IEnumerable<string> Keys(string identifier, string? address)
     {

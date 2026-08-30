@@ -3976,9 +3976,11 @@ MSG
   donc un attribut sans nom de politique répondrait `WWW-Authenticate: Bearer` à un client CardDAV,
   qui n'a pas de jeton et ne sait pas en demander. Toute route `/dav` porte
   `[Authorize(Policy = CardDavAuthenticationDefaults.PolicyName)]`, jamais autre chose.
-- **Le piège du limiteur après une régénération**, que 4c-i ne peut pas fermer : le contrôleur pourrait effacer la clé de l’identifiant en régénérant — l’appelant vient de prouver son identité par un JWT — mais `AuthAttemptThrottle` est `internal` et un contrôleur public ne peut pas le prendre en paramètre. Il faut une couture, et la clé d’adresse resterait de toute façon. 4c-ii la pose ou l’assume.
+- **Le piège du limiteur après une régénération**, que 4c-i ne peut pas fermer : le contrôleur pourrait effacer la clé de l’identifiant en régénérant — l’appelant vient de prouver son identité par un JWT — mais `AuthAttemptThrottle` est `internal` et un contrôleur public ne peut pas le prendre en paramètre. Il faut une couture, et la clé d’adresse resterait de toute façon. 4c-ii la pose ou l’assume. **Fermé en 4c-ii-c** (tâche 10) : la couture est `IAuthAttemptThrottle`, publique comme `IDavAuthenticationCache`, l’implémentation restant `internal` ; `ForgetIdentifier` efface la clé de l’identifiant à la régénération et à l’allumage, et la clé d’adresse reste bien debout.
 - **Le résidu de soixante secondes sur la révocation** : `Forget` ne peut pas battre un `Store`
   concurrent — une requête qui a lu l'ancien secret avant la rotation peut le réinscrire après.
   Le fermer demande un compteur de génération dans `IDavAuthenticationCache` ; c'est le bon
-  correctif et 4c-ii le bon endroit.
+  correctif et 4c-ii le bon endroit. **Fermé en 4c-ii-c** (tâche 10) :
+  le compteur vit hors des entrées — une entrée qui expire emporterait sa génération — la génération
+  est prise avant la lecture en base et `Store` refuse celle qui a bougé.
 - Aucune conformité client prouvée : c'est 4d.

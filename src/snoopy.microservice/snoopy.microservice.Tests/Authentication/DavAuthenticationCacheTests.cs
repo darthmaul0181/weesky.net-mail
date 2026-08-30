@@ -19,7 +19,8 @@ public sealed class DavAuthenticationCacheTests
     {
         var (cache, _) = Create();
 
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-a", out var identity));
         Assert.Equal(User, identity.UserId);
@@ -31,7 +32,8 @@ public sealed class DavAuthenticationCacheTests
     {
         // A replaced secret must not be served from the cache of the one it replaced.
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         Assert.False(cache.TryGet("alice@weesky.be", "fingerprint-b", out _));
     }
@@ -40,7 +42,8 @@ public sealed class DavAuthenticationCacheTests
     public void TryGet_MissesOnAnotherIdentifier()
     {
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         Assert.False(cache.TryGet("bob@weesky.be", "fingerprint-a", out _));
     }
@@ -49,7 +52,8 @@ public sealed class DavAuthenticationCacheTests
     public void TryGet_HitsJustInsideTheWindow()
     {
         var (cache, clock) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         clock.Now = clock.Now.Add(DavAuthenticationCache.Window - TimeSpan.FromSeconds(1));
 
@@ -60,7 +64,8 @@ public sealed class DavAuthenticationCacheTests
     public void TryGet_MissesOnceTheWindowHasPassed()
     {
         var (cache, clock) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         clock.Now = clock.Now.Add(DavAuthenticationCache.Window + TimeSpan.FromSeconds(1));
 
@@ -73,9 +78,11 @@ public sealed class DavAuthenticationCacheTests
         // One entry per identifier, not per (identifier, fingerprint) pair: a second Store for
         // the same account retires the first fingerprint rather than keeping both alive.
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
-        cache.Store("alice@weesky.be", "fingerprint-b", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-b", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         Assert.False(cache.TryGet("alice@weesky.be", "fingerprint-a", out _));
         Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-b", out _));
@@ -87,7 +94,8 @@ public sealed class DavAuthenticationCacheTests
         // What a regeneration and a security-stamp rotation both call, so the replaced secret
         // stops working on this instance at once rather than at the end of the window.
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         cache.Forget("alice@weesky.be");
 
@@ -98,8 +106,10 @@ public sealed class DavAuthenticationCacheTests
     public void Forget_LeavesAnotherIdentifiersEntryIntact()
     {
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
-        cache.Store("bob@weesky.be", "fingerprint-b", new DavIdentity(Guid.NewGuid(), true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
+        cache.Store("bob@weesky.be", "fingerprint-b", new DavIdentity(Guid.NewGuid(), true),
+            cache.Generation("bob@weesky.be"));
 
         cache.Forget("alice@weesky.be");
 
@@ -112,7 +122,8 @@ public sealed class DavAuthenticationCacheTests
         // The contract (IDavAuthenticationCache) puts canonicalisation on the caller; this pins
         // that the cache itself compares byte for byte rather than compensating for casing.
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         Assert.False(cache.TryGet("Alice@weesky.be", "fingerprint-a", out _));
     }
@@ -122,7 +133,8 @@ public sealed class DavAuthenticationCacheTests
     {
         var (cache, _) = Create();
 
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, false));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, false),
+            cache.Generation("alice@weesky.be"));
 
         Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-a", out var identity));
         Assert.False(identity.CardDavEnabled);
@@ -135,7 +147,8 @@ public sealed class DavAuthenticationCacheTests
         // window it keeps answering enabled whatever the switch did meanwhile. That staleness is
         // why the controller driving the switch forgets on enable as much as on disable.
         var (cache, _) = Create();
-        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true));
+        cache.Store("alice@weesky.be", "fingerprint-a", new DavIdentity(User, true),
+            cache.Generation("alice@weesky.be"));
 
         Assert.True(cache.TryGet("alice@weesky.be", "fingerprint-a", out var stale));
         Assert.True(stale.CardDavEnabled);

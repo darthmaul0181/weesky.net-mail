@@ -41,8 +41,11 @@ internal static class DavRequestLog
 /// <param name="Resource">the request path — never the query, which may carry a token</param>
 /// <param name="Depth">the Depth header as sent, unparsed: an unreadable one is the diagnosis</param>
 /// <param name="Report">the report the body named, or null when the request carried none</param>
-/// <param name="TokenIn">the sync token the client presented (plan c)</param>
-/// <param name="TokenOut">the sync token the answer minted (plan c)</param>
+/// <param name="TokenIn">the sync token the client presented to sync-collection, through
+/// DavSyncToken.ForLog (prefix stripped, control characters blanked) — carried on the refusal
+/// path above all, which is the case the field exists for</param>
+/// <param name="TokenOut">the sync token the answer minted — a truncated answer mints the cut,
+/// not the counter, and telling the two apart in a log is the diagnosis this field buys</param>
 /// <param name="Responses">how many response elements the multistatus carried — an empty book is
 /// a claim about this number, and an access log cannot carry it</param>
 /// <param name="StatusCode">the status actually written</param>

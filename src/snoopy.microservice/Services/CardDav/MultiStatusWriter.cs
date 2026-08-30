@@ -174,6 +174,17 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     }
 
     /// <summary>
+    /// The <c>DAV:sync-token</c> of RFC 6578 § 6.2, a direct child of <c>multistatus</c> written
+    /// after the last response — the value the client files and hands back next round.
+    /// </summary>
+    internal async Task WriteSyncTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await writer.WriteElementStringAsync(null, "sync-token", DavXml.Dav.NamespaceName, token)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Pushes what is written so far onto the wire, and only that: the point of writing straight
     /// into the body is that the first response is sent before the last one is composed.
     /// </summary>

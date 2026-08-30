@@ -199,7 +199,8 @@ public sealed class WebmailUserStoreTests
         var db = nameof(RotateSecurityStamp_ForgetsTheCachedSynchronisationIdentity);
         var cache = new DavAuthenticationCache(Clock);
         var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
-        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true));
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true),
+            cache.Generation("mick@weesky.be"));
 
         await CreateStore(db, cache).RotateSecurityStampAsync("  Mick@WEESKY.be ", CancellationToken.None);
 
@@ -214,7 +215,8 @@ public sealed class WebmailUserStoreTests
         var db = nameof(DeleteByEmail_ForgetsTheCachedSynchronisationIdentity);
         var cache = new DavAuthenticationCache(Clock);
         var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
-        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true));
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true),
+            cache.Generation("mick@weesky.be"));
 
         await CreateStore(db, cache).DeleteByEmailAsync("  Mick@WEESKY.be ", CancellationToken.None);
 

@@ -18,7 +18,7 @@ internal static class VCardProjector
 {
     // Column widths ContactValidator does not mirror: display_name 255, uid 255, group_name 64,
     // params 255 (emails/phones) but 512 (addresses), and the seven contact_addresses components.
-    private const int MaxDisplayNameLength = 255;
+    internal const int MaxDisplayNameLength = 255;
 
     /// <summary>What <c>contacts.uid</c> holds — the import refuses a card whose UID is longer.</summary>
     internal const int MaxUidLength = 255;

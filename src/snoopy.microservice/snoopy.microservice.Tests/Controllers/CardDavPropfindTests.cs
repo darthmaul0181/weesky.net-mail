@@ -1,5 +1,9 @@
 using System.Xml.Linq;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -8,6 +12,8 @@ namespace weesky.Snoopy.Microservice.Tests.Controllers;
 
 public sealed class CardDavPropfindTests : IAsyncLifetime
 {
+    private static readonly Guid Epoch = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
     private DavTestServer server = null!;
 
     private Guid UserId => server.UserId;
@@ -39,6 +45,10 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     [Fact]
     public async Task DepthZeroOnTheCollection_AnswersTheCollectionAlone()
     {
+        // The card is what makes the assertion say anything: on an empty book a collection leaking
+        // its members into a Depth: 0 answer is still a single response.
+        GivenCards("a.vcf");
+
         var response = await Propfind(DavPaths.Collection(UserId), depth: "0", body: PropBody("displayname"));
 
         Assert.Equal(207, response.StatusCode);
@@ -72,6 +82,120 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
 
         // A book that serves a dead href is one a client flags in error on every cycle.
         Assert.Equal(2, HrefsOf(response).Count);
+    }
+
+    [Fact]
+    public async Task DepthOne_BoundsItsMembersToTheCounterItRead()
+    {
+        GivenTheCounterAt(20);
+        GivenCardAtRank("late.vcf", 25);
+        GivenCardAtRank("a.vcf", 5);
+
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "1", body: PropBody("getetag"));
+
+        // The forgotten path: DAVx5 reads the state then the member list in two separate PROPFINDs
+        // and holds the ctag as covering the list. A row committed in between would be covered by
+        // the returned ctag without appearing in the list.
+        Assert.DoesNotContain(HrefsOf(response), h => h.EndsWith("late.vcf"));
+        Assert.Contains(HrefsOf(response), h => h.EndsWith("a.vcf"));
+    }
+
+    [Fact]
+    public async Task DepthOne_ReturnsTheSameCounterItBoundedWith()
+    {
+        GivenTheCounterAt(20);
+        GivenCardAtRank("a.vcf", 5);
+
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "1",
+            body: PropBody("getctag", DavXml.CalendarServer));
+
+        // The two halves of the answer must be coherent with each other: the ctag returned is the
+        // one the member list was bounded by, never a second read.
+        Assert.Equal(DavSyncToken.Ctag(new SyncState(Epoch, 20, 0)), CtagOf(response));
+    }
+
+    [Fact]
+    public async Task DepthZero_ReadsTheCounterOnceToo()
+    {
+        GivenTheCounterAt(20);
+        GivenCardAtRank("a.vcf", 5);
+
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
+            body: PropBody("getctag", DavXml.CalendarServer));
+
+        // The card again: without one, a book leaking its members into a Depth: 0 answer would
+        // leave both of these assertions standing.
+        Assert.Single(ResponsesOf(response));
+        Assert.Equal(DavSyncToken.Ctag(new SyncState(Epoch, 20, 0)), CtagOf(response));
+    }
+
+    [Fact]
+    public async Task DepthOne_ReadsTheCounterAndTheMembersInOneSnapshot()
+    {
+        // Outside one snapshot the bound is not free, and what it costs is a MODIFIED card: an
+        // edit gives it a new, higher rank, so a webmail edit landing between the two reads moves
+        // it above the bound and OUT of the member list, while the ctag still covers its old rank.
+        // A client reads that absence as a server-side delete and drops its copy until the next
+        // ctag poll — hours, by DAVx5's default.
+        //
+        // InMemory can never show that: it has no isolation, and ignoring TransactionIgnoredWarning
+        // even makes CurrentTransaction stay null after BeginTransactionAsync, so a witness has
+        // nothing to look at. Keeping the warning fatal turns "a snapshot was opened" into the one
+        // observable there is — the refusal below is the provider's, never a route's answer.
+        await using var strict = await DavTestServer.StartAsync(keepTransactionsFatal: true);
+        using (var db = strict.CreateContext())
+        {
+            SeedCard(db, strict.UserId, "a.vcf", 5);
+            db.SaveChanges();
+        }
+
+        var collection = DavPaths.Collection(strict.UserId);
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(
+            () => strict.PropfindAsync(collection, "1", PropBody("getetag")));
+
+        // And only where both reads happen: a Depth: 0 reads the counter alone, one statement that
+        // owes nothing to a snapshot, and it must not have paid for one.
+        Assert.Equal(207, (await strict.PropfindAsync(collection, "0", PropBody("getetag"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task ASecondReadOfTheCounter_WouldContradictTheAnswerAlreadyGiven()
+    {
+        // Both orders answer the same thing on a quiet book, so the book is made to move: this
+        // store answers a counter that has advanced to every read past the first. One read serves
+        // the ctag AND the bound, so both assertions below hold; a second read feeds 99 to
+        // whichever half asked for it — the ctag, or the bound that then lets late.vcf through.
+        await using var drifting = await DavTestServer.StartAsync(
+            overrides: services => services.AddScoped<IContactSyncStore, DriftingSyncStore>());
+        using (var db = drifting.CreateContext())
+        {
+            db.ContactSyncStates.Add(new ContactSyncState
+            {
+                UserId = drifting.UserId, Epoch = Epoch, Seq = 20, PrunedBelow = 0
+            });
+            SeedCard(db, drifting.UserId, "a.vcf", 5);
+            SeedCard(db, drifting.UserId, "late.vcf", 25);
+            db.SaveChanges();
+        }
+
+        var response = await drifting.PropfindAsync(DavPaths.Collection(drifting.UserId), "1",
+            PropBody([DavXml.CalendarServer + "getctag", DavXml.Dav + "getetag"]));
+
+        Assert.Equal(DavSyncToken.Ctag(new SyncState(Epoch, 20, 0)),
+            CtagOf(response, DavPaths.Collection(drifting.UserId)));
+        Assert.DoesNotContain(HrefsOf(response), h => h.EndsWith("late.vcf"));
+    }
+
+    [Fact]
+    public async Task ABookWithNoCounterAtAll_StillAnswersItsMembers()
+    {
+        // No state row means no rank was ever issued, so there is no claim to keep honest — and
+        // bounding at 0 would answer an empty book, which a client applies by deleting its copies.
+        GivenCardAtRank("a.vcf", 5);
+
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "1", body: PropBody("getetag"));
+
+        Assert.Contains(HrefsOf(response), h => h.EndsWith("a.vcf"));
     }
 
     [Fact]
@@ -181,23 +305,43 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     {
         using var db = server.CreateContext();
         var sequence = (ulong)db.Contacts.Count();
-        foreach (var name in names)
-        {
-            var id = Guid.NewGuid();
-            db.Contacts.Add(new Contact
-            {
-                Id = id,
-                UserId = UserId,
-                Uid = id.ToString(),
-                DavName = name,
-                VCardRaw = $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{id}\r\nFN:{name}\r\nEND:VCARD\r\n",
-                CardHash = $"hash-of-{name}",
-                UpdatedAt = DateTime.UtcNow,
-                SyncSequence = ++sequence,
-            });
-        }
-
+        foreach (var name in names) SeedCard(db, UserId, name, ++sequence);
         db.SaveChanges();
+    }
+
+    private void GivenCardAtRank(string davName, ulong rank)
+    {
+        using var db = server.CreateContext();
+        SeedCard(db, UserId, davName, rank);
+        db.SaveChanges();
+    }
+
+    /// <summary>The counter alone, never followed by <see cref="GivenCardAtRank"/>: a test here
+    /// pins the bound, so the seeded ranks must be free to sit on either side of it.</summary>
+    private void GivenTheCounterAt(ulong seq)
+    {
+        using var db = server.CreateContext();
+        db.ContactSyncStates.Add(new ContactSyncState
+        {
+            UserId = UserId, Epoch = Epoch, Seq = seq, PrunedBelow = 0
+        });
+        db.SaveChanges();
+    }
+
+    private static void SeedCard(PreferencesDbContext db, Guid userId, string davName, ulong rank)
+    {
+        var id = Guid.NewGuid();
+        db.Contacts.Add(new Contact
+        {
+            Id = id,
+            UserId = userId,
+            Uid = id.ToString(),
+            DavName = davName,
+            VCardRaw = $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{id}\r\nFN:{davName}\r\nEND:VCARD\r\n",
+            CardHash = $"hash-of-{davName}",
+            UpdatedAt = DateTime.UtcNow,
+            SyncSequence = rank,
+        });
     }
 
     /// <summary>Visible in the webmail, invisible to the protocol: no dav_name yet — the one
@@ -237,4 +381,59 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
 
     private static List<string> HrefsOf(DavTestResponse response) =>
         [.. ResponsesOf(response).Select(r => r.Element(DavXml.Href)!.Value)];
+
+    private string CtagOf(DavTestResponse response) => CtagOf(response, DavPaths.Collection(UserId));
+
+    /// <summary>The collection's own ctag, named by its href rather than taken as the first in the
+    /// document: a card answers the request with an EMPTY getctag in its 404 propstat.</summary>
+    private static string CtagOf(DavTestResponse response, string collectionHref) =>
+        ResponsesOf(response)
+            .Single(r => r.Element(DavXml.Href)!.Value == collectionHref)
+            .Descendants(DavXml.CalendarServer + "getctag")
+            .Single()
+            .Value;
+
+    /// <summary>
+    /// Reads the state for real, but every read past the first answers a counter that has moved
+    /// on. Registered where a test claims one read serves both halves of the answer: nothing else
+    /// of this store is reachable from a PROPFIND, hence the refusals.
+    /// </summary>
+    private sealed class DriftingSyncStore(PreferencesDbContext context) : IContactSyncStore
+    {
+        private const ulong Drifted = 99;
+
+        private int reads;
+
+        public async Task<SyncState?> ReadStateAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            var row = await context.ContactSyncStates
+                .SingleOrDefaultAsync(s => s.UserId == userId, cancellationToken);
+            return row is null
+                ? null
+                : new SyncState(row.Epoch, reads++ == 0 ? row.Seq : Drifted, row.PrunedBelow);
+        }
+
+        public Task<ulong> NextSequenceAsync(Guid userId, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public Task<SyncState> ReadOrCreateStateAsync(Guid userId, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public Task PlaceTombstoneAsync(
+            Guid userId, string davName, ulong sequence, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public Task LiftTombstoneAsync(Guid userId, string davName, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public Task<bool> ArchiveAsync(ContactRevision revision, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public Task<PruneOutcome> PruneAsync(DateTime tombstonesBefore, DateTime revisionsBefore,
+            CancellationToken cancellationToken) =>
+            throw Refused();
+
+        private static InvalidOperationException Refused() =>
+            new("A PROPFIND reads the state and nothing else of this store.");
+    }
 }

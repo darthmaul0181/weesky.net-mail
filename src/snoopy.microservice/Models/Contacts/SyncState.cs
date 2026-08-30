@@ -8,5 +8,6 @@ namespace weesky.Snoopy.Microservice.Models.Contacts;
 /// </summary>
 /// <param name="Epoch">Rotated only by a restore; it makes every token the old database issued foreign.</param>
 /// <param name="Seq">The rank of the most recent write.</param>
-/// <param name="PrunedBelow">A token at or below this is unrecoverable.</param>
+/// <param name="PrunedBelow">A token strictly below this is unrecoverable; at it, every
+/// tombstone still needed survives (ruling BG).</param>
 public sealed record SyncState(Guid Epoch, ulong Seq, ulong PrunedBelow);

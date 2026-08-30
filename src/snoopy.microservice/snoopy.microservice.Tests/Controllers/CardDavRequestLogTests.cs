@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -117,6 +118,80 @@ public sealed class CardDavRequestLogTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ASyncCollection_LogsTheTokenPresentedAndTheTokenMinted()
+    {
+        GivenSyncState(seq: 20);
+        GivenCardAtRank("a.vcf", 12);
+
+        await server.SendAsync("REPORT", DavPaths.Collection(UserId),
+            SyncBody(DavSyncToken.Token(new SyncState(Epoch, 8, 0))));
+
+        // The emitted line, not the intent: both fields on the same entry, prefix stripped so the
+        // epoch and the rank - the discriminating tail - survive the 64-character bound.
+        logger.VerifyInformationLoggedWithAll(
+            $"tokenIn={Epoch}/8", $"tokenOut={Epoch}/20", "status=207");
+    }
+
+    [Fact]
+    public async Task ARefusedToken_StillLogsWhatTheClientPresented()
+    {
+        GivenSyncState(seq: 20, pruned: 10);
+
+        await server.SendAsync("REPORT", DavPaths.Collection(UserId),
+            SyncBody(DavSyncToken.Token(new SyncState(Epoch, 5, 0))));
+
+        // The refusal path is the one the field exists for: "a token refused in a loop" separates
+        // from the four other empty-book causes only by reading WHICH token looped. No token was
+        // minted, and the line must say so rather than repeat a stale one.
+        logger.VerifyInformationLoggedWithAll(
+            $"tokenIn={Epoch}/5", "tokenOut=(null)", "status=403", "valid-sync-token");
+    }
+
+    [Fact]
+    public async Task ATruncatedAnswer_LogsTheCutTokenAndNotTheCounter()
+    {
+        GivenSyncState(seq: 11);
+        GivenCardAtRank("a.vcf", 10);
+        GivenCardAtRank("b.vcf", 11);
+
+        await server.SendAsync("REPORT", DavPaths.Collection(UserId),
+            SyncBody(DavSyncToken.Token(new SyncState(Epoch, 0, 0)), limit: 1));
+
+        // The truncated answer mints the cut, not the counter; a log that said 11 here would hide
+        // exactly the resumption the 507 asks the client to make.
+        logger.VerifyInformationLoggedWithAll($"tokenOut={Epoch}/10", "status=207");
+        logger.VerifyNoLoggedValueContains($"{Epoch}/11");
+    }
+
+    [Fact]
+    public async Task AFloodedToken_IsBoundedInTheLine()
+    {
+        GivenSyncState(seq: 20);
+
+        await server.SendAsync("REPORT", DavPaths.Collection(UserId),
+            SyncBody(new string('x', 200)));
+
+        // The one field of the line that echoes client input, bounded by the log itself - a
+        // foreign token is not ours to shorten, so the log's own 64-character cut is what holds.
+        logger.VerifyInformationLoggedWithAll(
+            "status=403", new string('x', DavRequestLog.MaxFieldLength));
+        logger.VerifyNoLoggedValueContains(new string('x', DavRequestLog.MaxFieldLength + 1));
+    }
+
+    [Fact]
+    public async Task AControlCharacterInAToken_NeverReachesTheLine()
+    {
+        GivenSyncState(seq: 20);
+
+        await server.SendAsync("REPORT", DavPaths.Collection(UserId),
+            SyncBody("evil\nstatus=200"));
+
+        // A raw newline in an echoed field is a forged second line to any log parser.
+        logger.VerifyInformationLoggedWithAll("evil?status=200");
+        logger.VerifyNoLoggedValueContains("evil\n");
+    }
+
+    [Fact]
     public async Task NoLine_EverCarriesTheAddressOrACard()
     {
         GivenCards("a.vcf");
@@ -150,6 +225,47 @@ public sealed class CardDavRequestLogTests : IAsyncLifetime
         new XDocument(new XElement(DavXml.Dav + "propertyupdate",
             new XElement(DavXml.Dav + "set", new XElement(DavXml.Prop,
                 new XElement(DavXml.Dav + "displayname", "X"))))).ToString();
+
+    private static readonly Guid Epoch = Guid.Parse("66666666-6666-6666-6666-666666666666");
+
+    private void GivenSyncState(ulong seq, ulong pruned = 0)
+    {
+        using var db = server.CreateContext();
+        db.ContactSyncStates.Add(new ContactSyncState
+        {
+            UserId = UserId, Epoch = Epoch, Seq = seq, PrunedBelow = pruned
+        });
+        db.SaveChanges();
+    }
+
+    private void GivenCardAtRank(string name, ulong rank)
+    {
+        using var db = server.CreateContext();
+        var id = Guid.NewGuid();
+        db.Contacts.Add(new Contact
+        {
+            Id = id,
+            UserId = UserId,
+            Uid = id.ToString(),
+            DavName = name,
+            VCardRaw = $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{id}\r\nFN:{name}\r\nEND:VCARD\r\n",
+            CardHash = $"hash-of-{name}",
+            UpdatedAt = DateTime.UtcNow,
+            SyncSequence = rank,
+        });
+        db.SaveChanges();
+    }
+
+    private static string SyncBody(string? token, int? limit = null)
+    {
+        var root = new XElement(DavXml.Dav + "sync-collection",
+            new XElement(DavXml.Dav + "sync-token", token ?? string.Empty),
+            new XElement(DavXml.Dav + "sync-level", "1"));
+        if (limit is { } bound)
+            root.Add(new XElement(DavXml.Dav + "limit", new XElement(DavXml.Dav + "nresults", bound)));
+        root.Add(new XElement(DavXml.Prop, new XElement(DavXml.Dav + "getetag")));
+        return new XDocument(root).ToString();
+    }
 
     private void GivenCards(params string[] names)
     {

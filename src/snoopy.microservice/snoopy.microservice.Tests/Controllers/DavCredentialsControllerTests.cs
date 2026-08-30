@@ -19,12 +19,13 @@ public sealed class DavCredentialsControllerTests
 
     private readonly Mock<IDavCredentialStore> store = new();
     private readonly Mock<IDavAuthenticationCache> cache = new();
+    private readonly Mock<IAuthAttemptThrottle> throttle = new();
 
     private DavCredentialsController CreateController(
         string? publicUrl = "https://api.mail.weesky.net", string username = "alice", string domain = "weesky.be")
     {
         var controller = new DavCredentialsController(
-            store.Object, cache.Object,
+            store.Object, cache.Object, throttle.Object,
             Options.Create(new DavOptions { PublicUrl = publicUrl }),
             NullLogger<DavCredentialsController>.Instance)
         {

@@ -33,7 +33,8 @@ internal static class DavProperties
     ];
 
     /// <summary>The two RFC 6352 § 8.3 makes mandatory, and no more.</summary>
-    private static readonly string[] Collations = ["i;ascii-casemap", "i;unicode-casemap"];
+    private static readonly string[] Collations =
+        [DavCollation.AsciiCasemap, DavCollation.UnicodeCasemap];
 
     /// <summary>
     /// Both cost, and a client that wants either names it — in a <c>prop</c>, or in the
@@ -89,13 +90,14 @@ internal static class DavProperties
                 DavSyncToken.Ctag(r.State))),
             (DavXml.Dav + "sync-token",
                 r => new XElement(DavXml.Dav + "sync-token", DavSyncToken.Token(r.State))),
-            // What this build ANSWERS, not what the slice will. Announcing addressbook-query and
-            // sync-collection while REPORT refuses them made DAVx5 loop: ctag poll,
-            // sync-collection, 403, start over — observed on Android, never falling back to the
-            // Depth: 1 listing, so the book never filled. Plan c announces them by implementing
-            // them.
+            // What this build ANSWERS, not what the slice will. Announcing a report REPORT
+            // refuses made DAVx5 loop: ctag poll, sync-collection, 403, start over — observed on
+            // Android, never falling back to the Depth: 1 listing, so the book never filled.
+            // sync-collection and addressbook-query are both here because REPORT now serves them;
+            // a report announced and refused is what made the client loop in the first place.
             (DavXml.Dav + "supported-report-set", _ => ReportSet(
-                DavXml.CardDav + "addressbook-multiget", DavXml.Dav + "expand-property")),
+                DavXml.CardDav + "addressbook-multiget", DavXml.CardDav + "addressbook-query",
+                DavXml.Dav + "expand-property", DavXml.Dav + "sync-collection")),
             // The book stores both versions verbatim and serves what it holds; announcing 3.0 alone
             // would make half the answers a lie.
             (DavXml.CardDav + "supported-address-data", _ => new XElement(
@@ -132,10 +134,11 @@ internal static class DavProperties
                 r => FromCard(r, DavXml.Dav + "getlastmodified", c => HttpDate(c.UpdatedAt))),
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype")),
             (DavXml.Dav + "current-user-privilege-set", _ => PrivilegeSet()),
-            // multiget alone: REPORT answers it on a card, and addressbook-query is refused there
-            // as everywhere else until plan c.
+            // Both, because REPORT answers both on a card: § 8.6 and § 8.7 each define their
+            // report on an address resource, and a Depth: 0 query on a card is sabre's nominal
+            // case for that Depth.
             (DavXml.Dav + "supported-report-set", _ => ReportSet(
-                DavXml.CardDav + "addressbook-multiget"))),
+                DavXml.CardDav + "addressbook-multiget", DavXml.CardDav + "addressbook-query"))),
     };
 
     /// <summary>
@@ -204,7 +207,10 @@ internal static class DavProperties
     /// The quoted entity tag, shared with the <c>ETag</c> header a GET answers: written twice, a
     /// conditional request would file a value no property ever advertised.
     /// </summary>
-    internal static string EntityTag(DavCard card) => $"\"{card.CardHash}\"";
+    internal static string EntityTag(DavCard card) => EntityTag(card.CardHash);
+
+    /// <summary>The same tag from a bare hash — what a PUT answers before any DavCard exists.</summary>
+    internal static string EntityTag(string cardHash) => $"\"{cardHash}\"";
 
     /// <summary>
     /// "R" appends "GMT" whatever the kind carries, so the conversion has to happen first; an

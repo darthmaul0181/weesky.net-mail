@@ -1060,20 +1060,33 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     private readonly record struct CardBefore(string? VCardRaw, string CardHash, string? Uid, string? DavName);
 
     /// <summary>
+    /// The transaction with this store's own commit rule. The no-commit-on-failure predicate only
+    /// ever matches a body returning <c>Result</c> or <c>Result&lt;T&gt;</c> — <c>T is IResult</c>
+    /// compiles for every <typeparamref name="T"/> but only those two implement it. A body
+    /// returning anything else (<c>int</c> from <c>DeleteManyAsync</c>,
+    /// <c>ContactImportOutcome</c> from <c>ImportAsync</c>) always commits, deliberately: both
+    /// report a partial failure inside their own return value rather than aborting, because a
+    /// batch that partially failed must still commit what succeeded.
+    /// </summary>
+    private Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken) =>
+        InTransactionAsync(
+            body, outcome => outcome is not CSharpFunctionalExtensions.IResult { IsFailure: true },
+            cancellationToken);
+
+    /// <summary>
     /// One transaction, opened THROUGH the context's execution strategy. No retry strategy is
     /// configured today, so going through it is presently a no-op — it is done anyway because EF
     /// refuses a manual transaction the day one appears, and bypassing it instead of traversing it
     /// would then make the retry silently wrong.
     /// <para>
-    /// The no-commit-on-failure guard below only ever matches a body returning <c>Result</c> or
-    /// <c>Result&lt;T&gt;</c> — <c>T is IResult</c> compiles for every <typeparamref name="T"/> but
-    /// only those two implement it. A body returning anything else (<c>int</c> from
-    /// <c>DeleteManyAsync</c>, <c>ContactImportOutcome</c> from <c>ImportAsync</c>) always commits,
-    /// deliberately: both report a partial failure inside their own return value rather than
-    /// aborting, because a batch that partially failed must still commit what succeeded.
+    /// The commit decision belongs to the caller: DavContactWriter's outcomes are no
+    /// <c>Result</c>, and a refusal decided after the rank was taken must roll the rank back
+    /// rather than commit it — a committed rank with nothing under it wakes every client for
+    /// nothing.
     /// </para>
     /// </summary>
-    private Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
+    internal Task<T> InTransactionAsync<T>(
+        Func<Task<T>> body, Func<T, bool> commit, CancellationToken cancellationToken)
     {
         // Typed explicitly rather than inline, and taking the CancellationToken as its own
         // parameter: that is the shape the token-taking ExecuteAsync overload requires, and an
@@ -1083,9 +1096,9 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         {
             await using var transaction = await context.Database.BeginTransactionAsync(token);
             var outcome = await body();
-            // A failed Result leaves the transaction uncommitted: the dispose below rolls it back, so a
-            // write that could not be stored never leaves a revision or a consumed rank behind.
-            if (outcome is CSharpFunctionalExtensions.IResult { IsFailure: true }) return outcome;
+            // A refused outcome leaves the transaction uncommitted: the dispose below rolls it back,
+            // so a write that could not be stored never leaves a revision or a consumed rank behind.
+            if (!commit(outcome)) return outcome;
 
             await transaction.CommitAsync(token);
             return outcome;
@@ -1132,13 +1145,17 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// result straight through instead of paying for <c>WithUid</c>, the size check and the hash
     /// comparison a second time on the busiest write path.
     /// </summary>
-    private async Task ApplyCardAsync(
+    internal async Task ApplyCardAsync(
         Contact row, string card, ProjectionCache? loaded, CancellationToken cancellationToken)
     {
         row.VCardRaw = card;
-        row.CardHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(card)));
+        row.CardHash = CardHashOf(card);
         await ReplaceProjectionAsync(row, VCardProjector.Project(card), loaded, cancellationToken);
     }
+
+    /// <summary>SHA-256 hex of the card as stored — the base of the CardDAV ETag.</summary>
+    internal static string CardHashOf(string card) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(card)));
 
     /// <summary>
     /// The card with a <c>UID</c> equal to the column, inserted where RFC 6350 puts it — right
@@ -1297,7 +1314,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// The FK cascades in MariaDB, but the InMemory provider the tests run on enforces no FK at
     /// all: loading and removing the four families here is what makes the two behave alike.
     /// </summary>
-    private async Task ClearProjectionAsync(
+    internal async Task ClearProjectionAsync(
         IReadOnlyList<Guid> contactIds, CancellationToken cancellationToken)
     {
         var loaded = await LoadProjectionAsync(contactIds, cancellationToken);
@@ -1320,7 +1337,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             await context.ContactPhotos.Where(p => contactIds.Contains(p.ContactId)).ToListAsync(cancellationToken));
     }
 
-    private sealed record ProjectionCache(
+    internal sealed record ProjectionCache(
         ILookup<Guid, ContactEmail> Emails, ILookup<Guid, ContactPhone> Phones,
         ILookup<Guid, ContactAddress> PostalAddresses, ILookup<Guid, ContactPhoto> Photos)
     {

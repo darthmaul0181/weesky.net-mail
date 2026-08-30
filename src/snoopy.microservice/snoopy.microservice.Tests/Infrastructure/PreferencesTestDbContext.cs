@@ -18,10 +18,18 @@ internal sealed class PreferencesTestDbContext : PreferencesDbContext
     // than silently no-op, to warn a caller relying on one. The transaction ContactStore opens is
     // real in production and ignored here — one more reason the sequence counter's atomicity
     // (IContactSyncStore.NextSequenceAsync) is verified by hand rather than by a test on InMemory.
-    public PreferencesTestDbContext(string databaseName)
+    //
+    // Ignoring it also makes the transaction INVISIBLE: CurrentTransaction stays null even after
+    // BeginTransactionAsync, so nothing can witness that a caller opened one. keepTransactionsFatal
+    // restores the default refusal, which is the only observable a test has for "a snapshot was
+    // opened here" — the isolation itself remains beyond this provider either way.
+    public PreferencesTestDbContext(string databaseName, bool keepTransactionsFatal = false)
         : base(new DbContextOptionsBuilder<PreferencesDbContext>()
               .UseInMemoryDatabase(databaseName, Root)
-              .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+              .ConfigureWarnings(w =>
+              {
+                  if (!keepTransactionsFatal) w.Ignore(InMemoryEventId.TransactionIgnoredWarning);
+              })
               .Options)
     {
     }

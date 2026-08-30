@@ -22,11 +22,24 @@ public interface IDavAuthenticationCache
     /// </summary>
     bool TryGet(string identifier, string fingerprint, out DavIdentity identity);
 
-    void Store(string identifier, string fingerprint, DavIdentity identity);
+    /// <summary>
+    /// The revocation counter of one identifier, taken by a caller BEFORE it reads the secret from
+    /// the database and handed back to <see cref="Store"/>. Reading it remembers nothing: the
+    /// identifier comes off the Basic header, so a read that created a row would give an attacker
+    /// an unbounded table to grow.
+    /// </summary>
+    long Generation(string identifier);
 
     /// <summary>
-    /// Drops the cached authentication for an account, so a regenerated or revoked secret stops
-    /// working on this instance at once — the touch throttle survives, since it holds no secret
+    /// Publishes an entry, unless <paramref name="generation"/> is older than the identifier's
+    /// current one — a <see cref="Forget"/> landed between the read and this write, and the secret
+    /// read before the rotation must not be written back after it.
+    /// </summary>
+    void Store(string identifier, string fingerprint, DavIdentity identity, long generation);
+
+    /// <summary>
+    /// Drops the cached authentication for an account and moves its generation on, so a
+    /// regenerated or revoked secret stops working on this instance at once — the touch throttle survives, since it holds no secret
     /// to invalidate. On the others the window is the ceiling — the same trade sessions make.
     ///
     /// <para>The synchronisation switch must call this too, on enable as much as on disable, and

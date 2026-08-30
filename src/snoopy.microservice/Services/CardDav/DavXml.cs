@@ -27,4 +27,13 @@ internal static class DavXml
     internal static readonly XName Href = Dav + "href";
     internal static readonly XName Status = Dav + "status";
     internal static readonly XName Error = Dav + "error";
+
+    /// <summary>
+    /// An attribute is its local name in no namespace — the unprefixed form RFC 6352's own grammar
+    /// spells; a prefix bound to the CardDAV namespace names the very same attribute.
+    /// </summary>
+    internal static string? Attribute(XElement element, string name) =>
+        element.Attributes().FirstOrDefault(a => !a.IsNamespaceDeclaration
+            && a.Name.LocalName == name
+            && (a.Name.Namespace == XNamespace.None || a.Name.Namespace == CardDav))?.Value;
 }

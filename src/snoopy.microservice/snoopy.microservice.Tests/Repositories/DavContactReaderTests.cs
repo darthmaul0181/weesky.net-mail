@@ -30,6 +30,13 @@ public sealed class DavContactReaderTests
         SyncSequence = 1,
     };
 
+    private static Contact AtRank(string davName, ulong rank)
+    {
+        var contact = Visible(davName);
+        contact.SyncSequence = rank;
+        return contact;
+    }
+
     private static Contact WithoutName()
     {
         var contact = Visible(Guid.NewGuid().ToString());
@@ -58,9 +65,22 @@ public sealed class DavContactReaderTests
             Visible("a.vcf"), Visible("b.vcf"));
         var reader = new DavContactReader(context);
 
-        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+        var cards = await reader.StreamAsync(UserId, ulong.MaxValue, CancellationToken.None).ToListAsync();
 
         Assert.Equal(["a.vcf", "b.vcf"], cards.Select(c => c.DavName).Order());
+    }
+
+    [Fact]
+    public async Task Streaming_StopsAtTheUpperBound_Inclusively()
+    {
+        using var context = NewContextWith(AtRank("at.vcf", 20), AtRank("past.vcf", 21));
+        var reader = new DavContactReader(context);
+
+        var cards = await reader.StreamAsync(UserId, 20, CancellationToken.None).ToListAsync();
+
+        // Inclusive: the caller's bound IS the rank of the most recent write it read, so excluding
+        // it would drop the very card that write created.
+        Assert.Equal(["at.vcf"], cards.Select(c => c.DavName));
     }
 
     [Fact]
@@ -69,7 +89,7 @@ public sealed class DavContactReaderTests
         using var context = NewContextWith(Visible("a.vcf"), WithoutName());
         var reader = new DavContactReader(context);
 
-        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+        var cards = await reader.StreamAsync(UserId, ulong.MaxValue, CancellationToken.None).ToListAsync();
 
         // The backfill has not reached it. Serving it would build an href from a name that does not
         // exist, and a book that serves a dead href is one a client flags in error every cycle.
@@ -82,7 +102,7 @@ public sealed class DavContactReaderTests
         using var context = NewContextWith(Visible("a.vcf"), WithoutCard("b.vcf"));
         var reader = new DavContactReader(context);
 
-        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+        var cards = await reader.StreamAsync(UserId, ulong.MaxValue, CancellationToken.None).ToListAsync();
 
         // The second of the three conditions: the 4a backfill missed this one, so it would go out
         // with an empty body.
@@ -95,7 +115,7 @@ public sealed class DavContactReaderTests
         using var context = NewContextWith(Visible("a.vcf"), WithEmptyHash("b.vcf"));
         var reader = new DavContactReader(context);
 
-        var cards = await reader.StreamAsync(UserId, CancellationToken.None).ToListAsync();
+        var cards = await reader.StreamAsync(UserId, ulong.MaxValue, CancellationToken.None).ToListAsync();
 
         // The third, and the one no assertion normally looks at: an ETag of "" is syntactically
         // valid and semantically false, and a client files it like any other value, for ever.
@@ -221,7 +241,7 @@ public sealed class DavContactReaderTests
         // leaves the read running to its end. The attribute alone does not carry it.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var _ in reader.StreamAsync(UserId, cancelled.Token)) { }
+            await foreach (var _ in reader.StreamAsync(UserId, ulong.MaxValue, cancelled.Token)) { }
         });
     }
 }

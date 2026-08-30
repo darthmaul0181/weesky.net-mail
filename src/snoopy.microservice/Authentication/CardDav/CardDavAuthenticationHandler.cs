@@ -28,7 +28,7 @@ internal sealed class CardDavAuthenticationHandler(
     IWebmailUserStore users,
     IAccountInfoProvider accounts,
     IDavAuthenticationCache cache,
-    AuthAttemptThrottle throttle,
+    IAuthAttemptThrottle throttle,
     TimeProvider clock,
     IHostEnvironment environment)
     : AuthenticationHandler<CardDavAuthenticationOptions>(options, loggerFactory, encoder)
@@ -76,7 +76,11 @@ internal sealed class CardDavAuthenticationHandler(
         var fingerprint = DavSecret.Fingerprint(secret);
 
         if (cache.TryGet(canonical, fingerprint, out var cached))
-            return await FinishAsync(canonical, fingerprint, cached, cachedHit: true);
+            return await FinishAsync(canonical, fingerprint, cached, generation: null);
+
+        // Taken before the first read and never after: a revocation landing while this request is
+        // in flight moves the counter, and the secret read below is then refused at the Store.
+        var generation = cache.Generation(canonical);
 
         var account = await users.FindByEmailAsync(canonical, Context.RequestAborted);
         if (account is null) return await RefuseWithDelayAsync(canonical, address);
@@ -102,7 +106,7 @@ internal sealed class CardDavAuthenticationHandler(
         }
 
         var identity = new DavIdentity(account.Value.Id, row.Value.CardDavEnabled);
-        return await FinishAsync(canonical, fingerprint, identity, cachedHit: false);
+        return await FinishAsync(canonical, fingerprint, identity, generation);
     }
 
     /// <summary>
@@ -199,10 +203,11 @@ internal sealed class CardDavAuthenticationHandler(
         return Refuse(Outcome.Unauthorized);
     }
 
+    /// <summary><paramref name="generation"/> is null on a cache hit, which has nothing to store.</summary>
     private async Task<AuthenticateResult> FinishAsync(
-        string identifier, string fingerprint, DavIdentity identity, bool cachedHit)
+        string identifier, string fingerprint, DavIdentity identity, long? generation)
     {
-        if (!cachedHit) cache.Store(identifier, fingerprint, identity);
+        if (generation is { } taken) cache.Store(identifier, fingerprint, identity, taken);
         throttle.RecordSuccess(identifier);
 
         // After the digest matched and never before: a 403 answered earlier would say "this

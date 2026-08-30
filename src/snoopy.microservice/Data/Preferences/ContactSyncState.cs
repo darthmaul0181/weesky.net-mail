@@ -29,8 +29,9 @@ public sealed class ContactSyncState
     public ulong Seq { get; set; }
 
     /// <summary>
-    /// The highest pruned rank. A token at or below it is unrecoverable — the tombstones it would
-    /// need are gone — and answers 403 valid-sync-token rather than silently omitting a deletion.
+    /// The highest pruned rank. A token strictly below it is unrecoverable — a tombstone it would
+    /// need is gone — and answers 403 valid-sync-token rather than silently omitting a deletion; a
+    /// token AT it still resolves, every tombstone above having survived (ruling BG).
     /// </summary>
     [Column("pruned_below")]
     public ulong PrunedBelow { get; set; }

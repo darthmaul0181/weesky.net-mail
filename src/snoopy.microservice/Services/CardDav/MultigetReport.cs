@@ -26,8 +26,8 @@ internal static class MultigetReport
         Guid userId, string principalAddress, IDavContactReader contacts,
         CancellationToken cancellationToken)
     {
-        var request = PropertiesAsked(body);
-        var addressData = AddressDataAsked(body); // may refuse — before anything is written
+        var request = AddressDataFilter.PropertiesAsked(body);
+        var addressData = AddressDataFilter.Asked(body); // may refuse — before anything is written
 
         var hrefs = body.Root!.Elements(DavXml.Href).Select(href => href.Value.Trim()).ToList();
         if (hrefs.Count > MaxHrefs)
@@ -56,7 +56,8 @@ internal static class MultigetReport
                 var context = new DavResourceContext(
                     DavResourceKind.Card, userId, principalAddress, card, null);
                 var (found, missing) = DavProperties.Resolve(request, context);
-                if (addressData is not null) found.Add(Serve(card, addressData));
+                if (addressData is not null)
+                    found.Add(AddressDataFilter.Element(card.VCardRaw, addressData));
                 await writer.WriteResourceAsync(href, found, missing, cancellationToken);
             }
             else
@@ -72,39 +73,4 @@ internal static class MultigetReport
         resource is { Kind: DavResourceKind.Card } && resource.UserId == userId
         && DavName.IsValid(resource.DavName);
 
-    /// <summary>
-    /// The card as this request asked to read it: converted FIRST, restricted SECOND. Restriction
-    /// is textual, so a card restricted to EMAIL has no FN — converting afterwards would have the
-    /// library re-insert what was just removed.
-    /// </summary>
-    private static XElement Serve(DavCard card, AddressDataRequest asked)
-    {
-        var text = asked.Version is { } version
-            ? VCardVersionConverter.To(card.VCardRaw, version)
-            : card.VCardRaw;
-        return new XElement(DavXml.CardDav + "address-data",
-            AddressDataFilter.Restrict(text, asked.PropertyNames));
-    }
-
-    /// <summary>
-    /// <c>address-data</c> is served by hand, not by the property tables, so its name is lifted out
-    /// of what <see cref="DavProperties.Resolve"/> is asked — left in, every card would carry a 404
-    /// propstat naming the very property its 200 propstat serves.
-    /// </summary>
-    private static DavPropertyRequest PropertiesAsked(XDocument body)
-    {
-        var request = DavPropertyRequest.Parse(body);
-        return request with
-        {
-            Names = [.. request.Names.Where(name => name != DavXml.CardDav + "address-data")]
-        };
-    }
-
-    private static AddressDataRequest? AddressDataAsked(XDocument body)
-    {
-        var container = body.Root!.Element(DavXml.Prop) ?? body.Root!.Element(DavXml.Dav + "include");
-        return container?.Element(DavXml.CardDav + "address-data") is { } element
-            ? AddressDataFilter.Parse(element)
-            : null;
-    }
 }

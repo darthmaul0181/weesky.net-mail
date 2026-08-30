@@ -55,9 +55,11 @@ internal sealed class DavTestServer : IAsyncDisposable
     /// <param name="userId">the authenticated user's GUID, minted when absent</param>
     /// <param name="overrides">applied last, so a test may replace a registration — a counting or
     /// throwing repository being the use case</param>
+    /// <param name="keepTransactionsFatal">leaves the InMemory refusal of BeginTransaction in
+    /// place, so that a test can witness a caller opening a snapshot at all</param>
     internal static async Task<DavTestServer> StartAsync(
         string email = "someone@weesky.be", Guid? userId = null,
-        Action<IServiceCollection>? overrides = null)
+        Action<IServiceCollection>? overrides = null, bool keepTransactionsFatal = false)
     {
         var user = new DavTestUser(email, userId ?? Guid.NewGuid());
         var databaseName = Guid.NewGuid().ToString("N");
@@ -67,7 +69,7 @@ internal sealed class DavTestServer : IAsyncDisposable
                 .UseTestServer()
                 .ConfigureServices(services =>
                 {
-                    ConfigureServices(services, user, databaseName);
+                    ConfigureServices(services, user, databaseName, keepTransactionsFatal);
                     overrides?.Invoke(services);
                 })
                 .Configure(app =>
@@ -82,6 +84,10 @@ internal sealed class DavTestServer : IAsyncDisposable
 
         return new DavTestServer(host, host.GetTestClient(), databaseName, user);
     }
+
+    /// <summary>This instance's private InMemory database, for a test building a context of its
+    /// own — a saboteur one, typically, which <see cref="CreateContext"/> cannot be.</summary>
+    internal string DatabaseName => databaseName;
 
     /// <summary>A context on this server's own database, for seeding and asserting.</summary>
     internal PreferencesTestDbContext CreateContext() => new(databaseName);
@@ -119,7 +125,8 @@ internal sealed class DavTestServer : IAsyncDisposable
         host.Dispose();
     }
 
-    private static void ConfigureServices(IServiceCollection services, DavTestUser user, string databaseName)
+    private static void ConfigureServices(IServiceCollection services, DavTestUser user,
+        string databaseName, bool keepTransactionsFatal)
     {
         services.AddLogging();
 
@@ -149,9 +156,12 @@ internal sealed class DavTestServer : IAsyncDisposable
                 .RequireAuthenticatedUser()));
 
         services.AddSingleton(user);
-        services.AddScoped<PreferencesDbContext>(_ => new PreferencesTestDbContext(databaseName));
+        services.AddScoped<PreferencesDbContext>(
+            _ => new PreferencesTestDbContext(databaseName, keepTransactionsFatal));
         services.AddScoped<IDavContactReader, DavContactReader>();
         services.AddScoped<IContactSyncStore, ContactSyncStore>();
+        services.AddScoped<ContactStore>();
+        services.AddScoped<IDavContactWriter, DavContactWriter>();
     }
 
     /// <summary>

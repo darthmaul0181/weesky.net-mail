@@ -152,8 +152,7 @@ internal static class VCardComposer
 
             // A lone \r is a line break to the parser too — left in place it would splice a card
             // boundary back in. And only the first card's lines may feed the splices.
-            var all = LogicalLines(existingCard
-                .Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n"));
+            var all = LogicalLines(CanonicalLineBreaks(existingCard));
             var end = all.FindIndex(c =>
                 NameOf(Unfold(c)).Equals("END", StringComparison.OrdinalIgnoreCase));
             var chunks = end < 0 ? all : all.Take(end + 1).ToList();
@@ -582,7 +581,7 @@ internal static class VCardComposer
         return semi < 0 ? [] : SplitOutsideQuotes(unfolded[(semi + 1)..colon]);
     }
 
-    private static string KeyOf(string parameter) =>
+    internal static string KeyOf(string parameter) =>
         (parameter.IndexOf('=') is var eq && eq < 0 ? parameter : parameter[..eq]).Trim();
 
     // The library's own rendering of a single property: a solo card cannot collapse anything, and
@@ -718,6 +717,10 @@ internal static class VCardComposer
 
     // ---- raw-text primitives --------------------------------------------------------------------
 
+    /// <summary>Bare LF or CR spelled as CRLF, so every reader here sees the same lines.</summary>
+    internal static string CanonicalLineBreaks(string text) =>
+        text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+
     internal static List<string> LogicalLines(string text)
     {
         var lines = new List<string>();
@@ -772,7 +775,7 @@ internal static class VCardComposer
         return end < 0 ? string.Empty : line[start..end];
     }
 
-    private static int IndexOutsideQuotes(string text, char target)
+    internal static int IndexOutsideQuotes(string text, char target)
     {
         var inQuotes = false;
         for (var i = 0; i < text.Length; i++)
@@ -784,7 +787,7 @@ internal static class VCardComposer
         return -1;
     }
 
-    private static List<string> SplitOutsideQuotes(string parameters)
+    internal static List<string> SplitOutsideQuotes(string parameters)
     {
         var parts = new List<string>();
         var start = 0;

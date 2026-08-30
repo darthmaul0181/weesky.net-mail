@@ -348,16 +348,13 @@ public sealed class CardDavReportTests : IAsyncLifetime
         Assert.Equal(DavPaths.Principal(UserId), nested.Element(DavXml.Dav + "href")!.Value);
     }
 
-    [Theory]
-    [InlineData("addressbook-query")]
-    [InlineData("sync-collection")]
-    public async Task AReportThisPlanDoesNotYetServe_Answers403SupportedReport(string localName)
+    [Fact]
+    public async Task AnAddressbookQueryOnTheHome_IsStillARefusal()
     {
-        var response = await Report(DavPaths.Collection(UserId), ReportBody(localName));
+        var response = await Report(DavPaths.Home(UserId), ReportBody("addressbook-query"));
 
-        // Named and refused rather than left to fall through: a 500 makes a client loop for ever
-        // on a report it believes temporarily broken. Plan c replaces the refusal by an
-        // implementation.
+        // § 8.6 defines the query on the book and on a card, and supported-report-set announces it
+        // exactly there: off those two shapes it stays the considered 403, never a 500.
         Assert.Equal(403, response.StatusCode);
         Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
     }
@@ -520,7 +517,8 @@ public sealed class CardDavReportTests : IAsyncLifetime
     /// <summary>Throws on every member: registered where a test claims no read may happen.</summary>
     private sealed class RefusingReader : IDavContactReader
     {
-        public IAsyncEnumerable<DavCard> StreamAsync(Guid userId, CancellationToken cancellationToken) =>
+        public IAsyncEnumerable<DavCard> StreamAsync(
+            Guid userId, ulong upTo, CancellationToken cancellationToken) =>
             throw Refused();
 
         public Task<DavCard?> FindAsync(Guid userId, string davName, CancellationToken cancellationToken) =>
@@ -531,6 +529,14 @@ public sealed class CardDavReportTests : IAsyncLifetime
             throw Refused();
 
         public Task<int> CountAsync(Guid userId, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public IAsyncEnumerable<DavCard> ChangedAsync(
+            Guid userId, ulong after, ulong upTo, CancellationToken cancellationToken) =>
+            throw Refused();
+
+        public Task<IReadOnlyList<ContactTombstone>> TombstonesAsync(
+            Guid userId, ulong after, ulong upTo, CancellationToken cancellationToken) =>
             throw Refused();
 
         private static InvalidOperationException Refused() =>
