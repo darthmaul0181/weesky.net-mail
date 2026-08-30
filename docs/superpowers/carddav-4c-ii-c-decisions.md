@@ -278,3 +278,65 @@ Les trois tests qui ont rougi au premier correctif — le jeu clos des propriét
 du conflit d'UID — sont la preuve que ces comportements étaient épinglés et non accidentels. Neuf
 tests ont été ajoutés, et chacun a été vérifié par mutation : reposer la garde retirée les fait
 rougir.
+
+## Ce que la seconde revue a corrigé — le protocole confronté aux RFC, à sabre et à Radicale
+
+Une seconde passe, un mois après la première, avec une lunette différente : chaque comportement
+confronté au texte des RFC 4918, 6352, 6578, 3744 et 5051, puis à ce que font sabre/dav et Radicale
+au même endroit. Sept constats corrigés, cinq duplications résorbées.
+
+**Les deux gates archivaient une lecture d'avant le verrou.** `DavContactWriter.GateAsync` et
+`ContactStore.UpdateAsync` lisaient la ligne, prenaient le verrou d'état, puis archivaient la
+ligne lue. Deux écritures sans `If-Match` sur la même fiche — le webmail et un téléphone, ou deux
+appareils — et la seconde archivait la version d'avant les deux : la version intermédiaire
+n'entrait jamais dans `contact_revisions`, la table dont tout le rôle est de ne rien perdre. Les
+quatre gates (PUT, DELETE, l'édition et les deux suppressions du webmail) relisent la ligne sous
+le verrou ; l'édition recompose sur la carte relue quand elle a bougé, ou refuse `CardMoved` si
+l'appelant avait dit ce qu'il avait lu.
+
+**`access-control` n'est plus annoncé.** RFC 3744 § 5 fait de `acl`, `supported-privilege-set`,
+`acl-restrictions`, `inherited-acl-set`, `owner` et `principal-collection-set` des propriétés
+obligatoires de **chaque** ressource d'un serveur qui porte la classe, et § 8 de la méthode ACL.
+Rien de cela n'est servi — `owner` sur le carnet seul, `principal-collection-set` sur le principal
+seul. Radicale n'annonce pas la classe ; sabre seulement quand son plugin ACL, qui sert tout,
+est chargé. `current-user-principal` (RFC 5397) et `principal-URL` ne dépendent d'aucune classe.
+
+**Un href en URI absolue désigne par son chemin.** RFC 4918 § 8.3 admet `absolute-URI` dans un
+href ; sabre (`calculateUri`) et Radicale (`urlparse().path`) le lisent ainsi. Refusé, chaque fiche
+d'un tel multiget répondait 404 dans le multistatus — ce qu'un client applique en effaçant ses
+copies. L'autorité n'est pas jugée, pas plus qu'eux ne la jugent.
+
+**PROPFIND sans `Depth` n'est refusé que sur les collections.** RFC 4918 § 9.1 réserve
+`propfind-finite-depth` aux collections ; sur une fiche, le principal ou la racine, infinity est
+la profondeur 0, et le 403 refusait un PROPFIND pour un en-tête dont il n'avait pas besoin.
+
+**Un UID qui change sous son propre nom est accepté.** RFC 6352 § 6.3.2.1 ne définit
+`no-uid-conflict` que pour un UID qu'une **autre** ressource détient. sabre accepte ; Radicale
+refuse (409) — la première revue l'avait noté justement. Ce qui a tranché : DAVx5 ne renonce
+jamais sur un 403, donc une fiche dont le client a régénéré l'UID restait bloquée pour toujours,
+sur un identifiant que personne ne détient. L'archive garde l'ancienne identité ; le refus avec
+href reste entier quand un détenteur existe.
+
+**Le `403 max-resource-size` annoncé peut enfin répondre.** La limite Kestrel du PUT était égale
+au plafond de la carte, donc tout corps au-delà était un 413 de transport, jamais la précondition
+annoncée. Elle passe à deux fois le plafond.
+
+**`i;unicode-casemap` diverge de RFC 5051, et le commentaire le dit désormais.** La RFC plie par
+titlecase puis décomposition récursive (≈ NFKD), sous quoi « jose » trouve « josé » en `contains` ;
+notre pli NFC + minuscules ne le trouve pas — exactement comme sabre (`mb_strtoupper`) et Radicale
+(`lower`). Aligné sur l'état de l'art, pas sur la lettre ; le commentaire justifiait FormC par
+l'argument inverse de la RFC.
+
+**Cinq duplications.** `WriteElementAsync` copié dans `DavError` et `MultiStatusWriter`
+(`XmlWriterExtensions`) ; `LimitOf` copié dans les deux rapports (`DavLimit`) ; trois dépliages
+vCard, dont `RawValueOf` lisait VERSION et UID du gate avec un `IndexOf(':')` aveugle aux
+guillemets (`VCardComposer.FirstRawValue`) ; deux découpages hors guillemets
+(`SplitOutsideQuotes(separator)`) ; et le contrôleur, quinze stubs de route, six blocs
+`try/catch/finally` et quatre « FindAsync ou 404 » identiques — une action par forme qui
+dispatche sur le verbe, `TracedAsync`, `FindCardOr404Async`, `RefuseAsync`, `BodyRefused` : 1082
+lignes deviennent 869, un seul chemin de journal.
+
+Laissé tel quel, et dit : `addressbook-query` ignore `Depth` là où RFC 6352 § 8.6 en fait la
+portée (Radicale l'ignore aussi) ; `FindManyAsync` inline jusqu'à 5000 noms dans un `IN` là où le
+store évite ce motif — DAVx5 multiget par 10, Thunderbird par 50 ; la densité de commentaires.
+Chaque correctif porte son test, et chaque test a été vérifié par mutation.
