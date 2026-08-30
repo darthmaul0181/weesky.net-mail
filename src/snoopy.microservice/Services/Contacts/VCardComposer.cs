@@ -655,7 +655,7 @@ internal static class VCardComposer
     /// genuinely declares <c>N:?;;;;</c> is not ours to rewrite (décision 1) — the projector's
     /// guard is what keeps that one out of the columns.
     /// </summary>
-    private static void StripNamePlaceholders(List<string> lines, VCard card)
+    internal static void StripNamePlaceholders(List<string> lines, VCard card)
     {
         if (Nameless(card.NameViews)) Blank(lines, "N", ";;;;");
         if (Nameless(card.DisplayNames)) Blank(lines, "FN", string.Empty);
@@ -718,7 +718,7 @@ internal static class VCardComposer
 
     // ---- raw-text primitives --------------------------------------------------------------------
 
-    private static List<string> LogicalLines(string text)
+    internal static List<string> LogicalLines(string text)
     {
         var lines = new List<string>();
         foreach (var physical in text.Split("\r\n"))
@@ -733,10 +733,10 @@ internal static class VCardComposer
         return lines;
     }
 
-    private static string Unfold(string chunk) =>
+    internal static string Unfold(string chunk) =>
         chunk.Replace("\r\n ", string.Empty).Replace("\r\n\t", string.Empty);
 
-    private static string Fold(string line)
+    internal static string Fold(string line)
     {
         if (line.Length <= 75) return line;
         var cut = CutAt(line, 75);
@@ -824,7 +824,7 @@ internal static class VCardComposer
         FirstRawLine(vcardRaw, "BDAY") is { } line
             ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
 
-    private static string? RawUid(string vcardRaw) => FirstRawLine(vcardRaw, "UID");
+    internal static string? RawUid(string vcardRaw) => FirstRawLine(vcardRaw, "UID");
 
     private static string EscapeLineBreaks(string value) =>
         value.Replace("\r\n", "\\n").Replace("\r", "\\n").Replace("\n", "\\n");
