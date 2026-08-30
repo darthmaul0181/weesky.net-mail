@@ -44,6 +44,20 @@ public sealed class CardDavReportTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnAllpropMultiget_StillHonoursTheAddressDataItsIncludeNames()
+    {
+        GivenCard("a.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\nEND:VCARD\r\n");
+
+        // Evolution's form: an allprop whose sibling include names address-data. Losing the
+        // include would silently serve the properties and withhold the card itself.
+        var response = await Report(DavPaths.Collection(UserId),
+            AllpropIncludeMultigetBody(DavPaths.Card(UserId, "a.vcf")));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Contains("FN:Ada", AddressDataOf(response).Single());
+    }
+
+    [Fact]
     public async Task TheResponses_FollowTheOrderOfTheBody_EachHrefCarryingItsOwnCard()
     {
         // Distinct content on purpose, and one name that needs escaping: fixtures whose names,
@@ -219,7 +233,12 @@ public sealed class CardDavReportTests : IAsyncLifetime
         var response = await Report(DavPaths.Card(UserId, "a.vcf"),
             MultigetBody(DavPaths.Card(UserId, "a.vcf")));
 
+        // The card's OWN response, not merely a status: this route exists because the header
+        // promises it, and a 207 carrying anything else would keep the promise in name only.
         Assert.Equal(207, response.StatusCode);
+        Assert.Equal([DavPaths.Card(UserId, "a.vcf")], HrefsOf(response));
+        Assert.Equal("\"hash-of-a.vcf\"", XDocument.Parse(await response.ReadAsync())
+            .Descendants(DavXml.Dav + "getetag").Single().Value);
     }
 
     [Fact]
@@ -238,6 +257,22 @@ public sealed class CardDavReportTests : IAsyncLifetime
         // The nested properties are RESOLVED on the target, not echoed: the home's own displayname.
         Assert.Equal("Address Books",
             nested.Descendants(DavXml.Dav + "displayname").Single().Value);
+    }
+
+    [Fact]
+    public async Task ExpandProperty_AnswersANested404ForATargetItCannotResolve()
+    {
+        // principal-collection-set hrefs "/dav/principals/", which resolves to no resource of
+        // ours: the nested response must SAY 404, or an unresolvable target masquerades as found.
+        var response = await Report(DavPaths.Principal(UserId), ExpandPropertyBody(
+            DavXml.Dav + "principal-collection-set", DavXml.Dav + "displayname"));
+
+        Assert.Equal(207, response.StatusCode);
+        var nested = XDocument.Parse(await response.ReadAsync())
+            .Descendants(DavXml.Dav + "principal-collection-set")
+            .Descendants(DavXml.Dav + "response").Single();
+        Assert.Equal(DavPaths.PrincipalCollection, nested.Element(DavXml.Dav + "href")!.Value);
+        Assert.Equal("HTTP/1.1 404 Not Found", nested.Element(DavXml.Dav + "status")!.Value);
     }
 
     [Theory]
@@ -368,6 +403,12 @@ public sealed class CardDavReportTests : IAsyncLifetime
         return new XDocument(new XElement(DavXml.CardDav + "addressbook-multiget", prop,
             hrefs.Select(href => new XElement(DavXml.Href, href)))).ToString();
     }
+
+    private static string AllpropIncludeMultigetBody(string href) =>
+        new XDocument(new XElement(DavXml.CardDav + "addressbook-multiget",
+            new XElement(DavXml.Dav + "allprop"),
+            new XElement(DavXml.Dav + "include", new XElement(DavXml.CardDav + "address-data")),
+            new XElement(DavXml.Href, href))).ToString();
 
     private static string ExpandPropertyBody(XName outer, XName inner) =>
         new XDocument(new XElement(DavXml.Dav + "expand-property",
