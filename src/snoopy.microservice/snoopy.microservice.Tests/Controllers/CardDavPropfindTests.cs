@@ -296,6 +296,54 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnAllpropBesideAPropname_Answers400()
+    {
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
+            body: PropfindBody(new XElement(DavXml.Dav + "allprop"),
+                new XElement(DavXml.Dav + "propname")));
+
+        // RFC 4918 § 14.20 admits exactly one of the three. Taken as allprop — the fallback an
+        // empty body earns — the answer would say the server understood a request it did not.
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnUnknownChildOfPropfind_Answers400()
+    {
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
+            body: PropfindBody(new XElement(DavXml.Dav + "undefined")));
+
+        // The element carries no shape at all, so the 207 it used to earn was the empty body's
+        // allprop under another name.
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnIncludeWithoutItsAllprop_Answers400()
+    {
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
+            body: PropfindBody(new XElement(DavXml.Dav + "include",
+                new XElement(DavXml.Dav + "sync-token"))));
+
+        // § 14.8 defines include as allprop's sibling and nowhere else; alone it names properties
+        // nothing would ever read.
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task APropfindWithNoChildAtAll_IsStillAllprop()
+    {
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
+            body: PropfindBody());
+
+        // Decision 14 of 4c: an empty body means allprop, and a root spelled out but left empty is
+        // the same silence. The strictness must refuse shapes, never the absence of one.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal("Contacts", XDocument.Parse(await response.ReadAsync())
+            .Descendants(DavXml.Dav + "displayname").Single().Value);
+    }
+
+    [Fact]
     public async Task ADtdInTheBody_Answers400()
     {
         var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
@@ -384,6 +432,9 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
         PropBody(names.Select(name => (XName)(DavXml.Dav + name)));
 
     private static string PropBody(string name, XNamespace ns) => PropBody([ns + name]);
+
+    private static string PropfindBody(params XElement[] children) =>
+        new XDocument(new XElement(DavXml.Dav + "propfind", children)).ToString();
 
     private static string PropBody(IEnumerable<XName> names) =>
         new XDocument(new XElement(DavXml.Dav + "propfind",

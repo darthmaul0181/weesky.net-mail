@@ -47,6 +47,39 @@ internal sealed record DavPropertyRequest(DavPropertyMode Mode, IReadOnlyList<XN
         return EverythingWeServe;
     }
 
+    /// <summary>
+    /// RFC 4918 § 14.20's own grammar — <c>propfind = (propname | (allprop, include?) | prop)</c> —
+    /// enforced on the PROPFIND path ALONE. <see cref="Parse"/> stays permissive because it is
+    /// shared with the reports, whose roots legitimately carry <c>filter</c>, <c>limit</c>,
+    /// <c>sync-token</c> or <c>sync-level</c> beside the <c>prop</c>. A null document, or a root
+    /// with no child at all, is the empty body that means allprop and is valid.
+    /// </summary>
+    /// <param name="document">The parsed body, or null for an empty one.</param>
+    /// <exception cref="DavBadRequestException">The body names no shape of the grammar.</exception>
+    internal static void ValidatePropfindBody(XDocument? document)
+    {
+        if (document?.Root is not { } root) return;
+
+        var shapes = 0;
+        var includes = 0;
+        foreach (var child in root.Elements())
+        {
+            if (child.Name == DavXml.Prop || child.Name == PropNameElement || child.Name == AllPropElement)
+                shapes++;
+            else if (child.Name == IncludeElement)
+                includes++;
+            else
+                throw new DavBadRequestException(
+                    $"A propfind body admits no {child.Name.LocalName} element.");
+        }
+
+        if (shapes > 1)
+            throw new DavBadRequestException(
+                "A propfind body names one of prop, propname or allprop, never several.");
+        if (includes > 0 && root.Element(AllPropElement) is null)
+            throw new DavBadRequestException("A propfind include is only valid beside an allprop.");
+    }
+
     private static IReadOnlyList<XName> NamesIn(XElement container) =>
         [.. container.Elements().Select(e => e.Name).Distinct()];
 }

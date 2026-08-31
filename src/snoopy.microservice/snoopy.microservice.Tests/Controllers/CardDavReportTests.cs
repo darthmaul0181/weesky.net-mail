@@ -393,6 +393,26 @@ public sealed class CardDavReportTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AQueryCarryingAFilterBesideItsProp_IsServed()
+    {
+        GivenCard("a.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\nEND:VCARD\r\n");
+
+        var body = new XDocument(new XElement(DavXml.CardDav + "addressbook-query",
+            new XElement(DavXml.Prop, new XElement(DavXml.Dav + "getetag")),
+            new XElement(DavXml.CardDav + "filter",
+                new XElement(DavXml.CardDav + "prop-filter", new XAttribute("name", "FN"),
+                    new XElement(DavXml.CardDav + "text-match", "Ada"))))).ToString();
+
+        var response = await Report(DavPaths.Collection(UserId), body);
+
+        // PROPFIND's one-shape-only rule belongs to PROPFIND: every report root carries children
+        // beside the prop — filter and limit here, sync-token and sync-level in a sync-collection —
+        // and a strictness that leaked into the shared parser would 400 all three.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal([DavPaths.Card(UserId, "a.vcf")], HrefsOf(response));
+    }
+
+    [Fact]
     public async Task AnUnknownReport_Answers403SupportedReportToo()
     {
         var response = await Report(DavPaths.Collection(UserId), ReportBody("acl-principal-prop-set"));

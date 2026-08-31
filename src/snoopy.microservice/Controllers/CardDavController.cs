@@ -474,8 +474,9 @@ public sealed class CardDavController(
             DavPropertyRequest request;
             try
             {
-                request = DavPropertyRequest.Parse(
-                    await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
+                var body = await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger);
+                DavPropertyRequest.ValidatePropfindBody(body);
+                request = DavPropertyRequest.Parse(body);
             }
             catch (DavBadRequestException ex)
             {
