@@ -96,7 +96,10 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     /// BEFORE the <paramref name="missing"/> one — the first of the three literal invariants:
     /// Thunderbird reads the FIRST descendant <c>status</c> of a <c>response</c> and compares it to
     /// the string <c>"HTTP/1.1 200 OK"</c>; writing the 404 propstat first makes every response read
-    /// as a failure. Either list may be empty, in which case its propstat is omitted entirely.
+    /// as a failure. Either list may be empty, in which case its propstat is omitted entirely; both
+    /// empty — the empty <c>prop</c> the tester's "no props" sync bodies carry — falls back on the
+    /// bare status, § 14.24 admitting <c>(href, status)</c> or <c>(href, propstat+)</c> and nothing
+    /// else. An href on its own is a document no conforming client can read.
     /// </summary>
     internal async Task WriteResourceAsync(string href, IReadOnlyList<XElement> found,
         IReadOnlyList<XName> missing, CancellationToken cancellationToken)
@@ -111,6 +114,8 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         if (missing.Count > 0)
             await WritePropstatAsync(404, missing.Select(name => new XElement(name)), cancellationToken)
                 .ConfigureAwait(false);
+        if (found.Count == 0 && missing.Count == 0)
+            await WriteStatusElementAsync(200).ConfigureAwait(false);
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
         responseCount++;
@@ -127,8 +132,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 
         await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await WriteHrefAsync(href).ConfigureAwait(false);
-        await writer.WriteElementStringAsync(null, "status", DavXml.Dav.NamespaceName, StatusLine(statusCode))
-            .ConfigureAwait(false);
+        await WriteStatusElementAsync(statusCode).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
         responseCount++;
     }
@@ -144,8 +148,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 
         await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await WriteHrefAsync(href).ConfigureAwait(false);
-        await writer.WriteElementStringAsync(null, "status", DavXml.Dav.NamespaceName, StatusLine(507))
-            .ConfigureAwait(false);
+        await WriteStatusElementAsync(507).ConfigureAwait(false);
 
         await writer.WriteStartElementAsync(null, "error", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await writer.WriteStartElementAsync(null, NumberOfMatchesWithinLimits.LocalName,
@@ -231,6 +234,11 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         await writer.DisposeAsync().ConfigureAwait(false);
     }
 
+    /// <summary>The one place a status line is written, so the four shapes above cannot spell the
+    /// same code two ways.</summary>
+    private Task WriteStatusElementAsync(int statusCode) =>
+        writer.WriteElementStringAsync(null, "status", DavXml.Dav.NamespaceName, StatusLine(statusCode));
+
     private Task WriteHrefAsync(string href) =>
         writer.WriteElementStringAsync(null, "href", DavXml.Dav.NamespaceName, href);
 
@@ -247,8 +255,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         }
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // prop
-        await writer.WriteElementStringAsync(null, "status", DavXml.Dav.NamespaceName, StatusLine(statusCode))
-            .ConfigureAwait(false);
+        await WriteStatusElementAsync(statusCode).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // propstat
     }
 

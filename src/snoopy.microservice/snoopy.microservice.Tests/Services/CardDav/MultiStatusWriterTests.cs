@@ -88,6 +88,22 @@ public sealed class MultiStatusWriterTests
     }
 
     [Fact]
+    public async Task AResourceWithNeitherPropstat_FallsBackOnADirectStatus()
+    {
+        var context = NewContext();
+
+        await using (var writer = await MultiStatusWriter.BeginAsync(context.Response, CancellationToken.None))
+            await writer.WriteResourceAsync("/dav/x/a.vcf", [], [], CancellationToken.None);
+
+        // RFC 4918 § 14.24 admits (href, status) or (href, propstat+) and nothing else — an href
+        // alone is what an empty prop used to produce, and no conforming client can read it.
+        var response = XDocument.Parse(ReadBody(context.Response)).Root!
+            .Elements(DavXml.Dav + "response").Single();
+        Assert.Equal("HTTP/1.1 200 OK", response.Elements(DavXml.Dav + "status").Single().Value);
+        Assert.Empty(response.Elements(DavXml.Dav + "propstat"));
+    }
+
+    [Fact]
     public async Task AMissingProperty_IsNamedWithoutAValue()
     {
         var context = NewContext();

@@ -141,6 +141,27 @@ public sealed class CardDavSyncCollectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AResponseAskedForNoProperty_StillCarriesAStatusOfItsOwn()
+    {
+        GivenCardAtRank("a.vcf", 12);
+        GivenATombstone("gone.vcf", 13);
+
+        // The tester's own body (vreports/sync/2.xml): an EMPTY prop, which asks for nothing at all.
+        var response = await Report(DavPaths.Collection(UserId), SyncBody(TokenAt(8), props: []));
+
+        // RFC 4918 § 14.24: a response is (href, status) or (href, propstat+). With neither propstat
+        // written, an href alone is a document no conforming client can read.
+        var card = ResponseOf(response, "a.vcf");
+        Assert.Equal("HTTP/1.1 200 OK", card.Elements(DavXml.Dav + "status").Single().Value);
+        Assert.Empty(card.Elements(DavXml.Dav + "propstat"));
+
+        // And the tombstone keeps the 404 it has always carried: the fallback fires on emptiness,
+        // never on a response that already said something.
+        Assert.Equal("HTTP/1.1 404 Not Found",
+            ResponseOf(response, "gone.vcf").Elements(DavXml.Dav + "status").Single().Value);
+    }
+
+    [Fact]
     public async Task TheNewTokenIsTheCounterReadBeforeTheRows()
     {
         GivenCardAtRank("a.vcf", 12);
@@ -551,6 +572,9 @@ public sealed class CardDavSyncCollectionTests : IAsyncLifetime
 
     private static List<XElement> ResponsesOf(DavTestResponse response) =>
         [.. XDocument.Parse(response.Body).Root!.Elements(DavXml.Response)];
+
+    private static XElement ResponseOf(DavTestResponse response, string davName) =>
+        ResponsesOf(response).Single(r => r.Element(DavXml.Href)!.Value.EndsWith(davName, StringComparison.Ordinal));
 
     private static List<string> HrefsOf(DavTestResponse response) =>
         [.. ResponsesOf(response).Select(r => r.Element(DavXml.Href)!.Value)];
