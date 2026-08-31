@@ -1941,11 +1941,11 @@ Trois notes, sur le modèle de `reverse-proxy-prerequisite.md` :
   propriété en `403` : l'en-tête `DAV: 1` l'engage, et les clients d'Apple écrivent leur `me-card`
   sur le home (décision 16). Servi
   ne veut pas dire stocké : rien n'entre en base.
-- **Pas de modèle d'ACL.** `current-user-privilege-set` rend un jeu constant et `access-control` est
-  annoncé parce que le RFC 6352 l'exige et que les clients le lisent (décision 13) ; la méthode `ACL`
-  répond `405`, et les rapports de principal du RFC 3744 sont une divergence nommée (décision 13).
-  Un carnet à un seul propriétaire n'a pas de politique
-  à exprimer.
+- **Pas de modèle d'ACL.** `current-user-privilege-set` rend un jeu constant ; `access-control` a
+  été **retiré** de l'en-tête `DAV:` par la seconde revue (P1) — la classe engagerait les
+  propriétés des § 5 et § 8 du RFC 3744 et la méthode `ACL`, qu'un carnet à un seul propriétaire
+  ne sert pas. La méthode `ACL` répond `405`, et les rapports de principal du RFC 3744 restent une
+  divergence nommée (décision 13).
 - **Pas de conversion du stock — mais une conversion à la lecture.** `supported-address-data`
   annonce 3.0 et 4.0 parce que le carnet contient les deux ; une carte n'est **jamais** réécrite en
   base — 4a l'interdit hors modification — mais un `address-data` qui nomme une version reçoit une
