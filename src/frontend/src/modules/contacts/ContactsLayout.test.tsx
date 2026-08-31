@@ -4,32 +4,70 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import ContactsLayout from './ContactsLayout'
-import type { Contact } from './contactTypes'
+import type { Contact, ContactDetail } from './contactTypes'
 import { mockViewport, resetViewport, settle } from '../../test-utils'
 
 afterEach(resetViewport)
 
 vi.mock('../../api.js', () => ({
   api: {
-    getContacts: vi.fn(), createContact: vi.fn(), updateContact: vi.fn(),
+    getContacts: vi.fn(), getContact: vi.fn(), createContact: vi.fn(), updateContact: vi.fn(),
     deleteContact: vi.fn(), setContactFavorite: vi.fn(),
     deleteContacts: vi.fn(), setContactsFavorite: vi.fn(),
     importContacts: vi.fn(), exportContacts: vi.fn(),
   },
-  ApiError: class extends Error {},
+  // The very class the layout imports from the mocked module, so its `instanceof ApiError` holds
+  // against what these tests throw: a locally-declared twin fails that check and routes a 409 to
+  // the generic branch, where the box would never open.
+  ApiError: class ApiError extends Error {
+    status: number
+    constructor(message: string, status: number) {
+      super(message)
+      this.name = 'ApiError'
+      this.status = status
+    }
+  },
 }))
 vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
 const { api } = await import('../../api.js') as unknown as {
-  api: Record<'getContacts' | 'createContact' | 'updateContact' | 'deleteContact'
+  api: Record<'getContacts' | 'getContact' | 'createContact' | 'updateContact' | 'deleteContact'
     | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
     | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
+}
+const { ApiError } = await import('../../api.js') as unknown as {
+  ApiError: new (message: string, status: number) => Error
 }
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
     firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
   }
+}
+
+/** The editor reads the card, never the tile: the list row carries neither line positions nor
+    the nine scalars, which is what makes the detail a mount condition for it. */
+function detailOf(row: Contact): ContactDetail {
+  return {
+    id: row.id, isFavorite: row.isFavorite, hasPhoto: false,
+    // Spread, not `?? undefined`: the API serialises with WhenWritingNull, so a name it has no
+    // value for is absent from the JSON rather than null.
+    ...(row.firstName != null ? { firstName: row.firstName } : {}),
+    ...(row.lastName != null ? { lastName: row.lastName } : {}),
+    ...(row.nickname != null ? { nickname: row.nickname } : {}),
+    addresses: row.addresses.map((address, position) => (
+      { position, address, type: 'INTERNET', pref: position === 0 ? 1 : 101, params: '', groupName: '' })),
+    phones: [], postalAddresses: [],
+  }
+}
+
+/** One book behind both endpoints, so a tile and the card it opens cannot disagree. */
+function serveBook(rows: Contact[]) {
+  api.getContacts.mockResolvedValue({ contacts: rows })
+  api.getContact.mockImplementation((id: string) => {
+    const row = rows.find(one => one.id === id)
+    return row ? Promise.resolve(detailOf(row)) : Promise.reject(new Error('not found'))
+  })
 }
 
 function renderAt(path: string) {
@@ -82,13 +120,11 @@ describe('ContactsLayout', () => {
     vi.clearAllMocks()
     // Two favourites, and one of them is not the first sorted row: with a single favourite the
     // scope filter is indistinguishable from "keep the first row" — the sort files favourites first.
-    api.getContacts.mockResolvedValue({
-      contacts: [
-        contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
-        contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
-        contact({ id: 'c', firstName: 'Carla', isFavorite: true, addresses: ['carla@x.be'] }),
-      ],
-    })
+    serveBook([
+      contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+      contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+      contact({ id: 'c', firstName: 'Carla', isFavorite: true, addresses: ['carla@x.be'] }),
+    ])
   })
 
   it('counts the whole book and its favourites in the band', async () => {
@@ -205,9 +241,36 @@ describe('ContactsLayout', () => {
 
     await waitFor(() => expect(api.updateContact).toHaveBeenCalledWith('b', {
       firstName: 'Bruno', lastName: 'Weiss', nickname: null, isFavorite: false,
-      addresses: ['bruno@x.be'],
+      displayName: null, middleName: null, namePrefix: null, nameSuffix: null,
+      organization: null, department: null, jobTitle: null, birthday: null,
+      website: null, notes: null,
+      addresses: [{ position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 1 }],
+      phones: [], postalAddresses: [],
     }))
     expect(api.createContact).not.toHaveBeenCalled()
+  })
+
+  // The form seeds from its card once, at mount: mounted before the card lands, it would seed
+  // without the positions and never reseed, and every save would rebuild the EMAIL block.
+  it('does not seed the editor before the card has landed', async () => {
+    api.getContact.mockReturnValue(new Promise(() => {}))
+    renderAt('/contacts/b/edit')
+    // The book has answered — the band counts it — and the card is still in flight.
+    await waitFor(() => expect(scopeButton(/all contacts/i)).toHaveTextContent('3'))
+
+    expect(screen.queryByLabelText(/first name/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/loading contacts/i)).toBeInTheDocument()
+  })
+
+  // Two queries feed the editor pane now, so its two lines have to exclude each other: a refused
+  // card while the book is still in flight would otherwise stack the reason under a loading line.
+  it('shows the refusal alone when the card fails while the book is still in flight', async () => {
+    api.getContacts.mockReturnValue(new Promise(() => {}))
+    api.getContact.mockRejectedValue(new Error('boom'))
+    renderAt('/contacts/b/edit')
+
+    expect(await screen.findByText(/could not load contacts/i)).toBeInTheDocument()
+    expect(screen.queryByText(/loading contacts/i)).not.toBeInTheDocument()
   })
 
   // One edit route straight after another: the layout stays mounted, so only the editor's key can
@@ -306,6 +369,125 @@ describe('ContactsLayout', () => {
 
     expect(screen.queryByRole('heading', { name: 'Bruno' })).not.toBeInTheDocument()
     expect(screen.getByText(/select a contact/i)).toBeInTheDocument()
+  })
+
+  /* The write proves which version it read, and the editor is the only door that needs it: a tab
+     left open for ten minutes must not silently overwrite the card the phone just changed. */
+  describe('a card that moved under the open editor', () => {
+    /** Bruno's card as the book's own row already projects it, plus what the case needs on top —
+        so the tile and the card it opens cannot disagree about anything else. */
+    function serveCard(fields: Partial<ContactDetail>) {
+      api.getContact.mockResolvedValue({
+        ...detailOf(contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] })), ...fields,
+      })
+    }
+
+    function openEditor() {
+      renderAt('/contacts/b/edit')
+      return waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
+    }
+
+    const save = () => userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    const conflictBox = () => screen.findByText('This contact changed elsewhere')
+
+    it('sends back the hash the card was read at', async () => {
+      api.updateContact.mockResolvedValue(undefined)
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+
+      await save()
+
+      await waitFor(() => expect(api.updateContact).toHaveBeenCalledWith(
+        'b', expect.objectContaining({ cardHash: 'abc123' })))
+    })
+
+    // A card the 4a backfill never reached answers no hash at all. The key has to be absent from
+    // the payload rather than present and undefined, which serialises as a version claim of null.
+    it('omits the key entirely when the card carries no hash', async () => {
+      api.updateContact.mockResolvedValue(undefined)
+      serveCard({})
+      await openEditor()
+
+      await save()
+
+      await waitFor(() => expect(api.updateContact).toHaveBeenCalled())
+      expect(api.updateContact.mock.calls[0][1]).not.toHaveProperty('cardHash')
+    })
+
+    it('offers to reload when the write is refused as stale', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+
+      await save()
+
+      expect(await conflictBox()).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+      // A refusal naming a conflict is not the generic banner: two messages about one failure read
+      // as two failures.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    // The refusal is not a reason to throw away what the user typed: reloading is their choice, and
+    // a box offering it over an emptied form leaves nothing to choose between.
+    it('leaves the typed form standing behind the box', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+      await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
+
+      await save()
+      await conflictBox()
+      // Past the refetch the refusal triggered, not just the instant of refusal: what a user meets
+      // is the form a second later, and that is when a remount would have eaten their typing.
+      await settle()
+
+      expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno')
+      expect(screen.getByLabelText(/last name/i)).toHaveValue('Weiss')
+    })
+
+    it('reloading fetches the card again and reseeds the form from it', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+      await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
+      await save()
+      await conflictBox()
+      // The refused write invalidated the book, whose key the card sits under: let that refetch
+      // land on the old card before the endpoint starts answering the new one.
+      await settle()
+
+      serveCard({ cardHash: 'def456', firstName: 'Bruna', lastName: 'Mertens' })
+      await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+
+      await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruna'))
+      expect(screen.getByLabelText(/last name/i)).toHaveValue('Mertens')
+      expect(screen.queryByText('This contact changed elsewhere')).not.toBeInTheDocument()
+    })
+
+    // The invalidation every write fires reaches the card too, so a hash read at save time would be
+    // the one the server holds *now*: the second attempt would claim to have read a version the
+    // user never saw and would go through, which is the overwrite this whole guard exists to stop.
+    it('keeps sending the hash it was seeded with until the form is reloaded', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+      // The form is seeded; from here the endpoint answers the version that refuses the write. The
+      // refused save invalidates the book, whose key the card sits under, so the card refreshes on
+      // its own and `detail` holds def456 well before the second attempt.
+      serveCard({ cardHash: 'def456' })
+
+      await save()
+      await conflictBox()
+      await settle()
+
+      await userEvent.click(screen.getByRole('button', { name: '✕' }))
+      await save()
+
+      await waitFor(() => expect(api.updateContact).toHaveBeenCalledTimes(2))
+      expect(api.updateContact.mock.calls[0][1]).toMatchObject({ cardHash: 'abc123' })
+      expect(api.updateContact.mock.calls[1][1]).toMatchObject({ cardHash: 'abc123' })
+    })
   })
 })
 
@@ -412,12 +594,10 @@ const bookLoaded = () => screen.findAllByText(/^(Alice|Bruno)$/)
 describe('ContactsLayout on a phone', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    api.getContacts.mockResolvedValue({
-      contacts: [
-        contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
-        contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
-      ],
-    })
+    serveBook([
+      contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+      contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+    ])
   })
 
   it('puts the scope column in a drawer and renders no splitter', async () => {

@@ -112,7 +112,7 @@ describe('ContactsTransfer', () => {
     choose(new File(['x'], 'contacts.csv', { type: 'text/csv' }))
 
     await waitFor(() =>
-      expect(onError).toHaveBeenCalledWith('That file is too large — the limit is 5 MB.'))
+      expect(onError).toHaveBeenCalledWith('That file is too large — the limit is 20 MB.'))
   })
 
   it('downloads the export under the served name', async () => {

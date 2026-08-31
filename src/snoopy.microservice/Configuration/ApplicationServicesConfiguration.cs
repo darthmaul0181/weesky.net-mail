@@ -7,6 +7,7 @@ using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.CardDav;
 
 namespace weesky.Snoopy.Microservice.Configuration;
 
@@ -31,6 +32,15 @@ internal static class ApplicationServicesConfiguration
         services.AddOptions<SieveOptions>().Bind(configuration.GetSection("Sieve"));
         services.AddOptions<MailOptions>().Bind(configuration.GetSection("Mail"));
         services.AddOptions<TrustedSenderOptions>().Bind(configuration.GetSection("TrustedSenders"));
+        services.AddOptions<DavOptions>()
+            .Bind(configuration.GetSection("Dav"))
+            .Validate(
+                options => DavOptions.IsBareHttpsOrigin(options.PublicUrl),
+                "Dav:PublicUrl must be a bare https origin — no path, no trailing slash, no port " +
+                "(e.g. https://api.mail.weesky.net). Clients concatenate /.well-known/carddav onto " +
+                "it, and some iOS versions ignore a non-standard port. Leave it unset to serve no " +
+                "synchronisation at all.")
+            .ValidateOnStart();
 
         // Kept in step with the per-request cap AttachmentSizeLimitFilter applies. Left at its
         // 128 MB default it becomes the real ceiling whenever MaxMessageSizeMb is raised past it,
@@ -75,6 +85,8 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IStagedAttachmentStore, StagedAttachmentStore>();
         services.AddHostedService<StagedAttachmentSweeper>();
         services.AddHostedService<TrustedSenderSweeper>();
+        services.AddHostedService<ContactTombstoneSweeper>();
+        services.AddHostedService<SyncStateConsistencyCheckHostedService>();
 
         services.AddHttpClient<IOAuthTokenService, OAuthTokenService>(client =>
             {
@@ -109,9 +121,16 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
         services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();
-        services.AddScoped<IContactStore, ContactStore>();
+        // One scoped ContactStore behind both faces: DavContactWriter shares its write gate — the
+        // projection path and the transaction wrapper — rather than duplicating either.
+        services.AddScoped<ContactStore>();
+        services.AddScoped<IContactStore>(provider => provider.GetRequiredService<ContactStore>());
+        services.AddScoped<IDavContactWriter, DavContactWriter>();
         services.AddScoped<IExternalDomainStore, ExternalDomainStore>();
         services.AddScoped<IConnectedAccountStore, ConnectedAccountStore>();
+        services.AddScoped<IDavCredentialStore, DavCredentialStore>();
+        services.AddScoped<IContactSyncStore, ContactSyncStore>();
+        services.AddScoped<IDavContactReader, DavContactReader>();
 
         return services;
     }

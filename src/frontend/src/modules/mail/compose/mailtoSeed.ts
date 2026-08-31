@@ -1,4 +1,5 @@
 import type { ComposeSeed } from './composeSeed'
+import { newMessageSeed } from './composeSeed'
 import { textToHtml } from './bodyFormat'
 import { isValidAddress } from './RecipientsField'
 
@@ -67,8 +68,7 @@ export function mailtoSeedFrom(search: string): ComposeSeed | null {
   const body = decode(fields.get('body') ?? '')
 
   return {
-    action: 'editAsNew',
-    to: addressesOf(url.pathname, fields.get('to') ?? ''),
+    ...newMessageSeed(addressesOf(url.pathname, fields.get('to') ?? '')),
     cc: addressesOf(fields.get('cc') ?? ''),
     bcc: addressesOf(fields.get('bcc') ?? ''),
     // Left unescaped on purpose: it lands on a controlled input value, and entity-encoding it
@@ -76,13 +76,5 @@ export function mailtoSeedFrom(search: string): ComposeSeed | null {
     subject: decode(fields.get('subject') ?? ''),
     // The guard stays: textToHtml('') is an empty <div>, and a bodyless mailto opens empty.
     html: body ? textToHtml(body) : '',
-    text: null,
-    fromAddress: null,
-    priority: 'normal',
-    attachments: [],
-    inReplyTo: null,
-    references: [],
-    draftRef: null,
-    nameHints: {},
   }
 }

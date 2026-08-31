@@ -111,30 +111,8 @@
    pull-to-refresh arms at, so the browser's own gesture rarely reaches this. */
 .mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 
-/* The two columns show their scrollbar under the cursor only, each on its own hover — but the
-   gutter stays reserved whether the thumb is painted or not. Toggling `overflow` instead would
-   resize the scroller, and the list's load-more sentinel is placed by geometry: a reflow on every
-   pointer entry would fire it. `overflow-y: auto` already keeps the gutter away when it fits. */
-.mail-folders-scroll,
-.mail-list-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.mail-folders-scroll:hover,
-.mail-list-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
-
-.mail-folders-scroll::-webkit-scrollbar,
-.mail-list-scroll::-webkit-scrollbar { width: 8px; }
-
-.mail-folders-scroll::-webkit-scrollbar-track,
-.mail-list-scroll::-webkit-scrollbar-track { background: transparent; }
-
-.mail-folders-scroll::-webkit-scrollbar-thumb,
-.mail-list-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-
-.mail-folders-scroll:hover::-webkit-scrollbar-thumb,
-.mail-list-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
+/* The scrollbar treatment these two columns wear lives in shell.css, shared with the contacts
+   module's two scrollers rather than transcribed into them. */
 
 .mail-pull {
   display: flex;

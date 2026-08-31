@@ -1,3 +1,4 @@
+using weesky.Snoopy.Microservice.Authentication.CardDav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -7,8 +8,10 @@ namespace weesky.Snoopy.Microservice.Tests.Repositories;
 
 public sealed class WebmailUserStoreTests
 {
-    private static WebmailUserStore CreateStore(string dbName) =>
-        new(new PreferencesTestDbContext(dbName));
+    private static readonly TimeProvider Clock = TimeProvider.System;
+
+    private static WebmailUserStore CreateStore(string dbName, IDavAuthenticationCache? cache = null) =>
+        new(new PreferencesTestDbContext(dbName), cache ?? new DavAuthenticationCache(Clock));
 
     [Fact]
     public async Task RegisterLogin_WhenAbsent_CreatesRowWithGuidAndStamps()
@@ -164,5 +167,59 @@ public sealed class WebmailUserStoreTests
         Assert.Equal<byte[]>(first, second);
         using var ctx = new PreferencesTestDbContext(db);
         Assert.Equal<byte[]>(first, ctx.Users.Single().KdfSalt!);
+    }
+
+    [Fact]
+    public async Task RotateSecurityStamp_DestroysTheSynchronisationSecret()
+    {
+        // A gesture of distrust destroys; switching off is the gesture of comfort, and it keeps.
+        // Leaving the secret alive would make "sign out everywhere" leave the whole address book
+        // readable and writable to whoever holds it.
+        var db = nameof(RotateSecurityStamp_DestroysTheSynchronisationSecret);
+        var account = await CreateStore(db).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
+        using (var seed = new PreferencesTestDbContext(db))
+        {
+            seed.DavCredentials.Add(new DavCredential
+            {
+                UserId = account.Id, SecretHash = new string('a', 64),
+                Salt = new byte[16], CreatedAt = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync(CancellationToken.None);
+        }
+
+        await CreateStore(db).RotateSecurityStampAsync("mick@weesky.be", CancellationToken.None);
+
+        using var ctx = new PreferencesTestDbContext(db);
+        Assert.Empty(ctx.DavCredentials);
+    }
+
+    [Fact]
+    public async Task RotateSecurityStamp_ForgetsTheCachedSynchronisationIdentity()
+    {
+        var db = nameof(RotateSecurityStamp_ForgetsTheCachedSynchronisationIdentity);
+        var cache = new DavAuthenticationCache(Clock);
+        var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true),
+            cache.Generation("mick@weesky.be"));
+
+        await CreateStore(db, cache).RotateSecurityStampAsync("  Mick@WEESKY.be ", CancellationToken.None);
+
+        Assert.False(cache.TryGet("mick@weesky.be", "fingerprint", out _));
+    }
+
+    [Fact]
+    public async Task DeleteByEmail_ForgetsTheCachedSynchronisationIdentity()
+    {
+        // The cascade takes the credential row; without this the burst entry would keep the
+        // deleted account's secret opening the address book for the rest of the window.
+        var db = nameof(DeleteByEmail_ForgetsTheCachedSynchronisationIdentity);
+        var cache = new DavAuthenticationCache(Clock);
+        var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true),
+            cache.Generation("mick@weesky.be"));
+
+        await CreateStore(db, cache).DeleteByEmailAsync("  Mick@WEESKY.be ", CancellationToken.None);
+
+        Assert.False(cache.TryGet("mick@weesky.be", "fingerprint", out _));
     }
 }

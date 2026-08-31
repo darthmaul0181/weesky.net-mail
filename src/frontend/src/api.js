@@ -171,6 +171,15 @@ export const api = {
   getContacts: () =>
     request('GET', '/api/Contacts'),
 
+  // The whole card, which the list does not carry: only the open contact pays for it.
+  getContact: (id) =>
+    request('GET', `/api/Contacts/${id}`),
+
+  // A blob, not a URL handed to <img>: the picture sits behind the session cookie on another
+  // origin, which an image element cannot send.
+  getContactPhoto: (id) =>
+    requestBlob(`/api/Contacts/${id}/Photo`).then(({ blob }) => blob),
+
   createContact: (contact) =>
     request('POST', '/api/Contacts', contact),
 
@@ -201,6 +210,19 @@ export const api = {
   },
 
   exportContacts: () => requestBlob('/api/Contacts/Export'),
+
+  // The address comes from the backend's configuration, never composed here: the URL this app
+  // calls is not necessarily the one the proxy publishes.
+  getDavCredentials: () =>
+    request('GET', '/api/DavCredentials'),
+
+  // Turning it on for the first time answers the secret in this very response — the only moment
+  // it exists in clear.
+  setDavCardDav: (enabled) =>
+    request('PUT', '/api/DavCredentials/CardDav', { enabled }),
+
+  regenerateDavSecret: () =>
+    request('POST', '/api/DavCredentials/Regenerate'),
 
   getTrustedSenders: () =>
     request('GET', '/api/TrustedSenders'),

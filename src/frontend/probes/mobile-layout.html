@@ -1337,6 +1337,50 @@
       touch: '.contact-card-back, .actionbar-item',
     })
 
+    // The e-mail row and the postal row share `.contact-card-value`, and `.is-postal` is what keeps
+    // them from sharing a rule too: `.contact-card-value > span { display: block }` used to match
+    // `.contact-card-primary` as well — a direct-child span of the e-mail row's own
+    // `.contact-card-value` — and beat the badge's own (0,1,0) rule with its (0,1,1), forcing it
+    // onto its own line 19px below the address it qualifies. Read the two rects: `top` must agree
+    // between them (badge beside link, not under it), and `.contact-card-primary`'s own `right -
+    // left` must hug its label rather than stretch across the row the way a blockified inline span
+    // does. The postal value alongside it is unaffected by the scoping and keeps its own lines one
+    // per rect — `smallest`/`clipped` are not what this case is for, hence no `touch` selector.
+    CASES.push({
+      name: 'contact-card address row',
+      html: `
+        <div class="contacts-layout" style="height:520px">
+          <div class="contacts-row">
+            <div class="contacts-card">
+              <div class="contact-card">
+                <div class="contact-card-body">
+                  <div class="contact-card-row">
+                    <span class="contact-card-label">Addresses</span>
+                    <span class="contact-card-values">
+                      <span class="contact-card-value">
+                        <a href="#">lionel.raeymaekers@example.be</a>
+                        <span class="contact-card-primary">primary</span>
+                      </span>
+                    </span>
+                  </div>
+                  <div class="contact-card-row">
+                    <span class="contact-card-label">Postal</span>
+                    <span class="contact-card-values">
+                      <span class="contact-card-value is-postal">
+                        <span>Rue Haute 1</span>
+                        <span>1000 Bruxelles</span>
+                        <span>Belgique</span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      overlap: ['.contact-card-primary', '.contact-card-value a'],
+    })
+
     // There was a `contacts-card vs. floating add` case here, and it is gone rather than broken:
     // it existed because the card's Delete was a `.btn` in a bottom band and `.floating-action`
     // landed on it, an occlusion no other metric in this file can see. The card now draws the

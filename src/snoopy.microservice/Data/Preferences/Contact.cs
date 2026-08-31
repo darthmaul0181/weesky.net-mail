@@ -32,6 +32,46 @@ public sealed class Contact
     [Column("nickname")]
     public string? Nickname { get; set; }
 
+    /// <summary>
+    /// The card's FN, stored because the frontend otherwise guesses it (first + last, else
+    /// nickname, else first address). A card carrying "Dr. John Smith Jr." must not be flattened.
+    /// </summary>
+    [Column("display_name")]
+    public string? DisplayName { get; set; }
+
+    [Column("middle_name")]
+    public string? MiddleName { get; set; }
+
+    [Column("name_prefix")]
+    public string? NamePrefix { get; set; }
+
+    [Column("name_suffix")]
+    public string? NameSuffix { get; set; }
+
+    [Column("organization")]
+    public string? Organization { get; set; }
+
+    /// <summary>ORG components 2..n, joined by ';' as they appear on the card.</summary>
+    [Column("department")]
+    public string? Department { get; set; }
+
+    [Column("job_title")]
+    public string? JobTitle { get; set; }
+
+    /// <summary>
+    /// vCard form verbatim: a partial date (--0315) or free text is valid. Interpretation is a
+    /// display concern, left to 4b.
+    /// </summary>
+    [Column("birthday")]
+    public string? Birthday { get; set; }
+
+    /// <summary>First occurrence of URL; the following ones stay in the card.</summary>
+    [Column("website")]
+    public string? Website { get; set; }
+
+    [Column("notes")]
+    public string? Notes { get; set; }
+
     [Column("is_favorite")]
     public bool IsFavorite { get; set; }
 
@@ -49,6 +89,26 @@ public sealed class Contact
     [Column("vcard_raw")]
     public string? VCardRaw { get; set; }
 
+    /// <summary>SHA-256 hex of <see cref="VCardRaw"/>; base of the CardDAV ETag. "" = not computed yet.</summary>
+    [Column("card_hash")]
+    public string CardHash { get; set; } = string.Empty;
+
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// The resource name a CardDAV client chose, or <c>{id}.vcf</c> for a card born here. Nullable
+    /// because MySQL uniqueness ignores NULL: a row the backfill has not reached can stay empty
+    /// without the first client PUT tripping on a duplicate of nothing.
+    /// </summary>
+    [Column("dav_name")]
+    public string? DavName { get; set; }
+
+    /// <summary>
+    /// The rank of the last write that changed this card. Zero means never backfilled, and zero is
+    /// the value a sync token never asks for — such a row is invisible to the protocol rather than
+    /// served under a name it does not have.
+    /// </summary>
+    [Column("sync_sequence")]
+    public ulong SyncSequence { get; set; }
 }

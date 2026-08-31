@@ -1,0 +1,23 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//dmfs.org//NONSGML DAVx5 4.4.1//EN
+UID:urn:uuid:6f4b2c1a-8d3e-4f5a-b1c2-d3e4f5a6b7c8
+FN:Sophie Modele
+N:Modele;Sophie;Anne;;
+NICKNAME:So
+EMAIL;PREF=1;TYPE=home:sophie.modele@exemple.example
+EMAIL;TYPE=work;PID=2.1:s.modele@atelier.exemple.example
+TEL;PREF=1;TYPE="cell,voice":+32470000002
+TEL;TYPE=work:+3271230000
+ADR;TYPE=home;PREF=1;LABEL="Rue du Modele 45\n6000 Charleroi":;;Rue du Mode
+ le 45;Charleroi;;6000;Belgique;;;3;45;Rue du Modele;;;;;Face a l'eglise;
+ORG:Atelier Modele;Production
+TITLE:Ceramiste
+URL:https://modele.exemple.example
+NOTE:Fiche DAVx5.
+PHOTO:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAA
+ ADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+CATEGORIES:Famille
+X-PHONETIC-FIRST-NAME:Sofi
+CLIENTPIDMAP:1;urn:uuid:9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+END:VCARD

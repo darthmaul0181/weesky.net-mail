@@ -1,0 +1,571 @@
+<?xml version="1.0" standalone="no"?>
+
+<!DOCTYPE serverinfo SYSTEM "serverinfo.dtd">
+
+<!--
+ Copyright (c) 2006-2016 Apple Inc. All rights reserved.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ -->
+
+<!--
+ Derived from ccs-caldavtester scripts/server/serverinfo-template.xml
+ (commit bed21e5924275552c1561febc8203a9f194cf737) for the weesky.net
+ 4d CardDAV conformance harness. Host/features/substitutions trimmed
+ to a single test account against CardDAV only — see
+ tools/caldavtester/README.md.
+ -->
+
+<serverinfo>
+	<host>api-dev.mail.weesky.net</host>
+	<nonsslport>80</nonsslport>
+	<sslport>443</sslport>
+	<authtype>basic</authtype>
+
+	<waitcount>120</waitcount>
+	<waitdelay>0.25</waitdelay>
+	<waitsuccess>30</waitsuccess>
+
+	<features>
+		<feature>carddav</feature>						<!-- Basic CardDAV feature enabler -->
+		<feature>current-user-principal</feature>		<!-- current-user-principal extension -->
+		<feature>limits</feature>						<!-- max-collections and max-resources limits -->
+		<feature>sync-report</feature>					<!-- WebDAV collection sync REPORT -->
+		<feature>well-known</feature>					<!-- well-known feature -->
+	</features>
+
+	<substitutions>
+		<!-- Useful xpath shortcuts for verifiers -->
+		<substitution>
+			<key>$multistatus-response-prefix:</key>
+			<value>/{DAV:}multistatus/{DAV:}response</value>
+		</substitution>
+		<substitution>
+			<key>$multistatus-href-prefix:</key>
+			<value>/{DAV:}multistatus/{DAV:}response/{DAV:}href</value>
+		</substitution>
+		<substitution>
+			<key>$verify-response-prefix:</key>
+			<value>{DAV:}response/{DAV:}propstat/{DAV:}prop</value>
+		</substitution>
+		<substitution>
+			<key>$verify-property-prefix:</key>
+			<value>/{DAV:}multistatus/{DAV:}response/{DAV:}propstat/{DAV:}prop</value>
+		</substitution>
+		<substitution>
+			<key>$verify-bad-response:</key>
+			<value>/{DAV:}multistatus/{DAV:}response/{DAV:}status</value>
+		</substitution>
+		<substitution>
+			<key>$verify-error-response:</key>
+			<value>/{DAV:}multistatus/{DAV:}response/{DAV:}error</value>
+		</substitution>
+		<substitution>
+			<key>$CALDAV:</key>
+			<value>urn:ietf:params:xml:ns:caldav</value>
+		</substitution>
+		<substitution>
+			<key>$CARDDAV:</key>
+			<value>urn:ietf:params:xml:ns:carddav</value>
+		</substitution>
+		<substitution>
+			<key>$CS:</key>
+			<value>http://calendarserver.org/ns/</value>
+		</substitution>
+
+		<!-- Server configuration settings -->
+		<!-- $host: and $hostssl: are implicitly added by CalDAVTester based
+		     on the host/nonsslport/sslport values and ssl command line switch -->
+
+		<!-- relative path to caldav root-->
+		<substitution>
+			<key>$root:</key>
+			<value>/dav/</value>
+		</substitution>
+
+		<!-- relative path to main principal collection-->
+		<substitution>
+			<key>$principalcollection:</key>
+			<value>/dav/principals/</value>
+		</substitution>
+
+		<!-- the core recored type collections-->
+		<substitution>
+			<key>$uidstype:</key>
+			<value>__uids__</value>
+		</substitution>
+		<substitution>
+			<key>$userstype:</key>
+			<value>users</value>
+		</substitution>
+		<substitution>
+			<key>$groupstype:</key>
+			<value>groups</value>
+		</substitution>
+		<substitution>
+			<key>$locationstype:</key>
+			<value>locations</value>
+		</substitution>
+		<substitution>
+			<key>$resourcestype:</key>
+			<value>resources</value>
+		</substitution>
+
+		<!-- relative path to record type principal collections-->
+		<substitution>
+			<key>$principals_uids:</key>
+			<value>$principalcollection:$uidstype:/</value>
+		</substitution>
+		<substitution>
+			<key>$principals_users:</key>
+			<value>$principalcollection:$userstype:/</value>
+		</substitution>
+		<substitution>
+			<key>$principals_groups:</key>
+			<value>$principalcollection:$groupstype:/</value>
+		</substitution>
+		<substitution>
+			<key>$principals_resources:</key>
+			<value>$principalcollection:$resourcestype:/</value>
+		</substitution>
+		<substitution>
+			<key>$principals_locations:</key>
+			<value>$principalcollection:$locationstype:/</value>
+		</substitution>
+
+		<!-- relative path to calendars collection-->
+		<substitution>
+			<key>$calendars:</key>
+			<value>$root:calendars/</value>
+		</substitution>
+
+		<!-- relative path to record type calendar collections-->
+		<substitution>
+			<key>$calendars_uids:</key>
+			<value>$calendars:$uidstype:/</value>
+		</substitution>
+		<substitution>
+			<key>$calendars_users:</key>
+			<value>$calendars:$userstype:/</value>
+		</substitution>
+		<substitution>
+			<key>$calendars_resources:</key>
+			<value>$calendars:$resourcestype:/</value>
+		</substitution>
+		<substitution>
+			<key>$calendars_locations:</key>
+			<value>$calendars:$locationstype:/</value>
+		</substitution>
+
+		<!-- primary calendar name-->
+		<substitution>
+			<key>$calendar:</key>
+			<value>calendar</value>
+		</substitution>
+
+		<!-- primary tasks-only calendar name-->
+		<substitution>
+			<key>$tasks:</key>
+			<value>tasks</value>
+		</substitution>
+
+		<!-- primary polls-only calendar name-->
+		<substitution>
+			<key>$polls:</key>
+			<value>polls</value>
+		</substitution>
+
+		<!-- inbox name-->
+		<substitution>
+			<key>$inbox:</key>
+			<value>inbox</value>
+		</substitution>
+
+		<!-- outbox name-->
+		<substitution>
+			<key>$outbox:</key>
+			<value>outbox</value>
+		</substitution>
+
+		<!-- dropbox name-->
+		<substitution>
+			<key>$dropbox:</key>
+			<value>dropbox</value>
+		</substitution>
+
+		<!-- attachments name-->
+		<substitution>
+			<key>$attachments:</key>
+			<value>dropbox</value>
+		</substitution>
+
+		<!-- notification name-->
+		<substitution>
+			<key>$notification:</key>
+			<value>notification</value>
+		</substitution>
+
+		<!-- freebusy name-->
+		<substitution>
+			<key>$freebusy:</key>
+			<value>freebusy</value>
+		</substitution>
+
+		<!-- Sync home collection items - use "-" to include the home resource-->
+		<substitution>
+			<key>$calendar_home_items_initial_sync:</key>
+			<value>[-,$calendar:/,$tasks:/,$inbox:/,$outbox:/,$freebusy:,$notification:/]</value>
+		</substitution>
+
+		<!-- Sync collection extra items - use "-" to include the collection.
+		     Vide chez nous : RFC 6578 ne fait pas figurer la collection dans son propre
+		     sync-report, c'est un CalendarServer-isme. "[]" = aucun item supplémentaire
+		     (src/utils.py, processHrefSubstitutions filtre la chaîne vide). -->
+		<substitution>
+			<key>$calendar_sync_extra_items:</key>
+			<value>[]</value>
+		</substitution>
+
+		<!-- Sync collection extra count - gets added to the totalcount value-->
+		<substitution>
+			<key>$calendar_sync_extra_count:</key>
+			<value>1</value> <!-- the request-uri resource is returned when no token passed-->
+		</substitution>
+
+
+		<!-- server-to-server inbox-->
+		<substitution>
+			<key>$servertoserver:</key>
+			<value>$root:inbox</value>
+		</substitution>
+
+		<!-- timezone service-->
+		<substitution>
+			<key>$timezoneservice:</key>
+			<value>$root:timezones</value>
+		</substitution>
+
+		<!-- timezone std service-->
+		<substitution>
+			<key>$timezonestdservice:</key>
+			<value>$root:stdtimezones</value>
+		</substitution>
+
+		<!-- relative path to addressbooks collection-->
+		<substitution>
+			<key>$addressbooks:</key>
+			<value>$root:addressbooks/</value>
+		</substitution>
+
+		<!-- relative path to record type addressbook collections-->
+		<substitution>
+			<key>$addressbooks_uids:</key>
+			<value>$addressbooks:$uidstype:/</value>
+		</substitution>
+		<substitution>
+			<key>$addressbooks_users:</key>
+			<value>$addressbooks:$userstype:/</value>
+		</substitution>
+
+		<!-- primary addressbook name -->
+		<substitution>
+			<key>$addressbook:</key>
+			<value>default</value>
+		</substitution>
+
+		<!-- directory name -->
+		<substitution>
+			<key>$directory:</key>
+			<value>$root:directory/</value>
+		</substitution>
+
+		<!-- POST add-member URI suffix -->
+		<substitution>
+			<key>$add-member:</key>
+			<value>;add-member</value>
+		</substitution>
+
+		<!-- user id for admin user -->
+		<substitution>
+			<key>$useradmin:</key>
+			<value>{email}</value>
+		</substitution>
+		<!-- guid for admin user -->
+		<substitution>
+			<key>$useradminguid:</key>
+			<value>0C8BDE62-E600-4696-83D3-8B5ECABDFD2E</value>
+		</substitution>
+		<!-- password for admin user -->
+		<substitution>
+			<key>$pswdadmin:</key>
+			<value>{secret}</value>
+		</substitution>
+
+		<!-- relative path to admin principal resource-->
+		<substitution>
+			<key>$principal_admin:</key>
+			<value>$principals_users:$useradmin:/</value>
+		</substitution>
+		<substitution>
+			<key>$principaluri_admin:</key>
+			<value>$principals_uids:$useradminguid:/</value>
+		</substitution>
+
+		<!-- user id for apprentice user -->
+		<substitution>
+			<key>$userapprentice:</key>
+			<value>apprentice</value>
+		</substitution>
+		<!-- guid for apprentice user -->
+		<substitution>
+			<key>$userapprenticeguid:</key>
+			<value>29B6C503-11DF-43EC-8CCA-40C7003149CE</value>
+		</substitution>
+		<!-- password for admin user -->
+		<substitution>
+			<key>$pswdapprentice:</key>
+			<value>apprentice</value>
+		</substitution>
+
+		<!-- relative path to apprentice principal resource-->
+		<substitution>
+			<key>$principal_apprentice:</key>
+			<value>$principals_users:$userapprentice:/</value>
+		</substitution>
+		<substitution>
+			<key>$principaluri_apprentice:</key>
+			<value>$principals_uids:$userapprenticeguid:/</value>
+		</substitution>
+
+		<!-- user id for proxy user -->
+		<substitution>
+			<key>$userproxy:</key>
+			<value>superuser</value>
+		</substitution>
+		<!-- password for proxy user -->
+		<substitution>
+			<key>$pswdproxy:</key>
+			<value>superuser</value>
+		</substitution>
+
+		<!--  Single test account (user 1) — unrolled from the upstream
+		      <repeat count="40"> block: only one dev account exists. -->
+		<substitution>
+			<key>$userid1:</key>
+			<value>{email}</value>
+		</substitution>
+		<!-- user guid -->
+		<substitution>
+			<key>$userguid1:</key>
+			<value>10000000-0000-0000-0000-000000000001</value>
+		</substitution>
+		<!-- user name -->
+		<substitution>
+			<key>$username1:</key>
+			<value>User 01</value>
+		</substitution>
+		<!-- user name URI encoded -->
+		<substitution>
+			<key>$username-encoded1:</key>
+			<value>User%2001</value>
+		</substitution>
+		<!-- first name -->
+		<substitution>
+			<key>$firstname1:</key>
+			<value>User</value>
+		</substitution>
+		<!-- last name -->
+		<substitution>
+			<key>$lastname1:</key>
+			<value>01</value>
+		</substitution>
+		<!-- password -->
+		<substitution>
+			<key>$pswd1:</key>
+			<value>{secret}</value>
+		</substitution>
+		<!-- relative path to user principal resource-->
+		<substitution>
+			<key>$principal1:</key>
+			<value>/dav/principals/{guid}/</value>
+		</substitution>
+		<substitution>
+			<key>$principaluri1:</key>
+			<value>$principals_uids:$userguid1:/</value>
+		</substitution>
+		<substitution>
+			<key>$principal1noslash:</key>
+			<value>$principals_users:$userid1:</value>
+		</substitution>
+
+		<!-- relative path to user calendar home-->
+		<substitution>
+			<key>$calendarhome1:</key>
+			<value>$calendars_uids:$userguid1:</value>
+		</substitution>
+		<!-- relative path to user alternate calendar home-->
+		<substitution>
+			<key>$calendarhomealt1:</key>
+			<value>$calendars_users:$userid1:</value>
+		</substitution>
+		<!-- relative path to user calendar-->
+		<substitution>
+			<key>$calendarpath1:</key>
+			<value>$calendarhome1:/$calendar:</value>
+		</substitution>
+		<!-- relative path to user alternate calendar-->
+		<substitution>
+			<key>$calendarpathalt1:</key>
+			<value>$calendarhomealt1:/$calendar:</value>
+		</substitution>
+		<!-- relative path to user tasks calendar-->
+		<substitution>
+			<key>$taskspath1:</key>
+			<value>$calendarhome1:/$tasks:</value>
+		</substitution>
+		<!-- relative path to user polls calendar-->
+		<substitution>
+			<key>$pollspath1:</key>
+			<value>$calendarhome1:/$polls:</value>
+		</substitution>
+		<!-- relative path to user inbox-->
+		<substitution>
+			<key>$inboxpath1:</key>
+			<value>$calendarhome1:/$inbox:</value>
+		</substitution>
+		<!-- relative path to user outbox-->
+		<substitution>
+			<key>$outboxpath1:</key>
+			<value>$calendarhome1:/$outbox:</value>
+		</substitution>
+		<!-- relative path to user dropbox-->
+		<substitution>
+			<key>$dropboxpath1:</key>
+			<value>$calendarhome1:/$dropbox:</value>
+		</substitution>
+		<!-- relative path to user notification-->
+		<substitution>
+			<key>$notificationpath1:</key>
+			<value>$calendarhome1:/$notification:</value>
+		</substitution>
+		<!-- relative path to user freebusy-->
+		<substitution>
+			<key>$freebusypath1:</key>
+			<value>$calendarhome1:/$freebusy:</value>
+		</substitution>
+		<substitution>
+			<key>$email1:</key>
+			<value>$userid1:@example.com</value>
+		</substitution>
+		<!-- calendar user address of user-->
+		<substitution>
+			<key>$cuaddr1:</key>
+			<value>mailto:$email1:</value>
+		</substitution>
+		<substitution>
+			<key>$cuaddralt1:</key>
+			<value>$cuaddr1:</value>
+		</substitution>
+		<substitution>
+			<key>$cuaddraltnoslash1:</key>
+			<value>$cuaddr1:</value>
+		</substitution>
+		<substitution>
+			<key>$cuaddrurn1:</key>
+			<value>urn:x-uid:$userguid1:</value>
+		</substitution>
+
+		<!-- relative path to user addressbook home-->
+		<substitution>
+			<key>$addressbookhome1:</key>
+			<value>/dav/addressbooks/{guid}</value>
+		</substitution>
+		<!-- relative path to user addressbook-->
+		<substitution>
+			<key>$addressbookpath1:</key>
+			<value>/dav/addressbooks/{guid}/default</value>
+		</substitution>
+
+		<!--  User with non-ascii name -->
+		<substitution>
+			<key>$i18nid:</key>
+			<value>i18nuser</value>
+		</substitution>
+		<!-- group guid-->
+		<substitution>
+			<key>$i18nguid:</key>
+			<value>860B3EE9-6D7C-4296-9639-E6B998074A78</value>
+		</substitution>
+		<!-- group name-->
+		<substitution>
+			<key>$i18nname:</key>
+			<value>まだ</value>
+		</substitution>
+		<!-- password -->
+		<substitution>
+			<key>$i18npswd:</key>
+			<value>i18nuser</value>
+		</substitution>
+		<!-- relative path to user calendar-->
+		<substitution>
+			<key>$i18ncalendarpath:</key>
+			<value>$calendars_uids:$i18nguid:/$calendar:</value>
+		</substitution>
+		<substitution>
+			<key>$i18nemail:</key>
+			<value>$i18nid:@example.com</value>
+		</substitution>
+		<!-- CUAddrs -->
+		<substitution>
+			<key>$i18ncuaddr:</key>
+			<value>mailto:$i18nemail:</value>
+		</substitution>
+		<substitution>
+			<key>$i18ncuaddrurn:</key>
+			<value>urn:x-uid:$i18nguid:</value>
+		</substitution>
+
+		<!-- relative path to disabled group principal resource-->
+		<substitution>
+			<key>$principaldisabled:</key>
+			<value>$principals_groups:disabledgroup/</value>
+		</substitution>
+		<substitution>
+			<key>$principaluridisabled:</key>
+			<value>$principals_uids:disabledgroup/</value>
+		</substitution>
+		<!-- calendar user address of disabled group-->
+		<substitution>
+			<key>$cuaddrdisabled:</key>
+			<value>$principals_uids:disabledgroup/</value>
+		</substitution>
+
+	</substitutions>
+
+    <calendardatafilter>ATTENDEE:X-CALENDARSERVER-DTSTAMP</calendardatafilter>
+    <calendardatafilter>ATTENDEE:X-CALENDARSERVER-AUTO</calendardatafilter>
+    <calendardatafilter>ATTENDEE:X-CALENDARSERVER-RESET-PARTSTAT</calendardatafilter>
+    <calendardatafilter>CALSCALE</calendardatafilter>
+    <calendardatafilter>PRODID</calendardatafilter>
+    <calendardatafilter>DTSTAMP</calendardatafilter>
+    <calendardatafilter>CREATED</calendardatafilter>
+    <calendardatafilter>LAST-MODIFIED</calendardatafilter>
+    <calendardatafilter>X-WR-CALNAME</calendardatafilter>
+    <calendardatafilter>CLASS=PUBLIC</calendardatafilter>
+    <calendardatafilter>PRIORITY=0</calendardatafilter>
+    <calendardatafilter>TRANSP=OPAQUE</calendardatafilter>
+    <calendardatafilter>SEQUENCE=0</calendardatafilter>
+
+    <addressdatafilter>PRODID</addressdatafilter>
+    <addressdatafilter>REV</addressdatafilter>
+</serverinfo>

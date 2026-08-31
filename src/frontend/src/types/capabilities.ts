@@ -12,4 +12,6 @@ export interface Capabilities {
   strictIdentities?: boolean
   quota?: boolean
   rules?: boolean
+  /** Whether this deployment publishes a synchronisation address. Read `!== false` like the rest. */
+  dav?: boolean
 }

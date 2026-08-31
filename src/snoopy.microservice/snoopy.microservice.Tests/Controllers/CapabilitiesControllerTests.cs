@@ -41,11 +41,12 @@ public sealed class CapabilitiesControllerTests
                     .ReturnsAsync(Result.Success(new AccountInfo { UserId = 1, UserName = "john", IsAdmin = true }));
     }
 
-    private CapabilitiesController CreateController()
+    private CapabilitiesController CreateController(string? davPublicUrl = null)
     {
         var controller = new CapabilitiesController(
             Options.Create(_platform),
             Options.Create(_sieve),
+            Options.Create(new DavOptions { PublicUrl = davPublicUrl }),
             _aliasDirectory.Object,
             _accountInfo.Object,
             _connections.Object,
@@ -55,16 +56,21 @@ public sealed class CapabilitiesControllerTests
         return controller;
     }
 
+    private async Task<CapabilitiesResponse> GetCapabilitiesAsync(string? davPublicUrl = null)
+    {
+        var result = await CreateController(davPublicUrl).GetCapabilities(CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        return Assert.IsType<CapabilitiesResponse>(ok.Value);
+    }
+
     [Fact]
     public async Task GetCapabilities_OnWeeskyAsAdmin_ReturnsEveryFlagTrue()
     {
-        var result = await CreateController().GetCapabilities(CancellationToken.None);
+        var capabilities = await GetCapabilitiesAsync(davPublicUrl: "https://api.mail.weesky.net");
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var capabilities = Assert.IsType<CapabilitiesResponse>(ok.Value);
         Assert.Equal(new CapabilitiesResponse(
             Platform: "weesky", Admin: true, Aliases: true, PasswordChange: true, ProfileEditing: true,
-            StrictIdentities: true, Quota: true, Rules: true), capabilities);
+            StrictIdentities: true, Quota: true, Rules: true, Dav: true), capabilities);
     }
 
     [Fact]
@@ -162,5 +168,15 @@ public sealed class CapabilitiesControllerTests
 
         var obj = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(502, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task Dav_FollowsWhetherAPublicAddressIsConfigured()
+    {
+        var withAddress = await GetCapabilitiesAsync(davPublicUrl: "https://api.mail.weesky.net");
+        Assert.True(withAddress.Dav);
+
+        var without = await GetCapabilitiesAsync(davPublicUrl: null);
+        Assert.False(without.Dav);
     }
 }

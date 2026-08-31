@@ -4,6 +4,9 @@
     "loading": "Loading contacts…",
     "loadFailed": "Could not load contacts.",
     "notFound": "Contact not found",
+    "conflictTitle": "This contact changed elsewhere",
+    "conflictBody": "Someone — or one of your devices — saved this contact while you were editing it. Reload to see their version; your changes here will be lost.",
+    "conflictReload": "Reload",
     "saved": "Contact saved",
     "saveFailed": "Could not save the contact",
     "deleted": "{{name}} deleted",
@@ -19,7 +22,15 @@
   "fields": {
     "nickname": "Nickname",
     "addresses": "Addresses",
-    "primary": "primary"
+    "primary": "primary",
+    "phones": "Phone numbers",
+    "birthday": "Birthday",
+    "organization": "Organisation",
+    "department": "Department",
+    "jobTitle": "Job title",
+    "postal": "Postal address",
+    "website": "Website",
+    "notes": "Notes"
   },
   "favourites": {
     "add": "Add to favourites",
@@ -48,6 +59,9 @@
     "invite": "Select a contact to see its details",
     "back": "Back to the list",
     "actions": "Contact actions",
+    "write": "Write",
+    "call": "Call",
+    "directions": "Directions",
     "bar": {
       "favourite": "Favourite"
     }
@@ -59,22 +73,56 @@
     "close": "Close the editor",
     "firstName": "First name",
     "lastName": "Last name",
+    "addField": "+ Add a field",
+    "displayName": "Display name",
+    "middleName": "Middle name",
+    "namePrefix": "Prefix",
+    "nameSuffix": "Suffix",
+    "birthdayPlaceholder": "27/10/1979",
     "addressLabel": "Address {{index}}",
     "addressPlaceholder": "name@example.com",
     "makePrimary": "Make this the primary address",
-    "moveUp": "Move address {{index}} up",
+    "makePrimaryLine": "Make this the primary address (address {{index}})",
     "removeAddress": "Remove address {{index}}",
     "addAddress": "+ Add an address",
-    "favourite": "Favourite"
+    "phoneLabel": "Phone {{index}}",
+    "phoneType": "Phone {{index}} type",
+    "phonePlaceholder": "+32 4xx xx xx xx",
+    "removePhone": "Remove phone {{index}}",
+    "addPhone": "+ Add a phone",
+    "postalType": "Postal address {{index}} type",
+    "removePostal": "Remove postal address {{index}}",
+    "addPostal": "+ Add a postal address",
+    "postal": {
+      "poBox": "PO box",
+      "extended": "Extended address",
+      "street": "Street",
+      "locality": "Locality",
+      "region": "Region",
+      "postalCode": "Postal code",
+      "country": "Country"
+    },
+    "types": {
+      "cell": "Mobile",
+      "home_voice": "Home",
+      "work_voice": "Work",
+      "home_fax": "Home fax",
+      "work_fax": "Work fax",
+      "voice": "Other",
+      "home": "Home",
+      "work": "Work"
+    },
+    "favourite": "Favourite",
+    "misc": "Other"
   },
   "transfer": {
     "actions": "Import and export",
-    "importHint": "Merge a CSV file into this book",
+    "importHint": "Merge a CSV or vCard file into this book",
     "import": "Import…",
     "nothingToExport": "Nothing to export",
     "exportHint": "Download this book as CSV",
     "export": "Export",
-    "tooLarge": "That file is too large — the limit is 5 MB.",
+    "tooLarge": "That file is too large — the limit is 20 MB.",
     "importFailed": "Could not import the file",
     "exportFailed": "Could not export the contacts"
   },

@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using weesky.Snoopy.Microservice.Authentication.CardDav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
-internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailUserStore
+internal sealed class WebmailUserStore(
+    PreferencesDbContext context, IDavAuthenticationCache davCache) : IWebmailUserStore
 {
     public async Task<WebmailAccount> RegisterLoginAsync(string email, CancellationToken cancellationToken)
     {
@@ -67,7 +69,19 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
         if (row is null) return Guid.NewGuid();
 
         row.SecurityStamp = Guid.NewGuid();
+
+        // Destroyed rather than switched off, and in the rotation's own SaveChanges so the two are
+        // one transaction. Not IDavCredentialStore.DeleteAsync: it carries a SaveChanges of its
+        // own, which would make two.
+        var secret = await context.DavCredentials
+            .FirstOrDefaultAsync(c => c.UserId == row.Id, cancellationToken);
+        if (secret is not null) context.DavCredentials.Remove(secret);
+
         await context.SaveChangesAsync(cancellationToken);
+
+        // After the commit, never before: from here no request can still read the deleted row, so
+        // the eviction races only against reads already in flight.
+        davCache.Forget(canonical);
 
         return row.SecurityStamp;
     }
@@ -99,6 +113,10 @@ internal sealed class WebmailUserStore(PreferencesDbContext context) : IWebmailU
 
         context.Users.Remove(existing);
         await context.SaveChangesAsync(cancellationToken);
+
+        // The cascade takes the dav_credentials row, but not the burst entry: without this the
+        // deleted account's secret keeps opening the address book for the rest of the window.
+        davCache.Forget(canonical);
     }
 
     private static WebmailAccount Account(WebmailUser row) => new(row.Id, row.SecurityStamp);

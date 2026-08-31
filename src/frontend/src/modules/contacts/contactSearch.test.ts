@@ -37,6 +37,13 @@ describe('fold', () => {
 })
 
 describe('matches', () => {
+  /* The only name on screen for a contact carrying one, so a search that skipped it would fail to
+     find a contact by the very word the list shows. */
+  it('matches on the display name', () => {
+    expect(matches(contact({ id: 'r', firstName: 'Raphaël', lastName: 'Le Châtelier',
+      displayName: 'Dr. Le Châtelier Jr.' }), 'jr')).toBe(true)
+  })
+
   it('matches on the first name', () => {
     expect(matches(bruno, 'bru')).toBe(true)
   })

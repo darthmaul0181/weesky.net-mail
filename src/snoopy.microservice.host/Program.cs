@@ -32,11 +32,9 @@ builder.Services.AddScoped<AttachmentSizeLimitFilter>();
 
 var keyRingPath = builder.Services.AddCredentialKeyRing(builder.Environment);
 
-var mvc = builder.Services.AddControllers(MvcFormatterConfiguration.ConfigureFormatters).AddJsonOptions(o =>
-{
-    o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
-    o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-});
+var mvc = builder.Services
+    .AddControllers(MvcFormatterConfiguration.ConfigureFormatters)
+    .AddJsonOptions(MvcFormatterConfiguration.ConfigureJson);
 
 // The host assembly carries no ApplicationPart attribute (see the csproj), so these two calls are
 // the whole of what MVC sees: the core always, the platform only where it is loaded. Without the

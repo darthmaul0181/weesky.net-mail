@@ -26,7 +26,10 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
         modelBuilder.Entity<Contact>().HasKey(c => c.Id);
         modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.Uid }).IsUnique();
-        modelBuilder.Entity<ContactEmail>().HasKey(e => new { e.ContactId, e.Address });
+        modelBuilder.Entity<ContactEmail>().HasKey(e => new { e.ContactId, e.Position });
+        modelBuilder.Entity<ContactPhone>().HasKey(p => new { p.ContactId, p.Position });
+        modelBuilder.Entity<ContactAddress>().HasKey(a => new { a.ContactId, a.Position });
+        modelBuilder.Entity<ContactPhoto>().HasKey(p => p.ContactId);
         // Without this edge EF has no dependency between the two and orders their INSERTs by table
         // name — contact_emails before contacts — breaking fk_contact_emails_contact on any create
         // carrying an address. Declared without navigation: the entities stay flat, the order does
@@ -36,6 +39,13 @@ public class PreferencesDbContext : DbContext
             .WithMany()
             .HasForeignKey(e => e.ContactId)
             .OnDelete(DeleteBehavior.Cascade);
+        // Same mechanism as ContactEmail -> Contact above, for the three sibling projection tables.
+        modelBuilder.Entity<ContactPhone>()
+            .HasOne<Contact>().WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactAddress>()
+            .HasOne<Contact>().WithMany().HasForeignKey(a => a.ContactId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactPhoto>()
+            .HasOne<Contact>().WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
 
@@ -69,6 +79,17 @@ public class PreferencesDbContext : DbContext
             .HasForeignKey(t => t.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<DavCredential>().HasKey(c => c.UserId);
+        // Same mechanism as the five tables above: "dav_credentials" sorts before "users", so
+        // without a declared edge EF orders the INSERTs by table name and breaks the FK on any
+        // create. Declared without navigation, like its neighbours. The InMemory provider enforces
+        // no foreign key, so no test can catch this — only the declaration can.
+        modelBuilder.Entity<DavCredential>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<ExternalDomain>().HasKey(d => d.Id);
         modelBuilder.Entity<ExternalDomain>().HasIndex(d => d.Name).IsUnique();
         modelBuilder.Entity<ExternalDomain>()
@@ -92,6 +113,31 @@ public class PreferencesDbContext : DbContext
             .WithMany()
             .HasForeignKey(a => a.DomainId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ContactSyncState>().HasKey(s => s.UserId);
+        modelBuilder.Entity<ContactTombstone>().HasKey(t => new { t.UserId, t.DavName });
+        modelBuilder.Entity<ContactRevision>().HasKey(r => r.Id);
+        modelBuilder.Entity<ContactRevision>().Property(r => r.Id).ValueGeneratedOnAdd();
+        modelBuilder.Entity<ContactRevision>()
+            .Property(r => r.Cause)
+            .HasConversion(v => v.ToString().ToLowerInvariant(), v => Enum.Parse<RevisionCause>(v, true))
+            .HasMaxLength(8);
+
+        // Same mechanism as every table above: all three sort before "users", so without a declared
+        // edge EF orders the INSERTs by table name and breaks the FK on any create. Declared without
+        // navigation, like their neighbours. The InMemory provider enforces no foreign key, so no
+        // test can catch this — only the declaration can.
+        modelBuilder.Entity<ContactSyncState>()
+            .HasOne<WebmailUser>().WithMany()
+            .HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactTombstone>()
+            .HasOne<WebmailUser>().WithMany()
+            .HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactRevision>()
+            .HasOne<WebmailUser>().WithMany()
+            .HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.DavName }).IsUnique();
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
@@ -104,13 +150,27 @@ public class PreferencesDbContext : DbContext
 
     public DbSet<TrustedSender> TrustedSenders { get; set; }
 
+    public DbSet<DavCredential> DavCredentials { get; set; }
+
     public DbSet<Contact> Contacts { get; set; }
 
     public DbSet<ContactEmail> ContactEmails { get; set; }
+
+    public DbSet<ContactPhone> ContactPhones { get; set; }
+
+    public DbSet<ContactAddress> ContactAddresses { get; set; }
+
+    public DbSet<ContactPhoto> ContactPhotos { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
 
     public DbSet<ExternalDomain> ExternalDomains { get; set; }
 
     public DbSet<ConnectedAccount> ConnectedAccounts { get; set; }
+
+    public DbSet<ContactSyncState> ContactSyncStates { get; set; }
+
+    public DbSet<ContactTombstone> ContactTombstones { get; set; }
+
+    public DbSet<ContactRevision> ContactRevisions { get; set; }
 }

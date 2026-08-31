@@ -4,6 +4,12 @@
 * text=auto
 
 ###############################################################################
+# vCard fixtures: RFC 6350 says CRLF, and the corpus tests read the bytes on
+# both Windows and Linux. text=auto alone would hand each host its own endings.
+###############################################################################
+*.vcf   text eol=crlf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

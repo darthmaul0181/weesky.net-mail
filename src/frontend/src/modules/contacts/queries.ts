@@ -2,12 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import { compareContacts } from './contactSearch'
-import type { Contact, ContactDraft, ContactImportReport, ContactListResponse } from './contactTypes'
+import type {
+  Contact, ContactDetail, ContactDraft, ContactImportReport, ContactListResponse,
+} from './contactTypes'
 
 /** Scoped by account from the outset, like the mail keys: linking a second account later isolates
     its book instead of mixing two. */
 export const contactKeys = {
   all: (accountId: string) => ['contacts', accountId] as const,
+  /** Under `all`, so the invalidation every write already fires refreshes the open card too. */
+  detail: (accountId: string, id: string) => ['contacts', accountId, id] as const,
+  photo: (accountId: string, id: string) => ['contacts', accountId, id, 'photo'] as const,
 }
 
 /**
@@ -24,6 +29,34 @@ export function useContacts(enabled = true) {
     staleTime: 5 * 60_000,
     select: (data): Contact[] => [...data.contacts].sort(compareContacts),
     enabled,
+  })
+}
+
+/**
+ * One contact's whole card. Only the open one is fetched: the list carries what a tile needs, and
+ * hauling every contact's phones, notes and postal addresses through it would make the book pay
+ * for a column that shows one.
+ */
+export function useContact(id: string | null) {
+  const accountId = useAccountId()
+
+  return useQuery({
+    queryKey: contactKeys.detail(accountId, id ?? ''),
+    queryFn: () => api.getContact(id) as Promise<ContactDetail>,
+    enabled: id != null,
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** The avatar's bytes, asked for only once the card says there are some. */
+export function useContactPhoto(id: string | null, hasPhoto: boolean) {
+  const accountId = useAccountId()
+
+  return useQuery({
+    queryKey: contactKeys.photo(accountId, id ?? ''),
+    queryFn: () => api.getContactPhoto(id) as Promise<Blob>,
+    enabled: hasPhoto && id != null,
+    staleTime: 5 * 60_000,
   })
 }
 

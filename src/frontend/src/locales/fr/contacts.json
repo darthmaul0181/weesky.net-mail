@@ -4,6 +4,9 @@
     "loading": "Chargement des contacts…",
     "loadFailed": "Impossible de charger les contacts.",
     "notFound": "Contact introuvable",
+    "conflictTitle": "Ce contact a changé ailleurs",
+    "conflictBody": "Quelqu’un — ou l’un de vos appareils — a enregistré ce contact pendant que vous le modifiiez. Rechargez pour voir sa version ; vos modifications ici seront perdues.",
+    "conflictReload": "Recharger",
     "saved": "Contact enregistré",
     "saveFailed": "Impossible d’enregistrer le contact",
     "deleted": "Contact supprimé : {{name}}",
@@ -19,7 +22,15 @@
   "fields": {
     "nickname": "Surnom",
     "addresses": "Adresses",
-    "primary": "principale"
+    "primary": "principale",
+    "phones": "Téléphones",
+    "birthday": "Anniversaire",
+    "organization": "Organisation",
+    "department": "Service",
+    "jobTitle": "Fonction",
+    "postal": "Adresse postale",
+    "website": "Site web",
+    "notes": "Notes"
   },
   "favourites": {
     "add": "Ajouter aux favoris",
@@ -48,6 +59,9 @@
     "invite": "Sélectionnez un contact pour voir sa fiche",
     "back": "Retour à la liste",
     "actions": "Actions du contact",
+    "write": "Écrire",
+    "call": "Appeler",
+    "directions": "Itinéraire",
     "bar": {
       "favourite": "Favori"
     }
@@ -59,22 +73,56 @@
     "close": "Fermer l’éditeur",
     "firstName": "Prénom",
     "lastName": "Nom",
+    "addField": "+ Ajouter un champ",
+    "displayName": "Nom affiché",
+    "middleName": "Deuxième prénom",
+    "namePrefix": "Préfixe",
+    "nameSuffix": "Suffixe",
+    "birthdayPlaceholder": "27/10/1979",
     "addressLabel": "Adresse {{index}}",
     "addressPlaceholder": "nom@exemple.com",
     "makePrimary": "Définir comme adresse principale",
-    "moveUp": "Monter l’adresse {{index}}",
+    "makePrimaryLine": "Définir comme adresse principale (adresse {{index}})",
     "removeAddress": "Supprimer l’adresse {{index}}",
     "addAddress": "+ Ajouter une adresse",
-    "favourite": "Favori"
+    "phoneLabel": "Téléphone {{index}}",
+    "phoneType": "Type du téléphone {{index}}",
+    "phonePlaceholder": "+32 4xx xx xx xx",
+    "removePhone": "Supprimer le téléphone {{index}}",
+    "addPhone": "+ Ajouter un téléphone",
+    "postalType": "Type de l’adresse postale {{index}}",
+    "removePostal": "Supprimer l’adresse postale {{index}}",
+    "addPostal": "+ Ajouter une adresse postale",
+    "postal": {
+      "poBox": "Boîte postale",
+      "extended": "Complément d’adresse",
+      "street": "Rue",
+      "locality": "Localité",
+      "region": "Région",
+      "postalCode": "Code postal",
+      "country": "Pays"
+    },
+    "types": {
+      "cell": "Mobile",
+      "home_voice": "Domicile",
+      "work_voice": "Bureau",
+      "home_fax": "Fax domicile",
+      "work_fax": "Fax bureau",
+      "voice": "Autre",
+      "home": "Domicile",
+      "work": "Bureau"
+    },
+    "favourite": "Favori",
+    "misc": "Divers"
   },
   "transfer": {
     "actions": "Importer et exporter",
-    "importHint": "Fusionner un fichier CSV dans ce carnet",
+    "importHint": "Fusionner un fichier CSV ou vCard dans ce carnet",
     "import": "Importer…",
     "nothingToExport": "Rien à exporter",
     "exportHint": "Télécharger ce carnet au format CSV",
     "export": "Exporter",
-    "tooLarge": "Ce fichier est trop volumineux — la limite est de 5 Mo.",
+    "tooLarge": "Ce fichier est trop volumineux — la limite est de 20 Mo.",
     "importFailed": "Impossible d’importer le fichier",
     "exportFailed": "Impossible d’exporter les contacts"
   },

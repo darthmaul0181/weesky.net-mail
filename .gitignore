@@ -364,3 +364,9 @@ FodyWeavers.xsd
 
 # Superpowers brainstorming companion (mockups, session state)
 .superpowers/
+
+# CardDAV conformance harness (4d): pinned tool clones, generated config, scrubbed outputs
+tools/caldavtester/.caldavtester/
+tools/caldavtester/results/
+tools/caldavtester/serverinfo.xml
+tools/caldavtester/serverinfo.local.json

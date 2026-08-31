@@ -179,6 +179,59 @@ describe('DropdownMenu', () => {
     })
   })
 
+  /* jsdom lays nothing out, so every number here is stubbed — the real geometry was measured in
+     the browser on the contact editor: a 106px "add a field" link at y 522 of a 763px viewport,
+     whose 290px menu ran to 838, seventy-five pixels under the fold. */
+  describe('direction="auto"', () => {
+    function place(triggerTop: number, viewport: number, menuHeight: number) {
+      const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockReturnValue({
+          top: triggerTop, right: 1026, bottom: triggerTop + 22, left: 920, width: 106, height: 22,
+        } as DOMRect)
+      const heightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockReturnValue(menuHeight)
+      vi.stubGlobal('innerWidth', 1479)
+      vi.stubGlobal('innerHeight', viewport)
+      return () => { rectSpy.mockRestore(); heightSpy.mockRestore(); vi.unstubAllGlobals() }
+    }
+
+    it('opens upward, aligned on the trigger, when the menu would run past the fold', () => {
+      const restore = place(522, 763, 290)
+
+      render(<DropdownMenu ariaLabel="Add a field" trigger="+" items={items()}
+        direction="auto" align="left" />)
+      fireEvent.click(screen.getByLabelText('Add a field'))
+
+      expect(screen.getByRole('menu'))
+        .toHaveStyle({ position: 'fixed', bottom: '245px', left: '920px' })
+      restore()
+    })
+
+    it('leaves the menu below, unpositioned, when there is room for it', () => {
+      const restore = place(200, 900, 290)
+
+      render(<DropdownMenu ariaLabel="Add a field" trigger="+" items={items()}
+        direction="auto" align="left" />)
+      fireEvent.click(screen.getByLabelText('Add a field'))
+
+      expect(screen.getByRole('menu')).not.toHaveAttribute('style')
+      restore()
+    })
+
+    /* Flipping a menu that fits neither way trades a clipped bottom, which a scroll can still
+       reach, for a clipped top, which nothing can. */
+    it('stays below when the menu fits on neither side', () => {
+      const restore = place(300, 500, 900)
+
+      render(<DropdownMenu ariaLabel="Add a field" trigger="+" items={items()}
+        direction="auto" align="left" />)
+      fireEvent.click(screen.getByLabelText('Add a field'))
+
+      expect(screen.getByRole('menu')).not.toHaveAttribute('style')
+      restore()
+    })
+  })
+
   // Regression pin: the default ('down') path must render exactly as it did before direction
   // existed — no inline position style, no scroll-close wiring.
   it('renders the down menu with no inline positioning, unaffected by scroll', () => {

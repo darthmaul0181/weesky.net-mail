@@ -27,33 +27,49 @@ public sealed class ContactEntitiesTests
         Assert.Null(stored.VCardRaw);
     }
 
-    // The composite key is what stops one address being stored twice on the same contact:
-    // inserting the same (contact_id, address) pair a second time, from a separate context so
-    // the conflict is a real store-level duplicate and not merely a change-tracker identity
-    // clash, must be rejected rather than create a second row.
     [Fact]
-    public async Task ContactEmail_KeyIsContactPlusAddress()
+    public void Contact_CarriesTheProjectionColumns()
     {
-        var dbName = nameof(ContactEmail_KeyIsContactPlusAddress);
-        var contact = Guid.NewGuid();
+        var contact = new Contact { DisplayName = "Dr. John Smith Jr.", Birthday = "--0315", CardHash = "" };
 
-        var context = new PreferencesTestDbContext(dbName);
+        Assert.Equal("--0315", contact.Birthday);
+        Assert.Equal(string.Empty, contact.CardHash); // "" = not computed yet, never null
+    }
+
+    // The composite key is (ContactId, Position), not (ContactId, Address): under the new schema
+    // (spec, § Schéma) the same address may legally appear twice on one contact under two
+    // different TYPE values, as two distinct properties on the card.
+    [Fact]
+    public async Task ContactEmail_KeyIsContactIdAndPosition()
+    {
+        var context = new PreferencesTestDbContext(nameof(ContactEmail_KeyIsContactIdAndPosition));
+        var id = Guid.NewGuid();
+
         context.ContactEmails.Add(new ContactEmail
         {
-            ContactId = contact, Address = "bruno@example.com", Position = 0
+            ContactId = id, Position = 0, Address = "a@b.c", Type = "HOME"
+        });
+        context.ContactEmails.Add(new ContactEmail
+        {
+            ContactId = id, Position = 1, Address = "a@b.c", Type = "WORK"
         });
         await context.SaveChangesAsync(CancellationToken.None);
 
-        var duplicateContext = new PreferencesTestDbContext(dbName);
-        duplicateContext.ContactEmails.Add(new ContactEmail
-        {
-            ContactId = contact, Address = "bruno@example.com", Position = 1
-        });
-        await Assert.ThrowsAsync<ArgumentException>(
-            () => duplicateContext.SaveChangesAsync(CancellationToken.None));
+        Assert.Equal(2, await context.ContactEmails.CountAsync());
+    }
 
-        Assert.NotNull(await context.ContactEmails.FindAsync([contact, "bruno@example.com"],
-            CancellationToken.None));
+    [Fact]
+    public async Task ChildTables_RoundTrip()
+    {
+        var context = new PreferencesTestDbContext(nameof(ChildTables_RoundTrip));
+        var id = Guid.NewGuid();
+
+        context.ContactPhones.Add(new ContactPhone { ContactId = id, Position = 0, Number = "+3221234567", Pref = 101 });
+        context.ContactAddresses.Add(new ContactAddress { ContactId = id, Position = 0, Street = "Rue Haute 1", Locality = "Bruxelles" });
+        context.ContactPhotos.Add(new ContactPhoto { ContactId = id, MediaType = "image/jpeg", Bytes = [1, 2, 3] });
+        await context.SaveChangesAsync(CancellationToken.None);
+
+        Assert.Single(await context.ContactPhones.ToListAsync());
     }
 
     // The model, not the behaviour: the InMemory provider enforces no foreign key, so no
@@ -76,16 +92,21 @@ public sealed class ContactEntitiesTests
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
-    // The five sibling tables (contacts, folder_role_overrides, user_preferences,
-    // sending_identities, trusted_senders) all carry the identical fk_..._user ON DELETE CASCADE
-    // shape to users(id), so one parameterised test stands in for five near-duplicates of
-    // ContactEmail_DeclaresForeignKeyToContact above rather than repeating its body five times.
+    // The nine sibling tables (contacts, folder_role_overrides, user_preferences,
+    // sending_identities, trusted_senders, dav_credentials, contact_sync_state,
+    // contact_tombstones, contact_revisions) all carry the identical fk_..._user ON DELETE CASCADE
+    // shape to users(id), so one parameterised test stands in for nine near-duplicates of
+    // ContactEmail_DeclaresForeignKeyToContact above rather than repeating its body nine times.
     [Theory]
     [InlineData(typeof(Contact), nameof(Contact.UserId))]
     [InlineData(typeof(FolderRoleOverride), nameof(FolderRoleOverride.UserId))]
     [InlineData(typeof(UserPreference), nameof(UserPreference.UserId))]
     [InlineData(typeof(SendingIdentity), nameof(SendingIdentity.UserId))]
     [InlineData(typeof(TrustedSender), nameof(TrustedSender.UserId))]
+    [InlineData(typeof(ContactSyncState), nameof(ContactSyncState.UserId))]
+    [InlineData(typeof(ContactTombstone), nameof(ContactTombstone.UserId))]
+    [InlineData(typeof(ContactRevision), nameof(ContactRevision.UserId))]
+    [InlineData(typeof(DavCredential), nameof(DavCredential.UserId))]
     public void Entity_DeclaresForeignKeyToWebmailUser(Type entityType, string foreignKeyPropertyName)
     {
         var context = new PreferencesTestDbContext(

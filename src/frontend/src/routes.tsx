@@ -22,6 +22,7 @@ const IdentitiesPage = lazy(() => import('./modules/settings/identities/Identiti
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
 const MessageSourceView = lazy(() => import('./modules/mail/source/MessageSourceView'))
+const SyncPage = lazy(() => import('./modules/settings/sync/SyncPage'))
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginRoute /> },
@@ -53,6 +54,7 @@ export const routes: RouteObject[] = [
                 element: <RequirePrimary />,
                 children: [
                   { path: 'account', element: <AccountPage /> },
+                  { path: 'sync', element: <Suspense fallback={null}><SyncPage /></Suspense> },
                   {
                     element: <RequireAliases />,
                     children: [

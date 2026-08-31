@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using System.Text;
+using System.Text.Json;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Contacts;
@@ -196,6 +197,19 @@ public sealed class ContactsControllerTests
         return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "contacts.csv");
     }
 
+    private static IFormFile VCardFileOf(string text, string? mediaType = "text/vcard", bool bom = false)
+    {
+        var bytes = new UTF8Encoding(bom).GetPreamble()
+            .Concat(new UTF8Encoding(false).GetBytes(text)).ToArray();
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "contacts.vcf");
+        if (mediaType != null) file.Headers = new HeaderDictionary { ["Content-Type"] = mediaType };
+        return file;
+    }
+
+    private static string Card(params string[] lines) =>
+        "BEGIN:VCARD\r\nVERSION:3.0\r\n" + string.Concat(lines.Select(l => l + "\r\n")) + "END:VCARD\r\n";
+
+
     [Fact]
     public async Task Import_Returns200WithTheReport()
     {
@@ -212,7 +226,7 @@ public sealed class ContactsControllerTests
     }
 
     [Fact]
-    public async Task Import_HandsTheStoreTheMappedRowsAndTheirVCard()
+    public async Task Import_HandsTheStoreTheMappedRowsAndTheirColumns()
     {
         IReadOnlyList<ContactImportRow>? seen = null;
         _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
@@ -226,7 +240,11 @@ public sealed class ContactsControllerTests
         var row = Assert.Single(seen!);
         Assert.Equal("Bruno", row.FirstName);
         Assert.Equal(2, row.Line);
-        Assert.Contains("TEL;TYPE=CELL:+32470000000", row.VCard);
+        var write = row.Write!;
+        Assert.NotNull(write.Phones);
+        var phone = Assert.Single(write.Phones);
+        Assert.Equal("+32470000000", phone.Number);
+        Assert.Equal("CELL", phone.Type);
     }
 
     // An address the file spelled wrong is dropped, not fatal — and the report has to say so.
@@ -365,6 +383,245 @@ public sealed class ContactsControllerTests
         Assert.Equal(50, report.Errors.Count);
     }
 
+    // The card is the truth, so it enters the book as it arrived — never re-serialised.
+    [Fact]
+    public async Task Import_SendsAVCardFileDownTheCardPath()
+    {
+        var first = Card("FN:Ana", "UID:card-1", "EMAIL:ana@example.com", "X-ABUID:ABC");
+        var second = Card("N:Solo;Bo;;;", "FN:Bo Solo", "UID:card-2");
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(2, 0, 0, 0, []));
+
+        var result = await CreateController().Import(VCardFileOf(first + second), CancellationToken.None);
+
+        Assert.Equal(2, Assert.IsType<ContactImportReport>(
+            Assert.IsType<OkObjectResult>(result.Result).Value).Created);
+        Assert.Collection(seen!,
+            r =>
+            {
+                Assert.Equal(1, r.Line);
+                Assert.Equal(first, r.VCard);
+                Assert.Equal("card-1", r.Uid);
+                Assert.Equal("ana@example.com", Assert.Single(r.Addresses));
+            },
+            r =>
+            {
+                Assert.Equal(8, r.Line);
+                Assert.Equal(second, r.VCard);
+                Assert.Equal("Bo", r.FirstName);
+            });
+    }
+
+    // Le chemin complet du .vcf : ce que le controleur remet au store porte l'ADR de la carte, la
+    // seule chose qui permet a une fusion de la poser sur une fiche qui n'en a pas.
+    [Fact]
+    public async Task Import_OffersAVCardsPostalAddressToTheStore()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(0, 1, 0, 0, []));
+
+        await CreateController().Import(VCardFileOf(Card("FN:Ana", "EMAIL:ana@example.com",
+            "TEL;TYPE=CELL:+32470000000",
+            "ADR;TYPE=HOME:;;Rue X 1;Namur;;5000;Belgium")), CancellationToken.None);
+
+        var offered = Assert.Single(seen!).Write;
+        Assert.Equal("Rue X 1", Assert.Single(offered!.PostalAddresses!).Street);
+        Assert.Equal("+32470000000", Assert.Single(offered.Phones!).Number);
+    }
+
+    // A file picker that names no media type, and the BOM a Windows editor leaves in front.
+    [Fact]
+    public async Task Import_RoutesOnTheContentWhenNoMediaTypeSaysSo()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        await CreateController().Import(
+            VCardFileOf(Card("FN:Ana", "EMAIL:ana@example.com"), mediaType: null, bom: true),
+            CancellationToken.None);
+
+        Assert.Equal(Card("FN:Ana", "EMAIL:ana@example.com"), Assert.Single(seen!).VCard);
+    }
+
+    // A card past the ceiling is a line in error, exactly like a skipped CSV row.
+    [Fact]
+    public async Task Import_ReportsACardPastTheSizeCapWithItsLine()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            VCardFileOf(Card("FN:Ana", "EMAIL:ana@example.com")
+                + Card("FN:Bo", "NOTE:" + new string('x', 1024 * 1024))),
+            CancellationToken.None);
+
+        Assert.Equal(Card("FN:Ana", "EMAIL:ana@example.com"), Assert.Single(seen!).VCard);
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var error = Assert.Single(report.Errors);
+        Assert.Equal(6, error.Line);
+        Assert.Equal(ContactStore.CardTooLarge, error.Reason);
+    }
+
+    // Truncating a UID would forge a synchronisation identity the card does not carry.
+    [Fact]
+    public async Task Import_ReportsAnOverLongUidWithItsLine()
+    {
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new ContactImportOutcome(0, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            VCardFileOf(Card("FN:Ana", "UID:" + new string('u', 256))), CancellationToken.None);
+
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var error = Assert.Single(report.Errors);
+        Assert.Equal(1, error.Line);
+        Assert.Contains("UID", error.Reason);
+    }
+
+    // A fragment is a line in error carrying its own line, never a stored card: an END-less vCard
+    // is what 4c would then serve.
+    [Fact]
+    public async Task Import_ReportsAMalformedCardWithItsLine()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var result = await CreateController().Import(
+            VCardFileOf(Card("FN:Ana", "EMAIL:ana@example.com") + "BEGIN:VCARD\r\nFN:Bo\r\n"),
+            CancellationToken.None);
+
+        Assert.Single(seen!);
+        var report = Assert.IsType<ContactImportReport>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var error = Assert.Single(report.Errors);
+        Assert.Equal(6, error.Line);
+        Assert.Equal(ContactsController.CardIncomplete, error.Reason);
+    }
+
+    // Every accented name of an Outlook or phone export, and a card kept verbatim keeps whatever
+    // the decoding made of it: a replacement character here is data destroyed for good.
+    [Fact]
+    public async Task Import_ReadsALatin1CardWithoutMangingItsAccents()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        var card = Card("N:Mertens;Amélie;;;", "FN:Amélie Mertens", "EMAIL:a@example.com");
+        var bytes = Encoding.Latin1.GetBytes(card);
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "contacts.vcf");
+
+        await CreateController().Import(file, CancellationToken.None);
+
+        var row = Assert.Single(seen!);
+        Assert.Equal("Amélie", row.FirstName);
+        Assert.Equal(card, row.VCard);
+    }
+
+    [Fact]
+    public async Task Import_Returns400WhenAVCardFileCarriesNoCard()
+    {
+        var result = await CreateController().Import(
+            VCardFileOf("nothing here\r\n"), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _store.Verify(s => s.ImportAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<ContactImportRow>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Every column the tables do not model, on the write the store composes the card from — the
+    // mapping table ContactVCardWriter used to own. What the composer makes of it is pinned by
+    // VCardComposerTests.ComposeNew_EmitsEveryFamilyOfANewCard, on these very values.
+    [Fact]
+    public async Task Import_MapsTheCsvColumnsOutsideTheModelOntoTheWrite()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        await CreateController().Import(FileOf(
+            "First Name,Last Name,Middle Name,Title,E-mail Address,Mobile Phone,Home Phone," +
+            "Business Fax,Company,Department,Job Title,Notes,Birthday,Web Page," +
+            "Home Street,Home City,Home Postal Code,Home Country,Business Street,Office Location\r\n" +
+            "Bruno,Mertens,J,Mr,bruno@example.com,+32470000000,+3281000000,+3281000001," +
+            "Weesky,Support,Engineer,a note,1980-01-15,https://x.be," +
+            "Rue X 1,Namur,5000,Belgium,Rue Y 2,Room 3"),
+            CancellationToken.None);
+
+        var write = Assert.Single(seen!).Write!;
+        Assert.NotNull(write.Phones);
+        Assert.NotNull(write.PostalAddresses);
+        Assert.Equal(
+            [("+32470000000", "CELL"), ("+3281000000", "HOME,VOICE"), ("+3281000001", "WORK,FAX")],
+            write.Phones.Select(p => (p.Number, p.Type)));
+        Assert.Equal("Weesky", write.Organization);
+        Assert.Equal("Support", write.Department);
+        Assert.Equal("Engineer", write.JobTitle);
+        Assert.Equal("a note", write.Notes);
+        Assert.Equal("1980-01-15", write.Birthday);
+        Assert.Equal("https://x.be", write.Website);
+        Assert.Equal("J", write.MiddleName);
+        Assert.Equal("Mr", write.NamePrefix); // Outlook's "Title" is the honorific, N's fourth part
+        Assert.Collection(write.PostalAddresses,
+            home =>
+            {
+                Assert.Equal("HOME", home.Type);
+                Assert.Null(home.Extended);
+                Assert.Equal("Rue X 1", home.Street);
+                Assert.Equal("Namur", home.Locality);
+                Assert.Equal("5000", home.PostalCode);
+                Assert.Equal("Belgium", home.Country);
+                Assert.Null(home.Region);
+            },
+            work =>
+            {
+                Assert.Equal("WORK", work.Type);
+                Assert.Equal("Room 3", work.Extended);
+                Assert.Equal("Rue Y 2", work.Street);
+            });
+    }
+
+    // A reader never names an identity: minting one here would put a GUID of our making on an
+    // existing contact the row merges into, rotating the very key a CardDAV client syncs on.
+    [Fact]
+    public async Task Import_MintsNoIdentityForACsvRow()
+    {
+        IReadOnlyList<ContactImportRow>? seen = null;
+        _store.Setup(s => s.ImportAsync(Uid, It.IsAny<IReadOnlyList<ContactImportRow>>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, IReadOnlyList<ContactImportRow>, CancellationToken>((_, rows, _) => seen = rows)
+              .ReturnsAsync(new ContactImportOutcome(1, 0, 0, 0, []));
+
+        await CreateController().Import(FileOf("First Name\r\nBruno"), CancellationToken.None);
+
+        var row = Assert.Single(seen!);
+        Assert.Null(row.Uid);
+        Assert.Null(row.VCard);
+        Assert.Equal("Bruno", row.Write!.FirstName);
+    }
+
+    // The request ceiling a vCard file needs, and the one the attribute has to carry itself:
+    // model binding buffers the body before a line of this controller runs.
+    [Fact]
+    public void Import_RefusesARequestPastTwentyMegabytes()
+    {
+        var attribute = typeof(ContactsController).GetMethod(nameof(ContactsController.Import))!
+            .GetCustomAttributesData()
+            .Single(a => a.AttributeType == typeof(RequestSizeLimitAttribute));
+
+        Assert.Equal(20L * 1024 * 1024, attribute.ConstructorArguments[0].Value);
+    }
+
     [Fact]
     public async Task Import_Returns400WithoutAFile()
     {
@@ -387,8 +644,8 @@ public sealed class ContactsControllerTests
     [Fact]
     public async Task Export_AnswersACsvAttachment()
     {
-        _store.Setup(s => s.ListAsync(Uid, It.IsAny<CancellationToken>()))
-              .ReturnsAsync([new ContactView(Guid.NewGuid(), "Bruno", "Mertens", null, false, ["bruno@example.com"])]);
+        _store.Setup(s => s.ExportAsync(Uid, It.IsAny<CancellationToken>()))
+              .ReturnsAsync([DetailOf(addresses: ["bruno@example.com"])]);
 
         var result = await CreateController().Export(CancellationToken.None);
 
@@ -397,5 +654,140 @@ public sealed class ContactsControllerTests
         Assert.StartsWith("contacts-", file.FileDownloadName);
         Assert.EndsWith(".csv", file.FileDownloadName);
         Assert.Contains("bruno@example.com", Encoding.UTF8.GetString(file.FileContents));
+    }
+
+    private static ContactDetail DetailOf(
+        Guid? id = null, string? first = "Bruno", string? last = "Mertens",
+        IReadOnlyList<string>? addresses = null) =>
+        new(id ?? Guid.NewGuid(), first, last, null, null, null, null, null, null, null, null,
+            null, null, null, false, false,
+            [.. (addresses ?? []).Select((a, i) => new ContactDetailEmail(i, a, string.Empty, 101, string.Empty, string.Empty))],
+            [], [], string.Empty);
+
+    // A foreign id is not distinguishable from an unknown one: the store answers null either way,
+    // and 403 would confirm the id exists.
+    [Fact]
+    public async Task Get_AnswersTheDetailAndHidesForeignIds()
+    {
+        var id = Guid.NewGuid();
+        var detail = DetailOf(id: id);
+        _store.Setup(s => s.GetAsync(Uid, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync((ContactDetail?)null);
+        _store.Setup(s => s.GetAsync(Uid, id, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
+
+        var found = await CreateController().Get(id, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(found.Result);
+        Assert.Same(detail, ok.Value);
+
+        var foreign = await CreateController().Get(Guid.NewGuid(), CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(foreign.Result);
+    }
+
+    [Fact]
+    public async Task GetPhoto_HonoursIfNoneMatch()
+    {
+        var id = Guid.NewGuid();
+        var bytes = new byte[] { 1, 2, 3 };
+        _store.Setup(s => s.GetPhotoAsync(Uid, id, It.IsAny<CancellationToken>()))
+              .ReturnsAsync((bytes, "image/jpeg", "abc123"));
+
+        var first = CreateController();
+        var firstResult = await first.GetPhoto(id, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(firstResult);
+        Assert.Equal(bytes, file.FileContents);
+        Assert.Equal("image/jpeg", file.ContentType);
+        Assert.Equal("\"abc123\"", first.Response.Headers.ETag.ToString());
+        Assert.Equal("nosniff", first.Response.Headers.XContentTypeOptions.ToString());
+
+        var second = CreateController();
+        second.Request.Headers.IfNoneMatch = "\"abc123\"";
+        var secondResult = await second.GetPhoto(id, CancellationToken.None);
+
+        Assert.IsType<StatusCodeResult>(secondResult);
+        Assert.Equal(StatusCodes.Status304NotModified, ((StatusCodeResult)secondResult).StatusCode);
+    }
+
+    [Fact]
+    public async Task GetPhoto_ForAForeignOrMissingIdReturns404()
+    {
+        _store.Setup(s => s.GetPhotoAsync(Uid, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(((byte[] Bytes, string MediaType, string CardHash)?)null);
+
+        var result = await CreateController().GetPhoto(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+
+    // params/group_name cannot bind onto ContactRequest or its line payloads at all — the decision
+    // is that they never enter, not that something filters them out. pref is the one exception,
+    // opened by 4b (spec décision 5): it binds and reaches the write. The behavioural assertions
+    // below (the write only ever carries the modelled fields) would pass identically whether or not
+    // that were true for Params/GroupName, so the structural check above them is the one that
+    // actually pins it: if a future edit ever added a Params/GroupName property to a payload type,
+    // only this reflection check — not the JSON deserialisation below — would catch it.
+    [Fact]
+    public async Task Put_IgnoresParamsAndGroupNameButBindsPref()
+    {
+        string[] outputOnly = ["Params", "GroupName"];
+        foreach (var payload in new[]
+                 { typeof(ContactEmailPayload), typeof(ContactPhonePayload), typeof(ContactAddressPayload) })
+            Assert.Empty(payload.GetProperties().Select(p => p.Name).Intersect(outputOnly));
+
+        ContactWrite? seen = null;
+        _store.Setup(s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ContactWrite>(), It.IsAny<CancellationToken>()))
+              .Callback<Guid, Guid, ContactWrite, CancellationToken>((_, _, write, _) => seen = write)
+              .ReturnsAsync(Result.Success());
+        var json = """
+            {
+              "firstName": "Bruno",
+              "addresses": [{"position": 0, "address": "bruno@example.com", "type": "HOME",
+                              "params": "TYPE=HOME;PREF=1", "pref": 1, "groupName": "item1"}],
+              "phones": [{"position": 0, "number": "+32470000000", "type": "CELL",
+                          "params": "TYPE=CELL", "pref": 1, "groupName": "item2"}],
+              "postalAddresses": [{"position": 0, "type": "HOME", "street": "Rue X",
+                                    "params": "TYPE=HOME", "pref": 1, "groupName": "item3"}]
+            }
+            """;
+        var request = JsonSerializer.Deserialize<ContactRequest>(json, Web)!;
+
+        var result = await CreateController().Update(Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        var address = Assert.Single(seen!.Addresses);
+        Assert.Equal("bruno@example.com", address.Address);
+        Assert.Equal(1, address.Pref);
+        Assert.NotNull(seen.Phones);
+        Assert.NotNull(seen.PostalAddresses);
+        var phone = Assert.Single(seen.Phones);
+        Assert.Equal("+32470000000", phone.Number);
+        Assert.Equal(1, phone.Pref);
+        var postal = Assert.Single(seen.PostalAddresses);
+        Assert.Equal("Rue X", postal.Street);
+        Assert.Equal(1, postal.Pref);
+    }
+
+    // The POST answer is rebuilt from the validated write, never re-read from the store — new
+    // fields (DisplayName) travel the same way the address list already did, and HasPhoto is always
+    // false: 4a gives the photo no write door (décision 12).
+    [Fact]
+    public async Task Create_AnswersFromTheValidatedWrite()
+    {
+        _store.Setup(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<ContactWrite>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Success(Guid.NewGuid()));
+        var request = new ContactRequest
+        {
+            FirstName = "Bruno",
+            DisplayName = "Dr. Bruno Mertens",
+            Addresses = ["bruno@example.com"],
+        };
+
+        var result = await CreateController().Create(request, CancellationToken.None);
+
+        var view = Assert.IsType<ContactView>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("Dr. Bruno Mertens", view.DisplayName);
+        Assert.False(view.HasPhoto);
     }
 }

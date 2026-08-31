@@ -430,6 +430,22 @@ a.dropdown-item { text-decoration: none; }
   margin-bottom: 8px;
 }
 
+/* The secret is read once and typed into a client by hand: monospace, and wide enough not to wrap. */
+.sync-secret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px; letter-spacing: 0.06em; user-select: all;
+}
+.sync-secret-note { margin: 6px 0 0; font-size: 12px; color: var(--text-muted); }
+/* Measured in probes/sync-password-row.html: the 300px label column and the row's 16px gap leave
+   .sync-value 244px inside the 560px section, and the password row wants 331 — secret 182.9 +
+   copy 28 + Regenerate 104.2, plus two 8px gaps. Unwrapped, Regenerate ran 87.1px past the section
+   in English and 79.9 in French, in the one state where the secret has to be read and transcribed;
+   the hidden steady state cleared by 0.0px, which is no margin at all. Wrapping drops Regenerate
+   to a second line and takes all three to 0. The 8px row gap is the `gap` below, not a second
+   declaration. */
+.sync-value { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.sync-value > span { overflow-wrap: anywhere; }
+
 /* Read-only names under their heading, not an outline: the disc is a marker nothing else on
    the page uses, and the indent it needs pushed the values out of line with every other row. */
 .account-domains { list-style: none; margin: 0; padding: 0; }
@@ -842,6 +858,55 @@ a.dropdown-item { text-decoration: none; }
   border-radius: calc(2px * var(--pp));
   background: var(--action-primary);
 }
+
+/* ── Quiet scrollbars ─────────────────────────────────────────────────────────
+   A scroller listed here paints its thumb under the cursor only, each on its own hover — but the
+   gutter stays reserved whether the thumb is painted or not. Toggling `overflow` instead would
+   resize the scroller, and the message list's load-more sentinel is placed by geometry: a reflow
+   on every pointer entry would fire it. `overflow-y: auto` already keeps the gutter away when the
+   content fits, so a list that does not scroll costs nothing here.
+
+   The four live in one selector list, in this file rather than in each module's own, because two
+   copies of a hover treatment are two copies that drift — `.column-actions` already cost this
+   codebase 4px of width and 2px of height that way. A new scroller opts in by joining the list.
+   The contacts scope column is in it before it can ever scroll: two rows never overflow, but the
+   day groups land beside them it would be the one column in either module still showing a
+   permanent bar next to a list that hides its own.
+
+   `scrollbar-color` covers Firefox and `::-webkit-scrollbar` the Blink/WebKit side; both are
+   needed, and neither alone is enough. */
+.mail-folders-scroll,
+.mail-list-scroll,
+.contacts-list-scroll,
+.contacts-scopes-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.mail-folders-scroll:hover,
+.mail-list-scroll:hover,
+.contacts-list-scroll:hover,
+.contacts-scopes-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
+
+.mail-folders-scroll::-webkit-scrollbar,
+.mail-list-scroll::-webkit-scrollbar,
+.contacts-list-scroll::-webkit-scrollbar,
+.contacts-scopes-scroll::-webkit-scrollbar { width: 8px; }
+
+.mail-folders-scroll::-webkit-scrollbar-track,
+.mail-list-scroll::-webkit-scrollbar-track,
+.contacts-list-scroll::-webkit-scrollbar-track,
+.contacts-scopes-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.mail-folders-scroll::-webkit-scrollbar-thumb,
+.mail-list-scroll::-webkit-scrollbar-thumb,
+.contacts-list-scroll::-webkit-scrollbar-thumb,
+.contacts-scopes-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+
+.mail-folders-scroll:hover::-webkit-scrollbar-thumb,
+.mail-list-scroll:hover::-webkit-scrollbar-thumb,
+.contacts-list-scroll:hover::-webkit-scrollbar-thumb,
+.contacts-scopes-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
 
 /* ── Narrow tiers ─────────────────────────────────────────────────────────────
    Desktop is the unqualified base above. These two blocks only override it, the

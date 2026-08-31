@@ -1,4 +1,5 @@
 using System.Text;
+using weesky.Snoopy.Microservice.Services;
 
 namespace weesky.Snoopy.Microservice.Services.Csv;
 
@@ -17,32 +18,13 @@ internal static class CsvReader
 
     internal static CsvDocument Read(byte[] content)
     {
-        var text = Decode(content);
+        var text = FileText.Decode(content);
         if (text.Length == 0) return new CsvDocument([], []);
 
         var records = Parse(text, SniffDelimiter(text));
         return records.Count == 0
             ? new CsvDocument([], [])
             : new CsvDocument(records[0].Fields, [.. records.Skip(1)]);
-    }
-
-    /// <summary>
-    /// UTF-8 when the bytes decode strictly, Latin-1 otherwise. Latin-1 differs from Windows-1252
-    /// only over 0x80–0x9F — typographic quotes and the euro sign, never a letter in a name.
-    /// </summary>
-    private static string Decode(byte[] content)
-    {
-        var start = content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF
-            ? 3 : 0;
-        try
-        {
-            return new UTF8Encoding(false, throwOnInvalidBytes: true)
-                .GetString(content, start, content.Length - start);
-        }
-        catch (DecoderFallbackException)
-        {
-            return Encoding.Latin1.GetString(content, start, content.Length - start);
-        }
     }
 
     // Counted over the header record alone. Read with the wrong delimiter a file does not fail —

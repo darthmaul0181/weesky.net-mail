@@ -215,6 +215,30 @@ public sealed class ContactCsvMapperTests
         Assert.Equal(["nickname"], row.OverLongFields);
     }
 
+    // The exporter's extended Outlook header set (task 7) lands on exactly the extras keys
+    // ContactsController.WriteOf/Postal already read: symmetry falls out of the same normalisation
+    // rule this file pins everywhere else, with no column-specific code of its own.
+    [Fact]
+    public void Map_KeepsTheExtendedOutlookColumnsAsTheExtrasTheExporterNowWrites()
+    {
+        var row = Assert.Single(Map(
+            "First Name,Mobile Phone,Home Phone,Business Phone,Home Fax,Business Fax,Other Phone," +
+            "Home Street,Home City,Home State,Home Postal Code,Home Country," +
+            "Business Street,Business City,Business State,Business Postal Code,Business Country\r\n" +
+            "Bruno,+1,+2,+3,+4,+5,+6,S,C,ST,PC,CO,BS,BC,BST,BPC,BCO"));
+
+        Assert.Equal("+1", row.Extras["mobilephone"]);
+        Assert.Equal("+2", row.Extras["homephone"]);
+        Assert.Equal("+3", row.Extras["businessphone"]);
+        Assert.Equal("+4", row.Extras["homefax"]);
+        Assert.Equal("+5", row.Extras["businessfax"]);
+        Assert.Equal("+6", row.Extras["otherphone"]);
+        Assert.Equal("S", row.Extras["homestreet"]);
+        Assert.Equal("PC", row.Extras["homepostalcode"]);
+        Assert.Equal("BPC", row.Extras["businesspostalcode"]);
+        Assert.Equal("BCO", row.Extras["businesscountry"]);
+    }
+
     // What the store's own NoNameOrAddress path relies on: a row whose only content was an
     // over-long name must come out looking exactly like an empty row, not a truncated one.
     [Fact]

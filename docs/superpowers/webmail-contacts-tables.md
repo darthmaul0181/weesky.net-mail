@@ -26,7 +26,8 @@ CREATE TABLE `contacts` (
 CREATE TABLE `contact_emails` (
   `contact_id` CHAR(36)          NOT NULL,
   `address`    VARCHAR(320)      NOT NULL COMMENT 'Forme canonique minuscule ; 320 = max RFC 5321',
-  `position`   SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 = adresse principale',
+  `position`   SMALLINT UNSIGNED NOT NULL DEFAULT 0
+    COMMENT 'Rang de la propriété dans la carte ; l''ordre d''affichage sort de (pref, position)',
   PRIMARY KEY (`contact_id`, `address`),
   CONSTRAINT `fk_contact_emails_contact`
     FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE CASCADE
@@ -45,8 +46,10 @@ tard. `utf8mb4_unicode_ci` et non `utf8mb4_0900_ai_ci` : la base est MariaDB.
 ## Pourquoi `updated_at` est géré par le schéma
 
 À l'inverse des dates de `users`, que le code pose explicitement pour que `creation_date` ne bouge
-jamais, `contacts.updated_at` doit suivre **toute** écriture : il est la base d'un futur ETag
-CardDAV. D'où `DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`.
+jamais, `contacts.updated_at` doit suivre **toute** écriture. Il n'est plus, depuis la tranche 4a
+(décision 9), la base de l'ETag CardDAV — c'est `card_hash`, un SHA-256 de `vcard_raw`, qui l'est
+désormais : `updated_at` reste un simple témoin. D'où `DEFAULT CURRENT_TIMESTAMP ON UPDATE
+CURRENT_TIMESTAMP`.
 
 ## Ajout de la tranche 3c
 
@@ -59,4 +62,88 @@ ALTER TABLE `contacts`
     NOT NULL DEFAULT 'manual'
     COMMENT 'Origine de la fiche ; écrite à la création seulement'
     AFTER `is_favorite`;
+```
+
+## Ajout de la tranche 4a
+
+À rejouer sur `snoopy_webmail` **et** `snoopy_webmail_dev`, avant tout déploiement du backend :
+d'abord ces tables, ensuite le backend, et le rattrapage des fiches `vcard_raw = NULL` en dernier.
+
+```sql
+ALTER TABLE `contacts`
+  ADD COLUMN `display_name` VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL
+    COMMENT 'La propriété FN de la carte ; devinée côté client jusqu''ici' AFTER `nickname`,
+  ADD COLUMN `middle_name`  VARCHAR(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `display_name`,
+  ADD COLUMN `name_prefix`  VARCHAR(50)  COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `middle_name`,
+  ADD COLUMN `name_suffix`  VARCHAR(50)  COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `name_prefix`,
+  ADD COLUMN `organization` VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `name_suffix`,
+  ADD COLUMN `department`   VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL
+    COMMENT 'Composantes 2..n de ORG, jointes par ; comme sur la carte' AFTER `organization`,
+  ADD COLUMN `job_title`    VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `department`,
+  ADD COLUMN `birthday`     VARCHAR(64)  DEFAULT NULL
+    COMMENT 'Forme vCard telle quelle : une date partielle (--0315) ou du texte libre est valide' AFTER `job_title`,
+  ADD COLUMN `website`      VARCHAR(512) DEFAULT NULL
+    COMMENT 'Première occurrence de URL ; les suivantes restent dans la carte' AFTER `birthday`,
+  ADD COLUMN `notes`        TEXT COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `website`,
+  ADD COLUMN `card_hash`    CHAR(64) NOT NULL DEFAULT ''
+    COMMENT 'SHA-256 hex de vcard_raw ; base de l''ETag CardDAV' AFTER `vcard_raw`;
+
+-- À vérifier avant de jouer le bloc suivant : il doit répondre zéro ligne, sinon le DROP
+-- PRIMARY KEY laisse une table qu'ADD PRIMARY KEY refusera.
+SELECT `contact_id`, `position`, COUNT(*) FROM `contact_emails`
+  GROUP BY `contact_id`, `position` HAVING COUNT(*) > 1;
+
+ALTER TABLE `contact_emails`
+  DROP PRIMARY KEY,
+  ADD PRIMARY KEY (`contact_id`, `position`),
+  ADD COLUMN `type`       VARCHAR(64) NOT NULL DEFAULT ''
+    COMMENT 'TYPE extrait de params, pour l''affichage ; vide = sans type',
+  ADD COLUMN `pref`       SMALLINT UNSIGNED NOT NULL DEFAULT 101
+    COMMENT 'PREF normalisée (1..100) ; 101 = la carte n''en dit rien. Tri : (pref, position)',
+  ADD COLUMN `params`     VARCHAR(255) NOT NULL DEFAULT ''
+    COMMENT 'Bloc de paramètres verbatim (TYPE=WORK;PREF=1) ; affichage seul, jamais ré-émis',
+  ADD COLUMN `group_name` VARCHAR(64) NOT NULL DEFAULT ''
+    COMMENT 'Groupe de la propriété (item1.EMAIL) ; ce qui rattache un X-ABLabel Apple';
+
+CREATE TABLE `contact_phones` (
+  `contact_id` CHAR(36)          NOT NULL,
+  `position`   SMALLINT UNSIGNED NOT NULL COMMENT 'Rang de la TEL dans la carte ; la poignée du composeur',
+  `number`     VARCHAR(64)       NOT NULL COMMENT 'Tel que porté par la carte ; aucune canonicalisation',
+  `type`       VARCHAR(64)       NOT NULL DEFAULT '',
+  `pref`       SMALLINT UNSIGNED NOT NULL DEFAULT 101,
+  `params`     VARCHAR(255)      NOT NULL DEFAULT '',
+  `group_name` VARCHAR(64)       NOT NULL DEFAULT '',
+  PRIMARY KEY (`contact_id`, `position`),
+  CONSTRAINT `fk_contact_phones_contact`
+    FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE `contact_addresses` (
+  `contact_id`  CHAR(36)          NOT NULL,
+  `position`    SMALLINT UNSIGNED NOT NULL COMMENT 'Rang de l''ADR dans la carte ; la poignée du composeur',
+  `type`        VARCHAR(64)       NOT NULL DEFAULT '',
+  `pref`        SMALLINT UNSIGNED NOT NULL DEFAULT 101,
+  `params`      VARCHAR(512)      NOT NULL DEFAULT ''
+    COMMENT 'Verbatim, LABEL compris — l''adresse formatée de 4.0 peut être longue',
+  `group_name`  VARCHAR(64)       NOT NULL DEFAULT '',
+  `po_box`      VARCHAR(64)  COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `extended`    VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `street`      VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `locality`    VARCHAR(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `region`      VARCHAR(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `postal_code` VARCHAR(32)  DEFAULT NULL,
+  `country`     VARCHAR(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`contact_id`, `position`),
+  CONSTRAINT `fk_contact_addresses_contact`
+    FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE `contact_photos` (
+  `contact_id` CHAR(36)    NOT NULL,
+  `media_type` VARCHAR(64) NOT NULL,
+  `bytes`      MEDIUMBLOB  NOT NULL,
+  PRIMARY KEY (`contact_id`),
+  CONSTRAINT `fk_contact_photos_contact`
+    FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 ```

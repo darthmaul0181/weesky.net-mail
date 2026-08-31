@@ -21,5 +21,6 @@
       "Bash(dotnet clean *)",
       "PowerShell(dotnet build *)"
     ]
-  }
+  },
+  "outputStyle": "Concise"
 }

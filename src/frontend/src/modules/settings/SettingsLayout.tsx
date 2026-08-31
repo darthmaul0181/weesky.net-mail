@@ -15,6 +15,7 @@ import AtSignIcon from '../../icons/AtSignIcon'
 import MailIcon from '../../icons/MailIcon'
 import FunnelIcon from '../../icons/FunnelIcon'
 import ShieldIcon from '../../icons/ShieldIcon.jsx'
+import RefreshIcon from '../../icons/RefreshIcon'
 
 function paneClass({ isActive }: { isActive: boolean }) {
   return isActive ? 'pane-item is-active' : 'pane-item'
@@ -39,6 +40,7 @@ export default function SettingsLayout() {
   // own sieveSupported, never to the platform's capabilities.
   const isPrimary = activeAccount?.isPrimary !== false
   const aliasesAvailable = capabilities?.aliases !== false
+  const davAvailable = capabilities?.dav !== false
   const adminAvailable = capabilities?.admin !== false
   const rulesAvailable = isPrimary
     ? capabilities?.rules !== false
@@ -54,6 +56,9 @@ export default function SettingsLayout() {
     { to: '/settings/folders', label: t('nav.folders'), icon: <FolderIcon size={16} /> },
     ...(isPrimary && aliasesAvailable ? [{ to: '/settings/aliases', label: t('nav.aliases'), icon: <AtSignIcon size={16} /> }] : []),
     { to: '/settings/identities', label: t('nav.identities'), icon: <MailIcon size={16} /> },
+    // Gated isPrimary like Account and Aliases: the secret authenticates the weesky user, and a
+    // connected external account has neither an address book nor a principal here.
+    ...(isPrimary && davAvailable ? [{ to: '/settings/sync', label: t('nav.sync'), icon: <RefreshIcon size={16} /> }] : []),
     ...(rulesAvailable ? [{ to: '/settings/rules', label: t('nav.rules'), icon: <FunnelIcon size={16} /> }] : []),
     ...(isAdmin && isPrimary && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} /> }] : []),
   ]

@@ -19,7 +19,10 @@ export function matches(contact: Contact, query: string): boolean {
   const needle = fold(query.trim())
   if (needle === '') return true
 
-  return [contact.firstName, contact.lastName, contact.nickname, ...contact.addresses]
+  // The display name included, or a contact the list shows as `Dr. Le Châtelier` answers to
+  // neither word: it is the only name on screen when the card carries one.
+  return [contact.firstName, contact.lastName, contact.nickname, contact.displayName,
+    ...contact.addresses]
     .some(field => field != null && fold(field).includes(needle))
 }
 
