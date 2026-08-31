@@ -134,22 +134,29 @@ volet outil de la tranche est clos ; la suite est la section 5 (clients réels).
 
 | # | Scénario (spec, décision 7) | Observé | Verdict |
 |---|---|---|---|
-| 1 | Appairage par l'adresse de l'onglet Sync | | |
-| 2 | Création côté client → webmail | | |
-| 3 | Création côté webmail → client | | |
-| 4 | Modification dans chaque sens, photo comprise | | |
-| 5 | Suppression dans chaque sens | | |
-| 6 | Carte 4.0 croisée avec DAVx⁵ | | |
-| 7 | Conflit : 412, le serveur gagne, l'autre version archivée | | |
-| 8 | Régénération du secret | | |
+| 1 | Appairage par l'adresse de l'onglet Sync | Principal et carnet trouvés depuis `https://api-dev.mail.weesky.net/dav/`, rien d'autre à saisir | conforme |
+| 2 | Création côté client → webmail | Fiche créée dans Thunderbird visible dans le webmail, champs à leur place | conforme |
+| 3 | Création côté webmail → client | Fiche créée au webmail reçue par Thunderbird à la synchronisation suivante | conforme |
+| 4 | Modification dans chaque sens, photo comprise | Modifications traversent dans les deux sens ; la photo posée côté client traverse. L'éditeur du webmail n'offre pas la modification de photo — manque produit hors 4d, à faire plus tard | conforme (protocole) |
+| 5 | Suppression dans chaque sens | Suppression Thunderbird → absente du webmail ; suppression webmail → la tombe est lue et la fiche disparaît de Thunderbird | conforme |
+| 6 | Carte 4.0 croisée avec DAVx⁵ | Carte 4.0 écrite par Thunderbird relue intacte par DAVx⁵ (conversion 3.0 à la lecture, décision 11) ; carte 3.0 de DAVx⁵ relue intacte par Thunderbird | conforme |
+| 7 | Conflit : 412, le serveur gagne, l'autre version archivée | Thunderbird pousse chaque édition immédiatement — fenêtre de conflit nulle en usage normal. Joué avec DAVx⁵ : édition téléphone non synchronisée + édition webmail → `412`, DAVx⁵ reprend la version serveur, l'édition du téléphone archivée | conforme |
+| 8 | Régénération du secret | Thunderbird et DAVx⁵ tombent tous deux en échec d'authentification à l'instant de la régénération — un secret par utilisateur (décision 1 de 4c) ; ré-appairage avec le nouveau secret repris sans reste | conforme |
 
 ### DAVx⁵ (Android, version —)
 
-(scénarios 1 à 8, plus :)
+Scénarios joués sur DAVx⁵ pendant la même campagne : appairage (1), croisement 4.0/3.0 (6),
+conflit — « le serveur gagne », l'édition du téléphone archivée (7), régénération du secret (8),
+plus le sien propre :
 
 | # | Scénario (spec, décision 7) | Observé | Verdict |
 |---|---|---|---|
-| 9 | « Delete collection » : le carnet se vide et réapparaît vide | | |
+| 9 | « Delete collection » : le carnet se vide et réapparaît vide | `DELETE` de DAVx⁵ → `204`, toutes les cartes tombées et archivées (décision 3) ; le carnet réapparaît vide au rafraîchissement, récupérable par les révisions | conforme |
+
+**Clôture (2026-08-31).** Les deux clients synchronisent dans les deux sens sans perte ni boucle ;
+le seul manque relevé est produit (pas d'édition de photo au webmail), hors 4d. Le secret du compte
+de test a été régénéré — les identifiants ayant servi à la campagne sont morts. La tranche 4d est
+close : outil passé (section 4), clients passés (ci-dessus), divergences rapprochées (section 6).
 
 ## 6. Divergences nommées
 
