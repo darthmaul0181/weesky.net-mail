@@ -30,6 +30,9 @@ internal static class DavPaths
     /// </summary>
     internal const string PrincipalCollection = Root + "/" + PrincipalsSegment + "/";
 
+    /// <summary>"/dav/addressbooks/" — the collection that CONTAINS the address-book homes.</summary>
+    internal const string BookCollection = Root + "/" + BooksSegment + "/";
+
     /// <summary>"/dav/principals/{userId}/" — always with its trailing slash.</summary>
     internal static string Principal(Guid userId) => $"{PrincipalCollection}{userId}/";
 

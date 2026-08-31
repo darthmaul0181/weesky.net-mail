@@ -412,6 +412,37 @@ public sealed class CardDavReportTests : IAsyncLifetime
         Assert.Equal([DavPaths.Card(UserId, "a.vcf")], HrefsOf(response));
     }
 
+    [Theory]
+    [InlineData(DavPaths.PrincipalCollection)]
+    [InlineData(DavPaths.BookCollection)]
+    public async Task EveryReportOnAnIntermediateCollection_IsTheStandardRefusal(string path)
+    {
+        var response = await Report(path, ExpandPropertyBody(
+            DavXml.Dav + "current-user-principal", DavXml.Dav + "displayname"));
+
+        // supported-report-set is EMPTY there, so expand-property must be refused like the rest:
+        // serving a report the resource never announced is the mirror of announcing one we refuse.
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "supported-report", ConditionOf(response));
+    }
+
+    [Theory]
+    [InlineData(DavPaths.PrincipalCollection)]
+    [InlineData(DavPaths.BookCollection)]
+    public async Task AProppatchOnAnIntermediateCollection_Is207AllForbidden(string path)
+    {
+        var body = new XDocument(new XElement(DavXml.Dav + "propertyupdate",
+            new XElement(DavXml.Dav + "set",
+                new XElement(DavXml.Prop, new XElement(DavXml.Dav + "displayname", "Mine"))))).ToString();
+
+        var response = await server.SendAsync("PROPPATCH", path, body);
+
+        // RFC 4918 § 9.2.1's answer, the same the other shapes give: Apple's Contacts.app can be
+        // made to crash by a bare refusal of the method.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Contains("403 Forbidden", await response.ReadAsync());
+    }
+
     [Fact]
     public async Task AnUnknownReport_Answers403SupportedReportToo()
     {

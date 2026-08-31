@@ -134,6 +134,56 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
     }
 
+    [Theory]
+    [InlineData(DavPaths.PrincipalCollection)]
+    [InlineData(DavPaths.BookCollection)]
+    public async Task AnIntermediateCollection_AnswersTheHomesCapabilities(string path)
+    {
+        var response = await server.SendAsync("OPTIONS", path);
+
+        // The Allow names REPORT and the verb is bound: the report is refused with the standard
+        // 403 supported-report the home already serves, rather than a 405 the header contradicts.
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
+    }
+
+    [Theory]
+    [InlineData(DavPaths.PrincipalCollection)]
+    [InlineData(DavPaths.BookCollection)]
+    public async Task AnIntermediateCollection_DemandsCredentials(string path)
+    {
+        var response = await server.SendUnauthenticated("PROPFIND", path);
+
+        // [AllowAnonymous] belongs to OPTIONS and to nothing else: these two URLs name every
+        // account of the deployment, and answering one anonymously would enumerate them.
+        Assert.Equal(401, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(DavPaths.PrincipalCollection)]
+    [InlineData(DavPaths.BookCollection)]
+    public async Task AMethodWeDoNotServe_OnAnIntermediateCollection_Answers405WithAllow(string path)
+    {
+        var response = await server.SendAsync("MKCOL", path);
+
+        Assert.Equal(405, response.StatusCode);
+        Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
+    }
+
+    [Theory]
+    [InlineData("/dav/principals", DavPaths.PrincipalCollection)]
+    [InlineData("/dav/addressbooks", DavPaths.BookCollection)]
+    public async Task AnIntermediateCollectionWithoutItsTrailingSlash_Answers308(
+        string requested, string canonical)
+    {
+        var response = await server.SendAsync("PROPFIND", requested, depth: "0");
+
+        // The same rule as the other three collection-shaped URLs: without the slash the path
+        // designates nothing, and a 308 keeps the method and the body a 301 would lose.
+        Assert.Equal(308, response.StatusCode);
+        Assert.Equal(canonical, response.Header("Location"));
+    }
+
     [Fact]
     public async Task Options_OnTheBareRoot_AnswersTheCapabilitiesToo()
     {

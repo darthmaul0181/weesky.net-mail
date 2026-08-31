@@ -70,6 +70,30 @@ public sealed class CardDavController(
     public Task BareRootAsync(CancellationToken cancellationToken) =>
         DispatchAsync(DavResourceKind.ServiceRoot, null, null, "/", cancellationToken);
 
+    /// <summary>
+    /// The two intermediate collections, carrying no user segment: <c>principal-collection-set</c>
+    /// PUBLISHES the first of them (RFC 3744 § 5.8), so a 404 there is the server contradicting its
+    /// own property. There is no <c>{userId}</c> to check, and none is wanted: the membership IS the
+    /// identity of whoever holds the secret, so Depth 1 lists this account's one child and no other.
+    /// REPORT is bound although <c>supported-report-set</c> is EMPTY here — the <c>Allow</c> names
+    /// the verb, and the default branch's <c>403 supported-report</c> is a considered answer where a
+    /// 405 under our own header would make an RFC 9110 client retry the verb for ever.
+    /// </summary>
+    /// <param name="cancellationToken">the request's own</param>
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = "principals")]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task PrincipalCollectionAsync(CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.PrincipalCollection, AuthenticatedUser.WebmailUid, null, null,
+            cancellationToken);
+
+    /// <inheritdoc cref="PrincipalCollectionAsync"/>
+    /// <param name="cancellationToken">the request's own</param>
+    [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = "addressbooks")]
+    [RequestSizeLimit(MaxBodyBytes)]
+    public Task BookCollectionAsync(CancellationToken cancellationToken) =>
+        DispatchAsync(DavResourceKind.BookCollection, AuthenticatedUser.WebmailUid, null, null,
+            cancellationToken);
+
     [AcceptVerbs("PROPFIND", "PROPPATCH", "REPORT", Route = "principals/{userId:guid}")]
     [RequestSizeLimit(MaxBodyBytes)]
     public Task PrincipalAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -356,7 +380,9 @@ public sealed class CardDavController(
                         trace.Responses = await MultigetReport.WriteAsync(Response, document!, requestHref,
                             user.WebmailUid, user.Email, contacts, cancellationToken);
                         return;
-                    case DavReportKind.ExpandProperty when kind is not DavResourceKind.Card:
+                    case DavReportKind.ExpandProperty when kind is DavResourceKind.ServiceRoot
+                        or DavResourceKind.Principal or DavResourceKind.Home
+                        or DavResourceKind.Collection:
                         trace.Responses = await ExpandAsync(kind, document!, requestHref, cancellationToken);
                         return;
                     case DavReportKind.Query
@@ -462,7 +488,8 @@ public sealed class CardDavController(
             {
                 // RFC 4918 § 9.1 reserves the refusal to collections; on anything else infinity
                 // IS depth 0, and refusing it fails a PROPFIND on a card for a header it never needed.
-                if (kind is DavResourceKind.Home or DavResourceKind.Collection)
+                if (kind is DavResourceKind.PrincipalCollection or DavResourceKind.BookCollection
+                    or DavResourceKind.Home or DavResourceKind.Collection)
                 {
                     await RefuseAsync(trace, FiniteDepth, null, cancellationToken);
                     return;
@@ -509,10 +536,10 @@ public sealed class CardDavController(
                 {
                     await WriteResourceAsync(writer, href, request, resource, token);
 
-                    if (depth is DavDepthValue.One && kind is DavResourceKind.Home)
+                    if (depth is DavDepthValue.One && OnlyChildOf(kind, user.WebmailUid) is { } child)
                     {
-                        await WriteResourceAsync(writer, DavPaths.Collection(user.WebmailUid), request,
-                            resource with { Kind = DavResourceKind.Collection }, token);
+                        await WriteResourceAsync(writer, child.Href, request,
+                            resource with { Kind = child.Kind }, token);
                     }
 
                     if (depth is DavDepthValue.One && kind is DavResourceKind.Collection)
@@ -697,6 +724,8 @@ public sealed class CardDavController(
     {
         var canonical = kind switch
         {
+            DavResourceKind.PrincipalCollection => DavPaths.PrincipalCollection,
+            DavResourceKind.BookCollection => DavPaths.BookCollection,
             DavResourceKind.Principal => DavPaths.Principal(userId),
             DavResourceKind.Home => DavPaths.Home(userId),
             DavResourceKind.Collection => DavPaths.Collection(userId),
@@ -718,6 +747,8 @@ public sealed class CardDavController(
         kind switch
         {
             DavResourceKind.ServiceRoot => rootHref!,
+            DavResourceKind.PrincipalCollection => DavPaths.PrincipalCollection,
+            DavResourceKind.BookCollection => DavPaths.BookCollection,
             DavResourceKind.Principal => DavPaths.Principal(userId),
             DavResourceKind.Home => DavPaths.Home(userId),
             DavResourceKind.Collection => DavPaths.Collection(userId),
@@ -763,6 +794,21 @@ public sealed class CardDavController(
         var (found, missing) = DavProperties.Resolve(request, resource);
         await writer.WriteResourceAsync(href, found, missing, cancellationToken);
     }
+
+    /// <summary>
+    /// The one member a Depth: 1 lists on the three collections that hold exactly one, and it is
+    /// always THIS account's: no <c>{userId}</c> reaches the two intermediate shapes, so serving
+    /// another guid's child would be listing a resource the caller is not. The book's own members
+    /// are streamed instead, being many.
+    /// </summary>
+    private static (string Href, DavResourceKind Kind)? OnlyChildOf(DavResourceKind kind, Guid userId) =>
+        kind switch
+        {
+            DavResourceKind.PrincipalCollection => (DavPaths.Principal(userId), DavResourceKind.Principal),
+            DavResourceKind.BookCollection => (DavPaths.Home(userId), DavResourceKind.Home),
+            DavResourceKind.Home => (DavPaths.Collection(userId), DavResourceKind.Collection),
+            _ => null,
+        };
 
     /// <summary>Only the collection's properties read the sync state; fetch it only when one of
     /// this answer's resources is the collection.</summary>
@@ -835,7 +881,9 @@ public sealed class CardDavController(
     /// </summary>
     [AcceptVerbs("OPTIONS", Route = "")]
     [AcceptVerbs("OPTIONS", Route = "/")]
+    [AcceptVerbs("OPTIONS", Route = "principals")]
     [AcceptVerbs("OPTIONS", Route = "principals/{userId:guid}")]
+    [AcceptVerbs("OPTIONS", Route = "addressbooks")]
     [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}")]
     [AllowAnonymous]
     public void OptionsHome() => Capabilities(DavHeaders.HomeAllow);
@@ -859,7 +907,9 @@ public sealed class CardDavController(
     /// reads it is told something the surface does not do.
     /// </summary>
     [Route("")]
+    [Route("principals")]
     [Route("principals/{userId:guid}")]
+    [Route("addressbooks")]
     [Route("addressbooks/{userId:guid}")]
     public void MethodNotAllowedOnHome() => MethodNotAllowed(DavHeaders.HomeAllow);
 

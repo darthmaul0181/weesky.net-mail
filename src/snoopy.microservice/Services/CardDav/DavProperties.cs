@@ -57,6 +57,9 @@ internal static class DavProperties
             (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype"))),
 
+        [DavResourceKind.PrincipalCollection] = IntermediateCollection("Principals"),
+        [DavResourceKind.BookCollection] = IntermediateCollection("Address Book Homes"),
+
         [DavResourceKind.Principal] = Set(
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
                 new XElement(DavXml.Dav + "principal"))),
@@ -186,6 +189,22 @@ internal static class DavProperties
         var poured = set.Names.Where(name => !AllPropExclusions.Contains(name)).ToList();
         return poured.Concat(request.Names.Where(name => !poured.Contains(name)));
     }
+
+    /// <summary>
+    /// The two collections that merely CONTAIN one shape each — <c>/dav/principals/</c> and
+    /// <c>/dav/addressbooks/</c>. Nothing of the sync model reaches here: no ctag, no sync-token,
+    /// and an EMPTY <c>supported-report-set</c>, since REPORT is bound only so the <c>Allow</c>
+    /// stays honest and answers the standard refusal. The 404 propstat a client then reads on
+    /// sync-token is the answer, not an omission.
+    /// </summary>
+    private static PropertySet IntermediateCollection(string displayName) => Set(
+        (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
+            new XElement(DavXml.Dav + "collection"))),
+        (DavXml.Dav + "displayname", _ => new XElement(DavXml.Dav + "displayname", displayName)),
+        (DavXml.Dav + "current-user-principal", CurrentUserPrincipal),
+        (DavXml.Dav + "principal-collection-set",
+            _ => Href(DavXml.Dav + "principal-collection-set", DavPaths.PrincipalCollection)),
+        (DavXml.Dav + "supported-report-set", _ => ReportSet()));
 
     private static XElement CurrentUserPrincipal(DavResourceContext r) =>
         Href(DavXml.Dav + "current-user-principal", DavPaths.Principal(r.UserId));

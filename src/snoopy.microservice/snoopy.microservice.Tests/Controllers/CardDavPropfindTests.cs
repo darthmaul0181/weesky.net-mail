@@ -262,6 +262,73 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
         Assert.Equal(207, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnIntermediateCollection_AnswersDepthZeroAsACollection(bool principals)
+    {
+        var path = principals ? DavPaths.PrincipalCollection : DavPaths.BookCollection;
+
+        var response = await Propfind(path, depth: "0",
+            body: PropBody("resourcetype", "current-user-principal"));
+
+        // principal-collection-set PUBLISHES "/dav/principals/", and RFC 3744 § 5.8 makes it a URL
+        // the client is entitled to walk: a 404 there says the server contradicts its own property.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal([path], HrefsOf(response));
+        var document = XDocument.Parse(await response.ReadAsync());
+        Assert.Single(document.Descendants(DavXml.Dav + "resourcetype")
+            .Single().Elements(DavXml.Dav + "collection"));
+        Assert.Equal(DavPaths.Principal(UserId), document
+            .Descendants(DavXml.Dav + "current-user-principal").Single()
+            .Element(DavXml.Dav + "href")!.Value);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DepthOneOnAnIntermediateCollection_ListsThisAccountsChildAndOnlyIt(bool principals)
+    {
+        var path = principals ? DavPaths.PrincipalCollection : DavPaths.BookCollection;
+        var child = principals ? DavPaths.Principal(UserId) : DavPaths.Home(UserId);
+
+        var response = await Propfind(path, depth: "1", body: PropBody("resourcetype"));
+
+        // The membership IS the identity of the bearer of the secret: there is no guid in the
+        // route, so listing anything but the caller's own child would be listing someone else's.
+        Assert.Equal([path, child], HrefsOf(response));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnIntermediateCollection_RefusesAnInfiniteDepthLikeTheHome(bool principals)
+    {
+        var path = principals ? DavPaths.PrincipalCollection : DavPaths.BookCollection;
+
+        var response = await Propfind(path, depth: null, body: null);
+
+        // A collection, so RFC 4918 § 9.1's refusal applies exactly as it does to the home and the
+        // book — one policy, not a third answer to the same silence.
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "propfind-finite-depth", ConditionOf(response));
+    }
+
+    [Fact]
+    public async Task TheBookCollection_AnnouncesNoReportAndCarriesNoSyncToken()
+    {
+        var response = await Propfind(DavPaths.BookCollection, depth: "0",
+            body: PropBody("supported-report-set", "sync-token"));
+
+        // Nothing is synchronised here and no report is served, so the announcement is empty and
+        // sync-token comes back in the 404 propstat — which is what the tester reads as badprops.
+        var document = XDocument.Parse(await response.ReadAsync());
+        Assert.Empty(document.Descendants(DavXml.Dav + "supported-report-set").Single().Elements());
+        var propstat404 = document.Descendants(DavXml.Dav + "propstat")
+            .Single(p => p.Element(DavXml.Dav + "status")!.Value.Contains("404"));
+        Assert.Single(propstat404.Descendants(DavXml.Dav + "sync-token"));
+    }
+
     [Fact]
     public async Task AnotherUsersPrincipal_Answers404AndNot403()
     {
