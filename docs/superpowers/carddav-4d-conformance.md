@@ -139,6 +139,7 @@ Reprises de la spec 4d (décision 4), confirmées ou allongées par les passages
 | `address-data` en `propstat 404` dans `sync-collection` | 14 | |
 | Plafond d'un mébioctet | 15 | |
 | Pas de `MKCOL`, `COPY`, `MOVE` | 3, 16 | |
+| `DavPaths.Parse` ne reconnaît pas `/dav/principals/` ni `/dav/addressbooks/` : un `expand-property` sur `principal-collection-set` rend un `404` imbriqué pour une URL que le PROPFIND sert (S4) | adjudication de la revue de vague | interne, parquée — aucun client réel n'étend cette propriété, le repli PROPFIND répond |
 
 ## 7. Points de guet Apple (hors tranche)
 
