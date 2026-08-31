@@ -10,10 +10,16 @@ internal static class DavHeaders
     // acl-restrictions, inherited-acl-set on every resource and the ACL method — none of which a
     // single-owner book serves. current-user-principal (RFC 5397) needs no class to be read.
     internal const string ComplianceClasses = "1, 3, addressbook";
-    internal const string CollectionAllow = "OPTIONS, PROPFIND, PROPPATCH, REPORT";
+    internal const string CollectionAllow = "OPTIONS, DELETE, PROPFIND, PROPPATCH, REPORT";
     internal const string CardAllow = "OPTIONS, HEAD, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT";
     internal const string VCardContentType = "text/vcard; charset=utf-8";
     internal const string XmlContentType = "application/xml; charset=utf-8";
+
+    /// <summary>
+    /// Root, principal and home: every collection verb but DELETE, which only the address book
+    /// serves (4d decision 3) — one shared string here and the home would announce a verb it 405s.
+    /// </summary>
+    internal const string HomeAllow = "OPTIONS, PROPFIND, PROPPATCH, REPORT";
 
     /// <summary>
     /// Sets the <c>DAV:</c> header naming the compliance classes. Applied on <em>every</em> response

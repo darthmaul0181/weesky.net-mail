@@ -231,17 +231,48 @@ public sealed class CardDavDeleteTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ADeleteOnTheCollection_Is405()
+    public async Task ADeleteOfTheCollection_Answers204AndEmptiesTheBook()
     {
+        await GivenACardAndItsEtag("a.vcf");
+
         var response = await Delete(DavPaths.Collection(UserId));
 
-        // It would erase the whole book — a gesture the product offers nowhere and that no route
-        // must offer by accident. The reference servers serve it, but their book is not tied to the
-        // account the way ours is. The Allow, not the status alone: routing pronounces a 405 here
-        // on its own, and asserting the status would stay green with the answer deleted.
+        Assert.Equal(204, response.StatusCode);
+        Assert.Equal("1, 3, addressbook", response.Header("DAV"));
+        // Emptied, never gone: the card 404s, the collection still answers.
+        Assert.Equal(404, (await server.SendAsync("GET", DavPaths.Card(UserId, "a.vcf"))).StatusCode);
+        Writer.Verify(w => w.DeleteAllAsync(UserId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ADeleteOfAnEmptyCollection_Answers204Too()
+    {
+        Assert.Equal(204, (await Delete(DavPaths.Collection(UserId))).StatusCode);
+    }
+
+    [Fact]
+    public async Task ADeleteOfTheCollectionUnderALostLock_Answers503()
+    {
+        Writer.Setup(w => w.DeleteAllAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DavWriteOutcome(DavWriteStatus.Busy, null, null, 0));
+
+        Assert.Equal(503, (await Delete(DavPaths.Collection(UserId))).StatusCode);
+    }
+
+    [Fact]
+    public async Task ADeleteOfTheHome_IsStill405()
+    {
+        var response = await Delete(DavPaths.Home(UserId));
+
         Assert.Equal(405, response.StatusCode);
-        Assert.Equal(DavHeaders.CollectionAllow, response.Header("Allow"));
-        Writer.VerifyNoOtherCalls();
+        Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
+        Writer.Verify(w => w.DeleteAllAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ADeleteOfSomeoneElsesCollection_Answers404()
+    {
+        Assert.Equal(404, (await Delete(DavPaths.Collection(Guid.NewGuid()))).StatusCode);
     }
 
     [Fact]
@@ -392,6 +423,9 @@ public sealed class CardDavDeleteTests : IAsyncLifetime
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns((Guid user, string name, string card, CancellationToken token) =>
                 WithRealWriter(real => real.ArchiveRejectedAsync(user, name, card, token)));
+        Writer.Setup(w => w.DeleteAllAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid user, CancellationToken token) =>
+                WithRealWriter(real => real.DeleteAllAsync(user, token)));
     }
 
     private async Task<T> WithRealWriter<T>(Func<IDavContactWriter, Task<T>> call)

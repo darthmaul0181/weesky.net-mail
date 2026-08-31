@@ -53,7 +53,7 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Options_OnACollection_AllowsTheFourCollectionMethods()
+    public async Task Options_OnACollection_AllowsTheFiveCollectionMethods()
     {
         var response = await server.SendAsync("OPTIONS", DavPaths.Collection(UserId));
 
@@ -105,14 +105,13 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
 
     [Theory]
     [InlineData("PUT")]
-    [InlineData("DELETE")]
     public async Task AWriteOnTheCollection_Answers405(string method)
     {
         var response = await server.SendAsync(method, DavPaths.Collection(UserId));
 
-        // The routes only bind PUT and DELETE on {name}, a segment the collection URL - ending in a
-        // slash - does not present: routing would give an accidental 404. And a DELETE of the
-        // collection would erase the whole book, a gesture the product offers nowhere.
+        // The route only binds PUT on {name}, a segment the collection URL - ending in a slash -
+        // does not present: routing would give an accidental 404. DELETE of the collection is
+        // served (decision 3: it empties the book) and answers here of its own accord.
         Assert.Equal(405, response.StatusCode);
 
         // The Allow, not the status: routing answers 405 here on its own, so a test asserting the
@@ -129,9 +128,11 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         var response = await server.SendAsync("GET", string.Format(template, UserId));
 
         // Task 7 gave the collection its Allow; these three answered a routing 405 carrying none,
-        // which tells a client the request failed but never which verb would have worked.
+        // which tells a client the request failed but never which verb would have worked. All
+        // three are home, principal or root, never the collection, so the Allow they carry is the
+        // home's — DELETE only the address book serves (4d decision 3).
         Assert.Equal(405, response.StatusCode);
-        Assert.Equal(DavHeaders.CollectionAllow, response.Header("Allow"));
+        Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
     }
 
     [Fact]
@@ -143,7 +144,18 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
 
         Assert.Equal(200, response.StatusCode);
         Assert.Equal(DavHeaders.ComplianceClasses, response.Header("DAV"));
-        Assert.Equal(DavHeaders.CollectionAllow, response.Header("Allow"));
+        Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
+    }
+
+    [Fact]
+    public async Task Options_OnTheHome_DoesNotAnnounceDelete()
+    {
+        var response = await server.SendAsync("OPTIONS", DavPaths.Home(UserId));
+
+        // The home's Allow must not gain the collection's DELETE: announcing a verb that answers
+        // 405 is the exact lie the routing Allow tells and these actions exist to avoid.
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(DavHeaders.HomeAllow, response.Header("Allow"));
     }
 
     [Fact]

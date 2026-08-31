@@ -268,6 +268,22 @@ public sealed class CardDavController(
                 cancellationToken);
         });
 
+    /// <summary>
+    /// DELETE — the only book cannot go away, so deleting it EMPTIES it (4d decision 3): every
+    /// served card archived and buried in the store's batches, the collection immediately answering
+    /// again, empty. RFC 4918 § 9.6 minus one nuance the RFC does not forbid: the collection
+    /// reappears at once. This is the tester's model (DELETE then PUT into it) and DAVx5's
+    /// "Delete collection" gesture. No If-Match: the collection has no ETag to compare.
+    /// </summary>
+    [HttpDelete(CollectionRoute)]
+    public Task DeleteCollectionAsync(Guid userId, CancellationToken cancellationToken) =>
+        TracedAsync(userId, DavResourceKind.Collection, async trace =>
+        {
+            trace.Condition = await AnswerOutcomeAsync(
+                await writer.DeleteAllAsync(AuthenticatedUser.WebmailUid, cancellationToken),
+                cancellationToken);
+        });
+
     private Task ProppatchAsync(DavResourceKind kind, Guid? userId, string? davName,
         string? rootHref, CancellationToken cancellationToken) =>
         TracedAsync(userId, kind, async trace =>
@@ -819,6 +835,9 @@ public sealed class CardDavController(
     [AcceptVerbs("OPTIONS", Route = "/")]
     [AcceptVerbs("OPTIONS", Route = "principals/{userId:guid}")]
     [AcceptVerbs("OPTIONS", Route = "addressbooks/{userId:guid}")]
+    [AllowAnonymous]
+    public void OptionsHome() => Capabilities(DavHeaders.HomeAllow);
+
     [AcceptVerbs("OPTIONS", Route = CollectionRoute)]
     [AllowAnonymous]
     public void OptionsCollection() => Capabilities(DavHeaders.CollectionAllow);
@@ -838,6 +857,8 @@ public sealed class CardDavController(
     [Route("")]
     [Route("principals/{userId:guid}")]
     [Route("addressbooks/{userId:guid}")]
+    public void MethodNotAllowedOnHome() => MethodNotAllowed(DavHeaders.HomeAllow);
+
     [Route(CollectionRoute)]
     public void MethodNotAllowedOnCollection() => MethodNotAllowed(DavHeaders.CollectionAllow);
 
