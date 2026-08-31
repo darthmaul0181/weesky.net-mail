@@ -431,6 +431,7 @@ public sealed class DavContactWriterTests : IDisposable
         var outcome = await Writer.DeleteAllAsync(UserId, CancellationToken.None);
 
         Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        Assert.Equal(0ul, outcome.Sequence);
         Assert.Empty(Context.Contacts);
         SyncStore.Verify(s => s.ArchiveAsync(
             It.Is<ContactRevision>(r => r.Cause == RevisionCause.Delete), It.IsAny<CancellationToken>()),
@@ -444,9 +445,10 @@ public sealed class DavContactWriterTests : IDisposable
     [Fact]
     public async Task DeletingTheWholeBook_SpansTheStoreBatches()
     {
-        // 101 cards: one over ContactStore.BatchSize, so the emptying MUST take two batch
-        // transactions — two ranks — and still bury every card.
-        for (var i = 0; i < 101; i++)
+        // One over ContactStore.BatchSize, so the emptying MUST take two batch transactions — two
+        // ranks — and still bury every card.
+        const int cards = ContactStore.BatchSize + 1;
+        for (var i = 0; i < cards; i++)
             await Writer.PutAsync(UserId, $"c{i}.vcf", ValidCard($"u{i}", fn: $"N{i}"), CancellationToken.None);
         SyncStore.Invocations.Clear();
 
@@ -456,7 +458,7 @@ public sealed class DavContactWriterTests : IDisposable
         Assert.Empty(Context.Contacts);
         SyncStore.Verify(s => s.NextSequenceAsync(UserId, It.IsAny<CancellationToken>()), Times.Exactly(2));
         SyncStore.Verify(s => s.PlaceTombstoneAsync(
-            UserId, It.IsAny<string>(), It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Exactly(101));
+            UserId, It.IsAny<string>(), It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Exactly(cards));
     }
 
     [Fact]
@@ -486,6 +488,7 @@ public sealed class DavContactWriterTests : IDisposable
         // 204 on nothing, and NO rank taken: a rank consumed here would wake every client for a
         // change that never happened — the same rule DeleteAsync's refusals follow.
         Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        Assert.Equal(0ul, outcome.Sequence);
         SyncStore.Verify(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         SyncStore.Verify(s => s.PlaceTombstoneAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Never);

@@ -63,9 +63,8 @@ internal sealed class DavContactWriter(
     {
         // The reader's visibility clause: a row the 4a backfill has not reached was never served,
         // and deleting what the protocol cannot see must be the same 404 an unknown name gets.
-        var row = await context.Contacts.SingleOrDefaultAsync(
-            c => c.UserId == userId && c.DavName == davName && c.VCardRaw != null && c.CardHash != "",
-            cancellationToken);
+        var row = await context.Contacts.Visible(userId)
+            .SingleOrDefaultAsync(c => c.DavName == davName, cancellationToken);
         if (row is null) return Refused(DavWriteStatus.NotFound);
 
         // The cheap net at this gate's own read; the decisive comparison is under the lock below.
@@ -126,17 +125,16 @@ internal sealed class DavContactWriter(
     {
         // The reader's visibility clause, as in DeleteAsync: what the protocol never served, it
         // cannot be asked to delete. Ids only — DeleteManyAsync re-reads each batch under its lock.
-        var ids = await context.Contacts
-            .Where(c => c.UserId == userId && c.DavName != null && c.VCardRaw != null && c.CardHash != "")
+        var ids = await context.Contacts.Visible(userId)
             .Select(c => c.Id)
             .ToListAsync(cancellationToken);
-        if (ids.Count == 0) return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, 0);
+        if (ids.Count == 0) return Emptied;
 
         try
         {
             var buried = await store.DeleteManyAsync(userId, ids, cancellationToken);
             logger.LogInformation("DELETE of the book for {UserId} buried {Count} cards", userId, buried);
-            return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, 0);
+            return Emptied;
         }
         catch (Exception e) when (DavOutcomeTranslator.IsTransient(e))
         {
@@ -144,6 +142,13 @@ internal sealed class DavContactWriter(
                 "DELETE of the book for {UserId} lost a lock race; answering busy", userId);
             context.ChangeTracker.Clear();
             return Refused(DavWriteStatus.Busy);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The rows vanished under the batch — someone emptied the book first, and to this
+            // sender that is the same 204 an already-empty book answers.
+            context.ChangeTracker.Clear();
+            return Emptied;
         }
     }
 
@@ -401,6 +406,8 @@ internal sealed class DavContactWriter(
             : null;
 
     private static DavWriteOutcome Refused(DavWriteStatus status) => new(status, null, null, 0);
+
+    private static readonly DavWriteOutcome Emptied = new(DavWriteStatus.Deleted, null, null, 0);
 
     private static DavWriteOutcome Conflict(Guid userId, string? holderName) =>
         new(DavWriteStatus.UidConflict, null,

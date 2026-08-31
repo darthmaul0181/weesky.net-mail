@@ -66,7 +66,5 @@ internal sealed class DavContactReader(PreferencesDbContext context) : IDavConta
 
     /// The three-condition visibility clause, written once so none of the four queries above can
     /// forget one and serve a card the 4a backfill has not finished reaching with an empty ETag.
-    private IQueryable<Contact> Visible(Guid userId) =>
-        context.Contacts.Where(c =>
-            c.UserId == userId && c.DavName != null && c.VCardRaw != null && c.CardHash != "");
+    private IQueryable<Contact> Visible(Guid userId) => context.Contacts.Visible(userId);
 }
