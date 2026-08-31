@@ -100,9 +100,33 @@ CR/LF/HTAB), un corps à plusieurs VCARD, et une ligne non pliée sans deux-poin
 
 ## 4. Passage final — après la vague de correctifs
 
-Date : — · commit : — · fichier : `results/—.txt`
+Date : 2026-08-31 · commit : `56814369` (S1..S4 + H1 déployés) · fichier :
+`results/20260831-204451.txt` · 201 tests en 92 s · `ok=107, failed=72, ignored=22, errors=0` ·
+épuration vérifiée (0 ligne en clair)
 
-(mêmes colonnes que le passage initial)
+| Suite | Tests | OK | Échecs | Ignorés | Note |
+|---|---|---|---|---|---|
+| propfind.xml | 16 | 15 | 1 | 0 | reste `getcontentlength=0` (DO) |
+| proppatch.xml | 7 | 0 | 7 | 0 | DN décision 16 |
+| put.xml | 18 | 14 | 4 | 0 | DN groupes |
+| get.xml | 3 | 1 | 2 | 2 suites | DO |
+| reports.xml | 39 | 33 | 6 | 2 suites | DO troncature + DN `supported-filter` |
+| sync-report.xml | 26 | 23 | 3 | 8 tests + 3 suites | S2+H1 ont fermé 12 échecs ; restent `data:,` (DO) et le PUT à octets identiques (DN décision 6) ×2 |
+| errors.xml | 10 | 5 | 5 | 0 | S3 a fermé le BEL ; restent P4 (+cascade), « non-vcf » lisible (DO), 405 vs 403 (DN) |
+| errorcondition.xml | 12 | 6 | 6 | 1 suite | S3 a fermé la ligne cassée et le double UID ; restent Content-Type (DN), cartes lisibles + 4.0 servie (DO) |
+| limits.xml | — | — | — | fichier | l'outil l'ignore lui-même (`require-feature: caldav`) |
+| nonascii.xml | 7 | 3 | 4 | 0 | fixture corrompue amont (DO) + collation (DN) |
+| well-known.xml | 10 | 0 | 10 | 0 | DO (Location relatif licite, `200` exigé hors RFC) |
+| current-user-principal.xml | 3 | 1 | 2 | 1 suite | S4 a ouvert l'URL ; restent deux artefacts : `$principaluri1:` resté à la forme `__uids__` de CalendarServer (harnais), et l'attente d'un principal non authentifié — notre `401` est la politique 4c |
+| mkcol.xml | 4 | 2 | 1 | 1 test | DN (404 vs 403) |
+| copymove.xml | 3 | 0 | 3 | 1 suite | DN décision 16 |
+| aclreports.xml | 21 | 1 | 18 | 2 tests | DN décision 13 |
+| ab-client.xml | 3 | 3 | 0 | 0 | — |
+
+**Bilan.** De 64/71 (initial) à 107/72 sur 53 tests exécutés de plus : les quatre défauts serveur du
+triage sont fermés et vérifiés en conditions réelles ; **chaque échec restant est rattaché à une
+ligne DO ou DN de la section 3** — aucun défaut serveur connu ne subsiste sur cette surface. Le
+volet outil de la tranche est clos ; la suite est la section 5 (clients réels).
 
 ## 5. Clients réels
 
