@@ -47,8 +47,8 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
     {
         var response = await server.SendUnauthenticated(method, DavPaths.Collection(UserId));
 
-        // [AllowAnonymous] sits on the OPTIONS method and on no other: were it on the class, the
-        // whole book would be readable without a password.
+        // [AllowAnonymous] sits on the three OPTIONS actions and on no other: were it on the class,
+        // the whole book would be readable without a password.
         Assert.Equal(401, response.StatusCode);
     }
 
@@ -168,6 +168,7 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         // whose Allow is the union of the two verbs bound at "/" - never ours.
         Assert.Equal(405, response.StatusCode);
         Assert.NotEqual(DavHeaders.CollectionAllow, response.Header("Allow"));
+        Assert.NotEqual(DavHeaders.HomeAllow, response.Header("Allow"));
     }
 
     [Fact]
@@ -178,6 +179,18 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         // 308 and not the 301 sabre and Radicale use: a 301 lets the client replay as GET, which
         // bare OkHttp does for every verb but PROPFIND - a redirected REPORT would lose its method
         // and its body.
+        Assert.Equal(308, response.StatusCode);
+        Assert.Equal(DavPaths.Collection(UserId), response.Header("Location"));
+    }
+
+    [Fact]
+    public async Task ADeleteOfACollectionWithoutItsTrailingSlash_Answers308()
+    {
+        var response = await server.SendAsync("DELETE", $"/dav/addressbooks/{UserId}/default");
+
+        // The redirect must hold for the destructive verb too, not only for PROPFIND/REPORT: a
+        // client that DELETEs the un-canonical spelling must be redirected onto the collection that
+        // answers, never onto a routing 404 or a 405 that says nothing moved.
         Assert.Equal(308, response.StatusCode);
         Assert.Equal(DavPaths.Collection(UserId), response.Header("Location"));
     }

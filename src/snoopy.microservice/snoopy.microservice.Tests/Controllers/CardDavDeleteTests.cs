@@ -256,7 +256,10 @@ public sealed class CardDavDeleteTests : IAsyncLifetime
         Writer.Setup(w => w.DeleteAllAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DavWriteOutcome(DavWriteStatus.Busy, null, null, 0));
 
-        Assert.Equal(503, (await Delete(DavPaths.Collection(UserId))).StatusCode);
+        var response = await Delete(DavPaths.Collection(UserId));
+
+        Assert.Equal(503, response.StatusCode);
+        Assert.Equal("1", response.Header("Retry-After"));
     }
 
     [Fact]
@@ -273,6 +276,7 @@ public sealed class CardDavDeleteTests : IAsyncLifetime
     public async Task ADeleteOfSomeoneElsesCollection_Answers404()
     {
         Assert.Equal(404, (await Delete(DavPaths.Collection(Guid.NewGuid()))).StatusCode);
+        Writer.Verify(w => w.DeleteAllAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -123,15 +123,17 @@ internal sealed class DavContactWriter(
 
     public async Task<DavWriteOutcome> DeleteAllAsync(Guid userId, CancellationToken cancellationToken)
     {
-        // The reader's visibility clause, as in DeleteAsync: what the protocol never served, it
-        // cannot be asked to delete. Ids only — DeleteManyAsync re-reads each batch under its lock.
-        var ids = await context.Contacts.Visible(userId)
-            .Select(c => c.Id)
-            .ToListAsync(cancellationToken);
-        if (ids.Count == 0) return Emptied;
-
         try
         {
+            // The reader's visibility clause, as in DeleteAsync: what the protocol never served, it
+            // cannot be asked to delete. Ids only — DeleteManyAsync re-reads each batch under its
+            // lock. The read sits inside the try too: a transient failure here is exactly the lock
+            // race the catch below answers Busy for, not a 500 escaping past it.
+            var ids = await context.Contacts.Visible(userId)
+                .Select(c => c.Id)
+                .ToListAsync(cancellationToken);
+            if (ids.Count == 0) return Emptied;
+
             var buried = await store.DeleteManyAsync(userId, ids, cancellationToken);
             logger.LogInformation("DELETE of the book for {UserId} buried {Count} cards", userId, buried);
             return Emptied;

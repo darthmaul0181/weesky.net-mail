@@ -827,9 +827,10 @@ public sealed class CardDavController(
     }
 
     /// <summary>
-    /// Capabilities, answered off the URL shape alone: <c>[AllowAnonymous]</c> on this method and
-    /// on no other, because a client asks what the server can do before it holds any credentials —
-    /// which is also why it consults no store and reveals nothing a URL did not already carry.
+    /// Capabilities, answered off the URL shape alone: <c>[AllowAnonymous]</c> on the three OPTIONS
+    /// actions and on no other action, because a client asks what the server can do before it holds
+    /// any credentials — which is also why it consults no store and reveals nothing a URL did not
+    /// already carry.
     /// </summary>
     [AcceptVerbs("OPTIONS", Route = "")]
     [AcceptVerbs("OPTIONS", Route = "/")]
@@ -847,11 +848,13 @@ public sealed class CardDavController(
     public void OptionsCard() => Capabilities(DavHeaders.CardAllow);
 
     /// <summary>
-    /// Last on purpose, and bound to no verb: carrying no method metadata, these score below every
-    /// real route above, so action selection reaches them only when nothing else answers the verb.
-    /// They carry <c>Allow</c> and nothing else. Routing supplies an Allow of its own, but it is
-    /// the union of the verbs bound on the template: it names GET and HEAD, which answer 405 on a
-    /// collection, and omits PUT and DELETE, which a card announces — either way a client that
+    /// Last on purpose, and bound to no verb: carrying no method metadata, these three actions —
+    /// this one and its siblings <see cref="MethodNotAllowedOnCollection"/> and
+    /// <see cref="MethodNotAllowedOnCard"/> — score below every real route above, so action
+    /// selection reaches them only when nothing else answers the verb. They carry <c>Allow</c> and
+    /// nothing else. Routing supplies an Allow of its own, but it is the union of the verbs bound on
+    /// the template: on the collection and card catch-alls it names GET and HEAD, which answer 405
+    /// on a collection, and omits PUT and DELETE, which a card announces — either way a client that
     /// reads it is told something the surface does not do.
     /// </summary>
     [Route("")]
