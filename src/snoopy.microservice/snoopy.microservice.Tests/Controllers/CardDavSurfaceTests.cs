@@ -103,11 +103,10 @@ public sealed class CardDavSurfaceTests : IAsyncLifetime
         Assert.Equal(DavHeaders.CardAllow, response.Header("Allow"));
     }
 
-    [Theory]
-    [InlineData("PUT")]
-    public async Task AWriteOnTheCollection_Answers405(string method)
+    [Fact]
+    public async Task AWriteOnTheCollection_Answers405()
     {
-        var response = await server.SendAsync(method, DavPaths.Collection(UserId));
+        var response = await server.SendAsync("PUT", DavPaths.Collection(UserId));
 
         // The route only binds PUT on {name}, a segment the collection URL - ending in a slash -
         // does not present: routing would give an accidental 404. DELETE of the collection is

@@ -4,6 +4,7 @@
 #   add-member.xml, default-addressbook.xml
 # mkcol, copymove et aclreports sont lancées EN SACHANT qu'elles échoueront :
 # leur échec mesure une divergence nommée (décision 4).
+# errorcondition.xml émet un REPORT sur $addressbookhome1: nu → 308 (barre finale absente) : bruit nommé, pas un signal.
 # reports, sync-report et current-user-principal référencent un 2e utilisateur
 # (blocs multi-utilisateurs retirés de serverinfo.template.xml) : $userid2:,
 # $publicuserguid*:, $groupguid*:, $addressbookhome2: etc. resteront en texte

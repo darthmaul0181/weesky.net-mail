@@ -208,7 +208,7 @@ gabarit plutôt que d'écrire l'XML de mémoire :
      | `$principal1:` | `/dav/principals/{guid}/` |
      | `$userid1:` | `{email}` |
      | `$pswd1:` | `{secret}` |
-     | `$addressbookhome1:` | `/dav/addressbooks/{guid}/` |
+     | `$addressbookhome1:` | `/dav/addressbooks/{guid}` |
      | `$addressbook:` | `default` |
      | `$addressbookpath1:` | `/dav/addressbooks/{guid}/default` |
      | `$useradmin:` | `{email}` |

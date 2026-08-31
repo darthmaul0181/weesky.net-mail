@@ -485,7 +485,7 @@
 		<!-- relative path to user addressbook home-->
 		<substitution>
 			<key>$addressbookhome1:</key>
-			<value>/dav/addressbooks/{guid}/</value>
+			<value>/dav/addressbooks/{guid}</value>
 		</substitution>
 		<!-- relative path to user addressbook-->
 		<substitution>

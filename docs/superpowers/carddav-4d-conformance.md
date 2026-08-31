@@ -71,6 +71,8 @@ Date : — · commit : — · fichier : `results/—.txt`
 
 (scénarios 1 à 8, plus :)
 
+| # | Scénario (spec, décision 7) | Observé | Verdict |
+|---|---|---|---|
 | 9 | « Delete collection » : le carnet se vide et réapparaît vide | | |
 
 ## 6. Divergences nommées

@@ -206,7 +206,7 @@ chemins tels que 4c les a fixés :
 | `$principalcollection:` | `/dav/principals/` |
 | `$principal1:` | `/dav/principals/{guid}/` |
 | `$userid1:`, `$pswd1:` | `{email}`, `{secret}` |
-| `$addressbookhome1:` | `/dav/addressbooks/{guid}/` |
+| `$addressbookhome1:` | `/dav/addressbooks/{guid}` |
 | `$addressbook:` | `default` |
 | `$addressbookpath1:` | `/dav/addressbooks/{guid}/default` |
 | `$useradmin:`, `$pswdadmin:` | les mêmes que l'utilisateur 1 (décision 2) |
