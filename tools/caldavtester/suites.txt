@@ -1,0 +1,22 @@
+# Suites CardDAV lancées (chemins relatifs à scripts/tests du tester).
+# Exclues parce qu'elles testent CalendarServer, pas CardDAV (spec, « Le harnais ») :
+#   sharing-*.xml, directory.xml, directory-gateway.xml, bulk.xml,
+#   add-member.xml, default-addressbook.xml
+# mkcol, copymove et aclreports sont lancées EN SACHANT qu'elles échoueront :
+# leur échec mesure une divergence nommée (décision 4).
+CardDAV/propfind.xml
+CardDAV/proppatch.xml
+CardDAV/put.xml
+CardDAV/get.xml
+CardDAV/reports.xml
+CardDAV/sync-report.xml
+CardDAV/errors.xml
+CardDAV/errorcondition.xml
+CardDAV/limits.xml
+CardDAV/nonascii.xml
+CardDAV/well-known.xml
+CardDAV/current-user-principal.xml
+CardDAV/mkcol.xml
+CardDAV/copymove.xml
+CardDAV/aclreports.xml
+CardDAV/ab-client.xml
