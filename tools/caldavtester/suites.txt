@@ -9,6 +9,8 @@
 # (blocs multi-utilisateurs retirés de serverinfo.template.xml) : $userid2:,
 # $publicuserguid*:, $groupguid*:, $addressbookhome2: etc. resteront en texte
 # littéral dans leur sortie. Ce bruit n'est PAS un signal de conformité.
+# limits.xml est ignoré par l'outil lui-même : son require-feature exige « caldav ».
+# C'est un fichier de quotas CalDAV ; gardé pour mémoire, il ne mesure rien ici.
 CardDAV/propfind.xml
 CardDAV/proppatch.xml
 CardDAV/put.xml

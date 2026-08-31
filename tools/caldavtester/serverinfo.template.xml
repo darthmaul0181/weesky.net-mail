@@ -227,10 +227,13 @@
 			<value>[-,$calendar:/,$tasks:/,$inbox:/,$outbox:/,$freebusy:,$notification:/]</value>
 		</substitution>
 
-		<!-- Sync collection extra items - use "-" to include the collection-->
+		<!-- Sync collection extra items - use "-" to include the collection.
+		     Vide chez nous : RFC 6578 ne fait pas figurer la collection dans son propre
+		     sync-report, c'est un CalendarServer-isme. "[]" = aucun item supplémentaire
+		     (src/utils.py, processHrefSubstitutions filtre la chaîne vide). -->
 		<substitution>
 			<key>$calendar_sync_extra_items:</key>
-			<value>[-]</value>
+			<value>[]</value>
 		</substitution>
 
 		<!-- Sync collection extra count - gets added to the totalcount value-->
