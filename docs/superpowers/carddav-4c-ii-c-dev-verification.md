@@ -72,10 +72,15 @@ Le corps doit être **exactement** ce que vous avez envoyé, fins de ligne compr
 être celui du `PUT`. Si les deux diffèrent, l'ETag a cessé de décrire ce qui sort et le client
 relira indéfiniment — c'est l'invariant central de la tranche.
 
-**3. Le remplacement conditionnel.** Avec l'ETag de l'étape 1 :
+**3. Le remplacement conditionnel.** Avec l'ETag de l'étape 1, guillemets compris — `$card2` doit
+être défini, sinon `--data-binary` avale l'URL et curl répond « no URL specified » ; et l'en-tête
+est composé en guillemets doubles échappés, car PowerShell 5.1 retire les guillemets internes d'un
+argument en guillemets simples et le serveur compare alors un tag sans guillemets, donc `412` :
 
 ```powershell
-curl.exe -i -s -u $cred -X PUT -H 'If-Match: "le-etag"' `
+$etag  = '"le-etag"'
+$card2 = "BEGIN:VCARD`r`nVERSION:3.0`r`nUID:probe-1`r`nFN:Probe Two`r`nEND:VCARD`r`n"
+curl.exe -i -s -u $cred -X PUT -H "If-Match: $etag" `
   --data-binary $card2 "$base/dav/addressbooks/$uid/default/probe-1.vcf"
 ```
 
