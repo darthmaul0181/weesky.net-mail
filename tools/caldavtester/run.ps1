@@ -18,7 +18,10 @@ if ($LASTEXITCODE -ne 0) { throw "Python 2.7 introuvable ('py -2.7'). Installer 
 
 function Get-Pinned([string]$Name, [string]$Url, [string]$Commit) {
     $dir = Join-Path $work $Name
-    if (-not (Test-Path $dir)) { git clone --quiet $Url $dir | Out-Null }
+    if (-not (Test-Path $dir)) {
+        git clone --quiet $Url $dir | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "clone de $Url a échoué" }
+    }
     git -C $dir -c advice.detachedHead=false checkout --quiet $Commit
     if ($LASTEXITCODE -ne 0) { throw "checkout $Commit a échoué dans $dir" }
     return $dir
