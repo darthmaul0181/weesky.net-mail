@@ -73,9 +73,12 @@ Le corps doit être **exactement** ce que vous avez envoyé, fins de ligne compr
 relira indéfiniment — c'est l'invariant central de la tranche.
 
 **3. Le remplacement conditionnel.** Avec l'ETag de l'étape 1, guillemets compris — `$card2` doit
-être défini, sinon `--data-binary` avale l'URL et curl répond « no URL specified » ; et l'en-tête
-est composé en guillemets doubles échappés, car PowerShell 5.1 retire les guillemets internes d'un
-argument en guillemets simples et le serveur compare alors un tag sans guillemets, donc `412` :
+être défini, sinon `--data-binary` avale l'URL et curl répond « no URL specified ». **PowerShell 7
+requis** pour cette étape et la suivante : PowerShell 5.1 retire les guillemets internes d'un
+argument natif quelle que soit la forme (vérifié au trace), le serveur reçoit un tag nu et répond
+`412` à tort. Pas de `Content-Type` ici, à dessein : curl envoie alors
+`application/x-www-form-urlencoded`, et c'est le cas qui a révélé que le binder de formulaire de
+MVC lisait le corps avant l'action — `[NoFormBinding]` sur le contrôleur, depuis.
 
 ```powershell
 $etag  = '"le-etag"'
@@ -94,7 +97,15 @@ curl.exe -i -s -u $cred -X PUT -H "If-None-Match: *" `
   --data-binary $card "$base/dav/addressbooks/$uid/default/probe-1.vcf"
 ```
 
-Attendu : **`412`** — la ressource existe. Sur un nom neuf, la même commande doit rendre `201`.
+Attendu : **`412`** — la ressource existe. Sur un nom neuf, une carte portant un **UID neuf** doit
+rendre `201` — pas `$card` : son `UID:probe-1` est détenu par `probe-1.vcf`, et la réponse serait
+`403 no-uid-conflict` avec l'href de cette fiche.
+
+```powershell
+$card3 = "BEGIN:VCARD`r`nVERSION:3.0`r`nUID:probe-2`r`nFN:Probe Three`r`nEND:VCARD`r`n"
+curl.exe -i -s -u $cred -X PUT -H "If-None-Match: *" `
+  --data-binary $card3 "$base/dav/addressbooks/$uid/default/probe-2.vcf"
+```
 
 **5. Une carte refusée.** Un corps sans `VERSION` :
 
