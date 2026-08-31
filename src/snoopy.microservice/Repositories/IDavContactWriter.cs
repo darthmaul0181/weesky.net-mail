@@ -38,6 +38,17 @@ public interface IDavContactWriter
         Guid userId, string davName, CancellationToken cancellationToken, string? ifMatch = null);
 
     /// <summary>
+    /// Empties the book: every card the protocol serves is archived and buried, in the store's own
+    /// batches — one transaction and one rank per hundred, never one giant transaction (the store
+    /// says why). Answers <see cref="DavWriteStatus.Deleted"/>, on an already-empty book too — where
+    /// it takes NO rank, so a no-op wakes nobody. A lock race answers <see cref="DavWriteStatus.Busy"/>;
+    /// the batches already committed stay emptied and buried, which is what the client's retry
+    /// finishes rather than undoes. Rows the 4a backfill never reached are not the protocol's to
+    /// delete and survive untouched.
+    /// </summary>
+    Task<DavWriteOutcome> DeleteAllAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Archives a body refused on a precondition, under the <c>Rejected</c> cause. Opens no state
     /// transaction and takes no rank: nothing visible to the protocol changed, and the 412 path
     /// must wake no client. Answers false when the deduplication window dropped it, or when the

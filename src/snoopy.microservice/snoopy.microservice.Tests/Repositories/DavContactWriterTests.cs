@@ -422,6 +422,88 @@ public sealed class DavContactWriterTests : IDisposable
     }
 
     [Fact]
+    public async Task DeletingTheWholeBook_BuriesAndArchivesEveryVisibleCard()
+    {
+        await Writer.PutAsync(UserId, "a.vcf", ValidCard("u1"), CancellationToken.None);
+        await Writer.PutAsync(UserId, "b.vcf", ValidCard("u2", fn: "Grace"), CancellationToken.None);
+        SyncStore.Invocations.Clear();
+
+        var outcome = await Writer.DeleteAllAsync(UserId, CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        Assert.Empty(Context.Contacts);
+        SyncStore.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.Cause == RevisionCause.Delete), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        SyncStore.Verify(s => s.PlaceTombstoneAsync(
+            UserId, "a.vcf", It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Once);
+        SyncStore.Verify(s => s.PlaceTombstoneAsync(
+            UserId, "b.vcf", It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeletingTheWholeBook_SpansTheStoreBatches()
+    {
+        // 101 cards: one over ContactStore.BatchSize, so the emptying MUST take two batch
+        // transactions — two ranks — and still bury every card.
+        for (var i = 0; i < 101; i++)
+            await Writer.PutAsync(UserId, $"c{i}.vcf", ValidCard($"u{i}", fn: $"N{i}"), CancellationToken.None);
+        SyncStore.Invocations.Clear();
+
+        var outcome = await Writer.DeleteAllAsync(UserId, CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        Assert.Empty(Context.Contacts);
+        SyncStore.Verify(s => s.NextSequenceAsync(UserId, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        SyncStore.Verify(s => s.PlaceTombstoneAsync(
+            UserId, It.IsAny<string>(), It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Exactly(101));
+    }
+
+    [Fact]
+    public async Task DeletingTheWholeBook_LeavesInvisibleRowsAlone()
+    {
+        // A row the 4a backfill has not reached was never served: the protocol cannot be asked to
+        // delete it, and the webmail contact behind it must survive the book's emptying.
+        await GivenAnInvisibleRow("ghost.vcf", uid: "u9");
+        await Writer.PutAsync(UserId, "a.vcf", ValidCard("u1"), CancellationToken.None);
+        SyncStore.Invocations.Clear();
+
+        var outcome = await Writer.DeleteAllAsync(UserId, CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        Assert.Equal("ghost.vcf", Assert.Single(Context.Contacts.Where(c => c.UserId == UserId)).DavName);
+        SyncStore.Verify(s => s.PlaceTombstoneAsync(
+            UserId, "a.vcf", It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Once);
+        SyncStore.Verify(s => s.PlaceTombstoneAsync(
+            UserId, "ghost.vcf", It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeletingAnEmptyBook_IsDeletedAndWakesNobody()
+    {
+        var outcome = await Writer.DeleteAllAsync(UserId, CancellationToken.None);
+
+        // 204 on nothing, and NO rank taken: a rank consumed here would wake every client for a
+        // change that never happened — the same rule DeleteAsync's refusals follow.
+        Assert.Equal(DavWriteStatus.Deleted, outcome.Status);
+        SyncStore.Verify(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        SyncStore.Verify(s => s.PlaceTombstoneAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<ulong>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeletingTheWholeBook_TouchesOnlyItsOwner()
+    {
+        var other = Guid.NewGuid();
+        await Writer.PutAsync(other, "theirs.vcf", ValidCard("u5"), CancellationToken.None);
+        await Writer.PutAsync(UserId, "mine.vcf", ValidCard("u1"), CancellationToken.None);
+
+        await Writer.DeleteAllAsync(UserId, CancellationToken.None);
+
+        Assert.Equal("theirs.vcf", Assert.Single(Context.Contacts).DavName);
+    }
+
+    [Fact]
     public async Task PuttingOverAnInvisibleRow_CreatesWithoutArchiving()
     {
         // A row the 4a backfill never reached: named, but with no card and no hash — invisible to

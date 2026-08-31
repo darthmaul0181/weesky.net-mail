@@ -122,6 +122,31 @@ internal sealed class DavContactWriter(
         }
     }
 
+    public async Task<DavWriteOutcome> DeleteAllAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        // The reader's visibility clause, as in DeleteAsync: what the protocol never served, it
+        // cannot be asked to delete. Ids only — DeleteManyAsync re-reads each batch under its lock.
+        var ids = await context.Contacts
+            .Where(c => c.UserId == userId && c.DavName != null && c.VCardRaw != null && c.CardHash != "")
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+        if (ids.Count == 0) return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, 0);
+
+        try
+        {
+            var buried = await store.DeleteManyAsync(userId, ids, cancellationToken);
+            logger.LogInformation("DELETE of the book for {UserId} buried {Count} cards", userId, buried);
+            return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, 0);
+        }
+        catch (Exception e) when (DavOutcomeTranslator.IsTransient(e))
+        {
+            logger.LogWarning(e,
+                "DELETE of the book for {UserId} lost a lock race; answering busy", userId);
+            context.ChangeTracker.Clear();
+            return Refused(DavWriteStatus.Busy);
+        }
+    }
+
     public async Task<bool> ArchiveRejectedAsync(
         Guid userId, string davName, string card, CancellationToken cancellationToken)
     {
