@@ -251,6 +251,93 @@ public sealed class DavContactWriterTests : IDisposable
         Assert.Equal(wrapped, (await RowOf("a.vcf")).VCardRaw);
     }
 
+    [Theory]
+    [InlineData("\u0007")]
+    [InlineData("\u0000")]
+    [InlineData("\u001F")]
+    [InlineData("\u007F")]
+    public async Task AControlCharacterInAValue_IsRefused(string control)
+    {
+        var outcome = await Writer.PutAsync(UserId, "a.vcf",
+            CardWithNote($"Illegal control here ->{control}<-"), CancellationToken.None);
+
+        // RFC 2426's ABNF excludes CTL from every value, and the bytes are stored as they arrive:
+        // accepted, a BEL is served back on every sync to clients that will not parse it.
+        Assert.Equal(DavWriteStatus.InvalidCard, outcome.Status);
+        Assert.Empty(Context.Contacts);
+        AssertNoRankWasTaken();
+    }
+
+    [Fact]
+    public async Task AControlCharacterEndingAValue_IsRefusedToo()
+    {
+        var outcome = await Writer.PutAsync(UserId, "a.vcf",
+            CardWithNote("Trailing bell\u0007"), CancellationToken.None);
+
+        // The last character before the CRLF: a scan stopping at the line's own terminator would
+        // read the card as clean and store the bell anyway.
+        Assert.Equal(DavWriteStatus.InvalidCard, outcome.Status);
+        Assert.Empty(Context.Contacts);
+    }
+
+    [Theory]
+    [InlineData("\t")]
+    [InlineData("\r\n ")]
+    public async Task AnHtabOrAFoldInAValue_IsStillAccepted(string separator)
+    {
+        var outcome = await Writer.PutAsync(UserId, "a.vcf",
+            CardWithNote($"Before{separator}after"), CancellationToken.None);
+
+        // CR, LF and HTAB are what folding and real values are MADE of: refusing them would refuse
+        // the correct clients the guard exists to protect.
+        Assert.Equal(DavWriteStatus.Created, outcome.Status);
+    }
+
+    [Theory]
+    [InlineData("UID:u2")]
+    [InlineData("item1.UID:u2")]
+    public async Task ACardCarryingTwoUids_IsInvalid_NotAUidConflict(string second)
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\n" + second + "\r\nEND:VCARD\r\n";
+
+        var outcome = await Writer.PutAsync(UserId, "a.vcf", card, CancellationToken.None);
+
+        // RFC 6352 § 5.1: one resource, one vCard, one identity. Answered no-uid-conflict, the
+        // client is told to go and read an href that names nothing — the group prefix counts, or
+        // the second UID hides behind an "item1." the reader would never look past.
+        Assert.Equal(DavWriteStatus.InvalidCard, outcome.Status);
+        Assert.Empty(Context.Contacts);
+        AssertNoRankWasTaken();
+    }
+
+    [Fact]
+    public async Task ALogicalLineWithoutAColon_IsRefused()
+    {
+        // The tester's verrors/3: an ADR value spilled onto its own physical line, unfolded, so
+        // "View;CA;94040;USA" is a logical line that is no contentline at all.
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\n" +
+            "ADR;type=WORK:;;2 Fidel Ave.;Mountain\r\nView;CA;94040;USA\r\nEND:VCARD\r\n";
+
+        var outcome = await Writer.PutAsync(UserId, "a.vcf", card, CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.InvalidCard, outcome.Status);
+        Assert.Empty(Context.Contacts);
+        AssertNoRankWasTaken();
+    }
+
+    [Fact]
+    public async Task AColonInsideQuotedParameters_StillCountsAsAContentline()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\n" +
+            "TEL;TYPE=\"WORK;HOME\":555\r\nEND:VCARD\r\n";
+
+        var outcome = await Writer.PutAsync(UserId, "a.vcf", card, CancellationToken.None);
+
+        // The separator is judged OUTSIDE quotes, and a quoted parameter value may legally carry
+        // both a ';' and a ':' — reading the first ':' anywhere would be a different rule.
+        Assert.Equal(DavWriteStatus.Created, outcome.Status);
+    }
+
     [Fact]
     public async Task ACardWithNoVersionAtAll_IsInvalid_NotUnsupported()
     {
@@ -931,6 +1018,15 @@ public sealed class DavContactWriterTests : IDisposable
 
     private static string ValidCard(string uid, string fn = "Ada") =>
         $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nN:Lovelace;{fn};;;\r\nFN:{fn}\r\nEND:VCARD\r\n";
+
+    private static string CardWithNote(string note) =>
+        $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\nNOTE:{note}\r\nEND:VCARD\r\n";
+
+    /// <summary>No rank taken means no tombstone lifted and no gap in the sequence a client
+    /// synchronises on: a refusal must cost the book nothing at all.</summary>
+    private void AssertNoRankWasTaken() =>
+        SyncStore.Verify(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     private static string CardOfVersion(string version) =>
         $"BEGIN:VCARD\r\nVERSION:{version}\r\nUID:u1\r\nFN:Ada\r\nEND:VCARD\r\n";

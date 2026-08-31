@@ -334,6 +334,10 @@ internal sealed class DavContactWriter(
         if (Encoding.UTF8.GetByteCount(card) > ContactStore.MaxCardBytes)
             return Refused(DavWriteStatus.TooLarge);
 
+        // RFC 2426's ABNF excludes CTL from every value. The bytes are stored and served as they
+        // arrive, so a bell accepted once is one a client re-reads and refuses on every sync after.
+        if (HasControlCharacter(card)) return Refused(DavWriteStatus.InvalidCard);
+
         // An address object resource is ONE vCard (RFC 6352 § 5.1).
         var chunks = VCardSplitter.Split(card);
         if (chunks.Count != 1 || !VCardSplitter.IsComplete(chunks[0]))
@@ -354,6 +358,23 @@ internal sealed class DavContactWriter(
         if (!AddressDataFilter.Versions.Contains(version, StringComparer.Ordinal))
             return Refused(DavWriteStatus.UnsupportedVersion);
 
+        var lines = VCardComposer.LogicalLines(VCardComposer.CanonicalLineBreaks(card))
+            .Select(VCardComposer.Unfold)
+            .ToList();
+
+        // Every line of a card is a contentline (RFC 6350 § 3.3), so one without a name/value colon
+        // is a value spilled onto a line of its own — the reader silently keeps it as a property.
+        if (lines.Exists(line => VCardComposer.IndexOutsideQuotes(line, ':') < 0))
+            return Refused(DavWriteStatus.InvalidCard);
+
+        // One resource, one identity (§ 5.1). Answered no-uid-conflict, the client is sent to read
+        // an href that names nothing; the group prefix counts, or "item1.UID" hides the second one.
+        if (lines.Count(line =>
+                VCardComposer.NameOf(line).Equals("UID", StringComparison.OrdinalIgnoreCase)) > 1)
+        {
+            return Refused(DavWriteStatus.InvalidCard);
+        }
+
         try
         {
             if (Vcf.Parse(card).FirstOrDefault() is null) return Refused(DavWriteStatus.InvalidCard);
@@ -373,6 +394,19 @@ internal sealed class DavContactWriter(
         }
 
         return null;
+    }
+
+    /// <summary>CR, LF and HTAB excepted: they are what the line structure and folding are made
+    /// of, and refusing them would refuse the correct clients this guard exists to protect.</summary>
+    private static bool HasControlCharacter(string card)
+    {
+        foreach (var character in card)
+        {
+            if (character is '\r' or '\n' or '\t') continue;
+            if (character < ' ' || character is '\u007F') return true;
+        }
+
+        return false;
     }
 
     /// <summary>True when the row is a current representation the If-Match header covers — the
