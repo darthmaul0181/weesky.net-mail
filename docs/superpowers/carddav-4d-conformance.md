@@ -6,30 +6,37 @@ chaque passage est recopié une fois et daté.
 
 ## 1. Passage initial — avant tout correctif
 
-Date : — · commit serveur déployé : — · fichier : `results/—.txt`
+Date : 2026-08-31 · commit serveur déployé : `6743b06b` (origin/cardav, avant la décision 3) ·
+fichier : `results/20260831-183718.txt` · 148 tests en 67 s · toutes les lignes `Authorization` épurées (67/67)
 
 | Suite | Tests | OK | Échecs | Ignorés | Fichier sauté |
 |---|---|---|---|---|---|
-| propfind.xml | | | | | |
-| proppatch.xml | | | | | |
-| put.xml | | | | | |
-| get.xml | | | | | |
-| reports.xml | | | | | |
-| sync-report.xml | | | | | |
-| errors.xml | | | | | |
-| errorcondition.xml | | | | | |
-| limits.xml | | | | | |
-| nonascii.xml | | | | | |
-| well-known.xml | | | | | |
-| current-user-principal.xml | | | | | |
-| mkcol.xml | | | | | |
-| copymove.xml | | | | | |
-| aclreports.xml | | | | | |
-| ab-client.xml | | | | | |
+| propfind.xml | 16 | 13 | 3 | 0 | non |
+| proppatch.xml | 7 | 0 | 7 | 0 | non |
+| put.xml | — | — | — | — | **oui** — start : `DELETEALL` du home → `DELETE default/` répond `405` |
+| get.xml | 3 | 1 | 2 | 2 suites (directory gateway) | non |
+| reports.xml | 39 | 33 | 6 | 2 suites (directory gateway) | non |
+| sync-report.xml | — | — | — | — | **oui** — start : `DELETE` de la collection répond `405` |
+| errors.xml | 10 | 4 | 6 | 0 | non |
+| errorcondition.xml | 12 | 4 | 8 | 1 suite | non |
+| limits.xml | — | — | — | fichier entier | non (ignoré : require-feature non satisfaite) |
+| nonascii.xml | 7 | 3 | 4 | 0 | non |
+| well-known.xml | 10 | 0 | 10 | 0 | non |
+| current-user-principal.xml | 3 | 0 | 3 | 1 suite | non |
+| mkcol.xml | 4 | 2 | 1 | 1 test | non |
+| copymove.xml | 3 | 0 | 3 | 1 suite | non |
+| aclreports.xml | 21 | 1 | 18 | 2 tests | non |
+| ab-client.xml | 0 | 0 | 0 | 0 | non (aucun test retenu) |
 
 Attendu avant mesure : `put.xml` et `sync-report.xml` sautent au `<start>` (`DELETE` de la
 collection encore en 405) ; `mkcol.xml`, `copymove.xml` et `aclreports.xml` échouent (divergences
 nommées).
+
+Constaté : **exactement les deux sauts prédits**, pour la raison prédite (le `405` du `DELETE` de
+collection, décision 3 non déployée). Total de l'outil : `ok=64, failed=71, ignored=11, errors=2`.
+Les échecs de `mkcol`/`copymove`/`aclreports` (22) sont les divergences nommées ; `proppatch` 0/7
+est la divergence PROPPATCH-403 ; restent à trier notamment `well-known` 0/10 et
+`current-user-principal` 0/3 (section 3).
 
 ## 2. Second passage — après le `DELETE` du carnet (décision 3)
 
