@@ -78,6 +78,8 @@ internal sealed record DavPropertyRequest(DavPropertyMode Mode, IReadOnlyList<XN
                 "A propfind body names one of prop, propname or allprop, never several.");
         if (includes > 0 && root.Element(AllPropElement) is null)
             throw new DavBadRequestException("A propfind include is only valid beside an allprop.");
+        if (includes > 1)
+            throw new DavBadRequestException("A propfind allprop carries one include, never several.");
     }
 
     private static IReadOnlyList<XName> NamesIn(XElement container) =>

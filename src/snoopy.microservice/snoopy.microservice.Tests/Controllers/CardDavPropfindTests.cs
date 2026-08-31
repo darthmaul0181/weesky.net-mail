@@ -398,6 +398,21 @@ public sealed class CardDavPropfindTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TwoIncludesBesideOneAllprop_Answers400()
+    {
+        var response = await Propfind(DavPaths.Collection(UserId), depth: "0",
+            body: PropfindBody(new XElement(DavXml.Dav + "allprop"),
+                new XElement(DavXml.Dav + "include", new XElement(DavXml.Dav + "sync-token")),
+                new XElement(DavXml.Dav + "include",
+                    new XElement(DavXml.Dav + "current-user-privilege-set"))));
+
+        // § 14.20's grammar spells "allprop, include?" — one at most. Accepted, the reader takes
+        // the first and the second's names are lost in silence, which is the worst of the three
+        // answers: the client waits for a property nothing will ever send.
+        Assert.Equal(400, response.StatusCode);
+    }
+
+    [Fact]
     public async Task APropfindWithNoChildAtAll_IsStillAllprop()
     {
         var response = await Propfind(DavPaths.Collection(UserId), depth: "0",

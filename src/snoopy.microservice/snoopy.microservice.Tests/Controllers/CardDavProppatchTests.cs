@@ -210,10 +210,27 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
         var response = await Proppatch(DavPaths.Collection(UserId),
             new XDocument(new XElement(DavXml.Dav + "propertyupdate")).ToString());
 
-        // Nothing was refused because nothing was asked: a response carrying its href and no
-        // propstat, not a 400 over a document that is otherwise what § 9.2 describes.
+        // Nothing was refused because nothing was asked: a response carrying no propstat, not a
+        // 400 over a document that is otherwise what § 9.2 describes.
         Assert.Equal(207, response.StatusCode);
         Assert.Empty(XDocument.Parse(response.Body).Descendants(DavXml.PropStat));
+    }
+
+    [Fact]
+    public async Task AnEmptySetProp_AnswersAResponseCarryingItsOwnStatus()
+    {
+        var body = new XDocument(new XElement(DavXml.Dav + "propertyupdate",
+            new XElement(DavXml.Dav + "set", new XElement(DavXml.Prop)))).ToString();
+
+        var response = await Proppatch(DavPaths.Collection(UserId), body);
+
+        // Grammatically valid and naming nothing, so no propstat is written — and § 14.24 admits
+        // (href, status) or (href, propstat+): the href alone is the shape a sync response was
+        // just cured of, and this path reaches it on all seven of the surface's URLs.
+        Assert.Equal(207, response.StatusCode);
+        var written = XDocument.Parse(response.Body).Root!.Elements(DavXml.Response).Single();
+        Assert.Equal("HTTP/1.1 200 OK", written.Elements(DavXml.Status).Single().Value);
+        Assert.Empty(written.Elements(DavXml.PropStat));
     }
 
     [Fact]

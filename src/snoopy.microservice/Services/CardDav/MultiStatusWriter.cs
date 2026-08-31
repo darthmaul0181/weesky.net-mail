@@ -165,7 +165,10 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     /// One <c>response</c> whose single <c>propstat</c> refuses every named property with 403 —
     /// RFC 4918 § 9.2.1's answer for a property a server does not let a client write. The names
     /// carry no value: a <c>propstat</c>'s <c>prop</c> names properties, it never restates them.
-    /// An empty list writes the href alone, because nothing was refused when nothing was asked.
+    /// An empty list — a grammatically valid <c>propertyupdate</c> naming nothing — writes no
+    /// propstat at all, and then the bare status of § 14.24, exactly as
+    /// <see cref="WriteResourceAsync"/> does: nothing was refused when nothing was asked, but an
+    /// href on its own is still a response no conforming client can read.
     /// </summary>
     internal async Task WriteRefusalAsync(string href, IReadOnlyList<XName> names,
         CancellationToken cancellationToken)
@@ -178,6 +181,10 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         {
             await WritePropstatAsync(403, names.Select(name => new XElement(name)), cancellationToken)
                 .ConfigureAwait(false);
+        }
+        else
+        {
+            await WriteStatusElementAsync(200).ConfigureAwait(false);
         }
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
