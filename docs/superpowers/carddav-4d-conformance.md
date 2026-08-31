@@ -40,9 +40,17 @@ est la divergence PROPPATCH-403 ; restent à trier notamment `well-known` 0/10 e
 
 ## 2. Second passage — après le `DELETE` du carnet (décision 3)
 
-Date : — · commit : — · fichier : `results/—.txt`
+Date : 2026-08-31 · commit : `e4c45012` · fichier : `results/20260831-195140.txt` ·
+201 tests en 88 s · `ok=89, failed=90, ignored=22, errors=0` · épuration vérifiée (0 ligne en clair)
 
-(mêmes colonnes ; seules les lignes qui ont bougé sont commentées)
+Seules les lignes qui ont bougé — la décision 3 a fait tourner les deux fichiers sautés,
+tout le reste est au chiffre près identique au passage initial :
+
+| Suite | Tests | OK | Échecs | Ignorés | Fichier sauté |
+|---|---|---|---|---|---|
+| put.xml | 18 | 14 | 4 | 0 | non — le `<start>` (DELETEALL) passe |
+| sync-report.xml | 34 | 11 | 15 | 8 tests + 3 suites | non — le `<start>` (`DELETE` de la collection) passe |
+| ab-client.xml | 3 | 3 | 0 | 0 | non (3 tests exécutés cette fois) |
 
 ## 3. Triage
 
