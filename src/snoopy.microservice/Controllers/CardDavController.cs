@@ -22,6 +22,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("dav")]
 [Authorize(Policy = CardDavAuthenticationDefaults.PolicyName)]
 [ApiExplorerSettings(IgnoreApi = true)]
+[NoFormBinding]
 public sealed class CardDavController(
     IDavContactReader contacts,
     IDavContactWriter writer,

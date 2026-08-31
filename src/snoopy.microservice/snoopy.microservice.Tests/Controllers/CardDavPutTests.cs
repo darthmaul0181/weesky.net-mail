@@ -471,6 +471,20 @@ public sealed class CardDavPutTests : IAsyncLifetime
             NullLogger<DavContactWriter>.Instance));
     }
 
+    [Fact]
+    public async Task ABodySentAsAForm_StillReachesTheWriterWhole()
+    {
+        // curl's default for --data, and what a client that sets no Content-Type sends: bound by
+        // the default binders, MVC's form value provider reads the body before the action runs,
+        // and the writer receives an empty card — a 403 valid-address-data on a valid card.
+        var response = await Put(DavPaths.Card(UserId, "a.vcf"), ValidCard("u1"),
+            contentType: "application/x-www-form-urlencoded");
+
+        Assert.Equal(201, response.StatusCode);
+        Writer.Verify(w => w.PutAsync(UserId, "a.vcf", ValidCard("u1"), It.IsAny<CancellationToken>(),
+            false, null), Times.Once);
+    }
+
     private Task<DavTestResponse> Put(string path, string body, string? ifMatch = null,
         string? ifNoneMatch = null, string? contentType = "text/vcard") =>
         PutBytes(path, Encoding.UTF8.GetBytes(body), ifMatch, ifNoneMatch, contentType);

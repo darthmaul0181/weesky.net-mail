@@ -1,3 +1,4 @@
+using System.Text;
 using System.Xml.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using weesky.Snoopy.Microservice.Data.Preferences;
@@ -453,6 +454,22 @@ public sealed class CardDavReportTests : IAsyncLifetime
         Assert.Equal(207, response.StatusCode);
         Assert.Equal(["https://mail.example.test" + DavPaths.Card(UserId, "a.vcf")], HrefsOf(response));
         Assert.Single(XDocument.Parse(await response.ReadAsync()).Descendants(DavXml.Dav + "getetag"));
+    }
+
+    [Fact]
+    public async Task AReportSentAsAForm_StillReadsItsBody()
+    {
+        GivenCards("a.vcf");
+        using var request = new HttpRequestMessage(new HttpMethod("REPORT"), DavPaths.Card(UserId, "a.vcf"));
+        request.Content = new StringContent(MultigetBody(DavPaths.Card(UserId, "a.vcf")),
+            Encoding.UTF8, "application/x-www-form-urlencoded");
+
+        using var sent = await server.Client.SendAsync(request);
+        var response = await DavTestResponse.ReadAsync(sent);
+
+        // The form value provider must not have eaten the body on its way to the action.
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal([DavPaths.Card(UserId, "a.vcf")], HrefsOf(response));
     }
 
     private Task<DavTestResponse> Report(string path, string? body, string? depth = null) =>
