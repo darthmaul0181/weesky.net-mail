@@ -45,6 +45,10 @@ Aucun DDL neuf : la tranche c n'ajoute ni colonne ni table.
 En PowerShell, `curl.exe` et non `curl`. Reprendre `$base`, `$cred` et `$uid` du document de la
 tranche b.
 
+**Avant la première écriture** : l'`ENUM` de `contacts.source` doit connaître `'carddav'` — le
+`MODIFY COLUMN` de `webmail-carddav-tables.md`. Sans lui, l'étape 1 répond `503` et le journal
+porte « Data truncated for column 'source' ».
+
 **1. Créer une carte.** Le `Content-Type` n'est pas un juge — le corps l'est — mais l'envoyer est ce
 que fait un vrai client.
 

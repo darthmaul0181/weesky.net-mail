@@ -147,7 +147,24 @@ ALTER TABLE `contacts`
   ADD COLUMN `sync_sequence` BIGINT UNSIGNED NOT NULL DEFAULT 0
     COMMENT '0 = jamais rattrapée, donc invisible du protocole (un jeton demande > n, n >= 0)',
   ADD UNIQUE INDEX `ux_contacts_dav_name` (`user_id`, `dav_name`),
-  ADD INDEX `ix_contacts_sync_sequence` (`user_id`, `sync_sequence`);
+  ADD INDEX `ix_contacts_sync_sequence` (`user_id`, `sync_sequence`),
+  MODIFY COLUMN `source` ENUM('manual','captured','imported','carddav')
+    NOT NULL DEFAULT 'manual'
+    COMMENT 'Origine de la fiche ; écrite à la création seulement';
+```
+
+**`MODIFY COLUMN source` est obligatoire, et il a manqué sur dev.** Une fiche née d'un `PUT`
+CardDAV porte `source = 'carddav'`, valeur que l'`ENUM` de la tranche 3c ne connaissait pas : en
+mode strict MariaDB refuse l'insertion (« Data truncated for column 'source' »), le gate rejoue une
+fois, échoue de nouveau et répond `503` — le premier `PUT` d'un vrai client ne crée jamais rien. Le
+fournisseur InMemory des tests n'a pas d'`ENUM`, donc rien ne pouvait l'attraper avant dev. Une
+base qui a déjà reçu les deux `ADD COLUMN` passe le `MODIFY` seul :
+
+```sql
+ALTER TABLE `snoopy_webmail_dev`.`contacts`
+  MODIFY COLUMN `source` ENUM('manual','captured','imported','carddav')
+    NOT NULL DEFAULT 'manual'
+    COMMENT 'Origine de la fiche ; écrite à la création seulement';
 ```
 
 Et les quatre paragraphes qu'un relecteur redemanderait :
@@ -241,16 +258,20 @@ après toute restauration et après toute reprise du schéma.
 ## Désinstallation
 
 ```sql
+-- Les fiches nées d'un client doivent être supprimées ou reclassées AVANT de rétrécir l'ENUM :
+-- MariaDB refuse le MODIFY tant qu'une ligne porte 'carddav'.
 ALTER TABLE `snoopy_webmail`.`contacts`
   DROP INDEX `ix_contacts_sync_sequence`,
   DROP INDEX `ux_contacts_dav_name`,
   DROP COLUMN `sync_sequence`,
-  DROP COLUMN `dav_name`;
+  DROP COLUMN `dav_name`,
+  MODIFY COLUMN `source` ENUM('manual','captured','imported') NOT NULL DEFAULT 'manual';
 ALTER TABLE `snoopy_webmail_dev`.`contacts`
   DROP INDEX `ix_contacts_sync_sequence`,
   DROP INDEX `ux_contacts_dav_name`,
   DROP COLUMN `sync_sequence`,
-  DROP COLUMN `dav_name`;
+  DROP COLUMN `dav_name`,
+  MODIFY COLUMN `source` ENUM('manual','captured','imported') NOT NULL DEFAULT 'manual';
 
 DROP TABLE IF EXISTS `snoopy_webmail`.`contact_revisions`;
 DROP TABLE IF EXISTS `snoopy_webmail_dev`.`contact_revisions`;
