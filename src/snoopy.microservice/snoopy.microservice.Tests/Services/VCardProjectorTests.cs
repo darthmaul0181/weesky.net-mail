@@ -351,14 +351,26 @@ public sealed class VCardProjectorTests
     {
         var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
             + "X-ADDRESSBOOKSERVER-MEMBER:URN:UUID:a\r\n"
-            + "X-ADDRESSBOOKSERVER-MEMBER:b\r\n"
-            + "X-ADDRESSBOOKSERVER-MEMBER:mailto:c@d.e\r\n"
             + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:a\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:b\r\n"
             + $"X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:{new string('x', 300)}\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:mailto:c@d.e\r\n"
             + "END:VCARD\r\n";
         var p = VCardProjector.Project(card);
-        Assert.Equal([new ProjectedMember("a", 0), new ProjectedMember("b", 1),
-            new ProjectedMember("mailto:c@d.e", 2)], p.Members);
+        Assert.Equal(ContactKinds.Group, p.Kind);
+        Assert.Equal([new ProjectedMember("a", 0), new ProjectedMember("b", 2),
+            new ProjectedMember("mailto:c@d.e", 4)], p.Members);
+    }
+
+    [Fact] // un AGENT imbriqué porte ses propres KIND et MEMBER : ils ne fuient pas au-dehors
+    public void Project_NestedAgentCardDoesNotLeakKindOrMember()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:o\r\nFN:Outer\r\nAGENT:\r\n"
+            + "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Inner\r\nKIND:group\r\n"
+            + "MEMBER:urn:uuid:x\r\nEND:VCARD\r\nEND:VCARD\r\n";
+        var p = VCardProjector.Project(card);
+        Assert.Equal(ContactKinds.Individual, p.Kind);
+        Assert.Empty(p.Members);
     }
 
     [Fact] // une fiche ordinaire ne porte ni kind de groupe ni membre

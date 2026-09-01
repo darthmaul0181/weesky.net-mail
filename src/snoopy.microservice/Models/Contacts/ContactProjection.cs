@@ -19,7 +19,8 @@ public sealed record ProjectedPhoto(string MediaType, byte[] Bytes);
 
 /// <summary>
 /// One MEMBER line of a group card: <see cref="MemberUid"/> is the referenced contact's UID with
-/// any <c>urn:uuid:</c> prefix removed, <see cref="Position"/> its rank in the card.
+/// any <c>urn:uuid:</c> prefix removed, <see cref="Position"/> its rank among the card's MEMBER
+/// lines — a dropped member leaves its rank to the next one.
 /// </summary>
 public sealed record ProjectedMember(string MemberUid, int Position);
 

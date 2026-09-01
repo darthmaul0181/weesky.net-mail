@@ -38,6 +38,9 @@ internal static class VCardProjector
     // What a writer puts in a mandatory N or FN it has nothing to fill.
     private const string Placeholder = "?";
 
+    // The URI form a MEMBER value takes in vCard 4.0; the projection stores the bare UID.
+    private const string UrnUuidPrefix = "urn:uuid:";
+
     private static readonly ContactProjection Empty = new(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         [], [], [], null, ContactKinds.Individual, []);
@@ -170,7 +173,8 @@ internal static class VCardProjector
     }
 
     internal static string StripUrnUuid(string value) =>
-        value.StartsWith("urn:uuid:", StringComparison.OrdinalIgnoreCase) ? value[9..] : value;
+        value.StartsWith(UrnUuidPrefix, StringComparison.OrdinalIgnoreCase)
+            ? value[UrnUuidPrefix.Length..] : value;
 
     private static ProjectedPhoto? Photo(VCard card)
     {
@@ -424,6 +428,11 @@ internal static class VCardProjector
                     if (--depth <= 0) break;
                     continue;
                 }
+
+                // A nested AGENT card carries its own KIND and MEMBER, and neither belongs to the
+                // card enclosing it. EMAIL/TEL/ADR stay unfiltered on purpose: their alignment
+                // guard exists to notice precisely that desync, and reads the nested lines to do it.
+                if (depth != 1 && family is Kind or XKind or Member or XMember) continue;
 
                 var semi = -1;
                 var colon = -1;
