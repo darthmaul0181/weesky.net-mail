@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -7,6 +8,30 @@ namespace weesky.Snoopy.Microservice.Tests.Data;
 
 public sealed class ContactEntitiesTests
 {
+    [Fact]
+    public void Contact_DefaultsToIndividualKind()
+    {
+        // La leçon du MODIFY COLUMN source de 4c-ii : la valeur est épinglée, l'ENUM MariaDB la
+        // refuse en mode strict si elle diverge du DDL.
+        Assert.Equal("individual", new Contact().Kind);
+        Assert.Equal("group", ContactKinds.Group);
+    }
+
+    [Fact]
+    public async Task ContactGroupMember_KeyIsGroupIdAndPosition_AndMemberIsUnique()
+    {
+        var context = new PreferencesTestDbContext(
+            nameof(ContactGroupMember_KeyIsGroupIdAndPosition_AndMemberIsUnique));
+        var groupId = Guid.NewGuid();
+
+        context.Contacts.Add(new Contact { Id = groupId, UserId = Guid.NewGuid(), Kind = ContactKinds.Group });
+        context.ContactGroupMembers.Add(new ContactGroupMember { GroupId = groupId, MemberUid = "a", Position = 0 });
+        context.ContactGroupMembers.Add(new ContactGroupMember { GroupId = groupId, MemberUid = "b", Position = 2 });
+        await context.SaveChangesAsync(CancellationToken.None); // les trous de position sont légaux (décision 3)
+
+        Assert.Equal(2, await context.ContactGroupMembers.CountAsync());
+    }
+
     [Fact]
     public async Task Contact_RoundTripsThroughTheContext()
     {

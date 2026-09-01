@@ -46,6 +46,10 @@ public class PreferencesDbContext : DbContext
             .HasOne<Contact>().WithMany().HasForeignKey(a => a.ContactId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ContactPhoto>()
             .HasOne<Contact>().WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContactGroupMember>().HasKey(m => new { m.GroupId, m.Position });
+        modelBuilder.Entity<ContactGroupMember>().HasIndex(m => new { m.GroupId, m.MemberUid }).IsUnique();
+        modelBuilder.Entity<ContactGroupMember>()
+            .HasOne<Contact>().WithMany().HasForeignKey(m => m.GroupId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
 
@@ -161,6 +165,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<ContactAddress> ContactAddresses { get; set; }
 
     public DbSet<ContactPhoto> ContactPhotos { get; set; }
+
+    public DbSet<ContactGroupMember> ContactGroupMembers => Set<ContactGroupMember>();
 
     public DbSet<WebmailUser> Users { get; set; }
 

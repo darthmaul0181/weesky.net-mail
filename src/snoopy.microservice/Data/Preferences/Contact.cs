@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Data.Preferences;
 
@@ -81,6 +82,13 @@ public sealed class Contact
     /// </summary>
     [Column("source")]
     public string Source { get; set; } = "manual";
+
+    /// <summary>
+    /// The card's species: "group" when it carries KIND:group / X-ADDRESSBOOKSERVER-KIND:group.
+    /// Written by the projection, like every other card-derived column.
+    /// </summary>
+    [Column("kind")]
+    public string Kind { get; set; } = ContactKinds.Individual;
 
     /// <summary>
     /// The source vCard verbatim, written by the import path only and never served to the UI. It
