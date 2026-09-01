@@ -96,8 +96,10 @@ export default function ComposeView({ onNotify }: Props) {
   const capture = useCaptureContacts()
   // Resolved once for the three fields, and by the same function the contacts band reads, so a
   // group the field expands and one « Write to group » writes to can never be two sets.
+  // A book still in flight is not an empty one: rendering its groups as options would let a
+  // click on a group row report `toast.emptyGroup` on a carnet that just hasn't answered yet.
   const groupOptions = useMemo(
-    () => groupOptionsOf(groups ?? [], contacts ?? []), [groups, contacts])
+    () => (contacts ? groupOptionsOf(groups ?? [], contacts) : []), [groups, contacts])
   const notifyEmptyGroup = (name: string) => onNotify(t('toast.emptyGroup', { name }), 'error')
   // State, not a ref: the toolbar sits above the editor, so a ref would still read null on the
   // render that mounts it and the buttons would do nothing until something else re-rendered.

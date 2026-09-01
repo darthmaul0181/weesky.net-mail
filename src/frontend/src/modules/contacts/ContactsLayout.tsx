@@ -148,8 +148,12 @@ export default function ContactsLayout() {
       or one carrying no address, brings nothing. Resolved by the function the composer's field
       calls, so the menu entry and the dropdown row cannot disagree about who a group holds.
       Keyed rather than scanned: every group row asks this on every render. */
+  // Same guard as the composer's: a book still in flight is not an empty one, so no group row
+  // should claim addresses it hasn't checked yet.
   const groupOptions = useMemo(
-    () => new Map(groupOptionsOf(groups.data ?? [], contacts ?? []).map(one => [one.id, one])),
+    () => new Map(contacts
+      ? groupOptionsOf(groups.data ?? [], contacts).map(one => [one.id, one])
+      : []),
     [groups.data, contacts])
   const groupAddresses = (group: ContactGroup) => groupOptions.get(group.id)?.addresses ?? []
   // The groups holding one contact — the card's chips.

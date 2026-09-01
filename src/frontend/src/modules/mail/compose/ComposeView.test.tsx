@@ -282,6 +282,19 @@ describe('ComposeView', () => {
     expect(onNotify).toHaveBeenCalledWith('The group Ghosts has no address to write to', 'error')
   })
 
+  // A book still in flight is not an empty one: rendering its groups as options would let a click
+  // on a group row report `toast.emptyGroup` on a carnet that simply hasn't answered yet.
+  it('offers no group suggestion while the book has not resolved', async () => {
+    mocks.getContacts.mockReturnValue(new Promise(() => {}))
+    mocks.getContactGroups.mockResolvedValue({ groups: [{ id: 'g1', name: 'Team', memberIds: ['b'] }] })
+    renderCompose()
+
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: 'tea' } })
+
+    await waitFor(() => expect(mocks.getContactGroups).toHaveBeenCalled())
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
   it('enables Send on a valid recipient and disables it again on an invalid one', () => {
     renderCompose()
 
