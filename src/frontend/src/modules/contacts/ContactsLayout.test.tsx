@@ -823,23 +823,27 @@ describe('contact groups', () => {
   })
 
   // Un groupe supprimé ailleurs, un GUID étranger collé dans l'URL : le scope ne résout plus, et
-  // un carnet filtré sur rien serait indistinguable d'un carnet vide.
-  it('falls back to the whole book when the scope names no known group', async () => {
-    renderAt('/contacts?scope=group:zzz')
+  // un carnet filtré sur rien serait indistinguable d'un carnet vide. Le repli emporte le scope et
+  // lui seul : une fiche ouverte qui disparaît avec le groupe se lit comme le contact parti avec.
+  it('falls back to the whole book when the scope names no known group, keeping the open card',
+    async () => {
+      const router = renderRouter('/contacts?scope=group:zzz&id=b')
 
-    await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
-    expect(screen.getByText('Bruno')).toBeInTheDocument()
-    expect(scopeButton(/all contacts/i)).toHaveClass('is-active')
-  })
+      await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
+      expect(scopeButton(/all contacts/i)).toHaveClass('is-active')
+      await waitFor(() => expect(router.state.location.search).toBe('?id=b'))
+    })
 
   // Une liste refusée répond elle aussi à la question — le scope ne résout pas — là où attendre
   // les données seules tiendrait la colonne sur sa ligne de chargement pour la session entière.
-  it('falls back when the group list itself is refused', async () => {
+  it('falls back when the group list itself is refused, and says so in the band', async () => {
     api.getContactGroups.mockRejectedValue(new Error('boom'))
     renderAt('/contacts?scope=group:g1')
 
     await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
     expect(screen.queryByText(/loading contacts/i)).not.toBeInTheDocument()
+    // Une section vide dirait que le compte n'a aucun groupe, ce qui est un mensonge par omission.
+    expect(await screen.findByText('Could not load the groups')).toBeInTheDocument()
   })
 
   // Le geste ajoute et ne retire jamais : un drop qui ajouterait ou retirerait selon l'état de
@@ -911,7 +915,8 @@ describe('contact groups', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail/compose'))
     const state = router.state.location.state as { seed: { to: string[] }; backTo: string }
     expect(state.seed.to).toEqual(['alice@x.be', 'bruno@x.be'])
-    expect(state.backTo).toBe('/contacts?scope=group:g1')
+    // URLSearchParams percent-encodes the `:`; the router decodes it back to the same scope.
+    expect(state.backTo).toBe('/contacts?scope=group%3Ag1')
   })
 
   // Le scope se conserve dans l'URL pour tout ce qui n'est pas « all » — la règle qui remplace les

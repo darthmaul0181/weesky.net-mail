@@ -138,6 +138,22 @@ describe('the groups section', () => {
     expect(onCreateGroup).toHaveBeenCalled()
   })
 
+  // Un intitulé qui n'est qu'un texte gras n'est pas une structure : rien ne mène un lecteur
+  // d'écran à la section.
+  it('names the section with a heading', () => {
+    renderScopes()
+
+    expect(screen.getByRole('heading', { name: 'Groups' })).toBeInTheDocument()
+  })
+
+  // Une liste refusée rendait une section vide, indistinguable d'un compte sans aucun groupe.
+  it('says the list was refused instead of drawing an empty section', () => {
+    renderScopes({ groupsError: true })
+
+    expect(screen.getByText('Could not load the groups')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New group' })).toBeInTheDocument()
+  })
+
   it('draws one row per group with its member count', () => {
     renderScopes({ groups: [friends, family] })
 

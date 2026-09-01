@@ -36,7 +36,8 @@
     "deleted": "Groupe supprimé : {{name}}",
     "saveFailed": "Impossible d’enregistrer le groupe",
     "deleteFailed": "Impossible de supprimer le groupe",
-    "addFailed": "Impossible d’ajouter les contacts au groupe"
+    "addFailed": "Impossible d’ajouter les contacts au groupe",
+    "loadFailed": "Impossible de charger les groupes"
   },
   "fields": {
     "nickname": "Surnom",

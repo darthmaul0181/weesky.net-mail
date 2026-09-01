@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import GroupNameModal from './GroupNameModal'
@@ -39,6 +39,16 @@ describe('GroupNameModal', () => {
     await userEvent.type(field(), '   ')
 
     expect(submit()).toBeDisabled()
+  })
+
+  // Le bouton grisé n'est pas la seule route vers le submit : la garde se rejoue dans le
+  // gestionnaire, sinon une soumission du formulaire enverrait un nom vide à l'API.
+  it('refuses a form submit that bypasses the disabled button', () => {
+    const { onSubmit } = renderModal({ initialName: 'Friends' })
+
+    fireEvent.submit(document.querySelector('form')!)
+
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('seeds a rename from the current name and refuses it unchanged', async () => {

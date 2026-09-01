@@ -68,10 +68,9 @@ export default function ContactsLayout() {
   })
 
   function backToHere() {
-    const entries = Object.entries(paramsForScope(scope, selectedId ? { id: selectedId } : {}))
-    return entries.length === 0
-      ? '/contacts'
-      : `/contacts?${entries.map(([key, value]) => `${key}=${value}`).join('&')}`
+    const query = new URLSearchParams(
+      paramsForScope(scope, selectedId ? { id: selectedId } : {})).toString()
+    return query ? `/contacts?${query}` : '/contacts'
   }
   const { toasts, addToast, removeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
@@ -179,12 +178,22 @@ export default function ContactsLayout() {
     navigate('/contacts', { replace: true })
   }, [missing, addToast, navigate, t])
 
+  // The scope falls back, the open card does not: a fiche is a selection of its own, and one that
+  // vanished because a group did would read as the contact having gone with it. Read off the URL
+  // rather than closed over, so the callback stays stable — `backToList`'s reason.
+  const fallBackToAll = useCallback(() => {
+    setParams(previous => {
+      const id = previous.get('id')
+      return paramsForScope('all', id ? { id } : {})
+    }, { replace: true })
+  }, [setParams])
+
   // A scope naming a group nobody holds any more — deleted from another device, a foreign GUID
   // pasted into the URL — falls back to the whole book once the list has answered, the fallback an
   // obsolete `?id=` already gets. Replace: Back must not bounce off the dead scope.
   useEffect(() => {
-    if (openGroupId != null && groupsSettled && openGroup == null) setParams({}, { replace: true })
-  }, [openGroupId, groupsSettled, openGroup, setParams])
+    if (openGroupId != null && groupsSettled && openGroup == null) fallBackToAll()
+  }, [openGroupId, groupsSettled, openGroup, fallBackToAll])
 
   function changeScope(next: ContactScope) {
     // Dropping the selected id: a contact filtered out of the new scope must not stay open, the
@@ -296,7 +305,7 @@ export default function ContactsLayout() {
       await deleteGroup.mutateAsync(id)
       // The open scope must not survive its group; the fallback effect only fires once the
       // refetched list has landed.
-      if (openGroupId === id) setParams({}, { replace: true })
+      if (openGroupId === id) fallBackToAll()
       addToast(t('groups.deleted', { name }), 'success')
     } catch (error) {
       addToast(apiErrorMessage(error, t('groups.deleteFailed')), 'error')
@@ -336,7 +345,8 @@ export default function ContactsLayout() {
           onRenameGroup={group => setGroupModal({ mode: 'rename', group })}
           onDeleteGroup={setPendingGroupDelete}
           onWriteToGroup={group => writeTo(groupAddresses(group))}
-          groupHasAddresses={group => groupAddresses(group).length > 0} />
+          groupHasAddresses={group => groupAddresses(group).length > 0}
+          groupsError={groups.isError} />
       </div>
     </div>
   )

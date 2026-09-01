@@ -29,7 +29,13 @@ export default function GroupNameModal({ title, initialName, saving, onSubmit, o
           <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
             onClick={onClose}>✕</button>
         </div>
-        <form onSubmit={event => { event.preventDefault(); onSubmit(trimmed) }}>
+        {/* The guard is replayed here: a disabled submit does not stop Enter in every browser,
+            and an empty or unchanged name must not reach the API. */}
+        <form onSubmit={event => {
+          event.preventDefault()
+          if (!submittable) return
+          onSubmit(trimmed)
+        }}>
           <div className="field-h">
             <label htmlFor="contact-group-name">{t('groups.nameLabel')}</label>
             {/* 255 is the column's own bound: refusing it at the keyboard beats refusing it after

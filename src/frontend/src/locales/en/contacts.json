@@ -36,7 +36,8 @@
     "deleted": "Group {{name}} deleted",
     "saveFailed": "Could not save the group",
     "deleteFailed": "Could not delete the group",
-    "addFailed": "Could not add the contacts to the group"
+    "addFailed": "Could not add the contacts to the group",
+    "loadFailed": "Could not load the groups"
   },
   "fields": {
     "nickname": "Nickname",

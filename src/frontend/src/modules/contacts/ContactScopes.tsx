@@ -28,6 +28,8 @@ interface Props {
   onWriteToGroup: (group: ContactGroup) => void
   /** Whether writing to the group would reach anybody — the parent resolves the members. */
   groupHasAddresses: (group: ContactGroup) => boolean
+  /** A refused list is said out loud: an empty section would claim the account holds no group. */
+  groupsError?: boolean
   /** Absent while nothing can be dropped: the rows are then plain navigation. */
   onDropContacts?: (scope: ContactScope, payload: ContactDragPayload) => void
 }
@@ -102,7 +104,7 @@ function ScopeRow({
  */
 export default function ContactScopes({
   scope, total, favorites, groups, onScope, onCreateGroup, onRenameGroup, onDeleteGroup,
-  onWriteToGroup, groupHasAddresses, onDropContacts,
+  onWriteToGroup, groupHasAddresses, groupsError, onDropContacts,
 }: Props) {
   const { t } = useTranslation('contacts')
 
@@ -117,10 +119,11 @@ export default function ContactScopes({
 
       {/* Drawn even with no group at all: the first one is created from here. */}
       <div className="contact-scopes-groups-header">
-        <span>{t('groups.title')}</span>
+        <h2>{t('groups.title')}</h2>
         <button type="button" className="contact-scopes-add" aria-label={t('groups.add')}
           title={t('groups.add')} onClick={onCreateGroup}>+</button>
       </div>
+      {groupsError && <p className="contact-scopes-error">{t('groups.loadFailed')}</p>}
       {groups.map(group => {
         const groupScope: ContactScope = `group:${group.id}`
         const writable = groupHasAddresses(group)
@@ -131,8 +134,9 @@ export default function ContactScopes({
               dropLabel={t('scopes.dropHere')} onScope={onScope} onDropContacts={onDropContacts} />
             {/* A menu rather than an in-place field: the row is already a drop target, and a text
                 box taking a dragover is a conflict nothing needs. */}
+            {/* `auto`: the band scrolls, so the last row's menu would open under the fold. */}
             <DropdownMenu ariaLabel={t('groups.menu', { name: group.name })} className="admin-icon-btn"
-              trigger={<KebabIcon size={14} />}
+              direction="auto" trigger={<KebabIcon size={14} />}
               items={[
                 { label: t('groups.rename'), onSelect: () => onRenameGroup(group) },
                 {
