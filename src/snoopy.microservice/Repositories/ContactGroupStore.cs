@@ -26,16 +26,16 @@ internal sealed class ContactGroupStore(
             .ToListAsync(cancellationToken);
         if (groups.Count == 0) return [];
 
-        var ids = groups.Select(g => g.Id).ToList();
-
         // The frontier between two books lives entirely in this join (décision 2): a MEMBER is a
         // bare UID, so what makes it this user's member is that a contact of THIS user carries it.
         // The UID is tried under both its forms — a card imported as UID:urn:uuid:… stores the
         // prefix, the MEMBER value never does. Written as a filtered cross join rather than a
         // join on a constant, which EF translates badly; the member side is narrowed to this
-        // user's groups first so the table is never swept.
+        // user's groups by the correlated subquery ContactStore uses throughout, never an IN list
+        // MariaDB cannot parametrise.
         var resolved = await (
-            from m in context.ContactGroupMembers.AsNoTracking().Where(m => ids.Contains(m.GroupId))
+            from m in context.ContactGroupMembers.AsNoTracking().Where(m => context.Contacts.Any(
+                g => g.Id == m.GroupId && g.UserId == userId && g.Kind == ContactKinds.Group))
             from c in context.Contacts.AsNoTracking().Individuals().Where(c => c.UserId == userId)
             where c.Uid == m.MemberUid || c.Uid == VCardProjector.UrnUuidPrefix + m.MemberUid
             select new { m.GroupId, MemberId = c.Id, m.Position })
@@ -125,6 +125,8 @@ internal sealed class ContactGroupStore(
             var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
             // Under the lock, so the archive keeps the version stored now, not the one read above.
+            // Assumed gap, as in EditCardAsync: Kind is not re-checked, so a card a DAV PUT turned
+            // into a contact between the find and the lock is still deleted as the group it was.
             if (!await ReloadAsync(row, cancellationToken)) return Result.Failure(ContactStore.NotFound);
             var davName = row.DavName;
 
@@ -220,22 +222,26 @@ internal sealed class ContactGroupStore(
 
     /// <summary>
     /// The whole path of one group-card write (décision 20): rank first, re-read under the lock,
-    /// archive, apply — hash and projection included — and the new rank on the row. The edit
-    /// answering null, or the card it composes, means nothing changed and nothing is written.
+    /// archive, apply — hash and projection included — and the new rank on the row. The body
+    /// answers whether it wrote, and only a write commits: an edit that composes nothing new
+    /// rolls the rank back rather than waking every client of this book for no change.
+    /// Assumed gap, symmetric with ContactStore.UpdateAsync: the reload does not re-check Kind, so
+    /// a card a DAV PUT turned into a contact between the find and the lock is still edited here.
     /// </summary>
-    private Task<Result> EditCardAsync(
-        Guid userId, Contact row, Func<Contact, string?> edit, CancellationToken cancellationToken) =>
-        store.InTransactionAsync<Result>(async () =>
+    private async Task<Result> EditCardAsync(
+        Guid userId, Contact row, Func<Contact, string?> edit, CancellationToken cancellationToken)
+    {
+        var written = await store.InTransactionAsync<Result<bool>>(async () =>
         {
             var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
             // Re-read under the state lock: it, not a card hash, is what makes this
             // read-modify-write a critical section — the race then touches only the row in play.
             if (!await ReloadAsync(row, cancellationToken) || row.VCardRaw is null)
-                return Result.Failure(ContactStore.NotFound);
+                return Result.Failure<bool>(ContactStore.NotFound);
 
             var card = edit(row);
-            if (card is null || card == row.VCardRaw) return Result.Success();
+            if (card is null || card == row.VCardRaw) return Result.Success(false);
 
             await sync.ArchiveAsync(new ContactRevision
             {
@@ -253,8 +259,11 @@ internal sealed class ContactGroupStore(
             row.UpdatedAt = DateTime.UtcNow;
             row.SyncSequence = rank;
             await context.SaveChangesAsync(cancellationToken);
-            return Result.Success();
-        }, outcome => outcome.IsSuccess, cancellationToken);
+            return Result.Success(true);
+        }, outcome => outcome.IsSuccess && outcome.Value, cancellationToken);
+
+        return written.IsSuccess ? Result.Success() : Result.Failure(written.Error);
+    }
 
     /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
     private async Task<bool> ReloadAsync(Contact row, CancellationToken cancellationToken)

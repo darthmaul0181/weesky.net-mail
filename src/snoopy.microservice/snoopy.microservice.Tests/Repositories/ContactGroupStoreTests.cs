@@ -280,6 +280,71 @@ public sealed class ContactGroupStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task AddMembersAsync_WritesEveryMemberOfTheBatchInOneCall()
+    {
+        var first = await GivenAContact("Ada");
+        var second = await GivenAContact("Grace");
+        var group = await GivenAGroup("Amis");
+
+        var added = await Store.AddMembersAsync(User, group, [first, second], CancellationToken.None);
+
+        Assert.True(added.IsSuccess);
+        var card = (await RowOf(group)).VCardRaw!;
+        Assert.Contains($"urn:uuid:{first}", card);
+        Assert.Contains($"urn:uuid:{second}", card);
+        Assert.Equal([first.ToString(), second.ToString()], await MemberUidsOf(group));
+    }
+
+    // A batch straddling both states: the already-held id must fall out of the delta, or the card
+    // grows a second MEMBER line for it — and the whole batch must still cost exactly one rank.
+    [Fact]
+    public async Task AddMembersAsync_OnAMixedBatch_WritesOnlyTheDeltaAndTakesOneRank()
+    {
+        var held = await GivenAContact("Ada");
+        var newcomer = await GivenAContact("Grace");
+        var group = await GivenAGroup("Amis", null, held.ToString());
+        Sync.Invocations.Clear();
+
+        var added = await Store.AddMembersAsync(User, group, [held, newcomer], CancellationToken.None);
+
+        Assert.True(added.IsSuccess);
+        var card = (await RowOf(group)).VCardRaw!;
+        Assert.Equal(1, Occurrences(card, $"urn:uuid:{held}"));
+        Assert.Equal(1, Occurrences(card, $"urn:uuid:{newcomer}"));
+        Assert.Equal([held.ToString(), newcomer.ToString()], await MemberUidsOf(group));
+        Sync.Verify(s => s.NextSequenceAsync(User, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // AddGroupMember prefixes urn:uuid: itself, so a stored UID already carrying it must be
+    // stripped before it is written — or the line names urn:uuid:urn:uuid:… and resolves to nobody.
+    [Fact]
+    public async Task AddMembersAsync_OnAContactWhoseUidCarriesThePrefix_WritesItOnlyOnce()
+    {
+        var bare = Guid.NewGuid().ToString();
+        var member = Guid.NewGuid();
+        Context.Contacts.Add(new Contact
+        {
+            Id = member, UserId = User, Uid = "urn:uuid:" + bare, FirstName = "Ada",
+            UpdatedAt = DateTime.UtcNow
+        });
+        await Context.SaveChangesAsync(CancellationToken.None);
+        var group = await GivenAGroup("Amis");
+
+        var added = await Store.AddMembersAsync(User, group, [member], CancellationToken.None);
+
+        Assert.True(added.IsSuccess);
+        var card = (await RowOf(group)).VCardRaw!;
+        Assert.Contains($"X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:{bare}", card);
+        Assert.DoesNotContain("urn:uuid:urn:uuid:", card);
+        Assert.Equal([bare], await MemberUidsOf(group));
+        // Both forms resolve, so the member the screen shows is the contact that was added.
+        Assert.Equal(member, Assert.Single(Assert.Single(await Store.ListAsync(User, CancellationToken.None)).MemberIds));
+    }
+
+    private static int Occurrences(string card, string value) =>
+        card.Split(value).Length - 1;
+
+    [Fact]
     public async Task AddMembersAsync_TakesARankAndArchives()
     {
         var member = await GivenAContact("Ada");

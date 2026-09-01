@@ -346,6 +346,15 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadGatewayEnveloppe(System.String)">
             <summary>502 carrying the error envelope — anything the mail server refused.</summary>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ApiBaseController.MaxBatch">
+            <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.
+            Here rather than on a controller: <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactsController"/> and
+            <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactGroupsController"/> bound their batches by it, and two spellings of one
+            ceiling would drift.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.RefuseBatch(System.Collections.Generic.IReadOnlyList{System.Guid})">
+            <summary>The one gate every bulk route passes, so none can drift on what they refuse.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.ConnectedAccountError(System.String)">
             <summary>
             Rule 4's status for a failed account resolution — the single place the three are produced:
@@ -615,13 +624,10 @@
             <response code="401">Not authenticated</response>
             <response code="404">No such group for this user</response>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.Refuse(System.Collections.Generic.IReadOnlyList{System.Guid})">
-            <summary>The one gate both member routes pass, so the two cannot drift on what they refuse.
-            Bounded by <see cref="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxBatch"/> — one ceiling, one number.</summary>
-        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.Answer(CSharpFunctionalExtensions.Result)">
-            <summary>The four writes answer alike: 204, or 404 for an id this book does not hold —
-            their only failure, the name having been validated before the store was ever called.</summary>
+            <summary>The four writes answer alike: 204, or 404 for the one failure that means "no such
+            row". Exhaustive rather than "404 or nothing", on ContactsController.Update's model: a
+            reason the store grows later is a refused body, not a missing group.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController">
             <summary>
@@ -745,9 +751,6 @@
             <response code="401">Not authenticated</response>
             <response code="404">No such contact for this user</response>
         </member>
-        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxBatch">
-            <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.</summary>
-        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.DeleteMany(weesky.Snoopy.Microservice.Models.Contacts.BulkContactsRequest,System.Threading.CancellationToken)">
             <summary>
             Deletes a batch. An id this user does not own resolves to nothing and is skipped in silence:
@@ -766,9 +769,6 @@
             <response code="204">Applied, whether or not every id matched</response>
             <response code="400">No id, or more than 200</response>
             <response code="401">Not authenticated</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Refuse(System.Collections.Generic.IReadOnlyList{System.Guid})">
-            <summary>The one gate both bulk routes pass, so the two cannot drift on what they refuse.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxUploadBytes">
             <summary>
@@ -3432,8 +3432,11 @@
         <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.EditCardAsync(System.Guid,weesky.Snoopy.Microservice.Data.Preferences.Contact,System.Func{weesky.Snoopy.Microservice.Data.Preferences.Contact,System.String},System.Threading.CancellationToken)">
             <summary>
             The whole path of one group-card write (décision 20): rank first, re-read under the lock,
-            archive, apply — hash and projection included — and the new rank on the row. The edit
-            answering null, or the card it composes, means nothing changed and nothing is written.
+            archive, apply — hash and projection included — and the new rank on the row. The body
+            answers whether it wrote, and only a write commits: an edit that composes nothing new
+            rolls the rank back rather than waking every client of this book for no change.
+            Assumed gap, symmetric with ContactStore.UpdateAsync: the reload does not re-check Kind, so
+            a card a DAV PUT turned into a contact between the find and the lock is still edited here.
             </summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.ReloadAsync(weesky.Snoopy.Microservice.Data.Preferences.Contact,System.Threading.CancellationToken)">

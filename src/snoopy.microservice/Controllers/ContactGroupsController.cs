@@ -114,7 +114,7 @@ public sealed class ContactGroupsController(IContactGroupStore store) : ApiBaseC
     public async Task<ActionResult> AddMembers(
         Guid id, ContactGroupMembersRequest request, CancellationToken cancellationToken)
     {
-        if (Refuse(request?.ContactIds) is { } refusal) return refusal;
+        if (RefuseBatch(request?.ContactIds) is { } refusal) return refusal;
 
         var saved = await store.AddMembersAsync(
             AuthenticatedUser.WebmailUid, id, request!.ContactIds!, cancellationToken);
@@ -137,25 +137,18 @@ public sealed class ContactGroupsController(IContactGroupStore store) : ApiBaseC
     public async Task<ActionResult> RemoveMembers(
         Guid id, ContactGroupMembersRequest request, CancellationToken cancellationToken)
     {
-        if (Refuse(request?.ContactIds) is { } refusal) return refusal;
+        if (RefuseBatch(request?.ContactIds) is { } refusal) return refusal;
 
         var saved = await store.RemoveMembersAsync(
             AuthenticatedUser.WebmailUid, id, request!.ContactIds!, cancellationToken);
         return Answer(saved);
     }
 
-    /// <summary>The one gate both member routes pass, so the two cannot drift on what they refuse.
-    /// Bounded by <see cref="ContactsController.MaxBatch"/> — one ceiling, one number.</summary>
-    private ActionResult? Refuse(IReadOnlyList<Guid>? ids) => ids switch
-    {
-        null or { Count: 0 } => BadRequestEnveloppe("At least one contact is required"),
-        { Count: > ContactsController.MaxBatch } =>
-            BadRequestEnveloppe($"No more than {ContactsController.MaxBatch} contacts at a time"),
-        _ => null,
-    };
-
-    /// <summary>The four writes answer alike: 204, or 404 for an id this book does not hold —
-    /// their only failure, the name having been validated before the store was ever called.</summary>
-    private ActionResult Answer(Result saved) =>
-        saved.IsSuccess ? NoContent() : NotFoundEnveloppe(saved.Error);
+    /// <summary>The four writes answer alike: 204, or 404 for the one failure that means "no such
+    /// row". Exhaustive rather than "404 or nothing", on ContactsController.Update's model: a
+    /// reason the store grows later is a refused body, not a missing group.</summary>
+    private ActionResult Answer(Result saved) => saved.IsSuccess ? NoContent()
+        : saved.Error == ContactStore.NotFound
+            ? NotFoundEnveloppe(saved.Error)
+            : BadRequestEnveloppe(saved.Error);
 }

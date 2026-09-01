@@ -182,7 +182,7 @@ public sealed class ContactGroupsControllerTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(ContactsController.MaxBatch + 1)]
+    [InlineData(ApiBaseController.MaxBatch + 1)]
     public async Task Members_RefusesABatchThatIsEmptyOrOverTheCap(int size)
     {
         var ids = Enumerable.Range(0, size).Select(_ => Guid.NewGuid()).ToArray();
