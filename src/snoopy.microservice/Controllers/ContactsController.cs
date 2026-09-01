@@ -1,4 +1,4 @@
-using CSharpFunctionalExtensions;
+﻿using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
@@ -192,9 +192,6 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
         return saved.IsSuccess ? NoContent() : NotFoundEnveloppe(saved.Error);
     }
 
-    /// <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.</summary>
-    private const int MaxBatch = 200;
-
     /// <summary>
     /// Deletes a batch. An id this user does not own resolves to nothing and is skipped in silence:
     /// a batch may not half-fail, and a 404 on a foreign id would confirm that it exists.
@@ -211,9 +208,10 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     public async Task<ActionResult> DeleteMany(
         BulkContactsRequest request, CancellationToken cancellationToken)
     {
-        if (Refuse(request?.Ids) is { } refusal) return refusal;
+        if (RefuseBatch(request?.Ids) is { } refusal) return refusal;
 
-        await store.DeleteManyAsync(AuthenticatedUser.WebmailUid, request!.Ids, cancellationToken);
+        await store.DeleteManyAsync(
+            AuthenticatedUser.WebmailUid, request!.Ids, includeGroups: false, cancellationToken);
         return NoContent();
     }
 
@@ -230,20 +228,12 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     public async Task<ActionResult> SetFavoriteMany(
         BulkFavoriteRequest request, CancellationToken cancellationToken)
     {
-        if (Refuse(request?.Ids) is { } refusal) return refusal;
+        if (RefuseBatch(request?.Ids) is { } refusal) return refusal;
 
         await store.SetFavoriteManyAsync(
             AuthenticatedUser.WebmailUid, request!.Ids, request.IsFavorite, cancellationToken);
         return NoContent();
     }
-
-    /// <summary>The one gate both bulk routes pass, so the two cannot drift on what they refuse.</summary>
-    private ActionResult? Refuse(IReadOnlyList<Guid>? ids) => ids switch
-    {
-        null or { Count: 0 } => BadRequestEnveloppe("At least one contact is required"),
-        { Count: > MaxBatch } => BadRequestEnveloppe($"No more than {MaxBatch} contacts at a time"),
-        _ => null,
-    };
 
     /// <summary>
     /// What bounds the request. A constant rather than configuration, so the attribute can carry

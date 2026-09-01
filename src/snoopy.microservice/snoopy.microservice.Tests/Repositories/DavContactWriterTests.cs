@@ -87,6 +87,23 @@ public sealed class DavContactWriterTests : IDisposable
     }
 
     [Fact]
+    public async Task SecondPutOfAGroupCard_LeavesOneRowPerMember()
+    {
+        // The FN differs between the two PUTs on purpose: a byte-identical replay takes no rank at
+        // all (AByteIdenticalRePut_TakesNoRankAndKeepsItsEtag above) and would never exercise the
+        // projection's second pass — the one that must clear the first PUT's member rows before
+        // writing its own, rather than doubling them against the UNIQUE (group_id, member_uid).
+        var first = await Writer.PutAsync(UserId, "g.vcf", GroupCard("Amis"), CancellationToken.None);
+        Assert.Equal(DavWriteStatus.Created, first.Status);
+
+        var second = await Writer.PutAsync(UserId, "g.vcf", GroupCard("Amis renommés"), CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Replaced, second.Status);
+        Assert.Equal(2, await Context.ContactGroupMembers.CountAsync());
+        Assert.Equal(ContactKinds.Group, (await RowOf("g.vcf")).Kind);
+    }
+
+    [Fact]
     public async Task PuttingOverATombstonedName_LiftsItInTheSameTransaction()
     {
         await Writer.PutAsync(UserId, "a.vcf", ValidCard("u1"), CancellationToken.None);
@@ -1018,6 +1035,13 @@ public sealed class DavContactWriterTests : IDisposable
 
     private static string ValidCard(string uid, string fn = "Ada") =>
         $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nN:Lovelace;{fn};;;\r\nFN:{fn}\r\nEND:VCARD\r\n";
+
+    private static string GroupCard(string fn) =>
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g1\r\n" +
+        $"FN:{fn}\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n" +
+        "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:11111111-1111-1111-1111-111111111111\r\n" +
+        "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:22222222-2222-2222-2222-222222222222\r\n" +
+        "END:VCARD\r\n";
 
     private static string CardWithNote(string note) =>
         $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u1\r\nFN:Ada\r\nNOTE:{note}\r\nEND:VCARD\r\n";

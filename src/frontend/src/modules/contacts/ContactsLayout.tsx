@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api.js'
@@ -18,14 +18,32 @@ import ContactEditView from './ContactEditView'
 import { useContactPhotoUrl } from './useContactPhotoUrl'
 import ContactList from './ContactList'
 import { displayNameOf } from './contactName'
-import ContactScopes, { type ContactScope } from './ContactScopes'
+import { groupOptionsOf } from './contactSearch'
+import ContactScopes, { groupIdOf, type ContactScope } from './ContactScopes'
 import ContactsTransfer from './ContactsTransfer'
+import GroupNameModal from './GroupNameModal'
 import type { Contact, ContactDraft } from './contactTypes'
+import type { ContactGroup } from './contactGroupTypes'
 import {
-  useContact, useContacts, useCreateContact, useDeleteContact, useDeleteContacts,
-  useSetContactFavorite, useSetContactsFavorite, useUpdateContact,
+  useAddContactGroupMembers, useContact, useContacts, useContactGroups, useCreateContact,
+  useCreateContactGroup, useDeleteContact, useDeleteContactGroup, useDeleteContacts,
+  useRemoveContactGroupMembers, useRenameContactGroup, useSetContactFavorite,
+  useSetContactsFavorite, useUpdateContact,
 } from './queries'
 import type { ContactDragPayload } from './dragContacts'
+
+/** The scope the URL names. Anything else — a stale name, a truncated value — is the whole book,
+    the fallback an obsolete `?id=` already gets. */
+function scopeOf(raw: string | null): ContactScope {
+  if (raw === 'favorites') return 'favorites'
+  return raw?.startsWith('group:') ? raw as ContactScope : 'all'
+}
+
+/** Every navigation inside the module asks the same question — does the scope survive? — and the
+    answer is the same for favourites and for a group: everything but `all` stays in the URL. */
+function paramsForScope(scope: ContactScope, extra?: Record<string, string>) {
+  return { ...(scope === 'all' ? {} : { scope }), ...extra }
+}
 
 /**
  * The contacts module's three columns. The shell hands a module one outlet, so the module builds
@@ -42,10 +60,20 @@ export default function ContactsLayout() {
 
   /* The composer is a route, not a dialog, so writing to a contact is a navigation carrying a
      seed — the shape a reply and a mailto: already arrive in. `backTo` sends the ✕ and the leave
-     guard back to this fiche instead of to a mailbox the reader never opened. */
-  const writeTo = (address: string) => navigate('/mail/compose', {
-    state: { seed: newMessageSeed([address]), backTo: `/contacts?id=${selectedId}` },
+     guard back to where the writing started — a fiche, or the group it was written to — instead of
+     to a mailbox the reader never opened. */
+  const writeTo = (addresses: string | string[]) => navigate('/mail/compose', {
+    state: {
+      seed: newMessageSeed(Array.isArray(addresses) ? addresses : [addresses]),
+      backTo: backToHere(),
+    },
   })
+
+  function backToHere() {
+    const query = new URLSearchParams(
+      paramsForScope(scope, selectedId ? { id: selectedId } : {})).toString()
+    return query ? `/contacts?${query}` : '/contacts'
+  }
   const { toasts, addToast, removeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
   const {
@@ -57,6 +85,12 @@ export default function ContactsLayout() {
   const deleteMany = useDeleteContacts()
   const setFavorite = useSetContactFavorite()
   const setManyFavorite = useSetContactsFavorite()
+  const groups = useContactGroups()
+  const createGroup = useCreateContactGroup()
+  const renameGroup = useRenameContactGroup()
+  const deleteGroup = useDeleteContactGroup()
+  const addMembers = useAddContactGroupMembers()
+  const removeMembers = useRemoveContactGroupMembers()
 
   // The editor takes the two content columns and leaves the band standing, exactly as the
   // composer does inside the mail module. Two routes, one layout — not a layout of its own.
@@ -64,13 +98,24 @@ export default function ContactsLayout() {
   const editing = useMatch('/contacts/:id/edit') != null
   const inEditor = creating || editing
 
-  const scope: ContactScope = params.get('scope') === 'favorites' ? 'favorites' : 'all'
+  const scope: ContactScope = scopeOf(params.get('scope'))
   const selectedId = params.get('id')
+  const openGroupId = groupIdOf(scope)
+  const openGroup = openGroupId ? groups.data?.find(one => one.id === openGroupId) ?? null : null
+  // A refused list answers the question too — the scope cannot resolve — where waiting on `data`
+  // alone would hold the column on its loading line for the rest of the session.
+  const groupsSettled = groups.data != null || groups.isError
+  // The list is filtered on nothing until the group resolves, and an unfiltered book under a group
+  // scope would read as the group holding everybody.
+  const groupPending = openGroupId != null && !groupsSettled
 
   const phone = useViewport() === 'phone'
   const drawer = useContextDrawer()
   const [listWidth, setListWidth] = usePaneSize('contacts.split.right', 380, 240)
   const [pendingDelete, setPendingDelete] = useState<Contact | null>(null)
+  const [groupModal, setGroupModal] =
+    useState<{ mode: 'create' } | { mode: 'rename'; group: ContactGroup } | null>(null)
+  const [pendingGroupDelete, setPendingGroupDelete] = useState<ContactGroup | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
 
@@ -94,7 +139,26 @@ export default function ContactsLayout() {
   const total = contacts?.length ?? 0
   const favorites = contacts?.filter(contact => contact.isFavorite).length ?? 0
 
-  const scoped = (contacts ?? []).filter(contact => scope !== 'favorites' || contact.isFavorite)
+  // A Set rather than `includes`: a group is a membership test run once per contact in the book.
+  const members = openGroup ? new Set(openGroup.memberIds) : null
+  const scoped = groupPending ? [] : (contacts ?? []).filter(contact =>
+    scope === 'favorites' ? contact.isFavorite : members ? members.has(contact.id) : true)
+
+  /** The addresses writing to a group would actually reach — a member the book no longer holds,
+      or one carrying no address, brings nothing. Resolved by the function the composer's field
+      calls, so the menu entry and the dropdown row cannot disagree about who a group holds.
+      Keyed rather than scanned: every group row asks this on every render. */
+  // Same guard as the composer's: a book still in flight is not an empty one, so no group row
+  // should claim addresses it hasn't checked yet.
+  const groupOptions = useMemo(
+    () => new Map(contacts
+      ? groupOptionsOf(groups.data ?? [], contacts).map(one => [one.id, one])
+      : []),
+    [groups.data, contacts])
+  const groupAddresses = (group: ContactGroup) => groupOptions.get(group.id)?.addresses ?? []
+  // The groups holding one contact — the card's chips.
+  const groupsOf = (contactId: string) =>
+    groups.data?.filter(group => group.memberIds.includes(contactId)) ?? []
   const selected = contacts?.find(contact => contact.id === selectedId) ?? null
   const edited = routeId ? contacts?.find(contact => contact.id === routeId) ?? null : null
   // An id the loaded book does not resolve is a target that no longer exists, never a create: an
@@ -123,25 +187,38 @@ export default function ContactsLayout() {
     navigate('/contacts', { replace: true })
   }, [missing, addToast, navigate, t])
 
+  // The scope falls back, the open card does not: a fiche is a selection of its own, and one that
+  // vanished because a group did would read as the contact having gone with it. Read off the URL
+  // rather than closed over, so the callback stays stable — `backToList`'s reason.
+  const fallBackToAll = useCallback(() => {
+    setParams(previous => {
+      const id = previous.get('id')
+      return paramsForScope('all', id ? { id } : {})
+    }, { replace: true })
+  }, [setParams])
+
+  // A scope naming a group nobody holds any more — deleted from another device, a foreign GUID
+  // pasted into the URL — falls back to the whole book once the list has answered, the fallback an
+  // obsolete `?id=` already gets. Replace: Back must not bounce off the dead scope.
+  useEffect(() => {
+    if (openGroupId != null && groupsSettled && openGroup == null) fallBackToAll()
+  }, [openGroupId, groupsSettled, openGroup, fallBackToAll])
+
   function changeScope(next: ContactScope) {
     // Dropping the selected id: a contact filtered out of the new scope must not stay open, the
     // same reason choosing a folder drops the open message's uid.
-    setParams(next === 'favorites' ? { scope: next } : {})
+    setParams(paramsForScope(next))
   }
 
   function select(id: string) {
-    setParams(scope === 'favorites' ? { scope, id } : { id })
+    setParams(paramsForScope(scope, { id }))
   }
 
   // Dropping the open contact is what puts the list back on screen where the card had replaced it.
   // The scope is read off the URL rather than closed over, so the callback stays stable and the
   // card's Escape listener is bound once instead of on every render.
   const backToList = useCallback(() => {
-    setParams(previous => {
-      const next: Record<string, string> = {}
-      if (previous.get('scope') === 'favorites') next.scope = 'favorites'
-      return next
-    })
+    setParams(previous => paramsForScope(scopeOf(previous.get('scope'))))
   }, [setParams])
 
   async function save(draft: ContactDraft) {
@@ -179,7 +256,7 @@ export default function ContactsLayout() {
     try {
       await deleteContact.mutateAsync(pendingDelete.id)
       // The open card must not survive its contact.
-      if (selectedId === pendingDelete.id) setParams(scope === 'favorites' ? { scope } : {})
+      if (selectedId === pendingDelete.id) setParams(paramsForScope(scope))
       addToast(t('layout.deleted', { name }), 'success')
     } catch (error) {
       addToast(apiErrorMessage(error, t('layout.deleteFailed')), 'error')
@@ -196,13 +273,70 @@ export default function ContactsLayout() {
     })
   }
 
-  // The drop adds the favourite and never removes it: a gesture that added or removed per row
-  // would land a different result on each contact it carried.
+  // The drop adds — the favourite, or the membership — and never removes: a gesture that added or
+  // removed per row would land a different result on each contact it carried.
   function dropOnScope(target: ContactScope, payload: ContactDragPayload) {
+    const groupId = groupIdOf(target)
+    if (groupId) {
+      addMembers.mutate({ id: groupId, contactIds: payload.ids }, {
+        onError: error => addToast(apiErrorMessage(error, t('groups.addFailed')), 'error'),
+      })
+      return
+    }
     if (target !== 'favorites') return
     setManyFavorite.mutate({ ids: payload.ids, isFavorite: true }, {
       onError: error => addToast(apiErrorMessage(error, t('layout.favouriteFailed')), 'error'),
     })
+  }
+
+  // No dialog: a group's membership is what a drop restores, never a loss the way deleting the
+  // contact itself is.
+  function removeFromOpenGroup(ids: string[]) {
+    if (!openGroup) return
+    removeMembers.mutate({ id: openGroup.id, contactIds: ids }, {
+      onError: error => addToast(apiErrorMessage(error, t('groups.removeFailed')), 'error'),
+    })
+  }
+
+  function removeFromGroup(groupId: string) {
+    if (!selected) return
+    removeMembers.mutate({ id: groupId, contactIds: [selected.id] }, {
+      onError: error => addToast(apiErrorMessage(error, t('groups.removeFailed')), 'error'),
+    })
+  }
+
+  async function submitGroupName(name: string) {
+    if (!groupModal) return
+    try {
+      if (groupModal.mode === 'create') {
+        await createGroup.mutateAsync(name)
+        addToast(t('groups.created', { name }), 'success')
+      } else {
+        await renameGroup.mutateAsync({ id: groupModal.group.id, name })
+        addToast(t('groups.renamed', { name }), 'success')
+      }
+      setGroupModal(null)
+    } catch (error) {
+      // The dialog stays open carrying what was typed: a refusal that closed it would make the
+      // user retype the name to find out whether it was the name that was refused.
+      addToast(apiErrorMessage(error, t('groups.saveFailed')), 'error')
+    }
+  }
+
+  async function confirmGroupDelete() {
+    if (!pendingGroupDelete) return
+    const { id, name } = pendingGroupDelete
+    try {
+      await deleteGroup.mutateAsync(id)
+      // The open scope must not survive its group; the fallback effect only fires once the
+      // refetched list has landed.
+      if (openGroupId === id) fallBackToAll()
+      addToast(t('groups.deleted', { name }), 'success')
+    } catch (error) {
+      addToast(apiErrorMessage(error, t('groups.deleteFailed')), 'error')
+    } finally {
+      setPendingGroupDelete(null)
+    }
   }
 
   function toggleFavorite(contact: Contact) {
@@ -230,8 +364,14 @@ export default function ContactsLayout() {
         {!drawer.inDrawer && transfer('btn btn-primary column-actions-square')}
       </div>
       <div className="contacts-scopes-scroll">
-        <ContactScopes scope={scope} total={total} favorites={favorites} onScope={changeScope}
-          onDropContacts={dropOnScope} />
+        <ContactScopes scope={scope} total={total} favorites={favorites}
+          groups={groups.data ?? []} onScope={changeScope} onDropContacts={dropOnScope}
+          onCreateGroup={() => setGroupModal({ mode: 'create' })}
+          onRenameGroup={group => setGroupModal({ mode: 'rename', group })}
+          onDeleteGroup={setPendingGroupDelete}
+          onWriteToGroup={group => writeTo(groupAddresses(group))}
+          groupHasAddresses={group => groupAddresses(group).length > 0}
+          groupsError={groups.isError} />
       </div>
     </div>
   )
@@ -267,14 +407,17 @@ export default function ContactsLayout() {
               and coming back would throw both away. */}
           <div className={`contacts-list${phone && selectedId ? ' is-hidden' : ''}`}
             style={phone ? undefined : { width: listWidth }} data-testid="contact-list">
-            {isLoading && <p className="contacts-empty">{t('layout.loading')}</p>}
+            {/* A group scope waits for its group too: filtered on nothing, the list would say the
+                book is empty for as long as that query is in flight. */}
+            {(isLoading || groupPending) && <p className="contacts-empty">{t('layout.loading')}</p>}
             {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
-            {contacts && (
+            {contacts && !groupPending && (
               <ContactList contacts={scoped} selectedId={selectedId} scope={scope} onSelect={select}
                 leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
                 actions={drawer.inDrawer ? transfer('selection-btn') : null}
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
                 onDeleteMany={deleteSelection}
+                onRemoveFromGroup={openGroup ? removeFromOpenGroup : undefined}
                 onEdit={id => navigate(`/contacts/${id}/edit`)} />
             )}
           </div>
@@ -290,7 +433,9 @@ export default function ContactsLayout() {
                 onBack={phone && !pendingDelete ? backToList : undefined}
                 bottomActions={phone}
                 onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)}
-                onWrite={writeTo} />
+                onWrite={writeTo}
+                groups={selected ? groupsOf(selected.id) : undefined}
+                onRemoveFromGroup={removeFromGroup} />
             </div>
           )}
         </div>
@@ -317,6 +462,22 @@ export default function ContactsLayout() {
         <DeleteConfirmModal entityLabel={displayNameOf(pendingDelete)}
           loading={deleteContact.isPending}
           onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />
+      )}
+
+      {groupModal && (
+        <GroupNameModal
+          title={t(groupModal.mode === 'create' ? 'groups.createTitle' : 'groups.renameTitle')}
+          initialName={groupModal.mode === 'rename' ? groupModal.group.name : ''}
+          saving={createGroup.isPending || renameGroup.isPending}
+          onSubmit={submitGroupName} onClose={() => setGroupModal(null)} />
+      )}
+
+      {/* The body says what the deletion leaves behind: a group is a view onto contacts, and
+          nobody should have to guess whether they are about to lose them. */}
+      {pendingGroupDelete && (
+        <DeleteConfirmModal message={t('groups.deleteBody', { name: pendingGroupDelete.name })}
+          loading={deleteGroup.isPending}
+          onConfirm={confirmGroupDelete} onClose={() => setPendingGroupDelete(null)} />
       )}
 
       {/* Never over the editor: that surface already is the create form, and the button would

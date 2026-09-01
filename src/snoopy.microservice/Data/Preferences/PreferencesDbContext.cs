@@ -46,6 +46,13 @@ public class PreferencesDbContext : DbContext
             .HasOne<Contact>().WithMany().HasForeignKey(a => a.ContactId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ContactPhoto>()
             .HasOne<Contact>().WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
+        // The key is the identity, not the rank: removing a member renumbers the survivors, and a
+        // survivor whose key moved would leave the tracker as a Deleted+Added pair EF orders
+        // INSERT-before-DELETE — the unique index on the identity then fires. Keyed this way the
+        // pair merges into one Modified of position, like contact_emails already does.
+        modelBuilder.Entity<ContactGroupMember>().HasKey(m => new { m.GroupId, m.MemberUid });
+        modelBuilder.Entity<ContactGroupMember>()
+            .HasOne<Contact>().WithMany().HasForeignKey(m => m.GroupId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
 
@@ -161,6 +168,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<ContactAddress> ContactAddresses { get; set; }
 
     public DbSet<ContactPhoto> ContactPhotos { get; set; }
+
+    public DbSet<ContactGroupMember> ContactGroupMembers { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
 

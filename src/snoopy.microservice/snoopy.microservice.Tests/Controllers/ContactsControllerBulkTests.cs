@@ -25,7 +25,7 @@ public sealed class ContactsControllerBulkTests
     [Fact]
     public async Task DeleteMany_AnswersNoContentAndPassesTheBatchThrough()
     {
-        _store.Setup(s => s.DeleteManyAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.DeleteManyAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
         var controller = CreateController();
         var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
@@ -33,7 +33,7 @@ public sealed class ContactsControllerBulkTests
         var result = await controller.DeleteMany(new BulkContactsRequest { Ids = ids }, default);
 
         Assert.IsType<NoContentResult>(result);
-        _store.Verify(s => s.DeleteManyAsync(It.IsAny<Guid>(), It.Is<IReadOnlyList<Guid>>(v => v.Count == 2), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteManyAsync(It.IsAny<Guid>(), It.Is<IReadOnlyList<Guid>>(v => v.Count == 2), false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Rien à supprimer n'est pas un succès muet : le client a envoyé une requête qui ne veut rien dire.
@@ -62,7 +62,7 @@ public sealed class ContactsControllerBulkTests
     [Fact]
     public async Task DeleteMany_AnswersNoContentWhenNothingMatched()
     {
-        _store.Setup(s => s.DeleteManyAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.DeleteManyAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
         var controller = CreateController();
 

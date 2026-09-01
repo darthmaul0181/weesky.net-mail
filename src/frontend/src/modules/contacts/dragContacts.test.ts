@@ -36,4 +36,10 @@ describe('canDropIntoScope', () => {
     expect(canDropIntoScope('all')).toBe(false)
     expect(canDropIntoScope('favorites')).toBe(true)
   })
+
+  // Un groupe est une cible par construction : la fonction ne le nomme pas, et ce test épingle
+  // qu'elle n'a pas besoin de le nommer.
+  it('accepts a group scope without a clause of its own', () => {
+    expect(canDropIntoScope('group:abc')).toBe(true)
+  })
 })

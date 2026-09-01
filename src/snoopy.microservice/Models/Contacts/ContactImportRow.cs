@@ -7,6 +7,8 @@ namespace weesky.Snoopy.Microservice.Models.Contacts;
 /// verbatim, with the <c>Uid</c> it declares as the merge key tried before the address and the
 /// name — <b>or</b> <c>Write</c>, the columns to compose one from. Never a UID of our making: the
 /// identity a client synchronises on is the card's or the store's, never a reader's.
+/// <c>IsGroup</c> is the card's own KIND, and it changes how the row resolves: a group is matched
+/// on its UID alone, never on a name or an address (décision 19). A CSV never sets it.
 /// </summary>
 public sealed record ContactImportRow(
     int Line,
@@ -17,4 +19,5 @@ public sealed record ContactImportRow(
     IReadOnlyList<string> Addresses,
     string? VCard,
     string? Uid,
-    ContactWrite? Write = null);
+    ContactWrite? Write = null,
+    bool IsGroup = false);

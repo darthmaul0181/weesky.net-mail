@@ -1,3 +1,5 @@
+using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.Contacts;
 using Xunit;
@@ -329,5 +331,53 @@ public sealed class VCardProjectorTests
             "EMAIL;TYPE=INTERNET:john@work.example\r\nEND:VCARD\r\n";
 
         Assert.Equal("john@work.example", VCardProjector.Project(card).DisplayName);
+    }
+
+    [Theory] // les deux dialectes de groupe se lisent, valeur insensible à la casse
+    [InlineData("KIND:group")]
+    [InlineData("X-ADDRESSBOOKSERVER-KIND:group")]
+    [InlineData("X-ADDRESSBOOKSERVER-KIND:GROUP")]
+    public void Project_ReadsBothGroupDialects(string kindLine)
+    {
+        var card = $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g1\r\nFN:Amis\r\nN:;;;;\r\n{kindLine}\r\n" +
+            "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\nEND:VCARD\r\n";
+        var p = VCardProjector.Project(card);
+        Assert.Equal(ContactKinds.Group, p.Kind);
+        Assert.Equal([new ProjectedMember("m1", 0)], p.Members);
+    }
+
+    [Fact] // les formes de valeur d'un MEMBER : préfixe, UID nu, autre schéma, doublon, trop long
+    public void Project_MemberValueFormsReadWide()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:URN:UUID:a\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:a\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:b\r\n"
+            + $"X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:{new string('x', 300)}\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:mailto:c@d.e\r\n"
+            + "END:VCARD\r\n";
+        var p = VCardProjector.Project(card);
+        Assert.Equal(ContactKinds.Group, p.Kind);
+        Assert.Equal([new ProjectedMember("a", 0), new ProjectedMember("b", 2),
+            new ProjectedMember("mailto:c@d.e", 4)], p.Members);
+    }
+
+    [Fact] // un AGENT imbriqué porte ses propres KIND et MEMBER : ils ne fuient pas au-dehors
+    public void Project_NestedAgentCardDoesNotLeakKindOrMember()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:o\r\nFN:Outer\r\nAGENT:\r\n"
+            + "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Inner\r\nKIND:group\r\n"
+            + "MEMBER:urn:uuid:x\r\nEND:VCARD\r\nEND:VCARD\r\n";
+        var p = VCardProjector.Project(card);
+        Assert.Equal(ContactKinds.Individual, p.Kind);
+        Assert.Empty(p.Members);
+    }
+
+    [Fact] // une fiche ordinaire ne porte ni kind de groupe ni membre
+    public void Project_IndividualCardHasNoMembers()
+    {
+        var p = VCardProjector.Project("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:X\r\nEND:VCARD\r\n");
+        Assert.Equal(ContactKinds.Individual, p.Kind);
+        Assert.Empty(p.Members);
     }
 }

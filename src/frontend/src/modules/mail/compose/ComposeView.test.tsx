@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   saveDraft: vi.fn(),
   deleteMessages: vi.fn(),
   getContacts: vi.fn(),
+  getContactGroups: vi.fn(),
   getPreferences: vi.fn(),
   createContact: vi.fn(),
   deleteContact: vi.fn(),
@@ -30,7 +31,8 @@ vi.mock('../../../api.js', () => ({
   api: {
     sendMessage: mocks.sendMessage, deleteAttachment: mocks.deleteAttachment,
     saveDraft: mocks.saveDraft, deleteMessages: mocks.deleteMessages,
-    getContacts: mocks.getContacts, getPreferences: mocks.getPreferences,
+    getContacts: mocks.getContacts, getContactGroups: mocks.getContactGroups,
+    getPreferences: mocks.getPreferences,
     createContact: mocks.createContact, deleteContact: mocks.deleteContact,
   },
   uploadAttachment: mocks.uploadAttachment,
@@ -147,6 +149,7 @@ beforeEach(() => {
   mocks.deleteMessages.mockResolvedValue(undefined)
   mocks.saveDraft.mockResolvedValue({ uid: 7, folderPath: 'Drafts' })
   mocks.getContacts.mockResolvedValue({ contacts: [bruno] })
+  mocks.getContactGroups.mockResolvedValue({ groups: [] })
   // Capture off by default: every test outside its own describe sends to addresses the book does
   // not hold, and would otherwise assert against a composer quietly creating contacts.
   prefs = { 'contacts.captureRecipients': 'false' }
@@ -236,6 +239,60 @@ describe('ComposeView', () => {
       // Emptied before the next field, so each assertion sees only its own dropdown.
       fireEvent.change(input, { target: { value: '' } })
     }
+  })
+
+  // The groups are read here too, and handed to the same three fields — a prop dropped from one
+  // of them is exactly what a To-only test misses.
+  it('offers the account’s groups in To, Cc and Bcc alike', async () => {
+    mocks.getContactGroups.mockResolvedValue({ groups: [{ id: 'g1', name: 'Team', memberIds: ['b'] }] })
+    renderCompose()
+    fireEvent.click(screen.getByRole('button', { name: 'Cc' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bcc' }))
+
+    for (const label of ['To', 'Cc', 'Bcc']) {
+      const input = screen.getByLabelText(label)
+      fireEvent.change(input, { target: { value: 'tea' } })
+
+      const field = within(input.closest('.recipients-field') as HTMLElement)
+      expect(await field.findByRole('option', { name: /Team/ })).toHaveTextContent('1 member')
+
+      fireEvent.change(input, { target: { value: '' } })
+    }
+  })
+
+  it('expands a picked group into one token per member', async () => {
+    mocks.getContactGroups.mockResolvedValue({ groups: [{ id: 'g1', name: 'Team', memberIds: ['b'] }] })
+    renderCompose()
+
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: 'tea' } })
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /Team/ }))
+
+    expect(screen.getByRole('button', { name: 'Remove Bruno Mertens' })).toBeInTheDocument()
+  })
+
+  // Never inserted in silence (decision 15): the composer's own notifier is the road that
+  // announcement takes, which is what makes this the wiring's only visible seam.
+  it('says so rather than adding nothing when a group resolves to nobody', async () => {
+    mocks.getContactGroups.mockResolvedValue({ groups: [{ id: 'g2', name: 'Ghosts', memberIds: ['gone'] }] })
+    const { onNotify } = renderCompose()
+
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: 'gho' } })
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /Ghosts/ }))
+
+    expect(onNotify).toHaveBeenCalledWith('The group Ghosts has no address to write to', 'error')
+  })
+
+  // A book still in flight is not an empty one: rendering its groups as options would let a click
+  // on a group row report `toast.emptyGroup` on a carnet that simply hasn't answered yet.
+  it('offers no group suggestion while the book has not resolved', async () => {
+    mocks.getContacts.mockReturnValue(new Promise(() => {}))
+    mocks.getContactGroups.mockResolvedValue({ groups: [{ id: 'g1', name: 'Team', memberIds: ['b'] }] })
+    renderCompose()
+
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: 'tea' } })
+
+    await waitFor(() => expect(mocks.getContactGroups).toHaveBeenCalled())
+    expect(screen.queryByRole('listbox')).toBeNull()
   })
 
   it('enables Send on a valid recipient and disables it again on an invalid one', () => {

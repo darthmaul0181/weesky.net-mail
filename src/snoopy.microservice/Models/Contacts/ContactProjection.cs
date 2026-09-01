@@ -18,6 +18,13 @@ public sealed record ProjectedAddress(
 public sealed record ProjectedPhoto(string MediaType, byte[] Bytes);
 
 /// <summary>
+/// One MEMBER line of a group card: <see cref="MemberUid"/> is the referenced contact's UID with
+/// any <c>urn:uuid:</c> prefix removed, <see cref="Position"/> its rank among the card's MEMBER
+/// lines — a dropped member leaves its rank to the next one.
+/// </summary>
+public sealed record ProjectedMember(string MemberUid, int Position);
+
+/// <summary>
 /// The projection of one stored vCard — everything the database columns derive from the card.
 /// Produced by <c>VCardProjector</c>, the read half of the total re-projection cycle.
 /// </summary>
@@ -29,4 +36,6 @@ public sealed record ContactProjection(
     IReadOnlyList<ProjectedEmail> Addresses,
     IReadOnlyList<ProjectedPhone> Phones,
     IReadOnlyList<ProjectedAddress> PostalAddresses,
-    ProjectedPhoto? Photo);
+    ProjectedPhoto? Photo,
+    string Kind,
+    IReadOnlyList<ProjectedMember> Members);

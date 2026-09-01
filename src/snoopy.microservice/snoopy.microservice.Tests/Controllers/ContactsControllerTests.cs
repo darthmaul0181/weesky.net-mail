@@ -5,10 +5,12 @@ using Moq;
 using System.Text;
 using System.Text.Json;
 using weesky.Snoopy.Microservice.Controllers;
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -681,6 +683,35 @@ public sealed class ContactsControllerTests
 
         var foreign = await CreateController().Get(Guid.NewGuid(), CancellationToken.None);
         Assert.IsType<NotFoundObjectResult>(foreign.Result);
+    }
+
+    // Wired to a real store rather than a double: what makes a group answer 404 is the store's
+    // kind clause, and a mock told to answer null would only assert the mapping already above.
+    [Fact]
+    public async Task Get_OnAGroupCard_Returns404()
+    {
+        var db = Guid.NewGuid().ToString();
+        var group = Guid.NewGuid();
+        await using (var context = new PreferencesTestDbContext(db))
+        {
+            context.Contacts.Add(new Contact
+            {
+                Id = group, UserId = Uid, Uid = group.ToString(), Kind = ContactKinds.Group,
+                DisplayName = "Amis", VCardRaw = "BEGIN:VCARD\r\nVERSION:3.0\r\nEND:VCARD\r\n",
+                CardHash = "h", DavName = $"{group}.vcf", UpdatedAt = DateTime.UtcNow
+            });
+            await context.SaveChangesAsync(CancellationToken.None);
+        }
+
+        var controller = new ContactsController(new ContactStore(
+            new PreferencesTestDbContext(db), ContactStoreTestFactory.NewSync().Object))
+        {
+            ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com", Uid)
+        };
+
+        var result = await controller.Get(group, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
     [Fact]

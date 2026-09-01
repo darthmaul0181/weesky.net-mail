@@ -299,4 +299,31 @@ describe('ContactList', () => {
 
     expect(onSelectionChange).toHaveBeenLastCalledWith(['a', 'b'])
   })
+
+  // Décision 14 : deux libellés distincts, Delete garde son dialogue et Remove from group n'en a
+  // pas — l'appartenance à un groupe se remet d'un simple drop, ce n'est pas une perte de données.
+  it('shows Remove from group beside Delete only when the caller wires a group scope', () => {
+    setup({ scope: 'group:g1', onRemoveFromGroup: vi.fn() })
+
+    expect(screen.getByRole('button', { name: 'Remove from group' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete selection' })).toBeInTheDocument()
+  })
+
+  it('offers no Remove from group action outside a group scope', () => {
+    setup()
+
+    expect(screen.queryByRole('button', { name: 'Remove from group' })).not.toBeInTheDocument()
+  })
+
+  it('removes the selection from the group without a dialog, and clears the selection', async () => {
+    const onRemoveFromGroup = vi.fn()
+    setup({ scope: 'group:g1', onRemoveFromGroup })
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from group' }))
+
+    expect(onRemoveFromGroup).toHaveBeenCalledWith(['a'])
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/delete this contact/i)).not.toBeInTheDocument()
+  })
 })

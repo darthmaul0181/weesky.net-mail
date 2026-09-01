@@ -19,6 +19,27 @@
     "favourites": "Favourites",
     "dropHere": "Drop here"
   },
+  "groups": {
+    "title": "Groups",
+    "add": "New group",
+    "menu": "Actions for {{name}}",
+    "rename": "Rename",
+    "write": "Write to group",
+    "writeEmpty": "No member of this group has an address",
+    "delete": "Delete group",
+    "deleteBody": "Delete the group {{name}}? The contacts themselves stay in your address book.",
+    "createTitle": "New group",
+    "renameTitle": "Rename group",
+    "nameLabel": "Name",
+    "created": "Group {{name}} created",
+    "renamed": "Group renamed to {{name}}",
+    "deleted": "Group {{name}} deleted",
+    "saveFailed": "Could not save the group",
+    "deleteFailed": "Could not delete the group",
+    "addFailed": "Could not add the contacts to the group",
+    "removeFailed": "Could not remove the contacts from the group",
+    "loadFailed": "Could not load the groups"
+  },
   "fields": {
     "nickname": "Nickname",
     "addresses": "Addresses",
@@ -51,6 +72,7 @@
     "selected_many": "{{count}} selected",
     "selected_other": "{{count}} selected",
     "deleteSelected": "Delete selection",
+    "removeFromGroup": "Remove from group",
     "deleteSelectedConfirm_one": "Delete this contact? This cannot be undone.",
     "deleteSelectedConfirm_many": "Delete these {{count}} contacts? This cannot be undone.",
     "deleteSelectedConfirm_other": "Delete these {{count}} contacts? This cannot be undone."
@@ -59,6 +81,7 @@
     "invite": "Select a contact to see its details",
     "back": "Back to the list",
     "actions": "Contact actions",
+    "removeFromGroup": "Remove {{name}} from this group",
     "write": "Write",
     "call": "Call",
     "directions": "Directions",

@@ -28,6 +28,7 @@ import DropletIcon from './DropletIcon'
 import AtSignIcon from './AtSignIcon'
 import FunnelIcon from './FunnelIcon'
 import PersonPlusIcon from './PersonPlusIcon'
+import PersonMinusIcon from './PersonMinusIcon'
 import PhoneIcon from './PhoneIcon'
 import MapPinIcon from './MapPinIcon'
 import ShieldIcon from './ShieldIcon'
@@ -53,6 +54,7 @@ import InboxIcon from './InboxIcon'
 import MenuIcon from './MenuIcon'
 import UploadIcon from './UploadIcon'
 import DownloadIcon from './DownloadIcon'
+import PeopleIcon from './PeopleIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -83,6 +85,7 @@ const icons = [
   { name: 'AtSignIcon', Icon: AtSignIcon, defaultSize: '16' },
   { name: 'FunnelIcon', Icon: FunnelIcon, defaultSize: '16' },
   { name: 'PersonPlusIcon', Icon: PersonPlusIcon, defaultSize: '15' },
+  { name: 'PersonMinusIcon', Icon: PersonMinusIcon, defaultSize: '15' },
   { name: 'PhoneIcon', Icon: PhoneIcon, defaultSize: '20' },
   { name: 'MapPinIcon', Icon: MapPinIcon, defaultSize: '20' },
   { name: 'ShieldIcon', Icon: ShieldIcon, defaultSize: '15' },
@@ -108,6 +111,7 @@ const icons = [
   { name: 'MenuIcon', Icon: MenuIcon, defaultSize: '20' },
   { name: 'UploadIcon', Icon: UploadIcon, defaultSize: '16' },
   { name: 'DownloadIcon', Icon: DownloadIcon, defaultSize: '16' },
+  { name: 'PeopleIcon', Icon: PeopleIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

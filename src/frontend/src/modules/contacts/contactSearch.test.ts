@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { compareContacts, filterContacts, fold, matches, suggestionsFor } from './contactSearch'
+import {
+  compareContacts, filterContacts, fold, groupOptionsOf, matches, suggestionsFor,
+} from './contactSearch'
+import type { GroupOption } from './contactSearch'
 import type { Contact } from './contactTypes'
+import type { ContactGroup } from './contactGroupTypes'
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
@@ -128,15 +132,23 @@ describe('compareContacts', () => {
   })
 })
 
+/** The rows of a call that hands in no group, narrowed to the address rows they can only be. */
+function addressesFor(...args: Parameters<typeof suggestionsFor>) {
+  return suggestionsFor(...args).map(row => {
+    if (row.kind !== 'address') throw new Error(`unexpected group row: ${row.name}`)
+    return row
+  })
+}
+
 describe('suggestionsFor', () => {
   it('answers one row per address, not per contact', () => {
-    const rows = suggestionsFor([bruno], 'bru')
+    const rows = addressesFor([bruno], 'bru')
 
     expect(rows.map(r => r.address)).toEqual(['bruno@example.com', 'b.mertens@wk.be'])
   })
 
   it('names each row with its contact', () => {
-    expect(suggestionsFor([chloe], 'chlo')[0].names).toEqual(['Chloé Vermeulen'])
+    expect(addressesFor([chloe], 'chlo')[0].names).toEqual(['Chloé Vermeulen'])
   })
 
   // The decision to allow a shared address lands here: one row, every owner named. Two rows would
@@ -146,7 +158,7 @@ describe('suggestionsFor', () => {
     const first = contact({ id: '1', firstName: 'Alice', lastName: 'Dupont', addresses: [shared] })
     const second = contact({ id: '2', firstName: 'Compta', lastName: 'Weesky', addresses: [shared] })
 
-    const rows = suggestionsFor([first, second], 'info')
+    const rows = addressesFor([first, second], 'info')
 
     expect(rows).toHaveLength(1)
     expect(rows[0].address).toBe(shared)
@@ -158,7 +170,7 @@ describe('suggestionsFor', () => {
   it('leaves a row unnamed when the contact carries no name of its own', () => {
     const shadow = contact({ id: 's', nickname: 'ghost@example.com', addresses: ['ghost@example.com'] })
 
-    expect(suggestionsFor([shadow], 'ghost')[0].names).toEqual([])
+    expect(addressesFor([shadow], 'ghost')[0].names).toEqual([])
   })
 
   it('names a shared address after the contact that has a name', () => {
@@ -166,7 +178,7 @@ describe('suggestionsFor', () => {
     const shadow = contact({ id: 's', nickname: shared, addresses: [shared] })
     const named = contact({ id: 'n', firstName: 'Compta', lastName: 'Weesky', addresses: [shared] })
 
-    expect(suggestionsFor([shadow, named], 'info')[0].names).toEqual(['Compta Weesky'])
+    expect(addressesFor([shadow, named], 'info')[0].names).toEqual(['Compta Weesky'])
   })
 
   // Same mailbox, different case: two rows would be the identical bug the shared-address test
@@ -175,7 +187,7 @@ describe('suggestionsFor', () => {
     const first = contact({ id: '1', firstName: 'Alice', lastName: 'Dupont', addresses: ['Info@Example.com'] })
     const second = contact({ id: '2', firstName: 'Compta', lastName: 'Weesky', addresses: ['info@example.com'] })
 
-    const rows = suggestionsFor([first, second], 'info')
+    const rows = addressesFor([first, second], 'info')
 
     expect(rows).toHaveLength(1)
     expect(rows[0].address).toBe('Info@Example.com')
@@ -187,7 +199,7 @@ describe('suggestionsFor', () => {
   it('excludes an address regardless of the case it is spelled in', () => {
     const emma = contact({ id: 'e2', firstName: 'Emma', addresses: ['emma@example.com'] })
 
-    const rows = suggestionsFor([emma], 'emma', { exclude: new Set(['EMMA@EXAMPLE.COM']) })
+    const rows = addressesFor([emma], 'emma', { exclude: new Set(['EMMA@EXAMPLE.COM']) })
 
     expect(rows).toEqual([])
   })
@@ -197,7 +209,7 @@ describe('suggestionsFor', () => {
   it('leaves out a contact unrelated to the query', () => {
     const unrelated = contact({ id: 'u', firstName: 'Zach', lastName: 'Stranger', addresses: ['zach@example.com'] })
 
-    const rows = suggestionsFor([bruno, unrelated], 'bru')
+    const rows = addressesFor([bruno, unrelated], 'bru')
 
     expect(rows.map(r => r.address)).toEqual(['bruno@example.com', 'b.mertens@wk.be'])
   })
@@ -210,7 +222,7 @@ describe('suggestionsFor', () => {
     const zack = contact({ id: 'z2', firstName: 'Zack', addresses: ['aaa@example.com'] })
     const amy = contact({ id: 'am', firstName: 'Amy', addresses: ['zzz@example.com'] })
 
-    const rows = suggestionsFor([zack, amy], 'example')
+    const rows = addressesFor([zack, amy], 'example')
 
     expect(rows.map(r => r.address)).toEqual(['aaa@example.com', 'zzz@example.com'])
   })
@@ -225,7 +237,7 @@ describe('suggestionsFor', () => {
     })
     const plain = contact({ id: 'plain', firstName: 'Oscar', addresses: ['oscar@example.com'] })
 
-    const rows = suggestionsFor([favorite, plain], 'example')
+    const rows = addressesFor([favorite, plain], 'example')
     const secondary = rows.findIndex(r => r.address === 'nora.secondary@example.com')
     const primary = rows.findIndex(r => r.address === 'oscar@example.com')
 
@@ -240,13 +252,13 @@ describe('suggestionsFor', () => {
       id: 'z', firstName: 'Zoé', isFavorite: true, addresses: ['zoe@example.com'],
     })
 
-    const rows = suggestionsFor([bruno, zoe], 'e')
+    const rows = addressesFor([bruno, zoe], 'e')
 
     expect(rows[0].address).toBe('zoe@example.com')
   })
 
   it('puts a primary address before a secondary one', () => {
-    const rows = suggestionsFor([bruno], 'e')
+    const rows = addressesFor([bruno], 'e')
     const primary = rows.findIndex(r => r.address === 'bruno@example.com')
     const secondary = rows.findIndex(r => r.address === 'b.mertens@wk.be')
 
@@ -254,7 +266,7 @@ describe('suggestionsFor', () => {
   })
 
   it('finds a contact by name and offers its addresses', () => {
-    expect(suggestionsFor([chloe], 'vermeulen').map(r => r.address)).toEqual(['chloe@example.com'])
+    expect(addressesFor([chloe], 'vermeulen').map(r => r.address)).toEqual(['chloe@example.com'])
   })
 
   // An excluded address must not eat a slot, or a field with nine tokens would show one option.
@@ -262,7 +274,7 @@ describe('suggestionsFor', () => {
     const many = Array.from({ length: 12 }, (_, i) =>
       contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
 
-    const rows = suggestionsFor(many, 'example', { exclude: new Set(['c0@example.com']), limit: 10 })
+    const rows = addressesFor(many, 'example', { exclude: new Set(['c0@example.com']), limit: 10 })
 
     expect(rows).toHaveLength(10)
     expect(rows.map(r => r.address)).not.toContain('c0@example.com')
@@ -272,14 +284,128 @@ describe('suggestionsFor', () => {
     const many = Array.from({ length: 30 }, (_, i) =>
       contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
 
-    expect(suggestionsFor(many, 'example')).toHaveLength(10)
+    expect(addressesFor(many, 'example')).toHaveLength(10)
   })
 
   it('answers nothing on an empty query', () => {
-    expect(suggestionsFor([bruno], '   ')).toEqual([])
+    expect(addressesFor([bruno], '   ')).toEqual([])
   })
 
   it('ignores a contact carrying no address', () => {
-    expect(suggestionsFor([contact({ id: 'n', firstName: 'Nobody' })], 'nobody')).toEqual([])
+    expect(addressesFor([contact({ id: 'n', firstName: 'Nobody' })], 'nobody')).toEqual([])
+  })
+})
+
+describe('groupOptionsOf', () => {
+  const group = (fields: Partial<ContactGroup> & { id: string }): ContactGroup =>
+    ({ name: 'Team', memberIds: [], ...fields })
+
+  it('resolves every member to its primary address, in member order', () => {
+    const rows = groupOptionsOf([group({ id: 'g', memberIds: ['b', 'a'] })], [bruno, alice])
+
+    expect(rows).toEqual([{
+      id: 'g', name: 'Team', memberCount: 2,
+      addresses: ['bruno@example.com', 'alice@example.com'],
+    }])
+  })
+
+  // Two members sharing a mailbox spelled two ways would otherwise put the identical recipient in
+  // the field twice — the rule suggestionsFor already applies to its own rows.
+  it('deduplicates two members carrying one address spelled differently', () => {
+    const first = contact({ id: '1', firstName: 'Alice', addresses: ['Info@Example.com'] })
+    const second = contact({ id: '2', firstName: 'Compta', addresses: ['info@example.com'] })
+
+    const [option] = groupOptionsOf([group({ id: 'g', memberIds: ['1', '2'] })], [first, second])
+
+    expect(option.addresses).toEqual(['Info@Example.com'])
+  })
+
+  // The count is the membership, never what writing would reach: a group of three whose members
+  // carry no address is still a group of three, and the row says so.
+  it('counts every member while offering only the addresses it resolves', () => {
+    const nameless = contact({ id: 'n', firstName: 'Nobody' })
+
+    const [option] = groupOptionsOf(
+      [group({ id: 'g', memberIds: ['n', 'gone', 'a'] })], [nameless, alice])
+
+    expect(option.memberCount).toBe(3)
+    expect(option.addresses).toEqual(['alice@example.com'])
+  })
+
+  it('answers a row per group, empty addresses included', () => {
+    const rows = groupOptionsOf([group({ id: 'g', name: 'Empty' })], [alice])
+
+    expect(rows).toEqual([{ id: 'g', name: 'Empty', memberCount: 0, addresses: [] }])
+  })
+})
+
+describe('suggestionsFor — group rows', () => {
+  const team: GroupOption = {
+    id: 'g1', name: 'Team', memberCount: 2,
+    addresses: ['alice@example.com', 'bruno@example.com'],
+  }
+
+  // 'te' matches Mertens as well, so the group is ranged against real address rows rather than
+  // being the only thing in the list.
+  it('ranges a matching group ahead of the addresses, carrying its member count', () => {
+    const rows = suggestionsFor([bruno], 'te', { groups: [team] })
+
+    expect(rows[0]).toEqual({ kind: 'group', ...team })
+    expect(rows.slice(1).map(row => row.kind)).toEqual(['address', 'address'])
+  })
+
+  it('matches the group name the way it matches a contact — folded', () => {
+    const accented: GroupOption = { ...team, name: 'Équipe' }
+
+    expect(suggestionsFor([], 'equipe', { groups: [accented] })).toHaveLength(1)
+  })
+
+  it('leaves out a group the query does not name', () => {
+    expect(suggestionsFor([], 'zzz', { groups: [team] })).toEqual([])
+  })
+
+  // The three group slots and the ten address slots are two budgets (decision 15): a matched
+  // group must never cost the field one of the addresses it would otherwise have offered.
+  it('caps the groups at three without spending an address slot', () => {
+    const groups: GroupOption[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `g${i}`, name: `Example ${i}`, memberCount: 1, addresses: [`g${i}@example.com`],
+    }))
+    const many = Array.from({ length: 12 }, (_, i) =>
+      contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
+
+    const rows = suggestionsFor(many, 'example', { groups })
+
+    expect(rows.filter(row => row.kind === 'group')).toHaveLength(3)
+    expect(rows.filter(row => row.kind === 'address')).toHaveLength(10)
+  })
+
+  // Picking it could only add nothing, and the field answers "nothing to add" with a toast — so
+  // the row would be an offer whose every outcome is an error message.
+  it('drops a group whose every address is already a token', () => {
+    const rows = suggestionsFor([], 'team', {
+      groups: [team], exclude: new Set(['ALICE@EXAMPLE.COM', 'bruno@example.com']),
+    })
+
+    expect(rows).toEqual([])
+  })
+
+  it('keeps a group one of whose addresses is still free', () => {
+    const rows = suggestionsFor([], 'team', {
+      groups: [team], exclude: new Set(['alice@example.com']),
+    })
+
+    expect(rows).toEqual([{ kind: 'group', ...team }])
+  })
+
+  // The one group with nothing to offer that still appears: a group nobody in the book resolves
+  // is a state the user has to be told about, and the field's toast is where that is said.
+  it('offers a group carrying no address at all', () => {
+    const empty: GroupOption = { id: 'g2', name: 'Team', memberCount: 0, addresses: [] }
+
+    expect(suggestionsFor([], 'team', { groups: [empty] })).toEqual([{ kind: 'group', ...empty }])
+  })
+
+  it('answers nothing on an empty query, groups included', () => {
+    expect(suggestionsFor([bruno], '   ', { groups: [team] })).toEqual([])
   })
 })

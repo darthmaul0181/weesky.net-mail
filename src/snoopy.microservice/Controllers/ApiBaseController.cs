@@ -61,6 +61,20 @@ public abstract class ApiBaseController : ControllerBase
     protected ActionResult BadGatewayEnveloppe(string message) =>
         StatusCode(StatusCodes.Status502BadGateway, ResultEnveloppe.CreateErrorEnveloppe(message));
 
+    /// <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.
+    /// Here rather than on a controller: <see cref="ContactsController"/> and
+    /// <see cref="ContactGroupsController"/> bound their batches by it, and two spellings of one
+    /// ceiling would drift.</summary>
+    internal const int MaxBatch = 200;
+
+    /// <summary>The one gate every bulk route passes, so none can drift on what they refuse.</summary>
+    protected ActionResult? RefuseBatch(IReadOnlyList<Guid>? ids) => ids switch
+    {
+        null or { Count: 0 } => BadRequestEnveloppe("At least one contact is required"),
+        { Count: > MaxBatch } => BadRequestEnveloppe($"No more than {MaxBatch} contacts at a time"),
+        _ => null,
+    };
+
     /// <summary>
     /// Rule 4's status for a failed account resolution — the single place the four are produced:
     /// 404 for an account that is not there, 409 for a connected account whose stored secret no

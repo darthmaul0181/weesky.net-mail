@@ -43,7 +43,10 @@
   },
   "recipients": {
     "remove": "Remove {{name}}",
-    "suggestions": "{{label}} suggestions"
+    "suggestions": "{{label}} suggestions",
+    "groupMembers_one": "{{count}} member",
+    "groupMembers_many": "{{count}} members",
+    "groupMembers_other": "{{count}} members"
   },
   "attachments": {
     "attach": "Attach files",
@@ -115,6 +118,7 @@
     "draftSaved": "Draft saved",
     "draftSaveFailed": "Could not save the draft",
     "imageFailed": "Could not insert the image",
+    "emptyGroup": "The group {{name}} has no address to write to",
     "captured": "{{name}} added to contacts",
     "capturedMany_one": "{{count}} contact added",
     "capturedMany_many": "{{count}} contacts added",

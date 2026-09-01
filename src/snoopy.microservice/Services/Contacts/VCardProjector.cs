@@ -5,6 +5,7 @@ using FolkerKinzel.VCards.Formatters;
 using FolkerKinzel.VCards.Models.Properties;
 using FolkerKinzel.VCards.Models.Properties.Parameters;
 using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Services.Contacts;
 
@@ -37,9 +38,12 @@ internal static class VCardProjector
     // What a writer puts in a mandatory N or FN it has nothing to fill.
     private const string Placeholder = "?";
 
+    // The URI form a MEMBER value takes in vCard 4.0; the projection stores the bare UID.
+    internal const string UrnUuidPrefix = "urn:uuid:";
+
     private static readonly ContactProjection Empty = new(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        [], [], [], null);
+        [], [], [], null, ContactKinds.Individual, []);
 
     private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -79,7 +83,10 @@ internal static class VCardProjector
             emails,
             Phones(card, raw),
             PostalAddresses(card, raw),
-            Photo(card));
+            Photo(card),
+            raw.KindValue?.Trim().Equals("group", StringComparison.OrdinalIgnoreCase) == true
+                ? ContactKinds.Group : ContactKinds.Individual,
+            Members(raw.MemberValues));
     }
 
     private static List<ProjectedEmail> Emails(VCard card, RawCard raw)
@@ -147,6 +154,27 @@ internal static class VCardProjector
 
         return addresses;
     }
+
+    // The projection is a set (décision 3): a duplicate is dropped here, ahead of the table's
+    // UNIQUE. A value longer than the column is dropped whole, never truncated — the e-mail
+    // address regime: a cut UID would name the wrong contact (décision 2). Card ranks survive.
+    private static List<ProjectedMember> Members(IReadOnlyList<string> values)
+    {
+        var members = new List<ProjectedMember>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var rank = 0; rank < values.Count; rank++)
+        {
+            var uid = StripUrnUuid(values[rank].Trim());
+            if (uid.Length == 0 || uid.Length > MaxUidLength || !seen.Add(uid)) continue;
+            members.Add(new ProjectedMember(uid, rank));
+        }
+
+        return members;
+    }
+
+    internal static string StripUrnUuid(string value) =>
+        value.StartsWith(UrnUuidPrefix, StringComparison.OrdinalIgnoreCase)
+            ? value[UrnUuidPrefix.Length..] : value;
 
     private static ProjectedPhoto? Photo(VCard card)
     {
@@ -343,6 +371,7 @@ internal static class VCardProjector
     /// the verbatim parameter block of each property in document order — what separates the first
     /// ';' from the first ':' outside quotes, no decoding. BDAY's value is kept as written too,
     /// because the library types the date and the column stores the card's own form (décision 11).
+    /// So are KIND's and MEMBER's, in both their dialects: the library models neither.
     /// </summary>
     private sealed class RawCard
     {
@@ -350,14 +379,30 @@ internal static class VCardProjector
         internal const int Tel = 1;
         internal const int Adr = 2;
         private const int Bday = 3;
-        private const int Begin = 4;
-        private const int End = 5;
+        private const int Kind = 4;
+        private const int XKind = 5;
+        private const int Member = 6;
+        private const int XMember = 7;
+        private const int Begin = 8;
+        private const int End = 9;
 
-        private static readonly string[] Families = ["EMAIL", "TEL", "ADR", "BDAY", "BEGIN", "END"];
+        private static readonly string[] Families =
+        [
+            "EMAIL", "TEL", "ADR", "BDAY", "KIND", "X-ADDRESSBOOKSERVER-KIND", "MEMBER",
+            "X-ADDRESSBOOKSERVER-MEMBER", "BEGIN", "END"
+        ];
 
         private readonly List<string>[] parameters = [[], [], []];
 
+        private readonly List<string> members = [];
+
         internal string? Birthday { get; }
+
+        /// <summary>The first KIND of either dialect, verbatim; null when the card declares none.</summary>
+        internal string? KindValue { get; }
+
+        // One list for both member dialects: a card speaks one of them, and document order rules.
+        internal IReadOnlyList<string> MemberValues => members;
 
         internal RawCard(string vcardRaw)
         {
@@ -384,6 +429,11 @@ internal static class VCardProjector
                     continue;
                 }
 
+                // A nested AGENT card carries its own KIND and MEMBER, and neither belongs to the
+                // card enclosing it. EMAIL/TEL/ADR stay unfiltered on purpose: their alignment
+                // guard exists to notice precisely that desync, and reads the nested lines to do it.
+                if (depth != 1 && family is Kind or XKind or Member or XMember) continue;
+
                 var semi = -1;
                 var colon = -1;
                 var inQuotes = false;
@@ -396,6 +446,8 @@ internal static class VCardProjector
 
                 if (colon < 0) continue; // not a property line; the library skips it too
                 if (family == Bday) Birthday ??= line[(colon + 1)..].ToString();
+                else if (family is Kind or XKind) KindValue ??= line[(colon + 1)..].ToString();
+                else if (family is Member or XMember) members.Add(line[(colon + 1)..].ToString());
                 else parameters[family].Add(semi < 0 ? string.Empty : line[(semi + 1)..colon].ToString());
             }
         }

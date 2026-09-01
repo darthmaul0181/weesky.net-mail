@@ -346,6 +346,15 @@
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.BadGatewayEnveloppe(System.String)">
             <summary>502 carrying the error envelope — anything the mail server refused.</summary>
         </member>
+        <member name="F:weesky.Snoopy.Microservice.Controllers.ApiBaseController.MaxBatch">
+            <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.
+            Here rather than on a controller: <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactsController"/> and
+            <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactGroupsController"/> bound their batches by it, and two spellings of one
+            ceiling would drift.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.RefuseBatch(System.Collections.Generic.IReadOnlyList{System.Guid})">
+            <summary>The one gate every bulk route passes, so none can drift on what they refuse.</summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ApiBaseController.ConnectedAccountError(System.String)">
             <summary>
             Rule 4's status for a failed account resolution — the single place the three are produced:
@@ -543,6 +552,83 @@
              one that found a password.
              </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.ContactGroupsController">
+            <summary>
+            The user's groups — the species <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactsController"/> refuses, on a controller of
+            its own. Three statuses and no fourth: 400 for a body that means nothing, 404 for an id this
+            book does not hold (another user's group included, which must be indistinguishable from one
+            that does not exist), and never 409 — a group write carries no precondition to lose.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.#ctor(weesky.Snoopy.Microservice.Repositories.IContactGroupStore)">
+            <summary>
+            The user's groups — the species <see cref="T:weesky.Snoopy.Microservice.Controllers.ContactsController"/> refuses, on a controller of
+            its own. Three statuses and no fourth: 400 for a body that means nothing, 404 for an id this
+            book does not hold (another user's group included, which must be indistinguishable from one
+            that does not exist), and never 409 — a group write carries no precondition to lose.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.List(System.Threading.CancellationToken)">
+            <summary>Every group, each with the members this book actually holds.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The groups</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.Create(weesky.Snoopy.Microservice.Models.Contacts.ContactGroupRequest,System.Threading.CancellationToken)">
+            <summary>Creates an empty group and answers it, id included.</summary>
+            <param name="request">the group's name</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Created</response>
+            <response code="400">No name, a name over 255 characters, or the cap reached</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.Rename(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactGroupRequest,System.Threading.CancellationToken)">
+            <summary>Renames the group. Nothing else of its card moves — its members least of all.</summary>
+            <param name="id">the group's identifier</param>
+            <param name="request">the new name</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">No name, or a name over 255 characters</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such group for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.Delete(System.Guid,System.Threading.CancellationToken)">
+            <summary>Deletes the group. The contacts it listed are untouched.</summary>
+            <param name="id">the group's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Deleted</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such group for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.AddMembers(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactGroupMembersRequest,System.Threading.CancellationToken)">
+            <summary>
+            Adds a batch of contacts to the group. An id this user does not own — and a group's own id
+            — resolves to nothing and is skipped in silence: a batch may not half-fail, and a 404 on a
+            foreign id would confirm that it exists.
+            </summary>
+            <param name="id">the group's identifier</param>
+            <param name="request">the contacts to add</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Added, whether or not every id matched</response>
+            <response code="400">No id, or more than 200</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such group for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.RemoveMembers(System.Guid,weesky.Snoopy.Microservice.Models.Contacts.ContactGroupMembersRequest,System.Threading.CancellationToken)">
+            <summary>Removes a batch of contacts from the group, under the same silent-skip rule.</summary>
+            <param name="id">the group's identifier</param>
+            <param name="request">the contacts to remove</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Removed, whether or not every id matched</response>
+            <response code="400">No id, or more than 200</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such group for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactGroupsController.Answer(CSharpFunctionalExtensions.Result)">
+            <summary>The four writes answer alike: 204, or 404 for the one failure that means "no such
+            row". Exhaustive rather than "404 or nothing", on ContactsController.Update's model: a
+            reason the store grows later is a refused body, not a missing group.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.ContactsBackfillController">
             <summary>
             The one-shot operator route of slice 4a: it gives a card, a hash and a projection to every
@@ -665,9 +751,6 @@
             <response code="401">Not authenticated</response>
             <response code="404">No such contact for this user</response>
         </member>
-        <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxBatch">
-            <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.</summary>
-        </member>
         <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.DeleteMany(weesky.Snoopy.Microservice.Models.Contacts.BulkContactsRequest,System.Threading.CancellationToken)">
             <summary>
             Deletes a batch. An id this user does not own resolves to nothing and is skipped in silence:
@@ -686,9 +769,6 @@
             <response code="204">Applied, whether or not every id matched</response>
             <response code="400">No id, or more than 200</response>
             <response code="401">Not authenticated</response>
-        </member>
-        <member name="M:weesky.Snoopy.Microservice.Controllers.ContactsController.Refuse(System.Collections.Generic.IReadOnlyList{System.Guid})">
-            <summary>The one gate both bulk routes pass, so the two cannot drift on what they refuse.</summary>
         </member>
         <member name="F:weesky.Snoopy.Microservice.Controllers.ContactsController.MaxUploadBytes">
             <summary>
@@ -1930,6 +2010,66 @@
             and <c>GroupName</c> for display; the last two never travel back on a write.
             </summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupMembersRequest">
+            <summary>The body of POST and DELETE /api/ContactGroups/{id}/Members. Empty and over-cap are
+            both refused; an id the book does not hold is skipped in silence.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupMembersRequest.#ctor(System.Collections.Generic.IReadOnlyList{System.Guid})">
+            <summary>The body of POST and DELETE /api/ContactGroups/{id}/Members. Empty and over-cap are
+            both refused; an id the book does not hold is skipped in silence.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupRequest">
+            <summary>The body of POST /api/ContactGroups and PUT /api/ContactGroups/{id}. Nullable at the
+            wire level so <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> answers the missing name, not the binder.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupRequest.#ctor(System.String)">
+            <summary>The body of POST /api/ContactGroups and PUT /api/ContactGroups/{id}. Nullable at the
+            wire level so <see cref="T:weesky.Snoopy.Microservice.Services.ContactValidator"/> answers the missing name, not the binder.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupsResponse">
+            <summary>Every group of the book. Wrapped like <see cref="T:weesky.Snoopy.Microservice.Models.Contacts.ContactListResponse"/>, and for the
+            same reason: a later field must not change the response's shape.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupsResponse.#ctor(System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactGroupView})">
+            <summary>Every group of the book. Wrapped like <see cref="T:weesky.Snoopy.Microservice.Models.Contacts.ContactListResponse"/>, and for the
+            same reason: a later field must not change the response's shape.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupView">
+            <summary>
+            One group as the client reads it. The card itself never leaves: a group is a name and a list of
+            contacts to every screen that shows one.
+            </summary>
+            <param name="Id">The group's identifier.</param>
+            <param name="Name">The card's FN.</param>
+            <param name="MemberIds">
+            The members this book actually holds, in the order the card lists them. A MEMBER pointing at
+            nothing, at another book, or at a group is no contact and is left out (décisions 2 and 9).
+            </param>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupView.#ctor(System.Guid,System.String,System.Collections.Generic.IReadOnlyList{System.Guid})">
+            <summary>
+            One group as the client reads it. The card itself never leaves: a group is a name and a list of
+            contacts to every screen that shows one.
+            </summary>
+            <param name="Id">The group's identifier.</param>
+            <param name="Name">The card's FN.</param>
+            <param name="MemberIds">
+            The members this book actually holds, in the order the card lists them. A MEMBER pointing at
+            nothing, at another book, or at a group is no contact and is left out (décisions 2 and 9).
+            </param>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupView.Id">
+            <summary>The group's identifier.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupView.Name">
+            <summary>The card's FN.</summary>
+        </member>
+        <member name="P:weesky.Snoopy.Microservice.Models.Contacts.ContactGroupView.MemberIds">
+            <summary>
+            The members this book actually holds, in the order the card lists them. A MEMBER pointing at
+            nothing, at another book, or at a group is no contact and is left out (décisions 2 and 9).
+            </summary>
+        </member>
         <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactDetail.#ctor(System.Guid,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Boolean,System.Boolean,System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactDetailEmail},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactDetailPhone},System.Collections.Generic.IReadOnlyList{weesky.Snoopy.Microservice.Models.Contacts.ContactDetailAddress})">
             <summary>
             The full contact card, as answered by GET /api/Contacts/{id}. Every child line carries its
@@ -1965,9 +2105,11 @@
             verbatim, with the <c>Uid</c> it declares as the merge key tried before the address and the
             name — <b>or</b> <c>Write</c>, the columns to compose one from. Never a UID of our making: the
             identity a client synchronises on is the card's or the store's, never a reader's.
+            <c>IsGroup</c> is the card's own KIND, and it changes how the row resolves: a group is matched
+            on its UID alone, never on a name or an address (décision 19). A CSV never sets it.
             </summary>
         </member>
-        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow.#ctor(System.Int32,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String,System.String,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite)">
+        <member name="M:weesky.Snoopy.Microservice.Models.Contacts.ContactImportRow.#ctor(System.Int32,System.String,System.String,System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.String,System.String,weesky.Snoopy.Microservice.Models.Contacts.ContactWrite,System.Boolean)">
             <summary>
             One row on its way into the book. Free of any notion of CSV, so a vCard file feeds the same
             merge rather than a second one. <c>Line</c> is the line in the source file, header included —
@@ -1975,6 +2117,8 @@
             verbatim, with the <c>Uid</c> it declares as the merge key tried before the address and the
             name — <b>or</b> <c>Write</c>, the columns to compose one from. Never a UID of our making: the
             identity a client synchronises on is the card's or the store's, never a reader's.
+            <c>IsGroup</c> is the card's own KIND, and it changes how the row resolves: a group is matched
+            on its UID alone, never on a name or an address (décision 19). A CSV never sets it.
             </summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Models.Contacts.ContactEmailPayload">
@@ -3254,6 +3398,61 @@
         <member name="M:weesky.Snoopy.Microservice.Platform.IProfileReader.GetDisplayNameAsync(weesky.Snoopy.Microservice.Models.User,System.Threading.CancellationToken)">
             <summary>The account's display name, null when the platform holds none.</summary>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.ContactGroupStore">
+            <summary>
+            The group half of the book. Takes the concrete <see cref="T:weesky.Snoopy.Microservice.Repositories.ContactStore"/>, as
+            <see cref="T:weesky.Snoopy.Microservice.Repositories.DavContactWriter"/> does: the write gate — the transaction wrapper, the card
+            application and the projection — is shared rather than duplicated, so a group card travels the
+            exact same path a contact's does (décision 20).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.#ctor(weesky.Snoopy.Microservice.Data.Preferences.PreferencesDbContext,weesky.Snoopy.Microservice.Repositories.ContactStore,weesky.Snoopy.Microservice.Repositories.IContactSyncStore)">
+            <summary>
+            The group half of the book. Takes the concrete <see cref="T:weesky.Snoopy.Microservice.Repositories.ContactStore"/>, as
+            <see cref="T:weesky.Snoopy.Microservice.Repositories.DavContactWriter"/> does: the write gate — the transaction wrapper, the card
+            application and the projection — is shared rather than duplicated, so a group card travels the
+            exact same path a contact's does (décision 20).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.EditMembersAsync(System.Guid,System.Guid,System.Collections.Generic.IReadOnlyList{System.Guid},System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Both member batches, which differ only in the direction. The whole decision — which ids
+            resolve, and whether any of them would change the card — is taken BEFORE the transaction:
+            a batch that changes nothing must take neither a rank nor a revision, and a rank consumed
+            for nothing wakes every client of this book.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.Delta(System.Collections.Generic.IReadOnlyList{System.String},System.String,System.Boolean)">
+            <summary>What of <paramref name="uids"/> the card does not yet carry, or still carries.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.ResolveAsync(System.Guid,System.Collections.Generic.IReadOnlyList{System.Guid},System.Threading.CancellationToken)">
+            <summary>
+            The ids of the batch turned into the UIDs a MEMBER line names — never a field of the
+            request: a UID read from the store is a value this book stored, whereas a raw one could
+            carry a line break and split the line it is written on. An unknown id, another book's, and
+            a group's all resolve to nothing here, which is what makes them a silent no-op.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.EditCardAsync(System.Guid,weesky.Snoopy.Microservice.Data.Preferences.Contact,System.Func{weesky.Snoopy.Microservice.Data.Preferences.Contact,System.String},System.Threading.CancellationToken)">
+            <summary>
+            The whole path of one group-card write (décision 20): rank first, re-read under the lock,
+            archive, apply — hash and projection included — and the new rank on the row. The body
+            answers whether it wrote, and only a write commits: an edit that composes nothing new
+            rolls the rank back rather than waking every client of this book for no change.
+            Assumed gap, symmetric with ContactStore.UpdateAsync: the reload does not re-check Kind, so
+            a card a DAV PUT turned into a contact between the find and the lock is still edited here.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.ReloadAsync(weesky.Snoopy.Microservice.Data.Preferences.Contact,System.Threading.CancellationToken)">
+            <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.ContactGroupStore.FindAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Scoped by user and by kind: a group belonging to somebody else, and a contact whatever its
+            owner, must both be indistinguishable from an id that does not exist — the controller then
+            answers 404 without leaking either.
+            </summary>
+        </member>
         <member name="F:weesky.Snoopy.Microservice.Repositories.ContactStore.MaxPerUser">
             <summary>
             What bounds the table, and what bounds the payload: the whole book is fetched into the
@@ -3300,6 +3499,38 @@
         </member>
         <member name="M:weesky.Snoopy.Microservice.Repositories.IConnectedAccountStore.DeleteAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
             <summary>App-level cascade: removes the row plus its sending_identities and folder_role_overrides.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Repositories.IContactGroupStore">
+            <summary>
+            A user's groups — <see cref="T:weesky.Snoopy.Microservice.Repositories.IContactStore"/>'s other half, the one species the address book
+            refuses (décision 4). Every method is scoped by <c>userId</c>, so a group belonging to somebody
+            else is simply not found, and every id it takes for a member is looked up in the caller's own
+            book: an unknown, foreign or group id resolves to nothing and is skipped in silence.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactGroupStore.ListAsync(System.Guid,System.Threading.CancellationToken)">
+            <summary>Every group, each with the members this book actually holds.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactGroupStore.CreateAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Composes an empty group card, stores it and projects it. Fails on a name that is blank or
+            over the column, and when the per-user cap is reached — groups count towards it (décision 18).
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactGroupStore.RenameAsync(System.Guid,System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>Rewrites the card's FN and nothing else. Fails when not found.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactGroupStore.DeleteAsync(System.Guid,System.Guid,System.Threading.CancellationToken)">
+            <summary>Removes the group and its member rows. The contacts it listed survive it.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactGroupStore.AddMembersAsync(System.Guid,System.Guid,System.Collections.Generic.IReadOnlyList{System.Guid},System.Threading.CancellationToken)">
+            <summary>
+            Adds a batch of contacts to the group. Idempotent: a contact already listed is not written
+            twice, and a batch that changes nothing takes neither a rank nor a revision.
+            </summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Repositories.IContactGroupStore.RemoveMembersAsync(System.Guid,System.Guid,System.Collections.Generic.IReadOnlyList{System.Guid},System.Threading.CancellationToken)">
+            <summary>Removes a batch of contacts from the group, under the same rules.</summary>
         </member>
         <member name="T:weesky.Snoopy.Microservice.Repositories.IContactStore">
             <summary>
@@ -4026,6 +4257,12 @@
             <c>contacts.notes</c> is TEXT — 65 535 <em>bytes</em>. The ceiling is counted in characters,
             so it is set low enough that even a card entirely made of 4-byte code points still fits.
             </summary>
+        </member>
+        <member name="F:weesky.Snoopy.Microservice.Services.ContactValidator.MaxGroupNameLength">
+            <summary><c>contacts.display_name</c> is VARCHAR(255) — a group is its FN, and nothing else.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Services.ContactValidator.ValidateGroupName(System.String)">
+            <summary>The group-name rule, one place: trimmed; refused empty or over the column.</summary>
         </member>
         <member name="M:weesky.Snoopy.Microservice.Services.ContactValidator.IsValidTypeToken(System.String)">
             <summary>

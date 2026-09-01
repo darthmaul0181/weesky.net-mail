@@ -199,6 +199,41 @@ public sealed class VCardVersionConverterTests
         Assert.Equal(card, VCardVersionConverter.To(card, "4.0"));
     }
 
+    [Fact]
+    public void ServingAGroupCardIn40_TranslatesKindAndMembers()
+    {
+        var v3 = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nN:;;;;\r\n"
+            + "X-ADDRESSBOOKSERVER-KIND:group\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\nEND:VCARD\r\n";
+        var served = VCardVersionConverter.To(v3, "4.0");
+        Assert.Contains("KIND:group", served);
+        Assert.Contains("MEMBER:urn:uuid:m1", served);
+        Assert.DoesNotContain("X-ADDRESSBOOKSERVER", served);
+    }
+
+    [Fact]
+    public void ServingAGroupCardIn30_RebuildsFromTheStoredCard()
+    {
+        // Le writer 3.0 a DÉJÀ supprimé KIND et MEMBER (propriétés 4.0-only) : rien à renommer,
+        // les deux lignes se rebâtissent depuis la carte stockée — le test rougit si on l'a écrit
+        // comme un renommage (décision 5).
+        var v4 = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:g\r\nFN:G\r\nKIND:group\r\n"
+            + "MEMBER:urn:uuid:m1\r\nMEMBER:m2\r\nEND:VCARD\r\n";
+        var served = VCardVersionConverter.To(v4, "3.0");
+        Assert.Contains("X-ADDRESSBOOKSERVER-KIND:group", served);
+        Assert.Contains("X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1", served);
+        Assert.Contains("X-ADDRESSBOOKSERVER-MEMBER:m2", served); // valeur verbatim, jamais réécrite
+    }
+
+    [Fact]
+    public void ServingAGroupCardIn40_RenamesAGroupPrefixedMemberLineWithParameters()
+    {
+        var v3 = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nN:;;;;\r\n"
+            + "X-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "item1.X-ADDRESSBOOKSERVER-MEMBER;X-FOO=bar:urn:uuid:m1\r\nEND:VCARD\r\n";
+        var served = VCardVersionConverter.To(v3, "4.0");
+        Assert.Contains("item1.MEMBER;X-FOO=bar:urn:uuid:m1", served);
+    }
+
     private static int Occurrences(string text, string needle)
     {
         var count = 0;

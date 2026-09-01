@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -7,6 +8,34 @@ namespace weesky.Snoopy.Microservice.Tests.Data;
 
 public sealed class ContactEntitiesTests
 {
+    [Fact]
+    public void Contact_DefaultsToIndividualKind()
+    {
+        // La leçon du MODIFY COLUMN source de 4c-ii : la valeur est épinglée, l'ENUM MariaDB la
+        // refuse en mode strict si elle diverge du DDL.
+        Assert.Equal("individual", new Contact().Kind);
+        Assert.Equal("group", ContactKinds.Group);
+    }
+
+    [Fact]
+    public async Task ContactGroupMember_KeyIsGroupIdAndMemberUid()
+    {
+        var context = new PreferencesTestDbContext(
+            nameof(ContactGroupMember_KeyIsGroupIdAndMemberUid));
+        var groupId = Guid.NewGuid();
+
+        context.Contacts.Add(new Contact { Id = groupId, UserId = Guid.NewGuid(), Kind = ContactKinds.Group });
+        context.ContactGroupMembers.Add(new ContactGroupMember { GroupId = groupId, MemberUid = "a", Position = 0 });
+        context.ContactGroupMembers.Add(new ContactGroupMember { GroupId = groupId, MemberUid = "b", Position = 2 });
+        await context.SaveChangesAsync(CancellationToken.None); // les trous de position sont légaux (décision 3)
+
+        Assert.Equal(2, await context.ContactGroupMembers.CountAsync());
+        // Le même (groupe, membre) une seconde fois est la même ligne, quelle que soit sa position :
+        // le suiveur la refuse plutôt que d'en ouvrir une deuxième (décision 3).
+        Assert.Throws<InvalidOperationException>(() => context.ContactGroupMembers.Add(
+            new ContactGroupMember { GroupId = groupId, MemberUid = "a", Position = 5 }));
+    }
+
     [Fact]
     public async Task Contact_RoundTripsThroughTheContext()
     {

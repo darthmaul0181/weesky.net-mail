@@ -24,7 +24,7 @@ public sealed class ContactStoreBulkTests
         var first = (await CreateStore(db).CreateAsync(user, Write("Alice", "alice@x.example"), CancellationToken.None)).Value;
         var second = (await CreateStore(db).CreateAsync(user, Write("Bob", "bob@x.example"), CancellationToken.None)).Value;
 
-        var removed = await CreateStore(db).DeleteManyAsync(user, [first, second], CancellationToken.None);
+        var removed = await CreateStore(db).DeleteManyAsync(user, [first, second], includeGroups: false, CancellationToken.None);
 
         Assert.Equal(2, removed);
         Assert.Empty(await CreateStore(db).ListAsync(user, CancellationToken.None));
@@ -39,7 +39,7 @@ public sealed class ContactStoreBulkTests
         var user = Guid.NewGuid();
         var kept = (await CreateStore(db).CreateAsync(user, Write("Alice", "alice@x.example"), CancellationToken.None)).Value;
 
-        var removed = await CreateStore(db).DeleteManyAsync(user, [kept, Guid.NewGuid()], CancellationToken.None);
+        var removed = await CreateStore(db).DeleteManyAsync(user, [kept, Guid.NewGuid()], includeGroups: false, CancellationToken.None);
 
         Assert.Equal(1, removed);
         Assert.Empty(await CreateStore(db).ListAsync(user, CancellationToken.None));
@@ -54,7 +54,7 @@ public sealed class ContactStoreBulkTests
         var theirs = Guid.NewGuid();
         var foreign = (await CreateStore(db).CreateAsync(theirs, Write("Bob", "bob@x.example"), CancellationToken.None)).Value;
 
-        var removed = await CreateStore(db).DeleteManyAsync(mine, [foreign], CancellationToken.None);
+        var removed = await CreateStore(db).DeleteManyAsync(mine, [foreign], includeGroups: false, CancellationToken.None);
 
         Assert.Equal(0, removed);
         Assert.Single(await CreateStore(db).ListAsync(theirs, CancellationToken.None));

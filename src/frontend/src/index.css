@@ -2249,6 +2249,29 @@ body {
 .contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
 .contact-scope.is-active .contact-scope-count { color: inherit; }
 
+/* The Groups heading carries the « + » — decision 13 keeps it out of `.column-actions`, whose
+   width is measured to the pixel for a French label. */
+.contact-scopes-groups-header {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; padding: 0 10px;
+  color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* A heading rather than a bare label: the section is a structure a screen reader can reach,
+   and `font: inherit` keeps the band's own type against the h2's UA size. */
+.contact-scopes-groups-header > h2 { flex: 1; min-width: 0; margin: 0; font: inherit; }
+.contact-scopes-add {
+  flex: none; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  color: var(--text-muted); font: inherit; font-size: 17px; font-weight: 400; line-height: 1;
+}
+.contact-scopes-add:hover { color: var(--icon-hover-accent); }
+/* A refused list says so: a Groups section that is merely empty claims the account has none. */
+.contact-scopes-error { margin: 0; padding: 2px 10px 6px; color: var(--danger); font-size: 12px; }
+/* A group row is the scope row plus its own menu: the row takes the width, the kebab sits at its
+   end. Drawn rather than hover-revealed — on a touch tablet a hover reveal is unreachable. */
+.contact-scope-row { display: flex; align-items: center; }
+.contact-scope-row .contact-scope { flex: 1; min-width: 0; }
+.contact-scope-row .dropdown-root { flex: none; }
+
 .contacts-row { flex: 1; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .contacts-list, .contacts-card, .contacts-editor {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
@@ -2447,6 +2470,24 @@ body {
   background: none; color: var(--text); border: 1px solid var(--border);
 }
 .contact-quick-btn.is-ghost:hover { background: var(--list-row-hover); }
+
+/* The groups holding this contact — chips rather than a row, since there is no rank between them
+   the way there is between addresses. Each × leaves that one group without a dialog: the
+   membership it drops is what a drag restores, never data lost the way deleting the contact is. */
+.contact-card-groups {
+  flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 22px 0;
+}
+.contact-group-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 4px 3px 10px; border-radius: 12px;
+  background: var(--surface-sunken); color: var(--text); font-size: 12px;
+}
+.contact-group-chip button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--text-muted); font-size: 11px; line-height: 1; cursor: pointer;
+}
+.contact-group-chip button:hover { background: var(--list-row-hover); color: var(--text); }
 
 .contact-card-body { flex: 1; min-height: 0; overflow-y: auto; }
 .contact-card-rows { display: grid; gap: 16px; padding: 22px; }
@@ -2760,6 +2801,11 @@ body {
      Chrome where this query never matches: retiring it would drop contacts-drawer from
      `smallest: 44` to 34 and read as a regression. */
   .contact-scope { min-height: 44px; }
+
+  /* The two controls the groups section adds to that column, under the same rule and for the same
+     reason: the « + » is a 17px glyph and the row kebab a 14px one. */
+  .contact-scopes-add,
+  .contact-scope-row > .dropdown-root > button { min-width: 44px; min-height: 44px; }
 
   /* The card's actions are icon buttons in the head from 640px up — 28px and 22px against a
      finger, on the one tier where `--touch` is not declared at all (a phone draws the band

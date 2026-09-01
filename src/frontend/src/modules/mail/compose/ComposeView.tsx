@@ -4,7 +4,8 @@ import type { TFunction } from 'i18next'
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useViewport } from '../../../hooks/useViewport'
-import { useContacts } from '../../contacts/queries'
+import { useContactGroups, useContacts } from '../../contacts/queries'
+import { groupOptionsOf } from '../../contacts/contactSearch'
 import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
@@ -90,8 +91,16 @@ export default function ComposeView({ onNotify }: Props) {
   // One read for the three fields: they would share the cache anyway, but a single call site is
   // easier to follow than three.
   const { data: contacts } = useContacts()
+  const { data: groups } = useContactGroups()
   const { data: preferences } = usePreferences()
   const capture = useCaptureContacts()
+  // Resolved once for the three fields, and by the same function the contacts band reads, so a
+  // group the field expands and one « Write to group » writes to can never be two sets.
+  // A book still in flight is not an empty one: rendering its groups as options would let a
+  // click on a group row report `toast.emptyGroup` on a carnet that just hasn't answered yet.
+  const groupOptions = useMemo(
+    () => (contacts ? groupOptionsOf(groups ?? [], contacts) : []), [groups, contacts])
+  const notifyEmptyGroup = (name: string) => onNotify(t('toast.emptyGroup', { name }), 'error')
   // State, not a ref: the toolbar sits above the editor, so a ref would still read null on the
   // render that mounts it and the buttons would do nothing until something else re-rendered.
   const [editor, setEditor] = useState<EditorHandle | null>(null)
@@ -536,7 +545,8 @@ export default function ComposeView({ onNotify }: Props) {
         </div>
         <div className="compose-to-row">
           <RecipientsField id="compose-to" label={t('fields.to')} tokens={to} onChange={changeTo}
-            autoFocus={!seed || refocusTo} contacts={contacts} />
+            autoFocus={!seed || refocusTo} contacts={contacts}
+            groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />
           <span className="compose-cc-links">
             {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>{t('fields.cc')}</button>}
             {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>{t('fields.bcc')}</button>}
@@ -546,9 +556,9 @@ export default function ComposeView({ onNotify }: Props) {
           </span>
         </div>
         {showCc && <RecipientsField id="compose-cc" label={t('fields.cc')} tokens={cc} onChange={changeCc}
-          contacts={contacts} />}
+          contacts={contacts} groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />}
         {showBcc && <RecipientsField id="compose-bcc" label={t('fields.bcc')} tokens={bcc} onChange={changeBcc}
-          contacts={contacts} />}
+          contacts={contacts} groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />}
         {/* Stays open while the value is not Normal: folding it would take a live setting off the
             screen while it kept riding on the message. Cc and Bcc are safe to fold — their tokens
             stay visible either way. */}

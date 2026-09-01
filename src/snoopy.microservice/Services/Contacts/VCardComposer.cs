@@ -27,6 +27,10 @@ internal static class VCardComposer
 
     private enum Family { Email, Phone, Postal }
 
+    // Apple's dialect, the one a new group card is born in (décision 6).
+    private const string GroupKindName = "X-ADDRESSBOOKSERVER-KIND";
+    private const string GroupMemberName = "X-ADDRESSBOOKSERVER-MEMBER";
+
     // 101 is the erasure the projector reads back as no PREF at all (décision 5 bis of 4a). Measured
     // against FolkerKinzel 8.2.0's 3.0 and 4.0 writers — the two versions Emit produces — setting
     // Preference to 100 (its own default) makes both emit no PREF parameter or token at all.
@@ -78,6 +82,78 @@ internal static class VCardComposer
         card.EMails = emails;
         return Emit(source, uid, write.Birthday ?? RawBirthday(existingCard));
     }
+
+    // ---- groups (tranche 4e) --------------------------------------------------------------------
+
+    /// <summary>A new group card — the only group write that goes through the serializer: a card
+    /// that does not exist yet has nothing to preserve (décision 6). Born in 3.0, Apple's dialect.</summary>
+    internal static string ComposeNewGroup(string uid, string name)
+    {
+        var card = new VCard
+        {
+            DisplayNames = [new TextProperty(name)],
+            NonStandards = [new NonStandardProperty(GroupKindName, "group")],
+        };
+        return Emit(new SourceCard(card, VCdVersion.V3_0, [], [], null), uid, null);
+    }
+
+    // The three edits below rewrite one line of the stored card and copy the rest verbatim
+    // (décision 6): a group card carries members the composer models nowhere, and the 3.0 writer
+    // emits no MEMBER at all, so re-serializing one would empty it.
+    internal static string AddGroupMember(string card, string memberUid)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        // The card's dialect, not ours: a mixed card is a memberless group to a strict 4.0 reader.
+        var name = lines.Any(l => IsName(l, "KIND")) ? "MEMBER" : GroupMemberName;
+        lines.Insert(EndIndex(lines), Fold($"{name}:{VCardProjector.UrnUuidPrefix}{memberUid}"));
+        return Join(lines);
+    }
+
+    // Décision 7: the removal matches every value form the reading accepts — both names, the
+    // urn:uuid: prefix optional and case-insensitive. Assumed scope: unlike the projector, the line
+    // edits carry no BEGIN/END depth guard and treat the input as ONE card, so a MEMBER inside a
+    // nested AGENT card would be removed with the rest.
+    internal static string RemoveGroupMember(string card, string memberUid)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        lines.RemoveAll(l =>
+        {
+            if (!IsName(l, "MEMBER") && !IsName(l, GroupMemberName)) return false;
+            var unfolded = Unfold(l);
+            var colon = IndexOutsideQuotes(unfolded, ':');
+            return colon >= 0
+                && VCardProjector.StripUrnUuid(unfolded[(colon + 1)..].Trim()) == memberUid;
+        });
+        return Join(lines);
+    }
+
+    internal static string RenameGroup(string card, string name)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        var escaped = EscapeText(name);
+        // Valueless — a malformed FN carrying no colon at all — is no FN to rename (FirstRawLine's
+        // own guard): the value replacement would eat the property name.
+        var index = lines.FindIndex(l => IsName(l, "FN") && IndexOutsideQuotes(Unfold(l), ':') >= 0);
+        if (index < 0)
+        {
+            lines.Insert(EndIndex(lines), Fold("FN:" + escaped));
+            return Join(lines);
+        }
+
+        var unfolded = Unfold(lines[index]);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        lines[index] = Fold(unfolded[..(colon + 1)] + escaped);
+        return Join(lines);
+    }
+
+    // Where a line joins the card: before END:VCARD, or at the end of a card that has no END.
+    internal static int EndIndex(List<string> lines)
+    {
+        var end = lines.FindLastIndex(l => IsName(l, "END"));
+        return end < 0 ? lines.Count : end;
+    }
+
+    private static string Join(List<string> lines) => string.Join("\r\n", lines) + "\r\n";
 
     // The families and scalars an entry point poses only when its write names them — absent means
     // untouched here, whichever door came in.
@@ -153,8 +229,7 @@ internal static class VCardComposer
             // A lone \r is a line break to the parser too — left in place it would splice a card
             // boundary back in. And only the first card's lines may feed the splices.
             var all = LogicalLines(CanonicalLineBreaks(existingCard));
-            var end = all.FindIndex(c =>
-                NameOf(Unfold(c)).Equals("END", StringComparison.OrdinalIgnoreCase));
+            var end = all.FindIndex(c => IsName(c, "END"));
             var chunks = end < 0 ? all : all.Take(end + 1).ToList();
             var rawOf = new Dictionary<VCardProperty, string>(ReferenceEqualityComparer.Instance);
             MapFamily(rawOf, chunks, "NICKNAME", parsed.NickNames);
@@ -170,9 +245,7 @@ internal static class VCardComposer
             Dictionary<VCardProperty, string> map, List<string> chunks, string name,
             IEnumerable<VCardProperty?>? properties)
         {
-            var lines = chunks
-                .Where(c => NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            var lines = chunks.Where(c => IsName(c, name)).ToList();
             var list = (properties ?? []).ToList();
             if (lines.Count != list.Count) return;
             for (var i = 0; i < list.Count; i++)
@@ -420,7 +493,7 @@ internal static class VCardComposer
         StripNamePlaceholders(lines, card);
         EnforceBirthday(lines, card, birthday);
         RestoreUid(lines, source, uid);
-        return string.Join("\r\n", lines) + "\r\n";
+        return Join(lines);
     }
 
     /// <summary>
@@ -434,8 +507,7 @@ internal static class VCardComposer
         if (source.RawUidLine is not { } raw) return;
         var colon = IndexOutsideQuotes(raw, ':');
         if (colon < 0 || raw[(colon + 1)..] != uid) return;
-        var index = lines.FindIndex(c =>
-            NameOf(Unfold(c)).Equals("UID", StringComparison.OrdinalIgnoreCase));
+        var index = lines.FindIndex(c => IsName(c, "UID"));
         if (index >= 0) lines[index] = Fold(raw);
     }
 
@@ -561,8 +633,7 @@ internal static class VCardComposer
     /// </summary>
     private static string? StoredLineOf(SourceCard source, string name, VCardProperty property) =>
         source.RawLineOf.TryGetValue(property, out var raw) ? raw
-            : source.InputChunks.FirstOrDefault(c =>
-                NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+            : source.InputChunks.FirstOrDefault(c => IsName(c, name));
 
     // These three describe a value's own bytes or type, and on this path the value is the model's:
     // the one they described is gone. VALUE included — AppendMissing only reattaches what the
@@ -639,8 +710,7 @@ internal static class VCardComposer
     {
         var indices = new List<int>();
         for (var i = 0; i < lines.Count; i++)
-            if (NameOf(Unfold(lines[i])).Equals(name, StringComparison.OrdinalIgnoreCase))
-                indices.Add(i);
+            if (IsName(lines[i], name)) indices.Add(i);
         return indices;
     }
 
@@ -667,8 +737,7 @@ internal static class VCardComposer
     // so a writer that stops filling the blank leaves the line exactly as it put it.
     private static void Blank(List<string> lines, string name, string empty)
     {
-        var index = lines.FindIndex(c =>
-            NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+        var index = lines.FindIndex(c => IsName(c, name));
         if (index < 0) return;
         var unfolded = Unfold(lines[index]);
         var colon = IndexOutsideQuotes(unfolded, ':');
@@ -687,8 +756,7 @@ internal static class VCardComposer
         if (string.IsNullOrEmpty(birthday)) return;
         var index = -1;
         for (var i = 0; i < lines.Count && index < 0; i++)
-            if (NameOf(Unfold(lines[i])).Equals("BDAY", StringComparison.OrdinalIgnoreCase))
-                index = i;
+            if (IsName(lines[i], "BDAY")) index = i;
 
         if (index >= 0)
         {
@@ -760,8 +828,9 @@ internal static class VCardComposer
     private static int CutAt(string line, int index) =>
         index < line.Length && char.IsHighSurrogate(line[index - 1]) ? index - 1 : index;
 
-    // The property name of an unfolded line, its group prefix stripped — "" when not a property.
-    internal static string NameOf(string line)
+    // The property name's bounds on an unfolded line, its group prefix skipped over —
+    // End = -1 when the line is not a property (no name terminator found).
+    internal static (int Start, int End) NameBounds(string line)
     {
         var start = 0;
         var end = line.IndexOfAny([';', ':', '.']);
@@ -772,8 +841,19 @@ internal static class VCardComposer
             end = next < 0 ? -1 : start + next;
         }
 
+        return (start, end);
+    }
+
+    // The property name of an unfolded line, its group prefix stripped — "" when not a property.
+    internal static string NameOf(string line)
+    {
+        var (start, end) = NameBounds(line);
         return end < 0 ? string.Empty : line[start..end];
     }
+
+    // Whether an unfolded-or-folded line carries one property name, its group prefix aside.
+    internal static bool IsName(string chunk, string name) =>
+        NameOf(Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
 
     internal static int IndexOutsideQuotes(string text, char target)
     {
@@ -825,6 +905,24 @@ internal static class VCardComposer
     internal static string? FirstRawValue(string vcardRaw, string name) =>
         FirstRawLine(vcardRaw, name) is { } line ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
 
+    /// <summary>Every raw value of one property family, in order — never decoded, never past
+    /// END:VCARD. <see cref="FirstRawValue"/> renders only one; this is for MEMBER, which repeats.</summary>
+    internal static List<string> RawValuesOf(string vcardRaw, string name)
+    {
+        var values = new List<string>();
+        foreach (var logical in LogicalLines(CanonicalLineBreaks(vcardRaw)))
+        {
+            var line = Unfold(logical);
+            var found = NameOf(line);
+            if (found.Equals("END", StringComparison.OrdinalIgnoreCase)) break;
+            if (!found.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
+            var colon = IndexOutsideQuotes(line, ':');
+            if (colon >= 0) values.Add(line[(colon + 1)..]);
+        }
+
+        return values;
+    }
+
     // The first BDAY's raw value in the stored card — what Reconcile and MergeFill, which carry no
     // birthday of their own, must keep the card spelling through re-serialization (décision 11).
     private static string? RawBirthday(string vcardRaw) =>
@@ -832,6 +930,11 @@ internal static class VCardComposer
             ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
 
     internal static string? RawUid(string vcardRaw) => FirstRawLine(vcardRaw, "UID");
+
+    // The price of writing a line by hand is escaping it by hand (décision 6): the backslash
+    // first, or it re-escapes the escapes it has just posed.
+    internal static string EscapeText(string value) => EscapeLineBreaks(value.Replace("\\", "\\\\"))
+        .Replace(";", "\\;").Replace(",", "\\,");
 
     private static string EscapeLineBreaks(string value) =>
         value.Replace("\r\n", "\\n").Replace("\r", "\\n").Replace("\n", "\\n");

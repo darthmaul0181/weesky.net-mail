@@ -5,6 +5,8 @@ import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import ContactsLayout from './ContactsLayout'
 import type { Contact, ContactDetail } from './contactTypes'
+import type { ContactGroup } from './contactGroupTypes'
+import { CONTACT_DRAG_MIME } from './dragContacts'
 import { mockViewport, resetViewport, settle } from '../../test-utils'
 
 afterEach(resetViewport)
@@ -15,6 +17,9 @@ vi.mock('../../api.js', () => ({
     deleteContact: vi.fn(), setContactFavorite: vi.fn(),
     deleteContacts: vi.fn(), setContactsFavorite: vi.fn(),
     importContacts: vi.fn(), exportContacts: vi.fn(),
+    getContactGroups: vi.fn(), createContactGroup: vi.fn(), renameContactGroup: vi.fn(),
+    deleteContactGroup: vi.fn(), addContactGroupMembers: vi.fn(),
+    removeContactGroupMembers: vi.fn(),
   },
   // The very class the layout imports from the mocked module, so its `instanceof ApiError` holds
   // against what these tests throw: a locally-declared twin fails that check and routes a 409 to
@@ -33,7 +38,9 @@ vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getContacts' | 'getContact' | 'createContact' | 'updateContact' | 'deleteContact'
     | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
-    | 'importContacts' | 'exportContacts', ReturnType<typeof vi.fn>>
+    | 'importContacts' | 'exportContacts'
+    | 'getContactGroups' | 'createContactGroup' | 'renameContactGroup' | 'deleteContactGroup'
+    | 'addContactGroupMembers' | 'removeContactGroupMembers', ReturnType<typeof vi.fn>>
 }
 const { ApiError } = await import('../../api.js') as unknown as {
   ApiError: new (message: string, status: number) => Error
@@ -70,6 +77,14 @@ function serveBook(rows: Contact[]) {
   })
 }
 
+/** Every case reads the band, and the band asks for the groups: an endpoint answering nothing
+    would put every existing case behind a failed query. */
+beforeEach(() => { api.getContactGroups.mockResolvedValue({ groups: [] }) })
+
+function serveGroups(groups: ContactGroup[]) {
+  api.getContactGroups.mockResolvedValue({ groups })
+}
+
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -89,6 +104,9 @@ const routes = [
   { path: '/contacts', element: <ContactsLayout /> },
   { path: '/contacts/new', element: <ContactsLayout /> },
   { path: '/contacts/:id/edit', element: <ContactsLayout /> },
+  // Writing is a navigation carrying a seed, so the destination has to exist for the router to
+  // record where it went and with what.
+  { path: '/mail/compose', element: <div>compose</div> },
 ]
 
 /** Both edit routes are the same route object, so the layout is not remounted between them —
@@ -759,5 +777,169 @@ describe('ContactsLayout on a phone', () => {
     expect(container.querySelector('.context-drawer')).toBeNull()
     expect(container.querySelector('.contacts-layout > .contacts-scopes-column')).toBeTruthy()
     expect(container.querySelector('.pane-splitter')).toBeTruthy()
+  })
+})
+
+/** Imitates dataTransfer: the types are readable while hovering, the value only on drop. */
+function dragging(ids: string[]) {
+  return { types: [CONTACT_DRAG_MIME], getData: () => JSON.stringify({ ids }), dropEffect: '' }
+}
+
+describe('contact groups', () => {
+  const friends: ContactGroup = { id: 'g1', name: 'Friends', memberIds: ['a', 'b'] }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    serveBook([
+      contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+      contact({ id: 'b', firstName: 'Bruno', addresses: ['bruno@x.be'] }),
+      contact({ id: 'c', firstName: 'Carla', isFavorite: true, addresses: ['carla@x.be'] }),
+    ])
+    serveGroups([friends])
+  })
+
+  /** The row and its kebab both carry the group's name, so the row is found by the count its own
+      accessible name ends on. */
+  const groupRow = () => scopeButton(/^Friends\s*\d+$/)
+
+  const openGroupMenu = () =>
+    userEvent.click(screen.getByRole('button', { name: 'Actions for Friends' }))
+
+  it('lists the groups in the band with their member counts', async () => {
+    renderAt('/contacts')
+
+    await waitFor(() => expect(groupRow()).toHaveTextContent('2'))
+  })
+
+  it('narrows the list to the members of the open group', async () => {
+    renderAt('/contacts')
+    await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
+
+    await userEvent.click(groupRow())
+
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.getByText('Bruno')).toBeInTheDocument()
+    expect(screen.queryByText('Carla')).not.toBeInTheDocument()
+  })
+
+  // Un groupe supprimé ailleurs, un GUID étranger collé dans l'URL : le scope ne résout plus, et
+  // un carnet filtré sur rien serait indistinguable d'un carnet vide. Le repli emporte le scope et
+  // lui seul : une fiche ouverte qui disparaît avec le groupe se lit comme le contact parti avec.
+  it('falls back to the whole book when the scope names no known group, keeping the open card',
+    async () => {
+      const router = renderRouter('/contacts?scope=group:zzz&id=b')
+
+      await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
+      expect(scopeButton(/all contacts/i)).toHaveClass('is-active')
+      await waitFor(() => expect(router.state.location.search).toBe('?id=b'))
+    })
+
+  // Une liste refusée répond elle aussi à la question — le scope ne résout pas — là où attendre
+  // les données seules tiendrait la colonne sur sa ligne de chargement pour la session entière.
+  it('falls back when the group list itself is refused, and says so in the band', async () => {
+    api.getContactGroups.mockRejectedValue(new Error('boom'))
+    renderAt('/contacts?scope=group:g1')
+
+    await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
+    expect(screen.queryByText(/loading contacts/i)).not.toBeInTheDocument()
+    // Une section vide dirait que le compte n'a aucun groupe, ce qui est un mensonge par omission.
+    expect(await screen.findByText('Could not load the groups')).toBeInTheDocument()
+  })
+
+  // Le geste ajoute et ne retire jamais : un drop qui ajouterait ou retirerait selon l'état de
+  // chaque ligne rendrait un résultat différent par contact.
+  it('adds the dropped contacts to the group and never removes any', async () => {
+    api.addContactGroupMembers.mockResolvedValue(undefined)
+    renderAt('/contacts')
+    await waitFor(() => expect(groupRow()).toBeInTheDocument())
+
+    fireEvent.drop(groupRow(), { dataTransfer: dragging(['c']) })
+
+    await waitFor(() => expect(api.addContactGroupMembers).toHaveBeenCalledWith('g1', ['c']))
+    expect(api.removeContactGroupMembers).not.toHaveBeenCalled()
+  })
+
+  it('creates a group from the section header', async () => {
+    api.createContactGroup.mockResolvedValue({ id: 'g2', name: 'Colleagues', memberIds: [] })
+    renderAt('/contacts')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New group' }))
+    await userEvent.type(screen.getByLabelText('Name'), 'Colleagues')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(api.createContactGroup).toHaveBeenCalledWith('Colleagues'))
+    expect(await screen.findByText('Group Colleagues created')).toBeInTheDocument()
+  })
+
+  it('renames a group from its row menu', async () => {
+    api.renameContactGroup.mockResolvedValue(undefined)
+    renderAt('/contacts')
+    await waitFor(() => expect(groupRow()).toBeInTheDocument())
+
+    await openGroupMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    await userEvent.clear(screen.getByLabelText('Name'))
+    await userEvent.type(screen.getByLabelText('Name'), 'Best friends')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(api.renameContactGroup).toHaveBeenCalledWith('g1', 'Best friends'))
+  })
+
+  // La suppression d'un groupe n'est pas celle de ses contacts, et le dialogue doit le dire.
+  it('confirms a group deletion saying the contacts stay', async () => {
+    api.deleteContactGroup.mockResolvedValue(undefined)
+    renderAt('/contacts?scope=group:g1')
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await openGroupMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete group' }))
+    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
+    expect(screen.getByText(/contacts themselves stay/i)).toBeInTheDocument()
+    expect(api.deleteContactGroup).not.toHaveBeenCalled()
+
+    serveGroups([])
+    await confirmDeletion()
+
+    await waitFor(() => expect(api.deleteContactGroup).toHaveBeenCalledWith('g1'))
+    // Le scope suivait le groupe : il tombe sur le carnet entier plutôt que sur une liste vide.
+    await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
+  })
+
+  it('writes to the members of the group and comes back to its scope', async () => {
+    const router = renderRouter('/contacts?scope=group:g1')
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await openGroupMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Write to group' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail/compose'))
+    const state = router.state.location.state as { seed: { to: string[] }; backTo: string }
+    expect(state.seed.to).toEqual(['alice@x.be', 'bruno@x.be'])
+    // URLSearchParams percent-encodes the `:`; the router decodes it back to the same scope.
+    expect(state.backTo).toBe('/contacts?scope=group%3Ag1')
+  })
+
+  // The entry and the composer's dropdown row resolve the members through one function, so a group
+  // the book answers nothing for refuses the click here rather than opening an empty composer.
+  it('refuses Write to group when no member resolves to an address', async () => {
+    serveGroups([{ id: 'g1', name: 'Friends', memberIds: ['gone'] }])
+    renderAt('/contacts')
+    await waitFor(() => expect(groupRow()).toBeInTheDocument())
+
+    await openGroupMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Write to group' })).toBeDisabled()
+  })
+
+  // Le scope se conserve dans l'URL pour tout ce qui n'est pas « all » — la règle qui remplace les
+  // sept `'favorites'` en dur.
+  it('keeps the group scope in the URL when a contact is opened', async () => {
+    const router = renderRouter('/contacts?scope=group:g1')
+    await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText('Bruno'))
+
+    expect(router.state.location.search).toContain('id=b')
+    expect(screen.queryByText('Carla')).not.toBeInTheDocument()
   })
 })

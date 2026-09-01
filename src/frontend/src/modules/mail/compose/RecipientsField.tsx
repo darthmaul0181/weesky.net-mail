@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type Keyboar
 import { useTranslation } from 'react-i18next'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { contactNameOf } from '../../contacts/contactName'
-import { compareContacts, suggestionsFor } from '../../contacts/contactSearch'
+import { compareContacts, fold, suggestionsFor } from '../../contacts/contactSearch'
+import type { ComposerSuggestion, GroupOption } from '../../contacts/contactSearch'
 import type { Contact } from '../../contacts/contactTypes'
 
 /** Paint-and-gate check only; the backend's MimeKit parse is the authority. */
@@ -19,6 +20,11 @@ interface Props {
   /** The user's book, handed in by ComposeView. Empty by default, so the field stays fully usable
       — and its existing behaviour unchanged — for an account with no contacts. */
   contacts?: Contact[]
+  /** Resolved once by ComposeView so the field and the contacts band read one truth. */
+  groups?: GroupOption[]
+  /** A group that would insert nothing. The field never adds in silence, so it says so through
+      whatever announcement channel the caller owns. */
+  onEmptyGroup?: (name: string) => void
 }
 
 /**
@@ -42,7 +48,7 @@ export function namesByAddressOf(contacts: Contact[]): Map<string, string> {
 }
 
 export default function RecipientsField({
-  id, label, tokens, onChange, autoFocus, contacts = [],
+  id, label, tokens, onChange, autoFocus, contacts = [], groups = [], onEmptyGroup,
 }: Props) {
   const { t } = useTranslation('compose')
   const [draft, setDraft] = useState('')
@@ -52,8 +58,8 @@ export default function RecipientsField({
   const [active, setActive] = useState(-1)
 
   const suggestions = useMemo(
-    () => suggestionsFor(contacts, draft, { exclude: new Set(tokens) }),
-    [contacts, draft, tokens])
+    () => suggestionsFor(contacts, draft, { exclude: new Set(tokens), groups }),
+    [contacts, draft, tokens, groups])
   const namesByAddress = useMemo(() => namesByAddressOf(contacts), [contacts])
 
   const open = !closed && suggestions.length > 0
@@ -71,6 +77,17 @@ export default function RecipientsField({
   function commit(raw: string) {
     const parts = raw.split(/[,;]/).map(p => p.trim()).filter(Boolean)
     if (parts.length > 0) onChange([...tokens, ...parts])
+    reset()
+  }
+
+  /** A group expands into every member the field is not already carrying; an address is the one
+      token it names. Both end in `reset()` — the query has been answered either way. */
+  function commitSuggestion(suggestion: ComposerSuggestion) {
+    if (suggestion.kind === 'address') { commit(suggestion.address); return }
+    const fresh = suggestion.addresses.filter(
+      address => !tokens.some(token => fold(token.trim()) === fold(address.trim())))
+    if (fresh.length > 0) onChange([...tokens, ...fresh])
+    else onEmptyGroup?.(suggestion.name)
     reset()
   }
 
@@ -104,7 +121,7 @@ export default function RecipientsField({
       if (open) { event.preventDefault(); setClosed(true) }
     } else if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
       event.preventDefault()
-      if (open && active >= 0) commit(suggestions[active].address)
+      if (open && active >= 0) commitSuggestion(suggestions[active])
       else if (draft.trim()) commit(draft)
     } else if (event.key === 'Backspace' && draft === '' && tokens.length > 0) {
       onChange(tokens.slice(0, -1))
@@ -155,13 +172,25 @@ export default function RecipientsField({
             // an invalid token. Rows rely on this too — their own handler bubbles up to it.
             onMouseDown={event => event.preventDefault()}>
             {suggestions.map((suggestion, index) => (
-              <li key={suggestion.address} id={`${listId}-${index}`} role="option"
+              <li key={suggestion.kind === 'group' ? `group:${suggestion.id}` : suggestion.address}
+                id={`${listId}-${index}`} role="option"
                 aria-selected={index === active}
                 className={`ownership-dropdown-option${index === active ? ' is-active' : ''}`}
-                onMouseDown={() => commit(suggestion.address)}>
-                {suggestion.names.length > 0
-                  && <span className="suggestion-names">{suggestion.names.join(', ')}</span>}
-                <span className="suggestion-address">{suggestion.address}</span>
+                onMouseDown={() => commitSuggestion(suggestion)}>
+                {suggestion.kind === 'group' ? (
+                  <>
+                    <span className="suggestion-names">{suggestion.name}</span>
+                    <span className="suggestion-address">
+                      {t('recipients.groupMembers', { count: suggestion.memberCount })}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {suggestion.names.length > 0
+                      && <span className="suggestion-names">{suggestion.names.join(', ')}</span>}
+                    <span className="suggestion-address">{suggestion.address}</span>
+                  </>
+                )}
               </li>
             ))}
           </ul>

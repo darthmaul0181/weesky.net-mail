@@ -1,8 +1,12 @@
 import { collator } from '../../lib/intl'
 import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
+import type { ContactGroup } from './contactGroupTypes'
 
 const DEFAULT_LIMIT = 10
+/** Three, against the addresses' ten: the two budgets are independent (decision 15), so a matched
+    group never costs the field an address it would otherwise have offered. */
+const GROUP_LIMIT = 3
 
 /** Diacritics stripped and lower-cased. Nobody reaches for the é key to look somebody up, so a
     query has to match an accented contact and the reverse. \p{M} (combining marks), not
@@ -37,6 +41,47 @@ export function compareContacts(a: Contact, b: Contact): number {
   return collator({ sensitivity: 'base' }).compare(displayNameOf(a), displayNameOf(b))
 }
 
+/** A group as the composer offers it: the name and the membership the row shows, plus the
+    addresses picking it would insert. */
+export interface GroupOption {
+  id: string
+  name: string
+  memberCount: number
+  addresses: string[]
+}
+
+export type ComposerSuggestion =
+  | ({ kind: 'address' } & AddressSuggestion)
+  | ({ kind: 'group' } & GroupOption)
+
+/**
+ * The resolved primary address of every group's members, deduplicated on the folded address the
+ * way the dropdown's own rows are — two members sharing a mailbox spelled two ways would
+ * otherwise put the identical recipient in the field twice.
+ *
+ * Computed once by the caller and read by the field and the band alike, so "writing to this group
+ * reaches nobody" is one answer rather than two that can disagree. `memberCount` counts the
+ * membership, never what writing would reach: a group of three whose members carry no address is
+ * still a group of three.
+ */
+export function groupOptionsOf(groups: ContactGroup[], contacts: Contact[]): GroupOption[] {
+  const byId = new Map(contacts.map(contact => [contact.id, contact]))
+  return groups.map(group => {
+    const seen = new Set<string>()
+    const addresses: string[] = []
+    for (const id of group.memberIds) {
+      const member = byId.get(id)
+      const address = member && primaryAddressOf(member)
+      if (!address) continue
+      const key = fold(address.trim())
+      if (seen.has(key)) continue
+      seen.add(key)
+      addresses.push(address)
+    }
+    return { id: group.id, name: group.name, memberCount: group.memberIds.length, addresses }
+  })
+}
+
 export interface AddressSuggestion {
   address: string
   /** Every contact carrying this address that the user actually named, in contact order. Length
@@ -46,18 +91,24 @@ export interface AddressSuggestion {
 }
 
 /**
- * The composer's dropdown. Rows are keyed by **address**, folded and trimmed, since an address is
- * what gets inserted: one address carried by several contacts — or spelled in different case by
- * two of them — is one row naming all of them, never several rows producing the identical
+ * The composer's dropdown. Address rows are keyed by **address**, folded and trimmed, since an
+ * address is what gets inserted: one address carried by several contacts — or spelled in different
+ * case by two of them — is one row naming all of them, never several rows producing the identical
  * recipient. The rendered `address` keeps its original spelling; only the key is canonicalised.
+ *
+ * Group rows come first and are capped before the merge, so the ten address places stay the ten
+ * address places. A group whose every address is already a token is dropped — picking it could
+ * only add nothing — while a group carrying no address at all is kept, because that is a state
+ * the user has to be told about and the field's toast is where it is said.
  */
 export function suggestionsFor(
   contacts: Contact[],
   query: string,
-  options: { exclude?: Set<string>; limit?: number } = {},
-): AddressSuggestion[] {
-  const { exclude, limit = DEFAULT_LIMIT } = options
-  if (fold(query.trim()) === '') return []
+  options: { exclude?: Set<string>; limit?: number; groups?: GroupOption[] } = {},
+): ComposerSuggestion[] {
+  const { exclude, limit = DEFAULT_LIMIT, groups = [] } = options
+  const needle = fold(query.trim())
+  if (needle === '') return []
 
   // Keyed canonically (folded, trimmed) so that 'Info@Example.com' and 'info@example.com' — same
   // mailbox, different spelling — collapse to one row instead of two identical-looking recipients.
@@ -89,11 +140,20 @@ export function suggestionsFor(
     }
   }
 
-  return [...rows.values()]
+  const groupRows = groups
+    .filter(group => fold(group.name).includes(needle))
+    .filter(group => group.addresses.length === 0
+      || group.addresses.some(address => !excludeKeys?.has(fold(address.trim()))))
+    .slice(0, GROUP_LIMIT)
+    .map(group => ({ kind: 'group' as const, ...group }))
+
+  const addressRows = [...rows.values()]
     .sort((left, right) =>
       Number(right.favorite) - Number(left.favorite)
       || Number(right.primary) - Number(left.primary)
       || collator({ sensitivity: 'base' }).compare(left.address, right.address))
     .slice(0, limit)
-    .map(({ address, names }) => ({ address, names }))
+    .map(({ address, names }) => ({ kind: 'address' as const, address, names }))
+
+  return [...groupRows, ...addressRows]
 }
