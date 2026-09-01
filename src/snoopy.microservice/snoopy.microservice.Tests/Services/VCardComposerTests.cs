@@ -684,4 +684,75 @@ public sealed class VCardComposerTests
 
         Assert.Equal(1, VCardProjector.Project(output).PostalAddresses.Single().Line.Pref);
     }
+
+    // ---- groupes (tranche 4e) --------------------------------------------------------------
+
+    [Fact]
+    public void ComposeNewGroup_CarriesKindNameAndEmptyN()
+    {
+        var card = VCardComposer.ComposeNewGroup("g1", "Amis");
+
+        Assert.Contains("X-ADDRESSBOOKSERVER-KIND:group", card);
+        Assert.Contains("FN:Amis", card);
+        Assert.Contains("N:;;;;", card);      // pas le ? de la bibliotheque (decision 17)
+        Assert.Contains("UID:g1", card);
+        // Le dialecte 4.0 n'apparait pas : aucune ligne nue KIND, seulement la X-.
+        Assert.DoesNotContain(VCardComposer.LogicalLines(card),
+            l => VCardComposer.NameOf(VCardComposer.Unfold(l))
+                .Equals("KIND", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AddGroupMember_FollowsTheCardsDialect_AndTouchesNothingElse()
+    {
+        // Carte 4.0 stockee : la ligne ecrite est MEMBER, jamais X-ADDRESSBOOKSERVER-MEMBER.
+        var v4 = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:g\r\nFN:G\r\nKIND:group\r\nX-FOO;X-BAR=1:v\r\nEND:VCARD\r\n";
+
+        var added = VCardComposer.AddGroupMember(v4, "m1");
+
+        Assert.Contains("MEMBER:urn:uuid:m1", added);
+        Assert.DoesNotContain("X-ADDRESSBOOKSERVER-MEMBER", added);
+        // Le reste octet pour octet : la famille X- etrangere intacte.
+        Assert.Equal(v4.Replace("END:VCARD", "MEMBER:urn:uuid:m1\r\nEND:VCARD"), added);
+    }
+
+    [Fact]
+    public void AddGroupMember_OnAnAppleCard_WritesTheXDialect()
+    {
+        var v3 = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\nEND:VCARD\r\n";
+
+        var added = VCardComposer.AddGroupMember(v3, "m1");
+
+        Assert.Equal(
+            v3.Replace("END:VCARD", "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\nEND:VCARD"), added);
+    }
+
+    [Fact]
+    public void RemoveGroupMember_MatchesEveryValueForm()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:m1\r\n"           // nu (DAVx5)
+            + "X-ADDRESSBOOKSERVER-MEMBER:URN:UUID:m1\r\n"  // prefixe, casse quelconque (Apple)
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m2\r\nEND:VCARD\r\n";
+
+        var removed = VCardComposer.RemoveGroupMember(card, "m1");
+
+        Assert.DoesNotContain("m1", removed);
+        Assert.Contains("urn:uuid:m2", removed);
+    }
+
+    [Fact]
+    public void RenameGroup_TouchesOnlyTheFnAndEscapes()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nN:;;;;\r\n"
+            + "X-ADDRESSBOOKSERVER-KIND:group\r\nEMAIL:a@b.c\r\nEND:VCARD\r\n";
+
+        var renamed = VCardComposer.RenameGroup(card, "Amis, Famille");
+
+        Assert.Contains(@"FN:Amis\, Famille", renamed);
+        Assert.Contains("EMAIL:a@b.c", renamed);   // les EMAIL sont la apres (decision 6)
+        Assert.Contains("N:;;;;", renamed);        // pas de N rempli
+        // Et l'aller-retour par le projecteur rend le nom desechappe.
+        Assert.Equal("Amis, Famille", VCardProjector.Project(renamed).DisplayName);
+    }
 }

@@ -39,7 +39,7 @@ internal static class VCardProjector
     private const string Placeholder = "?";
 
     // The URI form a MEMBER value takes in vCard 4.0; the projection stores the bare UID.
-    private const string UrnUuidPrefix = "urn:uuid:";
+    internal const string UrnUuidPrefix = "urn:uuid:";
 
     private static readonly ContactProjection Empty = new(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null,

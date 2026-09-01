@@ -27,6 +27,10 @@ internal static class VCardComposer
 
     private enum Family { Email, Phone, Postal }
 
+    // Apple's dialect, the one a new group card is born in (décision 6).
+    private const string GroupKindName = "X-ADDRESSBOOKSERVER-KIND";
+    private const string GroupMemberName = "X-ADDRESSBOOKSERVER-MEMBER";
+
     // 101 is the erasure the projector reads back as no PREF at all (décision 5 bis of 4a). Measured
     // against FolkerKinzel 8.2.0's 3.0 and 4.0 writers — the two versions Emit produces — setting
     // Preference to 100 (its own default) makes both emit no PREF parameter or token at all.
@@ -79,6 +83,78 @@ internal static class VCardComposer
         return Emit(source, uid, write.Birthday ?? RawBirthday(existingCard));
     }
 
+    // ---- groups (tranche 4e) --------------------------------------------------------------------
+
+    /// <summary>A new group card — the only group write that goes through the serializer: a card
+    /// that does not exist yet has nothing to preserve (décision 6). Born in 3.0, Apple's dialect.</summary>
+    internal static string ComposeNewGroup(string uid, string name)
+    {
+        var card = new VCard
+        {
+            DisplayNames = [new TextProperty(name)],
+            NonStandards = [new NonStandardProperty(GroupKindName, "group")],
+        };
+        return Emit(new SourceCard(card, VCdVersion.V3_0, [], [], null), uid, null);
+    }
+
+    // The three edits below rewrite one line of the stored card and copy the rest verbatim
+    // (décision 6): a group card carries members the composer models nowhere, and the 3.0 writer
+    // emits no MEMBER at all, so re-serializing one would empty it.
+    internal static string AddGroupMember(string card, string memberUid)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        // The card's dialect, not ours: a mixed card is a memberless group to a strict 4.0 reader.
+        var name = lines.Any(l => IsName(l, "KIND")) ? "MEMBER" : GroupMemberName;
+        lines.Insert(EndIndex(lines), Fold($"{name}:{VCardProjector.UrnUuidPrefix}{memberUid}"));
+        return Join(lines);
+    }
+
+    // Décision 7: the removal matches every value form the reading accepts — both names, the
+    // urn:uuid: prefix optional and case-insensitive.
+    internal static string RemoveGroupMember(string card, string memberUid)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        lines.RemoveAll(l =>
+        {
+            if (!IsName(l, "MEMBER") && !IsName(l, GroupMemberName)) return false;
+            var unfolded = Unfold(l);
+            var colon = IndexOutsideQuotes(unfolded, ':');
+            return colon >= 0
+                && VCardProjector.StripUrnUuid(unfolded[(colon + 1)..].Trim()) == memberUid;
+        });
+        return Join(lines);
+    }
+
+    internal static string RenameGroup(string card, string name)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        var escaped = EscapeText(name);
+        // Valueless — a malformed FN carrying no colon at all — is no FN to rename (FirstRawLine's
+        // own guard): the value replacement would eat the property name.
+        var index = lines.FindIndex(l => IsName(l, "FN") && IndexOutsideQuotes(Unfold(l), ':') >= 0);
+        if (index < 0)
+        {
+            lines.Insert(EndIndex(lines), Fold("FN:" + escaped));
+            return Join(lines);
+        }
+
+        var unfolded = Unfold(lines[index]);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        lines[index] = Fold(unfolded[..(colon + 1)] + escaped);
+        return Join(lines);
+    }
+
+    private static bool IsName(string chunk, string name) =>
+        NameOf(Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
+
+    // Where a line joins the card: before END:VCARD, or at the end of a card that has no END.
+    private static int EndIndex(List<string> lines)
+    {
+        var end = lines.FindLastIndex(l => IsName(l, "END"));
+        return end < 0 ? lines.Count : end;
+    }
+
+    private static string Join(List<string> lines) => string.Join("\r\n", lines) + "\r\n";
     // The families and scalars an entry point poses only when its write names them — absent means
     // untouched here, whichever door came in.
     private static void PoseOptional(
@@ -832,6 +908,11 @@ internal static class VCardComposer
             ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
 
     internal static string? RawUid(string vcardRaw) => FirstRawLine(vcardRaw, "UID");
+
+    // The price of writing a line by hand is escaping it by hand (décision 6): the backslash
+    // first, or it re-escapes the escapes it has just posed.
+    internal static string EscapeText(string value) => EscapeLineBreaks(value.Replace("\\", "\\\\"))
+        .Replace(";", "\\;").Replace(",", "\\,");
 
     private static string EscapeLineBreaks(string value) =>
         value.Replace("\r\n", "\\n").Replace("\r", "\\n").Replace("\n", "\\n");
