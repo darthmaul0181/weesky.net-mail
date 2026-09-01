@@ -211,6 +211,20 @@ export const api = {
 
   exportContacts: () => requestBlob('/api/Contacts/Export'),
 
+  getContactGroups: () => request('GET', '/api/ContactGroups'),
+
+  createContactGroup: (name) => request('POST', '/api/ContactGroups', { name }),
+
+  renameContactGroup: (id, name) => request('PUT', `/api/ContactGroups/${id}`, { name }),
+
+  deleteContactGroup: (id) => request('DELETE', `/api/ContactGroups/${id}`),
+
+  addContactGroupMembers: (id, contactIds) =>
+    request('POST', `/api/ContactGroups/${id}/Members`, { contactIds }),
+
+  removeContactGroupMembers: (id, contactIds) =>
+    request('DELETE', `/api/ContactGroups/${id}/Members`, { contactIds }),
+
   // The address comes from the backend's configuration, never composed here: the URL this app
   // calls is not necessarily the one the proxy publishes.
   getDavCredentials: () =>
