@@ -639,6 +639,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         var born = new Dictionary<Guid, Contact>();
         var pending = new Dictionary<Guid, PendingCard>();
         var replaced = new List<Guid>();
+        var knownGroups = new List<(Guid Id, ContactImportRow Row)>();
         var merges = new List<(Guid Target, ContactImportRow Row, List<string> Addresses)>();
         var errors = new List<ContactImportError>();
         int created = 0, merged = 0, skipped = 0, failed = 0;
@@ -649,6 +650,11 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             // (décision 19). The UID of the other species does not decide either: refused, counted.
             if (row.IsGroup)
             {
+                // No column of ours describes a group: its card is the whole of it, so a row
+                // arriving without one carries nothing at all. Only a reader change could produce it.
+                if (row.VCard == null)
+                { failed++; errors.Add(new ContactImportError(row.Line, NoNameOrAddress)); continue; }
+
                 if (row.Uid != null && uidOwners.TryGetValue(row.Uid, out var owner))
                 {
                     if (owner.Kind != ContactKinds.Group)
@@ -657,18 +663,10 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                     // A group already known by UID: the incoming card replaces it through pending,
                     // which is what makes re-importing a file idempotent. The contact merge never
                     // applies to a group, so a card that says nothing new is caught, as everywhere
-                    // else, by PrepareCard reporting it unchanged.
-                    var known = await context.Contacts
-                        .FirstOrDefaultAsync(c => c.Id == owner.Id, cancellationToken);
-                    if (known != null)
-                    {
-                        pending[known.Id] = new PendingCard(known, row.Line, row.VCard!);
-                        // Its child rows are what the projection replacing them must clear, and
-                        // only the cache loaded below clears them: a group is in no merge, so
-                        // nothing else would ever put it in there.
-                        replaced.Add(known.Id);
-                        merged++;
-                    }
+                    // else, by PrepareCard reporting it unchanged. Held here and resolved once the
+                    // loop is over: a read per row would be a query per line inside the transaction
+                    // already holding the state row's lock.
+                    knownGroups.Add((owner.Id, row));
                     continue;
                 }
 
@@ -802,6 +800,33 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             created++;
         }
 
+        // One query for every group the batch already knew, the merge path's shape below. What this
+        // file gave BIRTH to is consulted first, and it is what a query cannot see: a file naming
+        // one group UID twice would otherwise lose its second card to a read of unsaved rows.
+        if (knownGroups.Count > 0)
+        {
+            var absent = knownGroups.Select(g => g.Id).Where(id => !born.ContainsKey(id)).Distinct().ToList();
+            var byId = (absent.Count == 0 ? [] : await context.Contacts
+                    .Where(c => c.UserId == userId && absent.Contains(c.Id))
+                    .ToListAsync(cancellationToken))
+                .ToDictionary(c => c.Id);
+
+            foreach (var (id, row) in knownGroups)
+            {
+                var group = born.TryGetValue(id, out var fresh) ? fresh : byId.GetValueOrDefault(id);
+                // Deleted between the index query and this one: nothing left to replace, and the row
+                // is dropped rather than failing the file — ApplyMergesAsync's own choice.
+                if (group == null) continue;
+
+                pending[id] = new PendingCard(group, row.Line, row.VCard!);
+                // Its child rows are what the projection replacing them must clear, and only the
+                // cache loaded below clears them: a group is in no merge, so nothing else would
+                // ever put it in there.
+                replaced.Add(id);
+                merged++;
+            }
+        }
+
         // Five queries for the whole batch, whatever the number of merges: what the targets already
         // hold is what re-projecting them has to clear.
         var cache = await LoadProjectionAsync(
@@ -859,6 +884,10 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
             await ApplyCardAsync(item.Contact, prepared.Value.Card, cache, cancellationToken);
             item.Contact.SyncSequence = rank;
+            // Under the same guard as every other write here, and as ApplyMergesAsync's own: a
+            // replaced group has no other writer of it, and a card that came back byte for byte
+            // must not move what a CardDAV ETag rests on.
+            item.Contact.UpdatedAt = DateTime.UtcNow;
             // A contact born here carries none, and one the backfill window left nameless takes its
             // name in the very batch that advances its rank: a rank above zero on a nameless row is
             // a row no report can serve.

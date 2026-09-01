@@ -218,4 +218,28 @@ public sealed class ContactStoreImportGroupTests
         Assert.Equal("Collègues", stored.DisplayName);
         Assert.Equal(second, after.ContactGroupMembers.Single(m => m.GroupId == stored.Id).MemberUid);
     }
+
+    // One file, one group UID, two cards. The second is resolved against what the batch has just
+    // GIVEN BIRTH TO and not against the table, which cannot see an unsaved row: the last card
+    // wins, and every line of the file is accounted for.
+    [Fact]
+    public async Task Import_TheSameGroupUidTwiceInOneFile_KeepsTheLastCard()
+    {
+        var db = nameof(Import_TheSameGroupUidTwiceInOneFile_KeepsTheLastCard);
+        var user = Guid.NewGuid();
+        const string second = "22222222-2222-2222-2222-222222222222";
+        var last = GroupCard("g-1", "Collègues", second);
+        var rows = Rows(GroupCard("g-1", "Amis", MemberUid), last);
+
+        var outcome = await CreateStore(db).ImportAsync(user, rows, CancellationToken.None);
+
+        Assert.Equal(
+            rows.Count, outcome.Created + outcome.Merged + outcome.Skipped + outcome.Failed);
+        Assert.Empty(outcome.Errors);
+        var after = new PreferencesTestDbContext(db);
+        var stored = Assert.Single(after.Contacts);
+        Assert.Equal(last, stored.VCardRaw);
+        Assert.Equal("Collègues", stored.DisplayName);
+        Assert.Equal(second, after.ContactGroupMembers.Single(m => m.GroupId == stored.Id).MemberUid);
+    }
 }
