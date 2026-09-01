@@ -57,6 +57,13 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
     internal const string NoNameOrAddress = "Neither a name nor a valid e-mail address";
 
+    /// <summary>
+    /// The UID is an identity, and it names one card of one species. A group card arriving on a
+    /// contact's UID — or the reverse — is refused rather than merged: the two are not versions of
+    /// one another, and picking either would silently change what the other is (décision 19).
+    /// </summary>
+    internal const string CrossSpeciesUid = "This row's UID already belongs to the other kind of card";
+
     // A separator no name can carry, so three parts fold into one key without ever colliding.
     private const char NamePartSeparator = '\0';
 
@@ -523,28 +530,35 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     public async Task<ContactImportOutcome> ImportAsync(
         Guid userId, IReadOnlyList<ContactImportRow> rows, CancellationToken cancellationToken)
     {
+        // Held in a variable rather than repeated inline: both merge indexes are built over the
+        // contacts alone. A group card carrying an EMAIL is exotic and stored all the same, and a
+        // row addressed like one must create a contact, never fold into the group (décision 19).
+        var individuals = context.Contacts.AsNoTracking().Individuals();
+
         // The same correlated subquery ListAsync uses: MariaDB cannot parametrise a collection, so
         // an IN list of up to MaxPerUser ids would be inlined and defeat the plan cache.
         var addressRows = await context.ContactEmails.AsNoTracking()
-            .Where(e => context.Contacts.Any(c => c.Id == e.ContactId && c.UserId == userId))
+            .Where(e => individuals.Any(c => c.Id == e.ContactId && c.UserId == userId))
             .ToListAsync(cancellationToken);
 
         // Only the address-less contacts: one that has addresses is reachable through the address
         // index, and the exporter always writes the addresses a contact has — so a row carrying a
         // name and nothing else can only ever be describing a contact that has none.
-        var addressless = await context.Contacts.AsNoTracking().Individuals()
+        var addressless = await individuals
             .Where(c => c.UserId == userId && !context.ContactEmails.Any(e => e.ContactId == c.Id))
             .Select(c => new { c.Id, c.FirstName, c.LastName, c.Nickname })
             .ToListAsync(cancellationToken);
 
         // The third index, and the one consulted first: a card's UID is an identity its owner
-        // chose, where an address is a coincidence and a name a guess (décision 14).
-        var uidOwners = new Dictionary<string, Guid>();
+        // chose, where an address is a coincidence and a name a guess (décision 14). Both species
+        // are in it, each under its own kind: an incoming row and the UID it lands on must belong
+        // to the same one, and this index is the only thing that can say so (décision 19).
+        var uidOwners = new Dictionary<string, (Guid Id, string Kind)>();
         foreach (var c in await context.Contacts.AsNoTracking()
                      .Where(c => c.UserId == userId)
-                     .Select(c => new { c.Id, c.Uid })
+                     .Select(c => new { c.Id, c.Uid, c.Kind })
                      .ToListAsync(cancellationToken))
-            uidOwners[c.Uid] = c.Id;
+            uidOwners[c.Uid] = (c.Id, c.Kind);
 
         var owners = new Dictionary<string, HashSet<Guid>>();
         var held = new Dictionary<Guid, HashSet<string>>();
@@ -595,7 +609,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// rows to learn what this pass already knows, having written it itself.
     /// </summary>
     private sealed record ImportIndexes(
-        Dictionary<string, Guid> UidOwners,
+        Dictionary<string, (Guid Id, string Kind)> UidOwners,
         Dictionary<string, HashSet<Guid>> Owners,
         Dictionary<Guid, HashSet<string>> Held,
         Dictionary<string, HashSet<Guid>> Named);
@@ -624,12 +638,61 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         var (uidOwners, owners, held, named) = index;
         var born = new Dictionary<Guid, Contact>();
         var pending = new Dictionary<Guid, PendingCard>();
+        var replaced = new List<Guid>();
         var merges = new List<(Guid Target, ContactImportRow Row, List<string> Addresses)>();
         var errors = new List<ContactImportError>();
         int created = 0, merged = 0, skipped = 0, failed = 0;
 
         foreach (var row in rows)
         {
+            // A group resolves by UID and by nothing else — never a name, never an address
+            // (décision 19). The UID of the other species does not decide either: refused, counted.
+            if (row.IsGroup)
+            {
+                if (row.Uid != null && uidOwners.TryGetValue(row.Uid, out var owner))
+                {
+                    if (owner.Kind != ContactKinds.Group)
+                    { failed++; errors.Add(new ContactImportError(row.Line, CrossSpeciesUid)); continue; }
+
+                    // A group already known by UID: the incoming card replaces it through pending,
+                    // which is what makes re-importing a file idempotent. The contact merge never
+                    // applies to a group, so a card that says nothing new is caught, as everywhere
+                    // else, by PrepareCard reporting it unchanged.
+                    var known = await context.Contacts
+                        .FirstOrDefaultAsync(c => c.Id == owner.Id, cancellationToken);
+                    if (known != null)
+                    {
+                        pending[known.Id] = new PendingCard(known, row.Line, row.VCard!);
+                        // Its child rows are what the projection replacing them must clear, and
+                        // only the cache loaded below clears them: a group is in no merge, so
+                        // nothing else would ever put it in there.
+                        replaced.Add(known.Id);
+                        merged++;
+                    }
+                    continue;
+                }
+
+                if (stored + created >= MaxPerUser)
+                { skipped++; errors.Add(new ContactImportError(row.Line, CapReached)); continue; }
+
+                // The mechanics of a contact born of a .vcf, WITHOUT Register or Index: a group
+                // enters no merge index, neither as a target nor as an entrant. Its columns are the
+                // projection's to write, as they are for every card stored verbatim.
+                var groupId = Guid.NewGuid();
+                var group = new Contact
+                {
+                    Id = groupId, UserId = userId, Uid = row.Uid ?? groupId.ToString(),
+                    Source = "imported", UpdatedAt = DateTime.UtcNow
+                };
+                context.Contacts.Add(group);
+                born[groupId] = group;
+                // Always non-null: a CSV never describes a group.
+                pending[groupId] = new PendingCard(group, row.Line, row.VCard!);
+                uidOwners[group.Uid] = (groupId, ContactKinds.Group);
+                created++;
+                continue;
+            }
+
             var canonical = row.Addresses.Select(IdentityResolver.Canonical).Distinct().ToList();
             if (row.FirstName == null && row.LastName == null && row.Nickname == null && canonical.Count == 0)
             {
@@ -638,10 +701,19 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 continue;
             }
 
+            // A contact whose UID belongs to a group: the mirror of the refusal above.
+            if (row.Uid != null && uidOwners.TryGetValue(row.Uid, out var holder)
+                && holder.Kind == ContactKinds.Group)
+            {
+                failed++;
+                errors.Add(new ContactImportError(row.Line, CrossSpeciesUid));
+                continue;
+            }
+
             List<Guid> targets;
             if (row.Uid != null && uidOwners.TryGetValue(row.Uid, out var byUid))
             {
-                targets = [byUid];
+                targets = [byUid.Id];
             }
             else
             {
@@ -722,7 +794,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             // into this contact, and two writes would project it twice.
             pending[id] = new PendingCard(contact, row.Line,
                 row.VCard ?? VCardComposer.ComposeNew(contact.Uid, Composed(row, contact, kept)));
-            uidOwners[contact.Uid] = id;
+            uidOwners[contact.Uid] = (id, ContactKinds.Individual);
             foreach (var address in kept) Register(owners, held, id, address);
             // Kept current as the file is read, or a name listed twice with no address would leave
             // two cards behind — the address and UID indexes are kept current for the same reason.
@@ -733,7 +805,8 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // Five queries for the whole batch, whatever the number of merges: what the targets already
         // hold is what re-projecting them has to clear.
         var cache = await LoadProjectionAsync(
-            [.. merges.Select(m => m.Target).Where(id => !born.ContainsKey(id)).Distinct()],
+            [.. merges.Select(m => m.Target).Concat(replaced)
+                .Where(id => !born.ContainsKey(id)).Distinct()],
             cancellationToken);
         await ApplyMergesAsync(userId, merges, born, pending, cache, uidOwners, cancellationToken);
 
@@ -846,7 +919,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         Dictionary<Guid, Contact> born,
         Dictionary<Guid, PendingCard> pending,
         ProjectionCache cache,
-        Dictionary<string, Guid> uidOwners,
+        Dictionary<string, (Guid Id, string Kind)> uidOwners,
         CancellationToken cancellationToken)
     {
         if (merges.Count == 0) return;
@@ -901,7 +974,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// </summary>
     private static PendingCard Filled(
         Contact contact, PendingCard? pending, ContactImportRow row, MergeWrite fill,
-        ProjectionCache cache, Dictionary<string, Guid> uidOwners)
+        ProjectionCache cache, Dictionary<string, (Guid Id, string Kind)> uidOwners)
     {
         var current = pending?.Card ?? contact.VCardRaw;
         if (current == null && row.VCard != null && LosesNothing(contact, cache, row.VCard))
@@ -967,14 +1040,15 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// contact of this user already answers to it — a duplicate <c>uq_contacts_user_uid</c> would
     /// fail the whole file.
     /// </summary>
-    private static bool Adopt(Contact contact, string? uid, Dictionary<string, Guid> uidOwners)
+    private static bool Adopt(
+        Contact contact, string? uid, Dictionary<string, (Guid Id, string Kind)> uidOwners)
     {
         if (uid is not { Length: > 0 } || uid.Length > VCardProjector.MaxUidLength) return false;
         if (uid == contact.Uid) return true;
         if (uidOwners.ContainsKey(uid)) return false;
 
         uidOwners.Remove(contact.Uid);
-        uidOwners[uid] = contact.Id;
+        uidOwners[uid] = (contact.Id, ContactKinds.Individual);
         contact.Uid = uid;
         return true;
     }

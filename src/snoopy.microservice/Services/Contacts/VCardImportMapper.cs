@@ -1,4 +1,5 @@
 using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Repositories;
 
 namespace weesky.Snoopy.Microservice.Services.Contacts;
 
@@ -12,15 +13,19 @@ internal static class VCardImportMapper
     internal static ContactImportRow Map(VCardChunk chunk)
     {
         var projection = VCardProjector.Project(chunk.Text);
+        var isGroup = projection.Kind == ContactKinds.Group;
         // A card naming nobody but itself still has to reach the merge: the display name is where
-        // the CSV mapper looks next too, and no vCard property carries the favourite.
+        // the CSV mapper looks next too, and no vCard property carries the favourite. Not for a
+        // group: the name of a group is not the nickname of a contact, and the index that fallback
+        // feeds is one a group never enters (décision 19).
         var nickname = projection.Nickname
-            ?? (projection.FirstName == null && projection.LastName == null ? projection.DisplayName : null);
+            ?? (!isGroup && projection.FirstName == null && projection.LastName == null
+                ? projection.DisplayName : null);
 
         return new ContactImportRow(
             chunk.Line, projection.FirstName, projection.LastName, nickname, false,
             [.. projection.Addresses.Select(e => e.Address)], chunk.Text, UidOf(chunk.Text),
-            Offered(projection, nickname));
+            Offered(projection, nickname), isGroup);
     }
 
     /// <summary>
