@@ -895,6 +895,23 @@ internal static class VCardComposer
     internal static string? FirstRawValue(string vcardRaw, string name) =>
         FirstRawLine(vcardRaw, name) is { } line ? line[(IndexOutsideQuotes(line, ':') + 1)..] : null;
 
+    /// <summary>Every raw value of one property family, in order — never decoded, never past
+    /// END:VCARD. <see cref="FirstRawValue"/> renders only one; this is for MEMBER, which repeats.</summary>
+    internal static List<string> RawValuesOf(string vcardRaw, string name)
+    {
+        var values = new List<string>();
+        foreach (var logical in LogicalLines(CanonicalLineBreaks(vcardRaw)))
+        {
+            if (IsName(logical, "END")) break;
+            if (!IsName(logical, name)) continue;
+            var line = Unfold(logical);
+            var colon = IndexOutsideQuotes(line, ':');
+            if (colon >= 0) values.Add(line[(colon + 1)..]);
+        }
+
+        return values;
+    }
+
     // The first BDAY's raw value in the stored card — what Reconcile and MergeFill, which carry no
     // birthday of their own, must keep the card spelling through re-serialization (décision 11).
     private static string? RawBirthday(string vcardRaw) =>

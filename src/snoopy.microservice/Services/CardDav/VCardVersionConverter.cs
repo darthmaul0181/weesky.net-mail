@@ -10,7 +10,9 @@ namespace weesky.Snoopy.Microservice.Services.CardDav;
 /// Spells a stored card in the version a client asked for. Not a comfort: DAVx5 asks for 4.0 as
 /// soon as the announcement carries it and iOS reads 4.0 badly — sabre withdrew its own 4.0
 /// announcement in 2013 for exactly that, and only restored it once it shipped this conversion.
-/// The transposition rules are the library's, never a textual rewrite of ours.
+/// The transposition rules are the library's, never a textual rewrite of ours — <see
+/// cref="RestoreUid"/>, <see cref="VCardComposer.StripNamePlaceholders"/> and <see
+/// cref="TranslateGroupProperties"/> are this class's three assumed exceptions.
 /// </summary>
 internal static class VCardVersionConverter
 {
@@ -40,6 +42,7 @@ internal static class VCardVersionConverter
         var lines = VCardComposer.LogicalLines(Vcf.AsString([parsed[0]], wanted, null, Options));
         VCardComposer.StripNamePlaceholders(lines, parsed[0]);
         RestoreUid(lines, card);
+        TranslateGroupProperties(lines, wanted, card);
         return string.Join("\r\n", lines) + "\r\n";
     }
 
@@ -88,5 +91,55 @@ internal static class VCardVersionConverter
         var index = lines.FindIndex(line => VCardComposer
             .NameOf(VCardComposer.Unfold(line)).Equals("UID", StringComparison.OrdinalIgnoreCase));
         if (index >= 0) lines[index] = VCardComposer.Fold(raw);
+    }
+
+    /// <summary>
+    /// The third of this class's assumed exceptions, after DropEmbeddedCards and RestoreUid, and for
+    /// RestoreUid's reason: without it a strictly-4.0 client reads a group as an empty sheet — the
+    /// defect 4e repairs, moved one step over (décision 5 de 4e). Going to 4.0 the library copied the
+    /// X- lines through: renaming them is enough. Going to 3.0 it already dropped KIND and MEMBER
+    /// before we looked, so the two lines are rebuilt from the STORED card, values verbatim.
+    /// </summary>
+    private static void TranslateGroupProperties(List<string> lines, VCdVersion wanted, string stored)
+    {
+        if (wanted == VCdVersion.V4_0)
+        {
+            Rename(lines, "X-ADDRESSBOOKSERVER-KIND", "KIND");
+            Rename(lines, "X-ADDRESSBOOKSERVER-MEMBER", "MEMBER");
+            return;
+        }
+
+        // 3.0 : rebâtir depuis la carte stockée, comme RestoreUid va y relire son UID.
+        if (VCardComposer.FirstRawValue(stored, "KIND") is not { } kind
+            || !kind.Trim().Equals("group", StringComparison.OrdinalIgnoreCase))
+            return;
+        var rebuilt = new List<string> { "X-ADDRESSBOOKSERVER-KIND:" + kind };
+        rebuilt.AddRange(VCardComposer.RawValuesOf(stored, "MEMBER")
+            .Select(v => VCardComposer.Fold("X-ADDRESSBOOKSERVER-MEMBER:" + v)));
+        var end = lines.FindLastIndex(l => VCardComposer.IsName(l, "END"));
+        lines.InsertRange(end < 0 ? lines.Count : end, rebuilt);
+    }
+
+    // Renames the NAME prefix of every line whose name is `from` (group prefix such as `item1.`
+    // kept, parameters and value untouched). A line may be folded, so this unfolds, replaces, then
+    // re-folds — as RestoreUid does.
+    private static void Rename(List<string> lines, string from, string to)
+    {
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (!VCardComposer.IsName(lines[i], from)) continue;
+            var unfolded = VCardComposer.Unfold(lines[i]);
+            var start = 0;
+            var end = unfolded.IndexOfAny([';', ':', '.']);
+            if (end >= 0 && unfolded[end] == '.')
+            {
+                start = end + 1;
+                var next = unfolded[start..].IndexOfAny([';', ':']);
+                end = next < 0 ? -1 : start + next;
+            }
+
+            if (end < 0) continue;
+            lines[i] = VCardComposer.Fold(unfolded[..start] + to + unfolded[end..]);
+        }
     }
 }
