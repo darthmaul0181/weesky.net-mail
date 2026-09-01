@@ -158,6 +158,44 @@ le seul manque relevé est produit (pas d'édition de photo au webmail), hors 4d
 de test a été régénéré — les identifiants ayant servi à la campagne sont morts. La tranche 4d est
 close : outil passé (section 4), clients passés (ci-dessus), divergences rapprochées (section 6).
 
+### Groupes de contacts (tranche 4e, campagne à mener)
+
+Spec [4e](specs/2026-08-31-webmail-contacts-4e-groups-design.md), § Tests, fin : aucun groupe
+n'existe en base au 2026-08-31, donc le scénario ne peut pas être une observation — il faut
+**créer** un groupe de chaque côté. Le tableau nomme son client par ligne : Thunderbird ne mappe pas
+`KIND:group` / `X-ADDRESSBOOKSERVER-KIND:group` sur une liste de diffusion — la carte en sort en
+fiche, « créé côté client » n'y est pas jouable, et ce n'est pas un défaut à relever. L'app Contacts
+d'iOS crée des « listes » depuis iOS 16, qui se synchronisent en cartes de groupe : « créé sur le
+téléphone » s'y joue comme sur DAVx⁵. Rien d'Apple n'a encore été observé sur ce serveur (section
+7) : la ligne Apple reste **ouverte**, jamais cochée, tant qu'aucun appareil ne s'est présenté.
+
+| # | Scénario | Client | Observé | Verdict |
+|---|---|---|---|---|
+| 1 | Groupe créé au webmail → retrouvé sur le téléphone | DAVx⁵ | | à jouer |
+| 2 | Groupe créé sur le téléphone → retrouvé au webmail | DAVx⁵ | | à jouer |
+| 3 | Membre ajouté au webmail → retrouvé sur le téléphone | DAVx⁵ | | à jouer |
+| 4 | Membre ajouté sur le téléphone → retrouvé au webmail | DAVx⁵ | | à jouer |
+| 5 | Groupe supprimé au webmail → absent du téléphone | DAVx⁵ | | à jouer |
+| 6 | Groupe supprimé sur le téléphone → absent du webmail | DAVx⁵ | | à jouer |
+| 7 | Groupe créé au webmail → retrouvé sur le téléphone | Apple (iPhone, Contacts iOS 16+, « liste ») | | **OUVERTE** |
+| 8 | Groupe créé sur le téléphone → retrouvé au webmail | Apple (iPhone, Contacts iOS 16+, « liste ») | | **OUVERTE** |
+| 9 | Membre ajouté au webmail → retrouvé sur le téléphone | Apple (iPhone, Contacts iOS 16+, « liste ») | | **OUVERTE** |
+| 10 | Membre ajouté sur le téléphone → retrouvé au webmail | Apple (iPhone, Contacts iOS 16+, « liste ») | | **OUVERTE** |
+| 11 | Groupe supprimé au webmail → absent du téléphone | Apple (iPhone, Contacts iOS 16+, « liste ») | | **OUVERTE** |
+| 12 | Groupe supprimé sur le téléphone → absent du webmail | Apple (iPhone, Contacts iOS 16+, « liste ») | | **OUVERTE** |
+| 13 | Les six scénarios ci-dessus | Thunderbird | — | non jouable — limite du client, pas un défaut |
+
+> **Mesure de la décision 8 — réglage *Contact group method* de DAVx⁵.**
+> À relever par l'utilisateur sur l'appareil de la campagne, **à la création du compte** (avant tout
+> autre réglage) : le mode que DAVx⁵ propose par défaut, *separate vCards* ou *categories*
+> (spec 4e, décision 8).
+>
+> - Relevé : _(à compléter à la campagne)_
+> - Si *separate vCards* : la tranche marche d'origine sur Android ; le repli ne concerne que qui a
+>   changé le réglage lui-même.
+> - Si *categories* : chaque utilisateur Android doit toucher ce réglage pour voir la fonction — la
+>   note de version doit dire de le passer sur *separate vCards*.
+
 ## 6. Divergences nommées
 
 Reprises de la spec 4d (décision 4), confirmées ou allongées par les passages :
