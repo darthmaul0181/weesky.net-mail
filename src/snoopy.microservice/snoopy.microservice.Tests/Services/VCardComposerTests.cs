@@ -739,6 +739,11 @@ public sealed class VCardComposerTests
 
         Assert.DoesNotContain("m1", removed);
         Assert.Contains("urn:uuid:m2", removed);
+        // Octet pour octet : l'entree moins exactement les deux lignes m1.
+        Assert.Equal(
+            card.Replace("X-ADDRESSBOOKSERVER-MEMBER:m1\r\n", "")
+                .Replace("X-ADDRESSBOOKSERVER-MEMBER:URN:UUID:m1\r\n", ""),
+            removed);
     }
 
     [Fact]
@@ -754,5 +759,7 @@ public sealed class VCardComposerTests
         Assert.Contains("N:;;;;", renamed);        // pas de N rempli
         // Et l'aller-retour par le projecteur rend le nom desechappe.
         Assert.Equal("Amis, Famille", VCardProjector.Project(renamed).DisplayName);
+        // Octet pour octet : seule la ligne FN a change.
+        Assert.Equal(card.Replace("FN:G", @"FN:Amis\, Famille"), renamed);
     }
 }

@@ -152,6 +152,7 @@ internal static class VCardComposer
     }
 
     private static string Join(List<string> lines) => string.Join("\r\n", lines) + "\r\n";
+
     // The families and scalars an entry point poses only when its write names them — absent means
     // untouched here, whichever door came in.
     private static void PoseOptional(
@@ -490,7 +491,7 @@ internal static class VCardComposer
         StripNamePlaceholders(lines, card);
         EnforceBirthday(lines, card, birthday);
         RestoreUid(lines, source, uid);
-        return string.Join("\r\n", lines) + "\r\n";
+        return Join(lines);
     }
 
     /// <summary>
