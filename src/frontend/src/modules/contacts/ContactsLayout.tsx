@@ -17,7 +17,8 @@ import ContactCard from './ContactCard'
 import ContactEditView from './ContactEditView'
 import { useContactPhotoUrl } from './useContactPhotoUrl'
 import ContactList from './ContactList'
-import { displayNameOf, primaryAddressOf } from './contactName'
+import { displayNameOf } from './contactName'
+import { groupOptionsOf } from './contactSearch'
 import ContactScopes, { groupIdOf, type ContactScope } from './ContactScopes'
 import ContactsTransfer from './ContactsTransfer'
 import GroupNameModal from './GroupNameModal'
@@ -144,16 +145,14 @@ export default function ContactsLayout() {
     scope === 'favorites' ? contact.isFavorite : members ? members.has(contact.id) : true)
 
   /** The addresses writing to a group would actually reach — a member the book no longer holds,
-      or one carrying no address, brings nothing. Task 13 replaces this with `groupOptionsOf`.
-      Off a map rather than a scan: every group row asks this on every render. */
-  const byId = useMemo(
-    () => new Map((contacts ?? []).map(one => [one.id, one])), [contacts])
-  const groupAddresses = (group: ContactGroup) => group.memberIds
-    .map(id => byId.get(id))
-    .map(member => (member ? primaryAddressOf(member) : null))
-    .filter((address): address is string => address != null)
-  // The groups holding one contact — the card's chips, and Task 13's `groupOptionsOf` will read
-  // the same list for the "add to group" menu.
+      or one carrying no address, brings nothing. Resolved by the function the composer's field
+      calls, so the menu entry and the dropdown row cannot disagree about who a group holds.
+      Keyed rather than scanned: every group row asks this on every render. */
+  const groupOptions = useMemo(
+    () => new Map(groupOptionsOf(groups.data ?? [], contacts ?? []).map(one => [one.id, one])),
+    [groups.data, contacts])
+  const groupAddresses = (group: ContactGroup) => groupOptions.get(group.id)?.addresses ?? []
+  // The groups holding one contact — the card's chips.
   const groupsOf = (contactId: string) =>
     groups.data?.filter(group => group.memberIds.includes(contactId)) ?? []
   const selected = contacts?.find(contact => contact.id === selectedId) ?? null

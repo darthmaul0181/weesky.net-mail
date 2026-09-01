@@ -43,7 +43,10 @@
   },
   "recipients": {
     "remove": "Retirer {{name}}",
-    "suggestions": "Suggestions pour {{label}}"
+    "suggestions": "Suggestions pour {{label}}",
+    "groupMembers_one": "{{count}} membre",
+    "groupMembers_many": "{{count}} membres",
+    "groupMembers_other": "{{count}} membres"
   },
   "attachments": {
     "attach": "Joindre des fichiers",
@@ -115,6 +118,7 @@
     "draftSaved": "Brouillon enregistré",
     "draftSaveFailed": "Impossible d’enregistrer le brouillon",
     "imageFailed": "Impossible d’insérer l’image",
+    "emptyGroup": "Le groupe {{name}} ne contient aucune adresse",
     "captured": "Contact ajouté : {{name}}",
     "capturedMany_one": "{{count}} contact ajouté",
     "capturedMany_many": "{{count}} contacts ajoutés",

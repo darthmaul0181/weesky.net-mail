@@ -919,6 +919,18 @@ describe('contact groups', () => {
     expect(state.backTo).toBe('/contacts?scope=group%3Ag1')
   })
 
+  // The entry and the composer's dropdown row resolve the members through one function, so a group
+  // the book answers nothing for refuses the click here rather than opening an empty composer.
+  it('refuses Write to group when no member resolves to an address', async () => {
+    serveGroups([{ id: 'g1', name: 'Friends', memberIds: ['gone'] }])
+    renderAt('/contacts')
+    await waitFor(() => expect(groupRow()).toBeInTheDocument())
+
+    await openGroupMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Write to group' })).toBeDisabled()
+  })
+
   // Le scope se conserve dans l'URL pour tout ce qui n'est pas « all » — la règle qui remplace les
   // sept `'favorites'` en dur.
   it('keeps the group scope in the URL when a contact is opened', async () => {

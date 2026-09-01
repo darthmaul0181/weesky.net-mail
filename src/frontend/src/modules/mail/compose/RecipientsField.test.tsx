@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import RecipientsField, { isValidAddress } from './RecipientsField'
+import type { GroupOption } from '../../contacts/contactSearch'
 import type { Contact } from '../../contacts/contactTypes'
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
@@ -285,5 +286,96 @@ describe('RecipientsField — a token wears its contact name', () => {
     ])
 
     expect(screen.getByText('Zoe')).toBeInTheDocument()
+  })
+})
+
+describe('RecipientsField — group rows', () => {
+  const bruno = contact({
+    id: 'b', firstName: 'Bruno', lastName: 'Mertens', addresses: ['bruno@x.be', 'b@wk.be'],
+  })
+  const team: GroupOption = {
+    id: 'g1', name: 'Team', memberCount: 2, addresses: ['alice@x.be', 'bruno@x.be'],
+  }
+
+  function show(
+    tokens: string[], groups: GroupOption[], extra: Partial<{
+      onChange: (tokens: string[]) => void; onEmptyGroup: (name: string) => void
+    }> = {},
+  ) {
+    const onChange = extra.onChange ?? vi.fn()
+    render(<RecipientsField id="to" label="To" tokens={tokens} onChange={onChange}
+      contacts={[bruno]} groups={groups} onEmptyGroup={extra.onEmptyGroup} />)
+    return { onChange, input: screen.getByLabelText('To') }
+  }
+
+  // 'te' matches Mertens too, so the group is ranged against real address rows rather than being
+  // the only thing in the list.
+  it('lists the group ahead of the addresses, saying how many members it holds', async () => {
+    const { input } = show([], [team])
+
+    await userEvent.type(input, 'te')
+
+    const rows = screen.getAllByRole('option')
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toHaveTextContent('Team')
+    expect(rows[0]).toHaveTextContent('2 members')
+    expect(rows[1]).toHaveTextContent('bruno@x.be')
+  })
+
+  it('says « member » in the singular', async () => {
+    const { input } = show([], [{ ...team, memberCount: 1, addresses: ['alice@x.be'] }])
+
+    await userEvent.type(input, 'te')
+
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent('1 member')
+  })
+
+  // The arrows walk one list, whatever each row holds: the group is the first thing a ArrowDown
+  // reaches, and the highlight has to be announced there like anywhere else.
+  it('reaches the group row with an arrow key and expands it on Enter', async () => {
+    const onChange = vi.fn()
+    const { input } = show([], [team], { onChange })
+    await userEvent.type(input, 'te')
+
+    await userEvent.keyboard('{ArrowDown}')
+
+    const row = screen.getAllByRole('option')[0]
+    expect(row).toHaveClass('is-active')
+    expect(input).toHaveAttribute('aria-activedescendant', row.id)
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(['alice@x.be', 'bruno@x.be'])
+    expect(input).toHaveValue('')
+  })
+
+  // Case is free in the field, so a member already standing there in another spelling must not
+  // come back as a second chip producing the identical recipient.
+  it('adds only the members not already tokenised, whatever their spelling', async () => {
+    const onChange = vi.fn()
+    const { input } = show([' ALICE@X.BE '], [team], { onChange })
+    await userEvent.type(input, 'te')
+
+    await userEvent.click(screen.getAllByRole('option')[0])
+
+    expect(onChange).toHaveBeenCalledWith([' ALICE@X.BE ', 'bruno@x.be'])
+  })
+
+  // Nothing is ever inserted in silence (decision 15): a group nobody in the book resolves is a
+  // state the user has to be told about, and this is the only road that announcement takes.
+  it('raises the empty-group notice instead of adding nothing', async () => {
+    const onChange = vi.fn()
+    const onEmptyGroup = vi.fn()
+    const empty: GroupOption = { id: 'g2', name: 'Nobody', memberCount: 0, addresses: [] }
+    const { input } = show([], [empty], { onChange, onEmptyGroup })
+    await userEvent.type(input, 'nob')
+
+    await userEvent.click(screen.getByRole('option'))
+
+    expect(onEmptyGroup).toHaveBeenCalledWith('Nobody')
+    expect(onChange).not.toHaveBeenCalled()
+    // Reset in every case: the query that found the group has been answered either way.
+    expect(input).toHaveValue('')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 })
