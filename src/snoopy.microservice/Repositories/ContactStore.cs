@@ -384,6 +384,18 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     {
         var removed = 0;
 
+        // The exclusion the strip below is given, computed ONCE and narrowed to the groups the
+        // caller actually condemned: only a group card can match the strip's own GroupCards()
+        // clause, and groups count by the dozen where ids counts by the thousand. Handing the whole
+        // list to each slice instead inlined every id into a NOT IN re-emitted by every
+        // transaction. One round trip: the set is small enough to travel per slice.
+        IReadOnlyCollection<Guid> dyingIds = [];
+        if (includeGroups && ids.Count > 0)
+            dyingIds = await context.Contacts.GroupCards()
+                .Where(c => c.UserId == userId && ids.Contains(c.Id))
+                .Select(c => c.Id)
+                .ToListAsync(cancellationToken);
+
         // Batched at a hundred, and it is not an optimisation: since decision 17 each of these
         // deletions ARCHIVES what it erases, so a whole-book deletion in one transaction would
         // write up to five gigabytes of MEDIUMTEXT — a redo log that overflows, and the state row's
@@ -433,12 +445,12 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 // The exclusion is computed on the WHOLE list, never on the slice: a group the
                 // caller also condemned would otherwise be rewritten by the slice preceding its
                 // own burial — a rank and a revision spent on a card nobody will ever read. And on
-                // the collection's door alone: where groups are not taken, an id naming one is
-                // skipped in silence, so excluding it would leave that survivor pointing at a
-                // contact this very call erased.
+                // the collection's door alone: where groups are not taken, dyingIds is empty, so an
+                // id naming a group — skipped in silence by the read above — does not shield that
+                // survivor from losing the member this very call erased.
                 await StripFromGroupsAsync(
                     userId, [.. rows.SelectMany(r => Forms(r.Uid)).Distinct(StringComparer.Ordinal)],
-                    includeGroups ? ids : [], rank, cancellationToken);
+                    dyingIds, rank, cancellationToken);
                 await context.SaveChangesAsync(cancellationToken);
 
                 // One tombstone PER card actually removed. As in DeleteAsync, the archive, the
@@ -464,7 +476,8 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// transaction — the card must say what the book knows. Matches every value form the reader
     /// accepts: bare UID or urn:uuid:-prefixed, either property name (RemoveGroupMember's rule).
     /// Groups in <paramref name="dyingIds"/> are dying with this delete and are left alone: ranks
-    /// and revisions on condemned cards.
+    /// and revisions on condemned cards. A group the card no longer names is left alone too — the
+    /// membership table alone may still point at it.
     /// </summary>
     internal async Task StripFromGroupsAsync(
         Guid userId, IReadOnlyList<string> uids, IReadOnlyCollection<Guid> dyingIds, ulong rank,
@@ -480,6 +493,12 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         foreach (var group in touched)
         {
             if (group.VCardRaw is null) continue;
+
+            var card = uids.Aggregate(group.VCardRaw, VCardComposer.RemoveGroupMember);
+            // The book named this group, the card does not: a retrait that changes nothing buys no
+            // MEDIUMTEXT revision, no rank and no UpdatedAt.
+            if (card == group.VCardRaw) continue;
+
             await sync.ArchiveAsync(new ContactRevision
             {
                 UserId = userId, ContactId = group.Id, Uid = group.Uid, DavName = group.DavName,
@@ -487,7 +506,6 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 Cause = RevisionCause.Webmail, ReplacedAt = DateTime.UtcNow
             }, cancellationToken);
 
-            var card = uids.Aggregate(group.VCardRaw, VCardComposer.RemoveGroupMember);
             await ApplyCardAsync(group, card, null, cancellationToken);
             group.UpdatedAt = DateTime.UtcNow;
             group.SyncSequence = rank;

@@ -110,7 +110,9 @@ internal static class VCardComposer
     }
 
     // Décision 7: the removal matches every value form the reading accepts — both names, the
-    // urn:uuid: prefix optional and case-insensitive.
+    // urn:uuid: prefix optional and case-insensitive. Assumed scope: unlike the projector, the line
+    // edits carry no BEGIN/END depth guard and treat the input as ONE card, so a MEMBER inside a
+    // nested AGENT card would be removed with the rest.
     internal static string RemoveGroupMember(string card, string memberUid)
     {
         var lines = LogicalLines(CanonicalLineBreaks(card));

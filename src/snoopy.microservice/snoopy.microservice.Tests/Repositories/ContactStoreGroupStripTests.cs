@@ -70,6 +70,40 @@ public sealed class ContactStoreGroupStripTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>
+    /// The book may still name a member the card no longer carries — a card replaced over DAV
+    /// leaves that window open. The retrait then changes nothing, and nothing is what it costs:
+    /// no MEDIUMTEXT revision, no rank, no UpdatedAt.
+    /// </summary>
+    [Fact]
+    public async Task Deleting_WritesNothingIntoAGroupWhoseCardNoLongerCarriesTheMember()
+    {
+        using var context = ContactStoreTestFactory.NewContext();
+        var sync = ContactStoreTestFactory.NewSync(rank: 42);
+        var store = new ContactStore(context, sync.Object);
+        var contact = await GivenAContact(context, "u1");
+        var group = await GivenAGroup(context, "Amis", []);
+
+        // The desynchronisation, posed by hand: the row names u1, the card never did.
+        context.ContactGroupMembers.Add(
+            new ContactGroupMember { GroupId = group, MemberUid = "u1", Position = 0 });
+        await context.SaveChangesAsync(CancellationToken.None);
+        var before = await context.Contacts.AsNoTracking()
+            .SingleAsync(c => c.Id == group, CancellationToken.None);
+        sync.Invocations.Clear();
+
+        Assert.True((await store.DeleteAsync(UserId, contact, CancellationToken.None)).IsSuccess);
+
+        var row = await context.Contacts.SingleAsync(c => c.Id == group, CancellationToken.None);
+        Assert.Equal(before.VCardRaw, row.VCardRaw);
+        Assert.Equal(before.CardHash, row.CardHash);
+        Assert.Equal(before.UpdatedAt, row.UpdatedAt);
+        Assert.Equal(1ul, row.SyncSequence);
+        sync.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.ContactId == group), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task DeletingAContactWhoseUidCarriesThePrefix_StillStripsIt()
     {
