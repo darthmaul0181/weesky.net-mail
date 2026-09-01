@@ -192,8 +192,10 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
         return saved.IsSuccess ? NoContent() : NotFoundEnveloppe(saved.Error);
     }
 
-    /// <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.</summary>
-    private const int MaxBatch = 200;
+    /// <summary>The most ids one bulk call may name — the batch size PUT /Mail/Messages/Flags takes.
+    /// Shared rather than duplicated: <see cref="ContactGroupsController"/> bounds its member
+    /// batches by the same number, and two spellings of one ceiling would drift.</summary>
+    internal const int MaxBatch = 200;
 
     /// <summary>
     /// Deletes a batch. An id this user does not own resolves to nothing and is skipped in silence:
