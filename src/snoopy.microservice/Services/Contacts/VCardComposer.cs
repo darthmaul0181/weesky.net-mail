@@ -144,9 +144,6 @@ internal static class VCardComposer
         return Join(lines);
     }
 
-    private static bool IsName(string chunk, string name) =>
-        NameOf(Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
-
     // Where a line joins the card: before END:VCARD, or at the end of a card that has no END.
     private static int EndIndex(List<string> lines)
     {
@@ -229,8 +226,7 @@ internal static class VCardComposer
             // A lone \r is a line break to the parser too — left in place it would splice a card
             // boundary back in. And only the first card's lines may feed the splices.
             var all = LogicalLines(CanonicalLineBreaks(existingCard));
-            var end = all.FindIndex(c =>
-                NameOf(Unfold(c)).Equals("END", StringComparison.OrdinalIgnoreCase));
+            var end = all.FindIndex(c => IsName(c, "END"));
             var chunks = end < 0 ? all : all.Take(end + 1).ToList();
             var rawOf = new Dictionary<VCardProperty, string>(ReferenceEqualityComparer.Instance);
             MapFamily(rawOf, chunks, "NICKNAME", parsed.NickNames);
@@ -246,9 +242,7 @@ internal static class VCardComposer
             Dictionary<VCardProperty, string> map, List<string> chunks, string name,
             IEnumerable<VCardProperty?>? properties)
         {
-            var lines = chunks
-                .Where(c => NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            var lines = chunks.Where(c => IsName(c, name)).ToList();
             var list = (properties ?? []).ToList();
             if (lines.Count != list.Count) return;
             for (var i = 0; i < list.Count; i++)
@@ -510,8 +504,7 @@ internal static class VCardComposer
         if (source.RawUidLine is not { } raw) return;
         var colon = IndexOutsideQuotes(raw, ':');
         if (colon < 0 || raw[(colon + 1)..] != uid) return;
-        var index = lines.FindIndex(c =>
-            NameOf(Unfold(c)).Equals("UID", StringComparison.OrdinalIgnoreCase));
+        var index = lines.FindIndex(c => IsName(c, "UID"));
         if (index >= 0) lines[index] = Fold(raw);
     }
 
@@ -637,8 +630,7 @@ internal static class VCardComposer
     /// </summary>
     private static string? StoredLineOf(SourceCard source, string name, VCardProperty property) =>
         source.RawLineOf.TryGetValue(property, out var raw) ? raw
-            : source.InputChunks.FirstOrDefault(c =>
-                NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+            : source.InputChunks.FirstOrDefault(c => IsName(c, name));
 
     // These three describe a value's own bytes or type, and on this path the value is the model's:
     // the one they described is gone. VALUE included — AppendMissing only reattaches what the
@@ -715,8 +707,7 @@ internal static class VCardComposer
     {
         var indices = new List<int>();
         for (var i = 0; i < lines.Count; i++)
-            if (NameOf(Unfold(lines[i])).Equals(name, StringComparison.OrdinalIgnoreCase))
-                indices.Add(i);
+            if (IsName(lines[i], name)) indices.Add(i);
         return indices;
     }
 
@@ -743,8 +734,7 @@ internal static class VCardComposer
     // so a writer that stops filling the blank leaves the line exactly as it put it.
     private static void Blank(List<string> lines, string name, string empty)
     {
-        var index = lines.FindIndex(c =>
-            NameOf(Unfold(c)).Equals(name, StringComparison.OrdinalIgnoreCase));
+        var index = lines.FindIndex(c => IsName(c, name));
         if (index < 0) return;
         var unfolded = Unfold(lines[index]);
         var colon = IndexOutsideQuotes(unfolded, ':');
@@ -763,8 +753,7 @@ internal static class VCardComposer
         if (string.IsNullOrEmpty(birthday)) return;
         var index = -1;
         for (var i = 0; i < lines.Count && index < 0; i++)
-            if (NameOf(Unfold(lines[i])).Equals("BDAY", StringComparison.OrdinalIgnoreCase))
-                index = i;
+            if (IsName(lines[i], "BDAY")) index = i;
 
         if (index >= 0)
         {
@@ -850,6 +839,10 @@ internal static class VCardComposer
 
         return end < 0 ? string.Empty : line[start..end];
     }
+
+    // Whether an unfolded-or-folded line carries one property name, its group prefix aside.
+    internal static bool IsName(string chunk, string name) =>
+        NameOf(Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
 
     internal static int IndexOutsideQuotes(string text, char target)
     {
