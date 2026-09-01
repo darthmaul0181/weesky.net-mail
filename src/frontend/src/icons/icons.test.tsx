@@ -28,6 +28,7 @@ import DropletIcon from './DropletIcon'
 import AtSignIcon from './AtSignIcon'
 import FunnelIcon from './FunnelIcon'
 import PersonPlusIcon from './PersonPlusIcon'
+import PersonMinusIcon from './PersonMinusIcon'
 import PhoneIcon from './PhoneIcon'
 import MapPinIcon from './MapPinIcon'
 import ShieldIcon from './ShieldIcon'
@@ -84,6 +85,7 @@ const icons = [
   { name: 'AtSignIcon', Icon: AtSignIcon, defaultSize: '16' },
   { name: 'FunnelIcon', Icon: FunnelIcon, defaultSize: '16' },
   { name: 'PersonPlusIcon', Icon: PersonPlusIcon, defaultSize: '15' },
+  { name: 'PersonMinusIcon', Icon: PersonMinusIcon, defaultSize: '15' },
   { name: 'PhoneIcon', Icon: PhoneIcon, defaultSize: '20' },
   { name: 'MapPinIcon', Icon: MapPinIcon, defaultSize: '20' },
   { name: 'ShieldIcon', Icon: ShieldIcon, defaultSize: '15' },

@@ -26,7 +26,8 @@ import type { ContactGroup } from './contactGroupTypes'
 import {
   useAddContactGroupMembers, useContact, useContacts, useContactGroups, useCreateContact,
   useCreateContactGroup, useDeleteContact, useDeleteContactGroup, useDeleteContacts,
-  useRenameContactGroup, useSetContactFavorite, useSetContactsFavorite, useUpdateContact,
+  useRemoveContactGroupMembers, useRenameContactGroup, useSetContactFavorite,
+  useSetContactsFavorite, useUpdateContact,
 } from './queries'
 import type { ContactDragPayload } from './dragContacts'
 
@@ -88,6 +89,7 @@ export default function ContactsLayout() {
   const renameGroup = useRenameContactGroup()
   const deleteGroup = useDeleteContactGroup()
   const addMembers = useAddContactGroupMembers()
+  const removeMembers = useRemoveContactGroupMembers()
 
   // The editor takes the two content columns and leaves the band standing, exactly as the
   // composer does inside the mail module. Two routes, one layout — not a layout of its own.
@@ -150,6 +152,10 @@ export default function ContactsLayout() {
     .map(id => byId.get(id))
     .map(member => (member ? primaryAddressOf(member) : null))
     .filter((address): address is string => address != null)
+  // The groups holding one contact — the card's chips, and Task 13's `groupOptionsOf` will read
+  // the same list for the "add to group" menu.
+  const groupsOf = (contactId: string) =>
+    groups.data?.filter(group => group.memberIds.includes(contactId)) ?? []
   const selected = contacts?.find(contact => contact.id === selectedId) ?? null
   const edited = routeId ? contacts?.find(contact => contact.id === routeId) ?? null : null
   // An id the loaded book does not resolve is a target that no longer exists, never a create: an
@@ -280,6 +286,22 @@ export default function ContactsLayout() {
     })
   }
 
+  // No dialog: a group's membership is what a drop restores, never a loss the way deleting the
+  // contact itself is.
+  function removeFromOpenGroup(ids: string[]) {
+    if (!openGroup) return
+    removeMembers.mutate({ id: openGroup.id, contactIds: ids }, {
+      onError: error => addToast(apiErrorMessage(error, t('groups.removeFailed')), 'error'),
+    })
+  }
+
+  function removeFromGroup(groupId: string) {
+    if (!selected) return
+    removeMembers.mutate({ id: groupId, contactIds: [selected.id] }, {
+      onError: error => addToast(apiErrorMessage(error, t('groups.removeFailed')), 'error'),
+    })
+  }
+
   async function submitGroupName(name: string) {
     if (!groupModal) return
     try {
@@ -392,6 +414,7 @@ export default function ContactsLayout() {
                 actions={drawer.inDrawer ? transfer('selection-btn') : null}
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
                 onDeleteMany={deleteSelection}
+                onRemoveFromGroup={openGroup ? removeFromOpenGroup : undefined}
                 onEdit={id => navigate(`/contacts/${id}/edit`)} />
             )}
           </div>
@@ -407,7 +430,9 @@ export default function ContactsLayout() {
                 onBack={phone && !pendingDelete ? backToList : undefined}
                 bottomActions={phone}
                 onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)}
-                onWrite={writeTo} />
+                onWrite={writeTo}
+                groups={selected ? groupsOf(selected.id) : undefined}
+                onRemoveFromGroup={removeFromGroup} />
             </div>
           )}
         </div>

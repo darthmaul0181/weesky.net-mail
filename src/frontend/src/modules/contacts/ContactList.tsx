@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import SelectionBand from '../../components/SelectionBand'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import PencilIcon from '../../icons/PencilIcon.jsx'
+import PersonMinusIcon from '../../icons/PersonMinusIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
@@ -29,6 +30,10 @@ interface Props {
   onEdit: (id: string) => void
   onDelete: (contact: Contact) => void
   onDeleteMany: (ids: string[]) => void
+  /** Only under a group scope — the layout withholds it elsewhere, which is what keeps this band
+      free of the action when there is no group to leave. Acts without a dialog: membership is what
+      a drop restores, never a loss the way deleting the contact itself is. */
+  onRemoveFromGroup?: (ids: string[]) => void
   /** What the parent drags. Reported in screen order, never in click order. */
   onSelectionChange?: (ids: string[]) => void
 }
@@ -42,7 +47,7 @@ interface Props {
  */
 export default function ContactList({
   contacts, selectedId, scope, leading, actions,
-  onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onSelectionChange,
+  onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onRemoveFromGroup, onSelectionChange,
 }: Props) {
   const { t } = useTranslation('contacts')
   const [query, setQuery] = useState('')
@@ -116,6 +121,14 @@ export default function ContactList({
           </span>
         </>}
       >
+        {onRemoveFromGroup && (
+          <button type="button" className="selection-btn"
+            aria-label={t('list.removeFromGroup')} title={t('list.removeFromGroup')}
+            disabled={count === 0}
+            onClick={() => { onRemoveFromGroup(selectedIds); selection.clear() }}>
+            <PersonMinusIcon size={20} />
+          </button>
+        )}
         <button type="button" className="selection-btn is-danger"
           aria-label={t('list.deleteSelected')} title={t('list.deleteSelected')}
           disabled={count === 0} onClick={() => setConfirming(true)}>

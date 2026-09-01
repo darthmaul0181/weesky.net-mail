@@ -2471,6 +2471,24 @@ body {
 }
 .contact-quick-btn.is-ghost:hover { background: var(--list-row-hover); }
 
+/* The groups holding this contact — chips rather than a row, since there is no rank between them
+   the way there is between addresses. Each × leaves that one group without a dialog: the
+   membership it drops is what a drag restores, never data lost the way deleting the contact is. */
+.contact-card-groups {
+  flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 22px 0;
+}
+.contact-group-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 4px 3px 10px; border-radius: 12px;
+  background: var(--surface-sunken); color: var(--text); font-size: 12px;
+}
+.contact-group-chip button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--text-muted); font-size: 11px; line-height: 1; cursor: pointer;
+}
+.contact-group-chip button:hover { background: var(--list-row-hover); color: var(--text); }
+
 .contact-card-body { flex: 1; min-height: 0; overflow-y: auto; }
 .contact-card-rows { display: grid; gap: 16px; padding: 22px; }
 .contact-card-row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 16px; }

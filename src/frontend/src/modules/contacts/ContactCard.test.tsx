@@ -301,4 +301,29 @@ describe('ContactCard', () => {
     expect(screen.getByText(/select a contact/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument()
   })
+
+  it('lists the groups holding this contact as chips', () => {
+    setup({ groups: [{ id: 'g1', name: 'Friends' }, { id: 'g2', name: 'Family' }] })
+
+    expect(screen.getByText('Friends')).toBeInTheDocument()
+    expect(screen.getByText('Family')).toBeInTheDocument()
+  })
+
+  it('renders no chip row when the contact belongs to no group', () => {
+    const { container } = setup({ groups: [] })
+
+    expect(container.querySelector('.contact-card-groups')).toBeNull()
+  })
+
+  it('removes a chip from its group without touching the others', async () => {
+    const onRemoveFromGroup = vi.fn()
+    setup({
+      groups: [{ id: 'g1', name: 'Friends' }, { id: 'g2', name: 'Family' }], onRemoveFromGroup,
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /remove.*friends/i }))
+
+    expect(onRemoveFromGroup).toHaveBeenCalledWith('g1')
+    expect(onRemoveFromGroup).toHaveBeenCalledTimes(1)
+  })
 })

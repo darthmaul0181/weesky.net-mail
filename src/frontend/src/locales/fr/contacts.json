@@ -37,6 +37,7 @@
     "saveFailed": "Impossible d’enregistrer le groupe",
     "deleteFailed": "Impossible de supprimer le groupe",
     "addFailed": "Impossible d’ajouter les contacts au groupe",
+    "removeFailed": "Impossible de retirer les contacts du groupe",
     "loadFailed": "Impossible de charger les groupes"
   },
   "fields": {
@@ -71,6 +72,7 @@
     "selected_many": "{{count}} sélectionnés",
     "selected_other": "{{count}} sélectionnés",
     "deleteSelected": "Supprimer la sélection",
+    "removeFromGroup": "Retirer du groupe",
     "deleteSelectedConfirm_one": "Supprimer ce contact ? Cette action est définitive.",
     "deleteSelectedConfirm_many": "Supprimer ces {{count}} contacts ? Cette action est définitive.",
     "deleteSelectedConfirm_other": "Supprimer ces {{count}} contacts ? Cette action est définitive."
@@ -79,6 +81,7 @@
     "invite": "Sélectionnez un contact pour voir sa fiche",
     "back": "Retour à la liste",
     "actions": "Actions du contact",
+    "removeFromGroup": "Retirer {{name}} de ce groupe",
     "write": "Écrire",
     "call": "Appeler",
     "directions": "Itinéraire",

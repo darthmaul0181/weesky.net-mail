@@ -32,6 +32,11 @@ interface Props {
   /** Opens the composer on this address. The layout owns it, like onEdit — the card knows the
       contact, the layout knows the router. */
   onWrite: (address: string) => void
+  /** The groups holding this contact — the layout's own `groupsOf`, resolved off the group list
+      rather than carried on the contact, since a group's membership lives on the group. */
+  groups?: { id: string; name: string }[]
+  /** Drops this contact from one group. Absent when there is nowhere to drop it from. */
+  onRemoveFromGroup?: (groupId: string) => void
   /** The phone's foot-of-screen shape: named cells in a band instead of a header cluster. Set by
       the layout, which is the only thing that knows the tier — never a `useViewport` of the card's
       own, for the reason `MessageReader.bottomActions` is a prop too.
@@ -52,7 +57,8 @@ interface Props {
  * that was never entered.
  */
 export default function ContactCard({
-  contact, onBack, onEdit, onDelete, onToggleFavorite, onWrite, bottomActions = false,
+  contact, onBack, onEdit, onDelete, onToggleFavorite, onWrite, groups, onRemoveFromGroup,
+  bottomActions = false,
 }: Props) {
   const { t } = useTranslation('contacts')
 
@@ -208,6 +214,18 @@ export default function ContactCard({
       </div>
 
       {quick}
+
+      {groups && groups.length > 0 && (
+        <div className="contact-card-groups">
+          {groups.map(g => (
+            <span key={g.id} className="contact-group-chip">
+              {g.name}
+              <button type="button" aria-label={t('card.removeFromGroup', { name: g.name })}
+                onClick={() => onRemoveFromGroup?.(g.id)}>✕</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="contact-card-body">
         <div className="contact-card-rows">

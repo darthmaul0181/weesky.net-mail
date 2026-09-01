@@ -37,6 +37,7 @@
     "saveFailed": "Could not save the group",
     "deleteFailed": "Could not delete the group",
     "addFailed": "Could not add the contacts to the group",
+    "removeFailed": "Could not remove the contacts from the group",
     "loadFailed": "Could not load the groups"
   },
   "fields": {
@@ -71,6 +72,7 @@
     "selected_many": "{{count}} selected",
     "selected_other": "{{count}} selected",
     "deleteSelected": "Delete selection",
+    "removeFromGroup": "Remove from group",
     "deleteSelectedConfirm_one": "Delete this contact? This cannot be undone.",
     "deleteSelectedConfirm_many": "Delete these {{count}} contacts? This cannot be undone.",
     "deleteSelectedConfirm_other": "Delete these {{count}} contacts? This cannot be undone."
@@ -79,6 +81,7 @@
     "invite": "Select a contact to see its details",
     "back": "Back to the list",
     "actions": "Contact actions",
+    "removeFromGroup": "Remove {{name}} from this group",
     "write": "Write",
     "call": "Call",
     "directions": "Directions",
