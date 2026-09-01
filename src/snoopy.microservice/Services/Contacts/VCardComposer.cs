@@ -145,7 +145,7 @@ internal static class VCardComposer
     }
 
     // Where a line joins the card: before END:VCARD, or at the end of a card that has no END.
-    private static int EndIndex(List<string> lines)
+    internal static int EndIndex(List<string> lines)
     {
         var end = lines.FindLastIndex(l => IsName(l, "END"));
         return end < 0 ? lines.Count : end;
@@ -826,8 +826,9 @@ internal static class VCardComposer
     private static int CutAt(string line, int index) =>
         index < line.Length && char.IsHighSurrogate(line[index - 1]) ? index - 1 : index;
 
-    // The property name of an unfolded line, its group prefix stripped — "" when not a property.
-    internal static string NameOf(string line)
+    // The property name's bounds on an unfolded line, its group prefix skipped over —
+    // End = -1 when the line is not a property (no name terminator found).
+    internal static (int Start, int End) NameBounds(string line)
     {
         var start = 0;
         var end = line.IndexOfAny([';', ':', '.']);
@@ -838,6 +839,13 @@ internal static class VCardComposer
             end = next < 0 ? -1 : start + next;
         }
 
+        return (start, end);
+    }
+
+    // The property name of an unfolded line, its group prefix stripped — "" when not a property.
+    internal static string NameOf(string line)
+    {
+        var (start, end) = NameBounds(line);
         return end < 0 ? string.Empty : line[start..end];
     }
 
@@ -902,9 +910,10 @@ internal static class VCardComposer
         var values = new List<string>();
         foreach (var logical in LogicalLines(CanonicalLineBreaks(vcardRaw)))
         {
-            if (IsName(logical, "END")) break;
-            if (!IsName(logical, name)) continue;
             var line = Unfold(logical);
+            var found = NameOf(line);
+            if (found.Equals("END", StringComparison.OrdinalIgnoreCase)) break;
+            if (!found.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
             var colon = IndexOutsideQuotes(line, ':');
             if (colon >= 0) values.Add(line[(colon + 1)..]);
         }

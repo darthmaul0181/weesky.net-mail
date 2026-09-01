@@ -94,11 +94,12 @@ internal static class VCardVersionConverter
     }
 
     /// <summary>
-    /// The third of this class's assumed exceptions, after DropEmbeddedCards and RestoreUid, and for
-    /// RestoreUid's reason: without it a strictly-4.0 client reads a group as an empty sheet — the
-    /// defect 4e repairs, moved one step over (décision 5 de 4e). Going to 4.0 the library copied the
-    /// X- lines through: renaming them is enough. Going to 3.0 it already dropped KIND and MEMBER
-    /// before we looked, so the two lines are rebuilt from the STORED card, values verbatim.
+    /// The third of this class's three textual exceptions, after RestoreUid and <see
+    /// cref="VCardComposer.StripNamePlaceholders"/> — and for RestoreUid's reason: without it a
+    /// strictly-4.0 client reads a group as an empty sheet — the defect 4e repairs, moved one step
+    /// over (décision 5 de 4e). Going to 4.0 the library copied the X- lines through: renaming them
+    /// is enough. Going to 3.0 it already dropped KIND and MEMBER before we looked, so the two
+    /// lines are rebuilt from the STORED card, values verbatim.
     /// </summary>
     private static void TranslateGroupProperties(List<string> lines, VCdVersion wanted, string stored)
     {
@@ -113,11 +114,10 @@ internal static class VCardVersionConverter
         if (VCardComposer.FirstRawValue(stored, "KIND") is not { } kind
             || !kind.Trim().Equals("group", StringComparison.OrdinalIgnoreCase))
             return;
-        var rebuilt = new List<string> { "X-ADDRESSBOOKSERVER-KIND:" + kind };
+        var rebuilt = new List<string> { VCardComposer.Fold("X-ADDRESSBOOKSERVER-KIND:" + kind) };
         rebuilt.AddRange(VCardComposer.RawValuesOf(stored, "MEMBER")
             .Select(v => VCardComposer.Fold("X-ADDRESSBOOKSERVER-MEMBER:" + v)));
-        var end = lines.FindLastIndex(l => VCardComposer.IsName(l, "END"));
-        lines.InsertRange(end < 0 ? lines.Count : end, rebuilt);
+        lines.InsertRange(VCardComposer.EndIndex(lines), rebuilt);
     }
 
     // Renames the NAME prefix of every line whose name is `from` (group prefix such as `item1.`
@@ -129,16 +129,7 @@ internal static class VCardVersionConverter
         {
             if (!VCardComposer.IsName(lines[i], from)) continue;
             var unfolded = VCardComposer.Unfold(lines[i]);
-            var start = 0;
-            var end = unfolded.IndexOfAny([';', ':', '.']);
-            if (end >= 0 && unfolded[end] == '.')
-            {
-                start = end + 1;
-                var next = unfolded[start..].IndexOfAny([';', ':']);
-                end = next < 0 ? -1 : start + next;
-            }
-
-            if (end < 0) continue;
+            var (start, end) = VCardComposer.NameBounds(unfolded);
             lines[i] = VCardComposer.Fold(unfolded[..start] + to + unfolded[end..]);
         }
     }
