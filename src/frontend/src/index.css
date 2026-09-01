@@ -2249,6 +2249,25 @@ body {
 .contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
 .contact-scope.is-active .contact-scope-count { color: inherit; }
 
+/* The Groups heading carries the « + » — decision 13 keeps it out of `.column-actions`, whose
+   width is measured to the pixel for a French label. */
+.contacts-scopes-groups-header {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; padding: 0 10px;
+  color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.contacts-scopes-groups-header > span { flex: 1; min-width: 0; }
+.contact-scopes-add {
+  flex: none; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  color: var(--text-muted); font: inherit; font-size: 17px; font-weight: 400; line-height: 1;
+}
+.contact-scopes-add:hover { color: var(--icon-hover-accent); }
+/* A group row is the scope row plus its own menu: the row takes the width, the kebab sits at its
+   end. Drawn rather than hover-revealed — on a touch tablet a hover reveal is unreachable. */
+.contact-scope-row { display: flex; align-items: center; }
+.contact-scope-row .contact-scope { flex: 1; min-width: 0; }
+.contact-scope-row .dropdown-root { flex: none; }
+
 .contacts-row { flex: 1; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .contacts-list, .contacts-card, .contacts-editor {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
@@ -2760,6 +2779,11 @@ body {
      Chrome where this query never matches: retiring it would drop contacts-drawer from
      `smallest: 44` to 34 and read as a regression. */
   .contact-scope { min-height: 44px; }
+
+  /* The two controls the groups section adds to that column, under the same rule and for the same
+     reason: the « + » is a 17px glyph and the row kebab a 14px one. */
+  .contact-scopes-add,
+  .contact-scope-row > .dropdown-root > button { min-width: 44px; min-height: 44px; }
 
   /* The card's actions are icon buttons in the head from 640px up — 28px and 22px against a
      finger, on the one tier where `--touch` is not declared at all (a phone draws the band

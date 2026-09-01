@@ -19,6 +19,25 @@
     "favourites": "Favourites",
     "dropHere": "Drop here"
   },
+  "groups": {
+    "title": "Groups",
+    "add": "New group",
+    "menu": "Actions for {{name}}",
+    "rename": "Rename",
+    "write": "Write to group",
+    "writeEmpty": "No member of this group has an address",
+    "delete": "Delete group",
+    "deleteBody": "Delete the group {{name}}? The contacts themselves stay in your address book.",
+    "createTitle": "New group",
+    "renameTitle": "Rename group",
+    "nameLabel": "Name",
+    "created": "Group {{name}} created",
+    "renamed": "Group renamed to {{name}}",
+    "deleted": "Group {{name}} deleted",
+    "saveFailed": "Could not save the group",
+    "deleteFailed": "Could not delete the group",
+    "addFailed": "Could not add the contacts to the group"
+  },
   "fields": {
     "nickname": "Nickname",
     "addresses": "Addresses",

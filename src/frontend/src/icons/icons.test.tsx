@@ -53,6 +53,7 @@ import InboxIcon from './InboxIcon'
 import MenuIcon from './MenuIcon'
 import UploadIcon from './UploadIcon'
 import DownloadIcon from './DownloadIcon'
+import PeopleIcon from './PeopleIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -108,6 +109,7 @@ const icons = [
   { name: 'MenuIcon', Icon: MenuIcon, defaultSize: '20' },
   { name: 'UploadIcon', Icon: UploadIcon, defaultSize: '16' },
   { name: 'DownloadIcon', Icon: DownloadIcon, defaultSize: '16' },
+  { name: 'PeopleIcon', Icon: PeopleIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {

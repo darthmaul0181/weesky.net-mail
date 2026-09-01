@@ -19,6 +19,25 @@
     "favourites": "Favoris",
     "dropHere": "Déposer ici"
   },
+  "groups": {
+    "title": "Groupes",
+    "add": "Nouveau groupe",
+    "menu": "Actions du groupe {{name}}",
+    "rename": "Renommer",
+    "write": "Écrire au groupe",
+    "writeEmpty": "Aucun membre de ce groupe ne porte d’adresse",
+    "delete": "Supprimer le groupe",
+    "deleteBody": "Supprimer le groupe {{name}} ? Les contacts, eux, restent dans votre carnet.",
+    "createTitle": "Nouveau groupe",
+    "renameTitle": "Renommer le groupe",
+    "nameLabel": "Nom",
+    "created": "Groupe créé : {{name}}",
+    "renamed": "Groupe renommé : {{name}}",
+    "deleted": "Groupe supprimé : {{name}}",
+    "saveFailed": "Impossible d’enregistrer le groupe",
+    "deleteFailed": "Impossible de supprimer le groupe",
+    "addFailed": "Impossible d’ajouter les contacts au groupe"
+  },
   "fields": {
     "nickname": "Surnom",
     "addresses": "Adresses",
