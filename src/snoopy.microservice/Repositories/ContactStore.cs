@@ -1298,6 +1298,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         row.Birthday = projection.Birthday;
         row.Website = projection.Website;
         row.Notes = projection.Notes;
+        row.Kind = projection.Kind;
 
         foreach (var email in projection.Addresses)
             context.ContactEmails.Add(new ContactEmail
@@ -1334,11 +1335,17 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             {
                 ContactId = row.Id, MediaType = photo.MediaType, Bytes = photo.Bytes
             });
+
+        foreach (var member in projection.Members)
+            context.ContactGroupMembers.Add(new ContactGroupMember
+            {
+                GroupId = row.Id, MemberUid = member.MemberUid, Position = member.Position
+            });
     }
 
     /// <summary>
     /// The FK cascades in MariaDB, but the InMemory provider the tests run on enforces no FK at
-    /// all: loading and removing the four families here is what makes the two behave alike.
+    /// all: loading and removing the five families here is what makes the two behave alike.
     /// </summary>
     internal async Task ClearProjectionAsync(
         IReadOnlyList<Guid> contactIds, CancellationToken cancellationToken)
@@ -1348,30 +1355,34 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     }
 
     /// <summary>
-    /// Every child row of the contacts an import merges into, loaded tracked in four queries.
+    /// Every child row of the contacts an import merges into, loaded tracked in five queries.
     /// Re-projecting them then costs no query per contact, whatever the size of the file.
     /// </summary>
     private async Task<ProjectionCache> LoadProjectionAsync(
         IReadOnlyList<Guid> contactIds, CancellationToken cancellationToken)
     {
-        if (contactIds.Count == 0) return ProjectionCache.Of([], [], [], []);
+        if (contactIds.Count == 0) return ProjectionCache.Of([], [], [], [], []);
 
         return ProjectionCache.Of(
             await context.ContactEmails.Where(e => contactIds.Contains(e.ContactId)).ToListAsync(cancellationToken),
             await context.ContactPhones.Where(p => contactIds.Contains(p.ContactId)).ToListAsync(cancellationToken),
             await context.ContactAddresses.Where(a => contactIds.Contains(a.ContactId)).ToListAsync(cancellationToken),
-            await context.ContactPhotos.Where(p => contactIds.Contains(p.ContactId)).ToListAsync(cancellationToken));
+            await context.ContactPhotos.Where(p => contactIds.Contains(p.ContactId)).ToListAsync(cancellationToken),
+            await context.ContactGroupMembers.Where(m => contactIds.Contains(m.GroupId)).ToListAsync(cancellationToken));
     }
 
     internal sealed record ProjectionCache(
         ILookup<Guid, ContactEmail> Emails, ILookup<Guid, ContactPhone> Phones,
-        ILookup<Guid, ContactAddress> PostalAddresses, ILookup<Guid, ContactPhoto> Photos)
+        ILookup<Guid, ContactAddress> PostalAddresses, ILookup<Guid, ContactPhoto> Photos,
+        ILookup<Guid, ContactGroupMember> Members)
     {
         internal static ProjectionCache Of(
             List<ContactEmail> emails, List<ContactPhone> phones,
-            List<ContactAddress> postal, List<ContactPhoto> photos) =>
+            List<ContactAddress> postal, List<ContactPhoto> photos,
+            List<ContactGroupMember> members) =>
             new(emails.ToLookup(e => e.ContactId), phones.ToLookup(p => p.ContactId),
-                postal.ToLookup(a => a.ContactId), photos.ToLookup(p => p.ContactId));
+                postal.ToLookup(a => a.ContactId), photos.ToLookup(p => p.ContactId),
+                members.ToLookup(m => m.GroupId));
 
         /// <summary>What a card-less contact already holds, in the order it will re-enter a card.</summary>
         internal IEnumerable<string> AddressesOf(Guid contactId) =>
@@ -1383,6 +1394,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             context.ContactPhones.RemoveRange(Phones[contactId]);
             context.ContactAddresses.RemoveRange(PostalAddresses[contactId]);
             context.ContactPhotos.RemoveRange(Photos[contactId]);
+            context.ContactGroupMembers.RemoveRange(Members[contactId]);
         }
     }
 
