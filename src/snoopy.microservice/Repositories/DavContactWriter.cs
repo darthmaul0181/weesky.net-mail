@@ -99,6 +99,10 @@ internal sealed class DavContactWriter(
 
                 await store.ClearProjectionAsync([row.Id], cancellationToken);
                 context.Contacts.Remove(row);
+                // Décision 7, on the protocol's own door: the groups this card sat in are rewritten
+                // under the rank of the delete that emptied them, not one of their own.
+                await store.StripFromGroupsAsync(
+                    userId, ContactStore.Forms(row.Uid), [row.Id], rank, cancellationToken);
                 await context.SaveChangesAsync(cancellationToken);
 
                 await sync.PlaceTombstoneAsync(userId, davName, rank, cancellationToken);

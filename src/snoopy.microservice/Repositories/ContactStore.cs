@@ -345,6 +345,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
             await ClearProjectionAsync([contactId], cancellationToken);
             context.Contacts.Remove(row);
+            await StripFromGroupsAsync(userId, Forms(before.Uid), [contactId], rank, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
             // The archive, the removal and the tombstone below are three separate saves inside one
@@ -422,6 +423,15 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
                 await ClearProjectionAsync([.. rows.Select(r => r.Id)], cancellationToken);
                 context.Contacts.RemoveRange(rows);
+                // The exclusion is computed on the WHOLE list, never on the slice: a group the
+                // caller also condemned would otherwise be rewritten by the slice preceding its
+                // own burial — a rank and a revision spent on a card nobody will ever read. And on
+                // the collection's door alone: where groups are not taken, an id naming one is
+                // skipped in silence, so excluding it would leave that survivor pointing at a
+                // contact this very call erased.
+                await StripFromGroupsAsync(
+                    userId, [.. rows.SelectMany(r => Forms(r.Uid)).Distinct(StringComparer.Ordinal)],
+                    includeGroups ? ids : [], rank, cancellationToken);
                 await context.SaveChangesAsync(cancellationToken);
 
                 // One tombstone PER card actually removed. As in DeleteAsync, the archive, the
@@ -440,6 +450,55 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         }
 
         return removed;
+    }
+
+    /// <summary>
+    /// Décision 7: a deleted contact leaves every group that carries it, inside the deleting
+    /// transaction — the card must say what the book knows. Matches every value form the reader
+    /// accepts: bare UID or urn:uuid:-prefixed, either property name (RemoveGroupMember's rule).
+    /// Groups in <paramref name="dyingIds"/> are dying with this delete and are left alone: ranks
+    /// and revisions on condemned cards.
+    /// </summary>
+    internal async Task StripFromGroupsAsync(
+        Guid userId, IReadOnlyList<string> uids, IReadOnlyCollection<Guid> dyingIds, ulong rank,
+        CancellationToken cancellationToken)
+    {
+        if (uids.Count == 0) return;
+
+        var touched = await context.Contacts.GroupCards()
+            .Where(g => g.UserId == userId && !dyingIds.Contains(g.Id)
+                && context.ContactGroupMembers.Any(m => m.GroupId == g.Id && uids.Contains(m.MemberUid)))
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in touched)
+        {
+            if (group.VCardRaw is null) continue;
+            await sync.ArchiveAsync(new ContactRevision
+            {
+                UserId = userId, ContactId = group.Id, Uid = group.Uid, DavName = group.DavName,
+                CardHash = group.CardHash, VCardRaw = group.VCardRaw,
+                Cause = RevisionCause.Webmail, ReplacedAt = DateTime.UtcNow
+            }, cancellationToken);
+
+            var card = uids.Aggregate(group.VCardRaw, VCardComposer.RemoveGroupMember);
+            await ApplyCardAsync(group, card, null, cancellationToken);
+            group.UpdatedAt = DateTime.UtcNow;
+            group.SyncSequence = rank;
+        }
+    }
+
+    /// <summary>
+    /// The two value forms one contact may be referenced by. The projection always strips, so
+    /// <c>member_uid</c> holds the bare value — but a card imported as <c>UID:urn:uuid:X</c> keeps
+    /// the prefix in its column, and it is <c>X</c> the MEMBER line names. Both forms travel, so
+    /// the query and the line removal match whichever way round the pair sits.
+    /// </summary>
+    internal static IReadOnlyList<string> Forms(string? uid)
+    {
+        if (uid is not { Length: > 0 }) return [];
+
+        var stripped = VCardProjector.StripUrnUuid(uid);
+        return stripped == uid ? [uid] : [uid, stripped];
     }
 
     public async Task<int> SetFavoriteManyAsync(
