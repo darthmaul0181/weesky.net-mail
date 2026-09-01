@@ -166,7 +166,7 @@ public class PreferencesDbContext : DbContext
 
     public DbSet<ContactPhoto> ContactPhotos { get; set; }
 
-    public DbSet<ContactGroupMember> ContactGroupMembers => Set<ContactGroupMember>();
+    public DbSet<ContactGroupMember> ContactGroupMembers { get; set; }
 
     public DbSet<WebmailUser> Users { get; set; }
 
