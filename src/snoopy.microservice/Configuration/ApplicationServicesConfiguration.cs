@@ -125,6 +125,7 @@ internal static class ApplicationServicesConfiguration
         // projection path and the transaction wrapper — rather than duplicating either.
         services.AddScoped<ContactStore>();
         services.AddScoped<IContactStore>(provider => provider.GetRequiredService<ContactStore>());
+        services.AddScoped<IContactGroupStore, ContactGroupStore>();
         services.AddScoped<IDavContactWriter, DavContactWriter>();
         services.AddScoped<IExternalDomainStore, ExternalDomainStore>();
         services.AddScoped<IConnectedAccountStore, ConnectedAccountStore>();

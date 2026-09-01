@@ -51,6 +51,9 @@ internal static class ContactValidator
     /// </summary>
     internal const int MaxNotesLength = 16000;
 
+    /// <summary><c>contacts.display_name</c> is VARCHAR(255) — a group is its FN, and nothing else.</summary>
+    internal const int MaxGroupNameLength = 255;
+
     private const string PrefOutOfRangeMessage = "A preference must be between 1 and 101";
 
     private static readonly string[] KnownSources = ["manual", "captured", "imported"];
@@ -62,6 +65,16 @@ internal static class ContactValidator
     // ^...$ gate — and this method is a named part of the validator's surface precisely so later
     // callers can run it on a value they never trimmed themselves.
     private static readonly Regex TypeToken = new($@"\A[A-Za-z0-9,-]{{0,{MaxTypeLength}}}\z", RegexOptions.Compiled);
+
+    /// <summary>The group-name rule, one place: trimmed; refused empty or over the column.</summary>
+    internal static Result<string> ValidateGroupName(string? name)
+    {
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return Result.Failure<string>("A group needs a name");
+        if (trimmed.Length > MaxGroupNameLength)
+            return Result.Failure<string>($"The group name must be at most {MaxGroupNameLength} characters");
+        return Result.Success(trimmed);
+    }
 
     internal static Result<ContactWrite> Validate(ContactRequest request)
     {
