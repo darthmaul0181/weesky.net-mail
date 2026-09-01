@@ -86,7 +86,7 @@ public sealed class ContactStoreDeletionTests
         sync.Invocations.Clear();
 
         var removed = await store.DeleteManyAsync(
-            userId, [first.Value, second.Value, Guid.NewGuid()], CancellationToken.None);
+            userId, [first.Value, second.Value, Guid.NewGuid()], includeGroups: false, CancellationToken.None);
 
         // One tombstone PER card actually removed. The bulk action bar is the busiest deletion door
         // in the product, and it is the one a per-row loop is most tempting to skip.
@@ -108,7 +108,7 @@ public sealed class ContactStoreDeletionTests
             userId, ContactStoreTestFactory.Write("Grace", "Hopper"), CancellationToken.None);
         sync.Invocations.Clear();
 
-        await store.DeleteManyAsync(userId, [first.Value, second.Value], CancellationToken.None);
+        await store.DeleteManyAsync(userId, [first.Value, second.Value], includeGroups: false, CancellationToken.None);
 
         sync.Verify(s => s.ArchiveAsync(
             It.Is<ContactRevision>(r => r.Cause == RevisionCause.Delete), It.IsAny<CancellationToken>()),
@@ -131,7 +131,7 @@ public sealed class ContactStoreDeletionTests
         }
         sync.Invocations.Clear();
 
-        await store.DeleteManyAsync(userId, ids, CancellationToken.None);
+        await store.DeleteManyAsync(userId, ids, includeGroups: false, CancellationToken.None);
 
         // One transaction, one rank: the state row is locked once, and incrementing it further
         // would distinguish nothing since everything becomes visible at the same COMMIT. Three
@@ -155,7 +155,7 @@ public sealed class ContactStoreDeletionTests
         }
         sync.Invocations.Clear();
 
-        await store.DeleteManyAsync(userId, ids, CancellationToken.None);
+        await store.DeleteManyAsync(userId, ids, includeGroups: false, CancellationToken.None);
 
         // "One transaction, one rank" holds; "one bulk action, one rank" does not, and nothing
         // asked for it. Several ranks for one bulk deletion are exactly what a client syncing
@@ -221,7 +221,7 @@ public sealed class ContactStoreDeletionTests
         sync.Invocations.Clear();
 
         var removed = await store.DeleteManyAsync(
-            userId, [whole.Value, nameless.Value, cardless], CancellationToken.None);
+            userId, [whole.Value, nameless.Value, cardless], includeGroups: false, CancellationToken.None);
 
         // Neither tolerance belongs to the batch: both are decided per row, and a row missing one
         // of the two must cost the other rows neither. Three removed, but only two of each.

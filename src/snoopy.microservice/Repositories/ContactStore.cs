@@ -71,7 +71,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // Projected, not the whole entity: VCardRaw is MEDIUMTEXT and ContactView never carries
         // it, but materialising the entity would still pull it across the wire for up to
         // MaxPerUser rows on every page load.
-        var contacts = await context.Contacts.AsNoTracking()
+        var contacts = await context.Contacts.AsNoTracking().Individuals()
             .Where(c => c.UserId == userId)
             .Select(c => new { c.Id, c.FirstName, c.LastName, c.Nickname, c.IsFavorite, c.DisplayName })
             .ToListAsync(cancellationToken);
@@ -110,7 +110,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
     public async Task<ContactDetail?> GetAsync(Guid userId, Guid contactId, CancellationToken cancellationToken)
     {
-        var row = await Scalars(context.Contacts.AsNoTracking()
+        var row = await Scalars(context.Contacts.AsNoTracking().Individuals()
             .Where(c => c.Id == contactId && c.UserId == userId)).FirstOrDefaultAsync(cancellationToken);
         if (row == null) return null;
 
@@ -132,7 +132,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     {
         // Joined rather than read twice: the hash lives on the contact and is what the caller
         // turns into the ETag it serves the picture with.
-        var found = await context.Contacts.AsNoTracking()
+        var found = await context.Contacts.AsNoTracking().Individuals()
             .Where(c => c.Id == contactId && c.UserId == userId)
             .Join(context.ContactPhotos.AsNoTracking(), c => c.Id, p => p.ContactId,
                 (c, p) => new { p.Bytes, p.MediaType, c.CardHash })
@@ -144,7 +144,8 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     public async Task<IReadOnlyList<ContactDetail>> ExportAsync(
         Guid userId, CancellationToken cancellationToken)
     {
-        var rows = await Scalars(context.Contacts.AsNoTracking().Where(c => c.UserId == userId))
+        var rows = await Scalars(
+                context.Contacts.AsNoTracking().Individuals().Where(c => c.UserId == userId))
             .ToListAsync(cancellationToken);
         if (rows.Count == 0) return [];
 
@@ -371,7 +372,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     }
 
     public async Task<int> DeleteManyAsync(
-        Guid userId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+        Guid userId, IReadOnlyList<Guid> ids, bool includeGroups, CancellationToken cancellationToken)
     {
         var removed = 0;
 
@@ -389,8 +390,9 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             {
                 var rank = await sync.NextSequenceAsync(userId, cancellationToken);
 
-                // Read under the lock, so what is archived is what is being removed.
-                var rows = await context.Contacts
+                // Read under the lock, so what is archived is what is being removed. The kind
+                // clause is the caller's: only the collection's own DELETE takes both species.
+                var rows = await (includeGroups ? context.Contacts : context.Contacts.Individuals())
                     .Where(c => c.UserId == userId && batch.Contains(c.Id))
                     .ToListAsync(cancellationToken);
                 if (rows.Count == 0) return 0;
@@ -443,7 +445,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     public async Task<int> SetFavoriteManyAsync(
         Guid userId, IReadOnlyList<Guid> ids, bool isFavorite, CancellationToken cancellationToken)
     {
-        var rows = await context.Contacts
+        var rows = await context.Contacts.Individuals()
             .Where(c => c.UserId == userId && ids.Contains(c.Id))
             .ToListAsync(cancellationToken);
         if (rows.Count == 0) return 0;
@@ -471,7 +473,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // Only the address-less contacts: one that has addresses is reachable through the address
         // index, and the exporter always writes the addresses a contact has — so a row carrying a
         // name and nothing else can only ever be describing a contact that has none.
-        var addressless = await context.Contacts.AsNoTracking()
+        var addressless = await context.Contacts.AsNoTracking().Individuals()
             .Where(c => c.UserId == userId && !context.ContactEmails.Any(e => e.ContactId == c.Id))
             .Select(c => new { c.Id, c.FirstName, c.LastName, c.Nickname })
             .ToListAsync(cancellationToken);
@@ -669,7 +671,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             created++;
         }
 
-        // Four queries for the whole batch, whatever the number of merges: what the targets already
+        // Five queries for the whole batch, whatever the number of merges: what the targets already
         // hold is what re-projecting them has to clear.
         var cache = await LoadProjectionAsync(
             [.. merges.Select(m => m.Target).Where(id => !born.ContainsKey(id)).Distinct()],
@@ -750,7 +752,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             .ToListAsync(cancellationToken);
         if (batch.Count == 0) return new BackfillOutcome(0, 0);
 
-        // Four queries for the whole batch, the import path's shape: what these contacts already
+        // Five queries for the whole batch, the import path's shape: what these contacts already
         // hold is both what the card is reconciled against and what re-projecting them clears.
         var cache = await LoadProjectionAsync([.. batch.Select(c => c.Id)], cancellationToken);
 
@@ -1280,7 +1282,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         CancellationToken cancellationToken)
     {
         // A contact that is not in the database yet has no child row to clear; an import's are
-        // already in hand, and clearing them from there is what keeps a whole file at four queries.
+        // already in hand, and clearing them from there is what keeps a whole file at five queries.
         if (loaded != null) loaded.Clear(context, row.Id);
         else if (context.Entry(row).State is EntityState.Unchanged or EntityState.Modified)
             await ClearProjectionAsync([row.Id], cancellationToken);
@@ -1400,9 +1402,11 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
     /// <summary>
     /// Scoped by user on purpose: a contact belonging to somebody else must be indistinguishable
-    /// from one that does not exist, so the controller can answer 404 without leaking it.
+    /// from one that does not exist, so the controller can answer 404 without leaking it. A group
+    /// card is out of reach for the same reason and in the same breath — this one read is what
+    /// Update, Delete and SetFavorite all resolve their id through.
     /// </summary>
     private async Task<Contact?> FindAsync(Guid userId, Guid contactId, CancellationToken cancellationToken) =>
-        await context.Contacts.FirstOrDefaultAsync(
+        await context.Contacts.Individuals().FirstOrDefaultAsync(
             c => c.Id == contactId && c.UserId == userId, cancellationToken);
 }

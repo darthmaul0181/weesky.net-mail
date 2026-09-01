@@ -6,7 +6,9 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// <summary>
 /// A user's contacts. Addresses go in as the caller typed them and come back canonical; callers
 /// never fold them themselves. Every method is scoped by <c>userId</c>, so a contact
-/// belonging to somebody else is simply not found.
+/// belonging to somebody else is simply not found — and, since 4e, by kind: this is the address
+/// book, so a group card is not found either, whatever it is asked for (décision 4). The CardDAV
+/// side reads its own way and serves both species; only the ceiling counts them both.
 /// </summary>
 public interface IContactStore
 {
@@ -52,9 +54,14 @@ public interface IContactStore
     /// <summary>
     /// Removes a batch and answers how many rows it actually held. An id this user does not own
     /// resolves to nothing and is skipped in silence: a batch may not half-fail, and telling an
-    /// unknown id from a foreign one would say whether it exists.
+    /// unknown id from a foreign one would say whether it exists — and a group card is skipped the
+    /// same way, being no more a thing the address book addresses (décision 4).
+    /// <paramref name="includeGroups"/> lifts that clause for the one caller speaking for the
+    /// CardDAV collection, where both species are resources; spelled out at every call site rather
+    /// than defaulted, so a product surface cannot acquire it by omission.
     /// </summary>
-    Task<int> DeleteManyAsync(Guid userId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+    Task<int> DeleteManyAsync(
+        Guid userId, IReadOnlyList<Guid> ids, bool includeGroups, CancellationToken cancellationToken);
 
     /// <summary>Sets or clears the favourite flag over a batch, under the same silent-skip rule.</summary>
     Task<int> SetFavoriteManyAsync(

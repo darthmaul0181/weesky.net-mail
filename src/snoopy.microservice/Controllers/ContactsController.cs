@@ -213,7 +213,8 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     {
         if (Refuse(request?.Ids) is { } refusal) return refusal;
 
-        await store.DeleteManyAsync(AuthenticatedUser.WebmailUid, request!.Ids, cancellationToken);
+        await store.DeleteManyAsync(
+            AuthenticatedUser.WebmailUid, request!.Ids, includeGroups: false, cancellationToken);
         return NoContent();
     }
 

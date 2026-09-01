@@ -37,6 +37,13 @@ public sealed class DavContactReaderTests
         return contact;
     }
 
+    private static Contact Group(string davName)
+    {
+        var contact = Visible(davName);
+        contact.Kind = ContactKinds.Group;
+        return contact;
+    }
+
     private static Contact WithoutName()
     {
         var contact = Visible(Guid.NewGuid().ToString());
@@ -68,6 +75,19 @@ public sealed class DavContactReaderTests
         var cards = await reader.StreamAsync(UserId, ulong.MaxValue, CancellationToken.None).ToListAsync();
 
         Assert.Equal(["a.vcf", "b.vcf"], cards.Select(c => c.DavName).Order());
+    }
+
+    [Fact]
+    public async Task ItStreamsAGroupCardLikeAnyOther()
+    {
+        using var context = NewContextWith(Visible("a.vcf"), Group("g.vcf"));
+        var reader = new DavContactReader(context);
+
+        var cards = await reader.StreamAsync(UserId, ulong.MaxValue, CancellationToken.None).ToListAsync();
+
+        // The DAV side filters on neither species: the collection serves both, and a client whose
+        // groups vanished from it would delete them locally on the next sync (décision 4).
+        Assert.Equal(["a.vcf", "g.vcf"], cards.Select(c => c.DavName).Order());
     }
 
     [Fact]

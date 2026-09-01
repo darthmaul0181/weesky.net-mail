@@ -134,7 +134,7 @@ internal sealed class DavContactWriter(
                 .ToListAsync(cancellationToken);
             if (ids.Count == 0) return Emptied;
 
-            var buried = await store.DeleteManyAsync(userId, ids, cancellationToken);
+            var buried = await store.DeleteManyAsync(userId, ids, includeGroups: true, cancellationToken);
             logger.LogInformation("DELETE of the book for {UserId} buried {Count} cards", userId, buried);
             return Emptied;
         }
