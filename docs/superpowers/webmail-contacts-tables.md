@@ -165,11 +165,25 @@ CREATE TABLE `contact_group_members` (
   `group_id`   CHAR(36)          NOT NULL,
   `member_uid` VARCHAR(255)      NOT NULL
     COMMENT 'UID du membre sans son préfixe urn:uuid: ; pas son id, un client peut PUT le groupe avant ses membres',
-  `position`   SMALLINT UNSIGNED NOT NULL COMMENT 'Rang du MEMBER dans la carte',
-  PRIMARY KEY (`group_id`, `position`),
-  UNIQUE KEY `uq_group_member` (`group_id`, `member_uid`),
+  `position`   SMALLINT UNSIGNED NOT NULL COMMENT 'Rang du MEMBER dans la carte ; simple attribut',
+  PRIMARY KEY (`group_id`, `member_uid`),
   INDEX `ix_group_members_uid` (`member_uid`),
   CONSTRAINT `fk_group_members_group`
     FOREIGN KEY (`group_id`) REFERENCES `contacts`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+```
+
+### Rattrapage : la clé de `contact_group_members`
+
+À jouer sur `snoopy_webmail_dev`, où la table a déjà été créée sous son ancienne forme
+(`PRIMARY KEY (group_id, position)` + `uq_group_member`). À ignorer là où la table est créée
+directement sous la forme ci-dessus. Retirer un membre renumérote les survivants : sous l'ancienne
+forme un survivant changeait de clé primaire, EF émettait son `INSERT` avant le `DELETE` de
+l'ancienne ligne, et `uq_group_member` sautait.
+
+```sql
+ALTER TABLE `contact_group_members`
+  DROP PRIMARY KEY,
+  DROP KEY `uq_group_member`,
+  ADD PRIMARY KEY (`group_id`, `member_uid`);
 ```

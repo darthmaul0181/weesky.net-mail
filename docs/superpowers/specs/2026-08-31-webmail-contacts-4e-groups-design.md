@@ -507,9 +507,8 @@ CREATE TABLE `contact_group_members` (
   `group_id`   CHAR(36)          NOT NULL,
   `member_uid` VARCHAR(255)      NOT NULL
     COMMENT 'UID du membre sans son préfixe urn:uuid: ; pas son id, un client peut PUT le groupe avant ses membres',
-  `position`   SMALLINT UNSIGNED NOT NULL COMMENT 'Rang du MEMBER dans la carte',
-  PRIMARY KEY (`group_id`, `position`),
-  UNIQUE KEY `uq_group_member` (`group_id`, `member_uid`),
+  `position`   SMALLINT UNSIGNED NOT NULL COMMENT 'Rang du MEMBER dans la carte ; simple attribut',
+  PRIMARY KEY (`group_id`, `member_uid`),
   INDEX `ix_group_members_uid` (`member_uid`),
   CONSTRAINT `fk_group_members_group`
     FOREIGN KEY (`group_id`) REFERENCES `contacts`(`id`) ON DELETE CASCADE
@@ -517,9 +516,16 @@ CREATE TABLE `contact_group_members` (
 ```
 
 Pas de `COLLATE` de colonne sur `member_uid` : la table l'est déjà en `utf8mb4_bin`, et
-`contacts.uid` — la colonne qu'elle vient rejoindre — n'en porte pas non plus. Et la clé composite
+`contacts.uid` — la colonne qu'elle vient rejoindre — n'en porte pas non plus. Et la clé primaire
 tient : `(group_id, member_uid)` pèse 1 164 octets, exactement comme `uq_contacts_user_uid` qui
 tourne déjà sur ce schéma — le format de ligne DYNAMIC y est donc prouvé, pas supposé.
+
+**La clé est l'identité, pas le rang.** `(group_id, member_uid)` est la clé primaire et `position`
+un simple attribut : retirer un membre renumérote les survivants, et sous une clé
+`(group_id, position)` un survivant renuméroté changeait de clé primaire — EF le suivait alors
+comme une paire `Deleted`+`Added`, émettait l'`INSERT` avant le `DELETE`, et l'unique
+`uq_group_member` sautait. Sous cette clé-ci la paire fusionne en un seul `UPDATE` de `position`,
+le mécanisme que `contact_emails` exerce déjà en production.
 
 Aucun rattrapage de données : la requête de sondage ne trouve aucune carte de groupe en base, et le
 défaut `individual` classe correctement tout le stock. Une carte de groupe arrivant par un `PUT`
@@ -528,7 +534,7 @@ ultérieur est projetée comme telle au moment où elle arrive.
 **La relation EF doit être déclarée** dans `PreferencesDbContext`. Sans arête déclarée, EF ordonne
 les `INSERT` par nom de table, et les tests InMemory ne peuvent pas l'attraper : `contact_group_members`
 s'insérerait avant `contacts`. La forme est celle des trois sœurs à clé composite, ligne pour
-ligne — `contact_photos`, la quatrième, a une clé simple — : `HasKey(new { GroupId, Position })`,
+ligne — `contact_photos`, la quatrième, a une clé simple — : `HasKey(new { GroupId, MemberUid })`,
 puis `HasOne<Contact>().WithMany().HasForeignKey(…).OnDelete(DeleteBehavior.Cascade)`.
 
 ## API

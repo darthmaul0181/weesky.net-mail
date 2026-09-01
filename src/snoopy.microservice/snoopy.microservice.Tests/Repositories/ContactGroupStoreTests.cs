@@ -433,6 +433,26 @@ public sealed class ContactGroupStoreTests : IDisposable
         Assert.True(await Context.Contacts.AnyAsync(c => c.Id == goes, CancellationToken.None));
     }
 
+    // Régression : retirer le PREMIER des deux membres renumérote le survivant de 1 à 0. Sous une
+    // clé (group_id, position) ce survivant changeait de clé primaire, EF le suivait comme une
+    // paire Deleted+Added et émettait l'INSERT avant le DELETE — MySQL rendait « Duplicate entry
+    // for key 'uq_group_member' ». InMemory ne prouve pas l'ordre du SQL ; ce qu'il épingle, c'est
+    // que la clé ne bouge plus, donc que la paire fusionne en un seul UPDATE de position.
+    [Fact]
+    public async Task RemoveMembersAsync_OfTheFirstMember_RenumbersTheSurvivorInPlace()
+    {
+        var goes = await GivenAContact("Ada");
+        var stays = await GivenAContact("Grace");
+        var group = await GivenAGroup("Amis", null, goes.ToString(), stays.ToString());
+
+        var removed = await Store.RemoveMembersAsync(User, group, [goes], CancellationToken.None);
+
+        Assert.True(removed.IsSuccess);
+        var survivor = Assert.Single(Context.ContactGroupMembers.Where(m => m.GroupId == group));
+        Assert.Equal(stays.ToString(), survivor.MemberUid);
+        Assert.Equal(0, survivor.Position);
+    }
+
     [Fact]
     public async Task RemoveMembersAsync_OfSomeoneWhoIsNotAMember_TakesNeitherRankNorRevision()
     {

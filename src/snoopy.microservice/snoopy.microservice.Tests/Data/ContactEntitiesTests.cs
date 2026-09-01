@@ -18,10 +18,10 @@ public sealed class ContactEntitiesTests
     }
 
     [Fact]
-    public async Task ContactGroupMember_KeyIsGroupIdAndPosition_AndMemberIsUnique()
+    public async Task ContactGroupMember_KeyIsGroupIdAndMemberUid()
     {
         var context = new PreferencesTestDbContext(
-            nameof(ContactGroupMember_KeyIsGroupIdAndPosition_AndMemberIsUnique));
+            nameof(ContactGroupMember_KeyIsGroupIdAndMemberUid));
         var groupId = Guid.NewGuid();
 
         context.Contacts.Add(new Contact { Id = groupId, UserId = Guid.NewGuid(), Kind = ContactKinds.Group });
@@ -30,6 +30,10 @@ public sealed class ContactEntitiesTests
         await context.SaveChangesAsync(CancellationToken.None); // les trous de position sont légaux (décision 3)
 
         Assert.Equal(2, await context.ContactGroupMembers.CountAsync());
+        // Le même (groupe, membre) une seconde fois est la même ligne, quelle que soit sa position :
+        // le suiveur la refuse plutôt que d'en ouvrir une deuxième (décision 3).
+        Assert.Throws<InvalidOperationException>(() => context.ContactGroupMembers.Add(
+            new ContactGroupMember { GroupId = groupId, MemberUid = "a", Position = 5 }));
     }
 
     [Fact]
