@@ -390,20 +390,17 @@ describe('RecipientsField — group rows', () => {
   })
 
   // 'josé@x.com' and 'jose@x.com' are two distinct SMTPUTF8 mailboxes; fold() strips the diacritic
-  // and would wrongly treat the accented address as already present. A second, unrelated address
-  // keeps the group itself offered (suggestionsFor's own dropdown filter, untouched by this fix,
-  // still folds — a group whose every address folds to an existing token stays hidden by design).
-  it('inserts an accented address a plain-ASCII token only folds to match', async () => {
+  // and would wrongly treat the accented address as already present — hiding the group's only
+  // address from the dropdown, then, were it shown, refusing to insert it as "already there".
+  it('offers and inserts an accented address a plain-ASCII token only folds to match', async () => {
     const onChange = vi.fn()
-    const accented: GroupOption = {
-      id: 'g3', name: 'Jose Accents', memberCount: 2, addresses: ['josé@x.com', 'other@x.com'],
-    }
+    const accented: GroupOption = { id: 'g3', name: 'Jose Accents', memberCount: 1, addresses: ['josé@x.com'] }
     const { input } = show(['jose@x.com'], [accented], { onChange })
     await userEvent.type(input, 'jose')
 
     await userEvent.click(screen.getByRole('option'))
 
-    expect(onChange).toHaveBeenCalledWith(['jose@x.com', 'josé@x.com', 'other@x.com'])
+    expect(onChange).toHaveBeenCalledWith(['jose@x.com', 'josé@x.com'])
   })
 
   // Nothing is ever inserted in silence (decision 15): a group nobody in the book resolves is a

@@ -204,6 +204,16 @@ describe('suggestionsFor', () => {
     expect(rows).toEqual([])
   })
 
+  // 'josé@x.com' and 'jose@x.com' are two distinct SMTPUTF8 mailboxes; excluding the plain one
+  // must not fold away the accented one too — the app's address identity is canonicalAddress.
+  it('still offers an accented address when only its plain-ASCII twin is excluded', () => {
+    const jose = contact({ id: 'j', firstName: 'José', addresses: ['josé@x.com'] })
+
+    const rows = addressesFor([jose], 'jose', { exclude: new Set(['jose@x.com']) })
+
+    expect(rows.map(r => r.address)).toEqual(['josé@x.com'])
+  })
+
   // suggestionsFor's own matches() filter carries no coverage without a contact in the input that
   // must not come back out: the 26 baseline tests all pass even with that filter deleted.
   it('leaves out a contact unrelated to the query', () => {
