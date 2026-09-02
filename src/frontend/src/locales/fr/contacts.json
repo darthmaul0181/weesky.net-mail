@@ -66,6 +66,7 @@
     "emptyGroup": "Ce groupe n’a pas encore de membre",
     "emptyFavourites": "Aucun favori pour l’instant",
     "noMatch": "Aucun contact correspondant",
+    "dragLabel": "Glisser vers une liste",
     "edit": "Modifier {{name}}",
     "delete": "Supprimer {{name}}",
     "selectAll": "Tout sélectionner",

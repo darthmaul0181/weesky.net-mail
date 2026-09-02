@@ -293,6 +293,21 @@ describe('ContactList', () => {
     expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['a', 'b'] })
   })
 
+  // The pill is built once, at the start of the drag, and setDragImage never learns which row it
+  // ends up over — so its label has to hold for every target this list drops onto, a group row
+  // included, rather than naming the one drop it was written against.
+  it('carries a neutral label on the drag pill, not the favourites one', () => {
+    setup()
+    const setDragImage = vi.fn()
+
+    fireEvent.dragStart(screen.getByTestId('contact-tile-a'),
+      { dataTransfer: { setData: vi.fn(), setDragImage } })
+
+    const pill = setDragImage.mock.calls[0][0] as HTMLElement
+    expect(pill.textContent).toContain('Drag to a list')
+    expect(pill.textContent).not.toMatch(/favourites/i)
+  })
+
   // Une tuile non cochée part seule : glisser ne doit jamais déranger une sélection faite pour
   // autre chose.
   it('drags an unchecked tile alone', () => {
