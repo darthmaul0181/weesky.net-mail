@@ -117,15 +117,35 @@ internal static class VCardComposer
     internal static string RemoveGroupMember(string card, string memberUid)
     {
         var lines = LogicalLines(CanonicalLineBreaks(card));
-        lines.RemoveAll(l =>
-        {
-            if (!IsName(l, "MEMBER") && !IsName(l, GroupMemberName)) return false;
-            var unfolded = Unfold(l);
-            var colon = IndexOutsideQuotes(unfolded, ':');
-            return colon >= 0
-                && VCardProjector.StripUrnUuid(unfolded[(colon + 1)..].Trim()) == memberUid;
-        });
+        lines.RemoveAll(l => Names(l, memberUid));
         return Join(lines);
+    }
+
+    /// <summary>The same matching rule, rewriting the value instead of dropping the line: a member
+    /// whose UID changed keeps the rank, the property name and the parameters the card gave it.</summary>
+    internal static string ReplaceGroupMember(string card, string memberUid, string replacement)
+    {
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        for (var index = 0; index < lines.Count; index++)
+        {
+            if (!Names(lines[index], memberUid)) continue;
+
+            var unfolded = Unfold(lines[index]);
+            var colon = IndexOutsideQuotes(unfolded, ':');
+            lines[index] = Fold(
+                unfolded[..(colon + 1)] + VCardProjector.UrnUuidPrefix + replacement);
+        }
+
+        return Join(lines);
+    }
+
+    private static bool Names(string line, string memberUid)
+    {
+        if (!IsName(line, "MEMBER") && !IsName(line, GroupMemberName)) return false;
+
+        var unfolded = Unfold(line);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        return colon >= 0 && VCardProjector.StripUrnUuid(unfolded[(colon + 1)..].Trim()) == memberUid;
     }
 
     internal static string RenameGroup(string card, string name)

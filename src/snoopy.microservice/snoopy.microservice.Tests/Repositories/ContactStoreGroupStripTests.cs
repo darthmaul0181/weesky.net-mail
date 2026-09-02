@@ -150,6 +150,42 @@ public sealed class ContactStoreGroupStripTests
     }
 
     /// <summary>
+    /// A PUT accepted under the same href with a different UID re-keys the groups rather than
+    /// orphaning them: the contact stays a member, and the group card names the identity that now
+    /// exists. Same accounting as the retrait — one rank, one revision, on the group.
+    /// </summary>
+    [Fact]
+    public async Task PuttingANewUidUnderTheSameHref_RekeysTheGroupsThatCarriedTheOldOne()
+    {
+        using var context = ContactStoreTestFactory.NewContext();
+        var sync = ContactStoreTestFactory.NewSyncCounting(first: 7);
+        var store = new ContactStore(context, sync.Object);
+        var writer = new DavContactWriter(
+            context, store, sync.Object, Mock.Of<ILogger<DavContactWriter>>());
+        var contact = await GivenAContact(context, "u1");
+        var group = await GivenAGroup(context, "Amis", ["u1"]);
+
+        var outcome = await writer.PutAsync(UserId, "u1.vcf",
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u2\r\nFN:Ada\r\nEND:VCARD\r\n", CancellationToken.None);
+
+        Assert.Equal(DavWriteStatus.Replaced, outcome.Status);
+        var card = await context.Contacts.SingleAsync(c => c.Id == group, CancellationToken.None);
+        Assert.Contains("X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:u2", card.VCardRaw, StringComparison.Ordinal);
+        Assert.DoesNotContain(":u1", card.VCardRaw, StringComparison.Ordinal);
+        Assert.Equal(["u2"], context.ContactGroupMembers
+            .Where(m => m.GroupId == group).Select(m => m.MemberUid).ToList());
+        Assert.Equal(outcome.Sequence, card.SyncSequence);
+        sync.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.ContactId == group && r.Cause == RevisionCause.Webmail),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        // The whole point of the re-key: the screen still shows the contact under its group.
+        var groups = await new ContactGroupStore(context, store, sync.Object)
+            .ListAsync(UserId, CancellationToken.None);
+        Assert.Equal(contact, Assert.Single(Assert.Single(groups).MemberIds));
+    }
+
+    /// <summary>
     /// The contract of the batch door, and it only holds beyond one batch: the exclusion is
     /// computed on the ids handed to the method, never on the slice being processed, or a group
     /// the list also carries would be rewritten by the slice that precedes its own burial.

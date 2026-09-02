@@ -479,9 +479,19 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
     /// and revisions on condemned cards. A group the card no longer names is left alone too — the
     /// membership table alone may still point at it.
     /// </summary>
-    internal async Task StripFromGroupsAsync(
+    internal Task StripFromGroupsAsync(
         Guid userId, IReadOnlyList<string> uids, IReadOnlyCollection<Guid> dyingIds, ulong rank,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        RekeyInGroupsAsync(userId, uids, null, dyingIds, rank, cancellationToken);
+
+    /// <summary>
+    /// The retrait and the re-key are one gesture: same groups, same exclusion, same accounting —
+    /// only the line edit differs. A null <paramref name="replacement"/> drops the MEMBER line, a
+    /// value rewrites it in place, which is what a PUT changing a UID under its href owes them.
+    /// </summary>
+    internal async Task RekeyInGroupsAsync(
+        Guid userId, IReadOnlyList<string> uids, string? replacement,
+        IReadOnlyCollection<Guid> dyingIds, ulong rank, CancellationToken cancellationToken)
     {
         if (uids.Count == 0) return;
 
@@ -494,7 +504,10 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         {
             if (group.VCardRaw is null) continue;
 
-            var card = uids.Aggregate(group.VCardRaw, VCardComposer.RemoveGroupMember);
+            var card = replacement is null
+                ? uids.Aggregate(group.VCardRaw, VCardComposer.RemoveGroupMember)
+                : uids.Aggregate(group.VCardRaw,
+                    (held, uid) => VCardComposer.ReplaceGroupMember(held, uid, replacement));
             // The book named this group, the card does not: a retrait that changes nothing buys no
             // MEDIUMTEXT revision, no rank and no UpdatedAt.
             if (card == group.VCardRaw) continue;
