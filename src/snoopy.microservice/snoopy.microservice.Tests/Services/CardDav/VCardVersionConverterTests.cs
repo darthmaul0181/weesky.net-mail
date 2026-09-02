@@ -1,4 +1,4 @@
-﻿using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.CardDav;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services.CardDav;
@@ -239,15 +239,34 @@ public sealed class VCardVersionConverterTests
     [Fact]
     public void ServingAMixedDialectGroupCardIn40_WritesEachLineOnce()
     {
+        // m2 n'a pas de jumeau X- : la déduplication porte sur le couple (nom, valeur), donc elle
+        // ne doit pas emporter les membres que le second dialecte ne redit pas.
         var mixed = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nN:;;;;\r\n"
-            + "KIND:group\r\nMEMBER:urn:uuid:m1\r\n"
+            + "KIND:group\r\nMEMBER:urn:uuid:m1\r\nMEMBER:urn:uuid:m2\r\n"
             + "X-ADDRESSBOOKSERVER-KIND:group\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\nEND:VCARD\r\n";
 
         var served = VCardVersionConverter.To(mixed, "4.0");
 
         Assert.DoesNotContain("X-ADDRESSBOOKSERVER", served);
         Assert.Equal(1, Lines(served, "KIND"));
-        Assert.Equal(1, Lines(served, "MEMBER"));
+        Assert.Equal(2, Lines(served, "MEMBER"));
+        Assert.Equal(1, Occurrences(served, "urn:uuid:m1"));
+        Assert.Equal(1, Occurrences(served, "urn:uuid:m2"));
+    }
+
+    // Des deux lignes qui disent le même membre, celle qui reste est la ligne stockée telle quelle :
+    // la bibliothèque resérialise la sienne et perdrait le préfixe de groupe et le paramètre X-.
+    [Fact]
+    public void ServingAMixedDialectGroupCardIn40_KeepsTheStoredLineVerbatim()
+    {
+        var mixed = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nN:;;;;\r\n"
+            + "KIND:group\r\nMEMBER:urn:uuid:m1\r\n"
+            + "X-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "item1.X-ADDRESSBOOKSERVER-MEMBER;X-FOO=bar:urn:uuid:m1\r\nEND:VCARD\r\n";
+
+        var served = VCardVersionConverter.To(mixed, "4.0");
+
+        Assert.Contains("item1.MEMBER;X-FOO=bar:urn:uuid:m1", served);
         Assert.Equal(1, Occurrences(served, "urn:uuid:m1"));
     }
 

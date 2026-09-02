@@ -102,18 +102,21 @@ internal static class VCardVersionConverter
     /// so the two lines are rebuilt from the STORED card, values verbatim.
     ///
     /// Neither arm may assume one dialect: clients write both on the same card, and each line the
-    /// output already carries would come back doubled — and, at the next PUT, stored doubled.
+    /// output already carries would come back doubled — and, at the next PUT, stored doubled. Of
+    /// the two spellings of one line, the surviving one is always the X- line the library copied
+    /// verbatim, never the one it re-serialised: that is what keeps the doctrine above true here.
     /// </summary>
     private static void TranslateGroupProperties(List<string> lines, VCdVersion wanted, string stored)
     {
         if (wanted == VCdVersion.V4_0)
         {
+            // Sur une carte à double dialecte les deux lignes disent la même chose, et c'est la X-
+            // qui reste : recopiée telle quelle, elle garde le préfixe de groupe et les paramètres
+            // de la carte stockée, là où la ligne modelée revient resérialisée par la bibliothèque.
+            DropShadowed(lines, "KIND", VCardComposer.GroupKindName);
+            DropShadowed(lines, "MEMBER", VCardComposer.GroupMemberName);
             Rename(lines, VCardComposer.GroupKindName, "KIND");
             Rename(lines, VCardComposer.GroupMemberName, "MEMBER");
-            // Une carte portant les deux dialectes tient déjà la ligne que le renommage vient
-            // d'écrire : sans cela chaque membre sort deux fois, et revient doublé au PUT suivant.
-            DropRepeats(lines, "KIND");
-            DropRepeats(lines, "MEMBER");
             return;
         }
 
@@ -133,21 +136,29 @@ internal static class VCardVersionConverter
         lines.InsertRange(VCardComposer.EndIndex(lines), rebuilt);
     }
 
-    // Keeps the first of each (property name, value) pair — parameters and group prefix aside,
-    // which is what makes the two dialects' lines the same line once renamed.
-    private static void DropRepeats(List<string> lines, string name)
+    // Drops each `standard` line whose value a `dialect` line already carries — the pair the
+    // renaming is about to make identical. Run BEFORE the renaming, so which of the two survives
+    // is our choice and not the library's emission order.
+    private static void DropShadowed(List<string> lines, string standard, string dialect)
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        lines.RemoveAll(line => VCardComposer.IsName(line, name)
-            && Key(line) is { Length: > 0 } key && !seen.Add(key));
+        var shadows = new HashSet<string>(
+            lines.Where(l => VCardComposer.IsName(l, dialect)).Select(Value).Where(v => v.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+        if (shadows.Count == 0) return;
+        lines.RemoveAll(l => VCardComposer.IsName(l, standard) && shadows.Contains(Value(l)));
     }
 
-    private static string Key(string line)
+    // A line's raw value, unfolded and trimmed — "" when the line carries none.
+    private static string Value(string line)
     {
         var unfolded = VCardComposer.Unfold(line);
         var colon = VCardComposer.IndexOutsideQuotes(unfolded, ':');
-        return colon < 0 ? string.Empty : Key(VCardComposer.NameOf(unfolded), unfolded[(colon + 1)..]);
+        return colon < 0 ? string.Empty : unfolded[(colon + 1)..].Trim();
     }
+
+    private static string Key(string line) =>
+        Value(line) is { Length: > 0 } value
+            ? Key(VCardComposer.NameOf(VCardComposer.Unfold(line)), value) : string.Empty;
 
     private static string Key(string name, string value) => name + ":" + value.Trim();
 
