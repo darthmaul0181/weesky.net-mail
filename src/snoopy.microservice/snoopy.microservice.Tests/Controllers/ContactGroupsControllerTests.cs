@@ -89,6 +89,28 @@ public sealed class ContactGroupsControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
+    // Les deux portes lisent la même règle : un nom que la projection effacerait n'entre par aucune.
+    [Fact]
+    public async Task Create_WithThePlaceholderName_Returns400AndNeverReachesTheStore()
+    {
+        var result = await CreateController().Create(new ContactGroupRequest("?"), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _store.Verify(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Rename_WithThePlaceholderName_Returns400AndNeverReachesTheStore()
+    {
+        var result = await CreateController().Rename(
+            Guid.NewGuid(), new ContactGroupRequest("?"), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _store.Verify(s => s.RenameAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task Create_AtTheCap_Returns400CarryingTheStoresReason()
     {

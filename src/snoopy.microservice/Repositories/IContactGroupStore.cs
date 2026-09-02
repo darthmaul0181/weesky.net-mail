@@ -11,7 +11,9 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// </summary>
 public interface IContactGroupStore
 {
-    /// <summary>Every group, each with the members this book actually holds.</summary>
+    /// <summary>Every group, each with the members this book actually holds, ordered by name —
+    /// case-blind, accents weighed by the invariant culture — then by id. Nothing downstream sorts,
+    /// so this order is the contract.</summary>
     Task<IReadOnlyList<ContactGroupView>> ListAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>

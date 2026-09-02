@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using MimeKit;
 using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Services.Contacts;
 
 namespace weesky.Snoopy.Microservice.Services;
 
@@ -66,11 +67,16 @@ internal static class ContactValidator
     // callers can run it on a value they never trimmed themselves.
     private static readonly Regex TypeToken = new($@"\A[A-Za-z0-9,-]{{0,{MaxTypeLength}}}\z", RegexOptions.Compiled);
 
-    /// <summary>The group-name rule, one place: trimmed; refused empty or over the column.</summary>
+    /// <summary>
+    /// The group-name rule, one place: trimmed; refused empty or over the column. A name the
+    /// projection reads back as the writer's placeholder is refused with the empty one — accepted,
+    /// it would answer 200 with the name and list the group without it.
+    /// </summary>
     internal static Result<string> ValidateGroupName(string? name)
     {
         var trimmed = name?.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return Result.Failure<string>("A group needs a name");
+        if (string.IsNullOrEmpty(trimmed) || VCardProjector.IsPlaceholder(trimmed))
+            return Result.Failure<string>("A group needs a name");
         if (trimmed.Length > MaxGroupNameLength)
             return Result.Failure<string>($"The group name must be at most {MaxGroupNameLength} characters");
         return Result.Success(trimmed);

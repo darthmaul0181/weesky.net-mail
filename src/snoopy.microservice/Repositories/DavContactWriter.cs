@@ -306,6 +306,16 @@ internal sealed class DavContactWriter(
                     }, cancellationToken);
                 }
 
+                // Décision 7 again, on the identity rather than on the row: a UID that moves under
+                // its href would leave every group naming the old one pointing at nothing. Judged
+                // on the stripped forms — the prefix is no part of what a MEMBER resolves against.
+                var member = VCardProjector.StripUrnUuid(identity);
+                if (VCardProjector.StripUrnUuid(row.Uid) != member)
+                {
+                    await store.RekeyInGroupsAsync(
+                        userId, ContactStore.Forms(row.Uid), member, [row.Id], rank, cancellationToken);
+                }
+
                 row.Uid = identity;
                 row.UpdatedAt = DateTime.UtcNow;
                 row.SyncSequence = rank;

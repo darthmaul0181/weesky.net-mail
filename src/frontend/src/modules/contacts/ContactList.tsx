@@ -7,7 +7,7 @@ import PersonMinusIcon from '../../icons/PersonMinusIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
-import { STAR_GLYPH, buildDragPill } from '../mail/list/dragImage'
+import { buildDragPill, LIST_GLYPH } from '../mail/list/dragImage'
 import { useSelection } from '../mail/list/useSelection'
 import { displayNameOf, primaryAddressOf } from './contactName'
 import { filterContacts } from './contactSearch'
@@ -79,7 +79,7 @@ export default function ContactList({
     const ids = dragIds(selectedIds, id)
     event.dataTransfer.setData(CONTACT_DRAG_MIME, serializeContactDrag({ ids }))
     event.dataTransfer.effectAllowed = 'copy'
-    const pill = buildDragPill(ids.length, t('favourites.add'), STAR_GLYPH)
+    const pill = buildDragPill(ids.length, t('list.dragLabel'), LIST_GLYPH)
     pill.style.position = 'absolute'
     pill.style.top = '-9999px'
     document.body.appendChild(pill)
@@ -149,7 +149,14 @@ export default function ContactList({
       </SelectionBand>
 
       <div className="contacts-list-scroll">
-        {contacts.length === 0 && <p className="contacts-empty">{t('list.empty')}</p>}
+        {/* `contacts` already arrives scoped, so an empty group or an empty favourites list is not
+            the whole book being empty — each gets its own line rather than borrowing `list.empty`. */}
+        {contacts.length === 0 && (
+          <p className="contacts-empty">
+            {t(scope.startsWith('group:') ? 'list.emptyGroup'
+              : scope === 'favorites' ? 'list.emptyFavourites' : 'list.empty')}
+          </p>
+        )}
         {contacts.length > 0 && shown.length === 0 && (
           <p className="contacts-empty">{t('list.noMatch')}</p>
         )}

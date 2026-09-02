@@ -33,19 +33,32 @@ internal sealed class ContactGroupStore(
         // join on a constant, which EF translates badly; the member side is narrowed to this
         // user's groups by the correlated subquery ContactStore uses throughout, never an IN list
         // MariaDB cannot parametrise.
+        // The prefixed branch matches on the TAIL, never on a concatenated constant: décision 7
+        // wants the nine-character prefix recognised in any case, and no LOWER() spells that rule
+        // alike in SQL and in the CLR — StripUrnUuid confirms the head below, on the rows returned.
         var resolved = await (
             from m in context.ContactGroupMembers.AsNoTracking().Where(m => context.Contacts.Any(
                 g => g.Id == m.GroupId && g.UserId == userId && g.Kind == ContactKinds.Group))
             from c in context.Contacts.AsNoTracking().Individuals().Where(c => c.UserId == userId)
-            where c.Uid == m.MemberUid || c.Uid == VCardProjector.UrnUuidPrefix + m.MemberUid
-            select new { m.GroupId, MemberId = c.Id, m.Position })
+            where c.Uid == m.MemberUid
+                || (c.Uid.Length == VCardProjector.UrnUuidPrefix.Length + m.MemberUid.Length
+                    && c.Uid.Substring(VCardProjector.UrnUuidPrefix.Length) == m.MemberUid)
+            select new { m.GroupId, MemberId = c.Id, m.Position, c.Uid, m.MemberUid })
             .ToListAsync(cancellationToken);
 
-        var byGroup = resolved.ToLookup(r => r.GroupId);
+        var byGroup = resolved
+            .Where(r => r.Uid == r.MemberUid || VCardProjector.StripUrnUuid(r.Uid) == r.MemberUid)
+            .ToLookup(r => r.GroupId);
+        // Sorted here rather than in SQL: nothing downstream sorts, and the answer must not depend
+        // on the column's collation — the invariant culture folds case and weighs accents as a
+        // reader expects. The id breaks the tie, so two homonyms never swap between two calls.
         return
         [
-            .. groups.Select(g => new ContactGroupView(g.Id, g.DisplayName ?? string.Empty,
-                [.. byGroup[g.Id].OrderBy(r => r.Position).Select(r => r.MemberId)]))
+            .. groups
+                .OrderBy(g => g.DisplayName ?? string.Empty, StringComparer.InvariantCultureIgnoreCase)
+                .ThenBy(g => g.Id)
+                .Select(g => new ContactGroupView(g.Id, g.DisplayName ?? string.Empty,
+                    [.. byGroup[g.Id].OrderBy(r => r.Position).Select(r => r.MemberId)]))
         ];
     }
 
@@ -151,6 +164,10 @@ internal sealed class ContactGroupStore(
             // contacts those rows pointed at are untouched (décision 7).
             await store.ClearProjectionAsync([groupId], cancellationToken);
             context.Contacts.Remove(row);
+            // Décision 7 on the third door: a group nested in another (décision 9) leaves it here,
+            // in the same transaction, or the parent keeps a MEMBER line naming nothing.
+            await store.StripFromGroupsAsync(
+                userId, ContactStore.Forms(row.Uid), [groupId], rank, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
             if (davName is not null)

@@ -1,3 +1,4 @@
+import { canonicalAddress } from '../../lib/canonicalAddress'
 import { collator } from '../../lib/intl'
 import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
@@ -55,9 +56,10 @@ export type ComposerSuggestion =
   | ({ kind: 'group' } & GroupOption)
 
 /**
- * The resolved primary address of every group's members, deduplicated on the folded address the
- * way the dropdown's own rows are — two members sharing a mailbox spelled two ways would
- * otherwise put the identical recipient in the field twice.
+ * The resolved primary address of every group's members, deduplicated on `canonicalAddress` — the
+ * app's own address identity, distinct from `fold`'s search normalisation, which strips
+ * diacritics and would collapse two distinct SMTPUTF8 mailboxes ('josé@x.com', 'jose@x.com') into
+ * one, silently dropping a member who never receives the mail.
  *
  * Computed once by the caller and read by the field and the band alike, so "writing to this group
  * reaches nobody" is one answer rather than two that can disagree. `memberCount` counts the
@@ -73,7 +75,7 @@ export function groupOptionsOf(groups: ContactGroup[], contacts: Contact[]): Gro
       const member = byId.get(id)
       const address = member && primaryAddressOf(member)
       if (!address) continue
-      const key = fold(address.trim())
+      const key = canonicalAddress(address)
       if (seen.has(key)) continue
       seen.add(key)
       addresses.push(address)
@@ -91,10 +93,12 @@ export interface AddressSuggestion {
 }
 
 /**
- * The composer's dropdown. Address rows are keyed by **address**, folded and trimmed, since an
- * address is what gets inserted: one address carried by several contacts — or spelled in different
- * case by two of them — is one row naming all of them, never several rows producing the identical
- * recipient. The rendered `address` keeps its original spelling; only the key is canonicalised.
+ * The composer's dropdown. Address rows are keyed on `canonicalAddress`, the app's own address
+ * identity, since an address is what gets inserted: one address carried by several contacts — or
+ * spelled in different case by two of them — is one row naming all of them, never several rows
+ * producing the identical recipient. `fold` stays reserved for matching the query, never identity
+ * — it would otherwise collapse two distinct SMTPUTF8 mailboxes that differ only by a diacritic.
+ * The rendered `address` keeps its original spelling; only the key is canonicalised.
  *
  * Group rows come first and are capped before the merge, so the ten address places stay the ten
  * address places. A group whose every address is already a token is dropped — picking it could
@@ -110,9 +114,9 @@ export function suggestionsFor(
   const needle = fold(query.trim())
   if (needle === '') return []
 
-  // Keyed canonically (folded, trimmed) so that 'Info@Example.com' and 'info@example.com' — same
-  // mailbox, different spelling — collapse to one row instead of two identical-looking recipients.
-  const excludeKeys = exclude && new Set([...exclude].map(address => fold(address.trim())))
+  // Keyed on canonicalAddress, the app's own address identity — not fold, which strips diacritics
+  // and would treat 'josé@x.com' as the 'jose@x.com' already excluded, hiding a distinct mailbox.
+  const excludeKeys = exclude && new Set([...exclude].map(address => canonicalAddress(address)))
   const rows = new Map<string, { address: string; names: string[]; favorite: boolean; primary: boolean }>()
 
   for (const contact of [...contacts].sort(compareContacts)) {
@@ -121,7 +125,7 @@ export function suggestionsFor(
     const primary = primaryAddressOf(contact)
     const name = contactNameOf(contact)
     for (const address of contact.addresses) {
-      const key = fold(address.trim())
+      const key = canonicalAddress(address)
       if (excludeKeys?.has(key)) continue
 
       const existing = rows.get(key)
@@ -143,7 +147,7 @@ export function suggestionsFor(
   const groupRows = groups
     .filter(group => fold(group.name).includes(needle))
     .filter(group => group.addresses.length === 0
-      || group.addresses.some(address => !excludeKeys?.has(fold(address.trim()))))
+      || group.addresses.some(address => !excludeKeys?.has(canonicalAddress(address))))
     .slice(0, GROUP_LIMIT)
     .map(group => ({ kind: 'group' as const, ...group }))
 

@@ -97,28 +97,70 @@ internal static class VCardVersionConverter
     /// The third of this class's three textual exceptions, after RestoreUid and <see
     /// cref="VCardComposer.StripNamePlaceholders"/> — and for RestoreUid's reason: without it a
     /// strictly-4.0 client reads a group as an empty sheet — the defect 4e repairs, moved one step
-    /// over (décision 5 de 4e). Going to 4.0 the library copied the X- lines through: renaming them
-    /// is enough. Going to 3.0 it already dropped KIND and MEMBER before we looked, so the two
-    /// lines are rebuilt from the STORED card, values verbatim.
+    /// over (décision 5 de 4e). Going to 4.0 the library copied the X- lines through, so renaming
+    /// them is the whole of it. Going to 3.0 it already dropped KIND and MEMBER before we looked,
+    /// so the two lines are rebuilt from the STORED card, values verbatim.
+    ///
+    /// Neither arm may assume one dialect: clients write both on the same card, and each line the
+    /// output already carries would come back doubled — and, at the next PUT, stored doubled. Of
+    /// the two spellings of one line, the surviving one is always the X- line the library copied
+    /// verbatim, never the one it re-serialised: that is what keeps the doctrine above true here.
     /// </summary>
     private static void TranslateGroupProperties(List<string> lines, VCdVersion wanted, string stored)
     {
         if (wanted == VCdVersion.V4_0)
         {
-            Rename(lines, "X-ADDRESSBOOKSERVER-KIND", "KIND");
-            Rename(lines, "X-ADDRESSBOOKSERVER-MEMBER", "MEMBER");
+            // Sur une carte à double dialecte les deux lignes disent la même chose, et c'est la X-
+            // qui reste : recopiée telle quelle, elle garde le préfixe de groupe et les paramètres
+            // de la carte stockée, là où la ligne modelée revient resérialisée par la bibliothèque.
+            DropShadowed(lines, "KIND", VCardComposer.GroupKindName);
+            DropShadowed(lines, "MEMBER", VCardComposer.GroupMemberName);
+            Rename(lines, VCardComposer.GroupKindName, "KIND");
+            Rename(lines, VCardComposer.GroupMemberName, "MEMBER");
             return;
         }
 
-        // 3.0 : rebâtir depuis la carte stockée, comme RestoreUid va y relire son UID.
+        // 3.0 : rebâtir depuis la carte stockée, comme RestoreUid va y relire son UID — sauf ce que
+        // la sortie porte déjà, la bibliothèque ayant recopié les X- d'une carte à double dialecte.
         if (VCardComposer.FirstRawValue(stored, "KIND") is not { } kind
             || !kind.Trim().Equals("group", StringComparison.OrdinalIgnoreCase))
             return;
-        var rebuilt = new List<string> { VCardComposer.Fold("X-ADDRESSBOOKSERVER-KIND:" + kind) };
+        var present = new HashSet<string>(
+            lines.Select(Key).Where(k => k.Length > 0), StringComparer.OrdinalIgnoreCase);
+        var rebuilt = new List<string>();
+        if (!present.Contains(Key(VCardComposer.GroupKindName, kind)))
+            rebuilt.Add(VCardComposer.Fold(VCardComposer.GroupKindName + ":" + kind));
         rebuilt.AddRange(VCardComposer.RawValuesOf(stored, "MEMBER")
-            .Select(v => VCardComposer.Fold("X-ADDRESSBOOKSERVER-MEMBER:" + v)));
+            .Where(v => !present.Contains(Key(VCardComposer.GroupMemberName, v)))
+            .Select(v => VCardComposer.Fold(VCardComposer.GroupMemberName + ":" + v)));
         lines.InsertRange(VCardComposer.EndIndex(lines), rebuilt);
     }
+
+    // Drops each `standard` line whose value a `dialect` line already carries — the pair the
+    // renaming is about to make identical. Run BEFORE the renaming, so which of the two survives
+    // is our choice and not the library's emission order.
+    private static void DropShadowed(List<string> lines, string standard, string dialect)
+    {
+        var shadows = new HashSet<string>(
+            lines.Where(l => VCardComposer.IsName(l, dialect)).Select(Value).Where(v => v.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+        if (shadows.Count == 0) return;
+        lines.RemoveAll(l => VCardComposer.IsName(l, standard) && shadows.Contains(Value(l)));
+    }
+
+    // A line's raw value, unfolded and trimmed — "" when the line carries none.
+    private static string Value(string line)
+    {
+        var unfolded = VCardComposer.Unfold(line);
+        var colon = VCardComposer.IndexOutsideQuotes(unfolded, ':');
+        return colon < 0 ? string.Empty : unfolded[(colon + 1)..].Trim();
+    }
+
+    private static string Key(string line) =>
+        Value(line) is { Length: > 0 } value
+            ? Key(VCardComposer.NameOf(VCardComposer.Unfold(line)), value) : string.Empty;
+
+    private static string Key(string name, string value) => name + ":" + value.Trim();
 
     // Renames the NAME prefix of every line whose name is `from` (group prefix such as `item1.`
     // kept, parameters and value untouched). A line may be folded, so this unfolds, replaces, then

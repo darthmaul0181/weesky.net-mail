@@ -27,9 +27,10 @@ internal static class VCardComposer
 
     private enum Family { Email, Phone, Postal }
 
-    // Apple's dialect, the one a new group card is born in (décision 6).
-    private const string GroupKindName = "X-ADDRESSBOOKSERVER-KIND";
-    private const string GroupMemberName = "X-ADDRESSBOOKSERVER-MEMBER";
+    // Apple's dialect, the one a new group card is born in (décision 6). Spelled once: the
+    // projector reads it and the version converter writes it.
+    internal const string GroupKindName = "X-ADDRESSBOOKSERVER-KIND";
+    internal const string GroupMemberName = "X-ADDRESSBOOKSERVER-MEMBER";
 
     // 101 is the erasure the projector reads back as no PREF at all (décision 5 bis of 4a). Measured
     // against FolkerKinzel 8.2.0's 3.0 and 4.0 writers — the two versions Emit produces — setting
@@ -116,15 +117,43 @@ internal static class VCardComposer
     internal static string RemoveGroupMember(string card, string memberUid)
     {
         var lines = LogicalLines(CanonicalLineBreaks(card));
-        lines.RemoveAll(l =>
-        {
-            if (!IsName(l, "MEMBER") && !IsName(l, GroupMemberName)) return false;
-            var unfolded = Unfold(l);
-            var colon = IndexOutsideQuotes(unfolded, ':');
-            return colon >= 0
-                && VCardProjector.StripUrnUuid(unfolded[(colon + 1)..].Trim()) == memberUid;
-        });
+        lines.RemoveAll(l => Names(l, memberUid));
         return Join(lines);
+    }
+
+    /// <summary>The same matching rule, rewriting the value instead of dropping the line: a member
+    /// whose UID changed keeps the rank, the property name and the parameters the card gave it. One
+    /// line survives per value — a card already naming the replacement must not name it twice.</summary>
+    internal static string ReplaceGroupMember(string card, string memberUid, string replacement)
+    {
+        if (memberUid == replacement) return card;
+
+        var lines = LogicalLines(CanonicalLineBreaks(card));
+        // Read over the WHOLE card before a line is written: the one already naming the replacement
+        // usually sits AFTER the one being re-keyed, AddGroupMember appending before END:VCARD.
+        var held = lines.Exists(l => Names(l, replacement));
+        for (var index = 0; index < lines.Count; index++)
+        {
+            if (!Names(lines[index], memberUid)) continue;
+            if (held) { lines.RemoveAt(index--); continue; }
+
+            var unfolded = Unfold(lines[index]);
+            var colon = IndexOutsideQuotes(unfolded, ':');
+            lines[index] = Fold(
+                unfolded[..(colon + 1)] + VCardProjector.UrnUuidPrefix + replacement);
+            held = true;
+        }
+
+        return Join(lines);
+    }
+
+    private static bool Names(string line, string memberUid)
+    {
+        if (!IsName(line, "MEMBER") && !IsName(line, GroupMemberName)) return false;
+
+        var unfolded = Unfold(line);
+        var colon = IndexOutsideQuotes(unfolded, ':');
+        return colon >= 0 && VCardProjector.StripUrnUuid(unfolded[(colon + 1)..].Trim()) == memberUid;
     }
 
     internal static string RenameGroup(string card, string name)

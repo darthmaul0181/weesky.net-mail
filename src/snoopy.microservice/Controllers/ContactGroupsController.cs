@@ -18,7 +18,9 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Authorize]
 public sealed class ContactGroupsController(IContactGroupStore store) : ApiBaseController
 {
-    /// <summary>Every group, each with the members this book actually holds.</summary>
+    /// <summary>Every group, each with the members this book actually holds. Ordered by name —
+    /// case-blind, accents weighed by the invariant culture — then by id, so two homonyms keep one
+    /// order across calls; the members keep the rank their MEMBER lines have on the card.</summary>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">The groups</response>
     /// <response code="401">Not authenticated</response>
