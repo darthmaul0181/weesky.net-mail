@@ -194,6 +194,44 @@ public sealed class ContactGroupStoreTests : IDisposable
         Assert.Equal(id, Assert.Single(Assert.Single(listed).MemberIds));
     }
 
+    // Décision 7: the prefix is recognised whatever its case, and the retrait already is — a
+    // contact "non-member" on reading and "member" on deletion is a card the book contradicts.
+    [Fact]
+    public async Task ListAsync_ResolvesAMemberWhoseStoredUidCarriesThePrefixInAnotherCase()
+    {
+        var bare = Guid.NewGuid().ToString();
+        var id = Guid.NewGuid();
+        Context.Contacts.Add(new Contact
+        {
+            Id = id, UserId = User, Uid = "URN:UUID:" + bare, FirstName = "Ada",
+            UpdatedAt = DateTime.UtcNow
+        });
+        await Context.SaveChangesAsync(CancellationToken.None);
+        await GivenAGroup("Amis", null, bare);
+
+        var listed = await Store.ListAsync(User, CancellationToken.None);
+
+        Assert.Equal(id, Assert.Single(Assert.Single(listed).MemberIds));
+    }
+
+    // The prefix alone is case-blind; the UID it carries is not, and the column collates binary.
+    [Fact]
+    public async Task ListAsync_LeavesAMemberWhoseUidDiffersOnlyByCaseOut()
+    {
+        var id = Guid.NewGuid();
+        Context.Contacts.Add(new Contact
+        {
+            Id = id, UserId = User, Uid = "urn:uuid:ABC", FirstName = "Ada",
+            UpdatedAt = DateTime.UtcNow
+        });
+        await Context.SaveChangesAsync(CancellationToken.None);
+        await GivenAGroup("Amis", null, "abc");
+
+        var listed = await Store.ListAsync(User, CancellationToken.None);
+
+        Assert.Empty(Assert.Single(listed).MemberIds);
+    }
+
     [Fact]
     public async Task ListAsync_LeavesAnotherBooksGroupOut()
     {

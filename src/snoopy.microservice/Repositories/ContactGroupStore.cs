@@ -33,15 +33,24 @@ internal sealed class ContactGroupStore(
         // join on a constant, which EF translates badly; the member side is narrowed to this
         // user's groups by the correlated subquery ContactStore uses throughout, never an IN list
         // MariaDB cannot parametrise.
+        // The prefixed branch matches on the TAIL, not on a concatenated constant: contacts.uid
+        // collates binary, and décision 7 wants the nine-character prefix recognised whatever its
+        // case while the UID itself stays case-sensitive. No LOWER() in the SQL — it would fold the
+        // whole head under a rule the collation and the CLR spell differently; the head is confirmed
+        // below by StripUrnUuid, the one place that rule is written.
         var resolved = await (
             from m in context.ContactGroupMembers.AsNoTracking().Where(m => context.Contacts.Any(
                 g => g.Id == m.GroupId && g.UserId == userId && g.Kind == ContactKinds.Group))
             from c in context.Contacts.AsNoTracking().Individuals().Where(c => c.UserId == userId)
-            where c.Uid == m.MemberUid || c.Uid == VCardProjector.UrnUuidPrefix + m.MemberUid
-            select new { m.GroupId, MemberId = c.Id, m.Position })
+            where c.Uid == m.MemberUid
+                || (c.Uid.Length == VCardProjector.UrnUuidPrefix.Length + m.MemberUid.Length
+                    && c.Uid.Substring(VCardProjector.UrnUuidPrefix.Length) == m.MemberUid)
+            select new { m.GroupId, MemberId = c.Id, m.Position, c.Uid, m.MemberUid })
             .ToListAsync(cancellationToken);
 
-        var byGroup = resolved.ToLookup(r => r.GroupId);
+        var byGroup = resolved
+            .Where(r => r.Uid == r.MemberUid || VCardProjector.StripUrnUuid(r.Uid) == r.MemberUid)
+            .ToLookup(r => r.GroupId);
         return
         [
             .. groups.Select(g => new ContactGroupView(g.Id, g.DisplayName ?? string.Empty,
