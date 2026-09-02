@@ -281,6 +281,25 @@ public sealed class ContactValidatorTests
         Assert.Contains("notes", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Le writer bouche un FN vide avec un « ? » et la projection le relit comme « pas de nom » :
+    // accepté ici, le groupe repartirait sans nom au GET suivant.
+    [Theory]
+    [InlineData("?")]
+    [InlineData("  ?  ")]
+    public void ValidateGroupName_RefusesThePlaceholderTheProjectionErases(string name)
+    {
+        var result = ContactValidator.ValidateGroupName(name);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("A group needs a name", result.Error);
+    }
+
+    [Fact]
+    public void ValidateGroupName_AcceptsANameThatMerelyContainsThePlaceholder()
+    {
+        Assert.Equal("a?", ContactValidator.ValidateGroupName("a?").Value);
+    }
+
     [Fact]
     public void IsValidTypeToken_RefusesATrailingNewline()
     {

@@ -347,8 +347,13 @@ internal static class VCardProjector
         return derived ? null : displayName;
     }
 
+    /// <summary>Whether the projection reads this value as no value at all — the rule
+    /// <see cref="WithoutPlaceholder"/> applies, exposed so a writer can refuse what it would
+    /// erase instead of storing a name that comes back empty.</summary>
+    internal static bool IsPlaceholder(string? value) => value == Placeholder;
+
     private static string? WithoutPlaceholder(string? value) =>
-        value == Placeholder ? null : value;
+        IsPlaceholder(value) ? null : value;
 
     private static T? First<T>(IEnumerable<T?>? properties) where T : VCardProperty =>
         properties?.FirstOrDefault(p => p != null);
