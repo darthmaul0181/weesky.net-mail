@@ -150,6 +150,35 @@ public sealed class ContactStoreGroupStripTests
     }
 
     /// <summary>
+    /// Décision 7 holds on the group door too: a group nested in another (décision 9 stores the
+    /// member unresolved) leaves its parent when it is deleted, or the parent keeps a MEMBER line
+    /// and a membership row pointing at a card that no longer exists.
+    /// </summary>
+    [Fact]
+    public async Task DeletingAGroupThroughTheGroupStore_StripsItFromItsParents()
+    {
+        using var context = ContactStoreTestFactory.NewContext();
+        var sync = ContactStoreTestFactory.NewSyncCounting(first: 7);
+        var store = new ContactStore(context, sync.Object);
+        var nested = await GivenAGroup(context, "Collègues", []);
+        var parent = await GivenAGroup(
+            context, "Amis", [(await context.Contacts.SingleAsync(c => c.Id == nested)).Uid]);
+        sync.Invocations.Clear();
+
+        var deleted = await new ContactGroupStore(context, store, sync.Object)
+            .DeleteAsync(UserId, nested, CancellationToken.None);
+
+        Assert.True(deleted.IsSuccess);
+        var row = await context.Contacts.SingleAsync(c => c.Id == parent, CancellationToken.None);
+        Assert.DoesNotContain("MEMBER", row.VCardRaw, StringComparison.Ordinal);
+        Assert.Empty(context.ContactGroupMembers.Where(m => m.GroupId == parent));
+        Assert.Equal(7ul, row.SyncSequence);
+        sync.Verify(s => s.ArchiveAsync(
+            It.Is<ContactRevision>(r => r.ContactId == parent && r.Cause == RevisionCause.Webmail),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
     /// A PUT accepted under the same href with a different UID re-keys the groups rather than
     /// orphaning them: the contact stays a member, and the group card names the identity that now
     /// exists. Same accounting as the retrait — one rank, one revision, on the group.

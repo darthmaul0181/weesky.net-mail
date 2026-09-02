@@ -151,6 +151,10 @@ internal sealed class ContactGroupStore(
             // contacts those rows pointed at are untouched (décision 7).
             await store.ClearProjectionAsync([groupId], cancellationToken);
             context.Contacts.Remove(row);
+            // Décision 7 on the third door: a group nested in another (décision 9) leaves it here,
+            // in the same transaction, or the parent keeps a MEMBER line naming nothing.
+            await store.StripFromGroupsAsync(
+                userId, ContactStore.Forms(row.Uid), [groupId], rank, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
             if (davName is not null)
