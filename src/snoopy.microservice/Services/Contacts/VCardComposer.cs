@@ -122,18 +122,23 @@ internal static class VCardComposer
     }
 
     /// <summary>The same matching rule, rewriting the value instead of dropping the line: a member
-    /// whose UID changed keeps the rank, the property name and the parameters the card gave it.</summary>
+    /// whose UID changed keeps the rank, the property name and the parameters the card gave it. One
+    /// line survives per value — a card already naming the replacement must not name it twice.</summary>
     internal static string ReplaceGroupMember(string card, string memberUid, string replacement)
     {
         var lines = LogicalLines(CanonicalLineBreaks(card));
+        var held = false;
         for (var index = 0; index < lines.Count; index++)
         {
+            if (Names(lines[index], replacement)) { held = true; continue; }
             if (!Names(lines[index], memberUid)) continue;
+            if (held) { lines.RemoveAt(index--); continue; }
 
             var unfolded = Unfold(lines[index]);
             var colon = IndexOutsideQuotes(unfolded, ':');
             lines[index] = Fold(
                 unfolded[..(colon + 1)] + VCardProjector.UrnUuidPrefix + replacement);
+            held = true;
         }
 
         return Join(lines);

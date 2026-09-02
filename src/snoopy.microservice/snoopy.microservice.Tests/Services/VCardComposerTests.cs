@@ -746,6 +746,73 @@ public sealed class VCardComposerTests
             removed);
     }
 
+    // Le re-clé réécrit la VALEUR et rien d'autre : nom de propriété, préfixe de groupe,
+    // paramètres — guillemets compris — et rang parmi les membres restent ceux de la carte.
+    [Fact]
+    public void ReplaceGroupMember_RewritesTheValueInPlaceAndTouchesNothingElse()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:m0\r\n"
+            + "item1.MEMBER;X-APPLE-FOO=\"a;b\":URN:UUID:m1\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m2\r\nEND:VCARD\r\n";
+
+        var replaced = VCardComposer.ReplaceGroupMember(card, "m1", "m9");
+
+        Assert.Equal(
+            card.Replace("item1.MEMBER;X-APPLE-FOO=\"a;b\":URN:UUID:m1",
+                "item1.MEMBER;X-APPLE-FOO=\"a;b\":urn:uuid:m9"),
+            replaced);
+    }
+
+    // Décision 7 au re-clé comme au retrait : les deux écritures de l'ancien UID matchent. Il n'en
+    // sort qu'UNE ligne — la première, à sa place — ou la carte servie nommerait deux fois le même.
+    [Fact]
+    public void ReplaceGroupMember_MatchesEveryValueFormAndLeavesOneLine()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:m1\r\n"           // nu (DAVx5)
+            + "X-ADDRESSBOOKSERVER-MEMBER:URN:UUID:m1\r\n"  // prefixe, casse quelconque (Apple)
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m2\r\nEND:VCARD\r\n";
+
+        var replaced = VCardComposer.ReplaceGroupMember(card, "m1", "m9");
+
+        Assert.Equal(
+            card.Replace("X-ADDRESSBOOKSERVER-MEMBER:m1\r\n", "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m9\r\n")
+                .Replace("X-ADDRESSBOOKSERVER-MEMBER:URN:UUID:m1\r\n", ""),
+            replaced);
+    }
+
+    // Une carte qui nomme déjà le nouvel UID — un MEMBER pendouillant, un vivant étant refusé en 409
+    // en amont : la ligne re-clée disparaît au lieu de doubler celle qui est en place.
+    [Fact]
+    public void ReplaceGroupMember_OnAValueTheCardAlreadyCarries_DropsTheLineRatherThanDoublingIt()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m9\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:m1\r\nEND:VCARD\r\n";
+
+        var replaced = VCardComposer.ReplaceGroupMember(card, "m1", "m9");
+
+        Assert.Equal(card.Replace("X-ADDRESSBOOKSERVER-MEMBER:m1\r\n", ""), replaced);
+    }
+
+    // Un MEMBER plié est UNE ligne logique : la valeur est lue par-dessus la couture, jamais la
+    // moitié d'après prise pour une propriété.
+    [Fact]
+    public void ReplaceGroupMember_OnAFoldedLine_RewritesTheWholeValue()
+    {
+        var member = new string('a', 80);
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:" + member[..40] + "\r\n " + member[40..]
+            + "\r\nEND:VCARD\r\n";
+
+        var replaced = VCardComposer.ReplaceGroupMember(card, member, "m9");
+
+        Assert.DoesNotContain("aa", replaced);
+        Assert.Contains("X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m9\r\n", replaced);
+        Assert.Equal(["m9"], VCardProjector.Project(replaced).Members.Select(m => m.MemberUid));
+    }
+
     [Fact]
     public void RenameGroup_TouchesOnlyTheFnAndEscapes()
     {

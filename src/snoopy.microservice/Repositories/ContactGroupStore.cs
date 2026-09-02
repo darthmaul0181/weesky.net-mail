@@ -33,11 +33,9 @@ internal sealed class ContactGroupStore(
         // join on a constant, which EF translates badly; the member side is narrowed to this
         // user's groups by the correlated subquery ContactStore uses throughout, never an IN list
         // MariaDB cannot parametrise.
-        // The prefixed branch matches on the TAIL, not on a concatenated constant: contacts.uid
-        // collates binary, and décision 7 wants the nine-character prefix recognised whatever its
-        // case while the UID itself stays case-sensitive. No LOWER() in the SQL — it would fold the
-        // whole head under a rule the collation and the CLR spell differently; the head is confirmed
-        // below by StripUrnUuid, the one place that rule is written.
+        // The prefixed branch matches on the TAIL, never on a concatenated constant: décision 7
+        // wants the nine-character prefix recognised in any case, and no LOWER() spells that rule
+        // alike in SQL and in the CLR — StripUrnUuid confirms the head below, on the rows returned.
         var resolved = await (
             from m in context.ContactGroupMembers.AsNoTracking().Where(m => context.Contacts.Any(
                 g => g.Id == m.GroupId && g.UserId == userId && g.Kind == ContactKinds.Group))
