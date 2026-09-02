@@ -51,10 +51,16 @@ internal sealed class ContactGroupStore(
         var byGroup = resolved
             .Where(r => r.Uid == r.MemberUid || VCardProjector.StripUrnUuid(r.Uid) == r.MemberUid)
             .ToLookup(r => r.GroupId);
+        // Sorted here rather than in SQL: nothing downstream sorts, and the answer must not depend
+        // on the column's collation — the invariant culture folds case and weighs accents as a
+        // reader expects. The id breaks the tie, so two homonyms never swap between two calls.
         return
         [
-            .. groups.Select(g => new ContactGroupView(g.Id, g.DisplayName ?? string.Empty,
-                [.. byGroup[g.Id].OrderBy(r => r.Position).Select(r => r.MemberId)]))
+            .. groups
+                .OrderBy(g => g.DisplayName ?? string.Empty, StringComparer.InvariantCultureIgnoreCase)
+                .ThenBy(g => g.Id)
+                .Select(g => new ContactGroupView(g.Id, g.DisplayName ?? string.Empty,
+                    [.. byGroup[g.Id].OrderBy(r => r.Position).Select(r => r.MemberId)]))
         ];
     }
 

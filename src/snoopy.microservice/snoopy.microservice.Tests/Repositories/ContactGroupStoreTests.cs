@@ -232,6 +232,34 @@ public sealed class ContactGroupStoreTests : IDisposable
         Assert.Empty(Assert.Single(listed).MemberIds);
     }
 
+    // Nothing downstream sorts — the screen shows what it receives, and suggestionsFor cuts at
+    // GROUP_LIMIT before any sort of its own. The order is therefore this method's contract.
+    [Fact]
+    public async Task ListAsync_OrdersTheGroupsByName()
+    {
+        await GivenAGroup("Work");
+        await GivenAGroup("clients");
+        await GivenAGroup("Émile");
+        await GivenAGroup("Family");
+
+        var listed = await Store.ListAsync(User, CancellationToken.None);
+
+        Assert.Equal(["clients", "Émile", "Family", "Work"], listed.Select(g => g.Name));
+    }
+
+    [Fact]
+    public async Task ListAsync_OnTwoGroupsOfOneName_OrdersThemByIdSoTheAnswerIsStable()
+    {
+        var first = await GivenAGroup("Amis");
+        var second = await GivenAGroup("amis");
+        Guid[] expected = [first, second];
+        Array.Sort(expected);
+
+        var listed = await Store.ListAsync(User, CancellationToken.None);
+
+        Assert.Equal(expected, listed.Select(g => g.Id));
+    }
+
     [Fact]
     public async Task ListAsync_LeavesAnotherBooksGroupOut()
     {
