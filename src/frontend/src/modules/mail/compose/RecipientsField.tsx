@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type Keyboar
 import { useTranslation } from 'react-i18next'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { contactNameOf } from '../../contacts/contactName'
-import { compareContacts, fold, suggestionsFor } from '../../contacts/contactSearch'
+import { compareContacts, suggestionsFor } from '../../contacts/contactSearch'
 import type { ComposerSuggestion, GroupOption } from '../../contacts/contactSearch'
 import type { Contact } from '../../contacts/contactTypes'
 
@@ -88,7 +88,7 @@ export default function RecipientsField({
   function commitSuggestion(suggestion: ComposerSuggestion) {
     if (suggestion.kind === 'address') { commit(suggestion.address); return }
     const fresh = suggestion.addresses.filter(
-      address => !tokens.some(token => fold(token.trim()) === fold(address.trim())))
+      address => !tokens.some(token => canonicalAddress(token) === canonicalAddress(address)))
     if (fresh.length > 0) onChange([...tokens, ...fresh])
     else onEmptyGroup?.(suggestion.name)
     reset()

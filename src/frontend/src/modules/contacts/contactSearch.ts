@@ -1,3 +1,4 @@
+import { canonicalAddress } from '../../lib/canonicalAddress'
 import { collator } from '../../lib/intl'
 import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
@@ -55,9 +56,10 @@ export type ComposerSuggestion =
   | ({ kind: 'group' } & GroupOption)
 
 /**
- * The resolved primary address of every group's members, deduplicated on the folded address the
- * way the dropdown's own rows are — two members sharing a mailbox spelled two ways would
- * otherwise put the identical recipient in the field twice.
+ * The resolved primary address of every group's members, deduplicated on `canonicalAddress` — the
+ * app's own address identity, distinct from `fold`'s search normalisation, which strips
+ * diacritics and would collapse two distinct SMTPUTF8 mailboxes ('josé@x.com', 'jose@x.com') into
+ * one, silently dropping a member who never receives the mail.
  *
  * Computed once by the caller and read by the field and the band alike, so "writing to this group
  * reaches nobody" is one answer rather than two that can disagree. `memberCount` counts the
@@ -73,7 +75,7 @@ export function groupOptionsOf(groups: ContactGroup[], contacts: Contact[]): Gro
       const member = byId.get(id)
       const address = member && primaryAddressOf(member)
       if (!address) continue
-      const key = fold(address.trim())
+      const key = canonicalAddress(address)
       if (seen.has(key)) continue
       seen.add(key)
       addresses.push(address)

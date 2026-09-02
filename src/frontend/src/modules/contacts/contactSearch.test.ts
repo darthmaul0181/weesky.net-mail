@@ -337,6 +337,19 @@ describe('groupOptionsOf', () => {
 
     expect(rows).toEqual([{ id: 'g', name: 'Empty', memberCount: 0, addresses: [] }])
   })
+
+  // Address identity is canonicalAddress (trim + lowercase), not fold: 'josé@x.com' and
+  // 'jose@x.com' are two distinct SMTPUTF8 mailboxes, and fold's diacritic-stripping would
+  // otherwise collapse them into one — a member who never receives the mail.
+  it('keeps two mailboxes that differ only by a diacritic', () => {
+    const jose = contact({ id: 'j1', firstName: 'José', addresses: ['josé@x.com'] })
+    const joseAscii = contact({ id: 'j2', firstName: 'Jose', addresses: ['jose@x.com'] })
+
+    const [option] = groupOptionsOf(
+      [group({ id: 'g', memberIds: ['j1', 'j2'] })], [jose, joseAscii])
+
+    expect(option.addresses).toEqual(['josé@x.com', 'jose@x.com'])
+  })
 })
 
 describe('suggestionsFor — group rows', () => {
