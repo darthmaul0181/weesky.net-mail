@@ -7,16 +7,12 @@ import PersonMinusIcon from '../../icons/PersonMinusIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
-import { buildDragPill } from '../mail/list/dragImage'
+import { buildDragPill, LIST_GLYPH } from '../mail/list/dragImage'
 import { useSelection } from '../mail/list/useSelection'
 import { displayNameOf, primaryAddressOf } from './contactName'
 import { filterContacts } from './contactSearch'
 import { CONTACT_DRAG_MIME, dragIds, serializeContactDrag } from './dragContacts'
 import type { Contact } from './contactTypes'
-
-// A bulleted list, neutral over every drop target this list offers — favourites and a group
-// alike — unlike the star `buildDragPill` used to carry regardless of where the pill was headed.
-const LIST_GLYPH = '<path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4 6h.01M4 12h.01M4 18h.01"></path>'
 
 interface Props {
   /** Already scoped by the layout; the text query is this component's own state. */

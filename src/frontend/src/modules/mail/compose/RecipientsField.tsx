@@ -116,9 +116,9 @@ export default function RecipientsField({
         setClosed(false)
         setActive(down ? 0 : suggestions.length - 1)
       } else {
-        setActive(previous => down
-          ? Math.min(previous + 1, suggestions.length - 1)
-          : Math.max(previous - 1, -1))
+        setActive(down
+          ? Math.min(activeIndex + 1, suggestions.length - 1)
+          : Math.max(activeIndex - 1, -1))
       }
     } else if (event.key === 'Escape') {
       if (open) { event.preventDefault(); setClosed(true) }

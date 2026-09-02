@@ -244,6 +244,27 @@ describe('RecipientsField — contact suggestions', () => {
 
     expect(onChange).toHaveBeenCalledWith(['c2@example.com'])
   })
+
+  // ArrowUp/ArrowDown must step from the bounded index, not the raw stale one — otherwise a shrink
+  // leaves one keypress dead: max(3-1,-1)=2 would repaint row 2 in place instead of moving to row 1.
+  it('steps from the bounded index, not the stale one, after suggestions shrink', async () => {
+    const onChange = vi.fn()
+    const many = Array.from({ length: 4 }, (_, i) =>
+      contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
+    const { rerender } = render(
+      <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many} />)
+    const input = screen.getByLabelText('To')
+    await userEvent.type(input, 'example')
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}')
+
+    rerender(
+      <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many.slice(0, 3)} />)
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+
+    const rows = screen.getAllByRole('option')
+    expect(rows[1]).toHaveClass('is-active')
+    expect(input).toHaveAttribute('aria-activedescendant', rows[1].id)
+  })
 })
 
 describe('RecipientsField — a token wears its contact name', () => {
