@@ -126,11 +126,14 @@ internal static class VCardComposer
     /// line survives per value — a card already naming the replacement must not name it twice.</summary>
     internal static string ReplaceGroupMember(string card, string memberUid, string replacement)
     {
+        if (memberUid == replacement) return card;
+
         var lines = LogicalLines(CanonicalLineBreaks(card));
-        var held = false;
+        // Read over the WHOLE card before a line is written: the one already naming the replacement
+        // usually sits AFTER the one being re-keyed, AddGroupMember appending before END:VCARD.
+        var held = lines.Exists(l => Names(l, replacement));
         for (var index = 0; index < lines.Count; index++)
         {
-            if (Names(lines[index], replacement)) { held = true; continue; }
             if (!Names(lines[index], memberUid)) continue;
             if (held) { lines.RemoveAt(index--); continue; }
 

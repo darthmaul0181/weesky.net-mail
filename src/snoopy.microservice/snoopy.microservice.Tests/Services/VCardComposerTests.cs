@@ -796,6 +796,21 @@ public sealed class VCardComposerTests
         Assert.Equal(card.Replace("X-ADDRESSBOOKSERVER-MEMBER:m1\r\n", ""), replaced);
     }
 
+    // Le même doublon dans l'ordre inverse, qui est l'ordre COURANT : AddGroupMember ajoute avant
+    // END:VCARD, donc la ligne pendouillante suit celle qu'on re-clé. La carte est lue en entier
+    // avant d'écrire, ou la première ligne serait réécrite avant qu'on sache la seconde là.
+    [Fact]
+    public void ReplaceGroupMember_WhenTheValueTheCardAlreadyCarriesComesLast_StillLeavesOneLine()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\n"
+            + "X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m9\r\nEND:VCARD\r\n";
+
+        var replaced = VCardComposer.ReplaceGroupMember(card, "m1", "m9");
+
+        Assert.Equal(card.Replace("X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\n", ""), replaced);
+    }
+
     // Un MEMBER plié est UNE ligne logique : la valeur est lue par-dessus la couture, jamais la
     // moitié d'après prise pour une propriété.
     [Fact]
