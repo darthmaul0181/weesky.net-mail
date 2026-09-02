@@ -65,14 +65,17 @@ export default function RecipientsField({
   const open = !closed && suggestions.length > 0
   const listId = `${id}-suggestions`
   const listRef = useRef<HTMLUListElement>(null)
+  // Bounded at read time: suggestions can shrink with no keystroke (a refetch on focus, a group
+  // renamed or deleted elsewhere), and `active` would otherwise point past the end of the new list.
+  const activeIndex = active < suggestions.length ? active : suggestions.length - 1
 
   useEffect(() => {
-    if (active < 0) return
-    const row = listRef.current?.children[active] as HTMLElement | undefined
+    if (activeIndex < 0) return
+    const row = listRef.current?.children[activeIndex] as HTMLElement | undefined
     // Optional call, not a test-time stub: jsdom implements no scrollIntoView, and bringing a row
     // into view is decoration — it must never be the reason the field throws.
     row?.scrollIntoView?.({ block: 'nearest' })
-  }, [active])
+  }, [activeIndex])
 
   function commit(raw: string) {
     const parts = raw.split(/[,;]/).map(p => p.trim()).filter(Boolean)
@@ -121,7 +124,7 @@ export default function RecipientsField({
       if (open) { event.preventDefault(); setClosed(true) }
     } else if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
       event.preventDefault()
-      if (open && active >= 0) commitSuggestion(suggestions[active])
+      if (open && activeIndex >= 0) commitSuggestion(suggestions[activeIndex])
       else if (draft.trim()) commit(draft)
     } else if (event.key === 'Backspace' && draft === '' && tokens.length > 0) {
       onChange(tokens.slice(0, -1))
@@ -159,7 +162,7 @@ export default function RecipientsField({
           aria-controls={open ? listId : undefined}
           // The highlight lives on a row the focus never moves to, so without this a screen
           // reader announces nothing as the arrows walk the list.
-          aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+          aria-activedescendant={open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
           onChange={e => type(e.target.value)}
           onKeyDown={onKeyDown} onPaste={onPaste}
           onBlur={() => { if (draft.trim()) commit(draft) }} />
@@ -174,8 +177,8 @@ export default function RecipientsField({
             {suggestions.map((suggestion, index) => (
               <li key={suggestion.kind === 'group' ? `group:${suggestion.id}` : suggestion.address}
                 id={`${listId}-${index}`} role="option"
-                aria-selected={index === active}
-                className={`ownership-dropdown-option${index === active ? ' is-active' : ''}`}
+                aria-selected={index === activeIndex}
+                className={`ownership-dropdown-option${index === activeIndex ? ' is-active' : ''}`}
                 onMouseDown={() => commitSuggestion(suggestion)}>
                 {suggestion.kind === 'group' ? (
                   <>

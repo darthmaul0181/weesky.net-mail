@@ -216,6 +216,34 @@ describe('RecipientsField — contact suggestions', () => {
     expect(onChange).toHaveBeenCalledWith(['a@x.be'])
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
+
+  // A refetch on focus, or a group renamed elsewhere, can shrink `suggestions` with no keystroke —
+  // the draft, and therefore `active`, never resets. The stale index used to reach past the end of
+  // the new array and hand `commitSuggestion` `undefined`.
+  it('re-bounds the active index when suggestions shrink without a keystroke', async () => {
+    const onChange = vi.fn()
+    const many = Array.from({ length: 4 }, (_, i) =>
+      contact({ id: `c${i}`, firstName: `C${i}`, addresses: [`c${i}@example.com`] }))
+    const { rerender } = render(
+      <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many} />)
+    const input = screen.getByLabelText('To')
+    await userEvent.type(input, 'example')
+    expect(screen.getAllByRole('option')).toHaveLength(4)
+
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}')
+    expect(screen.getAllByRole('option')[3]).toHaveClass('is-active')
+
+    rerender(
+      <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many.slice(0, 3)} />)
+    const rows = screen.getAllByRole('option')
+    expect(rows).toHaveLength(3)
+    expect(rows[2]).toHaveClass('is-active')
+    expect(input).toHaveAttribute('aria-activedescendant', rows[2].id)
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onChange).toHaveBeenCalledWith(['c2@example.com'])
+  })
 })
 
 describe('RecipientsField — a token wears its contact name', () => {
