@@ -63,6 +63,8 @@
     "searchLabel": "Rechercher un contact",
     "searchPlaceholder": "Rechercher un contact…",
     "empty": "Aucun contact pour l’instant",
+    "emptyGroup": "Ce groupe n’a pas encore de membre",
+    "emptyFavourites": "Aucun favori pour l’instant",
     "noMatch": "Aucun contact correspondant",
     "edit": "Modifier {{name}}",
     "delete": "Supprimer {{name}}",

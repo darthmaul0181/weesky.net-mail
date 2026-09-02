@@ -149,7 +149,14 @@ export default function ContactList({
       </SelectionBand>
 
       <div className="contacts-list-scroll">
-        {contacts.length === 0 && <p className="contacts-empty">{t('list.empty')}</p>}
+        {/* `contacts` already arrives scoped, so an empty group or an empty favourites list is not
+            the whole book being empty — each gets its own line rather than borrowing `list.empty`. */}
+        {contacts.length === 0 && (
+          <p className="contacts-empty">
+            {t(scope.startsWith('group:') ? 'list.emptyGroup'
+              : scope === 'favorites' ? 'list.emptyFavourites' : 'list.empty')}
+          </p>
+        )}
         {contacts.length > 0 && shown.length === 0 && (
           <p className="contacts-empty">{t('list.noMatch')}</p>
         )}

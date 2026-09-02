@@ -130,6 +130,23 @@ describe('ContactList', () => {
     expect(screen.getByText(/no contacts/i)).toBeInTheDocument()
   })
 
+  // `contacts` already arrives scoped, so an empty group is not the whole book being empty — "No
+  // contacts yet" reads as though the group had never held anybody, with "All contacts" full one
+  // column to the left.
+  it('names the scope in the empty line under an empty group', () => {
+    setup({ contacts: [], scope: 'group:g1' })
+
+    expect(screen.getByText('This group has no members yet')).toBeInTheDocument()
+    expect(screen.queryByText('No contacts yet')).not.toBeInTheDocument()
+  })
+
+  it('names the scope in the empty line under empty favourites', () => {
+    setup({ contacts: [], scope: 'favorites' })
+
+    expect(screen.getByText('No favourites yet')).toBeInTheDocument()
+    expect(screen.queryByText('No contacts yet')).not.toBeInTheDocument()
+  })
+
   it('says so when the filter matches nothing', async () => {
     setup()
 

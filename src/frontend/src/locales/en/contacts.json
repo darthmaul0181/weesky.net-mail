@@ -63,6 +63,8 @@
     "searchLabel": "Search contacts",
     "searchPlaceholder": "Search contacts…",
     "empty": "No contacts yet",
+    "emptyGroup": "This group has no members yet",
+    "emptyFavourites": "No favourites yet",
     "noMatch": "No matching contacts",
     "edit": "Edit {{name}}",
     "delete": "Delete {{name}}",
