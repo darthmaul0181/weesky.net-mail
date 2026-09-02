@@ -393,8 +393,8 @@ internal static class VCardProjector
 
         private static readonly string[] Families =
         [
-            "EMAIL", "TEL", "ADR", "BDAY", "KIND", "X-ADDRESSBOOKSERVER-KIND", "MEMBER",
-            "X-ADDRESSBOOKSERVER-MEMBER", "BEGIN", "END"
+            "EMAIL", "TEL", "ADR", "BDAY", "KIND", VCardComposer.GroupKindName, "MEMBER",
+            VCardComposer.GroupMemberName, "BEGIN", "END"
         ];
 
         private readonly List<string>[] parameters = [[], [], []];

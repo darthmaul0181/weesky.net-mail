@@ -1,4 +1,4 @@
-using weesky.Snoopy.Microservice.Services.CardDav;
+﻿using weesky.Snoopy.Microservice.Services.CardDav;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services.CardDav;
@@ -233,6 +233,46 @@ public sealed class VCardVersionConverterTests
         var served = VCardVersionConverter.To(v3, "4.0");
         Assert.Contains("item1.MEMBER;X-FOO=bar:urn:uuid:m1", served);
     }
+
+    // Des clients écrivent les deux dialectes sur la même carte. La conversion ne doit pas les
+    // additionner : les doublons reviendraient en vcard_raw au PUT suivant.
+    [Fact]
+    public void ServingAMixedDialectGroupCardIn40_WritesEachLineOnce()
+    {
+        var mixed = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:G\r\nN:;;;;\r\n"
+            + "KIND:group\r\nMEMBER:urn:uuid:m1\r\n"
+            + "X-ADDRESSBOOKSERVER-KIND:group\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\nEND:VCARD\r\n";
+
+        var served = VCardVersionConverter.To(mixed, "4.0");
+
+        Assert.DoesNotContain("X-ADDRESSBOOKSERVER", served);
+        Assert.Equal(1, Lines(served, "KIND"));
+        Assert.Equal(1, Lines(served, "MEMBER"));
+        Assert.Equal(1, Occurrences(served, "urn:uuid:m1"));
+    }
+
+    [Fact]
+    public void ServingAMixedDialectGroupCardIn30_WritesEachLineOnce()
+    {
+        var mixed = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:g\r\nFN:G\r\n"
+            + "KIND:group\r\nMEMBER:urn:uuid:m1\r\n"
+            + "X-ADDRESSBOOKSERVER-KIND:group\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:m1\r\nEND:VCARD\r\n";
+
+        var served = VCardVersionConverter.To(mixed, "3.0");
+
+        Assert.Equal(0, Lines(served, "KIND"));
+        Assert.Equal(0, Lines(served, "MEMBER"));
+        Assert.Equal(1, Lines(served, "X-ADDRESSBOOKSERVER-KIND"));
+        Assert.Equal(1, Lines(served, "X-ADDRESSBOOKSERVER-MEMBER"));
+        Assert.Equal(1, Occurrences(served, "urn:uuid:m1"));
+    }
+
+    // Combien de lignes portent ce nom de propriété — le paramètre que le writer 4.0 ajoute de
+    // lui-même (VALUE=URI sur MEMBER) est sa règle, pas la nôtre, et ne doit pas figer le test.
+    private static int Lines(string card, string name) =>
+        card.Split("\r\n").Count(l =>
+            l.StartsWith(name + ":", StringComparison.Ordinal)
+            || l.StartsWith(name + ";", StringComparison.Ordinal));
 
     private static int Occurrences(string text, string needle)
     {

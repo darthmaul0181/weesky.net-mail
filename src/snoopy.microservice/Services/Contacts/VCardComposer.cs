@@ -27,9 +27,10 @@ internal static class VCardComposer
 
     private enum Family { Email, Phone, Postal }
 
-    // Apple's dialect, the one a new group card is born in (décision 6).
-    private const string GroupKindName = "X-ADDRESSBOOKSERVER-KIND";
-    private const string GroupMemberName = "X-ADDRESSBOOKSERVER-MEMBER";
+    // Apple's dialect, the one a new group card is born in (décision 6). Spelled once: the
+    // projector reads it and the version converter writes it.
+    internal const string GroupKindName = "X-ADDRESSBOOKSERVER-KIND";
+    internal const string GroupMemberName = "X-ADDRESSBOOKSERVER-MEMBER";
 
     // 101 is the erasure the projector reads back as no PREF at all (décision 5 bis of 4a). Measured
     // against FolkerKinzel 8.2.0's 3.0 and 4.0 writers — the two versions Emit produces — setting

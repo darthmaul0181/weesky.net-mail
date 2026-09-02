@@ -97,28 +97,59 @@ internal static class VCardVersionConverter
     /// The third of this class's three textual exceptions, after RestoreUid and <see
     /// cref="VCardComposer.StripNamePlaceholders"/> — and for RestoreUid's reason: without it a
     /// strictly-4.0 client reads a group as an empty sheet — the defect 4e repairs, moved one step
-    /// over (décision 5 de 4e). Going to 4.0 the library copied the X- lines through: renaming them
-    /// is enough. Going to 3.0 it already dropped KIND and MEMBER before we looked, so the two
-    /// lines are rebuilt from the STORED card, values verbatim.
+    /// over (décision 5 de 4e). Going to 4.0 the library copied the X- lines through, so renaming
+    /// them is the whole of it. Going to 3.0 it already dropped KIND and MEMBER before we looked,
+    /// so the two lines are rebuilt from the STORED card, values verbatim.
+    ///
+    /// Neither arm may assume one dialect: clients write both on the same card, and each line the
+    /// output already carries would come back doubled — and, at the next PUT, stored doubled.
     /// </summary>
     private static void TranslateGroupProperties(List<string> lines, VCdVersion wanted, string stored)
     {
         if (wanted == VCdVersion.V4_0)
         {
-            Rename(lines, "X-ADDRESSBOOKSERVER-KIND", "KIND");
-            Rename(lines, "X-ADDRESSBOOKSERVER-MEMBER", "MEMBER");
+            Rename(lines, VCardComposer.GroupKindName, "KIND");
+            Rename(lines, VCardComposer.GroupMemberName, "MEMBER");
+            // Une carte portant les deux dialectes tient déjà la ligne que le renommage vient
+            // d'écrire : sans cela chaque membre sort deux fois, et revient doublé au PUT suivant.
+            DropRepeats(lines, "KIND");
+            DropRepeats(lines, "MEMBER");
             return;
         }
 
-        // 3.0 : rebâtir depuis la carte stockée, comme RestoreUid va y relire son UID.
+        // 3.0 : rebâtir depuis la carte stockée, comme RestoreUid va y relire son UID — sauf ce que
+        // la sortie porte déjà, la bibliothèque ayant recopié les X- d'une carte à double dialecte.
         if (VCardComposer.FirstRawValue(stored, "KIND") is not { } kind
             || !kind.Trim().Equals("group", StringComparison.OrdinalIgnoreCase))
             return;
-        var rebuilt = new List<string> { VCardComposer.Fold("X-ADDRESSBOOKSERVER-KIND:" + kind) };
+        var present = new HashSet<string>(
+            lines.Select(Key).Where(k => k.Length > 0), StringComparer.OrdinalIgnoreCase);
+        var rebuilt = new List<string>();
+        if (!present.Contains(Key(VCardComposer.GroupKindName, kind)))
+            rebuilt.Add(VCardComposer.Fold(VCardComposer.GroupKindName + ":" + kind));
         rebuilt.AddRange(VCardComposer.RawValuesOf(stored, "MEMBER")
-            .Select(v => VCardComposer.Fold("X-ADDRESSBOOKSERVER-MEMBER:" + v)));
+            .Where(v => !present.Contains(Key(VCardComposer.GroupMemberName, v)))
+            .Select(v => VCardComposer.Fold(VCardComposer.GroupMemberName + ":" + v)));
         lines.InsertRange(VCardComposer.EndIndex(lines), rebuilt);
     }
+
+    // Keeps the first of each (property name, value) pair — parameters and group prefix aside,
+    // which is what makes the two dialects' lines the same line once renamed.
+    private static void DropRepeats(List<string> lines, string name)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        lines.RemoveAll(line => VCardComposer.IsName(line, name)
+            && Key(line) is { Length: > 0 } key && !seen.Add(key));
+    }
+
+    private static string Key(string line)
+    {
+        var unfolded = VCardComposer.Unfold(line);
+        var colon = VCardComposer.IndexOutsideQuotes(unfolded, ':');
+        return colon < 0 ? string.Empty : Key(VCardComposer.NameOf(unfolded), unfolded[(colon + 1)..]);
+    }
+
+    private static string Key(string name, string value) => name + ":" + value.Trim();
 
     // Renames the NAME prefix of every line whose name is `from` (group prefix such as `item1.`
     // kept, parameters and value untouched). A line may be folded, so this unfolds, replaces, then
