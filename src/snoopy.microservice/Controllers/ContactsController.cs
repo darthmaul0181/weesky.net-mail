@@ -87,6 +87,9 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     /// <response code="400">Neither name nor address, an unparsable address, or the cap reached</response>
     /// <response code="401">Not authenticated</response>
     [HttpPost]
+    // A 512 KB photo is ~700 KB of base64: the body now has a size worth bounding, and the bound
+    // is the CardDAV PUT's own.
+    [RequestSizeLimit(2 * ContactStore.MaxCardBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -103,11 +106,11 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
         // Answered from the validated write rather than re-read: the store folded the addresses,
         // so echoing the request's spelling would hand back a form the next save would change.
         var write = validated.Value;
-        // HasPhoto is false by construction: 4a gives the photo no write door (décision 12).
+        // 4f opens the write door 4a closed: the answer can no longer say false by construction.
         return Ok(new ContactView(created.Value, write.FirstName, write.LastName, write.Nickname,
             write.IsFavorite,
             [.. write.Addresses.Select(a => IdentityResolver.Canonical(a.Address)).Distinct()],
-            write.DisplayName, false));
+            write.DisplayName, write.Photo is PhotoPayload.Replace));
     }
 
     /// <summary>
@@ -124,6 +127,7 @@ public sealed class ContactsController(IContactStore store) : ApiBaseController
     /// <response code="404">No such contact for this user</response>
     /// <response code="409">The card moved since <c>cardHash</c> was read; reload and retry</response>
     [HttpPut("{id:guid}")]
+    [RequestSizeLimit(2 * ContactStore.MaxCardBytes)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

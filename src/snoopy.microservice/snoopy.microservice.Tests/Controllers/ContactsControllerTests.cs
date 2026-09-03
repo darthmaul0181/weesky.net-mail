@@ -821,4 +821,58 @@ public sealed class ContactsControllerTests
         Assert.Equal("Dr. Bruno Mertens", view.DisplayName);
         Assert.False(view.HasPhoto);
     }
+
+    // ---- la photo (decisions 1 et 7) --------------------------------------------------------------
+
+    [Fact]
+    public async Task Create_WithAPhoto_AnswersHasPhoto()
+    {
+        _store.Setup(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<ContactWrite>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Success(Guid.NewGuid()));
+        var request = Valid();
+        request.Photo = Convert.ToBase64String(new byte[] { 0xFF, 0xD8, 0xFF, 0x09 });
+
+        var result = await CreateController().Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        // false par construction depuis 4a : c'est la ligne que cette tranche corrige.
+        Assert.True(Assert.IsType<ContactView>(ok.Value).HasPhoto);
+    }
+
+    [Fact]
+    public async Task Create_WithoutAPhoto_StillAnswersFalse()
+    {
+        _store.Setup(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<ContactWrite>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Success(Guid.NewGuid()));
+
+        var result = await CreateController().Create(Valid(), CancellationToken.None);
+
+        Assert.False(Assert.IsType<ContactView>(Assert.IsType<OkObjectResult>(result.Result).Value).HasPhoto);
+    }
+
+    [Fact]
+    public async Task Update_WithAnOversizedPhoto_Answers400WithoutTouchingTheStore()
+    {
+        var request = Valid();
+        request.Photo = Convert.ToBase64String([0xFF, 0xD8, 0xFF, .. new byte[512 * 1024 - 2]]);
+
+        var result = await CreateController().Update(Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _store.Verify(s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ContactWrite>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void WriteRoutes_BoundTheirBodyLikeTheDavPut()
+    {
+        foreach (var name in new[] { nameof(ContactsController.Create), nameof(ContactsController.Update) })
+        {
+            // RequestSizeLimitAttribute n'expose pas sa limite : l'argument du constructeur, lui,
+            // est dans les metadonnees.
+            var limit = typeof(ContactsController).GetMethod(name)!.GetCustomAttributesData()
+                .Single(a => a.AttributeType == typeof(RequestSizeLimitAttribute));
+            Assert.Equal(2L * ContactStore.MaxCardBytes, limit.ConstructorArguments[0].Value);
+        }
+    }
 }

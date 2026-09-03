@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
@@ -20,10 +21,11 @@ public sealed class ContactStoreTests
         IReadOnlyList<ContactWriteEmail>? emails = null,
         IReadOnlyList<ContactWritePhone>? phones = null,
         IReadOnlyList<ContactWriteAddress>? postal = null,
+        PhotoPayload? photo = null,
         params string[] addresses) =>
         new(first, last, nick, null, null, null, null, null, null, null, null, null, notes,
             favorite, emails ?? [.. addresses.Select(a => new ContactWriteEmail(null, a, string.Empty))],
-            phones, postal, source);
+            phones, postal, source, null, photo);
 
     [Fact]
     public async Task Create_ThenList_ReturnsTheContact()
@@ -856,5 +858,61 @@ public sealed class ContactStoreTests
         var once = ContactStore.WithUid(CardWithoutUid, "ours");
 
         Assert.Equal(once, ContactStore.WithUid(once, "ours"));
+    }
+
+    // ---- la photo (decision 7) --------------------------------------------------------------------
+
+    [Fact]
+    public async Task Update_WithAReplacedPhoto_ProjectsItAndArchivesOneRevision()
+    {
+        var db = nameof(Update_WithAReplacedPhoto_ProjectsItAndArchivesOneRevision);
+        var user = Guid.NewGuid();
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0x11 };
+        var id = (await CreateStore(db).CreateAsync(user, Write(addresses: "b@x.be"), CancellationToken.None)).Value;
+
+        var updated = await CreateStore(db).UpdateAsync(user, id,
+            Write(photo: new PhotoPayload.Replace(bytes, "image/jpeg"), addresses: "b@x.be"),
+            CancellationToken.None);
+
+        Assert.True(updated.IsSuccess);
+        var photo = await CreateStore(db).GetPhotoAsync(user, id, CancellationToken.None);
+        Assert.Equal(bytes, photo!.Value.Bytes);
+        Assert.Equal("image/jpeg", photo.Value.MediaType);
+    }
+
+    [Fact]
+    public async Task Update_WithARemovedPhoto_DropsItAndHasPhotoFallsBack()
+    {
+        var db = nameof(Update_WithARemovedPhoto_DropsItAndHasPhotoFallsBack);
+        var user = Guid.NewGuid();
+        var id = (await CreateStore(db).CreateAsync(user,
+            Write(photo: new PhotoPayload.Replace([0xFF, 0xD8, 0xFF, 0x11], "image/jpeg"), addresses: "b@x.be"),
+            CancellationToken.None)).Value;
+
+        await CreateStore(db).UpdateAsync(user, id,
+            Write(photo: new PhotoPayload.Remove(), addresses: "b@x.be"), CancellationToken.None);
+
+        Assert.Null(await CreateStore(db).GetPhotoAsync(user, id, CancellationToken.None));
+        Assert.False((await CreateStore(db).GetAsync(user, id, CancellationToken.None))!.HasPhoto);
+    }
+
+    // Le chemin nominal d'une sauvegarde qui ne change rien : la photo reste, et la carte
+    // recomposee est byte-identique, donc PrepareCard n'ouvre aucune transaction.
+    [Fact]
+    public async Task Update_WithoutAPhotoPayload_KeepsThePhotoAndTakesNoRank()
+    {
+        var db = nameof(Update_WithoutAPhotoPayload_KeepsThePhotoAndTakesNoRank);
+        var user = Guid.NewGuid();
+        var sync = ContactStoreTestFactory.NewSync();
+        var id = (await new ContactStore(new PreferencesTestDbContext(db), sync.Object).CreateAsync(user,
+            Write(photo: new PhotoPayload.Replace([0xFF, 0xD8, 0xFF, 0x11], "image/jpeg"), addresses: "b@x.be"),
+            CancellationToken.None)).Value;
+        sync.Invocations.Clear();
+
+        await new ContactStore(new PreferencesTestDbContext(db), sync.Object)
+            .UpdateAsync(user, id, Write(addresses: "b@x.be"), CancellationToken.None);
+
+        Assert.NotNull(await CreateStore(db).GetPhotoAsync(user, id, CancellationToken.None));
+        sync.Verify(s => s.NextSequenceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
