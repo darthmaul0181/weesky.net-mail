@@ -214,3 +214,24 @@ Reprises de la spec 4d (décision 4), confirmées ou allongées par les passages
 
 Le mébioctet face aux photos iOS, le `me-card` en `PROPPATCH`, la lecture du 4.0 : à rejouer avec
 la liste de la décision 7 le jour où un appareil Apple se présente.
+
+## 8. Verification manuelle de la tranche 4f (photo)
+
+Ce que le code ne peut pas prouver seul : jsdom ne decode aucune image, et l'orientation EXIF, le
+fond blanc et l'aller-retour CardDAV ne se lisent qu'a l'oeil. A jouer **sur le deploiement**, pas
+en tout-local : `localhost` n'est pas dans les origines CORS de l'API dev.
+
+| # | Point | Chrome | Firefox | Safari | DAVx5 |
+|---|---|---|---|---|---|
+| 1 | Photo de telephone **en portrait** : l'apercu est debout, pas couche | | | | — |
+| 2 | Apres sauvegarde et rechargement, elle est debout aussi | | | | — |
+| 3 | PNG a fond transparent : le fond est **blanc**, pas noir | | | | — |
+| 4 | « Remove » puis sauvegarde : les initiales reviennent, et changer de contact puis revenir ne la fait pas reapparaitre | | | | — |
+| 5 | HEIC d'iPhone : erreur inline `photoUnreadable` sous l'avatar, aucun banner, sauvegarde toujours possible | | — | — | — |
+| 6 | Synchronisation : la photo apparait dans le contact Android, puis la changer depuis le telephone et resynchroniser vers le webmail | — | — | — | |
+
+**Un KO sur 1, 3 ou 6 rejette la tranche** — ce sont les trois que la suite de tests ne couvre pas.
+Le 1 est la seule preuve de `imageOrientation: 'from-image'`, le 3 celle du `fillRect` blanc, le 6
+celle que la ligne `PHOTO` ecrite est lisible par un vrai client.
+
+Releve : _(a completer)_
