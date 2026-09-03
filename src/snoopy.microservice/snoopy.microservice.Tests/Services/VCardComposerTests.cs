@@ -844,4 +844,63 @@ public sealed class VCardComposerTests
         // Octet pour octet : seule la ligne FN a change.
         Assert.Equal(card.Replace("FN:G", @"FN:Amis\, Famille"), renamed);
     }
+
+    // ---- le cout des lignes logiques (decision 6 bis) ---------------------------------------------
+
+    // Une borne d'allocations, pas un budget de temps : la premiere est deterministe, le second est
+    // un flake par construction.
+    [Fact]
+    public void LogicalLines_OnAFoldedPhoto_DoesNotReallocateTheLinePerFold()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:X\r\n"
+            + VCardComposer.Fold("PHOTO;ENCODING=b;TYPE=JPEG:" + new string('A', 699_052))
+            + "\r\nEND:VCARD\r\n";
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var lines = VCardComposer.LogicalLines(card);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(5, lines.Count);
+        Assert.StartsWith("PHOTO;ENCODING=b;TYPE=JPEG:", lines[3]);
+        Assert.Equal(card, string.Join("\r\n", lines) + "\r\n");
+        Assert.True(allocated < 20L * card.Length, $"{allocated} octets alloues pour {card.Length} caracteres");
+    }
+
+    [Fact]
+    public void IsName_OnAFoldedPhoto_ReadsTheNameWithoutUnfolding()
+    {
+        var chunk = VCardComposer.Fold("PHOTO;ENCODING=b;TYPE=JPEG:" + new string('A', 699_052));
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var found = VCardComposer.IsName(chunk, "PHOTO");
+        var missed = VCardComposer.IsName(chunk, "NOTE");
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(found);
+        Assert.False(missed);
+        Assert.True(allocated < 4096, $"{allocated} octets alloues");
+    }
+
+    // Le cas que la premiere ligne physique ne suffit pas a trancher : le pli a coupe le nom.
+    [Fact]
+    public void IsName_WhenTheFoldCutsTheNameItself_StillUnfolds()
+    {
+        var name = new string('N', 80);
+
+        Assert.True(VCardComposer.IsName(VCardComposer.Fold(name + ":v"), name));
+    }
+
+    [Fact]
+    public void IsName_WhenTheFoldCutsAGroupPrefix_StillUnfolds()
+    {
+        var chunk = VCardComposer.Fold(new string('g', 74) + ".PHOTO:v");
+
+        Assert.True(VCardComposer.IsName(chunk, "PHOTO"));
+    }
+
+    [Fact]
+    public void LogicalLines_OnALeadingContinuation_StillMakesItItsOwnLine()
+    {
+        Assert.Equal([" orphan", "FN:X"], VCardComposer.LogicalLines(" orphan\r\nFN:X"));
+    }
 }

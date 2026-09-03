@@ -821,15 +821,23 @@ internal static class VCardComposer
     internal static List<string> LogicalLines(string text)
     {
         var lines = new List<string>();
+        // A buffer rather than lines[^1] += …, which reallocates the whole logical line on every
+        // fold: a 700 KB PHOTO pays that 9 500 times, gigabytes per call (décision 6 bis).
+        var pending = new StringBuilder();
         foreach (var physical in text.Split("\r\n"))
         {
             if (physical.Length == 0) continue;
-            if ((physical[0] == ' ' || physical[0] == '\t') && lines.Count > 0)
-                lines[^1] += "\r\n" + physical;
-            else
-                lines.Add(physical);
+            if ((physical[0] == ' ' || physical[0] == '\t') && pending.Length > 0)
+            {
+                pending.Append("\r\n").Append(physical);
+                continue;
+            }
+
+            if (pending.Length > 0) lines.Add(pending.ToString());
+            pending.Clear().Append(physical);
         }
 
+        if (pending.Length > 0) lines.Add(pending.ToString());
         return lines;
     }
 
@@ -880,9 +888,17 @@ internal static class VCardComposer
         return end < 0 ? string.Empty : line[start..end];
     }
 
-    // Whether an unfolded-or-folded line carries one property name, its group prefix aside.
-    internal static bool IsName(string chunk, string name) =>
-        NameOf(Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
+    // Whether an unfolded-or-folded line carries one property name, its group prefix aside. The
+    // name lives in the first physical line unless the fold cut the name itself, which only a name
+    // past 75 characters can do: unfolding 700 KB of PHOTO to read "PHOTO" is what made every
+    // family scan quadratic (décision 6 bis).
+    internal static bool IsName(string chunk, string name)
+    {
+        var fold = chunk.IndexOf("\r\n", StringComparison.Ordinal);
+        var first = fold < 0 ? chunk : chunk[..fold];
+        var readable = first.AsSpan().IndexOfAny(';', ':') >= 0;
+        return NameOf(readable ? first : Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
+    }
 
     internal static int IndexOutsideQuotes(string text, char target)
     {
