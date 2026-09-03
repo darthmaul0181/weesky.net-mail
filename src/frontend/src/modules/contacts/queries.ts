@@ -13,7 +13,10 @@ export const contactKeys = {
   all: (accountId: string) => ['contacts', accountId] as const,
   /** Under `all`, so the invalidation every write already fires refreshes the open card too. */
   detail: (accountId: string, id: string) => ['contacts', accountId, id] as const,
-  photo: (accountId: string, id: string) => ['contacts', accountId, id, 'photo'] as const,
+  /** Keyed by the card's hash: a removal, a replacement and a stale entry are then three different
+      keys, so react-query has nothing old left to serve while it refetches (décision 10). */
+  photo: (accountId: string, id: string, cardHash: string) =>
+    ['contacts', accountId, id, 'photo', cardHash] as const,
 }
 
 export const contactGroupKeys = {
@@ -61,11 +64,11 @@ export function useContact(id: string | null) {
 }
 
 /** The avatar's bytes, asked for only once the card says there are some. */
-export function useContactPhoto(id: string | null, hasPhoto: boolean) {
+export function useContactPhoto(id: string | null, hasPhoto: boolean, cardHash: string | null) {
   const accountId = useAccountId()
 
   return useQuery({
-    queryKey: contactKeys.photo(accountId, id ?? ''),
+    queryKey: contactKeys.photo(accountId, id ?? '', cardHash ?? ''),
     queryFn: () => api.getContactPhoto(id) as Promise<Blob>,
     enabled: hasPhoto && id != null,
     staleTime: 5 * 60_000,

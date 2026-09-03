@@ -65,7 +65,8 @@ export default function ContactCard({
   // The list paints the card at once and the detail enriches it when it lands: a selection that
   // began with a blank would flicker on every click, for a request that costs one round trip.
   const { data: detail } = useContact(contact?.id ?? null)
-  const photo = useContactPhotoUrl(contact?.id ?? null, detail?.hasPhoto ?? false)
+  const photo = useContactPhotoUrl(
+    contact?.id ?? null, detail?.hasPhoto ?? false, detail?.cardHash ?? null)
 
   // Escape mirrors the ← button, MessageReader's arrangement, and like it exists only where the
   // card has replaced the list. The layout withholds onBack while its delete confirm is open, so
