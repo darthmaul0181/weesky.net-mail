@@ -15,7 +15,7 @@ public sealed class ContactValidatorTests
 
     private static ContactRequest Request(
         string? first = null, string? last = null, string? nick = null,
-        string? birthday = null, string? notes = null,
+        string? birthday = null, string? notes = null, string? photo = null,
         IReadOnlyList<PhonePayload>? phones = null,
         params string[] addresses) =>
         new()
@@ -25,6 +25,7 @@ public sealed class ContactValidatorTests
             Nickname = nick,
             Birthday = birthday,
             Notes = notes,
+            Photo = photo,
             Addresses = [.. addresses],
             Phones = phones is null
                 ? null
@@ -336,5 +337,100 @@ public sealed class ContactValidatorTests
         var result = ContactValidator.Validate(request);
 
         Assert.True(result.IsFailure);
+    }
+
+    // ---- la photo (decisions 2, 3, 4) -------------------------------------------------------------
+
+    // Le sniff ne lit que les premiers octets : une signature suivie de zeros est un JPEG pour lui,
+    // et une vraie image dans une fixture ne prouverait rien de plus.
+    private static string Base64Jpeg(int length) =>
+        Convert.ToBase64String([0xFF, 0xD8, 0xFF, .. new byte[length - 3]]);
+
+    private static IEnumerable<string> Wrapped(string value, int width)
+    {
+        for (var i = 0; i < value.Length; i += width)
+            yield return value[i..Math.Min(i + width, value.Length)];
+    }
+
+    [Fact]
+    public void Validate_WithoutAPhoto_LeavesTheCardsOwn()
+    {
+        var result = ContactValidator.Validate(Request(first: "Bruno"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.Photo);
+    }
+
+    [Fact]
+    public void Validate_WithAJsonNullPhoto_LeavesTheCardsOwn()
+    {
+        var result = ContactValidator.Validate(FromJson("""{"firstName":"Bruno","photo":null}"""));
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.Photo);
+    }
+
+    [Fact]
+    public void Validate_WithAnEmptyPhoto_Removes()
+    {
+        var result = ContactValidator.Validate(Request(first: "Bruno", photo: ""));
+
+        Assert.IsType<PhotoPayload.Remove>(result.Value.Photo);
+    }
+
+    [Fact]
+    public void Validate_WithABase64Jpeg_ReplacesAndSniffsTheType()
+    {
+        var result = ContactValidator.Validate(Request(first: "Bruno", photo: Base64Jpeg(64)));
+
+        var replace = Assert.IsType<PhotoPayload.Replace>(result.Value.Photo);
+        Assert.Equal("image/jpeg", replace.MediaType);
+        Assert.Equal(64, replace.Bytes.Length);
+    }
+
+    [Fact]
+    public void Validate_WithAnSvg_Refuses()
+    {
+        var svg = Convert.ToBase64String("""<svg xmlns="http://www.w3.org/2000/svg"/>"""u8);
+
+        var result = ContactValidator.Validate(Request(first: "Bruno", photo: svg));
+
+        Assert.Equal("The photo is not a JPEG, PNG, GIF or WebP image", result.Error);
+    }
+
+    [Fact]
+    public void Validate_WithSomethingThatIsNotBase64_Refuses()
+    {
+        var result = ContactValidator.Validate(Request(first: "Bruno", photo: "not base64!!"));
+
+        Assert.Equal("The photo is not valid base64", result.Error);
+    }
+
+    // 512 Ko et 512 Ko + 1 s'encodent sur la meme longueur, le padding absorbant l'octet : seule la
+    // taille decodee peut les distinguer (decision 4).
+    [Fact]
+    public void Validate_WithOneByteOverTheCeiling_RefusesOnTheDecodedLength()
+    {
+        var admitted = Base64Jpeg(512 * 1024);
+        var refused = Base64Jpeg(512 * 1024 + 1);
+
+        Assert.Equal(admitted.Length, refused.Length);
+        Assert.True(ContactValidator.Validate(Request(first: "B", photo: admitted)).IsSuccess);
+        Assert.Equal("The photo exceeds 512 KB",
+            ContactValidator.Validate(Request(first: "B", photo: refused)).Error);
+    }
+
+    // Le test qui empeche une garde de longueur de revenir : pliee a 76 colonnes, une image
+    // parfaitement admissible depasse 4 * ceil(MaxPhotoBytes / 3) caracteres (decision 4).
+    [Fact]
+    public void Validate_WithAWrappedBase64UnderTheCeiling_Accepts()
+    {
+        var wrapped = string.Join("\r\n", Wrapped(Base64Jpeg(500 * 1024), 76));
+
+        Assert.True(wrapped.Length > 4 * ((512 * 1024 + 2) / 3));
+        var result = ContactValidator.Validate(Request(first: "Bruno", photo: wrapped));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : null);
+        Assert.IsType<PhotoPayload.Replace>(result.Value.Photo);
     }
 }

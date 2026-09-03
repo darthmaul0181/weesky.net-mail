@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using MimeKit;
@@ -54,6 +55,18 @@ internal static class ContactValidator
 
     /// <summary><c>contacts.display_name</c> is VARCHAR(255) — a group is its FN, and nothing else.</summary>
     internal const int MaxGroupNameLength = 255;
+
+    /// <summary>
+    /// The photo's ceiling, in decoded bytes — what the browser's reducer produces at worst
+    /// (décision 8). <see cref="Repositories.ContactStore.MaxCardBytes"/> stays sovereign above it.
+    /// </summary>
+    internal const int MaxPhotoBytes = 512 * 1024;
+
+    internal const string PhotoNotBase64 = "The photo is not valid base64";
+
+    internal const string PhotoNotRaster = "The photo is not a JPEG, PNG, GIF or WebP image";
+
+    internal static readonly string PhotoTooLarge = $"The photo exceeds {MaxPhotoBytes / 1024} KB";
 
     private const string PrefOutOfRangeMessage = "A preference must be between 1 and 101";
 
@@ -183,11 +196,47 @@ internal static class ContactValidator
                 return Result.Failure<ContactWrite>(PrefOutOfRangeMessage);
         }
 
+        // Last, because it is the only check that reads hundreds of kilobytes.
+        var photoError = PhotoOf(request.Photo, out var photo);
+        if (photoError != null) return Result.Failure<ContactWrite>(photoError);
+
         return Result.Success(new ContactWrite(
             first, last, nick, displayName, middleName, namePrefix, nameSuffix,
             organization, department, jobTitle, birthday, website, notes,
             request.IsFavorite, addresses, phones, postalAddresses, Source(request.Source),
-            request.CardHash));
+            request.CardHash, photo));
+    }
+
+    /// <summary>
+    /// The photo's refusal message, null when the payload is good — <paramref name="photo"/> is
+    /// only meaningful then. Validity and decoded size are read by <c>Base64.IsValid</c>, which
+    /// allocates nothing and tolerates the whitespace <c>FromBase64String</c> tolerates; the string
+    /// it reads is already bounded by the route's request size limit. No length pre-guard: it would
+    /// refuse a wrapped base64 the ceiling admits, and the length cannot decide anyway — 512 KB and
+    /// 512 KB + 1 encode to the same 699 052 characters (décision 4). The decode comes last.
+    /// <para>
+    /// Not passed through <see cref="Given"/>: whitespace is legal base64 filler, and only the
+    /// exactly empty string means "remove it".
+    /// </para>
+    /// </summary>
+    private static string? PhotoOf(string? value, out PhotoPayload? photo)
+    {
+        photo = null;
+        if (value == null) return null;
+        if (value.Length == 0)
+        {
+            photo = new PhotoPayload.Remove();
+            return null;
+        }
+
+        if (!Base64.IsValid(value.AsSpan(), out var decodedLength)) return PhotoNotBase64;
+        if (decodedLength > MaxPhotoBytes) return PhotoTooLarge;
+
+        var bytes = Convert.FromBase64String(value);
+        if (VCardProjector.SniffRasterType(bytes) is not { } mediaType) return PhotoNotRaster;
+
+        photo = new PhotoPayload.Replace(bytes, mediaType);
+        return null;
     }
 
     /// <summary>
